@@ -4,11 +4,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models.jobs import ExportFile, ExportJob, FileStatus, JobStatus
+from app.repositories.job_repository import FileRepository, JobRepository
 
 
 def scan_source_files(source_path: str) -> List[Path]:
@@ -64,12 +64,14 @@ def _process_file(export_file_id: int, src_file: Path, target: Optional[Path]) -
     """
     db: Session = SessionLocal()
     try:
-        ef = db.get(ExportFile, export_file_id)
+        file_repo = FileRepository(db)
+
+        ef = file_repo.get(export_file_id)
         if ef is None:
             return
 
         ef.status = FileStatus.COPYING
-        db.commit()
+        file_repo.save(ef)
 
         if target is not None:
             dst = target / ef.relative_path
@@ -83,16 +85,11 @@ def _process_file(export_file_id: int, src_file: Path, target: Optional[Path]) -
         else:
             ef.status = FileStatus.ERROR
             ef.error_message = err
-        db.commit()
+        file_repo.save(ef)
 
         # Atomically increment copied_bytes to avoid lost-update races between threads.
         if success and ef.size_bytes:
-            db.execute(
-                update(ExportJob)
-                .where(ExportJob.id == ef.job_id)
-                .values(copied_bytes=ExportJob.copied_bytes + ef.size_bytes)
-            )
-            db.commit()
+            file_repo.increment_job_bytes(ef.job_id, ef.size_bytes)
     finally:
         db.close()
 
@@ -105,13 +102,16 @@ def run_copy_job(job_id: int) -> None:
     """
     db: Session = SessionLocal()
     try:
-        job = db.get(ExportJob, job_id)
+        job_repo = JobRepository(db)
+        file_repo = FileRepository(db)
+
+        job = job_repo.get(job_id)
         if not job:
             return
 
         job.status = JobStatus.RUNNING
         job.started_at = datetime.now(timezone.utc)
-        db.commit()
+        job_repo.save(job)
 
         source = Path(job.source_path)
         target = Path(job.target_mount_path) if job.target_mount_path else None
@@ -119,31 +119,26 @@ def run_copy_job(job_id: int) -> None:
         files = scan_source_files(job.source_path)
         job.file_count = len(files)
         job.total_bytes = sum(f.stat().st_size for f in files if f.exists())
-        db.commit()
+        job_repo.save(job)
 
         # Delete any existing ExportFile rows for this job (e.g. on a FAILED restart)
         # so we start clean and avoid duplicate records.
-        db.query(ExportFile).filter(ExportFile.job_id == job_id).delete()
-        db.commit()
+        file_repo.delete_by_job(job_id)
 
         # Insert fresh ExportFile records for this run.
-        for f in files:
-            rel = _relative_path(f, source)
-            ef = ExportFile(
+        export_files = [
+            ExportFile(
                 job_id=job_id,
-                relative_path=str(rel),
+                relative_path=str(_relative_path(f, source)),
                 size_bytes=f.stat().st_size if f.exists() else 0,
                 status=FileStatus.PENDING,
             )
-            db.add(ef)
-        db.commit()
+            for f in files
+        ]
+        file_repo.add_bulk(export_files)
 
         # Re-query to get stable IDs now that the transaction is committed.
-        committed_files = (
-            db.query(ExportFile)
-            .filter(ExportFile.job_id == job_id)
-            .all()
-        )
+        committed_files = file_repo.list_by_job(job_id)
         src_by_rel = {str(_relative_path(f, source)): f for f in files}
         file_pairs = [
             (src_by_rel[ef.relative_path], ef.id)
@@ -166,17 +161,13 @@ def run_copy_job(job_id: int) -> None:
 
         # Determine final job status.
         db.expire_all()
-        error_count = (
-            db.query(ExportFile)
-            .filter(ExportFile.job_id == job_id, ExportFile.status == FileStatus.ERROR)
-            .count()
-        )
+        error_count = file_repo.count_errors(job_id)
 
-        job = db.get(ExportJob, job_id)
+        job = job_repo.get(job_id)
         if job:
             job.status = JobStatus.FAILED if error_count > 0 else JobStatus.COMPLETED
             job.completed_at = datetime.now(timezone.utc)
-            db.commit()
+            job_repo.save(job)
     finally:
         db.close()
 
@@ -188,17 +179,16 @@ def run_verify_job(job_id: int) -> None:
     """
     db: Session = SessionLocal()
     try:
-        job = db.get(ExportJob, job_id)
+        job_repo = JobRepository(db)
+        file_repo = FileRepository(db)
+
+        job = job_repo.get(job_id)
         if not job:
             return
 
         target = Path(job.target_mount_path) if job.target_mount_path else None
 
-        files = (
-            db.query(ExportFile)
-            .filter(ExportFile.job_id == job_id, ExportFile.status == FileStatus.DONE)
-            .all()
-        )
+        files = file_repo.list_done_by_job(job_id)
 
         any_mismatch = False
         for ef in files:
@@ -222,10 +212,10 @@ def run_verify_job(job_id: int) -> None:
 
         db.commit()
 
-        job = db.get(ExportJob, job_id)
+        job = job_repo.get(job_id)
         if job:
             job.status = JobStatus.FAILED if any_mismatch else JobStatus.COMPLETED
             job.completed_at = datetime.now(timezone.utc)
-            db.commit()
+            job_repo.save(job)
     finally:
         db.close()
