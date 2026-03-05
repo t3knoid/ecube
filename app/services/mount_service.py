@@ -25,6 +25,13 @@ def add_mount(mount_data: MountCreate, db: Session) -> NetworkMount:
             cmd = ["mount", "-t", "nfs", mount_data.remote_path, mount_data.local_mount_point]
         else:
             cmd = ["mount", "-t", "cifs", mount_data.remote_path, mount_data.local_mount_point]
+            if mount_data.credentials_file:
+                cmd += ["-o", f"credentials={mount_data.credentials_file}"]
+            elif mount_data.username:
+                options = f"username={mount_data.username}"
+                if mount_data.password:
+                    options += f",password={mount_data.password}"
+                cmd += ["-o", options]
 
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if result.returncode == 0:
