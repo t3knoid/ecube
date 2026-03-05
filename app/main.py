@@ -34,10 +34,32 @@ def _error_response(status_code: int, code: str, message: str, trace_id: str | N
     return JSONResponse(status_code=status_code, content=body.model_dump())
 
 
+def _try_log_auth_failure(request: Request, reason: str, trace_id: str) -> None:
+    """Best-effort audit log for authentication failures.  Never raises."""
+    db = getattr(request.state, "db", None)
+    if db is None:
+        return
+    try:
+        from app.repositories.audit_repository import AuditRepository
+
+        AuditRepository(db).add(
+            action="AUTH_FAILURE",
+            details={
+                "path": str(request.url.path),
+                "method": request.method,
+                "reason": reason,
+                "trace_id": trace_id,
+            },
+        )
+    except Exception:
+        pass
+
+
 @app.exception_handler(AuthenticationError)
 async def authentication_error_handler(request: Request, exc: AuthenticationError) -> JSONResponse:
     trace_id = str(uuid.uuid4())
     logger.warning("401 %s trace_id=%s path=%s", exc.code, trace_id, request.url.path)
+    _try_log_auth_failure(request, reason=exc.message, trace_id=trace_id)
     return _error_response(401, exc.code, exc.message, trace_id)
 
 
@@ -74,6 +96,8 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
     trace_id = str(uuid.uuid4())
     logger.info("%d %s trace_id=%s path=%s", exc.status_code, code, trace_id, request.url.path)
+    if exc.status_code == 401:
+        _try_log_auth_failure(request, reason=detail, trace_id=trace_id)
     return _error_response(exc.status_code, code, detail, trace_id)
 
 

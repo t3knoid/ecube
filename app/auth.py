@@ -1,11 +1,13 @@
 from dataclasses import dataclass, field
-from typing import Callable, List
+from typing import Callable, List, Optional
 
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.database import get_db
 from app.exceptions import AuthorizationError
 
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -107,7 +109,8 @@ def require_roles(*allowed_roles: str) -> Callable[..., CurrentUser]:
 
     Returns a dependency callable that validates the current user holds at least
     one of *allowed_roles*.  Raises HTTP 403 (via :class:`AuthorizationError`)
-    when the user is authenticated but lacks the required role.
+    when the user is authenticated but lacks the required role.  Every denial is
+    recorded in the audit log with the actor identity and context.
 
     Usage::
 
@@ -120,11 +123,51 @@ def require_roles(*allowed_roles: str) -> Callable[..., CurrentUser]:
             ...
     """
 
-    def _check(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    def _check(
+        request: Request,
+        current_user: CurrentUser = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> CurrentUser:
         if not any(r in current_user.roles for r in allowed_roles):
+            _try_log_authorization_denied(
+                db=db,
+                actor=current_user.username,
+                path=str(request.url.path),
+                method=request.method,
+                required_roles=list(allowed_roles),
+                user_roles=current_user.roles,
+            )
             raise AuthorizationError(
                 f"This action requires one of the following roles: {', '.join(sorted(allowed_roles))}"
             )
         return current_user
 
     return _check
+
+
+def _try_log_authorization_denied(
+    db: Optional[Session],
+    actor: str,
+    path: str,
+    method: str,
+    required_roles: List[str],
+    user_roles: List[str],
+) -> None:
+    """Best-effort audit log for role-denial events.  Never raises."""
+    if db is None:
+        return
+    try:
+        from app.repositories.audit_repository import AuditRepository
+
+        AuditRepository(db).add(
+            action="AUTHORIZATION_DENIED",
+            user=actor,
+            details={
+                "path": path,
+                "method": method,
+                "required_roles": required_roles,
+                "user_roles": user_roles,
+            },
+        )
+    except Exception:
+        pass
