@@ -1,0 +1,256 @@
+# 6. REST API Specification — Design
+
+For the complete role model and policy context, see [10-security-and-access-control.md](10-security-and-access-control.md).
+
+## 1. API Authentication
+
+### 1.1 Identity Sources
+
+ECUBE supports two identity modes:
+
+- **Local mode (default)**
+  - Uses Linux system users and groups (`/etc/passwd`, `/etc/group`).
+  - Group membership determines ECUBE roles.
+
+- **LDAP mode (optional)**
+  - Uses LDAP bind for authentication.
+  - LDAP group membership maps to ECUBE roles.
+
+### 1.2 Authentication Mechanism
+
+- API uses **token-based authentication** (JWT or signed session token).
+- Token includes:
+  - `username`
+  - `roles` (resolved from local groups or LDAP groups)
+  - `issued_at`
+  - `expires_at`
+
+### 1.3 User Context
+
+Every request resolves to:
+
+```json
+{
+    "username": "frank",
+    "roles": ["manager", "auditor"]
+}
+```
+
+---
+
+## 2. ECUBE Security Roles
+
+### 2.1 Role Definitions
+
+- **Administrator**
+  - Full access to all ECUBE operations.
+- **Manager**
+  - Initialize drives.
+  - Assign drives to projects.
+  - Prepare drives for eject.
+  - Manage mounts.
+  - View jobs, drives, logs.
+- **Processor**
+  - Create jobs.
+  - Start copy operations.
+  - View job and drive status.
+- **Auditor**
+  - Read audit logs.
+  - View job and file metadata.
+  - Compute file hashes (MD5/SHA‑256).
+  - Perform file comparisons.
+  - No write operations.
+
+### 2.2 Authorization Matrix
+
+| API Area / Operation | Admin | Manager | Processor | Auditor |
+|----------------------|:-----:|:-------:|:---------:|:-------:|
+| Add/remove mounts | ✔ | ✔ | ✖ | ✖ |
+| List mounts | ✔ | ✔ | ✔ | ✔ |
+| Initialize drives | ✔ | ✔ | ✖ | ✖ |
+| Prepare drives for eject | ✔ | ✔ | ✖ | ✖ |
+| List drives | ✔ | ✔ | ✔ | ✔ |
+| Create jobs | ✔ | ✔ | ✔ | ✖ |
+| Start copy jobs | ✔ | ✔ | ✔ | ✖ |
+| View job status | ✔ | ✔ | ✔ | ✔ |
+| Regenerate manifest | ✔ | ✔ | ✔ | ✖ |
+| Verify job | ✔ | ✔ | ✔ | ✖ |
+| Read audit logs | ✔ | ✔ | ✖ | ✔ |
+| Introspection (read-only) | ✔ | ✔ | ✔ | ✔ |
+| File hash/compare | ✔ | ✖ | ✖ | ✔ |
+
+---
+
+## 3. Updated REST API Endpoints with Security Requirements
+
+Each endpoint now includes **required roles**.
+
+---
+
+## 3.1 Mount Management
+
+### `POST /mounts`
+
+Add NFS/SMB mount.
+
+**Roles:** `admin`, `manager`
+
+### `DELETE /mounts/{id}`
+
+Unmount and remove mount.
+
+**Roles:** `admin`, `manager`
+
+### `GET /mounts`
+
+List all mounts.
+
+**Roles:** `admin`, `manager`, `processor`, `auditor`
+
+---
+
+## 3.2 Drive Management
+
+### `GET /drives`
+
+List all drives with state and project assignment.
+
+**Roles:** `admin`, `manager`, `processor`, `auditor`
+
+### `POST /drives/{id}/initialize`
+
+Initialize drive for a project.
+
+Enforces project isolation.
+
+**Roles:** `admin`, `manager`
+
+### `POST /drives/{id}/prepare-eject`
+
+Unmount and mark drive AVAILABLE.
+
+**Roles:** `admin`, `manager`
+
+---
+
+## 3.3 Job Management
+
+### `POST /jobs`
+
+Create a new job.
+
+**Roles:** `admin`, `manager`, `processor`
+
+### `POST /jobs/{id}/start`
+
+Start job with thread count.
+
+**Roles:** `admin`, `manager`, `processor`
+
+### `GET /jobs/{id}`
+
+Return job status and progress.
+
+**Roles:** `admin`, `manager`, `processor`, `auditor`
+
+### `POST /jobs/{id}/verify`
+
+Re-verify checksums.
+
+**Roles:** `admin`, `manager`, `processor`
+
+### `POST /jobs/{id}/manifest`
+
+Regenerate manifest.
+
+**Roles:** `admin`, `manager`, `processor`
+
+---
+
+## 3.4 Audit Log Access
+
+### `GET /audit`
+
+Return audit logs with filters.
+
+**Roles:** `admin`, `manager`, `auditor`
+
+---
+
+## 3.5 File Audit Operations
+
+### `GET /files/{file_id}/hashes`
+
+Compute MD5/SHA‑256 for a file.
+
+**Roles:** `admin`, `auditor`
+
+### `POST /files/compare`
+
+Compare two files by hash/size/path.
+
+**Roles:** `admin`, `auditor`
+
+---
+
+## 3.6 Introspection API (Read‑Only)
+
+### `GET /introspection/usb/topology`
+
+USB hub/port/device mapping.
+
+**Roles:** `admin`, `manager`, `processor`, `auditor`
+
+### `GET /introspection/block-devices`
+
+Block device metadata.
+
+**Roles:** `admin`, `manager`, `processor`, `auditor`
+
+### `GET /introspection/mounts`
+
+Mounted filesystems.
+
+**Roles:** `admin`, `manager`, `processor`, `auditor`
+
+### `GET /introspection/system-health`
+
+CPU, memory, disk I/O, worker queue.
+
+**Roles:** `admin`, `manager`, `processor`, `auditor`
+
+### `GET /introspection/jobs/{id}/debug`
+
+Internal worker state.
+
+**Roles:** `admin`, `manager`, `processor`, `auditor`
+
+---
+
+## 4. Error Handling for Security
+
+### 4.1 Unauthorized (401)
+
+Returned when:
+
+- Token missing
+- Token invalid
+- Token expired
+
+### 4.2 Forbidden (403)
+
+Returned when:
+
+- User lacks required role
+- User attempts cross‑project access
+- User attempts restricted operation (for example, processor initializing drive)
+
+### 4.3 Audit Logging
+
+Every security‑relevant event is logged:
+
+- Authentication success/failure
+- Role resolution
+- Access denied events
+- Drive initialization attempts
+- File hash/compare operations
