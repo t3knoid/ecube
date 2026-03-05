@@ -1,0 +1,43 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Pytest: Integration (all)",
+      "type": "python",
+      "request": "launch",
+      "module": "pytest",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "tests/integration",
+        "-q",
+        "-s",
+        "--run-integration"
+      ],
+      "env": {
+        "INTEGRATION_DATABASE_URL": "postgresql://ecube_test:ecube_test@localhost:5433/ecube_integration",
+        "DATABASE_URL": "postgresql://ecube_test:ecube_test@localhost:5433/ecube_integration"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Pytest: Integration (current file)",
+      "type": "python",
+      "request": "launch",
+      "module": "pytest",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "${file}",
+        "-q",
+        "-s",
+        "--run-integration"
+      ],
+      "env": {
+        "INTEGRATION_DATABASE_URL": "postgresql://ecube_test:ecube_test@localhost:5433/ecube_integration",
+        "DATABASE_URL": "postgresql://ecube_test:ecube_test@localhost:5433/ecube_integration"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}
