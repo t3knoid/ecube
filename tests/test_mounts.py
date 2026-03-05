@@ -9,10 +9,10 @@ def test_list_mounts_empty(client, db):
     assert response.json() == []
 
 
-def test_add_mount(client, db):
+def test_add_mount(manager_client, db):
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0)
-        response = client.post(
+        response = manager_client.post(
             "/mounts",
             json={
                 "type": "NFS",
@@ -26,10 +26,10 @@ def test_add_mount(client, db):
     assert data["status"] == "MOUNTED"
 
 
-def test_add_mount_failure(client, db):
+def test_add_mount_failure(manager_client, db):
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=1, stderr="Permission denied", stdout="")
-        response = client.post(
+        response = manager_client.post(
             "/mounts",
             json={
                 "type": "NFS",
@@ -59,7 +59,7 @@ def test_list_mounts(client, db):
     assert data[0]["local_mount_point"] == "/mnt/data"
 
 
-def test_delete_mount(client, db):
+def test_delete_mount(manager_client, db):
     mount = NetworkMount(
         type=MountType.SMB,
         remote_path="//192.168.1.1/share",
@@ -72,10 +72,10 @@ def test_delete_mount(client, db):
 
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0)
-        response = client.delete(f"/mounts/{mount_id}")
+        response = manager_client.delete(f"/mounts/{mount_id}")
     assert response.status_code == 204
 
 
-def test_delete_mount_not_found(client, db):
-    response = client.delete("/mounts/999")
+def test_delete_mount_not_found(manager_client, db):
+    response = manager_client.delete("/mounts/999")
     assert response.status_code == 404

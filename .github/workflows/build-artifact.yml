@@ -1,0 +1,47 @@
+name: Build Deployment Artifact
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set artifact metadata
+        id: meta
+        run: |
+          echo "short_sha=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=ecube-package-${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+
+      - name: Create deployment package
+        run: |
+          mkdir -p dist
+          tar -czf "dist/${{ steps.meta.outputs.artifact_name }}.tar.gz" \
+            app \
+            alembic \
+            pyproject.toml \
+            alembic.ini \
+            README.md \
+            LICENSE
+
+      - name: Generate checksum
+        run: |
+          cd dist
+          sha256sum "${{ steps.meta.outputs.artifact_name }}.tar.gz" > "${{ steps.meta.outputs.artifact_name }}.sha256"
+
+      - name: Upload deployment artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.artifact_name }}
+          path: |
+            dist/${{ steps.meta.outputs.artifact_name }}.tar.gz
+            dist/${{ steps.meta.outputs.artifact_name }}.sha256
+          if-no-files-found: error
+          retention-days: 30
