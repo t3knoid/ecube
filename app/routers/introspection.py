@@ -72,11 +72,13 @@ def system_mounts():
 
 @router.get("/system-health")
 def system_health(db: Session = Depends(get_db)):
+    db_status = "connected"
+    db_error = None
     try:
         db.execute(text("SELECT 1"))
-        db_status = "connected"
-    except Exception:
+    except Exception as exc:
         db_status = "error"
+        db_error = str(exc)
 
     active_jobs = (
         db.query(ExportJob).filter(ExportJob.status == JobStatus.RUNNING).count()
@@ -85,6 +87,7 @@ def system_health(db: Session = Depends(get_db)):
     return {
         "status": "ok",
         "database": db_status,
+        "database_error": db_error,
         "active_jobs": active_jobs,
     }
 
