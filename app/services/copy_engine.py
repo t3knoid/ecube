@@ -51,7 +51,12 @@ def _checksum_only(src: Path) -> Tuple[bool, Optional[str], Optional[str]]:
         return False, None, str(exc)
 
 
-def _process_file(export_file_id: int, src_file: Path, target: Optional[Path]) -> None:
+def _relative_path(f: Path, source: Path) -> Path:
+    """Return *f* relative to *source* if *source* is a directory, else just the filename."""
+    return f.relative_to(source) if source.is_dir() else Path(f.name)
+
+
+
     """Worker executed inside the thread pool.
 
     Each worker opens its own DB session to avoid cross-thread SQLAlchemy issues.
@@ -115,7 +120,7 @@ def run_copy_job(job_id: int, db: Session) -> None:
     # Flush once after all inserts rather than per-row.
     file_pairs: List[Tuple[Path, int]] = []
     for f in files:
-        rel = f.relative_to(source) if source.is_dir() else Path(f.name)
+        rel = _relative_path(f, source)
         ef = ExportFile(
             job_id=job_id,
             relative_path=str(rel),
@@ -131,7 +136,7 @@ def run_copy_job(job_id: int, db: Session) -> None:
         .filter(ExportFile.job_id == job_id)
         .all()
     )
-    src_by_rel = {str(f.relative_to(source) if source.is_dir() else Path(f.name)): f for f in files}
+    src_by_rel = {str(_relative_path(f, source)): f for f in files}
     file_pairs = [(src_by_rel[ef.relative_path], ef.id) for ef in committed_files if ef.relative_path in src_by_rel]
 
     with ThreadPoolExecutor(max_workers=job.thread_count or 4) as executor:
