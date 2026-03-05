@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -12,4 +13,4 @@ class AuditLog(Base):
     job_id = Column(
         Integer, ForeignKey("export_jobs.id", ondelete="SET NULL"), nullable=True
     )
-    details = Column(JSON)
+    details = Column(JSON().with_variant(JSONB(), "postgresql"))

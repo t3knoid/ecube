@@ -89,13 +89,17 @@ def start_job(
         db.commit()
 
     create_audit_log(db=db, action="JOB_STARTED", job_id=job_id, details={})
-    background_tasks.add_task(copy_engine.run_copy_job, job_id, db)
+    background_tasks.add_task(copy_engine.run_copy_job, job_id)
     db.refresh(job)
     return job
 
 
 @router.post("/{job_id}/verify", response_model=ExportJobSchema)
-def verify_job(job_id: int, db: Session = Depends(get_db)):
+def verify_job(
+    job_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     job = db.get(ExportJob, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -103,6 +107,7 @@ def verify_job(job_id: int, db: Session = Depends(get_db)):
     job.status = JobStatus.VERIFYING
     db.commit()
     create_audit_log(db=db, action="JOB_VERIFY_STARTED", job_id=job_id, details={})
+    background_tasks.add_task(copy_engine.run_verify_job, job_id)
     db.refresh(job)
     return job
 
