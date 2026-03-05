@@ -173,7 +173,7 @@ def test_job_get_for_update_reraises_non_lock_operational_error():
 # ---------------------------------------------------------------------------
 
 
-def test_initialize_drive_lock_conflict_returns_409(client, db):
+def test_initialize_drive_lock_conflict_returns_409(manager_client, db):
     """A lock conflict on drive initialization returns HTTP 409."""
     drive = UsbDrive(
         device_identifier="USB-LOCK-01", current_state=DriveState.AVAILABLE
@@ -185,7 +185,7 @@ def test_initialize_drive_lock_conflict_returns_409(client, db):
         "app.repositories.drive_repository.DriveRepository.get_for_update",
         side_effect=ConflictError("Drive is currently locked by another operation."),
     ):
-        response = client.post(
+        response = manager_client.post(
             f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-001"}
         )
 
@@ -195,7 +195,7 @@ def test_initialize_drive_lock_conflict_returns_409(client, db):
     assert "locked" in data["message"].lower()
 
 
-def test_prepare_eject_lock_conflict_returns_409(client, db):
+def test_prepare_eject_lock_conflict_returns_409(manager_client, db):
     """A lock conflict on prepare-eject returns HTTP 409."""
     drive = UsbDrive(
         device_identifier="USB-LOCK-02",
@@ -209,13 +209,13 @@ def test_prepare_eject_lock_conflict_returns_409(client, db):
         "app.repositories.drive_repository.DriveRepository.get_for_update",
         side_effect=ConflictError("Drive is currently locked by another operation."),
     ):
-        response = client.post(f"/drives/{drive.id}/prepare-eject")
+        response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
 
     assert response.status_code == 409
     assert response.json()["code"] == "CONFLICT"
 
 
-def test_start_job_lock_conflict_returns_409(client, db):
+def test_start_job_lock_conflict_returns_409(manager_client, db):
     """A lock conflict on job start returns HTTP 409."""
     job = ExportJob(
         project_id="PROJ-001",
@@ -230,7 +230,7 @@ def test_start_job_lock_conflict_returns_409(client, db):
         "app.repositories.job_repository.JobRepository.get_for_update",
         side_effect=ConflictError("Job is currently locked by another operation."),
     ):
-        response = client.post(f"/jobs/{job.id}/start", json={})
+        response = manager_client.post(f"/jobs/{job.id}/start", json={})
 
     assert response.status_code == 409
     data = response.json()
@@ -238,7 +238,7 @@ def test_start_job_lock_conflict_returns_409(client, db):
     assert "locked" in data["message"].lower()
 
 
-def test_verify_job_lock_conflict_returns_409(client, db):
+def test_verify_job_lock_conflict_returns_409(manager_client, db):
     """A lock conflict on job verify returns HTTP 409."""
     job = ExportJob(
         project_id="PROJ-001",
@@ -253,13 +253,13 @@ def test_verify_job_lock_conflict_returns_409(client, db):
         "app.repositories.job_repository.JobRepository.get_for_update",
         side_effect=ConflictError("Job is currently locked by another operation."),
     ):
-        response = client.post(f"/jobs/{job.id}/verify")
+        response = manager_client.post(f"/jobs/{job.id}/verify")
 
     assert response.status_code == 409
     assert response.json()["code"] == "CONFLICT"
 
 
-def test_create_job_drive_lock_conflict_returns_409(client, db):
+def test_create_job_drive_lock_conflict_returns_409(manager_client, db):
     """A lock conflict when assigning a drive during job creation returns 409."""
     drive = UsbDrive(
         device_identifier="USB-LOCK-03", current_state=DriveState.AVAILABLE
@@ -271,7 +271,7 @@ def test_create_job_drive_lock_conflict_returns_409(client, db):
         "app.repositories.drive_repository.DriveRepository.get_for_update",
         side_effect=ConflictError("Drive is currently locked by another operation."),
     ):
-        response = client.post(
+        response = manager_client.post(
             "/jobs",
             json={
                 "project_id": "PROJ-001",
@@ -296,7 +296,7 @@ def test_create_job_drive_lock_conflict_returns_409(client, db):
 # ---------------------------------------------------------------------------
 
 
-def test_double_start_prevented(client, db):
+def test_double_start_prevented(manager_client, db):
     """Starting a PENDING job twice: first succeeds (→ RUNNING), second returns 409.
 
     ``start_job`` transitions the job to RUNNING atomically within the
@@ -313,17 +313,17 @@ def test_double_start_prevented(client, db):
     db.commit()
 
     with patch("app.services.copy_engine.run_copy_job"):
-        response1 = client.post(f"/jobs/{job.id}/start", json={})
+        response1 = manager_client.post(f"/jobs/{job.id}/start", json={})
     assert response1.status_code == 200
     assert response1.json()["status"] == "RUNNING"
 
     # Second start attempt must be rejected because the job is now RUNNING.
-    response2 = client.post(f"/jobs/{job.id}/start", json={})
+    response2 = manager_client.post(f"/jobs/{job.id}/start", json={})
     assert response2.status_code == 409
     assert response2.json()["code"] == "CONFLICT"
 
 
-def test_double_assign_prevented(client, db):
+def test_double_assign_prevented(manager_client, db):
     """Assigning the same AVAILABLE drive to two jobs: first succeeds, second returns 409.
 
     The first job creation sets the drive to IN_USE and commits.  The second
@@ -335,7 +335,7 @@ def test_double_assign_prevented(client, db):
     db.add(drive)
     db.commit()
 
-    response1 = client.post(
+    response1 = manager_client.post(
         "/jobs",
         json={
             "project_id": "PROJ-GUARD",
@@ -347,7 +347,7 @@ def test_double_assign_prevented(client, db):
     assert response1.status_code == 200
 
     # Second job tries to claim the same drive – drive is now IN_USE.
-    response2 = client.post(
+    response2 = manager_client.post(
         "/jobs",
         json={
             "project_id": "PROJ-GUARD",
@@ -360,7 +360,7 @@ def test_double_assign_prevented(client, db):
     assert response2.json()["code"] == "CONFLICT"
 
 
-def test_double_initialize_different_projects_prevented(client, db):
+def test_double_initialize_different_projects_prevented(manager_client, db):
     """Initializing a drive for a different project while it is IN_USE returns 409."""
     drive = UsbDrive(
         device_identifier="USB-GUARD-02",
@@ -370,14 +370,14 @@ def test_double_initialize_different_projects_prevented(client, db):
     db.add(drive)
     db.commit()
 
-    response = client.post(
+    response = manager_client.post(
         f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-B"}
     )
     assert response.status_code == 409
     assert response.json()["code"] == "CONFLICT"
 
 
-def test_start_job_transitions_to_running_atomically(client, db):
+def test_start_job_transitions_to_running_atomically(manager_client, db):
     """start_job sets job status to RUNNING within the locked transaction.
 
     This ensures the row holds the updated state before the lock is released,
@@ -393,7 +393,7 @@ def test_start_job_transitions_to_running_atomically(client, db):
     db.commit()
 
     with patch("app.services.copy_engine.run_copy_job"):
-        response = client.post(f"/jobs/{job.id}/start", json={})
+        response = manager_client.post(f"/jobs/{job.id}/start", json={})
 
     assert response.status_code == 200
     assert response.json()["status"] == "RUNNING"
