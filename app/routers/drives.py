@@ -26,15 +26,15 @@ def initialize_drive(
     drive_id: int,
     body: DriveInitialize,
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(_ADMIN_MANAGER),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER),
 ):
-    return drive_service.initialize_drive(drive_id, body.project_id, db)
+    return drive_service.initialize_drive(drive_id, body.project_id, db, actor=current_user.username)
 
 
 @router.post("/{drive_id}/prepare-eject", response_model=UsbDriveSchema)
 def prepare_eject(
     drive_id: int,
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(_ADMIN_MANAGER),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER),
 ):
-    return drive_service.prepare_eject(drive_id, db)
+    return drive_service.prepare_eject(drive_id, db, actor=current_user.username)
