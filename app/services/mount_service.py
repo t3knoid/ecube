@@ -5,20 +5,22 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.network import MountStatus, MountType, NetworkMount
+from app.repositories.audit_repository import AuditRepository
+from app.repositories.mount_repository import MountRepository
 from app.schemas.network import MountCreate
-from app.services.audit_service import create_audit_log
 
 
 def add_mount(mount_data: MountCreate, db: Session) -> NetworkMount:
+    mount_repo = MountRepository(db)
+    audit_repo = AuditRepository(db)
+
     mount = NetworkMount(
         type=mount_data.type,
         remote_path=mount_data.remote_path,
         local_mount_point=mount_data.local_mount_point,
         status=MountStatus.UNMOUNTED,
     )
-    db.add(mount)
-    db.commit()
-    db.refresh(mount)
+    mount_repo.add(mount)
 
     _mount_error = None
     try:
@@ -39,14 +41,13 @@ def add_mount(mount_data: MountCreate, db: Session) -> NetworkMount:
         else:
             mount.status = MountStatus.ERROR
             _mount_error = (result.stderr or result.stdout or "").strip() or "mount failed"
-        db.commit()
+        mount_repo.save(mount)
     except Exception as exc:
         mount.status = MountStatus.ERROR
-        db.commit()
+        mount_repo.save(mount)
         _mount_error = str(exc)
 
-    create_audit_log(
-        db=db,
+    audit_repo.add(
         action="MOUNT_ADDED",
         details={
             "mount_id": mount.id,
@@ -59,7 +60,10 @@ def add_mount(mount_data: MountCreate, db: Session) -> NetworkMount:
 
 
 def remove_mount(mount_id: int, db: Session) -> None:
-    mount = db.get(NetworkMount, mount_id)
+    mount_repo = MountRepository(db)
+    audit_repo = AuditRepository(db)
+
+    mount = mount_repo.get(mount_id)
     if not mount:
         raise HTTPException(status_code=404, detail="Mount not found")
 
@@ -75,21 +79,21 @@ def remove_mount(mount_id: int, db: Session) -> None:
         # operator can manually clean up the mount point if needed.
         pass
 
-    create_audit_log(
-        db=db,
+    audit_repo.add(
         action="MOUNT_REMOVED",
         details={"mount_id": mount_id, "local_mount_point": mount.local_mount_point},
     )
-    db.delete(mount)
-    db.commit()
+    mount_repo.delete(mount)
 
 
 def list_mounts(db: Session):
-    return db.query(NetworkMount).all()
+    return MountRepository(db).list_all()
 
 
 def validate_mount(mount_id: int, db: Session) -> NetworkMount:
-    mount = db.get(NetworkMount, mount_id)
+    mount_repo = MountRepository(db)
+
+    mount = mount_repo.get(mount_id)
     if not mount:
         raise HTTPException(status_code=404, detail="Mount not found")
 
@@ -106,6 +110,4 @@ def validate_mount(mount_id: int, db: Session) -> NetworkMount:
         mount.status = MountStatus.ERROR
 
     mount.last_checked_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(mount)
-    return mount
+    return mount_repo.save(mount)
