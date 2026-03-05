@@ -1,5 +1,6 @@
 import subprocess
 from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -10,7 +11,7 @@ from app.repositories.mount_repository import MountRepository
 from app.schemas.network import MountCreate
 
 
-def add_mount(mount_data: MountCreate, db: Session) -> NetworkMount:
+def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None) -> NetworkMount:
     mount_repo = MountRepository(db)
     audit_repo = AuditRepository(db)
 
@@ -49,6 +50,7 @@ def add_mount(mount_data: MountCreate, db: Session) -> NetworkMount:
 
     audit_repo.add(
         action="MOUNT_ADDED",
+        user=actor,
         details={
             "mount_id": mount.id,
             "remote_path": mount_data.remote_path,
@@ -59,7 +61,7 @@ def add_mount(mount_data: MountCreate, db: Session) -> NetworkMount:
     return mount
 
 
-def remove_mount(mount_id: int, db: Session) -> None:
+def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None) -> None:
     mount_repo = MountRepository(db)
     audit_repo = AuditRepository(db)
 
@@ -81,6 +83,7 @@ def remove_mount(mount_id: int, db: Session) -> None:
 
     audit_repo.add(
         action="MOUNT_REMOVED",
+        user=actor,
         details={"mount_id": mount_id, "local_mount_point": mount.local_mount_point},
     )
     mount_repo.delete(mount)
@@ -90,8 +93,9 @@ def list_mounts(db: Session):
     return MountRepository(db).list_all()
 
 
-def validate_mount(mount_id: int, db: Session) -> NetworkMount:
+def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None) -> NetworkMount:
     mount_repo = MountRepository(db)
+    audit_repo = AuditRepository(db)
 
     mount = mount_repo.get(mount_id)
     if not mount:
@@ -110,4 +114,15 @@ def validate_mount(mount_id: int, db: Session) -> NetworkMount:
         mount.status = MountStatus.ERROR
 
     mount.last_checked_at = datetime.now(timezone.utc)
-    return mount_repo.save(mount)
+    mount = mount_repo.save(mount)
+
+    audit_repo.add(
+        action="MOUNT_VALIDATED",
+        user=actor,
+        details={
+            "mount_id": mount_id,
+            "local_mount_point": mount.local_mount_point,
+            "status": mount.status.value,
+        },
+    )
+    return mount

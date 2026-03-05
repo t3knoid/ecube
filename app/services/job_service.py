@@ -1,5 +1,6 @@
 import json
 import os
+from typing import Optional
 
 from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy.orm import Session
@@ -17,7 +18,7 @@ from app.schemas.jobs import JobCreate, JobStart
 from app.services import copy_engine
 
 
-def create_job(body: JobCreate, db: Session) -> ExportJob:
+def create_job(body: JobCreate, db: Session, actor: Optional[str] = None) -> ExportJob:
     job_repo = JobRepository(db)
     drive_repo = DriveRepository(db)
     assignment_repo = DriveAssignmentRepository(db)
@@ -40,6 +41,16 @@ def create_job(body: JobCreate, db: Session) -> ExportJob:
 
         # Enforce project isolation: the drive must belong to the same project, if set
         if getattr(drive, "current_project_id", None) not in (None, body.project_id):
+            audit_repo.add(
+                action="PROJECT_ISOLATION_VIOLATION",
+                user=actor,
+                job_id=job.id,
+                details={
+                    "drive_id": body.drive_id,
+                    "existing_project_id": drive.current_project_id,
+                    "requested_project_id": body.project_id,
+                },
+            )
             raise HTTPException(
                 status_code=409,
                 detail="Drive belongs to a different project",
@@ -58,6 +69,7 @@ def create_job(body: JobCreate, db: Session) -> ExportJob:
 
     audit_repo.add(
         action="JOB_CREATED",
+        user=actor,
         job_id=job.id,
         details={"project_id": body.project_id},
     )
@@ -76,6 +88,7 @@ def start_job(
     body: JobStart,
     background_tasks: BackgroundTasks,
     db: Session,
+    actor: Optional[str] = None,
 ) -> ExportJob:
     job_repo = JobRepository(db)
     audit_repo = AuditRepository(db)
@@ -96,7 +109,7 @@ def start_job(
         job.thread_count = body.thread_count
     job_repo.save(job)
 
-    audit_repo.add(action="JOB_STARTED", job_id=job_id, details={})
+    audit_repo.add(action="JOB_STARTED", user=actor, job_id=job_id, details={})
     background_tasks.add_task(copy_engine.run_copy_job, job_id)
     db.refresh(job)
     return job
@@ -106,6 +119,7 @@ def verify_job(
     job_id: int,
     background_tasks: BackgroundTasks,
     db: Session,
+    actor: Optional[str] = None,
 ) -> ExportJob:
     job_repo = JobRepository(db)
     audit_repo = AuditRepository(db)
@@ -116,13 +130,13 @@ def verify_job(
 
     job.status = JobStatus.VERIFYING
     job_repo.save(job)
-    audit_repo.add(action="JOB_VERIFY_STARTED", job_id=job_id, details={})
+    audit_repo.add(action="JOB_VERIFY_STARTED", user=actor, job_id=job_id, details={})
     background_tasks.add_task(copy_engine.run_verify_job, job_id)
     db.refresh(job)
     return job
 
 
-def create_manifest(job_id: int, db: Session) -> ExportJob:
+def create_manifest(job_id: int, db: Session, actor: Optional[str] = None) -> ExportJob:
     job_repo = JobRepository(db)
     manifest_repo = ManifestRepository(db)
     audit_repo = AuditRepository(db)
@@ -164,6 +178,7 @@ def create_manifest(job_id: int, db: Session) -> ExportJob:
     )
     audit_repo.add(
         action="MANIFEST_CREATED",
+        user=actor,
         job_id=job_id,
         details={"manifest_path": manifest_path, "error": manifest_error},
     )
