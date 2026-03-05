@@ -1,10 +1,6 @@
 # 11. Testing and Validation
 
-This document defines how to run automated tests for ECUBE using `pytest`, including:
-
-- Unit tests (fast, isolated, SQLite in-memory).
-- Integration tests (real database and system integrations).
-- Requirements and setup steps for each test type.
+This document defines how to run automated tests for ECUBE using `pytest`, including unit tests, integration tests, and hardware-in-the-loop validation.
 
 ## 11.1 Test Scope
 
@@ -13,28 +9,35 @@ This document defines how to run automated tests for ECUBE using `pytest`, inclu
 Unit tests validate API routes and service behavior in isolation.
 
 - Database: SQLite in-memory with `StaticPool`.
-- External/system calls: mocked (for example, mount and filesystem operations).
-- Speed: fast; runs on every local change and CI run.
+- External/system calls: mocked where applicable.
+- Speed: fast; suitable for local rapid iteration and CI default runs.
 
-Current unit tests live in `tests/` (for example `tests/test_drives.py`, `tests/test_jobs.py`, `tests/test_mounts.py`, `tests/test_introspection.py`).
+Current unit tests live in `tests/`.
 
 ### Integration Tests
 
-Integration tests validate end-to-end behavior against real infrastructure components.
+Integration tests validate behavior against real infrastructure components.
 
 - Database: PostgreSQL test database.
-- Migrations: applied with Alembic before test execution.
-- External dependencies: optional real system interactions (mount tooling, filesystem, hardware discovery) based on test scope.
+- Migrations: applied with Alembic before execution.
+- Optional system integrations: mount tooling, filesystem, and introspection dependencies.
 
-Recommended location for integration tests: `tests/integration/`.
+Integration tests live in `tests/integration/` and are gated by `--run-integration`.
+
+### Hardware HIL Tests
+
+Hardware-in-the-loop tests validate behavior with a physical USB hub and devices.
+
+- Tests are in `tests/hardware/`.
+- Execution requires `--run-hardware`.
 
 ## 11.2 Prerequisites
 
-### Common Requirements (Unit + Integration)
+### Common Requirements
 
 - Python `3.11+`
 - Virtual environment activated
-- Dev dependencies installed
+- Development dependencies installed
 
 Install dependencies:
 
@@ -45,18 +48,13 @@ pip install -e ".[dev]"
 ### Unit Test Requirements
 
 - No PostgreSQL required.
-- No system mount privileges required.
-- Tests rely on in-memory SQLite and mocks.
+- No mount/hardware privileges required.
 
 ### Integration Test Requirements
 
 - PostgreSQL instance available and reachable.
-- Dedicated test database and user credentials.
-- Alembic available to migrate schema.
-- Optional (only for mount/hardware integration cases):
-  - Linux runtime with `/sys` and `/proc` visibility.
-  - `mount`/`umount` tooling and suitable permissions.
-  - Isolated test mount targets and disposable test data.
+- `DATABASE_URL` (or `INTEGRATION_DATABASE_URL`) set to integration DB.
+- Schema migrated with Alembic.
 
 ## 11.3 Running Unit Tests
 
@@ -66,13 +64,13 @@ Run all unit tests:
 python -m pytest tests -q
 ```
 
-Run a single test module:
+Run a single module:
 
 ```bash
 python -m pytest tests/test_jobs.py -q
 ```
 
-Run selected tests by keyword:
+Run by keyword:
 
 ```bash
 python -m pytest tests -q -k "mount or job"
@@ -80,11 +78,9 @@ python -m pytest tests -q -k "mount or job"
 
 ## 11.4 Integration Test Setup
 
-Use a separate PostgreSQL database for integration tests. Do not point integration tests at development or production databases.
+Use a dedicated PostgreSQL database for integration tests.
 
-### Option A: Automated local environment (recommended)
-
-This repository includes `docker-compose.integration.yml` for local integration testing.
+### Option A: Local Docker Compose (recommended)
 
 Start PostgreSQL integration service:
 
@@ -92,13 +88,9 @@ Start PostgreSQL integration service:
 docker compose -f docker-compose.integration.yml up -d
 ```
 
-The service exposes PostgreSQL on `localhost:5433` with:
+Set integration environment variables.
 
-- DB: `ecube_integration`
-- User: `ecube_test`
-- Password: `ecube_test`
-
-Set integration DB URL:
+Bash:
 
 ```bash
 export INTEGRATION_DATABASE_URL="postgresql://ecube_test:ecube_test@localhost:5433/ecube_integration"
@@ -112,283 +104,106 @@ $env:INTEGRATION_DATABASE_URL = "postgresql://ecube_test:ecube_test@localhost:54
 $env:DATABASE_URL = $env:INTEGRATION_DATABASE_URL
 ```
 
-Apply schema migrations:
+Apply migrations:
 
 ```bash
 alembic upgrade head
 ```
 
-Run integration tests explicitly:
+Run integration tests:
 
 ```bash
 python -m pytest tests/integration -q --run-integration
 ```
 
-Stop environment when done:
+Run integration tests with live stdout/stderr output:
+
+```bash
+python -m pytest tests/integration -q -s --run-integration
+```
+
+Shutdown when done:
 
 ```bash
 docker compose -f docker-compose.integration.yml down
 ```
 
-Remove DB volume for a fully clean re-run:
+## 11.5 PostgreSQL Concurrency Scaffold
+
+The repository includes a real row-lock contention scaffold:
+
+- `tests/integration/test_concurrency_scaffold_integration.py`
+
+What it validates:
+
+- Session A acquires `FOR UPDATE` lock on a row.
+- Session B attempts `FOR UPDATE NOWAIT` on the same row.
+- Application-level conflict handling is surfaced correctly.
+
+Run only this scaffold:
 
 ```bash
-docker compose -f docker-compose.integration.yml down -v
+python -m pytest tests/integration/test_concurrency_scaffold_integration.py -q --run-integration
 ```
 
-### Step 1: Create integration database
-
-Example (PostgreSQL):
-
-```sql
-CREATE DATABASE ecube_integration;
-CREATE USER ecube_test WITH PASSWORD 'ecube_test';
-GRANT ALL PRIVILEGES ON DATABASE ecube_integration TO ecube_test;
-```
-
-### Step 2: Configure environment for test run
-
-Set `DATABASE_URL` for the integration session:
-
-```bash
-export DATABASE_URL="postgresql://ecube_test:ecube_test@localhost/ecube_integration"
-```
-
-Windows PowerShell:
-
-```powershell
-$env:DATABASE_URL = "postgresql://ecube_test:ecube_test@localhost/ecube_integration"
-```
-
-### Step 3: Apply schema migrations
-
-```bash
-alembic upgrade head
-```
-
-### Step 4: Run integration tests
+Run full integration suite including scaffold:
 
 ```bash
 python -m pytest tests/integration -q --run-integration
 ```
 
-### Step 5: Cleanup (recommended)
-
-- Drop and recreate the integration DB between full runs, or
-- Use per-test transactional isolation and explicit teardown fixtures.
-
-## 11.5 How to Add an Integration Test
-
-1. Create a new test file under `tests/integration/`.
-2. Use fixtures that connect to PostgreSQL (not SQLite `StaticPool`).
-3. Ensure schema is migrated before the suite runs.
-4. Isolate test data:
-   - unique IDs per test,
-   - cleanup in fixture teardown,
-   - no shared mutable global state.
-5. If system commands are exercised (`mount`, `umount`, hardware discovery), run only in controlled environments.
-
-Recommended fixture pattern:
-
-- `integration_engine` fixture bound to PostgreSQL `DATABASE_URL`.
-- `integration_db_session` fixture with transaction rollback or schema teardown.
-- `integration_client` fixture with FastAPI dependency override to integration session.
-
-Current scaffold in this repository:
-
-- `tests/integration/conftest.py`
-- `tests/integration/test_smoke_integration.py`
+Note: this scaffold requires PostgreSQL and auto-skips on non-PostgreSQL backends.
 
 ## 11.6 Local Debug Workflow (Integration)
 
-1. Start local integration PostgreSQL:
+1. Start local PostgreSQL:
 
    ```bash
    docker compose -f docker-compose.integration.yml up -d
    ```
 
-2. Set integration environment variables:
-
-   ```powershell
-   $env:INTEGRATION_DATABASE_URL = "postgresql://ecube_test:ecube_test@localhost:5433/ecube_integration"
-   $env:DATABASE_URL = $env:INTEGRATION_DATABASE_URL
-   ```
-
-3. Apply migrations:
-
-   ```bash
-   alembic upgrade head
-   ```
-
-4. Run one integration test while debugging:
+2. Set integration environment variables.
+3. Apply migrations: `alembic upgrade head`.
+4. Run a focused integration test:
 
    ```bash
    python -m pytest tests/integration/test_smoke_integration.py -q --run-integration -s
    ```
 
-5. Tear down when finished:
-
-   ```bash
-   docker compose -f docker-compose.integration.yml down
-   ```
-
-### One-click VS Code debugging
-
-This repository includes `.vscode/launch.json` with:
-
-- `Pytest: Integration (all)`
-- `Pytest: Integration (current file)`
-
-Usage:
-
-1. Ensure Docker PostgreSQL is running and migrations are applied.
-2. Open Run and Debug in VS Code.
-3. Select one of the integration debug profiles above.
-4. Press `F5` to start and hit breakpoints.
-
 ## 11.7 Suggested CI Test Sequence
 
-1. Install dependencies:
-
-   ```bash
-   pip install -e ".[dev]"
-   ```
-
-2. Run unit tests first:
-
-   ```bash
-   python -m pytest tests -q
-   ```
-
-3. If integration environment is available, run:
+1. Install dependencies: `pip install -e ".[dev]"`.
+2. Run unit tests: `python -m pytest tests -q`.
+3. If integration infrastructure is available:
 
    ```bash
    alembic upgrade head
    python -m pytest tests/integration -q --run-integration
    ```
 
-## 11.8 Quality and Safety Notes
+## 11.8 Integration Use-Case Coverage Matrix
 
-- Keep unit tests deterministic and independent.
-- Keep integration tests isolated from production-like resources.
-- Never use real evidence data in tests.
-- For mount and hardware integration tests, use disposable fixtures and restricted host environments.
+- Authentication and access: `tests/integration/test_auth_use_cases_integration.py`
+- Drive management: `tests/integration/test_drives_use_cases_integration.py`
+- Mount management: `tests/integration/test_mounts_use_cases_integration.py`
+- Job lifecycle: `tests/integration/test_jobs_use_cases_integration.py`
+- Introspection: `tests/integration/test_introspection_use_cases_integration.py`
+- Baseline smoke: `tests/integration/test_smoke_integration.py`
 
-## 11.9 Integration Use-Case Coverage Matrix
+## 11.9 Hardware HIL Testing
 
-The following integration use cases are covered and mapped to tests.
-
-### Authentication and Access
-
-- Public health endpoint without token.
-- Protected endpoints reject missing token.
-- Protected endpoints reject invalid token.
-- Protected endpoints accept valid token.
-
-Tests: `tests/integration/test_auth_use_cases_integration.py`
-
-### Drive Management
-
-- List drives.
-- Initialize drive for project assignment.
-- Reject cross-project initialization conflict.
-- Prepare drive for eject.
-- Handle drive-not-found cases.
-- Verify drive lifecycle audit events.
-
-Tests: `tests/integration/test_drives_use_cases_integration.py`
-
-### Mount Management
-
-- List mounts.
-- Add NFS mount (success path).
-- Add mount (error path).
-- Remove existing mount.
-- Remove missing mount.
-- Verify mount lifecycle audit events.
-
-Tests: `tests/integration/test_mounts_use_cases_integration.py`
-
-### Job Lifecycle
-
-- Create job.
-- Create job with drive assignment.
-- Reject job creation on project mismatch drive.
-- Get job and handle missing job.
-- Start job and update thread count.
-- Reject start on already-running job.
-- Verify job workflow kickoff.
-- Generate manifest and persist manifest record.
-- Verify job lifecycle audit events.
-
-Tests: `tests/integration/test_jobs_use_cases_integration.py`
-
-### Introspection
-
-- System health endpoint.
-- USB topology endpoint.
-- Block device endpoint.
-- Mount table endpoint.
-- Job debug endpoint (found and not found).
-
-Tests: `tests/integration/test_introspection_use_cases_integration.py`
-
-### Baseline Smoke
-
-- Health endpoint reachability.
-- System-health endpoint basic DB connectivity check.
-
-Tests: `tests/integration/test_smoke_integration.py`
-
-## 11.10 Hardware HIL Testing (USB Hub and Devices)
-
-Hardware-in-the-loop (HIL) tests validate behavior with a physical USB hub and real USB devices connected to the test machine.
-
-Current HIL test skeleton:
+Hardware test skeleton:
 
 - `tests/hardware/test_usb_hub_hil.py`
 
-### 11.10.1 Requirements
-
-- Linux host with USB sysfs visibility (for example `/sys/bus/usb/devices`).
-- Physical USB hub and at least one disposable test USB device.
-- Interactive terminal session (operator prompts require input).
-- API environment running with valid auth secret settings.
-
-### 11.10.2 Execution
-
-Run the hardware test explicitly:
+Run explicitly:
 
 ```bash
 python -m pytest tests/hardware/test_usb_hub_hil.py -s --run-hardware
 ```
 
-Notes:
+Guidance:
 
-- `--run-hardware` is required because hardware tests are skipped by default.
-- `-s` is required to display interactive operator prompts.
-
-### 11.10.3 Operator-driven flow
-
-The test guides the operator through these physical steps:
-
-1. Start from baseline (hub disconnected, no test device connected).
-2. Connect hub and one known test USB device.
-3. Verify topology and block-device introspection responses.
-4. Disconnect and reconnect test USB device.
-5. Disconnect hub/device and verify near-baseline state.
-
-### 11.10.4 Assertions performed by the test
-
-- Introspection endpoints are reachable and return expected response shape.
-- USB topology device count increases after connect.
-- Block device endpoint returns structured list data.
-- USB topology remains consistent through reconnect.
-- Device count decreases after disconnect.
-
-### 11.10.5 Safety and reliability guidance
-
-- Use disposable test media only (never production evidence media).
-- Keep host USB environment stable during execution (avoid unrelated hot-plug events).
-- If run in CI, dedicate a hardware runner and isolate USB peripherals.
-- Record OS-level diagnostics (`dmesg`, `lsusb`) alongside test output for troubleshooting.
+- Use disposable media only.
+- Keep host USB environment stable during execution.
+- Run on dedicated hardware for CI-style execution.
