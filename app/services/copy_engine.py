@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
@@ -56,7 +57,7 @@ def _relative_path(f: Path, source: Path) -> Path:
     return f.relative_to(source) if source.is_dir() else Path(f.name)
 
 
-
+def _process_file(export_file_id: int, src_file: Path, target: Optional[Path]) -> None:
     """Worker executed inside the thread pool.
 
     Each worker opens its own DB session to avoid cross-thread SQLAlchemy issues.
@@ -84,84 +85,147 @@ def _relative_path(f: Path, source: Path) -> Path:
             ef.error_message = err
         db.commit()
 
-        # Update copied_bytes on the parent job atomically via a separate query.
+        # Atomically increment copied_bytes to avoid lost-update races between threads.
         if success and ef.size_bytes:
-            job = db.get(ExportJob, ef.job_id)
-            if job:
-                job.copied_bytes = (job.copied_bytes or 0) + ef.size_bytes
-                db.commit()
+            db.execute(
+                update(ExportJob)
+                .where(ExportJob.id == ef.job_id)
+                .values(copied_bytes=ExportJob.copied_bytes + ef.size_bytes)
+            )
+            db.commit()
     finally:
         db.close()
 
 
-def run_copy_job(job_id: int, db: Session) -> None:
+def run_copy_job(job_id: int) -> None:
     """Execute the copy job using a thread pool.
 
-    *db* is the caller's session and is used only for the initial job fetch and
-    final status update.  Each worker thread opens its own session.
+    Opens its own DB session so it is safe to run as a FastAPI background task
+    after the originating request's session has been closed.
     """
-    job = db.get(ExportJob, job_id)
-    if not job:
-        return
+    db: Session = SessionLocal()
+    try:
+        job = db.get(ExportJob, job_id)
+        if not job:
+            return
 
-    job.status = JobStatus.RUNNING
-    job.started_at = datetime.now(timezone.utc)
-    db.commit()
-
-    source = Path(job.source_path)
-    target = Path(job.target_mount_path) if job.target_mount_path else None
-
-    files = scan_source_files(job.source_path)
-    job.file_count = len(files)
-    job.total_bytes = sum(f.stat().st_size for f in files if f.exists())
-    db.commit()
-
-    # Create ExportFile records and collect (src_path, export_file_id) pairs.
-    # Flush once after all inserts rather than per-row.
-    file_pairs: List[Tuple[Path, int]] = []
-    for f in files:
-        rel = _relative_path(f, source)
-        ef = ExportFile(
-            job_id=job_id,
-            relative_path=str(rel),
-            size_bytes=f.stat().st_size if f.exists() else 0,
-            status=FileStatus.PENDING,
-        )
-        db.add(ef)
-    db.commit()
-
-    # Re-query to get stable IDs now that the transaction is committed.
-    committed_files = (
-        db.query(ExportFile)
-        .filter(ExportFile.job_id == job_id)
-        .all()
-    )
-    src_by_rel = {str(_relative_path(f, source)): f for f in files}
-    file_pairs = [(src_by_rel[ef.relative_path], ef.id) for ef in committed_files if ef.relative_path in src_by_rel]
-
-    with ThreadPoolExecutor(max_workers=job.thread_count or 4) as executor:
-        futures = {
-            executor.submit(_process_file, ef_id, src, target): ef_id
-            for src, ef_id in file_pairs
-        }
-        for future in as_completed(futures):
-            try:
-                future.result()  # re-raise any unexpected exception from the worker
-            except Exception:
-                # Worker already recorded FileStatus.ERROR in its own session;
-                # unexpected exceptions are caught here to let other workers finish.
-                pass
-
-    # Determine final job status.
-    db.expire_all()
-    error_count = (
-        db.query(ExportFile)
-        .filter(ExportFile.job_id == job_id, ExportFile.status == FileStatus.ERROR)
-        .count()
-    )
-
-    job = db.get(ExportJob, job_id)
-    if job:
-        job.status = JobStatus.FAILED if error_count > 0 else JobStatus.COMPLETED
-        job.completed_at = datetime.now(timezone.utc)
+        job.status = JobStatus.RUNNING
+        job.started_at = datetime.now(timezone.utc)
         db.commit()
+
+        source = Path(job.source_path)
+        target = Path(job.target_mount_path) if job.target_mount_path else None
+
+        files = scan_source_files(job.source_path)
+        job.file_count = len(files)
+        job.total_bytes = sum(f.stat().st_size for f in files if f.exists())
+        db.commit()
+
+        # Delete any existing ExportFile rows for this job (e.g. on a FAILED restart)
+        # so we start clean and avoid duplicate records.
+        db.query(ExportFile).filter(ExportFile.job_id == job_id).delete()
+        db.commit()
+
+        # Insert fresh ExportFile records for this run.
+        for f in files:
+            rel = _relative_path(f, source)
+            ef = ExportFile(
+                job_id=job_id,
+                relative_path=str(rel),
+                size_bytes=f.stat().st_size if f.exists() else 0,
+                status=FileStatus.PENDING,
+            )
+            db.add(ef)
+        db.commit()
+
+        # Re-query to get stable IDs now that the transaction is committed.
+        committed_files = (
+            db.query(ExportFile)
+            .filter(ExportFile.job_id == job_id)
+            .all()
+        )
+        src_by_rel = {str(_relative_path(f, source)): f for f in files}
+        file_pairs = [
+            (src_by_rel[ef.relative_path], ef.id)
+            for ef in committed_files
+            if ef.relative_path in src_by_rel
+        ]
+
+        with ThreadPoolExecutor(max_workers=job.thread_count or 4) as executor:
+            futures = {
+                executor.submit(_process_file, ef_id, src, target): ef_id
+                for src, ef_id in file_pairs
+            }
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception:
+                    # Worker already recorded FileStatus.ERROR in its own session;
+                    # unexpected exceptions are caught here to let other workers finish.
+                    pass
+
+        # Determine final job status.
+        db.expire_all()
+        error_count = (
+            db.query(ExportFile)
+            .filter(ExportFile.job_id == job_id, ExportFile.status == FileStatus.ERROR)
+            .count()
+        )
+
+        job = db.get(ExportJob, job_id)
+        if job:
+            job.status = JobStatus.FAILED if error_count > 0 else JobStatus.COMPLETED
+            job.completed_at = datetime.now(timezone.utc)
+            db.commit()
+    finally:
+        db.close()
+
+
+def run_verify_job(job_id: int) -> None:
+    """Re-compute checksums for all completed files and compare against stored values.
+
+    Opens its own DB session so it is safe to run as a FastAPI background task.
+    """
+    db: Session = SessionLocal()
+    try:
+        job = db.get(ExportJob, job_id)
+        if not job:
+            return
+
+        target = Path(job.target_mount_path) if job.target_mount_path else None
+
+        files = (
+            db.query(ExportFile)
+            .filter(ExportFile.job_id == job_id, ExportFile.status == FileStatus.DONE)
+            .all()
+        )
+
+        any_mismatch = False
+        for ef in files:
+            if target is not None:
+                dst = target / ef.relative_path
+                success, checksum, err = _checksum_only(dst)
+            else:
+                # No target path — re-verify the source file checksum.
+                src = Path(job.source_path)
+                src_file = src / ef.relative_path if src.is_dir() else src
+                success, checksum, err = _checksum_only(src_file)
+
+            if not success:
+                ef.status = FileStatus.ERROR
+                ef.error_message = err or "Checksum computation failed"
+                any_mismatch = True
+            elif checksum != ef.checksum:
+                ef.status = FileStatus.ERROR
+                ef.error_message = f"Checksum mismatch: expected {ef.checksum}, got {checksum}"
+                any_mismatch = True
+
+        db.commit()
+
+        job = db.get(ExportJob, job_id)
+        if job:
+            job.status = JobStatus.FAILED if any_mismatch else JobStatus.COMPLETED
+            job.completed_at = datetime.now(timezone.utc)
+            db.commit()
+    finally:
+        db.close()

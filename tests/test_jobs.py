@@ -72,3 +72,21 @@ def test_start_already_running_job(client, db):
 
     response = client.post(f"/jobs/{job.id}/start", json={})
     assert response.status_code == 409
+
+
+def test_verify_job(client, db):
+    create_response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-001",
+            "evidence_number": "EV-001",
+            "source_path": "/tmp",
+        },
+    )
+    job_id = create_response.json()["id"]
+
+    with patch("app.services.copy_engine.run_verify_job") as mock_verify:
+        mock_verify.return_value = None
+        response = client.post(f"/jobs/{job_id}/verify")
+    assert response.status_code == 200
+    assert response.json()["status"] == "VERIFYING"
