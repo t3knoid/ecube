@@ -36,14 +36,14 @@ def create_job(body: JobCreate, db: Session = Depends(get_db)):
         # Enforce project isolation: the drive must belong to the same project, if set
         if getattr(drive, "current_project_id", None) not in (None, body.project_id):
             raise HTTPException(
-                status_code=400,
+                status_code=409,
                 detail="Drive belongs to a different project",
             )
 
         # Ensure the drive is in a valid state for assignment
         if drive.current_state == DriveState.IN_USE:
             raise HTTPException(
-                status_code=400,
+                status_code=409,
                 detail="Drive is already in use",
             )
 
