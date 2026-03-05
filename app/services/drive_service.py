@@ -1,21 +1,25 @@
-from sqlalchemy.orm import Session
-from app.models.hardware import UsbDrive, DriveState
-from app.services.audit_service import create_audit_log
 from fastapi import HTTPException
+from sqlalchemy.orm import Session
+
+from app.models.hardware import DriveState, UsbDrive
+from app.repositories.audit_repository import AuditRepository
+from app.repositories.drive_repository import DriveRepository
 
 
 def get_all_drives(db: Session):
-    return db.query(UsbDrive).all()
+    return DriveRepository(db).list_all()
 
 
 def initialize_drive(drive_id: int, project_id: str, db: Session) -> UsbDrive:
-    drive = db.get(UsbDrive, drive_id)
+    drive_repo = DriveRepository(db)
+    audit_repo = AuditRepository(db)
+
+    drive = drive_repo.get(drive_id)
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
 
     if drive.current_project_id and drive.current_project_id != project_id:
-        create_audit_log(
-            db=db,
+        audit_repo.add(
             action="PROJECT_ISOLATION_VIOLATION",
             details={
                 "drive_id": drive_id,
@@ -30,10 +34,8 @@ def initialize_drive(drive_id: int, project_id: str, db: Session) -> UsbDrive:
 
     drive.current_project_id = project_id
     drive.current_state = DriveState.IN_USE
-    db.commit()
-    db.refresh(drive)
-    create_audit_log(
-        db=db,
+    drive_repo.save(drive)
+    audit_repo.add(
         action="DRIVE_INITIALIZED",
         details={"drive_id": drive_id, "project_id": project_id},
     )
@@ -41,15 +43,16 @@ def initialize_drive(drive_id: int, project_id: str, db: Session) -> UsbDrive:
 
 
 def prepare_eject(drive_id: int, db: Session) -> UsbDrive:
-    drive = db.get(UsbDrive, drive_id)
+    drive_repo = DriveRepository(db)
+    audit_repo = AuditRepository(db)
+
+    drive = drive_repo.get(drive_id)
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
 
     drive.current_state = DriveState.AVAILABLE
-    db.commit()
-    db.refresh(drive)
-    create_audit_log(
-        db=db,
+    drive_repo.save(drive)
+    audit_repo.add(
         action="DRIVE_EJECT_PREPARED",
         details={"drive_id": drive_id},
     )
