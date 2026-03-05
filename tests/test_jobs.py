@@ -74,6 +74,50 @@ def test_start_already_running_job(client, db):
     assert response.status_code == 409
 
 
+def test_create_job_conflict_when_drive_has_different_project(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-PRJ-CONFLICT",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-AAA",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-BBB",
+            "evidence_number": "EV-009",
+            "source_path": "/data/evidence",
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 409
+
+
+def test_create_job_conflict_when_drive_already_in_use(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-IN-USE",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-001",
+            "evidence_number": "EV-010",
+            "source_path": "/data/evidence",
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 409
+
+
 def test_verify_job(client, db):
     create_response = client.post(
         "/jobs",
