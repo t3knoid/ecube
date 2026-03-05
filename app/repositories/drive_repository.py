@@ -43,9 +43,13 @@ class DriveRepository:
             )
         except OperationalError as exc:
             self.db.rollback()
-            raise ConflictError(
-                "Drive is currently locked by another operation."
-            ) from exc
+            orig = getattr(exc, "orig", None)
+            sqlstate = getattr(orig, "pgcode", None) or getattr(orig, "sqlstate", None)
+            if sqlstate == "55P03":
+                raise ConflictError(
+                    "Drive is currently locked by another operation."
+                ) from exc
+            raise
 
     def add(self, drive: UsbDrive) -> UsbDrive:
         """Persist a new drive and flush it to obtain its ID."""
