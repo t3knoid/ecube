@@ -14,7 +14,7 @@ def initialize_drive(drive_id: int, project_id: str, db: Session) -> UsbDrive:
     drive_repo = DriveRepository(db)
     audit_repo = AuditRepository(db)
 
-    drive = drive_repo.get(drive_id)
+    drive = drive_repo.get_for_update(drive_id)
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
 
@@ -46,7 +46,7 @@ def prepare_eject(drive_id: int, db: Session) -> UsbDrive:
     drive_repo = DriveRepository(db)
     audit_repo = AuditRepository(db)
 
-    drive = drive_repo.get(drive_id)
+    drive = drive_repo.get_for_update(drive_id)
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
 
