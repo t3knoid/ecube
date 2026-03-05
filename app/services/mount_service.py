@@ -32,9 +32,14 @@ def add_mount(mount_data: MountCreate, db: Session) -> NetworkMount:
         else:
             mount.status = MountStatus.ERROR
         db.commit()
-    except Exception:
+    except Exception as exc:
+        # Record the error so callers can see why the mount failed.
         mount.status = MountStatus.ERROR
         db.commit()
+        # Re-use the details dict in the subsequent audit log below.
+        _mount_error = str(exc)
+    else:
+        _mount_error = None
 
     create_audit_log(
         db=db,
@@ -43,6 +48,7 @@ def add_mount(mount_data: MountCreate, db: Session) -> NetworkMount:
             "mount_id": mount.id,
             "remote_path": mount_data.remote_path,
             "status": mount.status.value,
+            "error": _mount_error,
         },
     )
     return mount
@@ -61,6 +67,8 @@ def remove_mount(mount_id: int, db: Session) -> None:
             timeout=30,
         )
     except Exception:
+        # Unmount failures are non-fatal; the record is still deleted so the
+        # operator can manually clean up the mount point if needed.
         pass
 
     create_audit_log(
