@@ -7,6 +7,9 @@ class MountCreate(BaseModel):
     type: MountType
     remote_path: str
     local_mount_point: str
+    username: Optional[str] = None
+    password: Optional[str] = None
+    credentials_file: Optional[str] = None
 
 
 class NetworkMountSchema(BaseModel):
