@@ -17,18 +17,18 @@ _ADMIN_MANAGER = require_roles("admin", "manager")
 def add_mount(
     body: MountCreate,
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(_ADMIN_MANAGER),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER),
 ):
-    return mount_service.add_mount(body, db)
+    return mount_service.add_mount(body, db, actor=current_user.username)
 
 
 @router.delete("/{mount_id}", status_code=204)
 def remove_mount(
     mount_id: int,
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(_ADMIN_MANAGER),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER),
 ):
-    mount_service.remove_mount(mount_id, db)
+    mount_service.remove_mount(mount_id, db, actor=current_user.username)
 
 
 @router.get("", response_model=List[NetworkMountSchema])
@@ -37,3 +37,12 @@ def list_mounts(
     _: CurrentUser = Depends(_ALL_ROLES),
 ):
     return mount_service.list_mounts(db)
+
+
+@router.post("/{mount_id}/validate", response_model=NetworkMountSchema)
+def validate_mount(
+    mount_id: int,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER),
+):
+    return mount_service.validate_mount(mount_id, db, actor=current_user.username)
