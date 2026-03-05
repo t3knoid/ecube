@@ -42,7 +42,7 @@ def upgrade() -> None:
         sa.Column("encryption_status", sa.String, nullable=True),
         sa.Column(
             "current_state",
-            sa.Enum("EMPTY", "AVAILABLE", "IN_USE", name="drivestate"),
+            sa.Enum("EMPTY", "AVAILABLE", "IN_USE", name="drivestate", native_enum=False),
             nullable=True,
         ),
         sa.Column("current_project_id", sa.String, nullable=True),
@@ -58,14 +58,14 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer, primary_key=True),
         sa.Column(
             "type",
-            sa.Enum("NFS", "SMB", name="mounttype"),
+            sa.Enum("NFS", "SMB", name="mounttype", native_enum=False),
             nullable=False,
         ),
         sa.Column("remote_path", sa.String, nullable=False),
         sa.Column("local_mount_point", sa.String, nullable=False, unique=True),
         sa.Column(
             "status",
-            sa.Enum("MOUNTED", "UNMOUNTED", "ERROR", name="mountstatus"),
+            sa.Enum("MOUNTED", "UNMOUNTED", "ERROR", name="mountstatus", native_enum=False),
             nullable=True,
         ),
         sa.Column(
@@ -84,7 +84,7 @@ def upgrade() -> None:
         sa.Column("target_mount_path", sa.String, nullable=True),
         sa.Column(
             "status",
-            sa.Enum("PENDING", "RUNNING", "COMPLETED", "FAILED", "VERIFYING", name="jobstatus"),
+            sa.Enum("PENDING", "RUNNING", "COMPLETED", "FAILED", "VERIFYING", name="jobstatus", native_enum=False),
             nullable=True,
         ),
         sa.Column("total_bytes", sa.BigInteger, default=0),
@@ -110,7 +110,7 @@ def upgrade() -> None:
         sa.Column("checksum", sa.String, nullable=True),
         sa.Column(
             "status",
-            sa.Enum("PENDING", "COPYING", "DONE", "ERROR", name="filestatus"),
+            sa.Enum("PENDING", "COPYING", "DONE", "ERROR", name="filestatus", native_enum=False),
             nullable=True,
         ),
         sa.Column("error_message", sa.Text, nullable=True),
