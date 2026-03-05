@@ -1,9 +1,13 @@
+import time
+
+import jwt
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.config import settings
 from app.database import Base, get_db
 from app.main import app
 
@@ -29,7 +33,22 @@ def db():
 
 
 @pytest.fixture(scope="function")
-def client(db):
+def client(db, auth_headers):
+    def override_get_db():
+        try:
+            yield db
+        finally:
+            pass
+
+    app.dependency_overrides[get_db] = override_get_db
+    with TestClient(app) as c:
+        c.headers.update(auth_headers)
+        yield c
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture(scope="function")
+def unauthenticated_client(db):
     def override_get_db():
         try:
             yield db
@@ -40,3 +59,16 @@ def client(db):
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(scope="function")
+def auth_headers():
+    payload = {
+        "sub": "test-user-id",
+        "username": "test-user",
+        "groups": ["evidence-team"],
+        "roles": ["processor"],
+        "exp": int(time.time()) + 3600,
+    }
+    token = jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+    return {"Authorization": f"Bearer {token}"}
