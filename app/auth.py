@@ -1,11 +1,12 @@
 from dataclasses import dataclass, field
-from typing import List
+from typing import Callable, List
 
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import settings
+from app.exceptions import AuthorizationError
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -78,3 +79,31 @@ def get_current_user(
 
     request.state.current_user = current_user
     return current_user
+
+
+def require_roles(*allowed_roles: str) -> Callable[..., CurrentUser]:
+    """FastAPI dependency factory that enforces role-based access control.
+
+    Returns a dependency callable that validates the current user holds at least
+    one of *allowed_roles*.  Raises HTTP 403 (via :class:`AuthorizationError`)
+    when the user is authenticated but lacks the required role.
+
+    Usage::
+
+        @router.post("/drives/{drive_id}/initialize")
+        def initialize_drive(
+            drive_id: int,
+            db: Session = Depends(get_db),
+            _: CurrentUser = Depends(require_roles("admin", "manager")),
+        ):
+            ...
+    """
+
+    def _check(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+        if not any(r in current_user.roles for r in allowed_roles):
+            raise AuthorizationError(
+                f"This action requires one of the following roles: {', '.join(sorted(allowed_roles))}"
+            )
+        return current_user
+
+    return _check
