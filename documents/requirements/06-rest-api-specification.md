@@ -62,7 +62,7 @@ Every request resolves to:
 ### 2.2 Authorization Matrix
 
 | API Area / Operation | Admin | Manager | Processor | Auditor |
-|----------------------|:-----:|:-------:|:---------:|:-------:|
+| -------------------- | :---: | :-----: | :-------: | :-----: |
 | Add/remove mounts | ✔ | ✔ | ✖ | ✖ |
 | List mounts | ✔ | ✔ | ✔ | ✔ |
 | Initialize drives | ✔ | ✔ | ✖ | ✖ |
