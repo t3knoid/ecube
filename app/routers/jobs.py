@@ -16,9 +16,9 @@ _ADMIN_MANAGER_PROCESSOR = require_roles("admin", "manager", "processor")
 def create_job(
     body: JobCreate,
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
 ):
-    return job_service.create_job(body, db)
+    return job_service.create_job(body, db, actor=current_user.username)
 
 
 @router.get("/{job_id}", response_model=ExportJobSchema)
@@ -36,9 +36,9 @@ def start_job(
     body: JobStart,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
 ):
-    return job_service.start_job(job_id, body, background_tasks, db)
+    return job_service.start_job(job_id, body, background_tasks, db, actor=current_user.username)
 
 
 @router.post("/{job_id}/verify", response_model=ExportJobSchema)
@@ -46,15 +46,15 @@ def verify_job(
     job_id: int,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
 ):
-    return job_service.verify_job(job_id, background_tasks, db)
+    return job_service.verify_job(job_id, background_tasks, db, actor=current_user.username)
 
 
 @router.post("/{job_id}/manifest", response_model=ExportJobSchema)
 def create_manifest(
     job_id: int,
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
 ):
-    return job_service.create_manifest(job_id, db)
+    return job_service.create_manifest(job_id, db, actor=current_user.username)
