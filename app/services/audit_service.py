@@ -1,6 +1,9 @@
+from typing import Any, Dict, Optional
+
 from sqlalchemy.orm import Session
+
 from app.models.audit import AuditLog
-from typing import Optional, Dict, Any
+from app.repositories.audit_repository import AuditRepository
 
 
 def create_audit_log(
@@ -10,13 +13,9 @@ def create_audit_log(
     job_id: Optional[int] = None,
     details: Optional[Dict[str, Any]] = None,
 ) -> AuditLog:
-    entry = AuditLog(
-        user=user,
+    return AuditRepository(db).add(
         action=action,
+        user=user,
         job_id=job_id,
-        details=details or {},
+        details=details,
     )
-    db.add(entry)
-    db.commit()
-    db.refresh(entry)
-    return entry
