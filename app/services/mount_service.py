@@ -20,6 +20,7 @@ def add_mount(mount_data: MountCreate, db: Session) -> NetworkMount:
     db.commit()
     db.refresh(mount)
 
+    _mount_error = None
     try:
         if mount_data.type == MountType.NFS:
             cmd = ["mount", "-t", "nfs", mount_data.remote_path, mount_data.local_mount_point]
@@ -28,25 +29,21 @@ def add_mount(mount_data: MountCreate, db: Session) -> NetworkMount:
             if mount_data.credentials_file:
                 cmd += ["-o", f"credentials={mount_data.credentials_file}"]
             elif mount_data.username:
-                options = f"username={mount_data.username}"
-                if mount_data.password:
-                    options += f",password={mount_data.password}"
-                cmd += ["-o", options]
+                # Pass only the username on the command line; password must be
+                # supplied via credentials_file to avoid exposure in process listings.
+                cmd += ["-o", f"username={mount_data.username}"]
 
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if result.returncode == 0:
             mount.status = MountStatus.MOUNTED
         else:
             mount.status = MountStatus.ERROR
+            _mount_error = (result.stderr or result.stdout or "").strip() or "mount failed"
         db.commit()
     except Exception as exc:
-        # Record the error so callers can see why the mount failed.
         mount.status = MountStatus.ERROR
         db.commit()
-        # Re-use the details dict in the subsequent audit log below.
         _mount_error = str(exc)
-    else:
-        _mount_error = None
 
     create_audit_log(
         db=db,

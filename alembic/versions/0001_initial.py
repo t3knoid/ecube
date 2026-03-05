@@ -6,6 +6,7 @@ Create Date: 2024-01-01 00:00:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB
 
 revision = "0001"
 down_revision = None
@@ -157,7 +158,7 @@ def upgrade() -> None:
             sa.ForeignKey("export_jobs.id", ondelete="SET NULL"),
             nullable=True,
         ),
-        sa.Column("details", sa.JSON, nullable=True),
+        sa.Column("details", sa.JSON().with_variant(JSONB(), "postgresql"), nullable=True),
     )
 
 
