@@ -4,14 +4,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.auth import CurrentUser, require_roles
 from app.database import get_db
 from app.models.jobs import ExportJob, JobStatus
 
 router = APIRouter(prefix="/introspection", tags=["introspection"])
 
+_ALL_ROLES = require_roles("admin", "manager", "processor", "auditor")
+
 
 @router.get("/usb/topology")
-def usb_topology():
+def usb_topology(_: CurrentUser = Depends(_ALL_ROLES)):
     devices = []
     usb_path = "/sys/bus/usb/devices"
     try:
@@ -34,7 +37,7 @@ def usb_topology():
 
 
 @router.get("/block-devices")
-def block_devices():
+def block_devices(_: CurrentUser = Depends(_ALL_ROLES)):
     stats = []
     try:
         with open("/proc/diskstats") as f:
@@ -50,7 +53,7 @@ def block_devices():
 
 
 @router.get("/mounts")
-def system_mounts():
+def system_mounts(_: CurrentUser = Depends(_ALL_ROLES)):
     mounts = []
     try:
         with open("/proc/mounts") as f:
@@ -71,7 +74,10 @@ def system_mounts():
 
 
 @router.get("/system-health")
-def system_health(db: Session = Depends(get_db)):
+def system_health(
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(_ALL_ROLES),
+):
     db_status = "connected"
     db_error = None
     try:
@@ -98,7 +104,11 @@ def system_health(db: Session = Depends(get_db)):
 
 
 @router.get("/jobs/{job_id}/debug")
-def job_debug(job_id: int, db: Session = Depends(get_db)):
+def job_debug(
+    job_id: int,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(_ALL_ROLES),
+):
     job = db.get(ExportJob, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
