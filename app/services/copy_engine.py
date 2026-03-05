@@ -123,7 +123,6 @@ def run_copy_job(job_id: int, db: Session) -> None:
             status=FileStatus.PENDING,
         )
         db.add(ef)
-    db.flush()  # single flush to populate all ef.id values
     db.commit()
 
     # Re-query to get stable IDs now that the transaction is committed.
