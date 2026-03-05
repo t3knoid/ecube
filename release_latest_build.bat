@@ -42,15 +42,27 @@ if "%PRERELEASE%"=="" set "PRERELEASE=true"
 set "DRAFT_RELEASE=%DRAFT_RELEASE%"
 if "%DRAFT_RELEASE%"=="" set "DRAFT_RELEASE=false"
 
+set "DEFAULT_OWNER=t3knoid"
+set "DEFAULT_REPO=ecube"
+
 for /f %%i in ('git remote get-url origin') do set "ORIGIN_URL=%%i"
 
+if "%GITHUB_OWNER%"=="" set "PARSED_OWNER="
+if "%GITHUB_REPO%"=="" set "PARSED_REPO="
+
 if "%GITHUB_OWNER%"=="" (
-  for /f "tokens=2 delims=/" %%i in ('echo %ORIGIN_URL:^:=/%') do set "GITHUB_OWNER=%%i"
+  for /f "usebackq tokens=* delims=" %%i in (`powershell -NoProfile -Command "$u='''%ORIGIN_URL%'''; if($u -match 'github\.com[:/](?<o>[^/]+)/(?<r>[^/.]+)(\.git)?$'){ Write-Output $matches.o }"`) do set "PARSED_OWNER=%%i"
 )
+
 if "%GITHUB_REPO%"=="" (
-  for /f "tokens=3 delims=/" %%i in ('echo %ORIGIN_URL:^:=/%') do set "GITHUB_REPO=%%i"
+  for /f "usebackq tokens=* delims=" %%i in (`powershell -NoProfile -Command "$u='''%ORIGIN_URL%'''; if($u -match 'github\.com[:/](?<o>[^/]+)/(?<r>[^/.]+)(\.git)?$'){ Write-Output $matches.r }"`) do set "PARSED_REPO=%%i"
 )
-set "GITHUB_REPO=%GITHUB_REPO:.git=%"
+
+if "%GITHUB_OWNER%"=="" set "GITHUB_OWNER=%PARSED_OWNER%"
+if "%GITHUB_REPO%"=="" set "GITHUB_REPO=%PARSED_REPO%"
+
+if "%GITHUB_OWNER%"=="" set "GITHUB_OWNER=%DEFAULT_OWNER%"
+if "%GITHUB_REPO%"=="" set "GITHUB_REPO=%DEFAULT_REPO%"
 
 if "%GITHUB_OWNER%"=="" (
   echo Could not parse GitHub owner from origin URL: %ORIGIN_URL%
