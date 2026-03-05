@@ -29,11 +29,27 @@ def create_job(body: JobCreate, db: Session = Depends(get_db)):
     db.refresh(job)
 
     if body.drive_id:
+        drive = db.get(UsbDrive, body.drive_id)
+        if not drive:
+            raise HTTPException(status_code=404, detail="Drive not found")
+
+        # Enforce project isolation: the drive must belong to the same project, if set
+        if getattr(drive, "current_project_id", None) not in (None, body.project_id):
+            raise HTTPException(
+                status_code=400,
+                detail="Drive belongs to a different project",
+            )
+
+        # Ensure the drive is in a valid state for assignment
+        if drive.current_state == DriveState.IN_USE:
+            raise HTTPException(
+                status_code=400,
+                detail="Drive is already in use",
+            )
+
         assignment = DriveAssignment(drive_id=body.drive_id, job_id=job.id)
         db.add(assignment)
-        drive = db.get(UsbDrive, body.drive_id)
-        if drive:
-            drive.current_state = DriveState.IN_USE
+        drive.current_state = DriveState.IN_USE
         db.commit()
 
     create_audit_log(
