@@ -38,19 +38,40 @@ def _headers(roles: list[str]) -> dict:
     return {"Authorization": f"Bearer {_make_token(roles)}"}
 
 
-def _client_for_role(db_session, roles: list[str]) -> TestClient:
-    """Return a TestClient with the given roles and the test DB injected."""
+class _RoleClient:
+    """Stateless request helper that injects role-scoped auth and test DB per request."""
 
-    def override_get_db():
+    def __init__(self, db_session, roles: list[str]) -> None:
+        self._db_session = db_session
+        self._headers = _headers(roles)
+
+    def _request(self, method: str, path: str, **kwargs):
+        def override_get_db():
+            try:
+                yield self._db_session
+            finally:
+                pass
+
+        app.dependency_overrides[get_db] = override_get_db
         try:
-            yield db_session
+            with TestClient(app, raise_server_exceptions=False) as client:
+                client.headers.update(self._headers)
+                return getattr(client, method)(path, **kwargs)
         finally:
-            pass
+            app.dependency_overrides.clear()
 
-    app.dependency_overrides[get_db] = override_get_db
-    client = TestClient(app, raise_server_exceptions=False)
-    client.headers.update(_headers(roles))
-    return client
+    def get(self, path: str, **kwargs):
+        return self._request("get", path, **kwargs)
+
+    def post(self, path: str, **kwargs):
+        return self._request("post", path, **kwargs)
+
+    def delete(self, path: str, **kwargs):
+        return self._request("delete", path, **kwargs)
+
+
+def _client_for_role(db_session, roles: list[str]) -> _RoleClient:
+    return _RoleClient(db_session, roles)
 
 
 # ---------------------------------------------------------------------------
