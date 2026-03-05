@@ -370,3 +370,35 @@ class TestAuthorizationDeniedAuditLogging:
         assert "user_roles" in entry.details
         assert isinstance(entry.details["required_roles"], list)
         assert isinstance(entry.details["user_roles"], list)
+
+
+# ---------------------------------------------------------------------------
+# Authentication failure audit logging
+# ---------------------------------------------------------------------------
+
+
+class TestAuthenticationFailureAuditLogging:
+    def test_missing_token_logs_auth_failure(self, unauthenticated_client, db):
+        response = unauthenticated_client.get("/drives")
+        assert response.status_code == 401
+
+        entry = _audit_by_action(db, "AUTH_FAILURE")
+        assert entry is not None
+        assert entry.details["path"] == "/drives"
+        assert entry.details["method"] == "GET"
+        assert "missing" in entry.details["reason"].lower()
+        assert entry.details["trace_id"]
+
+    def test_invalid_token_logs_auth_failure(self, unauthenticated_client, db):
+        response = unauthenticated_client.get(
+            "/drives",
+            headers={"Authorization": "Bearer not.a.valid.token"},
+        )
+        assert response.status_code == 401
+
+        entry = _audit_by_action(db, "AUTH_FAILURE")
+        assert entry is not None
+        assert entry.details["path"] == "/drives"
+        assert entry.details["method"] == "GET"
+        assert "invalid" in entry.details["reason"].lower()
+        assert entry.details["trace_id"]

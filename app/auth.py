@@ -24,11 +24,14 @@ class CurrentUser:
 def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
+    db: Session = Depends(get_db),
 ) -> CurrentUser:
     """FastAPI dependency that validates a bearer token and returns the authenticated user.
 
     Raises HTTP 401 for missing, invalid, or expired tokens.
     """
+    request.state.db = db
+
     if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
