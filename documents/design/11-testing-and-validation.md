@@ -116,6 +116,12 @@ Run integration tests:
 python -m pytest tests/integration -q --run-integration
 ```
 
+Run integration tests with live stdout/stderr output:
+
+```bash
+python -m pytest tests/integration -q -s --run-integration
+```
+
 Shutdown when done:
 
 ```bash
