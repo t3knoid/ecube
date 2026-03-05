@@ -28,7 +28,7 @@ def test_add_mount(client, db):
 
 def test_add_mount_failure(client, db):
     with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(returncode=1, stderr="Permission denied")
+        mock_run.return_value = MagicMock(returncode=1, stderr="Permission denied", stdout="")
         response = client.post(
             "/mounts",
             json={

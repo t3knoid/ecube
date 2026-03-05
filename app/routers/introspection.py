@@ -1,6 +1,6 @@
 import os
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -80,12 +80,17 @@ def system_health(db: Session = Depends(get_db)):
         db_status = "error"
         db_error = str(exc)
 
-    active_jobs = (
-        db.query(ExportJob).filter(ExportJob.status == JobStatus.RUNNING).count()
-    )
+    active_jobs = 0
+    if db_status == "connected":
+        try:
+            active_jobs = (
+                db.query(ExportJob).filter(ExportJob.status == JobStatus.RUNNING).count()
+            )
+        except Exception:
+            pass
 
     return {
-        "status": "ok",
+        "status": "ok" if db_status == "connected" else "degraded",
         "database": db_status,
         "database_error": db_error,
         "active_jobs": active_jobs,
@@ -96,7 +101,7 @@ def system_health(db: Session = Depends(get_db)):
 def job_debug(job_id: int, db: Session = Depends(get_db)):
     job = db.get(ExportJob, job_id)
     if not job:
-        return {"error": "Job not found"}
+        raise HTTPException(status_code=404, detail="Job not found")
 
     return {
         "job_id": job.id,
