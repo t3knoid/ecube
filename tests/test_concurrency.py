@@ -87,12 +87,20 @@ def test_job_get_for_update_returns_none_when_missing(db):
 # ---------------------------------------------------------------------------
 
 
-def _make_locked_mock_session():
-    """Return a MagicMock Session whose query chain raises OperationalError."""
-    mock_db = MagicMock()
-    lock_error = OperationalError(
-        "could not obtain lock on row in relation", params=None, orig=None
+def _make_operational_error(pgcode: str | None) -> OperationalError:
+    class _Orig:
+        def __init__(self, code: str | None):
+            self.pgcode = code
+
+    return OperationalError(
+        "database operation failed", params=None, orig=_Orig(pgcode)
     )
+
+
+def _make_locked_mock_session():
+    """Return a MagicMock Session whose query chain raises lock OperationalError."""
+    mock_db = MagicMock()
+    lock_error = _make_operational_error("55P03")
     (
         mock_db.query.return_value
         .filter.return_value
@@ -123,6 +131,40 @@ def test_job_get_for_update_raises_conflict_on_lock():
         repo.get_for_update(1)
 
     assert "locked" in exc_info.value.message.lower()
+    mock_db.rollback.assert_called_once()
+
+
+def test_drive_get_for_update_reraises_non_lock_operational_error():
+    """Non-lock OperationalError values are not translated to ConflictError."""
+    mock_db = MagicMock()
+    non_lock_error = _make_operational_error("08006")
+    (
+        mock_db.query.return_value
+        .filter.return_value
+        .with_for_update.return_value
+        .one_or_none.side_effect
+    ) = non_lock_error
+
+    repo = DriveRepository(mock_db)
+    with pytest.raises(OperationalError):
+        repo.get_for_update(1)
+    mock_db.rollback.assert_called_once()
+
+
+def test_job_get_for_update_reraises_non_lock_operational_error():
+    """Non-lock OperationalError values are not translated to ConflictError."""
+    mock_db = MagicMock()
+    non_lock_error = _make_operational_error("08006")
+    (
+        mock_db.query.return_value
+        .filter.return_value
+        .with_for_update.return_value
+        .one_or_none.side_effect
+    ) = non_lock_error
+
+    repo = JobRepository(mock_db)
+    with pytest.raises(OperationalError):
+        repo.get_for_update(1)
     mock_db.rollback.assert_called_once()
 
 

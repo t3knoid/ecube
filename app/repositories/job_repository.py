@@ -46,9 +46,13 @@ class JobRepository:
             )
         except OperationalError as exc:
             self.db.rollback()
-            raise ConflictError(
-                "Job is currently locked by another operation."
-            ) from exc
+            orig = getattr(exc, "orig", None)
+            sqlstate = getattr(orig, "pgcode", None) or getattr(orig, "sqlstate", None)
+            if sqlstate == "55P03":
+                raise ConflictError(
+                    "Job is currently locked by another operation."
+                ) from exc
+            raise
 
     def add(self, job: ExportJob) -> ExportJob:
         """Persist a new job and flush it to obtain its ID."""
