@@ -34,7 +34,7 @@ def create_job(body: JobCreate, db: Session) -> ExportJob:
     job_repo.add(job)
 
     if body.drive_id:
-        drive = drive_repo.get(body.drive_id)
+        drive = drive_repo.get_for_update(body.drive_id)
         if not drive:
             raise HTTPException(status_code=404, detail="Drive not found")
 
@@ -80,7 +80,7 @@ def start_job(
     job_repo = JobRepository(db)
     audit_repo = AuditRepository(db)
 
-    job = job_repo.get(job_id)
+    job = job_repo.get_for_update(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     if job.status not in (JobStatus.PENDING, JobStatus.FAILED):
@@ -88,9 +88,13 @@ def start_job(
             status_code=409, detail=f"Job is already in status {job.status}"
         )
 
+    # Transition to RUNNING inside the locked transaction so that any concurrent
+    # request arriving after this commit will observe the updated state and be
+    # rejected with 409 before the background copy task begins.
+    job.status = JobStatus.RUNNING
     if body.thread_count:
         job.thread_count = body.thread_count
-        job_repo.save(job)
+    job_repo.save(job)
 
     audit_repo.add(action="JOB_STARTED", job_id=job_id, details={})
     background_tasks.add_task(copy_engine.run_copy_job, job_id)
@@ -106,7 +110,7 @@ def verify_job(
     job_repo = JobRepository(db)
     audit_repo = AuditRepository(db)
 
-    job = job_repo.get(job_id)
+    job = job_repo.get_for_update(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 

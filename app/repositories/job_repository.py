@@ -1,8 +1,10 @@
 from typing import List, Optional
 
 from sqlalchemy import update
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from app.exceptions import ConflictError
 from app.models.jobs import (
     DriveAssignment,
     ExportFile,
@@ -21,6 +23,36 @@ class JobRepository:
     def get(self, job_id: int) -> Optional[ExportJob]:
         """Return a single job by primary key, or ``None``."""
         return self.db.get(ExportJob, job_id)
+
+    def get_for_update(self, job_id: int) -> Optional[ExportJob]:
+        """Return a single job locked for update, or ``None`` if not found.
+
+        Issues a ``SELECT … FOR UPDATE NOWAIT`` so that concurrent transactions
+        attempting to transition the same job are serialized.  If the row is
+        already held by another transaction the database raises an
+        ``OperationalError`` which is translated to
+        :class:`~app.exceptions.ConflictError` (HTTP 409).
+
+        On backends that do not enforce ``FOR UPDATE`` at the row level
+        (e.g. SQLite used in tests) the clause is silently ignored and a
+        normal ``SELECT`` is executed instead.
+        """
+        try:
+            return (
+                self.db.query(ExportJob)
+                .filter(ExportJob.id == job_id)
+                .with_for_update(nowait=True)
+                .one_or_none()
+            )
+        except OperationalError as exc:
+            self.db.rollback()
+            orig = getattr(exc, "orig", None)
+            sqlstate = getattr(orig, "pgcode", None) or getattr(orig, "sqlstate", None)
+            if sqlstate == "55P03":
+                raise ConflictError(
+                    "Job is currently locked by another operation."
+                ) from exc
+            raise
 
     def add(self, job: ExportJob) -> ExportJob:
         """Persist a new job and flush it to obtain its ID."""
