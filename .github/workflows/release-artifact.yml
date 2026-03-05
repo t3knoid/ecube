@@ -1,0 +1,45 @@
+name: Publish Release Artifact
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set artifact metadata
+        id: meta
+        run: |
+          echo "artifact_name=ecube-package-${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Create deployment package
+        run: |
+          mkdir -p dist
+          tar -czf "dist/${{ steps.meta.outputs.artifact_name }}.tar.gz" \
+            app \
+            alembic \
+            pyproject.toml \
+            alembic.ini \
+            README.md \
+            LICENSE
+
+      - name: Generate checksum
+        run: |
+          cd dist
+          sha256sum "${{ steps.meta.outputs.artifact_name }}.tar.gz" > "${{ steps.meta.outputs.artifact_name }}.sha256"
+
+      - name: Upload assets to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/${{ steps.meta.outputs.artifact_name }}.tar.gz
+            dist/${{ steps.meta.outputs.artifact_name }}.sha256
