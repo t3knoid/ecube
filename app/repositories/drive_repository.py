@@ -1,7 +1,9 @@
 from typing import List, Optional
 
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from app.exceptions import ConflictError
 from app.models.hardware import UsbDrive
 
 
@@ -18,6 +20,32 @@ class DriveRepository:
     def get(self, drive_id: int) -> Optional[UsbDrive]:
         """Return a single drive by primary key, or ``None``."""
         return self.db.get(UsbDrive, drive_id)
+
+    def get_for_update(self, drive_id: int) -> Optional[UsbDrive]:
+        """Return a single drive locked for update, or ``None`` if not found.
+
+        Issues a ``SELECT … FOR UPDATE NOWAIT`` so that concurrent transactions
+        attempting to modify the same drive row are serialized.  If the row is
+        already held by another transaction the database raises an
+        ``OperationalError`` which is translated to
+        :class:`~app.exceptions.ConflictError` (HTTP 409).
+
+        On backends that do not enforce ``FOR UPDATE`` at the row level
+        (e.g. SQLite used in tests) the clause is silently ignored and a
+        normal ``SELECT`` is executed instead.
+        """
+        try:
+            return (
+                self.db.query(UsbDrive)
+                .filter(UsbDrive.id == drive_id)
+                .with_for_update(nowait=True)
+                .one_or_none()
+            )
+        except OperationalError as exc:
+            self.db.rollback()
+            raise ConflictError(
+                "Drive is currently locked by another operation."
+            ) from exc
 
     def add(self, drive: UsbDrive) -> UsbDrive:
         """Persist a new drive and flush it to obtain its ID."""
