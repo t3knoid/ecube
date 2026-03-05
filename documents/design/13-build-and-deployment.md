@@ -98,6 +98,12 @@ Tag source:
 - Both scripts read the release tag from the root `version` file (first line).
 - Example `version` content: `v1.2.3`
 
+Repo target source:
+
+- Scripts attempt to parse owner/repo from `origin` remote.
+- If parsing fails, scripts fall back to `t3knoid/ecube`.
+- You can always override with `GITHUB_OWNER` and `GITHUB_REPO`.
+
 Optional arguments:
 
 - Default release title pattern: `ecube <tag>`
@@ -105,6 +111,16 @@ Optional arguments:
 - `RELEASE_TITLE` environment variable
 - `PRERELEASE=true` (default)
 - `DRAFT_RELEASE=true`
+
+Troubleshooting:
+
+- If the script returns `GitHub API error 404`, set explicit repo targeting variables before running:
+
+  ```powershell
+  $env:GITHUB_OWNER = "t3knoid"
+  $env:GITHUB_REPO = "ecube"
+  release_latest_build.bat
+  ```
 
 ## 13.3 Package Deployment
 

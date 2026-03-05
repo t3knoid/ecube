@@ -28,15 +28,20 @@ fi
 TITLE="${RELEASE_TITLE:-ecube ${TAG}}"
 PRERELEASE="${PRERELEASE:-true}"
 DRAFT="${DRAFT_RELEASE:-false}"
+DEFAULT_OWNER="t3knoid"
+DEFAULT_REPO="ecube"
 
 ORIGIN_URL="$(git remote get-url origin)"
 if [[ "${ORIGIN_URL}" =~ github.com[:/]([^/]+)/([^/.]+)(\.git)?$ ]]; then
-  OWNER="${GITHUB_OWNER:-${BASH_REMATCH[1]}}"
-  REPO="${GITHUB_REPO:-${BASH_REMATCH[2]}}"
+  PARSED_OWNER="${BASH_REMATCH[1]}"
+  PARSED_REPO="${BASH_REMATCH[2]}"
 else
-  echo "Could not parse GitHub owner/repo from origin URL: ${ORIGIN_URL}" >&2
-  exit 1
+  PARSED_OWNER=""
+  PARSED_REPO=""
 fi
+
+OWNER="${GITHUB_OWNER:-${PARSED_OWNER:-${DEFAULT_OWNER}}}"
+REPO="${GITHUB_REPO:-${PARSED_REPO:-${DEFAULT_REPO}}}"
 
 RELEASE_BY_TAG_URL="https://api.github.com/repos/${OWNER}/${REPO}/releases/tags/${TAG}"
 if curl -fsS \
