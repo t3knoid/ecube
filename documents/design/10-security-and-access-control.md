@@ -28,21 +28,21 @@
 
 ## Authorization Matrix (Design Baseline)
 
-| Operation / API area                         | Admin | Manager | Processor | Auditor |
-|---------------------------------------------|:-----:|:-------:|:---------:|:-------:|
-| Manage users / security config (future)     |  ✔    |    ✖    |     ✖     |    ✖    |
-| Add/remove mounts                           |  ✔    |    ✔    |     ✖     |    ✖    |
-| List mounts                                 |  ✔    |    ✔    |     ✔     |    ✔    |
-| Initialize drives / assign to projects      |  ✔    |    ✔    |     ✖     |    ✖    |
-| Prepare drives for eject                    |  ✔    |    ✔    |     ✖     |    ✖    |
-| List drives / drive states                  |  ✔    |    ✔    |     ✔     |    ✔    |
-| Create jobs                                 |  ✔    |    ✔    |     ✔     |    ✖    |
-| Start copy jobs                             |  ✔    |    ✔    |     ✔     |    ✖    |
-| View job status                             |  ✔    |    ✔    |     ✔     |    ✔    |
-| Regenerate manifest / verify job            |  ✔    |    ✔    |     ✔     |    ✖    |
-| Read audit logs                             |  ✔    |    ✔    |     ✖     |    ✔    |
-| Introspection (read-only system info)       |  ✔    |    ✔    |     ✔     |    ✔    |
-| File hash / file compare (audit functions)  |  ✔    |    ✖    |     ✖     |    ✔    |
+| Operation / API area                       | Admin | Manager | Processor | Auditor |
+|--------------------------------------------|:-----:|:-------:|:---------:|:-------:|
+| Manage users / security config (future)    |  ✔    |    ✖    |     ✖     |    ✖    |
+| Add/remove mounts                          |  ✔    |    ✔    |     ✖     |    ✖    |
+| List mounts                                |  ✔    |    ✔    |     ✔     |    ✔    |
+| Initialize drives / assign to projects     |  ✔    |    ✔    |     ✖     |    ✖    |
+| Prepare drives for eject                   |  ✔    |    ✔    |     ✖     |    ✖    |
+| List drives / drive states                 |  ✔    |    ✔    |     ✔     |    ✔    |
+| Create jobs                                |  ✔    |    ✔    |     ✔     |    ✖    |
+| Start copy jobs                            |  ✔    |    ✔    |     ✔     |    ✖    |
+| View job status                            |  ✔    |    ✔    |     ✔     |    ✔    |
+| Regenerate manifest / verify job           |  ✔    |    ✔    |     ✔     |    ✖    |
+| Read audit logs                            |  ✔    |    ✔    |     ✖     |    ✔    |
+| Introspection (read-only system info)      |  ✔    |    ✔    |     ✔     |    ✔    |
+| File hash / file compare (audit functions) |  ✔    |    ✖    |     ✖     |    ✔    |
 
 ## Service-Layer Integration Pattern
 
