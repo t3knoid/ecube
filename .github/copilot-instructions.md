@@ -64,7 +64,7 @@ python -m pytest tests/ -v
 
 - Tests use a **SQLite in-memory database** with `StaticPool` (never PostgreSQL).
 - All SQLAlchemy `Enum` columns must use `native_enum=False` for SQLite compatibility.
-- `AuditLog` uses `JSON` column type (not `JSONB`) in model definitions so tests work with SQLite.
+- `AuditLog` (and any similar structured metadata) must use SQLAlchemy's portable `JSON` column type in **ORM models** so tests work with SQLite. In Alembic migrations, use PostgreSQL `JSONB` for the production schema and plain `JSON` for the SQLite test schema; when design/docs say "JSONB", implement this as `JSON` in models + `JSONB` in Postgres migrations.
 - Test fixtures are defined in `tests/conftest.py`.
 
 ## Architecture & Security Model
