@@ -1,0 +1,50 @@
+services:
+  ecube-host:
+    build:
+      context: .
+      dockerfile: deploy/ecube-host/Dockerfile
+    container_name: ecube-host
+    restart: unless-stopped
+    privileged: true
+    cap_add:
+      - SYS_ADMIN
+      - DAC_READ_SEARCH
+    security_opt:
+      - apparmor:unconfined
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://ecube:ecube@postgres:5432/ecube
+      PYTHONUNBUFFERED: "1"
+      ECUBE_RUN_MIGRATIONS_ON_START: "true"
+      ECUBE_DB_WAIT_MAX_RETRIES: "30"
+      ECUBE_DB_WAIT_SECONDS: "2"
+    volumes:
+      - ecube_runtime_data:/var/lib/ecube
+      - /dev/bus/usb:/dev/bus/usb
+      - /run/udev:/run/udev:ro
+      - /sys/bus/usb:/sys/bus/usb:ro
+      - /proc:/host_proc:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16
+    container_name: ecube-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ecube
+      POSTGRES_USER: ecube
+      POSTGRES_PASSWORD: ecube
+    volumes:
+      - ecube_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ecube -d ecube"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  ecube_runtime_data:
+  ecube_postgres_data:
