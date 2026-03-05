@@ -81,7 +81,7 @@ security:
 
 ## Authorization Matrix (High Level)
 
-| Operation / API area                         | Admin | Manager | Processor | Auditor |
+| Operation / API area                        | Admin | Manager | Processor | Auditor |
 |---------------------------------------------|:-----:|:-------:|:---------:|:-------:|
 | Manage users / security config (future)     |  ✔    |    ✖    |     ✖     |    ✖    |
 | Add/remove mounts                           |  ✔    |    ✔    |     ✖     |    ✖    |
