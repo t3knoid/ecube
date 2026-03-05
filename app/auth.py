@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import List
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import settings
@@ -19,6 +19,7 @@ class CurrentUser:
 
 
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
 ) -> CurrentUser:
     """FastAPI dependency that validates a bearer token and returns the authenticated user.
@@ -29,6 +30,13 @@ def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing authentication token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if credentials.scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -61,9 +69,12 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    return CurrentUser(
+    current_user = CurrentUser(
         id=user_id,
         username=username,
         groups=payload.get("groups", []),
         roles=payload.get("roles", []),
     )
+
+    request.state.current_user = current_user
+    return current_user
