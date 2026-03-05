@@ -93,7 +93,11 @@ def test_expired_token_returns_401(auth_client):
 
 
 def test_token_signed_with_wrong_secret_returns_401(auth_client):
-    token = jwt.encode(_valid_payload(), "wrong-secret", algorithm=_ALGORITHM)
+    token = jwt.encode(
+        _valid_payload(),
+        "wrong-secret-key-for-tests-only-1234567890",
+        algorithm=_ALGORITHM,
+    )
     response = auth_client.get("/protected", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 401
 

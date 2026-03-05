@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env")
 
     database_url: str = "postgresql://ecube:ecube@localhost/ecube"
-    secret_key: str = "change-me-in-production"
+    secret_key: str = "change-me-in-production-please-rotate-32b"
     algorithm: str = "HS256"
 
 
