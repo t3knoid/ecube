@@ -47,6 +47,65 @@ Behavior:
   - `ecube-package-<release-tag>.tar.gz`
   - `ecube-package-<release-tag>.sha256`
 
+### Release helper script (repo root)
+
+Use the root helper scripts to publish a GitHub release for the latest commit.
+Publishing the release triggers `.github/workflows/release-artifact.yml`.
+
+Prerequisite:
+
+- `GITHUB_TOKEN` set with repo `contents:write` scope.
+
+Set `GITHUB_TOKEN`:
+
+Linux/macOS (current shell session):
+
+```bash
+export GITHUB_TOKEN="<your-token>"
+```
+
+Linux/macOS (persist in shell profile):
+
+```bash
+echo 'export GITHUB_TOKEN="<your-token>"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+Windows PowerShell (current session):
+
+```powershell
+$env:GITHUB_TOKEN = "<your-token>"
+```
+
+Windows PowerShell (persist for current user):
+
+```powershell
+[System.Environment]::SetEnvironmentVariable("GITHUB_TOKEN", "<your-token>", "User")
+```
+
+Commands:
+
+```bash
+./release_latest_build.sh
+```
+
+```bat
+release_latest_build.bat
+```
+
+Tag source:
+
+- Both scripts read the release tag from the root `version` file (first line).
+- Example `version` content: `v1.2.3`
+
+Optional arguments:
+
+- Default release title pattern: `ecube <tag>`
+- `TARGET_COMMITISH` environment variable (default `HEAD`)
+- `RELEASE_TITLE` environment variable
+- `PRERELEASE=true` (default)
+- `DRAFT_RELEASE=true`
+
 ## 13.3 Package Deployment
 
 ### Prerequisites
