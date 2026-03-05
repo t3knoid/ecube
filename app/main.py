@@ -2,9 +2,10 @@ import logging
 import traceback
 import uuid
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from app.auth import get_current_user
 from app.exceptions import AuthenticationError, AuthorizationError, ConflictError, ECUBEException
 from app.routers import drives, introspection, jobs, mounts
 from app.schemas.errors import ErrorResponse
@@ -16,10 +17,16 @@ app = FastAPI(
     description="Evidence Copying & USB Based Export",
 )
 
-app.include_router(drives.router)
-app.include_router(mounts.router)
-app.include_router(jobs.router)
-app.include_router(introspection.router)
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+app.include_router(drives.router, dependencies=[Depends(get_current_user)])
+app.include_router(mounts.router, dependencies=[Depends(get_current_user)])
+app.include_router(jobs.router, dependencies=[Depends(get_current_user)])
+app.include_router(introspection.router, dependencies=[Depends(get_current_user)])
 
 
 def _error_response(status_code: int, code: str, message: str, trace_id: str | None = None) -> JSONResponse:
