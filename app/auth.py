@@ -70,11 +70,32 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    groups = payload.get("groups", [])
+    roles = payload.get("roles", [])
+    if groups is None:
+        groups = []
+    if roles is None:
+        roles = []
+
+    if not isinstance(groups, list) or not all(isinstance(group, str) for group in groups):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not isinstance(roles, list) or not all(isinstance(role, str) for role in roles):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     current_user = CurrentUser(
         id=user_id,
         username=username,
-        groups=payload.get("groups", []),
-        roles=payload.get("roles", []),
+        groups=groups,
+        roles=roles,
     )
 
     request.state.current_user = current_user
