@@ -112,6 +112,7 @@ def create_manifest(job_id: int, db: Session = Depends(get_db)):
     }
 
     manifest_path = None
+    manifest_error = None
     if job.target_mount_path:
         manifest_path = os.path.join(
             job.target_mount_path, f"manifest_{job.id}.json"
@@ -120,7 +121,8 @@ def create_manifest(job_id: int, db: Session = Depends(get_db)):
             os.makedirs(job.target_mount_path, exist_ok=True)
             with open(manifest_path, "w") as fp:
                 json.dump(manifest_data, fp, indent=2)
-        except Exception:
+        except Exception as exc:
+            manifest_error = str(exc)
             manifest_path = None
 
     manifest = Manifest(job_id=job_id, manifest_path=manifest_path, format="JSON")
@@ -130,7 +132,7 @@ def create_manifest(job_id: int, db: Session = Depends(get_db)):
         db=db,
         action="MANIFEST_CREATED",
         job_id=job_id,
-        details={"manifest_path": manifest_path},
+        details={"manifest_path": manifest_path, "error": manifest_error},
     )
     db.refresh(job)
     return job

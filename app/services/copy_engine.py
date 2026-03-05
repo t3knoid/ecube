@@ -112,6 +112,7 @@ def run_copy_job(job_id: int, db: Session) -> None:
     db.commit()
 
     # Create ExportFile records and collect (src_path, export_file_id) pairs.
+    # Flush once after all inserts rather than per-row.
     file_pairs: List[Tuple[Path, int]] = []
     for f in files:
         rel = f.relative_to(source) if source.is_dir() else Path(f.name)
@@ -122,9 +123,17 @@ def run_copy_job(job_id: int, db: Session) -> None:
             status=FileStatus.PENDING,
         )
         db.add(ef)
-        db.flush()  # populate ef.id without full commit
-        file_pairs.append((f, ef.id))
+    db.flush()  # single flush to populate all ef.id values
     db.commit()
+
+    # Re-query to get stable IDs now that the transaction is committed.
+    committed_files = (
+        db.query(ExportFile)
+        .filter(ExportFile.job_id == job_id)
+        .all()
+    )
+    src_by_rel = {str(f.relative_to(source) if source.is_dir() else Path(f.name)): f for f in files}
+    file_pairs = [(src_by_rel[ef.relative_path], ef.id) for ef in committed_files if ef.relative_path in src_by_rel]
 
     with ThreadPoolExecutor(max_workers=job.thread_count or 4) as executor:
         futures = {
@@ -132,7 +141,12 @@ def run_copy_job(job_id: int, db: Session) -> None:
             for src, ef_id in file_pairs
         }
         for future in as_completed(futures):
-            future.result()  # re-raise any unexpected exception
+            try:
+                future.result()  # re-raise any unexpected exception from the worker
+            except Exception:
+                # Worker already recorded FileStatus.ERROR in its own session;
+                # unexpected exceptions are caught here to let other workers finish.
+                pass
 
     # Determine final job status.
     db.expire_all()
