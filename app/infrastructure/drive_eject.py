@@ -44,27 +44,37 @@ def sync_filesystem() -> Tuple[bool, Optional[str]]:
 def _find_device_mountpoints(device_base: str) -> List[str]:
     """Find all mountpoints for a device and its partitions from /proc/mounts.
     
+    Handles traditional partition naming (sdb1, sdb2) and modern schemes:
+    - NVMe: nvme0n1 → nvme0n1p1, nvme0n1p2
+    - MMC: mmcblk0 → mmcblk0p1, mmcblk0p2
+    
     Args:
         device_base: Base device name (e.g., "sdb" from "/dev/sdb")
         
     Returns:
-        List of mount points for this device and its partitions (e.g., /dev/sdb, /dev/sdb1, /dev/sdb2).
+        List of mount points for this device and its partitions.
     """
     try:
         with open("/proc/mounts", "r") as f:
             mountpoints = []
+            device_prefix = f"/dev/{device_base}"
+            
             for line in f:
                 parts = line.split()
                 if len(parts) >= 2:
                     source = parts[0]
                     mount_point = parts[1]
-                    # Match the device itself or its partitions (e.g., /dev/sdb or /dev/sdb1)
-                    if source == f"/dev/{device_base}" or (
-                        source.startswith(f"/dev/{device_base}")
-                        and len(source) > len(f"/dev/{device_base}")
-                        and source[len(f"/dev/{device_base}")].isdigit()
-                    ):
+                    
+                    # Match the device itself (exact match)
+                    if source == device_prefix:
                         mountpoints.append(mount_point)
+                    # Match partitions: suffix must be either digits (sdb1) or p+digits (nvme0n1p1)
+                    elif source.startswith(device_prefix) and len(source) > len(device_prefix):
+                        suffix = source[len(device_prefix):]
+                        # Match traditional (1, 2, 3...) or modern p-prefixed (p1, p2, p3...)
+                        if re.match(r"^(p?\d+)$", suffix):
+                            mountpoints.append(mount_point)
+            
             return mountpoints
     except (OSError, IOError):
         # If we can't read /proc/mounts, log the issue but continue
