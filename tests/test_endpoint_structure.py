@@ -9,11 +9,9 @@ Validates that all endpoints have:
 """
 
 import inspect
-from typing import get_type_hints
 
 import pytest
-from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.main import app
 from app.routers import audit, drives, introspection, jobs, mounts
