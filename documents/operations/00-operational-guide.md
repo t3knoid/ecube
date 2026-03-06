@@ -1212,7 +1212,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 | GET | `/introspection/block-devices` | all | Kernel block device inventory |
 | GET | `/introspection/mounts` | all | Mount inventory and status |
 | GET | `/introspection/system-health` | all | Database and job engine health |
-| GET | `/introspection/jobs/{job_id}/debug` | all | Debug info for specific job |
+| GET | `/introspection/jobs/{job_id}/debug` | admin,auditor | Debug info for specific job |
 
 ---
 
