@@ -49,21 +49,14 @@ class JobCreate(BaseModel):
     source_path: str = Field(..., description="Path to source data on network mount or local filesystem")
     target_mount_path: Optional[str] = Field(default=None, description="Alternative target mount; defaults to assigned drive")
     drive_id: Optional[int] = Field(default=None, description="Pre-assigned USB drive ID")
-    thread_count: int = Field(default=4, description="Number of parallel copy threads (1-8)")
+    thread_count: int = Field(default=4, ge=1, le=8, description="Number of parallel copy threads (1-8)")
+    max_file_retries: int = Field(default=3, ge=0, description="Maximum number of retries for failed files (0+)")
+    retry_delay_seconds: int = Field(default=1, ge=0, description="Delay between retries in seconds (0+)")
     created_by: Optional[str] = Field(default=None, description="Username of the job creator")
-    project_id: str
-    evidence_number: str
-    source_path: str
-    target_mount_path: Optional[str] = None
-    drive_id: Optional[int] = None
-    thread_count: int = 4
-    max_file_retries: int = 3
-    retry_delay_seconds: int = 1
-    created_by: Optional[str] = None
 
 
 class JobStart(BaseModel):
-    thread_count: Optional[int] = Field(default=None, description="Override thread count for this job start")
+    thread_count: Optional[int] = Field(default=None, ge=1, le=8, description="Override thread count for this job start (1-8, optional)")
 
 
 class ExportFileSchema(BaseModel):
@@ -89,10 +82,9 @@ class ExportJobSchema(BaseModel):
     total_bytes: int = Field(..., description="Total bytes to copy")
     copied_bytes: int = Field(..., description="Bytes copied so far")
     file_count: int = Field(..., description="Total number of files to copy")
-    thread_count: int = Field(..., description="Number of parallel threads used")
-    created_by: Optional[str] = Field(default=None, description="Username of the job creator")
-    max_file_retries: int = Field(default=3, description="Maximum number of retries for failed files")
-    retry_delay_seconds: int = Field(default=1, description="Delay between retries in seconds")
+    thread_count: int = Field(..., ge=1, le=8, description="Number of parallel threads used (1-8)")
+    max_file_retries: int = Field(default=3, ge=0, description="Maximum number of retries for failed files (0+)")
+    retry_delay_seconds: int = Field(default=1, ge=0, description="Delay between retries in seconds (0+)")
     created_by: Optional[str] = Field(default=None, description="Username of the job creator")
 
     model_config = {"from_attributes": True}
