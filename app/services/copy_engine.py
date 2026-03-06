@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models.jobs import ExportFile, ExportJob, FileStatus, JobStatus
+from app.repositories.audit_repository import AuditRepository
 from app.repositories.job_repository import FileRepository, JobRepository
 
 
@@ -65,6 +66,7 @@ def _process_file(export_file_id: int, src_file: Path, target: Optional[Path]) -
     db: Session = SessionLocal()
     try:
         file_repo = FileRepository(db)
+        audit_repo = AuditRepository(db)
 
         ef = file_repo.get(export_file_id)
         if ef is None:
@@ -72,6 +74,12 @@ def _process_file(export_file_id: int, src_file: Path, target: Optional[Path]) -
 
         ef.status = FileStatus.COPYING
         file_repo.save(ef)
+
+        audit_repo.add(
+            action="FILE_COPY_START",
+            job_id=ef.job_id,
+            details={"file_id": ef.id, "relative_path": ef.relative_path},
+        )
 
         if target is not None:
             dst = target / ef.relative_path
@@ -82,10 +90,25 @@ def _process_file(export_file_id: int, src_file: Path, target: Optional[Path]) -
         ef.checksum = checksum
         if success:
             ef.status = FileStatus.DONE
+            file_repo.save(ef)
+            audit_repo.add(
+                action="FILE_COPY_SUCCESS",
+                job_id=ef.job_id,
+                details={"file_id": ef.id, "relative_path": ef.relative_path},
+            )
         else:
             ef.status = FileStatus.ERROR
             ef.error_message = err
-        file_repo.save(ef)
+            file_repo.save(ef)
+            audit_repo.add(
+                action="FILE_COPY_FAILURE",
+                job_id=ef.job_id,
+                details={
+                    "file_id": ef.id,
+                    "relative_path": ef.relative_path,
+                    "error": err,
+                },
+            )
 
         # Atomically increment copied_bytes to avoid lost-update races between threads.
         if success and ef.size_bytes:
