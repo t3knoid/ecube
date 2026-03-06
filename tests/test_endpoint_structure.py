@@ -250,26 +250,3 @@ class TestEndpointHttpMethods:
         
         # Should have at least some POST endpoints for creating resources
         assert len(post_routes) > 0, "No POST endpoints defined"
-
-
-def test_endpoint_summary(client):
-    """Print summary of all endpoints for verification."""
-    routes = []
-    for route in app.routes:
-        if hasattr(route, "path") and hasattr(route, "methods"):
-            docstring = inspect.getdoc(route.endpoint)
-            methods = ", ".join(sorted(route.methods))
-            summary = docstring.split("\n")[0] if docstring else "[NO DOCSTRING]"
-            routes.append({
-                "path": route.path,
-                "methods": methods,
-                "summary": summary,
-            })
-    
-    # Sort by path
-    routes.sort(key=lambda x: x["path"])
-    
-    print("\n\n=== ENDPOINT STRUCTURE SUMMARY ===\n")
-    for route in routes:
-        print(f"{route['methods']:8} {route['path']:45} {route['summary']}")
-    print("\n")
