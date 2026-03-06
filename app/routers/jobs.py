@@ -70,8 +70,8 @@ def verify_job(
 ):
     """Verify the integrity of copied data by comparing hashes and file counts.
 
-    Launches verification in a background task and transitions to ``VERIFYING``.
-    Upon completion, moves to ``VERIFIED`` or ``VERIFY_FAILED`` depending on results.
+    Launches verification in a background task and transitions the job to ``VERIFYING``.
+    Upon completion, sets the job to ``COMPLETED`` if verification succeeds or ``FAILED`` if it fails.
 
     **Roles:** ``admin``, ``manager``, ``processor``
     """
