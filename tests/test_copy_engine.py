@@ -1,6 +1,5 @@
 """Tests for retry/resume semantics in the copy engine."""
 
-import time
 from pathlib import Path
 from unittest.mock import patch
 
