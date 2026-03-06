@@ -116,6 +116,28 @@ alembic revision -m "describe change"
 2. Run `alembic upgrade head`.
 3. Start the API server (`uvicorn app.main:app --reload`).
 
+## API Documentation
+
+ECUBE provides interactive API documentation via OpenAPI (Swagger UI) and ReDoc. Once the API server is running, access the documentation at:
+
+- **Swagger UI (Interactive):** `http://localhost:8000/docs`
+- **ReDoc (Alternative UI):** `http://localhost:8000/redoc`
+- **OpenAPI Schema (JSON):** `http://localhost:8000/openapi.json`
+
+The Swagger UI allows you to:
+
+- View all available endpoints with descriptions
+- Understand request/response schemas
+- Test API endpoints directly from the browser
+- Explore authentication and role requirements
+
+All endpoints require authentication via JWT bearer tokens. Full API specification and security role details are documented in:
+
+- `documents/design/06-rest-api-specification.md`
+- `documents/design/10-security-and-access-control.md`
+
+---
+
 ## Build and Deployment
 
 ECUBE build and deployment guidance (release artifacts, package deployment without Docker runtime, Docker image builds, and compose deployment) is documented in:

@@ -15,6 +15,14 @@ _ALL_ROLES = require_roles("admin", "manager", "processor", "auditor")
 
 @router.get("/usb/topology")
 def usb_topology(_: CurrentUser = Depends(_ALL_ROLES)):
+    """Introspect USB hubs, ports, and connected devices from system sysfs.
+
+    Returns raw device identifiers and attributes for diagnostic purposes.
+    Information is read-only and does not modify system state.
+
+    **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
+    **Restricted:** Outputs are scrubbed and do not expose sensitive paths.
+    """
     devices = []
     usb_path = "/sys/bus/usb/devices"
     try:
@@ -38,6 +46,14 @@ def usb_topology(_: CurrentUser = Depends(_ALL_ROLES)):
 
 @router.get("/block-devices")
 def block_devices(_: CurrentUser = Depends(_ALL_ROLES)):
+    """List all block devices (disks, partitions) detected by the kernel.
+
+    Returns device names and major/minor numbers. Does not expose partition contents.
+    Information is for diagnostic and drive discovery purposes only.
+
+    **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
+    **Restricted:** Sensitive mount points and credentials are not exposed.
+    """
     stats = []
     try:
         with open("/proc/diskstats") as f:
@@ -54,6 +70,14 @@ def block_devices(_: CurrentUser = Depends(_ALL_ROLES)):
 
 @router.get("/mounts")
 def system_mounts(_: CurrentUser = Depends(_ALL_ROLES)):
+    """List all currently mounted filesystems on the system.
+
+    Returns mount points, filesystem types, and mount options.
+    Does not include credentials or sensitive configuration.
+
+    **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
+    **Restricted:** Network credentials and temporary mount details are scrubbed.
+    """
     mounts = []
     try:
         with open("/proc/mounts") as f:
@@ -78,6 +102,12 @@ def system_health(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_ALL_ROLES),
 ):
+    """Check the health of critical system components: database and job engine.
+
+    Reports connectivity status, error details if applicable, and active job count.
+
+    **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
+    """
     db_status = "connected"
     db_error = None
     try:
@@ -109,6 +139,14 @@ def job_debug(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_ALL_ROLES),
 ):
+    """Retrieve detailed debug information for a specific export job.
+
+    Returns internal state, paths, and progress metrics for troubleshooting.
+    Should only be used by administrators and auditors for investigation.
+
+    **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
+    **Restricted:** Credential-like fields and sensitive paths are redacted.
+    """
     job = db.get(ExportJob, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
