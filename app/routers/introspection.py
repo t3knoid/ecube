@@ -11,6 +11,7 @@ from app.models.jobs import ExportJob, JobStatus
 router = APIRouter(prefix="/introspection", tags=["introspection"])
 
 _ALL_ROLES = require_roles("admin", "manager", "processor", "auditor")
+_ADMIN_AUDITOR = require_roles("admin", "auditor")
 
 
 @router.get("/usb/topology")
@@ -137,15 +138,16 @@ def system_health(
 def job_debug(
     job_id: int,
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(_ALL_ROLES),
+    _: CurrentUser = Depends(_ADMIN_AUDITOR),
 ):
     """Retrieve detailed debug information for a specific export job.
 
     Returns internal state, paths, and progress metrics for troubleshooting.
-    Should only be used by administrators and auditors for investigation.
+    Restricted to administrators and auditors who need to investigate job issues.
 
-    **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
-    **Restricted:** Credential-like fields and sensitive paths are redacted.
+    Includes source and target paths as these are necessary for debugging copy operations.
+
+    **Roles:** ``admin``, ``auditor``
     """
     job = db.get(ExportJob, job_id)
     if not job:
