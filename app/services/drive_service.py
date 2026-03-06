@@ -62,6 +62,14 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None) -> Us
     initial_state = drive.current_state
     initial_device_path = drive.filesystem_path
 
+    # Fail fast if the drive is not in the required IN_USE state.
+    # Don't waste time on expensive OS operations for invalid preconditions.
+    if initial_state != DriveState.IN_USE:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Drive is not in IN_USE state; cannot prepare eject (current state: {initial_state})",
+        )
+
     # Perform potentially slow OS operations without holding a database lock.
     flush_ok, flush_err = sync_filesystem()
     unmount_ok: bool = True
@@ -90,13 +98,6 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None) -> Us
         raise HTTPException(
             status_code=409,
             detail=f"Device path changed during prepare-eject (was: {initial_device_path!r}, now: {drive.filesystem_path!r}); operation aborted",
-        )
-
-    # Verify the drive is still IN_USE (final precondition check).
-    if drive.current_state != DriveState.IN_USE:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Drive is not in IN_USE state; cannot prepare eject (current state: {drive.current_state})",
         )
 
     if flush_ok and unmount_ok:
