@@ -30,6 +30,8 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None) -> Exp
         source_path=body.source_path,
         target_mount_path=body.target_mount_path,
         thread_count=body.thread_count,
+        max_file_retries=body.max_file_retries,
+        retry_delay_seconds=body.retry_delay_seconds,
         created_by=body.created_by,
     )
     job_repo.add(job)
