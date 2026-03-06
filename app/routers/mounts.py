@@ -19,6 +19,13 @@ def add_mount(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
 ):
+    """Register a new network mount (SMB, NFS, etc.) as a data source.
+
+    Stores mount credentials and configuration; does not immediately connect.
+    Connection is validated via ``POST /mounts/{mount_id}/validate``.
+
+    **Roles:** ``admin``, ``manager``
+    """
     return mount_service.add_mount(body, db, actor=current_user.username)
 
 
@@ -28,6 +35,12 @@ def remove_mount(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
 ):
+    """Remove a network mount from the system.
+
+    Deletes the mount configuration and credentials. In-progress jobs using this mount may fail.
+
+    **Roles:** ``admin``, ``manager``
+    """
     mount_service.remove_mount(mount_id, db, actor=current_user.username)
 
 
@@ -36,6 +49,12 @@ def list_mounts(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_ALL_ROLES),
 ):
+    """List all registered network mounts and their connectivity status.
+
+    Returns mount details without exposing credentials.
+
+    **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
+    """
     return mount_service.list_mounts(db)
 
 
@@ -44,6 +63,12 @@ def validate_all_mounts(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
 ):
+    """Test connectivity and credentials for all registered network mounts.
+
+    Updates the ``is_validated`` flag for each mount and records any errors encountered.
+
+    **Roles:** ``admin``, ``manager``
+    """
     return mount_service.validate_all_mounts(db, actor=current_user.username)
 
 
@@ -53,4 +78,10 @@ def validate_mount(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
 ):
+    """Test connectivity and credentials for a specific network mount.
+
+    Attempts to connect using stored credentials and reports success or error.
+
+    **Roles:** ``admin``, ``manager``
+    """
     return mount_service.validate_mount(mount_id, db, actor=current_user.username)
