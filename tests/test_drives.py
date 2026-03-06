@@ -261,7 +261,10 @@ def test_prepare_eject_invalid_device_path(manager_client, db):
 
 
 def test_prepare_eject_requires_in_use_state(manager_client, db):
-    """Prepare-eject must reject drives not in IN_USE state (409 Conflict)."""
+    """Prepare-eject must reject drives not in IN_USE state (409 Conflict).
+    
+    Verifies that sync_filesystem is NOT called (fast-fail optimization).
+    """
     drive = UsbDrive(
         device_identifier="USB011",
         current_state=DriveState.EMPTY,
@@ -270,11 +273,13 @@ def test_prepare_eject_requires_in_use_state(manager_client, db):
     db.add(drive)
     db.commit()
 
-    with patch("app.services.drive_service.sync_filesystem", return_value=(True, None)):
+    with patch("app.services.drive_service.sync_filesystem") as mock_sync:
         response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
 
     assert response.status_code == 409
     assert "not in IN_USE state" in response.json()["message"]
+    # Verify sync was NOT called (fast-fail before OS operations)
+    mock_sync.assert_not_called()
 
     # Drive state must remain EMPTY.
     db.expire(drive)
@@ -283,7 +288,10 @@ def test_prepare_eject_requires_in_use_state(manager_client, db):
 
 
 def test_prepare_eject_available_state_conflict(manager_client, db):
-    """Prepare-eject on AVAILABLE drive returns 409 Conflict."""
+    """Prepare-eject on AVAILABLE drive returns 409 Conflict.
+    
+    Verifies that sync_filesystem is NOT called (fast-fail optimization).
+    """
     drive = UsbDrive(
         device_identifier="USB012",
         current_state=DriveState.AVAILABLE,
@@ -292,11 +300,13 @@ def test_prepare_eject_available_state_conflict(manager_client, db):
     db.add(drive)
     db.commit()
 
-    with patch("app.services.drive_service.sync_filesystem", return_value=(True, None)):
+    with patch("app.services.drive_service.sync_filesystem") as mock_sync:
         response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
 
     assert response.status_code == 409
     assert "not in IN_USE state" in response.json()["message"]
+    # Verify sync was NOT called (fast-fail before OS operations)
+    mock_sync.assert_not_called()
 
 
 def test_prepare_eject_device_path_changed(manager_client, db):
