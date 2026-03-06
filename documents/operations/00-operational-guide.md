@@ -1123,10 +1123,32 @@ sudo ufw enable
 
 ## API Quick Reference
 
+### Interactive API Documentation
+
+ECUBE provides **interactive API documentation** via OpenAPI/Swagger that allows you to explore and test all endpoints directly from your browser. In **local development**, when the API server is running on port `8000`, access:
+
+- **Swagger UI:** `http://localhost:8000/docs`
+- **ReDoc (Alternative):** `http://localhost:8000/redoc`
+- **OpenAPI JSON Schema:** `http://localhost:8000/openapi.json`
+
+In **production**, use the same paths on your deployed HTTPS endpoint (for example, `https://localhost:8443/docs` or `https://ecube-api.example.com/docs`), replacing `localhost:8000` with the actual host and port configured for the ECUBE API.
+Use the Swagger UI to:
+
+- View all available endpoints with detailed descriptions
+- Understand request/response schemas for each endpoint
+- See required authentication and role requirements
+- Test endpoints interactively with test data
+- Copy curl commands
+- View HTTP request/response examples
+
 ### Authentication
 
-All endpoints (except `/introspection/version`) require bearer token in `Authorization` header:
+The following endpoints are publicly accessible and do **not** require authentication:
 
+- `GET /health`
+- API documentation: `GET /docs`, `GET /redoc`, `GET /openapi.json`
+
+All other API endpoints require a bearer token in the `Authorization` header. For example:
 ```bash
 curl -H "Authorization: Bearer $JWT_TOKEN" https://localhost:8443/endpoint
 ```
@@ -1135,10 +1157,10 @@ curl -H "Authorization: Bearer $JWT_TOKEN" https://localhost:8443/endpoint
 
 | Method | Endpoint | Role | Description |
 | ------ | -------- | ---- | ----------- |
-| GET | `/drives` | manager+ | List all drives and state |
-| POST | `/drives` | manager | Initialize drive for project |
-| GET | `/drives/{id}` | manager+ | Get drive detail |
-| POST | `/drives/{id}/eject` | manager | Prepare drive for eject |
+| GET | `/drives` | admin/manager/processor/auditor | List all drives and state |
+| POST | `/drives/refresh` | admin/manager | Force rescan of attached drives |
+| POST | `/drives/{drive_id}/initialize` | admin/manager | Initialize drive for project |
+| POST | `/drives/{drive_id}/prepare-eject` | admin/manager | Prepare drive for eject |
 
 ### Mounts (`/mounts`)
 
@@ -1146,17 +1168,19 @@ curl -H "Authorization: Bearer $JWT_TOKEN" https://localhost:8443/endpoint
 | ------ | -------- | ---- | ----------- |
 | GET | `/mounts` | manager+ | List network mounts |
 | POST | `/mounts` | manager | Add new mount |
-| POST | `/mounts/validate` | manager | Validate mount connectivity |
+| POST | `/mounts/{mount_id}/validate` | admin/manager | Validate mount connectivity |
+| POST | `/mounts/validate` | admin/manager | Validate all mounts |
+| DELETE | `/mounts/{mount_id}` | admin/manager | Remove mount |
 
 ### Jobs (`/jobs`)
 
 | Method | Endpoint | Role | Description |
 | ------ | -------- | -------- | ----------- |
-| GET | `/jobs` | processor+ | List export jobs |
-| POST | `/jobs` | processor | Create new job |
-| GET | `/jobs/{id}` | processor+ | Get job detail (status, progress) |
-| POST | `/jobs/{id}/start` | processor | Start copy operation |
-| GET | `/jobs/{id}/manifest` | processor+ | Get copy manifest and hashes |
+| POST | `/jobs` | processor+ | Create new export job |
+| GET | `/jobs/{job_id}` | processor+ | Get job detail (status, progress) |
+| POST | `/jobs/{job_id}/start` | processor | Start copy operation |
+| POST | `/jobs/{job_id}/verify` | processor+ | Verify data integrity |
+| POST | `/jobs/{job_id}/manifest` | processor+ | Generate manifest document |
 
 ### Audit (`/audit`)
 
@@ -1185,9 +1209,11 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 | Method | Endpoint | Role | Description |
 | ------ | ----------------------- | ------ | ----------------------- |
-| GET | `/introspection/version` | public | API version (no auth needed) |
-| GET | `/introspection/drives` | manager+ | Hardware inventory (hubs, ports, drives) |
-| GET | `/introspection/mounts` | manager+ | Mount inventory and status |
+| GET | `/introspection/usb/topology` | all | USB hub and device topology |
+| GET | `/introspection/block-devices` | all | Kernel block device inventory |
+| GET | `/introspection/mounts` | all | Mount inventory and status |
+| GET | `/introspection/system-health` | all | Database and job engine health |
+| GET | `/introspection/jobs/{job_id}/debug` | admin,auditor | Debug info for specific job |
 
 ---
 
