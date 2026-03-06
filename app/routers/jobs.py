@@ -18,6 +18,13 @@ def create_job(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
 ):
+    """Create a new export job to copy eDiscovery data to an assigned drive.
+
+    Initializes the job with source path, target drive, and any additional manifest files.
+    The job starts in ``PENDING`` state and awaits ``start_job`` to begin copying.
+
+    **Roles:** ``admin``, ``manager``, ``processor``
+    """
     return job_service.create_job(body, db, actor=current_user.username)
 
 
@@ -27,6 +34,12 @@ def get_job(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_ALL_ROLES),
 ):
+    """Retrieve the current state and progress of an export job.
+
+    Returns job metadata, status, copied file count, and any verification results.
+
+    **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
+    """
     return job_service.get_job(job_id, db)
 
 
@@ -38,6 +51,13 @@ def start_job(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
 ):
+    """Start copying data from the source to the assigned USB drive.
+
+    Launches the copy process in a background task and transitions the job to ``IN_PROGRESS``.
+    Progress updates and errors are recorded in the job's status.
+
+    **Roles:** ``admin``, ``manager``, ``processor``
+    """
     return job_service.start_job(job_id, body, background_tasks, db, actor=current_user.username)
 
 
@@ -48,6 +68,13 @@ def verify_job(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
 ):
+    """Verify the integrity of copied data by comparing hashes and file counts.
+
+    Launches verification in a background task and transitions to ``VERIFYING``.
+    Upon completion, moves to ``VERIFIED`` or ``VERIFY_FAILED`` depending on results.
+
+    **Roles:** ``admin``, ``manager``, ``processor``
+    """
     return job_service.verify_job(job_id, background_tasks, db, actor=current_user.username)
 
 
@@ -57,4 +84,11 @@ def create_manifest(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
 ):
+    """Generate a manifest document containing file hashes and copy metadata.
+
+    Creates a digitally-signed manifest file on the USB drive for compliance and audit.
+    Returns the job with updated manifest status.
+
+    **Roles:** ``admin``, ``manager``, ``processor``
+    """
     return job_service.create_manifest(job_id, db, actor=current_user.username)
