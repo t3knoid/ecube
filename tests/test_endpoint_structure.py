@@ -227,7 +227,7 @@ class TestAuthenticationStructure:
         
         # This is a light validation - actual authorization tests are in test_authorization.py
         response = auditor_client.post("/drives/1/initialize", json={"project_id": "PROJ-001"})
-        assert response.status_code in [403, 404], "Role-based access should be enforced"
+        assert response.status_code == 403, "Role-based access should be enforced with 403 for insufficient role"
 
 
 class TestEndpointHttpMethods:
