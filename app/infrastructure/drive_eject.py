@@ -48,11 +48,10 @@ def _normalize_device_path(path: str) -> str:
     """Normalize a device path, resolving symlinks if possible.
 
     Handles paths like /dev/disk/by-id/* or /dev/disk/by-path/* by resolving
-    them to their actual device paths (e.g., /dev/sda).
+    them to their actual device paths (e.g., /dev/sda). Also resolves 
+    /dev/mapper/* symlinks to their actual /dev/dm-N device nodes.
 
     Paths that don't exist (common in tests) are returned as-is.
-    Device-mapper paths (/dev/mapper/*, /dev/dm-*) and paths with no parent
-    directory are not normalized to avoid issues in test environments.
 
     Args:
         path: Device path, possibly a symlink
@@ -61,10 +60,6 @@ def _normalize_device_path(path: str) -> str:
         Normalized path with symlinks resolved, or original path if realpath fails.
     """
     try:
-        # Only normalize if path looks like it could be a symlink
-        # (i.e., not device-mapper paths which are special)
-        if path.startswith("/dev/mapper/") or path.startswith("/dev/dm-"):
-            return path
         return os.path.realpath(path)
     except (OSError, TypeError):
         return path
@@ -91,12 +86,13 @@ def sync_filesystem() -> Tuple[bool, Optional[str]]:
 def _resolve_mapper_device_to_parent(mapper_path: str) -> Optional[str]:
     """Resolve a device-mapper device back to its parent block device via sysfs.
     
-    Examples:
-    - /dev/mapper/crypto_XXXXX (LUKS) -> /dev/sdb (if backed by sdb)
-    - /dev/dm-0 (LVM/device-mapper) -> /dev/sda (if backed by sda)
+    On Linux, /dev/mapper/<name> is a symlink to /dev/dm-N. This function:
+    1. Normalizes the input path (resolves symlink to /dev/dm-N)
+    2. Looks up the parent device via /sys/block/dm-N/slaves/
     
-    Uses /sys/block/<device>/slaves/ to find parent block device(s).
-    Returns the parent device name (e.g., "sdb") if found, None otherwise.
+    Examples:
+    - /dev/mapper/crypto_XXXXX (LUKS) -> resolved to /dev/dm-0 -> /dev/sdb
+    - /dev/dm-0 (already direct) -> /dev/sdb
     
     Args:
         mapper_path: Full device path, e.g. /dev/mapper/luks_vol or /dev/dm-0
@@ -104,27 +100,27 @@ def _resolve_mapper_device_to_parent(mapper_path: str) -> Optional[str]:
     Returns:
         Parent device base name (e.g., "sdb") if traceable via sysfs, None if not found or not a mapper device.
     """
-    # Extract device name from path (e.g., "crypto_XXXXX" from "/dev/mapper/crypto_XXXXX")
-    device_name = os.path.basename(mapper_path)
+    # Normalize to real /dev/dm-N path (handles symlinks)
+    normalized_path = _normalize_device_path(mapper_path)
     
-    # For /dev/mapper/* devices, the sysfs entry is often under a sanitized name.
-    # Try the device name as-is first, then try via dm-* major/minor if needed.
-    sysfs_paths = [
-        f"/sys/block/{device_name}",  # e.g. /sys/block/crypto_XXXXX
-    ]
+    # Extract the dm device name (e.g., "dm-0" from "/dev/dm-0")
+    # Only proceed if this looks like a device-mapper device
+    if not (normalized_path.startswith("/dev/dm-")):
+        return None
     
-    for sysfs_path in sysfs_paths:
-        slaves_path = os.path.join(sysfs_path, "slaves")
-        try:
-            if os.path.isdir(slaves_path):
-                # Read symlinks in slaves/ directory; each points to a parent device.
-                entries = os.listdir(slaves_path)
-                if entries:
-                    # Return the first (typically only) slave as the parent device base name
-                    return entries[0]
-        except OSError:
-            # sysfs path may not exist or not be readable; continue to next attempt
-            pass
+    device_name = os.path.basename(normalized_path)  # e.g., "dm-0"
+    slaves_path = f"/sys/block/{device_name}/slaves"
+    
+    try:
+        if os.path.isdir(slaves_path):
+            # Read symlinks in slaves/ directory; each points to a parent device.
+            entries = os.listdir(slaves_path)
+            if entries:
+                # Return the first (typically only) slave as the parent device base name
+                return entries[0]
+    except OSError:
+        # sysfs path may not exist or not be readable
+        pass
     
     return None
 
