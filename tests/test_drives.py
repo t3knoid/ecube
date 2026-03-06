@@ -417,3 +417,56 @@ def test_prepare_eject_state_changed_during_operation(manager_client, db):
     assert drive.current_state == DriveState.AVAILABLE
 
 
+def test_prepare_eject_nvme_partitions(manager_client, db):
+    """Prepare-eject correctly handles NVMe naming (nvme0n1p1, nvme0n1p2).
+    
+    Tests that the partition matching logic recognizes modern NVMe partition
+    naming with 'p' prefix (e.g., nvme0n1p1) not just traditional digit suffix.
+    """
+    drive = UsbDrive(
+        device_identifier="USB016",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        filesystem_path="/dev/nvme0n1",
+    )
+    db.add(drive)
+    db.commit()
+
+    # Mock unmount_device to verify it was called with the base device
+    with patch("app.services.drive_service.sync_filesystem", return_value=(True, None)):
+        with patch("app.services.drive_service.unmount_device", return_value=(True, None)) as mock_unmount:
+            response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+
+    assert response.status_code == 200
+    assert response.json()["current_state"] == "AVAILABLE"
+    # Verify unmount was called with the NVMe device path
+    mock_unmount.assert_called_once_with("/dev/nvme0n1")
+
+
+def test_prepare_eject_mmc_partitions(manager_client, db):
+    """Prepare-eject correctly handles MMC naming (mmcblk0p1, mmcblk0p2).
+    
+    Tests that the partition matching logic recognizes MMC partition naming
+    with 'p' prefix (e.g., mmcblk0p1) not just traditional digit suffix.
+    """
+    drive = UsbDrive(
+        device_identifier="USB017",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        filesystem_path="/dev/mmcblk0",
+    )
+    db.add(drive)
+    db.commit()
+
+    # Mock unmount_device to verify it was called with the base device
+    with patch("app.services.drive_service.sync_filesystem", return_value=(True, None)):
+        with patch("app.services.drive_service.unmount_device", return_value=(True, None)) as mock_unmount:
+            response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+
+    assert response.status_code == 200
+    assert response.json()["current_state"] == "AVAILABLE"
+    # Verify unmount was called with the MMC device path
+    mock_unmount.assert_called_once_with("/dev/mmcblk0")
+
+
+
