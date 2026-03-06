@@ -3,6 +3,40 @@ from typing import Optional
 from app.models.jobs import JobStatus, FileStatus
 
 
+class FileHashesResponse(BaseModel):
+    file_id: int
+    relative_path: str
+    md5: Optional[str] = None
+    sha256: Optional[str] = None
+    size_bytes: Optional[int] = None
+
+    model_config = {"from_attributes": True}
+
+
+class FileCompareRequest(BaseModel):
+    file_id_a: int
+    file_id_b: int
+
+
+class FileCompareItem(BaseModel):
+    file_id: int
+    relative_path: str
+    md5: Optional[str] = None
+    sha256: Optional[str] = None
+    size_bytes: Optional[int] = None
+
+    model_config = {"from_attributes": True}
+
+
+class FileCompareResponse(BaseModel):
+    match: bool
+    hash_match: Optional[bool] = None
+    size_match: Optional[bool] = None
+    path_match: Optional[bool] = None
+    file_a: FileCompareItem
+    file_b: FileCompareItem
+
+
 class JobCreate(BaseModel):
     project_id: str
     evidence_number: str
