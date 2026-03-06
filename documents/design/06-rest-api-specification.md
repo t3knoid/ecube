@@ -1,5 +1,11 @@
 # 6. REST API Specification — Design
 
+**OpenAPI Documentation:** This API specification is also available interactively via OpenAPI (Swagger) when the ECUBE API server is running:
+
+- **Swagger UI:** `http://localhost:8000/docs`
+- **ReDoc:** `http://localhost:8000/redoc`
+- **OpenAPI Schema (JSON):** `http://localhost:8000/openapi.json`
+
 For the complete role model and policy context, see [10-security-and-access-control.md](10-security-and-access-control.md).
 
 ## 1. API Authentication
@@ -64,7 +70,7 @@ Every request resolves to:
 ### 2.2 Authorization Matrix
 
 | API Area / Operation | Admin | Manager | Processor | Auditor |
-|----------------------|:-----:|:-------:|:---------:|:-------:|
+| ---------------------- | :-----: | :-------: | :---------: | :-------: |
 | Add/remove mounts | ✔ | ✔ | ✖ | ✖ |
 | List mounts | ✔ | ✔ | ✔ | ✔ |
 | Initialize drives | ✔ | ✔ | ✖ | ✖ |

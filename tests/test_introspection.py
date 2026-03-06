@@ -44,12 +44,12 @@ def test_system_health_degraded(client, db):
     assert data["database_error"] is not None
 
 
-def test_job_debug_not_found(client, db):
-    response = client.get("/introspection/jobs/999/debug")
+def test_job_debug_not_found(auditor_client, db):
+    response = auditor_client.get("/introspection/jobs/999/debug")
     assert response.status_code == 404
 
 
-def test_job_debug(client, db):
+def test_job_debug(auditor_client, db):
     from app.models.jobs import ExportJob
 
     job = ExportJob(
@@ -60,7 +60,7 @@ def test_job_debug(client, db):
     db.add(job)
     db.commit()
 
-    response = client.get(f"/introspection/jobs/{job.id}/debug")
+    response = auditor_client.get(f"/introspection/jobs/{job.id}/debug")
     assert response.status_code == 200
     data = response.json()
     assert data["job_id"] == job.id
