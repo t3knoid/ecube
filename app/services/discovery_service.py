@@ -22,6 +22,17 @@ Drive FSM transitions applied during a refresh:
 
 The refresh is idempotent: running it multiple times without hardware changes
 produces no state mutations.
+
+Operational notes
+=================
+
+Hub auto-creation:
+  When a port is discovered but its parent hub is not present in the topology
+  snapshot (e.g. due to sysfs race conditions or partial enumeration), a
+  placeholder hub is automatically created with a default name matching the
+  hub system identifier. This ensures port-to-hub relationships remain intact
+  and avoids foreign-key violations. The placeholder hub name can be manually
+  updated via the hub management API when the hub is fully enumerated.
 """
 
 from __future__ import annotations
