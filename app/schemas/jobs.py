@@ -75,7 +75,7 @@ class ExportJobSchema(BaseModel):
     evidence_number: str = Field(..., description="Evidence case number")
     source_path: str = Field(..., description="Source path of evidence data")
     target_mount_path: Optional[str] = Field(default=None, description="Target mount path for copied data")
-    status: JobStatus = Field(..., description="Current job status (PENDING, RUNNING, COMPLETED, FAILED, VERIFYING, VERIFIED)")
+    status: JobStatus = Field(..., description="Current job status (PENDING, RUNNING, COMPLETED, FAILED, VERIFYING)")
     total_bytes: int = Field(..., description="Total bytes to copy")
     copied_bytes: int = Field(..., description="Bytes copied so far")
     file_count: int = Field(..., description="Total number of files to copy")
