@@ -53,18 +53,27 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None) -> Us
     drive_repo = DriveRepository(db)
     audit_repo = AuditRepository(db)
 
-    drive = drive_repo.get_for_update(drive_id)
+    # Read the drive WITHOUT row lock so OS operations don't hold the lock.
+    drive = drive_repo.get(drive_id)
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
 
-    # Attempt a system-wide filesystem flush.
-    flush_ok, flush_err = sync_filesystem()
+    # Copy the fields we need before releasing the row (no lock yet).
+    device_path = drive.filesystem_path
 
-    # Attempt to unmount the block device if a path is known.
+    # Perform potentially slow OS operations without holding a database lock.
+    flush_ok, flush_err = sync_filesystem()
     unmount_ok: bool = True
     unmount_err: Optional[str] = None
-    if drive.filesystem_path:
-        unmount_ok, unmount_err = unmount_device(drive.filesystem_path)
+    if device_path:
+        unmount_ok, unmount_err = unmount_device(device_path)
+
+    # Re-lock only for the state transition and audit write.
+    # Also re-check that the drive state hasn't changed since our initial read.
+    drive = drive_repo.get_for_update(drive_id)
+    if not drive:
+        # Drive was deleted between reads (unlikely but possible).
+        raise HTTPException(status_code=404, detail="Drive not found")
 
     if flush_ok and unmount_ok:
         drive.current_state = DriveState.AVAILABLE
