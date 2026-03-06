@@ -1125,12 +1125,13 @@ sudo ufw enable
 
 ### Interactive API Documentation
 
-ECUBE provides **interactive API documentation** via OpenAPI/Swagger that allows you to explore and test all endpoints directly from your browser. Once the API server is running on port 8000, access:
+ECUBE provides **interactive API documentation** via OpenAPI/Swagger that allows you to explore and test all endpoints directly from your browser. In **local development**, when the API server is running on port `8000`, access:
 
 - **Swagger UI:** `http://localhost:8000/docs`
 - **ReDoc (Alternative):** `http://localhost:8000/redoc`
 - **OpenAPI JSON Schema:** `http://localhost:8000/openapi.json`
 
+In **production**, use the same paths on your deployed HTTPS endpoint (for example, `https://localhost:8443/docs` or `https://ecube-api.example.com/docs`), replacing `localhost:8000` with the actual host and port configured for the ECUBE API.
 Use the Swagger UI to:
 
 - View all available endpoints with detailed descriptions
