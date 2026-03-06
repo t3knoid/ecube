@@ -148,8 +148,8 @@ Performs the following steps in sequence:
 - If device has multiple partitions mounted, unmounts all; returns `500` only if any unmount fails
 
 **Audit events:**
-- `DRIVE_EJECT_PREPARED`: Drive successfully prepared for eject
-- `DRIVE_EJECT_FAILED`: Sync or unmount failed; includes `flush_ok`, `flush_error`, `unmount_ok`, `unmount_error`
+- `DRIVE_EJECT_PREPARED`: Drive successfully prepared for eject; includes `drive_id`, `filesystem_path`, `flush_ok`, `unmount_ok`
+- `DRIVE_EJECT_FAILED`: Sync or unmount failed; includes `drive_id`, `filesystem_path`, `flush_ok`, `flush_error`, `unmount_ok`, `unmount_error`
 
 **Roles:** `admin`, `manager`
 
