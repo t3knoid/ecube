@@ -78,7 +78,7 @@ def custom_openapi():
     )
 
     # Define security schemes (merge, don't overwrite)
-    openapi_schema["components"].setdefault("securitySchemes", {}).update({
+    openapi_schema.setdefault("components", {}).setdefault("securitySchemes", {}).update({
         "HTTPBearer": {
             "type": "http",
             "scheme": "bearer",
