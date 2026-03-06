@@ -21,8 +21,9 @@ def add_mount(
 ):
     """Register a new network mount (SMB, NFS, etc.) as a data source.
 
-    Stores mount credentials and configuration; does not immediately connect.
-    Connection is validated via ``POST /mounts/{mount_id}/validate``.
+    Stores mount credentials and configuration, and attempts to connect immediately,
+    updating the mount status based on the result of the system ``mount`` command.
+    Connectivity can be explicitly re-tested via ``POST /mounts/{mount_id}/validate``.
 
     **Roles:** ``admin``, ``manager``
     """
