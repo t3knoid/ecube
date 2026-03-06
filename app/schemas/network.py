@@ -6,7 +6,7 @@ from app.models.network import MountType, MountStatus
 
 class MountCreate(BaseModel):
     type: MountType = Field(..., description="Mount protocol type (SMB, NFS, etc.)")
-    remote_path: str = Field(..., description="Remote path on the network share (e.g., //server/share or nfs://server/export)")
+    remote_path: str = Field(..., description="Remote path on the network share (e.g., //server/share for SMB or server:/export for NFS)")
     local_mount_point: str = Field(..., description="Local filesystem path where the mount will be attached")
     username: Optional[str] = Field(default=None, description="Username for authentication (if required)")
     password: Optional[str] = Field(default=None, description="Password for authentication (if required)")
