@@ -1168,9 +1168,9 @@ curl -H "Authorization: Bearer $JWT_TOKEN" https://localhost:8443/endpoint
 | ------ | -------- | ---- | ----------- |
 | GET | `/mounts` | manager+ | List network mounts |
 | POST | `/mounts` | manager | Add new mount |
-| POST | `/mounts/{mount_id}/validate` | manager | Validate mount connectivity |
-| POST | `/mounts/validate` | manager | Validate all mounts |
-| DELETE | `/mounts/{mount_id}` | manager | Remove mount |
+| POST | `/mounts/{mount_id}/validate` | admin/manager | Validate mount connectivity |
+| POST | `/mounts/validate` | admin/manager | Validate all mounts |
+| DELETE | `/mounts/{mount_id}` | admin/manager | Remove mount |
 
 ### Jobs (`/jobs`)
 
