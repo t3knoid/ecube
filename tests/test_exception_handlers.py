@@ -170,8 +170,8 @@ def test_existing_404_schema(client):
     _assert_error_schema(data, expected_code="NOT_FOUND")
 
 
-def test_existing_409_schema(manager_client, db):
-    """Project isolation violations (409) use the standard error schema."""
+def test_existing_isolation_violation_schema(manager_client, db):
+    """Project isolation violations return 403 with the standard error schema."""
     from app.models.hardware import UsbDrive, DriveState
 
     drive = UsbDrive(
@@ -183,9 +183,9 @@ def test_existing_409_schema(manager_client, db):
     db.commit()
 
     response = manager_client.post(f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-B"})
-    assert response.status_code == 409
+    assert response.status_code == 403
     data = response.json()
-    _assert_error_schema(data, expected_code="CONFLICT")
+    _assert_error_schema(data, expected_code="FORBIDDEN")
 
 
 def test_existing_409_job_start_schema(client, db):
