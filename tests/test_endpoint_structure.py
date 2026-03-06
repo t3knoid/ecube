@@ -64,7 +64,7 @@ class TestEndpointDocumentation:
             
             docstring = inspect.getdoc(route["endpoint"])
             if docstring:
-                # A meaningful docstring should have at least 10 words
+                # A meaningful docstring should have at least 5 words
                 words = len(docstring.split())
                 if words < 5:
                     short_docstrings.append(
@@ -121,6 +121,38 @@ class TestResponseModels:
             if hasattr(route, "response_model")
             and route.response_model is not None
             and hasattr(route, "methods")
+        # These GET endpoints should have response models
+        expected_list_endpoints = [
+            "/drives",
+            "/mounts",
+            "/audit",
+        ]
+
+        # Build a set of (path, method) for GET routes that define a response_model
+        get_routes_with_models = {
+            (route.path, method)
+            for route in app.routes
+            if hasattr(route, "response_model") and hasattr(route, "methods")
+            for method in route.methods
+            if method == "GET"
+        }
+
+        for path in expected_list_endpoints:
+            assert (path, "GET") in get_routes_with_models, f"GET {path} should define response_model"
+
+    def test_single_resource_endpoints_have_response_model(self):
+        """POST/PUT endpoints should define response_model."""
+        # Key endpoints that modify resources
+        important_endpoints = [
+            "/drives/{drive_id}/initialize",
+            "/drives/{drive_id}/prepare-eject",
+            "/jobs",  # create job
+        ]
+
+        routes_by_path = {
+            (route.path, method): route
+            for route in app.routes
+            if hasattr(route, "response_model") and hasattr(route, "methods") and route.response_model is not None
             for method in route.methods
         }
 
@@ -139,6 +171,16 @@ class TestResponseModels:
         assert not missing, "Endpoints missing response_model:\n" + "\n".join(missing)
 
 
+        documented_endpoints = list(routes_by_path.keys())
+        assert documented_endpoints, "No POST/PUT/PATCH endpoints have response models defined"
+
+        # Ensure each critical endpoint has at least one mutating method with a response model
+        for path in important_endpoints:
+            has_documented_method = any(
+                (path, method) in routes_by_path
+                for method in ["POST", "PUT", "PATCH"]
+            )
+            assert has_documented_method, f"{path} should define a response_model for POST/PUT/PATCH"
 class TestPydanticSchemas:
     """Verify request/response schemas have field descriptions."""
 
