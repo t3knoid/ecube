@@ -131,7 +131,7 @@ The Swagger UI allows you to:
 - Test API endpoints directly from the browser
 - Explore authentication and role requirements
 
-All endpoints require authentication via JWT bearer tokens. Full API specification and security role details are documented in:
+All application/API endpoints (except `/health` and documentation endpoints such as `/docs`, `/redoc`, and `/openapi.json`) require authentication via JWT bearer tokens. Full API specification and security role details are documented in:
 
 - `documents/design/06-rest-api-specification.md`
 - `documents/design/10-security-and-access-control.md`
