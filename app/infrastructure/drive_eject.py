@@ -41,7 +41,7 @@ def sync_filesystem() -> Tuple[bool, Optional[str]]:
         return False, f"sync error: {exc}"
 
 
-def _find_device_mountpoints(device_base: str) -> List[str]:
+def _find_device_mountpoints(device_base: str) -> Tuple[List[str], Optional[str]]:
     """Find all mountpoints for a device and its partitions from /proc/mounts.
     
     Handles traditional partition naming (sdb1, sdb2) and modern schemes:
@@ -52,7 +52,10 @@ def _find_device_mountpoints(device_base: str) -> List[str]:
         device_base: Base device name (e.g., "sdb" from "/dev/sdb")
         
     Returns:
-        List of mount points for this device and its partitions.
+        Tuple of (mountpoints_list, error_message):
+        - On success: (list of mount points, None)
+        - On read failure: (empty list, error message explaining the failure)
+        - On no mounts found: (empty list, None)
     """
     try:
         with open("/proc/mounts", "r") as f:
@@ -75,10 +78,12 @@ def _find_device_mountpoints(device_base: str) -> List[str]:
                         if re.match(r"^(p?\d+)$", suffix):
                             mountpoints.append(mount_point)
             
-            return mountpoints
-    except (OSError, IOError):
-        # If we can't read /proc/mounts, log the issue but continue
-        return []
+            return mountpoints, None
+    except OSError as exc:
+        # Distinguish read failure from "no mounts found"
+        return [], f"could not read /proc/mounts: {exc}"
+    except IOError as exc:
+        return [], f"could not read /proc/mounts: {exc}"
 
 
 def unmount_device(device_path: str) -> Tuple[bool, Optional[str]]:
@@ -101,7 +106,11 @@ def unmount_device(device_path: str) -> Tuple[bool, Optional[str]]:
     device_base = device_path[5:]  # Remove "/dev/" prefix
 
     # Find all mountpoints for this device and its partitions
-    mountpoints = _find_device_mountpoints(device_base)
+    mountpoints, read_error = _find_device_mountpoints(device_base)
+
+    # If we couldn't read /proc/mounts, propagate the error
+    if read_error:
+        return False, read_error
 
     # If nothing is mounted, treat as success (nothing to do)
     if not mountpoints:
