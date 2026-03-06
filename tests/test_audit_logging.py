@@ -106,6 +106,9 @@ class TestDriveAuditLogging:
         assert entry is not None
         assert entry.user == "manager-user"
         assert entry.details["drive_id"] == drive.id
+        assert entry.details["flush_ok"] is True
+        assert entry.details["unmount_ok"] is True
+        assert entry.details["filesystem_path"] is None
 
 
 # ---------------------------------------------------------------------------
