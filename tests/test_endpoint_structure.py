@@ -64,7 +64,7 @@ class TestEndpointDocumentation:
             
             docstring = inspect.getdoc(route["endpoint"])
             if docstring:
-                # A meaningful docstring should have at least 10 words
+                # A meaningful docstring should have at least 5 words
                 words = len(docstring.split())
                 if words < 5:
                     short_docstrings.append(
