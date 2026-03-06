@@ -125,7 +125,23 @@ Enforces project isolation.
 
 ### `POST /drives/{id}/prepare-eject`
 
-Unmount and mark drive AVAILABLE.
+Prepare drive for safe eject: flush filesystem writes, unmount all partitions, and transition to AVAILABLE.
+
+Performs the following steps in sequence:
+1. Issues `sync(1)` to flush all pending filesystem writes to block devices
+2. Identifies and unmounts all partitions and mount points for the device
+3. On success: transitions drive from `IN_USE` → `AVAILABLE`, logs `DRIVE_EJECT_PREPARED`
+4. On failure: drive remains `IN_USE`, logs `DRIVE_EJECT_FAILED` with error details
+
+**Behavior:**
+- Returns `200` with updated drive state on success
+- Returns `500` if sync or unmount operations fail (drive state unchanged, stays `IN_USE`)
+- If device is not mounted, returns `200` immediately (no-op is success)
+- If device has multiple partitions mounted, unmounts all; returns `500` only if any unmount fails
+
+**Audit events:**
+- `DRIVE_EJECT_PREPARED`: Drive successfully prepared for eject
+- `DRIVE_EJECT_FAILED`: Sync or unmount failed; includes `flush_ok`, `flush_error`, `unmount_ok`, `unmount_error`
 
 **Roles:** `admin`, `manager`
 
