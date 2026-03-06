@@ -74,6 +74,7 @@ def custom_openapi():
         description=app.description,
         contact=app.contact,
         license_info=app.license_info,
+        tags=app.openapi_tags,
         routes=app.routes,
         tags=app.openapi_tags,
     )
