@@ -88,6 +88,8 @@ class TestDriveAuditLogging:
         assert entry.details["requested_project_id"] == "PROJ-B"
 
     def test_prepare_eject_logs_actor(self, manager_client, db):
+        from unittest.mock import patch
+
         drive = UsbDrive(
             device_identifier="AUDIT-EJECT",
             current_state=DriveState.IN_USE,
@@ -96,7 +98,8 @@ class TestDriveAuditLogging:
         db.add(drive)
         db.commit()
 
-        response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+        with patch("app.services.drive_service.sync_filesystem", return_value=(True, None)):
+            response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
         assert response.status_code == 200
 
         entry = _audit_by_action(db, "DRIVE_EJECT_PREPARED")
