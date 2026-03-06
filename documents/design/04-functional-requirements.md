@@ -7,13 +7,19 @@
 
 ## 4.2 Drive Prepare-Eject Procedure
 
+- **Precondition:** Drive must be in `IN_USE` state; reject with 409 if not
+- **Initial validation:** Capture drive state and filesystem path at request start
 - Filesystem sync: Issue `sync(1)` to flush pending writes before unmount
 - Partition discovery: Parse `/proc/mounts` to find all mounted partitions belonging to the device
 - Unmount all partitions: Attempt to unmount each mount point, collecting errors
+- **Transaction optimization:** OS operations (sync/unmount) execute without database row lock to reduce contention
+- **Race condition detection:** After re-acquiring lock, validate that drive state and device path have not changed since initial read
+  - If state changed: reject with 409 Conflict (another request changed drive state)
+  - If device path changed: reject with 409 Conflict (discovery refresh changed path during operation)
+  - This ensures audit trail records the device path actually used for OS operations
 - Failure handling: If any operation fails, keep drive `IN_USE` and audit the failure with details
 - Success: Transition drive to `AVAILABLE` only after all operations succeed
 - No-op case: If device is not currently mounted, consider it successfully prepared (return success)
-- Transaction optimization: OS operations (sync/unmount) execute without database row lock to reduce contention
 
 ## 4.3 Project Isolation Design (Critical)
 
