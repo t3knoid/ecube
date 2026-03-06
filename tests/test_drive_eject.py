@@ -133,6 +133,56 @@ class TestFindDeviceMountpoints:
         assert error is None
         assert set(result) == {"/media/mmc", "/media/mmc1"}
 
+    def test_unescape_mountpoint_with_spaces(self):
+        """Correctly unescape mountpoints with escaped spaces from /proc/mounts."""
+        from app.infrastructure.drive_eject import _unescape_mountpoint
+        
+        # /proc/mounts encodes spaces as \040
+        escaped_path = "/media/my\\040files"
+        result = _unescape_mountpoint(escaped_path)
+        assert result == "/media/my files"
+
+    def test_unescape_mountpoint_with_tabs(self):
+        """Correctly unescape mountpoints with escaped tabs from /proc/mounts."""
+        from app.infrastructure.drive_eject import _unescape_mountpoint
+        
+        # /proc/mounts encodes tabs as \011
+        escaped_path = "/media/usb\\011backup"
+        result = _unescape_mountpoint(escaped_path)
+        assert result == "/media/usb\tbackup"
+
+    def test_unescape_mountpoint_multiple_escapes(self):
+        """Correctly unescape mountpoints with multiple escape sequences."""
+        from app.infrastructure.drive_eject import _unescape_mountpoint
+        
+        # Multiple escapes: space, newline (as literal \n), etc.
+        escaped_path = "/mnt/my\\040files\\011here"
+        result = _unescape_mountpoint(escaped_path)
+        assert result == "/mnt/my files\there"
+
+    def test_unescape_mountpoint_no_escapes(self):
+        """Mountpoint with no escapes should remain unchanged."""
+        from app.infrastructure.drive_eject import _unescape_mountpoint
+        
+        path = "/media/usb"
+        result = _unescape_mountpoint(path)
+        assert result == "/media/usb"
+
+    def test_find_device_with_escaped_mountpoint(self):
+        """Parse /proc/mounts correctly when mountpoints have escapes."""
+        # Simulate /proc/mounts with path containing space
+        proc_mounts_content = """/dev/sdb /media/my\\040usb ext4 rw 0 0
+/dev/sdb1 /media/usb\\011sub ext4 rw 0 0
+"""
+        with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
+            result, error = _find_device_mountpoints("sdb")
+        
+        assert error is None
+        # Results should be unescaped
+        assert "/media/my usb" in result  # space unescaped
+        assert "/media/usb\tsub" in result  # tab unescaped
+        assert len(result) == 2
+
 
 class TestResolveMapperDevice:
     """Tests for device-mapper resolution (LUKS, LVM, dm devices)."""
