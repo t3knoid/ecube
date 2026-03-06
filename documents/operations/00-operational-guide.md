@@ -1142,8 +1142,12 @@ Use the Swagger UI to:
 
 ### Authentication
 
-All endpoints require bearer token in `Authorization` header:
+The following endpoints are publicly accessible and do **not** require authentication:
 
+- `GET /health`
+- API documentation: `GET /docs`, `GET /redoc`, `GET /openapi.json`
+
+All other API endpoints require a bearer token in the `Authorization` header. For example:
 ```bash
 curl -H "Authorization: Bearer $JWT_TOKEN" https://localhost:8443/endpoint
 ```
