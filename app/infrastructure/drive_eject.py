@@ -1,5 +1,11 @@
 """OS-level drive flush and unmount operations.
 
+.. note::
+   This module is **Linux-only**.  It shells out to ``/bin/sync`` and
+   ``/bin/umount``, which are standard Linux utilities.  Running on
+   macOS, Windows, or other non-Linux platforms will fail at the
+   ``OSError`` level when the binaries are not present.
+
 These thin wrappers isolate subprocess calls so they can be patched in tests
 without requiring physical hardware.
 """
