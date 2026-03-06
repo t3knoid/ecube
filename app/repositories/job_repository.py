@@ -105,6 +105,21 @@ class FileRepository:
             .all()
         )
 
+    def list_incomplete_by_job(self, job_id: int) -> List[ExportFile]:
+        """Return files that are not yet successfully completed for *job_id*.
+
+        This includes files in ``PENDING``, ``COPYING``, ``RETRYING``, and
+        ``ERROR`` states — everything except ``DONE``.
+        """
+        return (
+            self.db.query(ExportFile)
+            .filter(
+                ExportFile.job_id == job_id,
+                ExportFile.status != FileStatus.DONE,
+            )
+            .all()
+        )
+
     def add(self, export_file: ExportFile) -> ExportFile:
         """Persist a new export file record."""
         self.db.add(export_file)
