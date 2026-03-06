@@ -48,13 +48,14 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None) -> Exp
                 user=actor,
                 job_id=job.id,
                 details={
+                    "actor": actor,
                     "drive_id": body.drive_id,
                     "existing_project_id": drive.current_project_id,
                     "requested_project_id": body.project_id,
                 },
             )
             raise HTTPException(
-                status_code=409,
+                status_code=403,
                 detail="Drive belongs to a different project",
             )
 
