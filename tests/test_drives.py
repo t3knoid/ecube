@@ -218,3 +218,162 @@ def test_prepare_eject_invalid_device_path(manager_client, db):
     log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_EJECT_FAILED").first()
     assert log is not None
     assert "invalid device path" in (log.details.get("unmount_error") or "")
+
+
+def test_prepare_eject_requires_in_use_state(manager_client, db):
+    """Prepare-eject must reject drives not in IN_USE state (409 Conflict)."""
+    drive = UsbDrive(
+        device_identifier="USB011",
+        current_state=DriveState.EMPTY,
+        current_project_id=None,
+    )
+    db.add(drive)
+    db.commit()
+
+    with patch("app.services.drive_service.sync_filesystem", return_value=(True, None)):
+        response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+
+    assert response.status_code == 409
+    assert "not in IN_USE state" in response.json()["message"]
+
+    # Drive state must remain EMPTY.
+    db.expire(drive)
+    db.refresh(drive)
+    assert drive.current_state == DriveState.EMPTY
+
+
+def test_prepare_eject_available_state_conflict(manager_client, db):
+    """Prepare-eject on AVAILABLE drive returns 409 Conflict."""
+    drive = UsbDrive(
+        device_identifier="USB012",
+        current_state=DriveState.AVAILABLE,
+        current_project_id=None,
+    )
+    db.add(drive)
+    db.commit()
+
+    with patch("app.services.drive_service.sync_filesystem", return_value=(True, None)):
+        response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+
+    assert response.status_code == 409
+    assert "not in IN_USE state" in response.json()["message"]
+
+
+def test_prepare_eject_device_path_changed(manager_client, db):
+    """Prepare-eject fails if filesystem_path changes during operation (409 Conflict).
+    
+    Simulates scenario where USB discovery refresh changes the device path
+    between the initial read and the locked update.
+    """
+    drive = UsbDrive(
+        device_identifier="USB013",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        filesystem_path="/dev/sdb",
+    )
+    db.add(drive)
+    db.commit()
+    drive_id = drive.id
+
+    def sync_and_change_path(*args, **kwargs):
+        """Simulate sync succeeding, then discovery changing the device path."""
+        # Simulate discovery refresh changing the path
+        drive_obj = db.query(UsbDrive).filter(UsbDrive.id == drive_id).first()
+        if drive_obj:
+            drive_obj.filesystem_path = "/dev/sdc"
+            db.commit()
+        return True, None
+
+    with patch("app.services.drive_service.sync_filesystem", side_effect=sync_and_change_path):
+        with patch("app.services.drive_service.unmount_device", return_value=(True, None)):
+            response = manager_client.post(f"/drives/{drive_id}/prepare-eject")
+
+    assert response.status_code == 409
+    assert "Device path changed" in response.json()["message"]
+    assert "/dev/sdb" in response.json()["message"]
+    assert "/dev/sdc" in response.json()["message"]
+
+    # Drive state must remain IN_USE.
+    db.expire_all()
+    drive = db.query(UsbDrive).filter(UsbDrive.id == drive_id).first()
+    assert drive.current_state == DriveState.IN_USE
+
+
+def test_prepare_eject_device_path_cleared_during_operation(manager_client, db):
+    """Prepare-eject fails if filesystem_path becomes None during operation (409 Conflict).
+    
+    Simulates scenario where USB is disconnected and discovery removes the device path.
+    """
+    drive = UsbDrive(
+        device_identifier="USB014",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        filesystem_path="/dev/sde",
+    )
+    db.add(drive)
+    db.commit()
+    drive_id = drive.id
+
+    def sync_and_clear_path(*args, **kwargs):
+        """Simulate sync succeeding, then discovery clearing the device path."""
+        # Simulate USB disconnection clearing the path
+        drive_obj = db.query(UsbDrive).filter(UsbDrive.id == drive_id).first()
+        if drive_obj:
+            drive_obj.filesystem_path = None
+            db.commit()
+        return True, None
+
+    with patch("app.services.drive_service.sync_filesystem", side_effect=sync_and_clear_path):
+        with patch("app.services.drive_service.unmount_device", return_value=(True, None)):
+            response = manager_client.post(f"/drives/{drive_id}/prepare-eject")
+
+    assert response.status_code == 409
+    assert "Device path changed" in response.json()["message"]
+    assert "/dev/sde" in response.json()["message"]
+
+    # Drive state must remain IN_USE.
+    db.expire_all()
+    drive = db.query(UsbDrive).filter(UsbDrive.id == drive_id).first()
+    assert drive.current_state == DriveState.IN_USE
+
+
+def test_prepare_eject_state_changed_during_operation(manager_client, db):
+    """Prepare-eject fails if current_state changes during operation (409 Conflict).
+    
+    Simulates scenario where another request (e.g., re-initialize) changes the state
+    between the initial read and the locked update.
+    """
+    drive = UsbDrive(
+        device_identifier="USB015",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        filesystem_path="/dev/sdf",
+    )
+    db.add(drive)
+    db.commit()
+    drive_id = drive.id
+
+    def sync_and_change_state(*args, **kwargs):
+        """Simulate sync succeeding, then another request changing the state."""
+        # Simulate another request re-initializing the drive
+        drive_obj = db.query(UsbDrive).filter(UsbDrive.id == drive_id).first()
+        if drive_obj:
+            drive_obj.current_state = DriveState.AVAILABLE
+            db.commit()
+        return True, None
+
+    with patch("app.services.drive_service.sync_filesystem", side_effect=sync_and_change_state):
+        with patch("app.services.drive_service.unmount_device", return_value=(True, None)):
+            response = manager_client.post(f"/drives/{drive_id}/prepare-eject")
+
+    assert response.status_code == 409
+    assert "state changed during prepare-eject" in response.json()["message"]
+    assert "IN_USE" in response.json()["message"]
+    assert "AVAILABLE" in response.json()["message"]
+
+    # Drive state should now be AVAILABLE (from the state change).
+    db.expire_all()
+    drive = db.query(UsbDrive).filter(UsbDrive.id == drive_id).first()
+    assert drive.current_state == DriveState.AVAILABLE
+
+
