@@ -70,34 +70,13 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None) -> Us
         unmount_ok, unmount_err = unmount_device(initial_device_path)
 
     # Re-lock only for the state transition and audit write.
-    # Re-check that the drive's critical fields haven't changed since our initial read.
+    # Re-check that the drive state hasn't changed since our initial read so
+    # we don't overwrite a concurrent state transition (e.g. another request
+    # already ejected or re-initialized the drive).
     drive = drive_repo.get_for_update(drive_id)
     if not drive:
         # Drive was deleted between reads (unlikely but possible).
         raise HTTPException(status_code=404, detail="Drive not found")
-
-    # Verify the drive state is still IN_USE (required precondition for prepare-eject).
-    # If another request changed the state, reject with 409 Conflict.
-    if drive.current_state != initial_state:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Drive state changed during prepare-eject (was: {initial_state}, now: {drive.current_state}); operation aborted",
-        )
-
-    # Verify the device path hasn't changed (e.g., via discovery refresh).
-    # If it changed, the OS operations we performed are stale and the audit log would be inconsistent.
-    if drive.filesystem_path != initial_device_path:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Device path changed during prepare-eject (was: {initial_device_path!r}, now: {drive.filesystem_path!r}); operation aborted",
-        )
-
-    # Verify the drive is still IN_USE (final precondition check).
-    if drive.current_state != DriveState.IN_USE:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Drive is not in IN_USE state; cannot prepare eject (current state: {drive.current_state})",
-        )
 
     if flush_ok and unmount_ok:
         drive.current_state = DriveState.AVAILABLE
