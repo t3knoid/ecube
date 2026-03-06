@@ -114,20 +114,25 @@ class TestResponseModels:
             "/drives/{drive_id}/prepare-eject",
             "/jobs",  # create job
         ]
-        
+
         routes_by_path = {
-            (route.path, method): route 
-            for route in app.routes 
-            if hasattr(route, "response_model") and hasattr(route, "methods")
+            (route.path, method): route
+            for route in app.routes
+            if hasattr(route, "response_model") and hasattr(route, "methods") and route.response_model is not None
             for method in route.methods
             if method in ["POST", "PUT", "PATCH"]
         }
-        
+
         documented_endpoints = list(routes_by_path.keys())
-        # We're being permissive here - just check a few critical ones exist
-        assert len(documented_endpoints) > 0, "No POST/PUT endpoints have response models defined"
+        assert documented_endpoints, "No POST/PUT/PATCH endpoints have response models defined"
 
-
+        # Ensure each critical endpoint has at least one mutating method with a response model
+        for path in important_endpoints:
+            has_documented_method = any(
+                (path, method) in routes_by_path
+                for method in ["POST", "PUT", "PATCH"]
+            )
+            assert has_documented_method, f"{path} should define a response_model for POST/PUT/PATCH"
 class TestPydanticSchemas:
     """Verify request/response schemas have field descriptions."""
 
