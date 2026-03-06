@@ -11,6 +11,7 @@ without requiring physical hardware.
 """
 from __future__ import annotations
 
+import codecs
 import os.path
 import re
 import subprocess
@@ -22,6 +23,51 @@ _DEVICE_PATH_RE = re.compile(r"^/dev/[a-zA-Z][a-zA-Z0-9]*$")
 # Absolute paths to system utilities so PATH manipulation cannot redirect them.
 _SYNC_BIN = "/bin/sync"
 _UMOUNT_BIN = "/bin/umount"
+
+
+def _unescape_mountpoint(escaped_path: str) -> str:
+    """Unescape special characters in /proc/mounts path.
+
+    /proc/mounts uses POSIX escape sequences: \\040 for space, \\011 for tab, etc.
+    This function converts escaped sequences back to actual characters.
+
+    Args:
+        escaped_path: Path string with escape sequences (from /proc/mounts)
+
+    Returns:
+        Unescaped path ready to pass to system calls.
+    """
+    try:
+        return codecs.decode(escaped_path, 'unicode_escape')
+    except (UnicodeDecodeError, AttributeError):
+        # If unescaping fails, return the original path
+        return escaped_path
+
+
+def _normalize_device_path(path: str) -> str:
+    """Normalize a device path, resolving symlinks if possible.
+
+    Handles paths like /dev/disk/by-id/* or /dev/disk/by-path/* by resolving
+    them to their actual device paths (e.g., /dev/sda).
+
+    Paths that don't exist (common in tests) are returned as-is.
+    Device-mapper paths (/dev/mapper/*, /dev/dm-*) and paths with no parent
+    directory are not normalized to avoid issues in test environments.
+
+    Args:
+        path: Device path, possibly a symlink
+
+    Returns:
+        Normalized path with symlinks resolved, or original path if realpath fails.
+    """
+    try:
+        # Only normalize if path looks like it could be a symlink
+        # (i.e., not device-mapper paths which are special)
+        if path.startswith("/dev/mapper/") or path.startswith("/dev/dm-"):
+            return path
+        return os.path.realpath(path)
+    except (OSError, TypeError):
+        return path
 
 
 def sync_filesystem() -> Tuple[bool, Optional[str]]:
@@ -118,20 +164,27 @@ def _find_device_mountpoints(device_base: str) -> Tuple[List[str], Optional[str]
                 parts = line.split()
                 if len(parts) >= 2:
                     source = parts[0]
-                    mount_point = parts[1]
+                    mount_point_escaped = parts[1]
+                    
+                    # Normalize source path to handle symlinks like /dev/disk/by-id/*
+                    normalized_source = _normalize_device_path(source)
+                    normalized_prefix = _normalize_device_path(device_prefix)
+                    
+                    # Unescape mount point (handles \040 for space, \011 for tab, etc.)
+                    mount_point = _unescape_mountpoint(mount_point_escaped)
                     
                     # Match the device itself (exact match)
-                    if source == device_prefix:
+                    if normalized_source == normalized_prefix:
                         mountpoints.append(mount_point)
                     # Match partitions: suffix must be either digits (sdb1) or p+digits (nvme0n1p1)
-                    elif source.startswith(device_prefix) and len(source) > len(device_prefix):
-                        suffix = source[len(device_prefix):]
+                    elif normalized_source.startswith(normalized_prefix) and len(normalized_source) > len(normalized_prefix):
+                        suffix = normalized_source[len(normalized_prefix):]
                         # Match traditional (1, 2, 3...) or modern p-prefixed (p1, p2, p3...)
                         if re.match(r"^(p?\d+)$", suffix):
                             mountpoints.append(mount_point)
                     # Match device-mapper devices (LUKS, LVM) backed by this device
-                    elif source.startswith("/dev/mapper/") or source.startswith("/dev/dm-"):
-                        parent_device = _resolve_mapper_device_to_parent(source)
+                    elif normalized_source.startswith("/dev/mapper/") or normalized_source.startswith("/dev/dm-"):
+                        parent_device = _resolve_mapper_device_to_parent(normalized_source)
                         if parent_device == device_base:
                             mountpoints.append(mount_point)
             
