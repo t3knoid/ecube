@@ -76,7 +76,7 @@ def _resolve_mapper_device_to_parent(mapper_path: str) -> Optional[str]:
                 if entries:
                     # Return the first (typically only) slave as the parent device base name
                     return entries[0]
-        except (OSError, IOError):
+        except OSError:
             # sysfs path may not exist or not be readable; continue to next attempt
             pass
     
