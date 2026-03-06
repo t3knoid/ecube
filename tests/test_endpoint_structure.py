@@ -87,6 +87,40 @@ class TestResponseModels:
 
     def test_list_endpoints_have_response_model(self):
         """GET endpoints that return lists should define response_model."""
+        # Build a set of (path, method) pairs where response_model is not None
+        routes_with_model = {
+            (route.path, method)
+            for route in app.routes
+            if hasattr(route, "response_model")
+            and route.response_model is not None
+            and hasattr(route, "methods")
+            for method in route.methods
+        }
+
+        # These specific GET endpoints must have a non-None response_model
+        expected_list_endpoints = [
+            ("/drives", "GET"),
+            ("/jobs/{job_id}", "GET"),
+            ("/mounts", "GET"),
+            ("/audit", "GET"),
+        ]
+
+        missing = [
+            f"{method} {path}"
+            for path, method in expected_list_endpoints
+            if (path, method) not in routes_with_model
+        ]
+        assert not missing, "Endpoints missing response_model:\n" + "\n".join(missing)
+
+    def test_single_resource_endpoints_have_response_model(self):
+        """POST/PUT endpoints should define response_model."""
+        # Build a set of (path, method) pairs where response_model is not None
+        routes_with_model = {
+            (route.path, method)
+            for route in app.routes
+            if hasattr(route, "response_model")
+            and route.response_model is not None
+            and hasattr(route, "methods")
         # These GET endpoints should have response models
         expected_list_endpoints = [
             "/drives",
@@ -120,8 +154,22 @@ class TestResponseModels:
             for route in app.routes
             if hasattr(route, "response_model") and hasattr(route, "methods") and route.response_model is not None
             for method in route.methods
-            if method in ["POST", "PUT", "PATCH"]
         }
+
+        # Key mutation endpoints that must declare a response_model
+        important_endpoints = [
+            ("/drives/{drive_id}/initialize", "POST"),
+            ("/drives/{drive_id}/prepare-eject", "POST"),
+            ("/jobs", "POST"),  # create job
+        ]
+
+        missing = [
+            f"{method} {path}"
+            for path, method in important_endpoints
+            if (path, method) not in routes_with_model
+        ]
+        assert not missing, "Endpoints missing response_model:\n" + "\n".join(missing)
+
 
         documented_endpoints = list(routes_by_path.keys())
         assert documented_endpoints, "No POST/PUT/PATCH endpoints have response models defined"
