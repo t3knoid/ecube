@@ -515,3 +515,27 @@ class TestUnmountDevice:
             timeout=30,
         )
 
+    def test_unmount_nested_mounts_deepest_first(self):
+        """Unmount nested mounts in correct order (deepest first) to avoid 'target is busy' errors."""
+        proc_mounts_content = """/dev/sdb /media/usb ext4 rw 0 0
+/dev/sdb1 /media/usb/sub ext4 rw 0 0
+/dev/sdb2 /media/usb/sub/deep ext4 rw 0 0
+"""
+        with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
+            with patch("subprocess.run") as mock_run:
+                success, error = unmount_device("/dev/sdb")
+
+        assert success is True
+        assert error is None
+        assert mock_run.call_count == 3
+        
+        # Verify unmount calls were made in order of deepest-first
+        # Extracting mount points from the calls in order
+        unmount_order = [call_args[0][0][1] for call_args in mock_run.call_args_list]
+        
+        # Deepest paths should be unmounted first
+        # /media/usb/sub/deep has depth 4, /media/usb/sub has depth 3, /media/usb has depth 2
+        assert unmount_order[0] == "/media/usb/sub/deep"  # deepest: /media/usb/sub/deep
+        assert unmount_order[1] == "/media/usb/sub"       # middle: /media/usb/sub
+        assert unmount_order[2] == "/media/usb"           # parent: /media/usb
+
