@@ -18,6 +18,10 @@ def list_drives(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_ALL_ROLES),
 ):
+    """List all USB drives with their current state and project assignments.
+
+    **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
+    """
     return drive_service.get_all_drives(db)
 
 
@@ -28,6 +32,13 @@ def initialize_drive(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
 ):
+    """Initialize a drive and bind it to a project for isolation enforcement.
+
+    Transitions the drive from ``AVAILABLE`` to ``IN_USE`` and records the project binding.
+    Once bound, the drive can only accept data for its designated project.
+
+    **Roles:** ``admin``, ``manager``
+    """
     return drive_service.initialize_drive(drive_id, body.project_id, db, actor=current_user.username)
 
 
@@ -37,6 +48,13 @@ def prepare_eject(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
 ):
+    """Prepare a drive for safe ejection and return it to available state.
+
+    Completes the copy/verify process and transitions the drive back to ``AVAILABLE``.
+    After ejection, the drive can be safely removed and reassigned to a different project.
+
+    **Roles:** ``admin``, ``manager``
+    """
     return drive_service.prepare_eject(drive_id, db, actor=current_user.username)
 
 
