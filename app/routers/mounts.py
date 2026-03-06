@@ -65,7 +65,8 @@ def validate_all_mounts(
 ):
     """Test connectivity and credentials for all registered network mounts.
 
-    Updates the ``is_validated`` flag for each mount and records any errors encountered.
+    Updates each mount's connectivity status and ``last_checked_at`` timestamp; any
+    errors encountered are reflected in the returned mount status.
 
     **Roles:** ``admin``, ``manager``
     """
