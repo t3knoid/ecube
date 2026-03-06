@@ -7,14 +7,18 @@ Covers:
 - Drive init/eject audit events.
 - Mount add/remove/validate audit events.
 - Job create/start/verify/manifest audit events.
+- File-level copy lifecycle audit events (FILE_COPY_START, FILE_COPY_SUCCESS, FILE_COPY_FAILURE).
 """
 
+import tempfile
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
+from app.models.jobs import ExportFile, ExportJob, FileStatus, JobStatus
 from app.models.network import MountStatus, MountType, NetworkMount
 
 
@@ -402,3 +406,131 @@ class TestAuthenticationFailureAuditLogging:
         assert entry.details["method"] == "GET"
         assert "invalid" in entry.details["reason"].lower()
         assert entry.details["trace_id"]
+
+
+# ---------------------------------------------------------------------------
+# File copy lifecycle audit events
+# ---------------------------------------------------------------------------
+
+
+class TestFileCopyAuditLogging:
+    """Verify that file-level copy events are written to audit_logs."""
+
+    def _make_job_and_file(self, db, relative_path: str) -> tuple:
+        """Create a minimal ExportJob + ExportFile and return (job, export_file)."""
+        job = ExportJob(
+            project_id="PROJ-FILE-AUDIT",
+            evidence_number="EV-FILE-AUDIT",
+            source_path="/tmp",
+            status=JobStatus.RUNNING,
+        )
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+
+        ef = ExportFile(
+            job_id=job.id,
+            relative_path=relative_path,
+            size_bytes=0,
+            status=FileStatus.PENDING,
+        )
+        db.add(ef)
+        db.commit()
+        db.refresh(ef)
+        return job, ef
+
+    def test_file_copy_success_emits_start_and_success_events(self, db):
+        from app.services.copy_engine import _process_file
+
+        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as tmp:
+            tmp.write(b"test content")
+            src_path = Path(tmp.name)
+
+        job, ef = self._make_job_and_file(db, src_path.name)
+        job_id = job.id
+        file_id = ef.id
+        relative_path = ef.relative_path
+
+        with patch("app.services.copy_engine.SessionLocal", return_value=db):
+            _process_file(file_id, src_path, None)
+
+        start = _audit_by_action(db, "FILE_COPY_START")
+        assert start is not None
+        assert start.job_id == job_id
+        assert start.details["file_id"] == file_id
+        assert start.details["relative_path"] == relative_path
+
+        success = _audit_by_action(db, "FILE_COPY_SUCCESS")
+        assert success is not None
+        assert success.job_id == job_id
+        assert success.details["file_id"] == file_id
+        assert success.details["relative_path"] == relative_path
+
+        assert _audit_by_action(db, "FILE_COPY_FAILURE") is None
+
+    def test_file_copy_failure_emits_start_and_failure_events(self, db):
+        from app.services.copy_engine import _process_file
+
+        job, ef = self._make_job_and_file(db, "nonexistent_file.txt")
+        job_id = job.id
+        file_id = ef.id
+        relative_path = ef.relative_path
+
+        nonexistent = Path("/nonexistent/path/file.txt")
+
+        with patch("app.services.copy_engine.SessionLocal", return_value=db):
+            with patch(
+                "app.services.copy_engine._checksum_only",
+                return_value=(False, None, "simulated I/O error"),
+            ):
+                _process_file(file_id, nonexistent, None)
+
+        start = _audit_by_action(db, "FILE_COPY_START")
+        assert start is not None
+        assert start.job_id == job_id
+        assert start.details["file_id"] == file_id
+
+        failure = _audit_by_action(db, "FILE_COPY_FAILURE")
+        assert failure is not None
+        assert failure.job_id == job_id
+        assert failure.details["file_id"] == file_id
+        assert failure.details["relative_path"] == relative_path
+        assert failure.details["error"] == "simulated I/O error"
+
+        assert _audit_by_action(db, "FILE_COPY_SUCCESS") is None
+
+    def test_file_copy_failure_records_error_reason(self, db):
+        from app.services.copy_engine import _process_file
+
+        job, ef = self._make_job_and_file(db, "error_file.txt")
+
+        with patch("app.services.copy_engine.SessionLocal", return_value=db):
+            with patch(
+                "app.services.copy_engine._checksum_only",
+                return_value=(False, None, "Permission denied"),
+            ):
+                _process_file(ef.id, Path("/some/file.txt"), None)
+
+        failure = _audit_by_action(db, "FILE_COPY_FAILURE")
+        assert failure is not None
+        assert "error" in failure.details
+        assert failure.details["error"] == "Permission denied"
+
+    def test_file_copy_start_event_schema(self, db):
+        from app.services.copy_engine import _process_file
+
+        with tempfile.NamedTemporaryFile(suffix=".dat", delete=False) as tmp:
+            tmp.write(b"schema test")
+            src_path = Path(tmp.name)
+
+        job, ef = self._make_job_and_file(db, src_path.name)
+
+        with patch("app.services.copy_engine.SessionLocal", return_value=db):
+            _process_file(ef.id, src_path, None)
+
+        start = _audit_by_action(db, "FILE_COPY_START")
+        assert start is not None
+        assert isinstance(start.details, dict)
+        assert "file_id" in start.details
+        assert "relative_path" in start.details
+        assert start.job_id is not None
