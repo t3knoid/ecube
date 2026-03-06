@@ -5,7 +5,6 @@ import uuid
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
-from fastapi.security import HTTPBearer
 
 from app.auth import get_current_user
 from app.exceptions import AuthenticationError, AuthorizationError, ConflictError, ECUBEException
@@ -13,9 +12,6 @@ from app.routers import audit, drives, files, introspection, jobs, mounts
 from app.schemas.errors import ErrorResponse
 
 logger = logging.getLogger(__name__)
-
-# Security scheme configuration
-security_bearer = HTTPBearer()
 
 # OpenAPI tags with descriptions for organizing endpoints
 tags_metadata = [
@@ -81,15 +77,15 @@ def custom_openapi():
         routes=app.routes,
     )
 
-    # Define security schemes
-    openapi_schema["components"]["securitySchemes"] = {
+    # Define security schemes (merge, don't overwrite)
+    openapi_schema["components"].setdefault("securitySchemes", {}).update({
         "HTTPBearer": {
             "type": "http",
             "scheme": "bearer",
             "bearerFormat": "JWT",
             "description": "JWT token for authentication. Include in Authorization header as 'Bearer <token>'.",
         }
-    }
+    })
 
     # Apply security requirement to all endpoints except /health
     for path, path_item in openapi_schema["paths"].items():
