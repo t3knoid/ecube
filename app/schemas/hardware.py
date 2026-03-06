@@ -36,9 +36,9 @@ class UsbDriveSchema(BaseModel):
             default=None,
             description=(
                 "Current OS block device node for the drive (e.g., /dev/sdb); may be used in place of a mount point "
-                "and may change across reboots or re-plugs"
-            ),
-        )
+        default=None,
+        description="Block device path for the drive (e.g., /dev/sdb); may be used in place of a mount point",
+    )
     capacity_bytes: Optional[int] = Field(default=None, description="Total storage capacity in bytes")
     encryption_status: Optional[str] = Field(default=None, description="Encryption status (e.g., 'encrypted', 'none')")
     current_state: DriveState = Field(..., description="Current drive state (EMPTY, AVAILABLE, IN_USE)")
