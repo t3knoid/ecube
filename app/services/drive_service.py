@@ -3,6 +3,7 @@ from typing import Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.infrastructure.drive_eject import sync_filesystem, unmount_device
 from app.models.hardware import DriveState, UsbDrive
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
@@ -56,11 +57,38 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None) -> Us
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
 
-    drive.current_state = DriveState.AVAILABLE
-    drive_repo.save(drive)
-    audit_repo.add(
-        action="DRIVE_EJECT_PREPARED",
-        user=actor,
-        details={"drive_id": drive_id},
-    )
+    # Attempt a system-wide filesystem flush.
+    flush_ok, flush_err = sync_filesystem()
+
+    # Attempt to unmount the block device if a path is known.
+    unmount_ok: bool = True
+    unmount_err: Optional[str] = None
+    if drive.filesystem_path:
+        unmount_ok, unmount_err = unmount_device(drive.filesystem_path)
+
+    if flush_ok and unmount_ok:
+        drive.current_state = DriveState.AVAILABLE
+        drive_repo.save(drive)
+        audit_repo.add(
+            action="DRIVE_EJECT_PREPARED",
+            user=actor,
+            details={"drive_id": drive_id},
+        )
+    else:
+        audit_repo.add(
+            action="DRIVE_EJECT_FAILED",
+            user=actor,
+            details={
+                "drive_id": drive_id,
+                "flush_ok": flush_ok,
+                "flush_error": flush_err,
+                "unmount_ok": unmount_ok,
+                "unmount_error": unmount_err,
+            },
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Drive eject preparation failed",
+        )
+
     return drive
