@@ -25,10 +25,19 @@ class UsbPortSchema(BaseModel):
 class UsbDriveSchema(BaseModel):
     id: int = Field(..., description="Unique identifier for the drive")
     port_id: Optional[int] = Field(default=None, description="ID of the port the drive is connected to")
-    device_identifier: str = Field(..., description="OS device identifier (e.g., /dev/sda)")
+    device_identifier: str = Field(
+        ...,
+        description=(
+            "Stable hardware identifier for the drive (USB serial when available, otherwise sysfs path); "
+            "distinct from the /dev block node reported in filesystem_path"
+        ),
+    )
     filesystem_path: Optional[str] = Field(
             default=None,
-            description="Block device path for the drive (e.g., /dev/sdb); may be used in place of a mount point",
+            description=(
+                "Current OS block device node for the drive (e.g., /dev/sdb); may be used in place of a mount point "
+                "and may change across reboots or re-plugs"
+            ),
         )
     capacity_bytes: Optional[int] = Field(default=None, description="Total storage capacity in bytes")
     encryption_status: Optional[str] = Field(default=None, description="Encryption status (e.g., 'encrypted', 'none')")
