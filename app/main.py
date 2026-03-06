@@ -75,6 +75,7 @@ def custom_openapi():
         contact=app.contact,
         license_info=app.license_info,
         routes=app.routes,
+        tags=app.openapi_tags,
     )
 
     # Define security schemes (merge, don't overwrite)
