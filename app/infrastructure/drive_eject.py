@@ -76,7 +76,7 @@ def _resolve_mapper_device_to_parent(mapper_path: str) -> Optional[str]:
                 if entries:
                     # Return the first (typically only) slave as the parent device base name
                     return entries[0]
-        except (OSError, IOError):
+        except OSError:
             # sysfs path may not exist or not be readable; continue to next attempt
             pass
     
@@ -171,9 +171,13 @@ def unmount_device(device_path: str) -> Tuple[bool, Optional[str]]:
     if not mountpoints:
         return True, None
 
+    # Sort deepest paths first so nested mounts are unmounted before their parents,
+    # preventing avoidable "target is busy" failures (e.g. /media/usb/sub before /media/usb).
+    mountpoints_ordered = sorted(mountpoints, key=lambda p: p.count("/"), reverse=True)
+
     # Attempt to unmount all mountpoints; collect errors
     errors = []
-    for mount_point in mountpoints:
+    for mount_point in mountpoints_ordered:
         try:
             subprocess.run(
                 [_UMOUNT_BIN, mount_point],

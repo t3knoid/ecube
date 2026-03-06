@@ -515,3 +515,18 @@ class TestUnmountDevice:
             timeout=30,
         )
 
+    def test_unmount_nested_mounts_deepest_first(self):
+        """Nested mountpoints are unmounted deepest-first to avoid 'target is busy' errors."""
+        # Parent /media/usb has a child bind-mount /media/usb/sub
+        proc_mounts_content = (
+            "/dev/sdb /media/usb ext4 rw 0 0\n"
+            "/dev/sdb /media/usb/sub ext4 rw 0 0\n"
+        )
+        unmount_calls = []
+        with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
+            with patch("subprocess.run", side_effect=lambda cmd, **_: unmount_calls.append(cmd[1])):
+                unmount_device("/dev/sdb")
+
+        # Deeper path (/media/usb/sub) must be unmounted before its parent (/media/usb)
+        assert unmount_calls == ["/media/usb/sub", "/media/usb"]
+
