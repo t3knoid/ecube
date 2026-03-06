@@ -1,4 +1,5 @@
-from typing import Any, Dict, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -29,3 +30,27 @@ class AuditRepository:
         self.db.commit()
         self.db.refresh(entry)
         return entry
+
+    def query(
+        self,
+        user: Optional[str] = None,
+        action: Optional[str] = None,
+        job_id: Optional[int] = None,
+        since: Optional[datetime] = None,
+        until: Optional[datetime] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[AuditLog]:
+        """Return audit log entries matching the given filters."""
+        q = self.db.query(AuditLog)
+        if user is not None:
+            q = q.filter(AuditLog.user == user)
+        if action is not None:
+            q = q.filter(AuditLog.action == action)
+        if job_id is not None:
+            q = q.filter(AuditLog.job_id == job_id)
+        if since is not None:
+            q = q.filter(AuditLog.timestamp >= since)
+        if until is not None:
+            q = q.filter(AuditLog.timestamp <= until)
+        return q.order_by(AuditLog.timestamp.desc(), AuditLog.id.desc()).offset(offset).limit(limit).all()
