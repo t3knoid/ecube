@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ErrorResponse(BaseModel):
@@ -14,6 +14,6 @@ class ErrorResponse(BaseModel):
         trace_id: Optional correlation identifier for log tracing.
     """
 
-    code: str
-    message: str
-    trace_id: Optional[str] = None
+    code: str = Field(..., description="Machine-readable error code (e.g., CONFLICT, NOT_FOUND, UNAUTHORIZED)")
+    message: str = Field(..., description="Human-readable description of the error")
+    trace_id: Optional[str] = Field(default=None, description="Unique correlation ID for tracing in logs")

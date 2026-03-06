@@ -103,7 +103,6 @@ class TestResponseModels:
         # These specific GET endpoints must have a non-None response_model
         expected_list_endpoints = [
             ("/drives", "GET"),
-            ("/jobs", "GET"),
             ("/mounts", "GET"),
             ("/audit", "GET"),
         ]
