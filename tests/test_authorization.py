@@ -145,6 +145,7 @@ class TestDriveAuthorization:
     # POST /drives/{id}/prepare-eject — admin, manager only
     def test_prepare_eject_admin_allowed(self, db):
         from app.models.hardware import DriveState, UsbDrive
+        from unittest.mock import patch
 
         drive = UsbDrive(
             device_identifier="AUTHZ-EJECT-ADMIN",
@@ -154,10 +155,12 @@ class TestDriveAuthorization:
         db.add(drive)
         db.commit()
         c = _client_for_role(db, ["admin"])
-        assert c.post(f"/drives/{drive.id}/prepare-eject").status_code == 200
+        with patch("app.services.drive_service.sync_filesystem", return_value=(True, None)):
+            assert c.post(f"/drives/{drive.id}/prepare-eject").status_code == 200
 
     def test_prepare_eject_manager_allowed(self, db):
         from app.models.hardware import DriveState, UsbDrive
+        from unittest.mock import patch
 
         drive = UsbDrive(
             device_identifier="AUTHZ-EJECT-MGR",
@@ -167,7 +170,8 @@ class TestDriveAuthorization:
         db.add(drive)
         db.commit()
         c = _client_for_role(db, ["manager"])
-        assert c.post(f"/drives/{drive.id}/prepare-eject").status_code == 200
+        with patch("app.services.drive_service.sync_filesystem", return_value=(True, None)):
+            assert c.post(f"/drives/{drive.id}/prepare-eject").status_code == 200
 
     def test_prepare_eject_processor_denied(self, db):
         c = _client_for_role(db, ["processor"])
