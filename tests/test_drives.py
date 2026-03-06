@@ -82,6 +82,8 @@ def test_prepare_eject(manager_client, db):
 
 def test_prepare_eject_with_filesystem_path(manager_client, db):
     """Flush and unmount are both called when drive has a filesystem_path."""
+    from app.models.audit import AuditLog
+
     drive = UsbDrive(
         device_identifier="USB006",
         current_state=DriveState.IN_USE,
@@ -101,6 +103,13 @@ def test_prepare_eject_with_filesystem_path(manager_client, db):
     assert response.json()["current_state"] == "AVAILABLE"
     mock_sync.assert_called_once()
     mock_umount.assert_called_once_with("/dev/sdb")
+
+    log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_EJECT_PREPARED").first()
+    assert log is not None
+    assert log.details["drive_id"] == drive.id
+    assert log.details["filesystem_path"] == "/dev/sdb"
+    assert log.details["flush_ok"] is True
+    assert log.details["unmount_ok"] is True
 
 
 def test_prepare_eject_not_found(manager_client, db):
