@@ -58,22 +58,46 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None) -> Us
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
 
-    # Copy the fields we need before releasing the row (no lock yet).
-    device_path = drive.filesystem_path
+    # Capture the precondition state for later validation.
+    initial_state = drive.current_state
+    initial_device_path = drive.filesystem_path
 
     # Perform potentially slow OS operations without holding a database lock.
     flush_ok, flush_err = sync_filesystem()
     unmount_ok: bool = True
     unmount_err: Optional[str] = None
-    if device_path:
-        unmount_ok, unmount_err = unmount_device(device_path)
+    if initial_device_path:
+        unmount_ok, unmount_err = unmount_device(initial_device_path)
 
     # Re-lock only for the state transition and audit write.
-    # Also re-check that the drive state hasn't changed since our initial read.
+    # Re-check that the drive's critical fields haven't changed since our initial read.
     drive = drive_repo.get_for_update(drive_id)
     if not drive:
         # Drive was deleted between reads (unlikely but possible).
         raise HTTPException(status_code=404, detail="Drive not found")
+
+    # Verify the drive state is still IN_USE (required precondition for prepare-eject).
+    # If another request changed the state, reject with 409 Conflict.
+    if drive.current_state != initial_state:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Drive state changed during prepare-eject (was: {initial_state}, now: {drive.current_state}); operation aborted",
+        )
+
+    # Verify the device path hasn't changed (e.g., via discovery refresh).
+    # If it changed, the OS operations we performed are stale and the audit log would be inconsistent.
+    if drive.filesystem_path != initial_device_path:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Device path changed during prepare-eject (was: {initial_device_path!r}, now: {drive.filesystem_path!r}); operation aborted",
+        )
+
+    # Verify the drive is still IN_USE (final precondition check).
+    if drive.current_state != DriveState.IN_USE:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Drive is not in IN_USE state; cannot prepare eject (current state: {drive.current_state})",
+        )
 
     if flush_ok and unmount_ok:
         drive.current_state = DriveState.AVAILABLE
@@ -83,7 +107,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None) -> Us
             user=actor,
             details={
                 "drive_id": drive_id,
-                "filesystem_path": device_path,
+                "filesystem_path": initial_device_path,
                 "flush_ok": flush_ok,
                 "unmount_ok": unmount_ok,
             },
@@ -94,7 +118,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None) -> Us
             user=actor,
             details={
                 "drive_id": drive_id,
-                "filesystem_path": device_path,
+                "filesystem_path": initial_device_path,
                 "flush_ok": flush_ok,
                 "flush_error": flush_err,
                 "unmount_ok": unmount_ok,
