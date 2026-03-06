@@ -185,20 +185,51 @@ class TestOpenAPISchema:
 
     def test_openapi_has_security_components(self, client):
         """Security schemes should be documented in OpenAPI."""
-        # This test validates that Ticket 3 has been implemented
         from app.main import app
-        
+
         openapi_schema = app.openapi()
-        
-        # Check if security schemes are defined
-        has_security = (
-            openapi_schema is not None and 
-            "components" in openapi_schema and
-            "securitySchemes" in openapi_schema.get("components", {})
+
+        assert openapi_schema is not None
+        assert "components" in openapi_schema, "OpenAPI schema missing 'components'"
+        assert "securitySchemes" in openapi_schema["components"], (
+            "OpenAPI schema missing security schemes; Bearer/JWT auth must be documented"
         )
-        
-        if not has_security:
-            pytest.skip("Security schemes not yet documented in OpenAPI (Ticket 3)")
+        scheme = openapi_schema["components"]["securitySchemes"].get("HTTPBearer", {})
+        assert scheme.get("type") == "http"
+        assert scheme.get("scheme") == "bearer"
+        assert scheme.get("bearerFormat") == "JWT"
+
+    def test_openapi_tag_descriptions_present(self):
+        """Tag descriptions defined in tags_metadata must appear in the OpenAPI schema."""
+        from app.main import app
+
+        openapi_schema = app.openapi()
+        tags = {t["name"]: t for t in openapi_schema.get("tags", [])}
+
+        expected_tags = ["drives", "jobs", "mounts", "audit", "introspection", "files"]
+        for tag_name in expected_tags:
+            assert tag_name in tags, f"Tag '{tag_name}' missing from OpenAPI schema"
+            assert tags[tag_name].get("description"), (
+                f"Tag '{tag_name}' is missing a description in the OpenAPI schema"
+            )
+
+    def test_protected_endpoints_have_security_requirement(self):
+        """All non-health endpoints must declare the HTTPBearer security requirement."""
+        from app.main import app
+
+        openapi_schema = app.openapi()
+        violations = []
+        for path, path_item in openapi_schema.get("paths", {}).items():
+            if path == "/health":
+                continue
+            for method, operation in path_item.items():
+                if isinstance(operation, dict) and "responses" in operation:
+                    if not operation.get("security"):
+                        violations.append(f"{method.upper()} {path}")
+
+        assert not violations, (
+            "Endpoints missing HTTPBearer security requirement:\n" + "\n".join(violations)
+        )
 
     def test_swagger_ui_endpoint_is_accessible(self, client):
         """Swagger UI should be accessible at /docs."""
