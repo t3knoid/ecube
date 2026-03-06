@@ -1125,12 +1125,13 @@ sudo ufw enable
 
 ### Interactive API Documentation
 
-ECUBE provides **interactive API documentation** via OpenAPI/Swagger that allows you to explore and test all endpoints directly from your browser. Once the API server is running on port 8000, access:
+ECUBE provides **interactive API documentation** via OpenAPI/Swagger that allows you to explore and test all endpoints directly from your browser. In **local development**, when the API server is running on port `8000`, access:
 
 - **Swagger UI:** `http://localhost:8000/docs`
 - **ReDoc (Alternative):** `http://localhost:8000/redoc`
 - **OpenAPI JSON Schema:** `http://localhost:8000/openapi.json`
 
+In **production**, use the same paths on your deployed HTTPS endpoint (for example, `https://localhost:8443/docs` or `https://ecube-api.example.com/docs`), replacing `localhost:8000` with the actual host and port configured for the ECUBE API.
 Use the Swagger UI to:
 
 - View all available endpoints with detailed descriptions
@@ -1142,8 +1143,12 @@ Use the Swagger UI to:
 
 ### Authentication
 
-All endpoints require bearer token in `Authorization` header:
+The following endpoints are publicly accessible and do **not** require authentication:
 
+- `GET /health`
+- API documentation: `GET /docs`, `GET /redoc`, `GET /openapi.json`
+
+All other API endpoints require a bearer token in the `Authorization` header. For example:
 ```bash
 curl -H "Authorization: Bearer $JWT_TOKEN" https://localhost:8443/endpoint
 ```
@@ -1153,9 +1158,9 @@ curl -H "Authorization: Bearer $JWT_TOKEN" https://localhost:8443/endpoint
 | Method | Endpoint | Role | Description |
 | ------ | -------- | ---- | ----------- |
 | GET | `/drives` | admin/manager/processor/auditor | List all drives and state |
-| POST | `/drives/refresh` | manager | Force rescan of attached drives |
-| POST | `/drives/{drive_id}/initialize` | manager | Initialize drive for project |
-| POST | `/drives/{drive_id}/prepare-eject` | manager | Prepare drive for eject |
+| POST | `/drives/refresh` | admin/manager | Force rescan of attached drives |
+| POST | `/drives/{drive_id}/initialize` | admin/manager | Initialize drive for project |
+| POST | `/drives/{drive_id}/prepare-eject` | admin/manager | Prepare drive for eject |
 
 ### Mounts (`/mounts`)
 
@@ -1163,9 +1168,9 @@ curl -H "Authorization: Bearer $JWT_TOKEN" https://localhost:8443/endpoint
 | ------ | -------- | ---- | ----------- |
 | GET | `/mounts` | manager+ | List network mounts |
 | POST | `/mounts` | manager | Add new mount |
-| POST | `/mounts/{mount_id}/validate` | manager | Validate mount connectivity |
-| POST | `/mounts/validate` | manager | Validate all mounts |
-| DELETE | `/mounts/{mount_id}` | manager | Remove mount |
+| POST | `/mounts/{mount_id}/validate` | admin/manager | Validate mount connectivity |
+| POST | `/mounts/validate` | admin/manager | Validate all mounts |
+| DELETE | `/mounts/{mount_id}` | admin/manager | Remove mount |
 
 ### Jobs (`/jobs`)
 
@@ -1208,7 +1213,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 | GET | `/introspection/block-devices` | all | Kernel block device inventory |
 | GET | `/introspection/mounts` | all | Mount inventory and status |
 | GET | `/introspection/system-health` | all | Database and job engine health |
-| GET | `/introspection/jobs/{job_id}/debug` | all | Debug info for specific job |
+| GET | `/introspection/jobs/{job_id}/debug` | admin,auditor | Debug info for specific job |
 
 ---
 
