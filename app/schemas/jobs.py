@@ -29,7 +29,13 @@ class FileCompareItem(BaseModel):
 
 
 class FileCompareResponse(BaseModel):
-    match: bool = Field(..., description="Whether files match across all dimensions")
+    match: bool = Field(
+        ...,
+        description=(
+            "Overall comparison result: True only when hash_match and path_match are True and "
+            "size_match is not explicitly False (size_match may be None if size is unknown)"
+        ),
+    )
     hash_match: Optional[bool] = Field(default=None, description="Hash comparison result (None if unknown)")
     size_match: Optional[bool] = Field(default=None, description="Size comparison result (None if unknown)")
     path_match: Optional[bool] = Field(default=None, description="Relative path comparison result")
@@ -57,8 +63,8 @@ class ExportFileSchema(BaseModel):
     relative_path: str = Field(..., description="Relative path from source root")
     size_bytes: Optional[int] = Field(default=None, description="File size in bytes")
     checksum: Optional[str] = Field(default=None, description="SHA-256 checksum computed during copy")
-    status: FileStatus = Field(..., description="Current copy/verification status (PENDING, DONE, FAILED)")
-    error_message: Optional[str] = Field(default=None, description="Error details if status is FAILED")
+    status: FileStatus = Field(..., description="Current copy/verification status (PENDING, COPYING, DONE, ERROR)")
+    error_message: Optional[str] = Field(default=None, description="Error details if status is ERROR")
 
     model_config = {"from_attributes": True}
 
@@ -69,7 +75,7 @@ class ExportJobSchema(BaseModel):
     evidence_number: str = Field(..., description="Evidence case number")
     source_path: str = Field(..., description="Source path of evidence data")
     target_mount_path: Optional[str] = Field(default=None, description="Target mount path for copied data")
-    status: JobStatus = Field(..., description="Current job status (PENDING, RUNNING, COMPLETED, FAILED, VERIFYING, VERIFIED)")
+    status: JobStatus = Field(..., description="Current job status (PENDING, RUNNING, COMPLETED, FAILED, VERIFYING)")
     total_bytes: int = Field(..., description="Total bytes to copy")
     copied_bytes: int = Field(..., description="Bytes copied so far")
     file_count: int = Field(..., description="Total number of files to copy")
