@@ -1152,7 +1152,8 @@ curl -H "Authorization: Bearer $JWT_TOKEN" https://localhost:8443/endpoint
 
 | Method | Endpoint | Role | Description |
 | ------ | -------- | ---- | ----------- |
-| GET | `/drives` | manager+ | List all drives and state |
+| GET | `/drives` | admin/manager/processor/auditor | List all drives and state |
+| POST | `/drives/refresh` | manager | Force rescan of attached drives |
 | POST | `/drives/{drive_id}/initialize` | manager | Initialize drive for project |
 | POST | `/drives/{drive_id}/prepare-eject` | manager | Prepare drive for eject |
 
