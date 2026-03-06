@@ -171,9 +171,14 @@ def unmount_device(device_path: str) -> Tuple[bool, Optional[str]]:
     if not mountpoints:
         return True, None
 
+    # Sort mountpoints by depth (deepest first) to safely unmount nested mounts.
+    # If we unmount a parent before its children, we get "target is busy" errors.
+    # Sorting by descending path length ensures children are unmounted first.
+    sorted_mountpoints = sorted(mountpoints, key=lambda p: len(p), reverse=True)
+
     # Attempt to unmount all mountpoints; collect errors
     errors = []
-    for mount_point in mountpoints:
+    for mount_point in sorted_mountpoints:
         try:
             subprocess.run(
                 [_UMOUNT_BIN, mount_point],
