@@ -50,9 +50,9 @@ def test_initialize_drive_conflict_logs_isolation_violation(integration_client, 
         f"/drives/{drive.id}/initialize",
         json={"project_id": "PROJ-B"},
     )
-    assert response.status_code == 409
+    assert response.status_code == 403
     data = response.json()
-    assert data["code"] == "CONFLICT"
+    assert data["code"] == "FORBIDDEN"
 
     audit = (
         integration_db.query(AuditLog)
