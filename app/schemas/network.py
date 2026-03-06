@@ -1,24 +1,24 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from app.models.network import MountType, MountStatus
 
 
 class MountCreate(BaseModel):
-    type: MountType
-    remote_path: str
-    local_mount_point: str
-    username: Optional[str] = None
-    password: Optional[str] = None
-    credentials_file: Optional[str] = None
+    type: MountType = Field(..., description="Mount protocol type (SMB, NFS, etc.)")
+    remote_path: str = Field(..., description="Remote path on the network share (e.g., //server/share or nfs://server/export)")
+    local_mount_point: str = Field(..., description="Local filesystem path where the mount will be attached")
+    username: Optional[str] = Field(default=None, description="Username for authentication (if required)")
+    password: Optional[str] = Field(default=None, description="Password for authentication (if required)")
+    credentials_file: Optional[str] = Field(default=None, description="Path to credentials file (alternative to username/password)")
 
 
 class NetworkMountSchema(BaseModel):
-    id: int
-    type: MountType
-    remote_path: str
-    local_mount_point: str
-    status: MountStatus
-    last_checked_at: Optional[datetime] = None
+    id: int = Field(..., description="Unique identifier for the mount configuration")
+    type: MountType = Field(..., description="Mount protocol type (SMB, NFS, etc.)")
+    remote_path: str = Field(..., description="Remote path on the network share")
+    local_mount_point: str = Field(..., description="Local filesystem path where the mount is attached")
+    status: MountStatus = Field(..., description="Current mount status (CONNECTED, DISCONNECTED, ERROR)")
+    last_checked_at: Optional[datetime] = Field(default=None, description="Timestamp of last connectivity check")
 
     model_config = {"from_attributes": True}
