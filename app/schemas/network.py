@@ -18,7 +18,7 @@ class NetworkMountSchema(BaseModel):
     type: MountType = Field(..., description="Mount protocol type (SMB, NFS, etc.)")
     remote_path: str = Field(..., description="Remote path on the network share")
     local_mount_point: str = Field(..., description="Local filesystem path where the mount is attached")
-    status: MountStatus = Field(..., description="Current mount status (CONNECTED, DISCONNECTED, ERROR)")
+    status: MountStatus = Field(..., description="Current mount status (MOUNTED, UNMOUNTED, ERROR)")
     last_checked_at: Optional[datetime] = Field(default=None, description="Timestamp of last connectivity check")
 
     model_config = {"from_attributes": True}
