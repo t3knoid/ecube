@@ -76,7 +76,6 @@ def custom_openapi():
         license_info=app.license_info,
         tags=app.openapi_tags,
         routes=app.routes,
-        tags=app.openapi_tags,
     )
 
     # Define security schemes (merge, don't overwrite)
