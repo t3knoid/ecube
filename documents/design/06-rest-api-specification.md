@@ -140,7 +140,7 @@ Prepare drive for safe eject: flush filesystem writes, unmount all partitions, a
 Performs the following steps in sequence:
 1. Validates drive is in `IN_USE` state at request start
 2. Issues `sync(1)` to flush all pending filesystem writes to block devices
-3. Identifies and unmounts all partitions and mount points for the device
+3. Identifies and unmounts all partitions and mount points for the device (discovers partitions via `/proc/mounts`; supports traditional sdb1/sdb2, NVMe nvme0n1p1, and MMC mmcblk0p1 naming schemes)
 4. Re-validates that drive state and device path have not changed (see race condition protection below)
 5. On success: transitions drive from `IN_USE` → `AVAILABLE`, logs `DRIVE_EJECT_PREPARED`
 6. On failure: drive remains `IN_USE`, logs `DRIVE_EJECT_FAILED` with error details

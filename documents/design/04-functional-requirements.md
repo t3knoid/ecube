@@ -10,7 +10,7 @@
 - **Precondition:** Drive must be in `IN_USE` state; reject with 409 if not
 - **Initial validation:** Capture drive state and filesystem path at request start
 - Filesystem sync: Issue `sync(1)` to flush pending writes before unmount
-- Partition discovery: Parse `/proc/mounts` to find all mounted partitions belonging to the device
+- Partition discovery: Parse `/proc/mounts` to find all mounted partitions belonging to the device (supports traditional sdb1/sdb2, NVMe nvme0n1p1, and MMC mmcblk0p1 naming schemes)
 - Unmount all partitions: Attempt to unmount each mount point, collecting errors
 - **Transaction optimization:** OS operations (sync/unmount) execute without database row lock to reduce contention
 - **Race condition detection:** After re-acquiring lock, validate that drive state and device path have not changed since initial read
