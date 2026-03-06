@@ -29,6 +29,16 @@ def get_current_user(
     """FastAPI dependency that validates a bearer token and returns the authenticated user.
 
     Raises HTTP 401 for missing, invalid, or expired tokens.
+
+    Role resolution strategy
+    ------------------------
+    If the token carries a non-empty ``roles`` claim, those roles are used
+    directly (backward-compatible behaviour).
+
+    If ``roles`` is absent or empty, the configured role resolver (see
+    :func:`app.auth_providers.get_role_resolver`) is applied to the ``groups``
+    claim.  This allows bearer tokens that carry only group memberships to
+    obtain ECUBE roles without route code changes.
     """
     request.state.db = db
 
@@ -95,6 +105,13 @@ def get_current_user(
             detail="Invalid token payload",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # When the token carries no explicit roles, resolve them from group
+    # memberships using the configured role resolver provider.
+    if not roles and groups:
+        from app.auth_providers import get_role_resolver
+
+        roles = get_role_resolver().resolve(groups)
 
     current_user = CurrentUser(
         id=user_id,
