@@ -93,6 +93,12 @@ def list_mounts(db: Session):
     return MountRepository(db).list_all()
 
 
+def validate_all_mounts(db: Session, actor: Optional[str] = None) -> list[NetworkMount]:
+    mount_repo = MountRepository(db)
+    mounts = mount_repo.list_all()
+    return [validate_mount(mount.id, db, actor=actor) for mount in mounts]
+
+
 def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None) -> NetworkMount:
     mount_repo = MountRepository(db)
     audit_repo = AuditRepository(db)
