@@ -39,6 +39,14 @@ def list_mounts(
     return mount_service.list_mounts(db)
 
 
+@router.post("/validate", response_model=List[NetworkMountSchema])
+def validate_all_mounts(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER),
+):
+    return mount_service.validate_all_mounts(db, actor=current_user.username)
+
+
 @router.post("/{mount_id}/validate", response_model=NetworkMountSchema)
 def validate_mount(
     mount_id: int,
