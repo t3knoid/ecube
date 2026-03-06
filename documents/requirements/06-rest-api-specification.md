@@ -127,17 +127,27 @@ Enforces project isolation.
 
 Prepare drive for safe eject: flush filesystem writes, unmount all partitions, and transition to AVAILABLE.
 
+**Precondition:** Drive must be in `IN_USE` state (required for this operation to proceed).
+
 Performs the following steps in sequence:
-1. Issues `sync(1)` to flush all pending filesystem writes to block devices
-2. Identifies and unmounts all partitions and mount points for the device
-3. On success: transitions drive from `IN_USE` → `AVAILABLE`, logs `DRIVE_EJECT_PREPARED`
-4. On failure: drive remains `IN_USE`, logs `DRIVE_EJECT_FAILED` with error details
+1. Validates drive is in `IN_USE` state at request start
+2. Issues `sync(1)` to flush all pending filesystem writes to block devices
+3. Identifies and unmounts all partitions and mount points for the device
+4. Re-validates that drive state and device path have not changed (see race condition protection below)
+5. On success: transitions drive from `IN_USE` → `AVAILABLE`, logs `DRIVE_EJECT_PREPARED`
+6. On failure: drive remains `IN_USE`, logs `DRIVE_EJECT_FAILED` with error details
 
 **Behavior:**
 - Returns `200` with updated drive state on success
+- Returns `409` Conflict if drive is not in `IN_USE` state (precondition violation)
+- Returns `409` Conflict if drive state changed during operation (detected race condition; operation aborted)
+- Returns `409` Conflict if device path changed during operation (e.g., via concurrent discovery refresh; operation aborted to avoid stale OS operations)
 - Returns `500` if sync or unmount operations fail (drive state unchanged, stays `IN_USE`)
 - If device is not mounted, returns `200` immediately (no-op is success)
 - If device has multiple partitions mounted, unmounts all; returns `500` only if any unmount fails
+
+**Race Condition Protection:**
+The endpoint captures the drive state and device path at the start, performs potentially slow OS operations without holding the database lock (to avoid contention), then re-acquires the lock to validate preconditions before committing the state transition. If another request or discovery process changes the drive's state or device path, this operation fails with 409 Conflict, ensuring audit consistency and preventing operations against stale or unintended device paths.
 
 **Audit events:**
 - `DRIVE_EJECT_PREPARED`: Drive successfully prepared for eject; includes `drive_id`, `filesystem_path`, `flush_ok`, `unmount_ok`
