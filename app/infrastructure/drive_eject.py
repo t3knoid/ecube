@@ -44,18 +44,24 @@ def sync_filesystem() -> Tuple[bool, Optional[str]]:
 def _find_device_mountpoints(device_base: str) -> Tuple[List[str], Optional[str]]:
     """Find all mountpoints for a device and its partitions from /proc/mounts.
     
-    Handles traditional partition naming (sdb1, sdb2) and modern schemes:
-    - NVMe: nvme0n1 → nvme0n1p1, nvme0n1p2
-    - MMC: mmcblk0 → mmcblk0p1, mmcblk0p2
+    Parses /proc/mounts to locate mount points (e.g., /media/usb, /media/usb1)
+    for a given block device and any partitions. Handles:
+    - Traditional partition naming: sdb → sdb1, sdb2 (partitions)
+    - NVMe partition naming: nvme0n1 → nvme0n1p1, nvme0n1p2
+    - MMC partition naming: mmcblk0 → mmcblk0p1, mmcblk0p2
     
     Args:
         device_base: Base device name (e.g., "sdb" from "/dev/sdb")
         
     Returns:
         Tuple of (mountpoints_list, error_message):
-        - On success: (list of mount points, None)
-        - On read failure: (empty list, error message explaining the failure)
-        - On no mounts found: (empty list, None)
+        - On success: (["/media/usb", "/media/usb1"], None)
+        - On read failure: ([], "could not read /proc/mounts: <reason>")
+        - If no mounts found: ([], None)
+        
+    Note:
+        Read errors are returned in the tuple, not logged, so callers can decide
+        how to handle them (propagate, retry, or treat as "no mounts").
     """
     try:
         with open("/proc/mounts", "r") as f:
@@ -80,7 +86,7 @@ def _find_device_mountpoints(device_base: str) -> Tuple[List[str], Optional[str]
             
             return mountpoints, None
     except OSError as exc:
-        # Distinguish read failure from "no mounts found"
+        # Return read error in tuple; caller decides whether to treat as fatal or no-op
         return [], f"could not read /proc/mounts: {exc}"
     except IOError as exc:
         return [], f"could not read /proc/mounts: {exc}"
