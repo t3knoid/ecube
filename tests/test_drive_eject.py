@@ -134,6 +134,213 @@ class TestFindDeviceMountpoints:
         assert set(result) == {"/media/mmc", "/media/mmc1"}
 
 
+class TestResolveMapperDevice:
+    """Tests for device-mapper resolution (LUKS, LVM, dm devices)."""
+
+    def test_resolve_luks_mapper_device(self):
+        """Resolve LUKS mapper device back to parent block device via sysfs."""
+        from app.infrastructure.drive_eject import _resolve_mapper_device_to_parent
+        
+        def mock_isdir(path):
+            # Normalize path separators for cross-platform compatibility
+            path = path.replace("\\", "/")
+            return path == "/sys/block/crypto_XXXXX/slaves"
+        
+        def mock_listdir(path):
+            # Normalize path separators for cross-platform compatibility
+            path = path.replace("\\", "/")
+            if path == "/sys/block/crypto_XXXXX/slaves":
+                return ["sdb"]  # sdb is the parent
+            return []
+        
+        import app.infrastructure.drive_eject as drive_eject_module
+        with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
+            with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
+                result = _resolve_mapper_device_to_parent("/dev/mapper/crypto_XXXXX")
+        
+        assert result == "sdb"
+
+    def test_resolve_lvm_mapper_device(self):
+        """Resolve LVM mapper device back to parent block device."""
+        from app.infrastructure.drive_eject import _resolve_mapper_device_to_parent
+        
+        def mock_isdir(path):
+            path = path.replace("\\", "/")
+            return path == "/sys/block/vg0-lv0/slaves"
+        
+        def mock_listdir(path):
+            path = path.replace("\\", "/")
+            if path == "/sys/block/vg0-lv0/slaves":
+                return ["sdc"]  # sdc is the parent
+            return []
+        
+        import app.infrastructure.drive_eject as drive_eject_module
+        with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
+            with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
+                result = _resolve_mapper_device_to_parent("/dev/mapper/vg0-lv0")
+        
+        assert result == "sdc"
+
+    def test_resolve_dm_device(self):
+        """Resolve /dev/dm-N style device back to parent block device."""
+        from app.infrastructure.drive_eject import _resolve_mapper_device_to_parent
+        
+        def mock_isdir(path):
+            path = path.replace("\\", "/")
+            return path == "/sys/block/dm-0/slaves"
+        
+        def mock_listdir(path):
+            path = path.replace("\\", "/")
+            if path == "/sys/block/dm-0/slaves":
+                return ["sdb"]
+            return []
+        
+        import app.infrastructure.drive_eject as drive_eject_module
+        with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
+            with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
+                result = _resolve_mapper_device_to_parent("/dev/dm-0")
+        
+        assert result == "sdb"
+
+    def test_resolve_mapper_device_not_found(self):
+        """Return None when sysfs slaves directory doesn't exist."""
+        from app.infrastructure.drive_eject import _resolve_mapper_device_to_parent
+        
+        import app.infrastructure.drive_eject as drive_eject_module
+        with patch.object(drive_eject_module.os.path, "isdir", return_value=False):
+            result = _resolve_mapper_device_to_parent("/dev/mapper/unknown")
+        
+        assert result is None
+
+    def test_resolve_mapper_device_listdir_fails(self):
+        """Return None when sysfs listdir fails."""
+        from app.infrastructure.drive_eject import _resolve_mapper_device_to_parent
+        
+        def mock_isdir(path):
+            return True
+        
+        def mock_listdir(path):
+            raise OSError("Permission denied")
+        
+        with patch("os.path.isdir", side_effect=mock_isdir):
+            with patch("os.listdir", side_effect=mock_listdir):
+                result = _resolve_mapper_device_to_parent("/dev/mapper/crypto_X")
+        
+        assert result is None
+
+    def test_find_luks_mounted_partition(self):
+        """Correctly identify LUKS-encrypted partition mounted via mapper."""
+        proc_mounts_content = """/dev/sda1 / ext4 rw 0 0
+/dev/mapper/crypto_sdb /media/encrypted ext4 rw 0 0
+/dev/sdb1 /media/unencrypted ext4 rw 0 0
+"""
+        def mock_isdir(path):
+            path = path.replace("\\", "/")
+            return path == "/sys/block/crypto_sdb/slaves"
+        
+        def mock_listdir(path):
+            path = path.replace("\\", "/")
+            if path == "/sys/block/crypto_sdb/slaves":
+                return ["sdb"]  # LUKS device is backed by sdb
+            return []
+        
+        import app.infrastructure.drive_eject as drive_eject_module
+        with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
+            with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
+                with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
+                    result, error = _find_device_mountpoints("sdb")
+        
+        assert error is None
+        # Should find both the LUKS mount and the partition mount
+        assert "/media/encrypted" in result
+        assert "/media/unencrypted" in result
+        assert len(result) == 2
+
+    def test_find_lvm_logical_volume(self):
+        """Correctly identify LVM logical volumes backed by the device."""
+        proc_mounts_content = """/dev/sda1 / ext4 rw 0 0
+/dev/mapper/vg0-data /mnt/data ext4 rw 0 0
+/dev/mapper/vg0-backup /mnt/backup ext4 rw 0 0
+/dev/sdb1 /media/direct ext4 rw 0 0
+"""
+        def mock_isdir(path):
+            # Both LVM logical volumes are tracked in sysfs
+            path = path.replace("\\", "/")
+            return path in ["/sys/block/vg0-data/slaves", "/sys/block/vg0-backup/slaves"]
+        
+        def mock_listdir(path):
+            path = path.replace("\\", "/")
+            if path == "/sys/block/vg0-data/slaves":
+                return ["sdb"]
+            if path == "/sys/block/vg0-backup/slaves":
+                return ["sdb"]  # Same VG on same drive
+            return []
+        
+        import app.infrastructure.drive_eject as drive_eject_module
+        with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
+            with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
+                with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
+                    result, error = _find_device_mountpoints("sdb")
+        
+        assert error is None
+        assert set(result) == {"/mnt/data", "/mnt/backup", "/media/direct"}
+
+    def test_mapper_device_backed_by_different_device(self):
+        """Ignore mapper devices that are backed by a different block device."""
+        proc_mounts_content = """/dev/mapper/crypto_sdc /media/encrypted ext4 rw 0 0
+/dev/sdb /media/usb ext4 rw 0 0
+"""
+        def mock_isdir(path):
+            path = path.replace("\\", "/")
+            return path == "/sys/block/crypto_sdc/slaves"
+        
+        def mock_listdir(path):
+            path = path.replace("\\", "/")
+            if path == "/sys/block/crypto_sdc/slaves":
+                return ["sdc"]  # backed by sdc, NOT sdb
+            return []
+        
+        import app.infrastructure.drive_eject as drive_eject_module
+        with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
+            with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
+                with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
+                    result, error = _find_device_mountpoints("sdb")
+        
+        assert error is None
+        # Should only find the direct device mount, not the LUKS mount backed by sdc
+        assert result == ["/media/usb"]
+
+    def test_unmount_with_mapper_device(self):
+        """Successfully unmount device including mapper device mounts."""
+        proc_mounts_content = """/dev/sdb /media/usb ext4 rw 0 0
+/dev/mapper/crypto_sdb /media/encrypted ext4 rw 0 0
+"""
+        
+        def mock_isdir(path):
+            path = path.replace("\\", "/")
+            return path == "/sys/block/crypto_sdb/slaves"
+        
+        def mock_listdir(path):
+            path = path.replace("\\", "/")
+            if path == "/sys/block/crypto_sdb/slaves":
+                return ["sdb"]
+            return []
+        
+        import app.infrastructure.drive_eject as drive_eject_module
+        with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
+            with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
+                with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
+                    with patch("subprocess.run") as mock_run:
+                        success, error = unmount_device("/dev/sdb")
+        
+        assert success is True
+        assert error is None
+        # Verify both mount points were unmounted
+        assert mock_run.call_count == 2
+        called_mounts = {call_args[0][0][1] for call_args in mock_run.call_args_list}
+        assert called_mounts == {"/media/usb", "/media/encrypted"}
+
+
 class TestUnmountDevice:
     """Tests for unmount_device function: partition discovery + unmount execution."""
 
