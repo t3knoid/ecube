@@ -18,6 +18,7 @@ class FileStatus(str, enum.Enum):
     COPYING = "COPYING"
     DONE = "DONE"
     ERROR = "ERROR"
+    RETRYING = "RETRYING"
 
 
 class ExportJob(Base):
@@ -32,6 +33,8 @@ class ExportJob(Base):
     copied_bytes = Column(BigInteger, default=0)
     file_count = Column(Integer, default=0)
     thread_count = Column(Integer, default=4)
+    max_file_retries = Column(Integer, default=3)
+    retry_delay_seconds = Column(Integer, default=1)
     started_at = Column(DateTime(timezone=True))
     completed_at = Column(DateTime(timezone=True))
     created_by = Column(String)
@@ -50,6 +53,7 @@ class ExportFile(Base):
     checksum = Column(String)
     status = Column(Enum(FileStatus, native_enum=False), default=FileStatus.PENDING)
     error_message = Column(Text)
+    retry_attempts = Column(Integer, default=0)
     job = relationship("ExportJob", back_populates="files")
 
 

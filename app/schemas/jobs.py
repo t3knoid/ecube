@@ -44,6 +44,8 @@ class JobCreate(BaseModel):
     target_mount_path: Optional[str] = None
     drive_id: Optional[int] = None
     thread_count: int = 4
+    max_file_retries: int = 3
+    retry_delay_seconds: int = 1
     created_by: Optional[str] = None
 
 
@@ -59,6 +61,7 @@ class ExportFileSchema(BaseModel):
     checksum: Optional[str] = None
     status: FileStatus
     error_message: Optional[str] = None
+    retry_attempts: int = 0
 
     model_config = {"from_attributes": True}
 
@@ -74,6 +77,8 @@ class ExportJobSchema(BaseModel):
     copied_bytes: int
     file_count: int
     thread_count: int
+    max_file_retries: int = 3
+    retry_delay_seconds: int = 1
     created_by: Optional[str] = None
 
     model_config = {"from_attributes": True}
