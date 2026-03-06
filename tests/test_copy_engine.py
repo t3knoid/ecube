@@ -9,7 +9,6 @@ import pytest
 from app.models.audit import AuditLog
 from app.models.jobs import ExportFile, ExportJob, FileStatus, JobStatus
 from app.services import copy_engine
-from tests.conftest import TestingSessionLocal
 
 
 # ---------------------------------------------------------------------------
