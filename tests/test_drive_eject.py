@@ -191,22 +191,29 @@ class TestResolveMapperDevice:
         """Resolve LUKS mapper device back to parent block device via sysfs."""
         from app.infrastructure.drive_eject import _resolve_mapper_device_to_parent
         
-        def mock_isdir(path):
-            # Normalize path separators for cross-platform compatibility
+        def mock_realpath(path):
+            # Simulate /dev/mapper/* → /dev/dm-N symlink resolution
             path = path.replace("\\", "/")
-            return path == "/sys/block/crypto_XXXXX/slaves"
+            if path == "/dev/mapper/crypto_XXXXX":
+                return "/dev/dm-0"  # symlink to dm-0
+            return path
+        
+        def mock_isdir(path):
+            # After normalization, sysfs path is /sys/block/dm-0/slaves
+            path = path.replace("\\", "/")
+            return path == "/sys/block/dm-0/slaves"
         
         def mock_listdir(path):
-            # Normalize path separators for cross-platform compatibility
             path = path.replace("\\", "/")
-            if path == "/sys/block/crypto_XXXXX/slaves":
-                return ["sdb"]  # sdb is the parent
+            if path == "/sys/block/dm-0/slaves":
+                return ["sdb"]  # dm-0 is backed by sdb
             return []
         
         import app.infrastructure.drive_eject as drive_eject_module
-        with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
-            with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
-                result = _resolve_mapper_device_to_parent("/dev/mapper/crypto_XXXXX")
+        with patch.object(drive_eject_module.os.path, "realpath", side_effect=mock_realpath):
+            with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
+                with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
+                    result = _resolve_mapper_device_to_parent("/dev/mapper/crypto_XXXXX")
         
         assert result == "sdb"
 
@@ -214,26 +221,39 @@ class TestResolveMapperDevice:
         """Resolve LVM mapper device back to parent block device."""
         from app.infrastructure.drive_eject import _resolve_mapper_device_to_parent
         
-        def mock_isdir(path):
+        def mock_realpath(path):
+            # Simulate /dev/mapper/vg0-lv0 → /dev/dm-1 symlink resolution
             path = path.replace("\\", "/")
-            return path == "/sys/block/vg0-lv0/slaves"
+            if path == "/dev/mapper/vg0-lv0":
+                return "/dev/dm-1"  # symlink to dm-1
+            return path
+        
+        def mock_isdir(path):
+            # After normalization, sysfs path is /sys/block/dm-1/slaves
+            path = path.replace("\\", "/")
+            return path == "/sys/block/dm-1/slaves"
         
         def mock_listdir(path):
             path = path.replace("\\", "/")
-            if path == "/sys/block/vg0-lv0/slaves":
-                return ["sdc"]  # sdc is the parent
+            if path == "/sys/block/dm-1/slaves":
+                return ["sdc"]  # dm-1 is backed by sdc
             return []
         
         import app.infrastructure.drive_eject as drive_eject_module
-        with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
-            with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
-                result = _resolve_mapper_device_to_parent("/dev/mapper/vg0-lv0")
+        with patch.object(drive_eject_module.os.path, "realpath", side_effect=mock_realpath):
+            with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
+                with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
+                    result = _resolve_mapper_device_to_parent("/dev/mapper/vg0-lv0")
         
         assert result == "sdc"
 
     def test_resolve_dm_device(self):
         """Resolve /dev/dm-N style device back to parent block device."""
         from app.infrastructure.drive_eject import _resolve_mapper_device_to_parent
+        
+        def mock_realpath(path):
+            # Already a /dev/dm-N path, no resolution needed
+            return path
         
         def mock_isdir(path):
             path = path.replace("\\", "/")
@@ -246,9 +266,10 @@ class TestResolveMapperDevice:
             return []
         
         import app.infrastructure.drive_eject as drive_eject_module
-        with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
-            with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
-                result = _resolve_mapper_device_to_parent("/dev/dm-0")
+        with patch.object(drive_eject_module.os.path, "realpath", side_effect=mock_realpath):
+            with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
+                with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
+                    result = _resolve_mapper_device_to_parent("/dev/dm-0")
         
         assert result == "sdb"
 
@@ -284,21 +305,30 @@ class TestResolveMapperDevice:
 /dev/mapper/crypto_sdb /media/encrypted ext4 rw 0 0
 /dev/sdb1 /media/unencrypted ext4 rw 0 0
 """
-        def mock_isdir(path):
+        def mock_realpath(path):
+            # Simulate /dev/mapper/* → /dev/dm-N symlink resolution
             path = path.replace("\\", "/")
-            return path == "/sys/block/crypto_sdb/slaves"
+            if path == "/dev/mapper/crypto_sdb":
+                return "/dev/dm-0"  # symlink to dm-0
+            return path
+        
+        def mock_isdir(path):
+            # After normalization, sysfs path is /sys/block/dm-0/slaves
+            path = path.replace("\\", "/")
+            return path == "/sys/block/dm-0/slaves"
         
         def mock_listdir(path):
             path = path.replace("\\", "/")
-            if path == "/sys/block/crypto_sdb/slaves":
+            if path == "/sys/block/dm-0/slaves":
                 return ["sdb"]  # LUKS device is backed by sdb
             return []
         
         import app.infrastructure.drive_eject as drive_eject_module
         with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
-            with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
-                with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
-                    result, error = _find_device_mountpoints("sdb")
+            with patch.object(drive_eject_module.os.path, "realpath", side_effect=mock_realpath):
+                with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
+                    with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
+                        result, error = _find_device_mountpoints("sdb")
         
         assert error is None
         # Should find both the LUKS mount and the partition mount
@@ -313,24 +343,34 @@ class TestResolveMapperDevice:
 /dev/mapper/vg0-backup /mnt/backup ext4 rw 0 0
 /dev/sdb1 /media/direct ext4 rw 0 0
 """
-        def mock_isdir(path):
-            # Both LVM logical volumes are tracked in sysfs
+        def mock_realpath(path):
+            # Simulate /dev/mapper/* → /dev/dm-N symlink resolution
             path = path.replace("\\", "/")
-            return path in ["/sys/block/vg0-data/slaves", "/sys/block/vg0-backup/slaves"]
+            if path == "/dev/mapper/vg0-data":
+                return "/dev/dm-1"  # symlink to dm-1
+            if path == "/dev/mapper/vg0-backup":
+                return "/dev/dm-2"  # symlink to dm-2
+            return path
+        
+        def mock_isdir(path):
+            # After normalization, sysfs paths are /sys/block/dm-N/slaves
+            path = path.replace("\\", "/")
+            return path in ["/sys/block/dm-1/slaves", "/sys/block/dm-2/slaves"]
         
         def mock_listdir(path):
             path = path.replace("\\", "/")
-            if path == "/sys/block/vg0-data/slaves":
-                return ["sdb"]
-            if path == "/sys/block/vg0-backup/slaves":
-                return ["sdb"]  # Same VG on same drive
+            if path == "/sys/block/dm-1/slaves":
+                return ["sdb"]  # dm-1 is backed by sdb
+            if path == "/sys/block/dm-2/slaves":
+                return ["sdb"]  # dm-2 is also backed by sdb (same VG)
             return []
         
         import app.infrastructure.drive_eject as drive_eject_module
         with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
-            with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
-                with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
-                    result, error = _find_device_mountpoints("sdb")
+            with patch.object(drive_eject_module.os.path, "realpath", side_effect=mock_realpath):
+                with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
+                    with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
+                        result, error = _find_device_mountpoints("sdb")
         
         assert error is None
         assert set(result) == {"/mnt/data", "/mnt/backup", "/media/direct"}
@@ -340,21 +380,30 @@ class TestResolveMapperDevice:
         proc_mounts_content = """/dev/mapper/crypto_sdc /media/encrypted ext4 rw 0 0
 /dev/sdb /media/usb ext4 rw 0 0
 """
-        def mock_isdir(path):
+        def mock_realpath(path):
+            # Simulate /dev/mapper/crypto_sdc → /dev/dm-0 symlink resolution
             path = path.replace("\\", "/")
-            return path == "/sys/block/crypto_sdc/slaves"
+            if path == "/dev/mapper/crypto_sdc":
+                return "/dev/dm-0"  # symlink to dm-0
+            return path
+        
+        def mock_isdir(path):
+            # After normalization, sysfs path is /sys/block/dm-0/slaves
+            path = path.replace("\\", "/")
+            return path == "/sys/block/dm-0/slaves"
         
         def mock_listdir(path):
             path = path.replace("\\", "/")
-            if path == "/sys/block/crypto_sdc/slaves":
+            if path == "/sys/block/dm-0/slaves":
                 return ["sdc"]  # backed by sdc, NOT sdb
             return []
         
         import app.infrastructure.drive_eject as drive_eject_module
         with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
-            with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
-                with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
-                    result, error = _find_device_mountpoints("sdb")
+            with patch.object(drive_eject_module.os.path, "realpath", side_effect=mock_realpath):
+                with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
+                    with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
+                        result, error = _find_device_mountpoints("sdb")
         
         assert error is None
         # Should only find the direct device mount, not the LUKS mount backed by sdc
@@ -366,22 +415,31 @@ class TestResolveMapperDevice:
 /dev/mapper/crypto_sdb /media/encrypted ext4 rw 0 0
 """
         
-        def mock_isdir(path):
+        def mock_realpath(path):
+            # Simulate /dev/mapper/crypto_sdb → /dev/dm-0 symlink resolution
             path = path.replace("\\", "/")
-            return path == "/sys/block/crypto_sdb/slaves"
+            if path == "/dev/mapper/crypto_sdb":
+                return "/dev/dm-0"  # symlink to dm-0
+            return path
+        
+        def mock_isdir(path):
+            # After normalization, sysfs path is /sys/block/dm-0/slaves
+            path = path.replace("\\", "/")
+            return path == "/sys/block/dm-0/slaves"
         
         def mock_listdir(path):
             path = path.replace("\\", "/")
-            if path == "/sys/block/crypto_sdb/slaves":
+            if path == "/sys/block/dm-0/slaves":
                 return ["sdb"]
             return []
         
         import app.infrastructure.drive_eject as drive_eject_module
         with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
-            with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
-                with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
-                    with patch("subprocess.run") as mock_run:
-                        success, error = unmount_device("/dev/sdb")
+            with patch.object(drive_eject_module.os.path, "realpath", side_effect=mock_realpath):
+                with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
+                    with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
+                        with patch("subprocess.run") as mock_run:
+                            success, error = unmount_device("/dev/sdb")
         
         assert success is True
         assert error is None
