@@ -81,7 +81,12 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None) -> Us
         audit_repo.add(
             action="DRIVE_EJECT_PREPARED",
             user=actor,
-            details={"drive_id": drive_id},
+            details={
+                "drive_id": drive_id,
+                "filesystem_path": device_path,
+                "flush_ok": flush_ok,
+                "unmount_ok": unmount_ok,
+            },
         )
     else:
         audit_repo.add(
@@ -89,6 +94,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None) -> Us
             user=actor,
             details={
                 "drive_id": drive_id,
+                "filesystem_path": device_path,
                 "flush_ok": flush_ok,
                 "flush_error": flush_err,
                 "unmount_ok": unmount_ok,
