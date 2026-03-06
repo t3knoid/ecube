@@ -201,6 +201,37 @@ def test_prepare_eject_no_unmount_when_no_path(manager_client, db):
     mock_umount.assert_not_called()
 
 
+def test_prepare_eject_concurrent_state_change(manager_client, db):
+    """Returns 409 when the drive state changes between the initial read and re-lock."""
+    from app.repositories.drive_repository import DriveRepository
+
+    drive = UsbDrive(
+        device_identifier="USB011",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+    )
+    db.add(drive)
+    db.commit()
+    drive_id = drive.id
+
+    # Simulate a concurrent state change: get_for_update returns a drive that
+    # another request already transitioned to AVAILABLE.
+    concurrent_drive = UsbDrive(
+        device_identifier="USB011",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-001",
+    )
+    concurrent_drive.id = drive_id
+
+    with (
+        patch("app.services.drive_service.sync_filesystem", return_value=(True, None)),
+        patch.object(DriveRepository, "get_for_update", return_value=concurrent_drive),
+    ):
+        response = manager_client.post(f"/drives/{drive_id}/prepare-eject")
+
+    assert response.status_code == 409
+
+
 def test_prepare_eject_invalid_device_path(manager_client, db):
     """A drive with an invalid filesystem_path is rejected without spawning a process."""
     drive = UsbDrive(

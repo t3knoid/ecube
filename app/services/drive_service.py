@@ -69,11 +69,19 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None) -> Us
         unmount_ok, unmount_err = unmount_device(device_path)
 
     # Re-lock only for the state transition and audit write.
-    # Also re-check that the drive state hasn't changed since our initial read.
+    # Re-check that the drive state hasn't changed since our initial read so
+    # we don't overwrite a concurrent state transition (e.g. another request
+    # already ejected or re-initialized the drive).
     drive = drive_repo.get_for_update(drive_id)
     if not drive:
         # Drive was deleted between reads (unlikely but possible).
         raise HTTPException(status_code=404, detail="Drive not found")
+
+    if drive.current_state != DriveState.IN_USE:
+        raise HTTPException(
+            status_code=409,
+            detail="Drive state changed concurrently; expected IN_USE",
+        )
 
     if flush_ok and unmount_ok:
         drive.current_state = DriveState.AVAILABLE
