@@ -63,8 +63,8 @@ class ExportFileSchema(BaseModel):
     relative_path: str = Field(..., description="Relative path from source root")
     size_bytes: Optional[int] = Field(default=None, description="File size in bytes")
     checksum: Optional[str] = Field(default=None, description="SHA-256 checksum computed during copy")
-    status: FileStatus = Field(..., description="Current copy/verification status (PENDING, DONE, FAILED)")
-    error_message: Optional[str] = Field(default=None, description="Error details if status is FAILED")
+    status: FileStatus = Field(..., description="Current copy/verification status (PENDING, COPYING, DONE, ERROR)")
+    error_message: Optional[str] = Field(default=None, description="Error details if status is ERROR")
 
     model_config = {"from_attributes": True}
 
