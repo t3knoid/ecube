@@ -73,24 +73,42 @@ def block_devices(_: CurrentUser = Depends(_ALL_ROLES)):
 def system_mounts(_: CurrentUser = Depends(_ALL_ROLES)):
     """List all currently mounted filesystems on the system.
 
-    Returns mount points, filesystem types, and mount options.
-    Does not include credentials or sensitive configuration.
+    Returns mount points and filesystem types. Mount options are filtered to remove
+    sensitive keys (credentials, paths, UIDs) while preserving important metadata
+    for diagnostics (ro/rw, relatime, etc).
 
     **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
-    **Restricted:** Network credentials and temporary mount details are scrubbed.
+    **Redaction:** Username, password, credentials, uid, gid, and other sensitive option keys are removed.
     """
+    # Sensitive mount option keys to redact (case-insensitive)
+    sensitive_keys = {
+        "username", "user", "password", "passwd", "credentials",
+        "uid", "gid", "file_mode", "dir_mode",
+        "key", "secret", "token", "auth", "authtoken"
+    }
+
     mounts = []
     try:
         with open("/proc/mounts") as f:
             for line in f:
                 parts = line.split()
                 if len(parts) >= 4:
+                    # Redact sensitive option keys
+                    raw_options = parts[3]
+                    filtered_options = []
+                    
+                    for opt in raw_options.split(","):
+                        # Check if option contains a sensitive key (before the =)
+                        opt_key = opt.split("=")[0].lower()
+                        if opt_key not in sensitive_keys:
+                            filtered_options.append(opt)
+                    
                     mounts.append(
                         {
                             "device": parts[0],
                             "mount_point": parts[1],
                             "fs_type": parts[2],
-                            "options": parts[3],
+                            "options": ",".join(filtered_options) if filtered_options else raw_options.split(",")[0],
                         }
                     )
     except Exception:
