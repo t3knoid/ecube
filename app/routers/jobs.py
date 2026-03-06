@@ -84,10 +84,10 @@ def create_manifest(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
 ):
-    """Generate a manifest document containing file hashes and copy metadata.
+    """Generate a JSON manifest document containing file hashes and copy metadata.
 
-    Creates a digitally-signed manifest file on the USB drive for compliance and audit.
-    Returns the job with updated manifest status.
+    Creates a manifest file on the USB drive listing all copied files with their
+    checksums and sizes. The manifest is written as plain JSON for audit and compliance purposes.
 
     **Roles:** ``admin``, ``manager``, ``processor``
     """
