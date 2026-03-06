@@ -108,7 +108,7 @@ def system_mounts(_: CurrentUser = Depends(_ALL_ROLES)):
                             "device": parts[0],
                             "mount_point": parts[1],
                             "fs_type": parts[2],
-                            "options": ",".join(filtered_options) if filtered_options else raw_options.split(",")[0],
+                            "options": ",".join(filtered_options) if filtered_options else "[REDACTED]",
                         }
                     )
     except Exception:
