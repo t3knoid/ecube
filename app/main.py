@@ -3,6 +3,7 @@ import traceback
 import uuid
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
 from app.auth import get_current_user
@@ -12,15 +13,95 @@ from app.schemas.errors import ErrorResponse
 
 logger = logging.getLogger(__name__)
 
+# OpenAPI tags with descriptions for organizing endpoints
+tags_metadata = [
+    {
+        "name": "drives",
+        "description": "USB drive lifecycle management — initialization, state transitions, and eject preparation.",
+    },
+    {
+        "name": "jobs",
+        "description": "Export job creation, execution, and monitoring — file copying, verification, and manifest generation.",
+    },
+    {
+        "name": "mounts",
+        "description": "Network mount management — NFS/SMB mount lifecycle and validation.",
+    },
+    {
+        "name": "audit",
+        "description": "Audit log access and filtering — immutable records of all system operations.",
+    },
+    {
+        "name": "introspection",
+        "description": "System introspection — USB topology, configuration state, and diagnostic information.",
+    },
+    {
+        "name": "files",
+        "description": "File audit operations — hash computation and file comparison.",
+    },
+]
+
 app = FastAPI(
     title="ECUBE",
-    description="Evidence Copying & USB Based Export",
+    description="Evidence Copying & USB Based Export Platform — Secure evidence export solution for encrypted USB drives.",
+    version="0.1.0",
+    contact={
+        "name": "ECUBE Support",
+        "email": "support@ecube.local",
+        "url": "https://ecube.local",
+    },
+    license_info={
+        "name": "Proprietary",
+        "url": "https://ecube.local/license",
+    },
+    openapi_tags=tags_metadata,
 )
 
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+def custom_openapi():
+    """Generate OpenAPI schema with security scheme definitions."""
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        contact=app.contact,
+        license_info=app.license_info,
+        tags=app.openapi_tags,
+        routes=app.routes,
+    )
+
+    # Define security schemes (merge, don't overwrite)
+    openapi_schema.setdefault("components", {}).setdefault("securitySchemes", {}).update({
+        "HTTPBearer": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "JWT token for authentication. Include in Authorization header as 'Bearer <token>'.",
+        }
+    })
+
+    # Apply security requirement to all endpoints except /health
+    for path, path_item in openapi_schema["paths"].items():
+        if path != "/health":
+            for operation in path_item.values():
+                if isinstance(operation, dict) and "responses" in operation:
+                    if "security" not in operation:
+                        operation["security"] = [{"HTTPBearer": []}]
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
+
 
 
 app.include_router(drives.router, dependencies=[Depends(get_current_user)])
