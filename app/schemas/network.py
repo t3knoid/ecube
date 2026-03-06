@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel
 from typing import Optional
 from app.models.network import MountType, MountStatus
@@ -18,5 +19,6 @@ class NetworkMountSchema(BaseModel):
     remote_path: str
     local_mount_point: str
     status: MountStatus
+    last_checked_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
