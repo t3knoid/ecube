@@ -139,8 +139,6 @@ def _find_device_mountpoints(device_base: str) -> Tuple[List[str], Optional[str]
     except OSError as exc:
         # Return read error in tuple; caller decides whether to treat as fatal or no-op
         return [], f"could not read /proc/mounts: {exc}"
-    except IOError as exc:
-        return [], f"could not read /proc/mounts: {exc}"
 
 
 def unmount_device(device_path: str) -> Tuple[bool, Optional[str]]:
