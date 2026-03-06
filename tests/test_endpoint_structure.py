@@ -57,9 +57,12 @@ class TestEndpointDocumentation:
         """Docstrings should be more than one line and descriptive."""
         routes = self._get_all_routes()
         
+        # Exclude FastAPI auto-generated documentation endpoints and health check
+        excluded_paths = {"/health", "/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
+        
         short_docstrings = []
         for route in routes:
-            if route["path"] == "/health":
+            if route["path"] in excluded_paths:
                 continue
             
             docstring = inspect.getdoc(route["endpoint"])
