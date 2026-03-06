@@ -29,7 +29,13 @@ class FileCompareItem(BaseModel):
 
 
 class FileCompareResponse(BaseModel):
-    match: bool = Field(..., description="Whether files match across all dimensions")
+    match: bool = Field(
+        ...,
+        description=(
+            "Overall comparison result: True only when hash_match and path_match are True and "
+            "size_match is not explicitly False (size_match may be None if size is unknown)"
+        ),
+    )
     hash_match: Optional[bool] = Field(default=None, description="Hash comparison result (None if unknown)")
     size_match: Optional[bool] = Field(default=None, description="Size comparison result (None if unknown)")
     path_match: Optional[bool] = Field(default=None, description="Relative path comparison result")
