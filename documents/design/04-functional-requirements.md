@@ -36,3 +36,12 @@
 
 - Emit structured JSON payloads for all critical operations.
 - Use append-only semantics and immutable timestamps.
+
+## 4.8 USB Discovery and State Refresh Design
+
+- Service reads sysfs topology (`/sys/bus/usb/devices`) and returns dataclass-based snapshot.
+- Hub and Port records are upserted (identified by stable `system_identifier` and `system_path` keys).
+- Drive state transitions follow FSM rules: `EMPTY → AVAILABLE` on reconnection, `AVAILABLE → EMPTY` on removal (unless `IN_USE` — project isolation preserved).
+- Refresh operation is fully idempotent: running multiple times without hardware changes produces no mutations.
+- **Operational note:** When a port is discovered but its parent hub is not present in the topology snapshot, a placeholder hub is automatically created with a default name. This prevents foreign-key violations in case of sysfs race conditions or partial enumeration. The placeholder hub name can be manually updated via hub management API when the hub is fully enumerated.
+- Every sync emits a `USB_DISCOVERY_SYNC` audit log with actor and summary counts (hubs_upserted, ports_upserted, drives_inserted, drives_updated, drives_removed).
