@@ -5,7 +5,7 @@ from typing import List
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
 from app.schemas.hardware import DriveInitialize, UsbDriveSchema
-from app.services import drive_service
+from app.services import drive_service, discovery_service
 
 router = APIRouter(prefix="/drives", tags=["drives"])
 
@@ -38,3 +38,19 @@ def prepare_eject(
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
 ):
     return drive_service.prepare_eject(drive_id, db, actor=current_user.username)
+
+
+@router.post("/refresh")
+def refresh_drives(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER),
+):
+    """Trigger a USB discovery sync and drive state refresh.
+
+    Discovers hubs, ports, and drives from system sources, upserts the
+    topology into the database, and recomputes drive states according to
+    the finite-state machine rules.  The operation is idempotent.
+
+    **Roles:** ``admin``, ``manager``
+    """
+    return discovery_service.run_discovery_sync(db, actor=current_user.username)
