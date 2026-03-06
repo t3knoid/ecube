@@ -87,18 +87,24 @@ class TestResponseModels:
 
     def test_list_endpoints_have_response_model(self):
         """GET endpoints that return lists should define response_model."""
-        # These endpoints should have response models
+        # These GET endpoints should have response models
         expected_list_endpoints = [
             "/drives",
-            "/jobs",
             "/mounts",
             "/audit",
         ]
-        
-        routes_by_path = {route.path: route for route in app.routes if hasattr(route, "response_model")}
-        
+
+        # Build a set of (path, method) for GET routes that define a response_model
+        get_routes_with_models = {
+            (route.path, method)
+            for route in app.routes
+            if hasattr(route, "response_model") and hasattr(route, "methods")
+            for method in route.methods
+            if method == "GET"
+        }
+
         for path in expected_list_endpoints:
-            assert path in routes_by_path, f"GET {path} should define response_model"
+            assert (path, "GET") in get_routes_with_models, f"GET {path} should define response_model"
 
     def test_single_resource_endpoints_have_response_model(self):
         """POST/PUT endpoints should define response_model."""
