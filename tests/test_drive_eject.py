@@ -17,8 +17,9 @@ class TestFindDeviceMountpoints:
 /dev/sdc1 /media/other ext4 rw 0 0
 """
         with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
-            result = _find_device_mountpoints("sdb")
+            result, error = _find_device_mountpoints("sdb")
 
+        assert error is None
         assert "/media/usb" in result
         assert "/media/usb1" in result
         assert "/media/usb2" in result
@@ -33,8 +34,9 @@ class TestFindDeviceMountpoints:
 /dev/nvme1n1p1 /media/other ext4 rw 0 0
 """
         with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
-            result = _find_device_mountpoints("nvme0n1")
+            result, error = _find_device_mountpoints("nvme0n1")
 
+        assert error is None
         assert "/media/nvme" in result
         assert "/media/nvme1" in result
         assert "/media/nvme2" in result
@@ -49,8 +51,9 @@ class TestFindDeviceMountpoints:
 /dev/mmcblk1p1 /media/other ext4 rw 0 0
 """
         with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
-            result = _find_device_mountpoints("mmcblk0")
+            result, error = _find_device_mountpoints("mmcblk0")
 
+        assert error is None
         assert "/media/mmc" in result
         assert "/media/mmc1" in result
         assert "/media/mmc2" in result
@@ -63,8 +66,9 @@ class TestFindDeviceMountpoints:
 /dev/sdb1 /media/other ext4 rw 0 0
 """
         with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
-            result = _find_device_mountpoints("sdc")
+            result, error = _find_device_mountpoints("sdc")
 
+        assert error is None
         assert result == []
 
     def test_base_device_only(self):
@@ -73,15 +77,18 @@ class TestFindDeviceMountpoints:
 /dev/sdb /media/usb ext4 rw 0 0
 """
         with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
-            result = _find_device_mountpoints("sdb")
+            result, error = _find_device_mountpoints("sdb")
 
+        assert error is None
         assert result == ["/media/usb"]
 
     def test_proc_mounts_read_error(self):
-        """Return empty list if /proc/mounts cannot be read."""
+        """Return error if /proc/mounts cannot be read."""
         with patch("builtins.open", side_effect=OSError("Permission denied")):
-            result = _find_device_mountpoints("sdb")
+            result, error = _find_device_mountpoints("sdb")
 
+        assert error is not None
+        assert "could not read /proc/mounts" in error
         assert result == []
 
     def test_reject_invalid_partition_suffixes(self):
@@ -93,8 +100,9 @@ class TestFindDeviceMountpoints:
 /dev/sdba /media/invalid4 ext4 rw 0 0
 """
         with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
-            result = _find_device_mountpoints("sdb")
+            result, error = _find_device_mountpoints("sdb")
 
+        assert error is None
         # Only the base device should match
         assert result == ["/media/usb"]
 
@@ -109,17 +117,20 @@ class TestFindDeviceMountpoints:
 """
         # Test traditional naming
         with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
-            result = _find_device_mountpoints("sdb")
+            result, error = _find_device_mountpoints("sdb")
+        assert error is None
         assert set(result) == {"/media/usb", "/media/usb1"}
 
         # Test NVMe naming
         with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
-            result = _find_device_mountpoints("nvme0n1")
+            result, error = _find_device_mountpoints("nvme0n1")
+        assert error is None
         assert set(result) == {"/media/nvme", "/media/nvme1"}
 
         # Test MMC naming
         with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
-            result = _find_device_mountpoints("mmcblk0")
+            result, error = _find_device_mountpoints("mmcblk0")
+        assert error is None
         assert set(result) == {"/media/mmc", "/media/mmc1"}
 
 
@@ -192,14 +203,15 @@ class TestUnmountDevice:
         mock_run.assert_not_called()
 
     def test_unmount_proc_mounts_read_failure(self):
-        """Return success when /proc/mounts cannot be read (graceful no-op)."""
+        """Return failure when /proc/mounts cannot be read (error propagation)."""
         with patch("builtins.open", side_effect=OSError("Permission denied")):
             with patch("subprocess.run") as mock_run:
                 success, error = unmount_device("/dev/sdb")
 
-        # Should treat unreadable /proc/mounts as "nothing mounted" (success)
-        assert success is True
-        assert error is None
+        # Should propagate the read error
+        assert success is False
+        assert error is not None
+        assert "could not read /proc/mounts" in error
         # No unmount calls should be made
         mock_run.assert_not_called()
 
