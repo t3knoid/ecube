@@ -51,6 +51,15 @@ class JobCreate(BaseModel):
     drive_id: Optional[int] = Field(default=None, description="Pre-assigned USB drive ID")
     thread_count: int = Field(default=4, description="Number of parallel copy threads (1-8)")
     created_by: Optional[str] = Field(default=None, description="Username of the job creator")
+    project_id: str
+    evidence_number: str
+    source_path: str
+    target_mount_path: Optional[str] = None
+    drive_id: Optional[int] = None
+    thread_count: int = 4
+    max_file_retries: int = 3
+    retry_delay_seconds: int = 1
+    created_by: Optional[str] = None
 
 
 class JobStart(BaseModel):
@@ -65,6 +74,7 @@ class ExportFileSchema(BaseModel):
     checksum: Optional[str] = Field(default=None, description="SHA-256 checksum computed during copy")
     status: FileStatus = Field(..., description="Current copy/verification status (PENDING, COPYING, DONE, ERROR)")
     error_message: Optional[str] = Field(default=None, description="Error details if status is ERROR")
+    retry_attempts: int = Field(default=0, description="Number of retry attempts for the file")
 
     model_config = {"from_attributes": True}
 
@@ -80,6 +90,9 @@ class ExportJobSchema(BaseModel):
     copied_bytes: int = Field(..., description="Bytes copied so far")
     file_count: int = Field(..., description="Total number of files to copy")
     thread_count: int = Field(..., description="Number of parallel threads used")
+    created_by: Optional[str] = Field(default=None, description="Username of the job creator")
+    max_file_retries: int = Field(default=3, description="Maximum number of retries for failed files")
+    retry_delay_seconds: int = Field(default=1, description="Delay between retries in seconds")
     created_by: Optional[str] = Field(default=None, description="Username of the job creator")
 
     model_config = {"from_attributes": True}
