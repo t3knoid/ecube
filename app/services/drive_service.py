@@ -67,7 +67,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None) -> Us
     if initial_state != DriveState.IN_USE:
         raise HTTPException(
             status_code=409,
-            detail=f"Drive is not in IN_USE state; cannot prepare eject (current state: {initial_state})",
+            detail=f"Drive is not in IN_USE state; cannot prepare eject (current state: {initial_state.value})",
         )
 
     # Perform potentially slow OS operations without holding a database lock.
@@ -89,7 +89,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None) -> Us
     if drive.current_state != initial_state:
         raise HTTPException(
             status_code=409,
-            detail=f"Drive state changed during prepare-eject (was: {initial_state}, now: {drive.current_state}); operation aborted",
+            detail=f"Drive state changed during prepare-eject (was: {initial_state.value}, now: {drive.current_state.value}); operation aborted",
         )
 
     # Verify the device path hasn't changed (e.g., via discovery refresh).
