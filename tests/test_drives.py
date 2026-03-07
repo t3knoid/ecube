@@ -48,7 +48,7 @@ def test_project_isolation_violation(manager_client, db):
     db.commit()
 
     response = manager_client.post(f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-002"})
-    assert response.status_code == 409
+    assert response.status_code == 403
 
 
 def test_reinitialize_same_project(manager_client, db):
