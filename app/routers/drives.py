@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from typing import List
@@ -6,6 +7,8 @@ from app.auth import CurrentUser, require_roles
 from app.database import get_db
 from app.schemas.hardware import DriveInitialize, UsbDriveSchema
 from app.services import drive_service, discovery_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/drives", tags=["drives"])
 

@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 from fastapi import HTTPException
@@ -7,6 +8,8 @@ from app.infrastructure.drive_eject import sync_filesystem, unmount_device
 from app.models.hardware import DriveState, UsbDrive
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
+
+logger = logging.getLogger(__name__)
 
 
 def get_all_drives(db: Session):

@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
@@ -11,6 +12,8 @@ from app.database import SessionLocal
 from app.models.jobs import ExportFile, ExportJob, FileStatus, JobStatus
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.job_repository import FileRepository, JobRepository
+
+logger = logging.getLogger(__name__)
 
 
 def scan_source_files(source_path: str) -> List[Path]:
