@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -5,6 +6,8 @@ from app.auth import CurrentUser, require_roles
 from app.database import get_db
 from app.schemas.jobs import FileCompareRequest, FileCompareResponse, FileHashesResponse
 from app.services import file_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/files", tags=["files"])
 
