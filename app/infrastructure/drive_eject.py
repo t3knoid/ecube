@@ -178,11 +178,16 @@ def _find_device_mountpoints(device_base: str) -> Tuple[List[str], Optional[str]
                         # Match traditional (1, 2, 3...) or modern p-prefixed (p1, p2, p3...)
                         if re.match(r"^(p?\d+)$", suffix):
                             mountpoints.append(mount_point)
-                    # Match device-mapper devices (LUKS, LVM) backed by this device
+                    # Match device-mapper devices (LUKS, LVM) backed by this device or its partitions
                     elif normalized_source.startswith("/dev/mapper/") or normalized_source.startswith("/dev/dm-"):
                         parent_device = _resolve_mapper_device_to_parent(normalized_source)
+                        # Check if parent is either the base device or a partition of it
                         if parent_device == device_base:
                             mountpoints.append(mount_point)
+                        elif parent_device.startswith(device_base) and len(parent_device) > len(device_base):
+                            suffix = parent_device[len(device_base):]
+                            if re.match(r"^(p?\d+)$", suffix):
+                                mountpoints.append(mount_point)
             
             return mountpoints, None
     except OSError as exc:
