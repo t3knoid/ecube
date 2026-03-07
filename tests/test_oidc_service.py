@@ -4,7 +4,6 @@ Tests cover:
 - Valid token acceptance
 - Expired token rejection
 - Invalid signature rejection
-- Missing required claims rejection
 - Audience mismatch rejection
 - JWKS cache behaviour
 - Discovery document failures
