@@ -182,14 +182,18 @@ def _find_device_mountpoints(device_base: str) -> Tuple[List[str], Optional[str]
                             mountpoints.append(mount_point)
                     # Match device-mapper devices (LUKS, LVM) backed by this device or its partitions
                     elif normalized_source.startswith("/dev/mapper/") or normalized_source.startswith("/dev/dm-"):
-                        parent_device = _resolve_mapper_device_to_parent(normalized_source)
-                        # Check if parent is either the base device or a partition of it
-                        if parent_device == device_base:
-                            mountpoints.append(mount_point)
-                        elif parent_device.startswith(device_base) and len(parent_device) > len(device_base):
-                            suffix = parent_device[len(device_base):]
-                            if re.match(r"^(p?\d+)$", suffix):
+                        parent_devices = _resolve_mapper_device_to_parent(normalized_source)
+                        for parent_device in parent_devices:
+                            # Exact base-device match (e.g., parent 'sdb' for /dev/sdb)
+                            if parent_device == device_base:
                                 mountpoints.append(mount_point)
+                                break
+                            # Partition-backed mapper (e.g., parent 'sdb1' or 'nvme0n1p2')
+                            elif parent_device.startswith(device_base) and len(parent_device) > len(device_base):
+                                suffix = parent_device[len(device_base):]
+                                if re.match(r"^(p?\d+)$", suffix):
+                                    mountpoints.append(mount_point)
+                                    break
             
             return mountpoints, None
     except OSError as exc:
@@ -246,6 +250,15 @@ def unmount_device(device_path: str) -> Tuple[bool, Optional[str]]:
             errors.append(f"umount timed out for {mount_point}")
         except subprocess.CalledProcessError as exc:
             stderr = (exc.stderr or b"").decode(errors="replace").strip()
+            # "not mounted" / "no mount point" means the desired end-state is
+            # already achieved (e.g. mount disappeared between the /proc/mounts
+            # read and the umount call).  Treat these as a successful no-op so
+            # a transient race doesn't cause the endpoint to return HTTP 500.
+            if stderr and any(
+                phrase in stderr.lower()
+                for phrase in ("not mounted", "no mount point")
+            ):
+                continue
             error_msg = f"umount failed for {mount_point}"
             if stderr:
                 error_msg += f": {stderr}"
