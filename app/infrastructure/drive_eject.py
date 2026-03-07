@@ -83,46 +83,48 @@ def sync_filesystem() -> Tuple[bool, Optional[str]]:
         return False, f"sync error: {exc}"
 
 
-def _resolve_mapper_device_to_parent(mapper_path: str) -> Optional[str]:
-    """Resolve a device-mapper device back to its parent block device via sysfs.
+def _resolve_mapper_device_to_parent(mapper_path: str) -> List[str]:
+    """Resolve a device-mapper device back to its parent block-device slaves via sysfs.
     
     On Linux, /dev/mapper/<name> is a symlink to /dev/dm-N. This function:
     1. Normalizes the input path (resolves symlink to /dev/dm-N)
-    2. Looks up the parent device via /sys/block/dm-N/slaves/
+    2. Lists the slave devices via /sys/block/dm-N/slaves/
     
     Examples:
-    - /dev/mapper/crypto_XXXXX (LUKS) -> resolved to /dev/dm-0 -> /dev/sdb
-    - /dev/dm-0 (already direct) -> /dev/sdb
+    - /dev/mapper/crypto_XXXXX (LUKS) -> resolved to /dev/dm-0 -> ["sdb"]
+    - /dev/dm-0 (already direct) -> ["sdb"]
+    - A multipath or RAID mapper may return multiple slave names.
     
     Args:
         mapper_path: Full device path, e.g. /dev/mapper/luks_vol or /dev/dm-0
         
     Returns:
-        Parent device base name (e.g., "sdb") if traceable via sysfs, None if not found or not a mapper device.
+        A list of parent device base names (e.g., ["sdb", "sdc"]). Returns an empty
+        list if the mapper has no slaves, cannot be resolved via sysfs, or is not
+        a device-mapper node.
     """
     # Normalize to real /dev/dm-N path (handles symlinks)
     normalized_path = _normalize_device_path(mapper_path)
     
     # Extract the dm device name (e.g., "dm-0" from "/dev/dm-0")
     # Only proceed if this looks like a device-mapper device
-    if not (normalized_path.startswith("/dev/dm-")):
-        return None
+    if not normalized_path.startswith("/dev/dm-"):
+        return []
     
     device_name = os.path.basename(normalized_path)  # e.g., "dm-0"
     slaves_path = f"/sys/block/{device_name}/slaves"
     
     try:
         if os.path.isdir(slaves_path):
-            # Read symlinks in slaves/ directory; each points to a parent device.
+            # Read entries in slaves/ directory; each entry name is a parent device.
             entries = os.listdir(slaves_path)
-            if entries:
-                # Return the first (typically only) slave as the parent device base name
-                return entries[0]
+            # Return all slave device base names (may be empty).
+            return sorted(entries)
     except OSError:
         # sysfs path may not exist or not be readable
         pass
     
-    return None
+    return []
 
 
 def _find_device_mountpoints(device_base: str) -> Tuple[List[str], Optional[str]]:
