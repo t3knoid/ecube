@@ -1,5 +1,5 @@
 """Unit tests for app.infrastructure.drive_eject module."""
-from unittest.mock import patch, mock_open, call
+from unittest.mock import patch, mock_open
 import subprocess
 
 from app.infrastructure.drive_eject import _find_device_mountpoints, unmount_device
