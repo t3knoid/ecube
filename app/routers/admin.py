@@ -147,7 +147,7 @@ def download_log_file(
         AuditRepository(db).add(
             action="LOG_FILE_DOWNLOADED",
             user=current_user.username,
-            details={"filename": safe, "action": "download"},
+            details={"filename": safe},
         )
     except Exception:
         logger.debug("Failed to record log file download in audit trail", exc_info=True)
