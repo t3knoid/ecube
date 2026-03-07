@@ -1160,7 +1160,7 @@ curl -H "Authorization: Bearer $JWT_TOKEN" https://localhost:8443/endpoint
 | GET | `/drives` | admin/manager/processor/auditor | List all drives and state |
 | POST | `/drives/refresh` | admin/manager | Force rescan of attached drives |
 | POST | `/drives/{drive_id}/initialize` | admin/manager | Initialize drive for project |
-| POST | `/drives/{drive_id}/prepare-eject` | admin/manager | Prepare drive for eject |
+| POST | `/drives/{drive_id}/prepare-eject` | admin/manager | Flush filesystem + unmount all partitions; transitions drive to AVAILABLE on success, stays IN_USE on failure |
 
 ### Mounts (`/mounts`)
 
