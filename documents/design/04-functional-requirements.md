@@ -9,8 +9,18 @@
 
 - **Precondition:** Drive must be in `IN_USE` state; reject with 409 if not
 - **Initial validation:** Capture drive state and filesystem path at request start
+- **Fast-fail optimization:** Validate `IN_USE` precondition immediately, before any expensive OS operations (sync/unmount). Prevents wasted work on invalid requests.
 - Filesystem sync: Issue `sync(1)` to flush pending writes before unmount
-- Partition discovery: Parse `/proc/mounts` to find all mounted partitions belonging to the device (supports traditional sdb1/sdb2, NVMe nvme0n1p1, and MMC mmcblk0p1 naming schemes)
+- Partition discovery: Parse `/proc/mounts` to find all mounted partitions and volumes belonging to the device
+  - Supports traditional partition naming: `sdb`, `sdb1`, `sdb2` (etc.)
+  - Supports NVMe partition naming: `nvme0n1`, `nvme0n1p1`, `nvme0n1p2` (etc.)
+  - Supports MMC partition naming: `mmcblk0`, `mmcblk0p1`, `mmcblk0p2` (etc.)
+  - Supports device-mapper (encrypted) volumes: `/dev/mapper/*` (LUKS) and `/dev/dm-*` (LVM)
+    - Resolves symlinks via `os.path.realpath()` to actual `/dev/dm-N` device nodes
+    - Traces parent block device via `/sys/block/dm-N/slaves/` sysfs interface
+- Path normalization: Normalizes device paths to resolve symlinks (e.g., `/dev/disk/by-id/*` → actual device)
+- Escape sequence handling: Decodes POSIX escape sequences in mount points from `/proc/mounts` (e.g., `\040` → space, `\011` → tab)
+- Safe unmount ordering: Unmounts nested mount points in reverse depth order (deepest first) to prevent "target is busy" errors
 - Unmount all partitions: Attempt to unmount each mount point, collecting errors
 - **Transaction optimization:** OS operations (sync/unmount) execute without database row lock to reduce contention
 - **Race condition detection:** After re-acquiring lock, validate that drive state and device path have not changed since initial read

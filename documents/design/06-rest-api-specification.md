@@ -133,26 +133,37 @@ Enforces project isolation.
 
 ### `POST /drives/{id}/prepare-eject`
 
-Prepare drive for safe eject: flush filesystem writes, unmount all partitions, and transition to AVAILABLE.
+Prepare drive for safe eject: flush filesystem writes, unmount all partitions and encrypted volumes, and transition to AVAILABLE.
 
 **Precondition:** Drive must be in `IN_USE` state (required for this operation to proceed).
 
 Performs the following steps in sequence:
-1. Validates drive is in `IN_USE` state at request start
+1. **Fast-fail validation:** Checks that drive is in `IN_USE` state before performing expensive OS operations
 2. Issues `sync(1)` to flush all pending filesystem writes to block devices
-3. Identifies and unmounts all partitions and mount points for the device (discovers partitions via `/proc/mounts`; supports traditional sdb1/sdb2, NVMe nvme0n1p1, and MMC mmcblk0p1 naming schemes)
+3. Identifies and unmounts all partitions, volumes, and encrypted devices:
+   - Discovers mount points via `/proc/mounts` parsing
+   - Supports traditional partition naming: `sdb`, `sdb1`, `sdb2` (etc.)
+   - Supports NVMe naming: `nvme0n1`, `nvme0n1p1`, `nvme0n1p2` (etc.)
+   - Supports MMC naming: `mmcblk0`, `mmcblk0p1`, `mmcblk0p2` (etc.)
+   - **Encrypted volume support:** Discovers and unmounts LUKS (`/dev/mapper/*`) and LVM (`/dev/dm-*`) volumes by:
+     - Resolving symlinks to actual device nodes via `os.path.realpath()`
+     - Tracing parent block device via `/sys/block/dm-N/slaves/` sysfs interface
+     - Validating encrypted volume is backed by the target device before including in unmount list
+   - **Safe unmount ordering:** Unmounts nested mount points in reverse depth order (deepest first) to prevent "umount: target is busy" errors when multiple levels of mounts exist
+   - **Path normalization:** Resolves device path symlinks (e.g., `/dev/disk/by-id/*` references)
+   - **Escape sequence handling:** Decodes POSIX escape sequences in mount points (e.g., `\040` for space, `\011` for tab) so actual paths are passed to `umount`
 4. Re-validates that drive state and device path have not changed (see race condition protection below)
 5. On success: transitions drive from `IN_USE` → `AVAILABLE`, logs `DRIVE_EJECT_PREPARED`
 6. On failure: drive remains `IN_USE`, logs `DRIVE_EJECT_FAILED` with error details
 
 **Behavior:**
 - Returns `200` with updated drive state on success
-- Returns `409` Conflict if drive is not in `IN_USE` state (precondition violation)
-- Returns `409` Conflict if drive state changed during operation (detected race condition; operation aborted)
+- Returns `409` Conflict if drive is not in `IN_USE` state (precondition violation); error message includes current state value (e.g., `current state: AVAILABLE`)
+- Returns `409` Conflict if drive state changed during operation (detected race condition; operation aborted); error message includes initial and final state values
 - Returns `409` Conflict if device path changed during operation (e.g., via concurrent discovery refresh; operation aborted to avoid stale OS operations)
 - Returns `500` if sync or unmount operations fail (drive state unchanged, stays `IN_USE`)
 - If device is not mounted, returns `200` immediately (no-op is success)
-- If device has multiple partitions mounted, unmounts all; returns `500` only if any unmount fails
+- If device has multiple partitions or encrypted volumes mounted, unmounts all; returns `500` only if any unmount fails
 
 **Race Condition Protection:**
 The endpoint captures the drive state and device path at the start, performs potentially slow OS operations without holding the database lock (to avoid contention), then re-acquires the lock to validate preconditions before committing the state transition. If another request or discovery process changes the drive's state or device path, this operation fails with 409 Conflict, ensuring audit consistency and preventing operations against stale or unintended device paths.
