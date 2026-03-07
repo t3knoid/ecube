@@ -292,17 +292,28 @@ class TestResolveMapperDevice:
     def test_resolve_mapper_device_listdir_fails(self):
         """Return empty list when sysfs listdir fails."""
         from app.infrastructure.drive_eject import _resolve_mapper_device_to_parent
-        
+
+        def mock_realpath(path):
+            # Simulate /dev/mapper/* → /dev/dm-N symlink resolution
+            path = path.replace("\\", "/")
+            if path == "/dev/mapper/crypto_X":
+                return "/dev/dm-0"
+            return path
+
         def mock_isdir(path):
-            return True
-        
+            # Pretend the slaves directory exists for dm-0
+            path = path.replace("\\", "/")
+            return path == "/sys/block/dm-0/slaves"
+
         def mock_listdir(path):
+            # Simulate a failure when listing the slaves directory
             raise OSError("Permission denied")
-        
-        with patch("os.path.isdir", side_effect=mock_isdir):
-            with patch("os.listdir", side_effect=mock_listdir):
-                result = _resolve_mapper_device_to_parent("/dev/mapper/crypto_X")
-        
+
+        import app.infrastructure.drive_eject as drive_eject_module
+        with patch.object(drive_eject_module.os.path, "realpath", side_effect=mock_realpath):
+            with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
+                with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
+                    result = _resolve_mapper_device_to_parent("/dev/mapper/crypto_X")
         assert result == []
 
     def test_find_luks_mounted_partition(self):
