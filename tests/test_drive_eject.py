@@ -448,6 +448,102 @@ class TestResolveMapperDevice:
         called_mounts = {call_args[0][0][1] for call_args in mock_run.call_args_list}
         assert called_mounts == {"/media/usb", "/media/encrypted"}
 
+    def test_find_mapper_device_backed_by_traditional_partition(self):
+        """Discover mapper devices backed by partitions (e.g., LUKS on /dev/sdb1)."""
+        proc_mounts_content = """/dev/sdb1 /media/data ext4 rw 0 0
+/dev/mapper/crypto_sdb1 /media/encrypted ext4 rw 0 0
+"""
+        def mock_realpath(path):
+            path = path.replace("\\", "/")
+            if path == "/dev/mapper/crypto_sdb1":
+                return "/dev/dm-0"
+            return path
+        
+        def mock_isdir(path):
+            path = path.replace("\\", "/")
+            return path == "/sys/block/dm-0/slaves"
+        
+        def mock_listdir(path):
+            path = path.replace("\\", "/")
+            if path == "/sys/block/dm-0/slaves":
+                return ["sdb1"]  # mapper backed by partition, not base device
+            return []
+        
+        import app.infrastructure.drive_eject as drive_eject_module
+        with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
+            with patch.object(drive_eject_module.os.path, "realpath", side_effect=mock_realpath):
+                with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
+                    with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
+                        result, error = _find_device_mountpoints("sdb")
+        
+        assert error is None
+        # Both partition and mapper mount should be discovered
+        assert set(result) == {"/media/data", "/media/encrypted"}
+
+    def test_find_mapper_device_backed_by_nvme_partition(self):
+        """Discover mapper devices backed by NVMe partitions (e.g., LUKS on /dev/nvme0n1p1)."""
+        proc_mounts_content = """/dev/nvme0n1p1 /media/data ext4 rw 0 0
+/dev/mapper/luks_nvme0n1p1 /media/encrypted ext4 rw 0 0
+"""
+        def mock_realpath(path):
+            path = path.replace("\\", "/")
+            if path == "/dev/mapper/luks_nvme0n1p1":
+                return "/dev/dm-1"
+            return path
+        
+        def mock_isdir(path):
+            path = path.replace("\\", "/")
+            return path == "/sys/block/dm-1/slaves"
+        
+        def mock_listdir(path):
+            path = path.replace("\\", "/")
+            if path == "/sys/block/dm-1/slaves":
+                return ["nvme0n1p1"]  # NVMe partition as dm slave
+            return []
+        
+        import app.infrastructure.drive_eject as drive_eject_module
+        with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
+            with patch.object(drive_eject_module.os.path, "realpath", side_effect=mock_realpath):
+                with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
+                    with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
+                        result, error = _find_device_mountpoints("nvme0n1")
+        
+        assert error is None
+        # Both partition and mapper mount should be discovered
+        assert set(result) == {"/media/data", "/media/encrypted"}
+
+    def test_find_mapper_partition_ignores_different_device(self):
+        """Do not pick up mapper devices backed by partitions of a different device."""
+        proc_mounts_content = """/dev/sdb /media/usb ext4 rw 0 0
+/dev/mapper/crypto_sdc1 /media/encrypted ext4 rw 0 0
+"""
+        def mock_realpath(path):
+            path = path.replace("\\", "/")
+            if path == "/dev/mapper/crypto_sdc1":
+                return "/dev/dm-0"
+            return path
+        
+        def mock_isdir(path):
+            path = path.replace("\\", "/")
+            return path == "/sys/block/dm-0/slaves"
+        
+        def mock_listdir(path):
+            path = path.replace("\\", "/")
+            if path == "/sys/block/dm-0/slaves":
+                return ["sdc1"]  # backed by sdc1, not sdb or sdb1
+            return []
+        
+        import app.infrastructure.drive_eject as drive_eject_module
+        with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
+            with patch.object(drive_eject_module.os.path, "realpath", side_effect=mock_realpath):
+                with patch.object(drive_eject_module.os.path, "isdir", side_effect=mock_isdir):
+                    with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
+                        result, error = _find_device_mountpoints("sdb")
+        
+        assert error is None
+        # Should only find the direct device mount, not the mapper mount backed by sdc1
+        assert result == ["/media/usb"]
+
 
 class TestUnmountDevice:
     """Tests for unmount_device function: partition discovery + unmount execution."""
