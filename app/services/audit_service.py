@@ -67,16 +67,10 @@ def log_and_audit(
     if metadata:
         details.update(metadata)
 
-    logger.log(
-        level,
-        action,
-        extra={
-            "user_id": actor_id,
-            "drive_id": drive_id,
-            "project_id": project_id,
-            **(metadata or {}),
-        },
-    )
+    log_extra = dict(details)
+    log_extra["user_id"] = actor_id
+
+    logger.log(level, action, extra=log_extra)
 
     return AuditRepository(db).add(
         action=action,
