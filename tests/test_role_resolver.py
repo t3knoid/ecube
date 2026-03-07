@@ -419,8 +419,9 @@ class TestGetCurrentUserWithOidcResolver:
         get_role_resolver.cache_clear()
 
     def _make_oidc_token_via_mock(self, groups, group_claim_name="groups"):
-        """Produce a local HS256 token and mock the OIDC validation so that
-        _get_current_user_oidc receives a realistic payload."""
+        """Return a decoded payload dict that simulates what validate_token()
+        returns for a token carrying the given groups claim.  These tests mock
+        validate_token() directly so no real JWT is created."""
         payload = {
             "sub": "oidc-sub-456",
             "preferred_username": "oidc.tester",
@@ -521,3 +522,37 @@ class TestGetCurrentUserWithOidcResolver:
                         )
         assert resp.status_code == 200
         assert resp.json()["username"] == "oidc-sub-only"
+
+    def test_oidc_token_with_non_list_groups_returns_401(self, resolver_client):
+        oidc_payload = {
+            "sub": "oidc-sub-bad",
+            "preferred_username": "bad.user",
+            "groups": "evidence-admins",  # string instead of list
+            "exp": int(time.time()) + 3600,
+            "iat": int(time.time()) - 5,
+        }
+        with patch.object(settings, "role_resolver", "oidc"):
+            with patch.object(settings, "oidc_group_claim_name", "groups"):
+                with patch("app.services.oidc_service.validate_token", return_value=oidc_payload):
+                    resp = resolver_client.get(
+                        "/resolved-user",
+                        headers={"Authorization": "Bearer mock.oidc.token"},
+                    )
+        assert resp.status_code == 401
+
+    def test_oidc_token_with_non_string_group_entries_returns_401(self, resolver_client):
+        oidc_payload = {
+            "sub": "oidc-sub-bad2",
+            "preferred_username": "bad.user2",
+            "groups": [123, "evidence-admins"],  # non-string entry
+            "exp": int(time.time()) + 3600,
+            "iat": int(time.time()) - 5,
+        }
+        with patch.object(settings, "role_resolver", "oidc"):
+            with patch.object(settings, "oidc_group_claim_name", "groups"):
+                with patch("app.services.oidc_service.validate_token", return_value=oidc_payload):
+                    resp = resolver_client.get(
+                        "/resolved-user",
+                        headers={"Authorization": "Bearer mock.oidc.token"},
+                    )
+        assert resp.status_code == 401

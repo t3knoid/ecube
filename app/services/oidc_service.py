@@ -139,7 +139,9 @@ def validate_token(token: str) -> Dict[str, Any]:
 
     decode_kwargs: Dict[str, Any] = {
         "algorithms": ["RS256", "RS384", "RS512", "ES256", "ES384", "ES512"],
-        "options": {},
+        "options": {
+            "require": ["exp", "iat", "sub"],
+        },
     }
 
     if settings.oidc_audience:
