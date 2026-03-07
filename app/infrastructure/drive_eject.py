@@ -11,7 +11,6 @@ without requiring physical hardware.
 """
 from __future__ import annotations
 
-import codecs
 import os.path
 import re
 import subprocess
@@ -28,8 +27,13 @@ _UMOUNT_BIN = "/bin/umount"
 def _unescape_mountpoint(escaped_path: str) -> str:
     """Unescape special characters in /proc/mounts path.
 
-    /proc/mounts uses POSIX escape sequences: \\040 for space, \\011 for tab, etc.
-    This function converts escaped sequences back to actual characters.
+    /proc/mounts uses POSIX octal escape sequences (``\\040`` for space,
+    ``\\011`` for tab, etc.) to encode raw bytes of the filesystem path.
+    These are *raw bytes*, not Unicode code points, so we build a
+    ``bytearray`` first and then decode it as UTF-8.  This correctly handles
+    multi-byte UTF-8 sequences (e.g. ``\\303\\251`` for the UTF-8 encoding
+    of ``é``), whereas the ``unicode_escape`` codec would misinterpret each
+    octal value as a Latin-1 code point, producing mojibake.
 
     Args:
         escaped_path: Path string with escape sequences (from /proc/mounts)
@@ -38,8 +42,15 @@ def _unescape_mountpoint(escaped_path: str) -> str:
         Unescaped path ready to pass to system calls.
     """
     try:
-        return codecs.decode(escaped_path, 'unicode_escape')
-    except (UnicodeDecodeError, AttributeError):
+        buf = bytearray()
+        for part in re.split(r'(\\[0-7]{3})', escaped_path):
+            if part and part[0] == '\\':
+                # Octal escape — convert to the corresponding byte value
+                buf.append(int(part[1:], 8))
+            else:
+                buf.extend(part.encode('utf-8', errors='surrogateescape'))
+        return buf.decode('utf-8', errors='surrogateescape')
+    except (ValueError, UnicodeDecodeError):
         # If unescaping fails, return the original path
         return escaped_path
 
