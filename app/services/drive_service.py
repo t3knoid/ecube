@@ -28,13 +28,14 @@ def initialize_drive(
             action="PROJECT_ISOLATION_VIOLATION",
             user=actor,
             details={
+                "actor": actor,
                 "drive_id": drive_id,
                 "existing_project_id": drive.current_project_id,
                 "requested_project_id": project_id,
             },
         )
         raise HTTPException(
-            status_code=409,
+            status_code=403,
             detail=f"Drive is already assigned to project '{drive.current_project_id}'",
         )
 

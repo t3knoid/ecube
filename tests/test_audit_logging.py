@@ -78,11 +78,12 @@ class TestDriveAuditLogging:
         response = manager_client.post(
             f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-B"}
         )
-        assert response.status_code == 409
+        assert response.status_code == 403
 
         entry = _audit_by_action(db, "PROJECT_ISOLATION_VIOLATION")
         assert entry is not None
         assert entry.user == "manager-user"
+        assert entry.details["actor"] == "manager-user"
         assert entry.details["drive_id"] == drive.id
         assert entry.details["existing_project_id"] == "PROJ-A"
         assert entry.details["requested_project_id"] == "PROJ-B"
@@ -246,11 +247,12 @@ class TestJobAuditLogging:
                 "drive_id": drive.id,
             },
         )
-        assert response.status_code == 409
+        assert response.status_code == 403
 
         entry = _audit_by_action(db, "PROJECT_ISOLATION_VIOLATION")
         assert entry is not None
         assert entry.user == "test-user"
+        assert entry.details["actor"] == "test-user"
         assert entry.details["existing_project_id"] == "PROJ-OTHER"
         assert entry.details["requested_project_id"] == "PROJ-DIFFERENT"
 
