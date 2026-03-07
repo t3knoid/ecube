@@ -77,8 +77,8 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None) -> Us
     if initial_device_path:
         unmount_ok, unmount_err = unmount_device(initial_device_path)
 
-    # Re-lock only for the state transition and audit write.
-    # Re-check that the drive's critical fields haven't changed since our initial read.
+    # Re-lock only for the validation and state transition; the audit write happens
+    # in a separate transaction after this state change is committed.
     drive = drive_repo.get_for_update(drive_id)
     if not drive:
         # Drive was deleted between reads (unlikely but possible).
