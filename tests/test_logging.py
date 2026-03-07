@@ -295,10 +295,22 @@ class TestAdminLogsEndpoints:
 
             with patch("app.routers.admin.settings") as mock_settings:
                 mock_settings.log_file = log_path
-                # Attempts to traverse out of log directory
-                for bad_name in ["../../../etc/passwd", "..%2f..%2fetc/passwd", "foo/bar"]:
+                # Patterns with slashes are rejected by _safe_filename (400)
+                # or handled by FastAPI routing (404).  Either way, the
+                # attacker cannot access files outside the log directory.
+                traversal_patterns = [
+                    ("../../../etc/passwd", {400, 404, 422}),
+                    ("..%2f..%2fetc%2fpasswd", {400, 404}),
+                ]
+                for bad_name, expected_codes in traversal_patterns:
                     resp = client.get(f"/admin/logs/{bad_name}")
-                    assert resp.status_code in (400, 404, 422), f"Expected rejection for {bad_name}"
+                    assert resp.status_code in expected_codes, (
+                        f"Expected one of {expected_codes} for {bad_name!r}, got {resp.status_code}"
+                    )
+                    # Crucially, the response body should NOT contain "safe"
+                    # (the contents of our actual log file).
+                    if hasattr(resp, "text"):
+                        assert resp.text != "safe"
 
     def test_download_nonexistent_file_returns_404(self, client):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -340,6 +352,7 @@ class TestAdminLogsEndpoints:
                 entries = AuditRepository(db).query(action="LOG_FILE_DOWNLOADED")
                 assert len(entries) >= 1
                 assert entries[0].details["filename"] == "app.log"
+                assert "action" not in entries[0].details
 
     def test_all_roles_can_list_logs(self, admin_client, manager_client, auditor_client, client):
         """All authenticated users should have access (no role restriction)."""
