@@ -327,3 +327,36 @@ class TestValidateToken:
                     result = validate_token(token)
 
         assert result.get("org_groups") == ["evidence-admins"]
+
+    def test_token_missing_exp_raises_oidc_token_error(self, mock_jwks_client, rsa_keypair):
+        mock_client, private_key = mock_jwks_client
+        payload = _valid_oidc_payload()
+        del payload["exp"]
+        token = _make_rsa_token(private_key, payload)
+
+        with self._patch_jwks_client(mock_client):
+            with patch.object(settings, "oidc_audience", None):
+                with pytest.raises(OidcTokenError, match="missing required claim"):
+                    validate_token(token)
+
+    def test_token_missing_iat_raises_oidc_token_error(self, mock_jwks_client, rsa_keypair):
+        mock_client, private_key = mock_jwks_client
+        payload = _valid_oidc_payload()
+        del payload["iat"]
+        token = _make_rsa_token(private_key, payload)
+
+        with self._patch_jwks_client(mock_client):
+            with patch.object(settings, "oidc_audience", None):
+                with pytest.raises(OidcTokenError, match="missing required claim"):
+                    validate_token(token)
+
+    def test_token_missing_sub_raises_oidc_token_error(self, mock_jwks_client, rsa_keypair):
+        mock_client, private_key = mock_jwks_client
+        payload = _valid_oidc_payload()
+        del payload["sub"]
+        token = _make_rsa_token(private_key, payload)
+
+        with self._patch_jwks_client(mock_client):
+            with patch.object(settings, "oidc_audience", None):
+                with pytest.raises(OidcTokenError, match="missing required claim"):
+                    validate_token(token)
