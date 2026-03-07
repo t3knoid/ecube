@@ -215,7 +215,7 @@ class TestResolveMapperDevice:
                 with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
                     result = _resolve_mapper_device_to_parent("/dev/mapper/crypto_XXXXX")
         
-        assert result == "sdb"
+        assert result == ["sdb"]
 
     def test_resolve_lvm_mapper_device(self):
         """Resolve LVM mapper device back to parent block device."""
@@ -245,7 +245,7 @@ class TestResolveMapperDevice:
                 with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
                     result = _resolve_mapper_device_to_parent("/dev/mapper/vg0-lv0")
         
-        assert result == "sdc"
+        assert result == ["sdc"]
 
     def test_resolve_dm_device(self):
         """Resolve /dev/dm-N style device back to parent block device."""
@@ -271,20 +271,20 @@ class TestResolveMapperDevice:
                 with patch.object(drive_eject_module.os, "listdir", side_effect=mock_listdir):
                     result = _resolve_mapper_device_to_parent("/dev/dm-0")
         
-        assert result == "sdb"
+        assert result == ["sdb"]
 
     def test_resolve_mapper_device_not_found(self):
-        """Return None when sysfs slaves directory doesn't exist."""
+        """Return empty list when sysfs slaves directory doesn't exist."""
         from app.infrastructure.drive_eject import _resolve_mapper_device_to_parent
         
         import app.infrastructure.drive_eject as drive_eject_module
         with patch.object(drive_eject_module.os.path, "isdir", return_value=False):
             result = _resolve_mapper_device_to_parent("/dev/mapper/unknown")
         
-        assert result is None
+        assert result == []
 
     def test_resolve_mapper_device_listdir_fails(self):
-        """Return None when sysfs listdir fails."""
+        """Return empty list when sysfs listdir fails."""
         from app.infrastructure.drive_eject import _resolve_mapper_device_to_parent
         
         def mock_isdir(path):
@@ -297,7 +297,7 @@ class TestResolveMapperDevice:
             with patch("os.listdir", side_effect=mock_listdir):
                 result = _resolve_mapper_device_to_parent("/dev/mapper/crypto_X")
         
-        assert result is None
+        assert result == []
 
     def test_find_luks_mounted_partition(self):
         """Correctly identify LUKS-encrypted partition mounted via mapper."""
@@ -718,6 +718,44 @@ class TestUnmountDevice:
             capture_output=True,
             timeout=30,
         )
+
+    def test_unmount_not_mounted_race_is_success(self):
+        """CalledProcessError with 'not mounted' stderr is treated as success.
+
+        If a mount disappears between the /proc/mounts read and the actual
+        umount call (transient race), umount exits non-zero with a 'not
+        mounted' message.  That condition already represents the desired
+        end-state, so it should be treated as a no-op rather than a failure.
+        """
+        proc_mounts_content = """/dev/sdb /media/usb ext4 rw 0 0
+"""
+        with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
+            with patch(
+                "subprocess.run",
+                side_effect=subprocess.CalledProcessError(
+                    32, "umount", stderr=b"umount: /media/usb: not mounted.\n"
+                ),
+            ):
+                success, error = unmount_device("/dev/sdb")
+
+        assert success is True
+        assert error is None
+
+    def test_unmount_no_mount_point_race_is_success(self):
+        """CalledProcessError with 'no mount point' stderr is treated as success."""
+        proc_mounts_content = """/dev/sdb /media/usb ext4 rw 0 0
+"""
+        with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
+            with patch(
+                "subprocess.run",
+                side_effect=subprocess.CalledProcessError(
+                    1, "umount", stderr=b"umount: /media/usb: no mount point specified.\n"
+                ),
+            ):
+                success, error = unmount_device("/dev/sdb")
+
+        assert success is True
+        assert error is None
 
     def test_unmount_nested_mounts_deepest_first(self):
         """Unmount nested mounts in correct order (deepest first) to avoid 'target is busy' errors."""
