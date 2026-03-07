@@ -361,7 +361,7 @@ def test_double_assign_prevented(manager_client, db):
 
 
 def test_double_initialize_different_projects_prevented(manager_client, db):
-    """Initializing a drive for a different project while it is IN_USE returns 409."""
+    """Initializing a drive for a different project while it is IN_USE returns 403."""
     drive = UsbDrive(
         device_identifier="USB-GUARD-02",
         current_state=DriveState.IN_USE,
@@ -373,8 +373,8 @@ def test_double_initialize_different_projects_prevented(manager_client, db):
     response = manager_client.post(
         f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-B"}
     )
-    assert response.status_code == 409
-    assert response.json()["code"] == "CONFLICT"
+    assert response.status_code == 403
+    assert response.json()["code"] == "FORBIDDEN"
 
 
 def test_start_job_transitions_to_running_atomically(manager_client, db):

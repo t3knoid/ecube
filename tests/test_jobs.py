@@ -93,7 +93,7 @@ def test_create_job_conflict_when_drive_has_different_project(client, db):
         },
     )
 
-    assert response.status_code == 409
+    assert response.status_code == 403
 
 
 def test_create_job_conflict_when_drive_already_in_use(client, db):

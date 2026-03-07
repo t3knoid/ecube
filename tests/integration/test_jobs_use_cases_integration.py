@@ -82,8 +82,8 @@ def test_create_job_conflict_when_drive_belongs_to_different_project(integration
             "drive_id": drive.id,
         },
     )
-    assert response.status_code == 409
-    assert response.json()["code"] == "CONFLICT"
+    assert response.status_code == 403
+    assert response.json()["code"] == "FORBIDDEN"
 
 
 @pytest.mark.integration
@@ -208,3 +208,4 @@ def test_create_manifest_writes_record_file_and_audit(integration_client, integr
     )
     assert audit is not None
     assert audit.details["error"] is None
+
