@@ -461,16 +461,81 @@ LDAP_GROUP_ROLE_MAP='{"CN=EvidenceAdmins,OU=Groups,DC=example,DC=com": ["admin"]
 
 #### OIDC Integration
 
-For OIDC providers (Okta, Auth0, Azure AD, etc.):
+For cloud identity providers (Okta, Auth0, Azure AD, Google Cloud Identity, etc.):
 
 ```bash
 ROLE_RESOLVER=oidc
 OIDC_DISCOVERY_URL=https://auth.example.com/.well-known/openid-configuration
 OIDC_CLIENT_ID=your-client-id
-OIDC_CLIENT_SECRET=your-client-secret
-OIDC_GROUP_CLAIM_NAME=groups
-OIDC_GROUP_ROLE_MAP='{"admin-group": ["admin"]}'
+OIDC_CLIENT_SECRET=your-client-secret  # Not used for token validation; for provider integration only
+OIDC_AUDIENCE=your-client-id            # Optional; validates 'aud' claim in token
+OIDC_GROUP_CLAIM_NAME=groups            # Which JWT claim contains group memberships
+OIDC_GROUP_ROLE_MAP='{"admin-group": ["admin"], "ops-group": ["processor"]}'
 ```
+
+**Network Requirements:**
+- HTTPS outbound access to OIDC provider's discovery URL
+- HTTPS outbound access to provider's JWKS endpoint (cached for process lifetime)
+- Recommend 10-second timeout for initial discovery URL fetch
+
+##### OIDC Provider Examples
+
+**Okta**
+
+```bash
+ROLE_RESOLVER=oidc
+OIDC_DISCOVERY_URL=https://<YOUR_OKTA_DOMAIN>/oauth2/default/.well-known/openid-configuration
+OIDC_CLIENT_ID=<YOUR_CLIENT_ID>
+OIDC_CLIENT_SECRET=<YOUR_CLIENT_SECRET>
+OIDC_GROUP_CLAIM_NAME=groups
+OIDC_GROUP_ROLE_MAP='{"EvidenceAdmins": ["admin"], "EvidenceTeam": ["processor"]}'
+```
+
+**Auth0**
+
+```bash
+ROLE_RESOLVER=oidc
+OIDC_DISCOVERY_URL=https://<YOUR_AUTH0_DOMAIN>/.well-known/openid-configuration
+OIDC_CLIENT_ID=<YOUR_CLIENT_ID>
+OIDC_CLIENT_SECRET=<YOUR_CLIENT_SECRET>
+OIDC_GROUP_CLAIM_NAME=org_groups
+OIDC_GROUP_ROLE_MAP='{"evidence-admins": ["admin"], "evidence-team": ["processor", "auditor"]}'
+```
+
+**Azure AD (OIDC mode)**
+
+```bash
+ROLE_RESOLVER=oidc
+OIDC_DISCOVERY_URL=https://login.microsoftonline.com/<TENANT_ID>/v2.0/.well-known/openid-configuration
+OIDC_CLIENT_ID=<YOUR_CLIENT_ID>
+OIDC_CLIENT_SECRET=<YOUR_CLIENT_SECRET>
+OIDC_AUDIENCE=<YOUR_CLIENT_ID>
+OIDC_GROUP_CLAIM_NAME=groups
+OIDC_GROUP_ROLE_MAP='{"<ObjectId_of_AdminGroup>": ["admin"]}'
+```
+
+**Google Cloud Identity**
+
+```bash
+ROLE_RESOLVER=oidc
+OIDC_DISCOVERY_URL=https://accounts.google.com/.well-known/openid-configuration
+OIDC_CLIENT_ID=<YOUR_CLIENT_ID>
+OIDC_CLIENT_SECRET=<YOUR_CLIENT_SECRET>
+OIDC_AUDIENCE=<YOUR_CLIENT_ID>
+OIDC_GROUP_CLAIM_NAME=groups
+OIDC_GROUP_ROLE_MAP='{"evidence-admins@example.com": ["admin"]}'
+```
+
+##### Troubleshooting OIDC
+
+| Issue | Cause | Resolution |
+|-------|-------|-----------|
+| `401 OIDC is enabled but 'oidc_discovery_url' is not configured` | Missing env var | Set `OIDC_DISCOVERY_URL` |
+| `401 OIDC token has expired` | Token past expiration time | Ensure client refreshes tokens before expiry |
+| `401 OIDC token audience mismatch` | `aud` claim doesn't match `OIDC_AUDIENCE` | Verify `OIDC_AUDIENCE` matches your provider's client ID |
+| `403` on all requests | Groups present but none mapped | Add user's groups to `OIDC_GROUP_ROLE_MAP` |
+| `401 Failed to obtain signing key` | JWKS endpoint unreachable | Check network access from ECUBE host to provider's JWKS endpoint |
+| Tokens always rejected even when valid | Discovery document fetch timeout | Increase network timeout; check OIDC_DISCOVERY_URL is correct |
 
 ### ECUBE Roles
 
