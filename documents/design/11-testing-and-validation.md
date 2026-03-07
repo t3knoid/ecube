@@ -76,6 +76,34 @@ Run by keyword:
 python -m pytest tests -q -k "mount or job"
 ```
 
+### Drive Eject Unit Tests
+
+The `tests/test_drive_eject.py` module validates the `/proc/mounts` parsing, device discovery, and unmount sequencing logic used by `prepare_eject`. This is the core of the filesystem-level safety:
+
+**Test Coverage:**
+
+- **Partition discovery:** Traditional (`sdb1`, `sdb2`), NVMe (`nvme0n1p1`), and MMC (`mmcblk0p1`) naming schemes.
+- **Escape sequence handling:** Validates that mount points with spaces, tabs, and other POSIX escape sequences from `/proc/mounts` are properly decoded before being passed to `umount`.
+- **Device-mapper (encrypted) support:** 
+  - Validates `/dev/mapper/*` device symlink resolution to `/dev/dm-N` nodes via `os.path.realpath()`
+  - Validates parent device discovery via `/sys/block/dm-N/slaves/` sysfs interface
+  - Tests LUKS-encrypted volumes, LVM logical volumes, and direct dm-device paths
+  - Confirms that mapper devices backed by a different device are correctly excluded
+- **Safe unmount ordering:** Validates that nested mount points (e.g., `/media/usb` and `/media/usb/sub`) are unmounted in reverse depth order to prevent "target is busy" errors.
+- **Error handling:** Validates graceful handling of `/proc/mounts` read failures, missing sysfs paths, and unmount failures.
+
+Run drive eject tests:
+
+```bash
+python -m pytest tests/test_drive_eject.py -q
+```
+
+Run specific device-mapper tests:
+
+```bash
+python -m pytest tests/test_drive_eject.py::TestResolveMapperDevice -q
+```
+
 ## 11.4 Integration Test Setup
 
 Use a dedicated PostgreSQL database for integration tests.
