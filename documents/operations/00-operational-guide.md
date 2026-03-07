@@ -474,6 +474,7 @@ OIDC_GROUP_ROLE_MAP='{"admin-group": ["admin"], "ops-group": ["processor"]}'
 ```
 
 **Network Requirements:**
+
 - HTTPS outbound access to OIDC provider's discovery URL
 - HTTPS outbound access to provider's JWKS endpoint (cached for process lifetime)
 - Recommend 10-second timeout for initial discovery URL fetch
@@ -529,7 +530,7 @@ OIDC_GROUP_ROLE_MAP='{"evidence-admins@example.com": ["admin"]}'
 ##### Troubleshooting OIDC
 
 | Issue | Cause | Resolution |
-|-------|-------|-----------|
+| ------- | ------- | ----------- |
 | `401 OIDC is enabled but 'oidc_discovery_url' is not configured` | Missing env var | Set `OIDC_DISCOVERY_URL` |
 | `401 OIDC token has expired` | Token past expiration time | Ensure client refreshes tokens before expiry |
 | `401 OIDC token audience mismatch` | `aud` claim doesn't match `OIDC_AUDIENCE` | Verify `OIDC_AUDIENCE` matches your provider's client ID |
@@ -1214,6 +1215,7 @@ The following endpoints are publicly accessible and do **not** require authentic
 - API documentation: `GET /docs`, `GET /redoc`, `GET /openapi.json`
 
 All other API endpoints require a bearer token in the `Authorization` header. For example:
+
 ```bash
 curl -H "Authorization: Bearer $JWT_TOKEN" https://localhost:8443/endpoint
 ```
