@@ -31,11 +31,11 @@
 
 #### OIDC token validation flow
 
-```
+```text
  Client                 ECUBE System Layer              OIDC Provider
    │                          │                               │
    │  Bearer: <id_token>      │                               │
-   │─────────────────────────▶│                               │
+   │────────────────────────▶│                               │
    │                          │  [on first request]           │
    │                          │  GET /.well-known/openid-     │
    │                          │  configuration                │
@@ -51,7 +51,7 @@
    │                          │  extract groups claim         │
    │                          │  resolve groups → roles       │
    │  200 OK (or 401/403)     │                               │
-   │◀─────────────────────────│                               │
+   │◀────────────────────────│                               │
 ```
 
 #### Group claim mapping
