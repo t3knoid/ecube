@@ -278,8 +278,14 @@ class TestResolveMapperDevice:
         from app.infrastructure.drive_eject import _resolve_mapper_device_to_parent
         
         import app.infrastructure.drive_eject as drive_eject_module
-        with patch.object(drive_eject_module.os.path, "isdir", return_value=False):
-            result = _resolve_mapper_device_to_parent("/dev/mapper/unknown")
+
+        def mock_realpath(path):
+            # Simulate /dev/mapper/unknown resolving to a /dev/dm-N device
+            return "/dev/dm-9"
+
+        with patch.object(drive_eject_module.os.path, "realpath", side_effect=mock_realpath):
+            with patch.object(drive_eject_module.os.path, "isdir", return_value=False):
+                result = _resolve_mapper_device_to_parent("/dev/mapper/unknown")
         
         assert result == []
 
