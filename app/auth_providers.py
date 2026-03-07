@@ -3,15 +3,18 @@
 Role resolution is the process of converting a user's group memberships into
 ECUBE roles (``admin``, ``manager``, ``processor``, ``auditor``).
 
-Two built-in providers are supplied:
+Three built-in providers are supplied:
 
 * :class:`LocalGroupRoleResolver` *(default)* — uses a static group-to-role
   mapping defined in application settings (``local_group_role_map``).
 * :class:`LdapGroupRoleResolver` *(optional)* — uses a separate mapping
   (``ldap_group_role_map``) intended for LDAP-sourced group names.  Enabled
   by setting ``role_resolver = "ldap"`` in configuration.
+* :class:`OidcGroupRoleResolver` *(optional)* — maps OIDC provider group
+  claims to ECUBE roles using ``oidc_group_role_map``.  Enabled by setting
+  ``role_resolver = "oidc"`` in configuration.
 
-Both providers apply **deny-by-default** semantics: a group not present in the
+All providers apply **deny-by-default** semantics: a group not present in the
 mapping contributes no roles, and a user whose groups are entirely unmapped
 will receive an empty role list (which ``require_roles`` will reject with
 HTTP 403).
@@ -102,6 +105,23 @@ class LdapGroupRoleResolver(_MappedRoleResolver):
     """
 
 
+class OidcGroupRoleResolver(_MappedRoleResolver):
+    """Role resolver that maps OIDC provider group claims to ECUBE roles.
+
+    The mapping is read from :attr:`app.config.Settings.oidc_group_role_map`.
+    The claim that supplies the group list is configured via
+    :attr:`app.config.Settings.oidc_group_claim_name` (default: ``"groups"``).
+
+    Example configuration::
+
+        oidc_group_role_map = '{"evidence-admins": ["admin"], "evidence-team": ["processor"]}'
+
+    Groups absent from the mapping contribute no roles (deny-by-default).
+
+    This provider is selected when ``role_resolver = "oidc"`` in settings.
+    """
+
+
 @lru_cache(maxsize=1)
 def get_role_resolver() -> RoleResolver:
     """Return the configured role resolver instance (cached after first call).
@@ -112,6 +132,8 @@ def get_role_resolver() -> RoleResolver:
       by ``settings.local_group_role_map``.
     * ``"ldap"`` — returns an :class:`LdapGroupRoleResolver` backed by
       ``settings.ldap_group_role_map``.
+    * ``"oidc"`` — returns an :class:`OidcGroupRoleResolver` backed by
+      ``settings.oidc_group_role_map``.
 
     The result is cached for the lifetime of the process so that configuration
     is read once and the resolver instance is reused across requests.
@@ -123,7 +145,9 @@ def get_role_resolver() -> RoleResolver:
         return LdapGroupRoleResolver(settings.ldap_group_role_map)
     if settings.role_resolver == "local":
         return LocalGroupRoleResolver(settings.local_group_role_map)
+    if settings.role_resolver == "oidc":
+        return OidcGroupRoleResolver(settings.oidc_group_role_map)
     raise ValueError(
         f"Unknown role_resolver setting: {settings.role_resolver!r}. "
-        "Valid options are: 'local', 'ldap'."
+        "Valid options are: 'local', 'ldap', 'oidc'."
     )
