@@ -181,10 +181,15 @@ def _get_current_user_oidc(token: str, request: Request) -> CurrentUser:
         or user_id
     )
 
-    groups = payload.get(settings.oidc_group_claim_name, [])
-    if not isinstance(groups, list):
-        groups = []
+    raw_groups = payload.get(settings.oidc_group_claim_name, [])
+    if not isinstance(raw_groups, list) or not all(isinstance(g, str) for g in raw_groups):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
+    groups = raw_groups
     roles = get_role_resolver().resolve(groups)
 
     current_user = CurrentUser(
