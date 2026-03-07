@@ -168,6 +168,22 @@ class TestFindDeviceMountpoints:
         result = _unescape_mountpoint(path)
         assert result == "/media/usb"
 
+    def test_unescape_mountpoint_utf8_non_ascii(self):
+        """Correctly decode multi-byte UTF-8 sequences encoded as octal escapes.
+
+        /proc/mounts encodes raw filesystem bytes as POSIX octal escapes.
+        A UTF-8 path like ``/mnt/café`` (where ``é`` is the two-byte sequence
+        0xC3 0xA9) appears in /proc/mounts as ``/mnt/caf\\303\\251``.
+        The bytes-first decoding must reconstruct the original UTF-8 string;
+        the old ``unicode_escape`` codec would produce mojibake (``cafÃ©``).
+        """
+        from app.infrastructure.drive_eject import _unescape_mountpoint
+
+        # UTF-8 bytes for 'é' are 0xC3 0xA9 → octal \303 \251
+        escaped_path = "/mnt/caf\\303\\251"
+        result = _unescape_mountpoint(escaped_path)
+        assert result == "/mnt/café"
+
     def test_find_device_with_escaped_mountpoint(self):
         """Parse /proc/mounts correctly when mountpoints have escapes."""
         # Simulate /proc/mounts with path containing space
