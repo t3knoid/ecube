@@ -1,3 +1,4 @@
+import logging
 import subprocess
 from datetime import datetime, timezone
 from typing import Optional
@@ -9,6 +10,8 @@ from app.models.network import MountStatus, MountType, NetworkMount
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.mount_repository import MountRepository
 from app.schemas.network import MountCreate
+
+logger = logging.getLogger(__name__)
 
 
 def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None) -> NetworkMount:

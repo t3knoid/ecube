@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from typing import Optional
 
@@ -16,6 +17,8 @@ from app.repositories.job_repository import (
 )
 from app.schemas.jobs import JobCreate, JobStart
 from app.services import copy_engine
+
+logger = logging.getLogger(__name__)
 
 
 def create_job(body: JobCreate, db: Session, actor: Optional[str] = None) -> ExportJob:
