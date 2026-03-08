@@ -1,6 +1,7 @@
 import logging
 import traceback
 import uuid
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.openapi.utils import get_openapi
@@ -8,8 +9,12 @@ from fastapi.responses import JSONResponse
 
 from app.auth import get_current_user
 from app.exceptions import AuthenticationError, AuthorizationError, ConflictError, ECUBEException
-from app.routers import audit, drives, files, introspection, jobs, mounts
+from app.logging_config import configure_logging
+from app.routers import admin, audit, drives, files, introspection, jobs, mounts
 from app.schemas.errors import ErrorResponse
+
+# Configure logging before anything else.
+configure_logging()
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +46,14 @@ tags_metadata = [
     },
 ]
 
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    logger.info("ECUBE application starting")
+    yield
+    logger.info("ECUBE application shutting down")
+
+
 app = FastAPI(
     title="ECUBE",
     description="Evidence Copying & USB Based Export Platform — Secure evidence export solution for encrypted USB drives.",
@@ -55,6 +68,7 @@ app = FastAPI(
         "url": "https://ecube.local/license",
     },
     openapi_tags=tags_metadata,
+    lifespan=lifespan,
 )
 
 
@@ -110,6 +124,7 @@ app.include_router(jobs.router, dependencies=[Depends(get_current_user)])
 app.include_router(files.router, dependencies=[Depends(get_current_user)])
 app.include_router(introspection.router, dependencies=[Depends(get_current_user)])
 app.include_router(audit.router, dependencies=[Depends(get_current_user)])
+app.include_router(admin.router, dependencies=[Depends(get_current_user)])
 
 
 def _error_response(status_code: int, code: str, message: str, trace_id: str | None = None) -> JSONResponse:

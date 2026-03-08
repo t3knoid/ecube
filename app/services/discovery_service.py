@@ -37,6 +37,7 @@ Hub auto-creation:
 
 from __future__ import annotations
 
+import logging
 from typing import Callable, List, Optional
 
 from sqlalchemy.orm import Session
@@ -46,6 +47,8 @@ from app.models.hardware import DriveState, UsbDrive
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
 from app.repositories.hardware_repository import HubRepository, PortRepository
+
+logger = logging.getLogger(__name__)
 
 
 def run_discovery_sync(
