@@ -261,6 +261,64 @@ ECUBE build and deployment guidance (release artifacts, package deployment witho
 
 Choose one runtime path per environment: package deployment **or** Docker deployment.
 
+## Logging
+
+ECUBE includes a structured logging facility that supports human-readable (text) and machine-readable (JSON) output formats.  Configuration is driven by environment variables (or a `.env` file).
+
+### Configuration
+
+| Variable                | Default   | Description                                          |
+|-------------------------|-----------|------------------------------------------------------|
+| `LOG_LEVEL`             | `INFO`    | Root log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+| `LOG_FORMAT`            | `text`    | Output format (`text` or `json`)                     |
+| `LOG_FILE`              | *(none)*  | Path to a log file; enables rotating file handler    |
+| `LOG_FILE_MAX_BYTES`    | `10485760`| Max size per log file before rotation (default 10 MB)|
+| `LOG_FILE_BACKUP_COUNT` | `5`       | Number of rotated backup files to keep               |
+
+Example `.env` configuration:
+
+```env
+LOG_LEVEL=INFO
+LOG_FORMAT=json
+LOG_FILE=/var/log/ecube/app.log
+LOG_FILE_MAX_BYTES=10485760
+LOG_FILE_BACKUP_COUNT=5
+```
+
+### Log Formats
+
+**Text format** (default):
+
+```
+2026-03-07T12:00:00+0000 [INFO] app.services.drive_service: drive_state_transition
+```
+
+**JSON format** (`LOG_FORMAT=json`):
+
+```json
+{
+  "timestamp": "2026-03-07T12:00:00+00:00",
+  "level": "INFO",
+  "module": "app.services.drive_service",
+  "message": "drive_state_transition",
+  "extra": {"drive_id": 1, "old_state": "AVAILABLE", "new_state": "IN_USE"}
+}
+```
+
+### Where Logs Are Written
+
+- **Console (stdout):** Always enabled.
+- **File:** Only when `LOG_FILE` is set.  Files are rotated automatically when they reach `LOG_FILE_MAX_BYTES`.
+
+### Log File Access via API
+
+When file-based logging is enabled, log files can be listed and downloaded via the `/admin/logs` endpoints.  All access requires authentication (JWT bearer token).
+
+- `GET /admin/logs` — list available log files with size and timestamp metadata
+- `GET /admin/logs/{filename}` — download a specific log file
+
+Path traversal protection is enforced: filenames containing `..` or `/` are rejected.  All log file access is recorded in the audit trail.
+
 ## Documentation
 
 - [Requirements Documents](documents/requirements)
