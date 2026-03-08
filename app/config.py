@@ -1,4 +1,4 @@
-from typing import Dict, List, Literal, Optional
+from typing import Dict, List, Literal, Optional, Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -29,6 +29,27 @@ class Settings(BaseSettings):
     #: strings.
     #: Example: ``{"CN=EvidenceAdmins,DC=corp,DC=example,DC=com": ["admin"]}``
     ldap_group_role_map: Dict[str, List[str]] = {}
+
+    # ---------------------------------------------------------------------------
+    # Logging configuration
+    # ---------------------------------------------------------------------------
+
+    #: Root log level.  One of ``DEBUG``, ``INFO``, ``WARNING``, ``ERROR``.
+    log_level: str = "INFO"
+
+    #: Log output format.  ``"text"`` for human-readable, ``"json"`` for
+    #: structured JSON (suitable for log aggregation / compliance tooling).
+    log_format: Literal["text", "json"] = "text"
+
+    #: Optional path to a log file.  When set, a
+    #: :class:`~logging.handlers.RotatingFileHandler` is attached.
+    log_file: Optional[str] = None
+
+    #: Maximum size (bytes) of a single log file before rotation.  Default 10 MB.
+    log_file_max_bytes: int = 10_485_760
+
+    #: Number of rotated backup log files to keep.
+    log_file_backup_count: int = 5
 
     # ---------------------------------------------------------------------------
     # OIDC configuration (used when role_resolver = "oidc")
