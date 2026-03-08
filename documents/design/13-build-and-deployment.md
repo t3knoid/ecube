@@ -32,7 +32,25 @@ ECUBE supports two primary deployment outputs:
    - `ecube-package-<release-tag>.sha256`
 2. **Docker runtime image** for containerized deployment.
 
-## 13.2 CI Release Packaging (GitHub Releases)
+## 13.2 Dependencies
+
+### Python Packages
+
+ECUBE now requires `PyJWT[crypto]` for OIDC support (RSA/EC signature verification for OIDC tokens).
+
+This is automatically installed via:
+
+```bash
+pip install -e ".[dev]"
+```
+
+If deploying from a pre-built package or in an environment without `pyproject.toml`, ensure cryptographic support is installed:
+
+```bash
+pip install "PyJWT[crypto]>=2.7.0"
+```
+
+## 13.3 CI Release Packaging (GitHub Releases)
 
 Workflow: `.github/workflows/release-artifact.yml`
 
