@@ -138,6 +138,121 @@ All application/API endpoints (except `/health` and documentation endpoints such
 
 ---
 
+## Identity Provider Configuration
+
+ECUBE supports three pluggable role resolver modes, selected by the `role_resolver` environment variable.
+
+### Local mode (default)
+
+Uses a static group-to-role mapping defined in configuration.
+
+```bash
+role_resolver=local
+local_group_role_map='{"evidence-admins": ["admin"], "evidence-team": ["processor", "auditor"]}'
+```
+
+### LDAP mode
+
+Uses LDAP group distinguished names mapped to ECUBE roles.
+
+```bash
+role_resolver=ldap
+ldap_group_role_map='{"CN=EvidenceAdmins,DC=corp,DC=example,DC=com": ["admin"]}'
+```
+
+### OIDC mode
+
+Validates OIDC ID tokens (from Auth0, Okta, Azure AD, Google Cloud Identity, etc.) against the
+provider's public keys and maps the group claim to ECUBE roles.
+
+```bash
+role_resolver=oidc
+oidc_discovery_url=<provider-discovery-url>
+oidc_client_id=<your-client-id>
+oidc_client_secret=<your-client-secret>  # kept secret; not used for token validation
+oidc_audience=<your-client-id>           # optional; enables audience validation
+oidc_group_claim_name=groups             # claim that carries group memberships
+oidc_group_role_map='{"evidence-admins": ["admin"], "evidence-team": ["processor"]}'
+```
+
+OIDC tokens are validated using the provider's JWKS endpoint (fetched via the discovery URL).
+The JWKS is cached for the process lifetime for performance.
+
+#### Provider examples
+
+**Auth0**
+
+```bash
+role_resolver=oidc
+oidc_discovery_url=https://<YOUR_AUTH0_DOMAIN>/.well-known/openid-configuration
+oidc_client_id=<YOUR_CLIENT_ID>
+oidc_client_secret=<YOUR_CLIENT_SECRET>
+oidc_group_claim_name=org_groups
+oidc_group_role_map='{"evidence-admins": ["admin"], "evidence-team": ["processor", "auditor"]}'
+```
+
+**Okta**
+
+```bash
+role_resolver=oidc
+oidc_discovery_url=https://<YOUR_OKTA_DOMAIN>/oauth2/default/.well-known/openid-configuration
+oidc_client_id=<YOUR_CLIENT_ID>
+oidc_client_secret=<YOUR_CLIENT_SECRET>
+oidc_group_claim_name=groups
+oidc_group_role_map='{"EvidenceAdmins": ["admin"], "EvidenceTeam": ["processor"]}'
+```
+
+**Azure AD (OIDC mode)**
+
+```bash
+role_resolver=oidc
+oidc_discovery_url=https://login.microsoftonline.com/<TENANT_ID>/v2.0/.well-known/openid-configuration
+oidc_client_id=<YOUR_CLIENT_ID>
+oidc_client_secret=<YOUR_CLIENT_SECRET>
+oidc_audience=<YOUR_CLIENT_ID>
+oidc_group_claim_name=groups
+oidc_group_role_map='{"<ObjectId_of_AdminGroup>": ["admin"]}'
+```
+
+**Google Cloud Identity**
+
+```bash
+role_resolver=oidc
+oidc_discovery_url=https://accounts.google.com/.well-known/openid-configuration
+oidc_client_id=<YOUR_CLIENT_ID>
+oidc_client_secret=<YOUR_CLIENT_SECRET>
+oidc_audience=<YOUR_CLIENT_ID>
+oidc_group_claim_name=groups
+oidc_group_role_map='{"evidence-admins@example.com": ["admin"]}'
+```
+
+#### How `oidc_group_role_map` works
+
+Each key is the exact string value that appears in the group claim of the OIDC token.
+Each value is a list of ECUBE roles to grant.  Unmapped groups are silently ignored
+(**deny-by-default**).  Roles from multiple groups are merged and deduplicated.
+
+Example token claim:
+
+```json
+{ "groups": ["evidence-admins", "evidence-team"] }
+```
+
+With the map `{"evidence-admins": ["admin"], "evidence-team": ["processor"]}`, the resolved
+roles are `["admin", "processor"]`.
+
+#### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `401 OIDC is enabled but 'oidc_discovery_url' is not configured` | Missing env var | Set `oidc_discovery_url` |
+| `401 OIDC token has expired` | Token past `exp` | Ensure the client refreshes tokens before expiry |
+| `401 OIDC token audience mismatch` | `aud` claim does not match `oidc_audience` | Verify `oidc_audience` matches the client ID registered with your provider |
+| `403` on all requests | Groups present but none mapped | Add the group to `oidc_group_role_map` |
+| `401 Failed to obtain signing key` | JWKS URI unreachable | Check network access from ECUBE host to the provider's JWKS endpoint |
+
+---
+
 ## Build and Deployment
 
 ECUBE build and deployment guidance (release artifacts, package deployment without Docker runtime, Docker image builds, and compose deployment) is documented in:

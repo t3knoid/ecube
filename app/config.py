@@ -16,7 +16,8 @@ class Settings(BaseSettings):
 
     #: Which role resolver provider to use.  ``"local"`` (default) maps local
     #: OS/application groups to ECUBE roles.  ``"ldap"`` maps LDAP group DNs.
-    role_resolver: Literal["local", "ldap"] = "local"
+    #: ``"oidc"`` maps OIDC provider group claims to ECUBE roles.
+    role_resolver: Literal["local", "ldap", "oidc"] = "local"
 
     #: Mapping used by :class:`~app.auth_providers.LocalGroupRoleResolver`.
     #: Keys are local group names; values are lists of ECUBE role strings.
@@ -49,6 +50,35 @@ class Settings(BaseSettings):
 
     #: Number of rotated backup log files to keep.
     log_file_backup_count: int = 5
+
+    # ---------------------------------------------------------------------------
+    # OIDC configuration (used when role_resolver = "oidc")
+    # ---------------------------------------------------------------------------
+
+    #: Full OIDC discovery URL (the ``/.well-known/openid-configuration``
+    #: endpoint of your identity provider).
+    #: Example: ``https://<YOUR_AUTH0_DOMAIN>/.well-known/openid-configuration``
+    oidc_discovery_url: Optional[str] = None
+
+    #: OIDC client ID registered with the identity provider.
+    oidc_client_id: Optional[str] = None
+
+    #: OIDC client secret (keep secret; not used for token validation itself).
+    oidc_client_secret: Optional[str] = None
+
+    #: Expected audience value for ``aud`` claim validation.  When set, tokens
+    #: whose ``aud`` claim does not match are rejected.  Leave ``None`` to skip
+    #: audience validation.
+    oidc_audience: Optional[str] = None
+
+    #: Name of the JWT claim that contains the user's group memberships.
+    #: Defaults to ``"groups"``; some providers use ``"roles"`` or a custom name.
+    oidc_group_claim_name: str = "groups"
+
+    #: Mapping used by :class:`~app.auth_providers.OidcGroupRoleResolver`.
+    #: Keys are OIDC group/claim values; values are lists of ECUBE role strings.
+    #: Example: ``{"evidence-admins": ["admin"], "evidence-team": ["processor"]}``
+    oidc_group_role_map: Dict[str, List[str]] = {}
 
 
 settings = Settings()
