@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from typing import List, Optional
 
@@ -8,6 +9,8 @@ from app.auth import CurrentUser, require_roles
 from app.database import get_db
 from app.repositories.audit_repository import AuditRepository
 from app.schemas.audit import AuditLogSchema
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
