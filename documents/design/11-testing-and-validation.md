@@ -98,6 +98,63 @@ Run drive eject tests:
 python -m pytest tests/test_drive_eject.py -q
 ```
 
+### Role Resolution and OIDC Tests
+
+The `tests/test_role_resolver.py` and `tests/test_oidc_service.py` modules validate identity provider integration.
+
+#### Role Resolver Tests
+
+Coverage includes:
+
+- **LocalGroupRoleResolver**: maps local OS/app groups to ECUBE roles
+- **LdapGroupRoleResolver**: maps LDAP group DNs to ECUBE roles
+- **OidcGroupRoleResolver**: maps OIDC provider group claims to ECUBE roles
+- **Deny-by-default semantics**: unmapped groups contribute no roles
+- **Deduplication**: multiple groups mapping to overlapping roles are deduplicated
+- **Factory pattern**: `get_role_resolver()` selects the correct provider based on `settings.role_resolver`
+
+Run role resolver tests:
+
+```bash
+python -m pytest tests/test_role_resolver.py -v
+```
+
+#### OIDC Service Tests
+
+Coverage includes:
+
+- **Token validation**: RSA-256/384/512 and EC-256/384/512 signature verification
+- **Expiration checking**: strict enforcement of `exp` claim
+- **Audience validation**: optional `aud` claim validation when `OIDC_AUDIENCE` is configured
+- **JWKS discovery and caching**: fetches from provider discovery URL; caches for process lifetime
+- **Discovery failures**: network errors, malformed discovery documents, missing JWKS URI
+- **Group claim extraction**: custom claim names (e.g., `org_groups` instead of `groups`)
+- **Error handling**: proper error propagation (`OidcTokenError` → HTTP 401)
+
+Tests use mocked RSA keypairs and don't require access to actual OIDC providers.
+
+Run OIDC tests:
+
+```bash
+python -m pytest tests/test_oidc_service.py -v
+```
+
+#### Integration Tests for OIDC
+
+Integration tests validate the end-to-end flow of OIDC token validation and role resolution within the authentication layer (`get_current_user()`).
+
+- **Token with valid groups** → roles correctly resolved
+- **Token without groups** → empty roles (deny-by-default)
+- **Mixed mapped/unmapped groups** → only mapped groups contribute roles
+- **Validation failures** → HTTP 401 with appropriate error message
+- **Fallback to sub/email** → when `preferred_username` is absent
+
+Run OIDC integration tests:
+
+```bash
+python -m pytest tests/test_role_resolver.py::TestGetCurrentUserWithOidcResolver -v
+```
+
 Run specific device-mapper tests:
 
 ```bash
