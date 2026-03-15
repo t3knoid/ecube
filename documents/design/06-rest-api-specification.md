@@ -138,6 +138,7 @@ Prepare drive for safe eject: flush filesystem writes, unmount all partitions an
 **Precondition:** Drive must be in `IN_USE` state (required for this operation to proceed).
 
 Performs the following steps in sequence:
+
 1. **Fast-fail validation:** Checks that drive is in `IN_USE` state before performing expensive OS operations
 2. Issues `sync(1)` to flush all pending filesystem writes to block devices
 3. Identifies and unmounts all partitions, volumes, and encrypted devices:
@@ -157,6 +158,7 @@ Performs the following steps in sequence:
 6. On failure: drive remains `IN_USE`, logs `DRIVE_EJECT_FAILED` with error details
 
 **Behavior:**
+
 - Returns `200` with updated drive state on success
 - Returns `409` Conflict if drive is not in `IN_USE` state (precondition violation); error message includes current state value (e.g., `current state: AVAILABLE`)
 - Returns `409` Conflict if drive state changed during operation (detected race condition; operation aborted); error message includes initial and final state values
@@ -169,6 +171,7 @@ Performs the following steps in sequence:
 The endpoint captures the drive state and device path at the start, performs potentially slow OS operations without holding the database lock (to avoid contention), then re-acquires the lock to validate preconditions before committing the state transition. If another request or discovery process changes the drive's state or device path, this operation fails with 409 Conflict, ensuring audit consistency and preventing operations against stale or unintended device paths.
 
 **Audit events:**
+
 - `DRIVE_EJECT_PREPARED`: Drive successfully prepared for eject; includes `drive_id`, `filesystem_path`, `flush_ok`, `unmount_ok`
 - `DRIVE_EJECT_FAILED`: Sync or unmount failed; includes `drive_id`, `filesystem_path`, `flush_ok`, `flush_error`, `unmount_ok`, `unmount_error`
 
