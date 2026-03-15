@@ -30,10 +30,20 @@ def get_current_user(
 
     Raises HTTP 401 for missing, invalid, or expired tokens.
 
+    Token validation strategy
+    -------------------------
+    When ``role_resolver = "oidc"`` the token is treated as an OIDC ID token
+    and validated against the provider's public keys (via JWKS).  The
+    ``oidc_group_claim_name`` claim is extracted and resolved to roles by
+    :class:`~app.auth_providers.OidcGroupRoleResolver`.
+
+    For all other ``role_resolver`` values (``"local"``, ``"ldap"``) the token
+    is validated as a locally-issued HS256 JWT signed with ``secret_key``.
+
     Role resolution strategy
     ------------------------
     If the token carries a non-empty ``roles`` claim, those roles are used
-    directly (backward-compatible behaviour).
+    directly (backward-compatible behaviour for local/LDAP modes).
 
     If ``roles`` is absent or empty, the configured role resolver (see
     :func:`app.auth_providers.get_role_resolver`) is applied to the ``groups``
@@ -57,6 +67,16 @@ def get_current_user(
         )
 
     token = credentials.credentials
+
+    # ------------------------------------------------------------------
+    # OIDC validation path
+    # ------------------------------------------------------------------
+    if settings.role_resolver == "oidc":
+        return _get_current_user_oidc(token, request)
+
+    # ------------------------------------------------------------------
+    # Local / LDAP validation path (HS256 symmetric key)
+    # ------------------------------------------------------------------
     try:
         payload = jwt.decode(
             token,
@@ -120,6 +140,64 @@ def get_current_user(
         roles=roles,
     )
 
+    request.state.current_user = current_user
+    return current_user
+
+
+def _get_current_user_oidc(token: str, request: Request) -> CurrentUser:
+    """Validate an OIDC ID token and return the authenticated user.
+
+    Delegates token validation to :mod:`app.services.oidc_service`.  Extracts
+    the ``sub`` claim as the user ID, ``preferred_username`` / ``email`` / ``sub``
+    as the display username, and the configured group claim for role resolution.
+
+    Raises:
+        HTTPException: HTTP 401 on any token validation failure.
+    """
+    from app.auth_providers import get_role_resolver
+    from app.services.oidc_service import OidcTokenError, validate_token
+
+    try:
+        payload = validate_token(token)
+    except OidcTokenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Prefer a human-readable username; fall back to the subject identifier.
+    username: str = (
+        payload.get("preferred_username")
+        or payload.get("email")
+        or user_id
+    )
+
+    raw_groups = payload.get(settings.oidc_group_claim_name, [])
+    if not isinstance(raw_groups, list) or not all(isinstance(g, str) for g in raw_groups):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    groups = raw_groups
+    roles = get_role_resolver().resolve(groups)
+
+    current_user = CurrentUser(
+        id=user_id,
+        username=username,
+        groups=groups,
+        roles=roles,
+    )
     request.state.current_user = current_user
     return current_user
 

@@ -5,6 +5,8 @@ Verifies that:
 - LocalGroupRoleResolver denies (returns empty) for unmapped groups.
 - LdapGroupRoleResolver maps configured groups to the correct ECUBE roles.
 - LdapGroupRoleResolver denies (returns empty) for unmapped groups.
+- OidcGroupRoleResolver maps OIDC group claims to the correct ECUBE roles.
+- OidcGroupRoleResolver denies (returns empty) for unmapped groups.
 - get_role_resolver() returns the provider selected by settings.role_resolver.
 - Multiple groups are resolved with deduplication.
 - get_current_user applies the resolver when the token has no roles claim.
@@ -22,6 +24,7 @@ from app.auth import CurrentUser, get_current_user
 from app.auth_providers import (
     LdapGroupRoleResolver,
     LocalGroupRoleResolver,
+    OidcGroupRoleResolver,
     RoleResolver,
     get_role_resolver,
 )
@@ -168,6 +171,66 @@ class TestLdapGroupRoleResolver:
 
 
 # ---------------------------------------------------------------------------
+# OidcGroupRoleResolver
+# ---------------------------------------------------------------------------
+
+
+class TestOidcGroupRoleResolver:
+    _MAP = {
+        "evidence-admins": ["admin"],
+        "evidence-managers": ["manager"],
+        "evidence-team": ["processor"],
+        "evidence-auditors": ["auditor"],
+        "dual-role-group": ["admin", "manager"],
+    }
+
+    def _resolver(self):
+        return OidcGroupRoleResolver(self._MAP)
+
+    def test_known_group_returns_correct_role(self):
+        assert self._resolver().resolve(["evidence-team"]) == ["processor"]
+
+    def test_admin_group_returns_admin_role(self):
+        assert self._resolver().resolve(["evidence-admins"]) == ["admin"]
+
+    def test_unmapped_group_returns_empty_list(self):
+        assert self._resolver().resolve(["unknown-group"]) == []
+
+    def test_empty_groups_returns_empty_list(self):
+        assert self._resolver().resolve([]) == []
+
+    def test_multiple_groups_aggregates_roles(self):
+        roles = self._resolver().resolve(["evidence-admins", "evidence-team"])
+        assert set(roles) == {"admin", "processor"}
+        assert len(roles) == 2
+
+    def test_duplicate_roles_are_deduplicated(self):
+        roles = self._resolver().resolve(["dual-role-group", "evidence-admins"])
+        assert roles.count("admin") == 1
+
+    def test_group_with_multiple_roles(self):
+        roles = self._resolver().resolve(["dual-role-group"])
+        assert set(roles) == {"admin", "manager"}
+
+    def test_mixed_mapped_and_unmapped_groups(self):
+        roles = self._resolver().resolve(["unknown-group", "evidence-team"])
+        assert roles == ["processor"]
+
+    def test_empty_map_always_returns_empty(self):
+        resolver = OidcGroupRoleResolver({})
+        assert resolver.resolve(["evidence-admins"]) == []
+
+    def test_is_role_resolver_subclass(self):
+        assert issubclass(OidcGroupRoleResolver, RoleResolver)
+
+    def test_all_four_roles_resolved_from_four_groups(self):
+        roles = self._resolver().resolve(
+            ["evidence-admins", "evidence-managers", "evidence-team", "evidence-auditors"]
+        )
+        assert set(roles) == {"admin", "manager", "processor", "auditor"}
+
+
+# ---------------------------------------------------------------------------
 # get_role_resolver() factory
 # ---------------------------------------------------------------------------
 
@@ -207,6 +270,23 @@ class TestGetRoleResolver:
             with patch.object(settings, "ldap_group_role_map", ldap_map):
                 resolver = get_role_resolver()
         assert resolver.resolve(["CN=Admins,DC=example,DC=com"]) == ["admin"]
+
+    def test_oidc_resolver_selected_when_configured(self):
+        with patch.object(settings, "role_resolver", "oidc"):
+            resolver = get_role_resolver()
+        assert isinstance(resolver, OidcGroupRoleResolver)
+
+    def test_oidc_resolver_uses_oidc_group_role_map(self):
+        oidc_map = {"evidence-admins": ["admin"]}
+        with patch.object(settings, "role_resolver", "oidc"):
+            with patch.object(settings, "oidc_group_role_map", oidc_map):
+                resolver = get_role_resolver()
+        assert resolver.resolve(["evidence-admins"]) == ["admin"]
+
+    def test_unknown_resolver_error_message_includes_oidc(self):
+        with patch.object(settings, "role_resolver", "bad"):
+            with pytest.raises(ValueError, match="'oidc'"):
+                get_role_resolver()
 
 
 # ---------------------------------------------------------------------------
@@ -320,3 +400,159 @@ class TestGetCurrentUserWithResolver:
                 )
         assert resp.status_code == 200
         assert resp.json()["roles"] == []
+
+
+# ---------------------------------------------------------------------------
+# Integration: get_current_user with OIDC resolver
+# ---------------------------------------------------------------------------
+
+
+class TestGetCurrentUserWithOidcResolver:
+    """get_current_user should use OidcGroupRoleResolver when role_resolver='oidc'."""
+
+    _OIDC_MAP = {"evidence-admins": ["admin"], "evidence-team": ["processor"]}
+
+    def setup_method(self):
+        get_role_resolver.cache_clear()
+
+    def teardown_method(self):
+        get_role_resolver.cache_clear()
+
+    def _make_oidc_token_via_mock(self, groups, group_claim_name="groups"):
+        """Return a decoded payload dict that simulates what validate_token()
+        returns for a token carrying the given groups claim.  These tests mock
+        validate_token() directly so no real JWT is created."""
+        payload = {
+            "sub": "oidc-sub-456",
+            "preferred_username": "oidc.tester",
+            group_claim_name: groups,
+            "exp": int(time.time()) + 3600,
+            "iat": int(time.time()) - 5,
+        }
+        return payload
+
+    def test_oidc_token_with_groups_maps_to_roles(self, resolver_client):
+        oidc_payload = self._make_oidc_token_via_mock(["evidence-admins"])
+        with patch.object(settings, "role_resolver", "oidc"):
+            with patch.object(settings, "oidc_group_role_map", self._OIDC_MAP):
+                with patch.object(settings, "oidc_group_claim_name", "groups"):
+                    with patch(
+                        "app.services.oidc_service.validate_token",
+                        return_value=oidc_payload,
+                    ):
+                        resp = resolver_client.get(
+                            "/resolved-user",
+                            headers={"Authorization": "Bearer mock.oidc.token"},
+                        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["roles"] == ["admin"]
+        assert data["groups"] == ["evidence-admins"]
+        assert data["username"] == "oidc.tester"
+
+    def test_oidc_token_without_groups_returns_empty_roles(self, resolver_client):
+        oidc_payload = {
+            "sub": "oidc-sub-789",
+            "preferred_username": "oidc.user2",
+            "exp": int(time.time()) + 3600,
+            "iat": int(time.time()) - 5,
+        }
+        with patch.object(settings, "role_resolver", "oidc"):
+            with patch.object(settings, "oidc_group_role_map", self._OIDC_MAP):
+                with patch.object(settings, "oidc_group_claim_name", "groups"):
+                    with patch("app.services.oidc_service.validate_token", return_value=oidc_payload):
+                        resp = resolver_client.get(
+                            "/resolved-user",
+                            headers={"Authorization": "Bearer mock.oidc.token"},
+                        )
+        assert resp.status_code == 200
+        assert resp.json()["roles"] == []
+
+    def test_oidc_token_with_mixed_mapped_unmapped_groups(self, resolver_client):
+        oidc_payload = self._make_oidc_token_via_mock(["evidence-admins", "unknown-group"])
+        with patch.object(settings, "role_resolver", "oidc"):
+            with patch.object(settings, "oidc_group_role_map", self._OIDC_MAP):
+                with patch.object(settings, "oidc_group_claim_name", "groups"):
+                    with patch("app.services.oidc_service.validate_token", return_value=oidc_payload):
+                        resp = resolver_client.get(
+                            "/resolved-user",
+                            headers={"Authorization": "Bearer mock.oidc.token"},
+                        )
+        assert resp.status_code == 200
+        assert resp.json()["roles"] == ["admin"]
+
+    def test_oidc_token_with_multiple_groups_multiple_roles(self, resolver_client):
+        oidc_payload = self._make_oidc_token_via_mock(["evidence-admins", "evidence-team"])
+        with patch.object(settings, "role_resolver", "oidc"):
+            with patch.object(settings, "oidc_group_role_map", self._OIDC_MAP):
+                with patch.object(settings, "oidc_group_claim_name", "groups"):
+                    with patch("app.services.oidc_service.validate_token", return_value=oidc_payload):
+                        resp = resolver_client.get(
+                            "/resolved-user",
+                            headers={"Authorization": "Bearer mock.oidc.token"},
+                        )
+        assert resp.status_code == 200
+        assert set(resp.json()["roles"]) == {"admin", "processor"}
+
+    def test_oidc_validation_failure_returns_401(self, resolver_client):
+        from app.services.oidc_service import OidcTokenError
+
+        with patch.object(settings, "role_resolver", "oidc"):
+            with patch("app.services.oidc_service.validate_token", side_effect=OidcTokenError("Token expired")):
+                resp = resolver_client.get(
+                    "/resolved-user",
+                    headers={"Authorization": "Bearer bad.oidc.token"},
+                )
+        assert resp.status_code == 401
+
+    def test_oidc_token_falls_back_to_sub_when_no_preferred_username(self, resolver_client):
+        oidc_payload = {
+            "sub": "oidc-sub-only",
+            "groups": ["evidence-admins"],
+            "exp": int(time.time()) + 3600,
+            "iat": int(time.time()) - 5,
+        }
+        with patch.object(settings, "role_resolver", "oidc"):
+            with patch.object(settings, "oidc_group_role_map", self._OIDC_MAP):
+                with patch.object(settings, "oidc_group_claim_name", "groups"):
+                    with patch("app.services.oidc_service.validate_token", return_value=oidc_payload):
+                        resp = resolver_client.get(
+                            "/resolved-user",
+                            headers={"Authorization": "Bearer mock.oidc.token"},
+                        )
+        assert resp.status_code == 200
+        assert resp.json()["username"] == "oidc-sub-only"
+
+    def test_oidc_token_with_non_list_groups_returns_401(self, resolver_client):
+        oidc_payload = {
+            "sub": "oidc-sub-bad",
+            "preferred_username": "bad.user",
+            "groups": "evidence-admins",  # string instead of list
+            "exp": int(time.time()) + 3600,
+            "iat": int(time.time()) - 5,
+        }
+        with patch.object(settings, "role_resolver", "oidc"):
+            with patch.object(settings, "oidc_group_claim_name", "groups"):
+                with patch("app.services.oidc_service.validate_token", return_value=oidc_payload):
+                    resp = resolver_client.get(
+                        "/resolved-user",
+                        headers={"Authorization": "Bearer mock.oidc.token"},
+                    )
+        assert resp.status_code == 401
+
+    def test_oidc_token_with_non_string_group_entries_returns_401(self, resolver_client):
+        oidc_payload = {
+            "sub": "oidc-sub-bad2",
+            "preferred_username": "bad.user2",
+            "groups": [123, "evidence-admins"],  # non-string entry
+            "exp": int(time.time()) + 3600,
+            "iat": int(time.time()) - 5,
+        }
+        with patch.object(settings, "role_resolver", "oidc"):
+            with patch.object(settings, "oidc_group_claim_name", "groups"):
+                with patch("app.services.oidc_service.validate_token", return_value=oidc_payload):
+                    resp = resolver_client.get(
+                        "/resolved-user",
+                        headers={"Authorization": "Bearer mock.oidc.token"},
+                    )
+        assert resp.status_code == 401
