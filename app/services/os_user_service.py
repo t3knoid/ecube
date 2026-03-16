@@ -33,13 +33,13 @@ ECUBE_GROUPS = {"ecube-admins", "ecube-managers", "ecube-processors", "ecube-aud
 RESERVED_USERNAMES = {"root", "ecube", "nobody", "daemon", "bin", "sys"}
 
 # Valid POSIX username pattern (matches the router-level check in users.py).
-_USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
+USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
 
 # Valid group name pattern.
-_GROUPNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
+GROUPNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
 
 # Default subprocess timeout (seconds).
-_SUBPROCESS_TIMEOUT = 30
+_SUBPROCESS_TIMEOUT = settings.subprocess_timeout_seconds
 
 
 class OSUserError(Exception):
@@ -106,7 +106,7 @@ def _run_sudo(
 
 def validate_username(username: str) -> None:
     """Raise :class:`ValueError` if *username* is not a valid POSIX username."""
-    if not _USERNAME_RE.match(username):
+    if not USERNAME_RE.match(username):
         raise ValueError(
             "Invalid username. Must start with a lowercase letter or underscore, "
             "contain only lowercase letters, digits, hyphens, or underscores, "
@@ -116,7 +116,7 @@ def validate_username(username: str) -> None:
 
 def validate_group_name(name: str) -> None:
     """Raise :class:`ValueError` if *name* is not a valid POSIX group name."""
-    if not _GROUPNAME_RE.match(name):
+    if not GROUPNAME_RE.match(name):
         raise ValueError(
             "Invalid group name. Must start with a lowercase letter or underscore, "
             "contain only lowercase letters, digits, hyphens, or underscores, "
@@ -258,10 +258,10 @@ def reset_password(username: str, password: str) -> None:
     _run_sudo([settings.chpasswd_binary_path], stdin_data=f"{username}:{password}")
 
 
-def set_user_groups(username: str, groups: List[str]) -> List[str]:
+def set_user_groups(username: str, groups: List[str]) -> OSUser:
     """Replace a user's supplementary group memberships.
 
-    Returns the resulting group list.
+    Returns the updated :class:`OSUser`.
     """
     validate_username(username)
     if not user_exists(username):
@@ -274,7 +274,16 @@ def set_user_groups(username: str, groups: List[str]) -> List[str]:
 
     # -G replaces all supplementary groups.
     _run_sudo([settings.usermod_binary_path, "-G", ",".join(groups), username])
-    return _get_user_groups(username)
+
+    pw = pwd.getpwnam(username)
+    return OSUser(
+        username=pw.pw_name,
+        uid=pw.pw_uid,
+        gid=pw.pw_gid,
+        home=pw.pw_dir,
+        shell=pw.pw_shell,
+        groups=_get_user_groups(username),
+    )
 
 
 def add_user_to_groups(username: str, groups: List[str]) -> List[str]:
