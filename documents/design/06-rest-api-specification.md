@@ -396,7 +396,157 @@ Remove all role assignments for a user. The user will fall back to OS group-base
 
 ---
 
-## 3.7 Introspection API (Read‑Only)
+## 3.7 OS User & Group Management API
+
+All endpoints require `admin` role and are only available when `role_resolver = "local"` (returns `404` otherwise).
+
+### `POST /admin/os-users`
+
+Create an OS user, set password, and optionally add to groups and assign DB roles.
+
+**Roles:** `admin`
+
+**Request body (JSON):**
+
+```json
+{
+    "username": "alice",
+    "password": "s3cret",
+    "groups": ["ecube-processors"],
+    "roles": ["processor"]
+}
+```
+
+**Response (201 Created):** `OSUserResponse` with `username`, `uid`, `gid`, `home`, `shell`, `groups`.
+
+**Error responses:**
+
+- `409 Conflict` — User already exists
+- `422 Unprocessable Entity` — Invalid username, empty password, or reserved username
+
+**Audit events:** `OS_USER_CREATED`
+
+### `GET /admin/os-users`
+
+List OS users filtered to ECUBE-relevant groups.
+
+**Roles:** `admin`
+
+**Response (200 OK):** `OSUserListResponse` with array of `OSUserResponse`.
+
+### `DELETE /admin/os-users/{username}`
+
+Delete an OS user and remove their DB role assignments.
+
+**Roles:** `admin`
+
+**Error responses:**
+
+- `404 Not Found` — User does not exist
+- `422 Unprocessable Entity` — Invalid or reserved username
+
+**Audit events:** `OS_USER_DELETED`
+
+### `PUT /admin/os-users/{username}/password`
+
+Reset an OS user's password via `chpasswd`.
+
+**Roles:** `admin`
+
+**Request body:** `{"password": "newpass"}`
+
+**Error responses:**
+
+- `404 Not Found` — User does not exist
+- `422 Unprocessable Entity` — Invalid/reserved username or empty password
+
+**Audit events:** `OS_PASSWORD_RESET` (password never appears in audit details)
+
+### `PUT /admin/os-users/{username}/groups`
+
+Replace an OS user's supplementary group memberships.
+
+**Roles:** `admin`
+
+**Request body:** `{"groups": ["ecube-admins", "ecube-processors"]}`
+
+**Response (200 OK):** `OSUserResponse` with updated group list.
+
+**Audit events:** `OS_USER_GROUPS_MODIFIED`
+
+### `POST /admin/os-groups`
+
+Create an OS group.
+
+**Roles:** `admin`
+
+**Request body:** `{"name": "ecube-custom"}`
+
+**Response (201 Created):** `OSGroupResponse` with `name`, `gid`, `members`.
+
+**Audit events:** `OS_GROUP_CREATED`
+
+### `GET /admin/os-groups`
+
+List OS groups filtered to ECUBE-relevant names.
+
+**Roles:** `admin`
+
+### `DELETE /admin/os-groups/{name}`
+
+Delete an OS group.
+
+**Roles:** `admin`
+
+**Audit events:** `OS_GROUP_DELETED`
+
+---
+
+## 3.8 First-Run Setup API
+
+These endpoints are **unauthenticated** and guarded by a first-run check.
+
+### `GET /setup/status`
+
+Check whether the system has been initialized.
+
+**Authentication:** None required.
+
+**Response (200 OK):**
+
+```json
+{"initialized": false}
+```
+
+### `POST /setup/initialize`
+
+Perform first-run system initialization: create OS groups, create admin user, set password, seed DB role, and mark system as initialized.
+
+**Authentication:** None required. Can only succeed once.
+
+**Request body:**
+
+```json
+{
+    "username": "ecube-admin",
+    "password": "s3cret"
+}
+```
+
+**Response (200 OK):** `SetupInitializeResponse` with `message`, `username`, `groups_created`.
+
+**Error responses:**
+
+- `409 Conflict` — System already initialized, or initialization in progress
+- `422 Unprocessable Entity` — Invalid username or empty password
+
+**Cross-process guard:** Uses a `system_initialization` single-row table with a uniqueness constraint to ensure only one worker can complete initialization, even in multi-worker deployments.
+
+**Audit events:** `SYSTEM_INITIALIZED`
+
+---
+
+## 3.9 Introspection API (Read‑Only)
 
 ### `GET /introspection/usb/topology`
 
@@ -458,3 +608,5 @@ Every security‑relevant event is logged:
 - Access denied events
 - Drive initialization attempts
 - File hash/compare operations
+- OS user/group management (`OS_USER_CREATED`, `OS_USER_DELETED`, `OS_PASSWORD_RESET`, `OS_USER_GROUPS_MODIFIED`, `OS_GROUP_CREATED`, `OS_GROUP_DELETED`)
+- System initialization (`SYSTEM_INITIALIZED`)
