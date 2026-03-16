@@ -19,9 +19,11 @@
 10. [Authenticate and Obtain Tokens](#10-authenticate-and-obtain-tokens)
 11. [API Test Scenarios](#11-api-test-scenarios)
 12. [QA Test Cases](#12-qa-test-cases)
-13. [Running the Automated Integration Tests](#13-running-the-automated-integration-tests)
-14. [Service Management](#14-service-management)
-15. [Troubleshooting](#15-troubleshooting)
+13. [Environment Reset Between Test Runs](#13-environment-reset-between-test-runs)
+14. [Running the Automated Integration Tests](#14-running-the-automated-integration-tests)
+15. [Service Management](#15-service-management)
+16. [Troubleshooting](#16-troubleshooting)
+17. [Version Compatibility](#17-version-compatibility)
 
 ---
 
@@ -185,12 +187,15 @@ sudo -u ecube tee /opt/ecube/.env > /dev/null << 'EOF'
 DATABASE_URL=postgresql://ecube:ecube123@localhost:5432/ecube
 
 # Map the QA groups created in step 5 to ECUBE roles
-LOCAL_GROUP_ROLE_MAP='{"qa-admins": ["admin"], "qa-managers": ["manager"], "qa-processors": ["processor"], "qa-auditors": ["auditor"]}'
+LOCAL_GROUP_ROLE_MAP={"qa-admins": ["admin"], "qa-managers": ["manager"], "qa-processors": ["processor"], "qa-auditors": ["auditor"]}
 
 # Token lifetime (default: 60 minutes; increase for long QA sessions)
 TOKEN_EXPIRE_MINUTES=480
 EOF
 ```
+
+> **Note:** Inside a heredoc, do not wrap the JSON value in extra quotes.
+> The `KEY=value` format passes the raw value directly to the application.
 
 > **Tip:** See `.env.example` for every available setting and its default value.
 
@@ -529,10 +534,10 @@ These tests exercise real hardware paths and are the primary reason to use bare-
 
 | # | Test | Steps | Expected |
 |---|------|-------|----------|
-| 1 | Hot-plug detection | Plug in a USB drive, wait 30 seconds | `GET /drives` shows the new drive in `EMPTY` state |
+| 1 | Hot-plug detection | Plug in a USB drive, wait 30 seconds | `GET /drives` shows the new drive in `AVAILABLE` state (discovery auto-transitions `EMPTY → AVAILABLE`) |
 | 2 | USB topology | `GET /introspection/usb/topology` | Shows real hub serial numbers, port numbers, connected devices |
 | 3 | Physical eject | Initialize drive → prepare-eject → physically remove | Drive disappears from `/drives` list; audit shows `DRIVE_EJECT_PREPARED` |
-| 4 | Re-plug same drive | Remove and re-insert the same drive | Drive reappears as `EMPTY` with same `device_identifier` |
+| 4 | Re-plug same drive | Remove and re-insert the same drive | Drive reappears as `AVAILABLE` with same `device_identifier` (after discovery cycle) |
 | 5 | Multiple drives | Plug in 2+ drives simultaneously | All drives appear in `/drives`; each can be initialized to different projects |
 | 6 | Sync + unmount | Initialize drive, create/start a job, then prepare-eject | Filesystem flushed and unmounted before eject (verify via `mount` command — no partitions from that drive should be listed) |
 
@@ -540,11 +545,33 @@ These tests exercise real hardware paths and are the primary reason to use bare-
 
 Walk through the complete data export lifecycle:
 
-1. **Set up a test file share.** Create a directory on the local machine or mount an NFS share with sample files:
+1. **Set up a test file share.** Create a local directory with known sample files and checksums:
    ```bash
-   sudo mkdir -p /mnt/test-evidence
-   # Copy some sample files
-   sudo cp -r /usr/share/doc/bash /mnt/test-evidence/case-001
+   sudo mkdir -p /mnt/test-evidence/case-001
+
+   # Create sample files with known content
+   echo "Evidence document alpha" | sudo tee /mnt/test-evidence/case-001/doc-alpha.txt
+   echo "Evidence document bravo" | sudo tee /mnt/test-evidence/case-001/doc-bravo.txt
+   dd if=/dev/urandom bs=1M count=10 2>/dev/null | sudo tee /mnt/test-evidence/case-001/binary-10mb.bin > /dev/null
+
+   # Record checksums for later verification
+   sudo sha256sum /mnt/test-evidence/case-001/* | sudo tee /mnt/test-evidence/case-001.sha256
+   ```
+
+   **For NFS testing:** If you have an NFS server, mount it instead:
+   ```bash
+   sudo mkdir -p /mnt/nfs-evidence
+   sudo mount -t nfs 10.0.0.5:/evidence /mnt/nfs-evidence
+   # Verify the mount is accessible
+   ls -la /mnt/nfs-evidence/
+   ```
+
+   **For SMB/CIFS testing:**
+   ```bash
+   sudo mkdir -p /mnt/smb-evidence
+   sudo mount -t cifs //10.0.0.5/evidence /mnt/smb-evidence \
+     -o username=evidence_user,password=evidence_pass,vers=3.0
+   ls -la /mnt/smb-evidence/
    ```
 
 2. **Add the mount** via `POST /mounts`.
@@ -568,6 +595,11 @@ Walk through the complete data export lifecycle:
 11. **Prepare eject** — `POST /drives/{id}/prepare-eject` — drive returns to `AVAILABLE`.
 
 12. **Physically remove the drive** and verify data on another computer.
+    Compare file checksums against the values recorded in step 1:
+    ```bash
+    # On the verification computer
+    sha256sum /media/usb/case-001/* | diff - case-001.sha256
+    ```
 
 13. **Check audit trail** — `GET /audit` — confirm the complete chain:
     `MOUNT_ADDED → DRIVE_INITIALIZED → JOB_CREATED → JOB_STARTED → JOB_COMPLETED → DRIVE_EJECT_PREPARED`
@@ -583,7 +615,60 @@ Walk through the complete data export lifecycle:
 
 ---
 
-## 13. Running the Automated Integration Tests
+## 13. Environment Reset Between Test Runs
+
+To ensure clean, repeatable results, reset the environment between QA test runs.
+
+### Quick reset (database only)
+
+```bash
+# Drop and recreate the database
+sudo -u postgres psql -c "DROP DATABASE IF EXISTS ecube;"
+sudo -u postgres psql -c "CREATE DATABASE ecube OWNER ecube;"
+
+# Re-run migrations
+cd /opt/ecube
+sudo -u ecube /opt/ecube/venv/bin/alembic upgrade head
+```
+
+### Full reset (database + test data + tokens)
+
+```bash
+# 1. Stop the service
+sudo systemctl stop ecube
+
+# 2. Drop and recreate the database
+sudo -u postgres psql -c "DROP DATABASE IF EXISTS ecube;"
+sudo -u postgres psql -c "CREATE DATABASE ecube OWNER ecube;"
+
+# 3. Re-run migrations
+cd /opt/ecube
+sudo -u ecube /opt/ecube/venv/bin/alembic upgrade head
+
+# 4. Clear test evidence data
+sudo rm -rf /mnt/test-evidence/case-001
+
+# 5. Physically remove and re-insert any USB drives
+#    (this ensures drives start in a clean AVAILABLE state after discovery)
+
+# 6. Start the service
+sudo systemctl start ecube
+
+# 7. Re-authenticate (previous tokens are invalid after restart
+#    if SECRET_KEY changed, or expired)
+TOKEN=$(curl -sk -X POST https://localhost:8443/auth/token \
+  -H "Content-Type: application/json" \
+  -d '{"username": "qa-admin", "password": "QaPass-admin!"}' \
+  | jq -r '.access_token')
+```
+
+> **Tip:** USB drives that were in `IN_USE` state will retain that state
+> across restarts (project isolation). To fully reset a drive, drop the
+> database as shown above, then re-plug the drive.
+
+---
+
+## 14. Running the Automated Integration Tests
 
 The project includes an automated integration test suite that runs against a real PostgreSQL database.
 
@@ -617,7 +702,7 @@ cd /opt/ecube/src
 
 ---
 
-## 14. Service Management
+## 15. Service Management
 
 ### Systemd Commands
 
@@ -661,7 +746,7 @@ sudo ss -tlnp | grep 8443
 
 ---
 
-## 15. Troubleshooting
+## 16. Troubleshooting
 
 | Symptom | Possible Cause | Resolution |
 |---------|---------------|------------|
@@ -676,3 +761,20 @@ sudo ss -tlnp | grep 8443
 | Port 8443 in use | Another process bound | `sudo ss -tlnp \| grep 8443` to find it; change port in systemd unit if needed |
 | Copy job hangs at IN_PROGRESS | Source path unreachable | Verify mount is active: `mount \| grep /mnt/evidence`; check NFS server connectivity |
 | Database connection pool exhausted | Too many concurrent requests | Increase `DB_POOL_SIZE` and `DB_POOL_MAX_OVERFLOW` in `.env` |
+
+---
+
+## 17. Version Compatibility
+
+| Component | Tested Version | Notes |
+|-----------|---------------|-------|
+| Ubuntu | 22.04 LTS | Primary target; Debian 12 also supported |
+| Python | 3.11+ | Required; 3.12 also works |
+| PostgreSQL | 14+ | Ubuntu 22.04 ships with 14; versions 15 and 16 also work |
+| Node.js | Not required | Backend is Python only |
+| OpenSSL | 3.0+ | Required for TLS certificate generation |
+| USB subsystem | Linux kernel 5.15+ | Required for sysfs-based USB discovery |
+
+Always test against the ECUBE release tag matching your deployment. Check the release notes
+for any version-specific migration steps or breaking changes:
+`https://github.com/t3knoid/ecube/releases`
