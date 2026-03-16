@@ -5,6 +5,7 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
@@ -251,6 +252,18 @@ async def ecube_exception_handler(request: Request, exc: ECUBEException) -> JSON
     trace_id = str(uuid.uuid4())
     logger.error("%d %s trace_id=%s path=%s", exc.status_code, exc.code, trace_id, request.url.path)
     return _error_response(exc.status_code, exc.code, exc.message, trace_id)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    trace_id = str(uuid.uuid4())
+    messages = []
+    for error in exc.errors():
+        loc = " -> ".join(str(part) for part in error["loc"])
+        messages.append(f"{loc}: {error['msg']}")
+    detail = "; ".join(messages)
+    logger.info("422 VALIDATION_ERROR trace_id=%s path=%s", trace_id, request.url.path)
+    return _error_response(422, "VALIDATION_ERROR", detail, trace_id)
 
 
 @app.exception_handler(HTTPException)
