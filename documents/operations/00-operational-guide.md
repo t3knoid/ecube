@@ -674,11 +674,11 @@ OIDC_GROUP_ROLE_MAP='{"evidence-admins@example.com": ["admin"]}'
 
 ### Assigning Roles
 
-Roles are derived from OS group memberships at login time:
+Roles are derived from group memberships at login time:
 
 1. User calls `POST /auth/token` with username and password
 2. PAM validates credentials against the host OS (or LDAP/Kerberos via PAM)
-3. ECUBE collects the user's group IDs via `os.getgrouplist()` and resolves them to group names with `grp.getgrgid()`
+3. ECUBE resolves the user's OS group memberships
 4. Groups are mapped to ECUBE roles using `LOCAL_GROUP_ROLE_MAP` (or `LDAP_GROUP_ROLE_MAP`)
 5. A signed JWT is issued containing the resolved roles
 6. Each subsequent API call validates roles from the JWT claims
