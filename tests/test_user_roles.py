@@ -117,7 +117,10 @@ class TestUserRoleEndpoints:
             json={"roles": ["admin", "superuser"]},
         )
         assert resp.status_code == 422
-        assert "superuser" in resp.json()["message"]
+        body = resp.json()
+        # Uniform error format from RequestValidationError handler
+        assert "VALIDATION_ERROR" == body["code"]
+        assert "admin" in body["message"] or "processor" in body["message"]
 
     def test_set_roles_empty_list(self, admin_client):
         resp = admin_client.put(
@@ -271,6 +274,38 @@ class TestUserRoleModel:
         db.refresh(role)
         assert role.username == "repr_test"
         assert role.role == "processor"
+
+
+# ───────────────────────────────────────────────────────────────────────
+# Username validation tests
+# ───────────────────────────────────────────────────────────────────────
+
+class TestUsernameValidation:
+    """Ensure _validate_username rejects shell metacharacters and invalid formats."""
+
+    @pytest.mark.parametrize("bad_name", [
+        "Admin",          # uppercase
+        "root;rm",        # shell metacharacter
+        "../etc",         # path traversal
+        "a" * 33,         # too long (max 32)
+        "1user",          # starts with digit
+        "user name",      # space
+        "user$var",       # dollar sign
+    ])
+    def test_invalid_usernames_rejected(self, admin_client, bad_name):
+        resp = admin_client.get(f"/users/{bad_name}/roles")
+        assert resp.status_code == 422
+        assert "Invalid username" in resp.json()["message"]
+
+    @pytest.mark.parametrize("good_name", [
+        "alice",
+        "_svc-account",
+        "user-01",
+        "a",
+    ])
+    def test_valid_usernames_accepted(self, admin_client, good_name):
+        resp = admin_client.get(f"/users/{good_name}/roles")
+        assert resp.status_code == 200
 
 
 # ───────────────────────────────────────────────────────────────────────
