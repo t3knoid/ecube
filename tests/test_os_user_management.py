@@ -7,7 +7,6 @@ All subprocess calls (sudo useradd, groupadd, etc.) and OS database lookups
 from __future__ import annotations
 
 import subprocess
-from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
 
 import pytest
