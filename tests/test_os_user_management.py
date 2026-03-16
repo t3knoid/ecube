@@ -212,8 +212,9 @@ class TestSetUserGroups:
         mock_grp.getgrgid.return_value = _make_grp(name="testuser", gid=1000)
         mock_subprocess.return_value = _ok_result()
 
-        groups = set_user_groups("testuser", ["ecube-admins"])
-        assert "ecube-admins" in groups
+        result = set_user_groups("testuser", ["ecube-admins"])
+        assert isinstance(result, OSUser)
+        assert "ecube-admins" in result.groups
 
 
 class TestCreateGroup:
@@ -466,14 +467,12 @@ class TestOSUserEndpoints:
         assert resp.status_code == 200
         assert "reset" in resp.json()["message"].lower()
 
-    @patch("app.routers.admin._pwd")
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
-    def test_set_user_groups(self, mock_pwd, mock_grp, mock_subprocess, mock_router_pwd, admin_client):
+    def test_set_user_groups(self, mock_pwd, mock_grp, mock_subprocess, admin_client):
         pw = _make_pw()
         mock_pwd.getpwnam.return_value = pw
-        mock_router_pwd.getpwnam.return_value = pw
         mock_grp.getgrnam.return_value = _make_grp(name="ecube-admins")
         mock_grp.getgrall.return_value = [
             _make_grp(name="ecube-admins", members=["testuser"]),
@@ -609,6 +608,8 @@ class TestSetupEndpoints:
         data = resp.json()
         assert data["message"] == "Setup complete"
         assert data["username"] == "admin1"
+        assert isinstance(data["groups_created"], list)
+        assert len(data["groups_created"]) == 4
 
         # Verify admin role seeded in DB.
         repo = UserRoleRepository(db)
@@ -708,6 +709,10 @@ class TestSetupEndpoints:
         # Verify password was reset via chpasswd.
         chpasswd_calls = [c for c in calls if "/usr/sbin/chpasswd" in c]
         assert len(chpasswd_calls) >= 1
+        # Verify groups_created is reported.
+        data = resp.json()
+        assert isinstance(data["groups_created"], list)
+        assert len(data["groups_created"]) == 4
 
 
 # ===========================================================================
