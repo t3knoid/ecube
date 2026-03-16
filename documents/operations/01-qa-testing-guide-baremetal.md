@@ -116,7 +116,13 @@ curl -fsSL -O \
 
 # Verify checksum and extract
 sha256sum -c "ecube-package-${LATEST_TAG}.sha256"
-tar -xzf "ecube-package-${LATEST_TAG}.tar.gz" -C /opt/ecube/
+
+# Ensure /opt/ecube exists and is owned by the ecube user
+sudo mkdir -p /opt/ecube
+sudo chown -R ecube:ecube /opt/ecube
+
+# Extract package as ecube user to avoid root-owned files
+sudo -u ecube tar -xzf "ecube-package-${LATEST_TAG}.tar.gz" -C /opt/ecube/
 
 # Set up Python virtual environment and install
 sudo -u ecube python3.11 -m venv /opt/ecube/venv
