@@ -479,7 +479,7 @@ curl -sk https://localhost:8443/files/{file_id}/hashes \
 curl -sk -X POST https://localhost:8443/files/compare \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"file_ids": [1, 2]}' | jq
+  -d '{"file_id_a": 1, "file_id_b": 2}' | jq
 ```
 
 ---
