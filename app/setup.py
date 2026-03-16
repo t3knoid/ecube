@@ -164,7 +164,10 @@ def _load_env_file(env_path: Path) -> None:
             continue
         key, _, value = line.partition("=")
         if key:
-            os.environ[key.strip()] = value.strip()
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                value = value[1:-1]
+            os.environ[key.strip()] = value
 
 
 def _seed_database(username: str, install_dir: str) -> bool:
@@ -253,8 +256,7 @@ def main() -> None:
     print()
     print("Next steps:")
     print(f"  1. Review configuration: {install_dir}/.env")
-    print("  2. Run migrations:       alembic upgrade head")
-    print("  3. Start the service:    systemctl start ecube")
+    print("  2. Start the service:    systemctl start ecube")
     print("=" * 60)
 
 
