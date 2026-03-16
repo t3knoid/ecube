@@ -18,6 +18,7 @@ class UserRoleRepository:
         rows = (
             self.db.query(UserRole.role)
             .filter(UserRole.username == username)
+            .order_by(UserRole.role)
             .all()
         )
         return [r[0] for r in rows]
