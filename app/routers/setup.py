@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.models.system import SystemInitialization
 from app.models.users import UserRole
@@ -45,6 +46,19 @@ router = APIRouter(prefix="/setup", tags=["setup"])
 _init_lock = threading.Lock()
 
 
+def _ensure_local_mode() -> None:
+    """Block setup endpoints when the role resolver is not ``local``.
+
+    In LDAP/OIDC deployments, OS user/group management is handled by the
+    directory service and the setup wizard must not create local accounts.
+    """
+    if getattr(settings, "role_resolver", "local") != "local":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Not found",
+        )
+
+
 @router.get("/status", response_model=SetupStatusResponse)
 def get_setup_status(
     db: Session = Depends(get_db),
@@ -57,6 +71,7 @@ def get_setup_status(
     This endpoint is **unauthenticated** — it is safe to call before any
     users exist.
     """
+    _ensure_local_mode()
     repo = UserRoleRepository(db)
     return SetupStatusResponse(initialized=repo.has_any_admin())
 
@@ -81,6 +96,7 @@ def initialize_system(
     This endpoint is **unauthenticated** — it can only succeed once, before
     any admin exists.
     """
+    _ensure_local_mode()
     repo = UserRoleRepository(db)
     if repo.has_any_admin():
         raise HTTPException(
