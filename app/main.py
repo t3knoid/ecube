@@ -117,8 +117,8 @@ app = FastAPI(
     description="Evidence Copying & USB Based Export Platform — Secure evidence export solution for encrypted USB drives.",
     version="0.1.0",
     contact={
-        "name": "ECUBE Support",
-        "email": "support@ecube.local",
+        "name": settings.api_contact_name,
+        "email": settings.api_contact_email,
         "url": "https://ecube.local",
     },
     license_info={

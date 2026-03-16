@@ -72,7 +72,7 @@ def get_jwks_client() -> PyJWKClient:
 
     discovery_url = settings.oidc_discovery_url
     try:
-        with urlopen(discovery_url, timeout=10) as resp:  # noqa: S310 - URL is administrator-controlled config, not user input
+        with urlopen(discovery_url, timeout=settings.oidc_discovery_timeout_seconds) as resp:  # noqa: S310 - URL is administrator-controlled config, not user input
             discovery: Dict[str, Any] = json.loads(resp.read().decode())
     except OidcTokenError:
         raise
@@ -138,7 +138,7 @@ def validate_token(token: str) -> Dict[str, Any]:
         ) from exc
 
     decode_kwargs: Dict[str, Any] = {
-        "algorithms": ["RS256", "RS384", "RS512", "ES256", "ES384", "ES512"],
+        "algorithms": settings.oidc_allowed_algorithms,
         "options": {
             "require": ["exp", "iat", "sub"],
         },

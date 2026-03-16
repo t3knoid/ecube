@@ -10,6 +10,7 @@ from app.models.network import MountStatus, MountType, NetworkMount
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.mount_repository import MountRepository
 from app.schemas.network import MountCreate
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +30,9 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None)
     _mount_error = None
     try:
         if mount_data.type == MountType.NFS:
-            cmd = ["mount", "-t", "nfs", mount_data.remote_path, mount_data.local_mount_point]
+            cmd = [settings.mount_binary_path, "-t", "nfs", mount_data.remote_path, mount_data.local_mount_point]
         else:
-            cmd = ["mount", "-t", "cifs", mount_data.remote_path, mount_data.local_mount_point]
+            cmd = [settings.mount_binary_path, "-t", "cifs", mount_data.remote_path, mount_data.local_mount_point]
             if mount_data.credentials_file:
                 cmd += ["-o", f"credentials={mount_data.credentials_file}"]
             elif mount_data.username:
@@ -39,7 +40,7 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None)
                 # supplied via credentials_file to avoid exposure in process listings.
                 cmd += ["-o", f"username={mount_data.username}"]
 
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=settings.subprocess_timeout_seconds)
         if result.returncode == 0:
             mount.status = MountStatus.MOUNTED
         else:
@@ -74,10 +75,10 @@ def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None) -> Non
 
     try:
         subprocess.run(
-            ["umount", mount.local_mount_point],
+            [settings.umount_binary_path, mount.local_mount_point],
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=settings.subprocess_timeout_seconds,
         )
     except Exception:
         # Unmount failures are non-fatal; the record is still deleted so the
