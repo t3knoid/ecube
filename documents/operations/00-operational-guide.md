@@ -72,12 +72,17 @@ ECUBE consists of three components:
 ### Data Flow
 
 1. Operator logs in via UI with username/password or SSO token
-2. UI authenticates against ECUBE API (JWT bearer token)
-3. API validates token and extracts user groups
-4. Groups mapped to ECUBE roles (admin, manager, processor, auditor)
-5. Role checked against operation (e.g., "processor" can start jobs, "auditor" can only read)
-6. Operation executed (e.g., mount network share, initialize drive, start copy)
-7. All actions logged to audit table with timestamp, user, action, result
+2. UI authenticates against ECUBE API (`POST /auth/token` → JWT bearer token)
+3. API validates credentials via PAM (or OIDC/LDAP)
+4. Roles resolved using a **DB-first hybrid model**:
+   - Check `user_roles` table for explicit role assignments → use if found
+   - Fall back to OS group memberships + `LOCAL_GROUP_ROLE_MAP` → use if found
+   - No roles from either source → 403 Forbidden
+5. JWT issued with resolved roles
+6. Each subsequent API call validates roles from JWT claims
+7. Role checked against operation (e.g., "processor" can start jobs, "auditor" can only read)
+8. Operation executed (e.g., mount network share, initialize drive, start copy)
+9. All actions logged to audit table with timestamp, user, action, result
 
 ---
 
@@ -230,7 +235,21 @@ sudo systemctl daemon-reload
 sudo -u ecube /opt/ecube/venv/bin/alembic upgrade head
 ```
 
-#### 6. Enable and Start Service
+#### 6. Run First-Run Setup Script
+
+The setup script creates OS groups, an initial admin user, generates the `.env`
+configuration, and seeds the database with the admin role.
+
+```bash
+sudo python -m app.setup
+```
+
+See [First-Run Setup Script](#first-run-setup-script) below for full details.
+
+> **Important:** The setup script must run **after** `alembic upgrade head`
+> because it writes to the `user_roles` table.
+
+#### 7. Enable and Start Service
 
 ```bash
 sudo systemctl enable ecube
@@ -257,6 +276,9 @@ docker compose up -d
 
 # Initialize database
 docker compose exec app alembic upgrade head
+
+# Run first-run setup (creates admin user, seeds DB role)
+docker compose exec app python -m app.setup
 
 # View logs
 docker compose logs -f app
@@ -674,29 +696,173 @@ OIDC_GROUP_ROLE_MAP='{"evidence-admins@example.com": ["admin"]}'
 
 ### Assigning Roles
 
-Roles are derived from group memberships at login time:
+ECUBE uses a **DB-first hybrid model** to resolve roles at login time:
 
 1. User calls `POST /auth/token` with username and password
 2. PAM validates credentials against the host OS (or LDAP/Kerberos via PAM)
-3. ECUBE resolves the user's OS group memberships
-4. Groups are mapped to ECUBE roles using `LOCAL_GROUP_ROLE_MAP` (or `LDAP_GROUP_ROLE_MAP`)
-5. A signed JWT is issued containing the resolved roles
-6. Each subsequent API call validates roles from the JWT claims
+3. Check the `user_roles` database table for explicit role assignments → use if found
+4. Fall back to OS group memberships + `LOCAL_GROUP_ROLE_MAP` (or `LDAP_GROUP_ROLE_MAP`) → use if found
+5. No roles from either source → 403 Forbidden
+6. A signed JWT is issued containing the resolved roles
+7. Each subsequent API call validates roles from the JWT claims
 
 **Example Flow:**
 
 ```text
 User "alice" calls POST /auth/token
     → PAM validates password
-    → OS groups: ["evidence-admins", "users"]
-    → LOCAL_GROUP_ROLE_MAP: "evidence-admins" → ["admin"]
+    → DB lookup: user_roles("alice") → ["admin"]    # found → use these
     → JWT issued with roles=["admin"]
     → All endpoints accessible until token expires
+
+User "bob" calls POST /auth/token
+    → PAM validates password
+    → DB lookup: user_roles("bob") → []              # empty → fall back
+    → OS groups: ["ecube-processors", "users"]
+    → LOCAL_GROUP_ROLE_MAP: "ecube-processors" → ["processor"]
+    → JWT issued with roles=["processor"]
 ```
 
-**Note:** If a user's group memberships change, they must re-authenticate
-(obtain a new token) for the updated roles to take effect. The old token
-retains the previous roles until it expires.
+#### Two Operational Modes
+
+| Stage | Role Source | Managed By |
+|---|---|---|
+| Initial setup / fallback | OS groups + `LOCAL_GROUP_ROLE_MAP` | Setup script / `.env` |
+| Day-to-day operations | `user_roles` table (DB) | Admin via API |
+
+The OS group fallback ensures that a freshly deployed system works immediately
+after `sudo python -m app.setup` — the admin user is a member of `ecube-admins`
+**and** has an explicit DB role. As the deployment matures, admins can manage
+all role assignments through the API and the DB takes precedence.
+
+**Note:** If a user's role assignments or group memberships change, they must
+re-authenticate (obtain a new token) for the updated roles to take effect.
+The old token retains the previous roles until it expires.
+
+### Admin Role Management API
+
+Administrators can manage user role assignments through the following
+endpoints. All require the `admin` role.
+
+#### List all users with roles
+
+```bash
+curl -k -H "Authorization: Bearer $TOKEN" \
+  https://localhost:8443/users
+```
+
+Response:
+
+```json
+{
+  "users": [
+    {"username": "alice", "roles": ["admin"]},
+    {"username": "bob", "roles": ["processor"]}
+  ]
+}
+```
+
+#### Get roles for a specific user
+
+```bash
+curl -k -H "Authorization: Bearer $TOKEN" \
+  https://localhost:8443/users/alice/roles
+```
+
+Response:
+
+```json
+{"username": "alice", "roles": ["admin"]}
+```
+
+#### Set roles for a user (replaces all existing assignments)
+
+```bash
+curl -k -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"roles": ["manager", "processor"]}' \
+  https://localhost:8443/users/bob/roles
+```
+
+Response:
+
+```json
+{"username": "bob", "roles": ["manager", "processor"]}
+```
+
+#### Remove all roles for a user
+
+```bash
+curl -k -X DELETE -H "Authorization: Bearer $TOKEN" \
+  https://localhost:8443/users/bob/roles
+```
+
+Response:
+
+```json
+{"username": "bob", "roles": []}
+```
+
+> **Note:** Removing all DB roles does not lock out a user if they still
+> have OS group memberships that map to ECUBE roles — the fallback will
+> apply on their next login.
+
+### First-Run Setup Script
+
+The first-run setup script bootstraps a new ECUBE installation. It must be
+run as root.
+
+```bash
+sudo python -m app.setup
+```
+
+**What it creates:**
+
+1. **OS groups:** `ecube-admins`, `ecube-managers`, `ecube-processors`, `ecube-auditors`
+2. **Admin OS user:** Prompted interactively (default: `ecube-admin`), added to `ecube-admins`
+3. **`.env` configuration:** Generated at `/opt/ecube/.env` with a random `SECRET_KEY`, `DATABASE_URL`, `ROLE_RESOLVER=local`, and `LOCAL_GROUP_ROLE_MAP`
+4. **DB admin role seed:** Inserts the admin user into the `user_roles` table with the `admin` role
+
+**Prerequisites:**
+
+- Must run as root (`sudo`)
+- Database migrations must be applied first: `alembic upgrade head`
+- Refuses to re-seed if an admin role already exists in the database
+
+**Example session:**
+
+```text
+============================================================
+ECUBE First-Run Setup
+============================================================
+
+Step 1: Creating ECUBE groups...
+  Created group 'ecube-admins'
+  Created group 'ecube-managers'
+  Created group 'ecube-processors'
+  Created group 'ecube-auditors'
+
+Step 2: Creating admin user...
+Enter admin username [ecube-admin]:
+Enter admin password:
+Confirm admin password:
+  Created OS user 'ecube-admin'
+  Added 'ecube-admin' to group 'ecube-admins'
+
+Step 3: Generating configuration...
+  Generated /opt/ecube/.env with random SECRET_KEY
+
+Step 4: Seeding database...
+  Seeded database: 'ecube-admin' → admin
+
+============================================================
+Setup complete!
+
+Next steps:
+  1. Review configuration: /opt/ecube/.env
+  2. Start the service:    systemctl start ecube
+============================================================
+```
 
 ---
 
