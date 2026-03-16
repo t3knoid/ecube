@@ -8,6 +8,7 @@ from typing import List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import SessionLocal
 from app.models.jobs import ExportFile, ExportJob, FileStatus, JobStatus
 from app.repositories.audit_repository import AuditRepository
@@ -248,6 +249,10 @@ def run_copy_job(job_id: int) -> None:
         max_retries = job.max_file_retries if job.max_file_retries is not None else 3
         retry_delay = float(job.retry_delay_seconds) if job.retry_delay_seconds is not None else 1.0
 
+        timeout = settings.copy_job_timeout
+        job_start = time.monotonic()
+        timed_out = False
+
         with ThreadPoolExecutor(max_workers=job.thread_count or 4) as executor:
             futures = {
                 executor.submit(_process_file, ef_id, src, target, max_retries, retry_delay): ef_id
@@ -261,15 +266,37 @@ def run_copy_job(job_id: int) -> None:
                     # unexpected exceptions are caught here to let other workers finish.
                     pass
 
+                # Check timeout after each file completes.
+                if timeout > 0 and (time.monotonic() - job_start) > timeout:
+                    timed_out = True
+                    # Cancel remaining pending futures.
+                    for pending in futures:
+                        pending.cancel()
+                    break
+
         # Determine final job status.
         db.expire_all()
         error_count = file_repo.count_errors(job_id)
 
         job = job_repo.get(job_id)
         if job:
-            job.status = JobStatus.FAILED if error_count > 0 else JobStatus.COMPLETED
-            job.completed_at = datetime.now(timezone.utc)
-            job_repo.save(job)
+            if timed_out:
+                job.status = JobStatus.FAILED
+                job.completed_at = datetime.now(timezone.utc)
+                job_repo.save(job)
+
+                AuditRepository(db).add(
+                    action="JOB_TIMEOUT",
+                    job_id=job_id,
+                    details={
+                        "timeout_seconds": timeout,
+                        "elapsed_seconds": round(time.monotonic() - job_start, 2),
+                    },
+                )
+            else:
+                job.status = JobStatus.FAILED if error_count > 0 else JobStatus.COMPLETED
+                job.completed_at = datetime.now(timezone.utc)
+                job_repo.save(job)
     finally:
         db.close()
 
