@@ -718,7 +718,8 @@ class TestOSUserAuditLogging:
         mock_pwd.getpwnam.return_value = _make_pw()
         mock_subprocess.return_value = _ok_result()
 
-        admin_client.put("/admin/os-users/testuser/password", json={"password": "new"})
+        sentinel_password = "SENTINEL-p4ssw0rd-MUST-NOT-APPEAR"
+        admin_client.put("/admin/os-users/testuser/password", json={"password": sentinel_password})
 
         from app.repositories.audit_repository import AuditRepository
         logs = AuditRepository(db).query(action="OS_PASSWORD_RESET")
@@ -726,7 +727,10 @@ class TestOSUserAuditLogging:
         # Password must NOT appear in audit details.
         for log in logs:
             details_str = str(log.details)
-            assert "new" not in details_str or "newuser" in details_str
+            assert sentinel_password not in details_str
+            # Verify expected keys are present instead.
+            assert "target_user" in log.details
+            assert log.details["target_user"] == "testuser"
 
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
