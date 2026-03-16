@@ -48,10 +48,10 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------------------
 
     #: Path to the TLS certificate file used by the application / uvicorn.
-    tls_certfile: Optional[str] = None
+    tls_certfile: str = "/opt/ecube/certs/cert.pem"
 
     #: Path to the TLS private key file.
-    tls_keyfile: Optional[str] = None
+    tls_keyfile: str = "/opt/ecube/certs/key.pem"
 
     # ---------------------------------------------------------------------------
     # Operational tuning

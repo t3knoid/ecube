@@ -33,11 +33,11 @@ class TestSettingsDefaults:
 
     def test_tls_certfile_default(self):
         s = Settings(database_url="sqlite://")
-        assert s.tls_certfile is None
+        assert s.tls_certfile == "/opt/ecube/certs/cert.pem"
 
     def test_tls_keyfile_default(self):
         s = Settings(database_url="sqlite://")
-        assert s.tls_keyfile is None
+        assert s.tls_keyfile == "/opt/ecube/certs/key.pem"
 
     def test_audit_log_retention_days_default(self):
         s = Settings(database_url="sqlite://")
