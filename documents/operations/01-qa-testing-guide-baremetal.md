@@ -530,7 +530,7 @@ curl -sk -X POST https://localhost:8443/files/compare \
 | # | Test | Expected |
 |---|------|----------|
 | 1 | Initialize an `AVAILABLE` drive | 200, state → `IN_USE` |
-| 2 | Initialize an `EMPTY` drive | 409, `CONFLICT` |
+| 2 | Initialize an `EMPTY` drive | 200, state → `IN_USE` |
 | 3 | Prepare-eject an `IN_USE` drive | 200, state → `AVAILABLE` |
 | 4 | Prepare-eject an `AVAILABLE` drive | 409, `CONFLICT` |
 
