@@ -148,8 +148,12 @@ def _load_env_file(env_path: Path) -> None:
             os.environ[key.strip()] = value.strip()
 
 
-def _seed_database(username: str, install_dir: str) -> None:
-    """Insert admin role mapping into user_roles table."""
+def _seed_database(username: str, install_dir: str) -> bool:
+    """Insert admin role mapping into user_roles table.
+
+    Returns True if seeding succeeded (or was already in place), False if a
+    database error occurred (e.g., missing migrations).
+    """
     # Load .env from install_dir so we use the same DATABASE_URL / SECRET_KEY
     # that _generate_env() wrote, regardless of the caller's working directory.
     env_path = Path(install_dir) / ".env"
@@ -163,11 +167,12 @@ def _seed_database(username: str, install_dir: str) -> None:
     from sqlalchemy import exc as sa_exc
 
     db = SessionLocal()
+    success = True
     try:
         repo = UserRoleRepository(db)
         if repo.has_any_admin():
             print("  Admin role already seeded in database — skipping")
-            return
+            return True
         existing = repo.get_roles(username)
         if "admin" not in existing:
             db.add(UserRole(username=username, role="admin"))
@@ -176,11 +181,14 @@ def _seed_database(username: str, install_dir: str) -> None:
         else:
             print(f"  User '{username}' already has admin role — skipping")
     except (sa_exc.ProgrammingError, sa_exc.OperationalError) as exc:
+        success = False
         print("  Error while seeding admin role in database.")
         print(f"  Details: {exc}")
         print("  The database schema may not be initialized. Run 'alembic upgrade head' and re-run this setup step.")
     finally:
         db.close()
+
+    return success
 
 
 def main() -> None:
@@ -208,8 +216,18 @@ def main() -> None:
     print()
 
     print("Step 4: Seeding database...")
-    _seed_database(admin_username, install_dir)
+    seed_ok = _seed_database(admin_username, install_dir)
     print()
+
+    if not seed_ok:
+        print("=" * 60)
+        print("Setup aborted: database seeding failed.")
+        print()
+        print("Please ensure the database schema is initialized:")
+        print("  1. Run migrations:       alembic upgrade head")
+        print("  2. Re-run this setup script: sudo python -m app.setup")
+        print("=" * 60)
+        sys.exit(1)
 
     print("=" * 60)
     print("Setup complete!")
