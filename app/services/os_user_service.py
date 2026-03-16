@@ -211,10 +211,26 @@ def create_user(
 
 def list_users(ecube_only: bool = True) -> List[OSUser]:
     """List OS users, optionally filtered to ECUBE-relevant groups."""
+    # Build a username→groups mapping in one pass over grp.getgrall()
+    # to avoid O(users×groups) repeated scans.
+    all_groups = grp.getgrall()
+    user_group_map: dict[str, list[str]] = {}
+    for g in all_groups:
+        for member in g.gr_mem:
+            user_group_map.setdefault(member, []).append(g.gr_name)
+
     result: List[OSUser] = []
     for pw in pwd.getpwall():
-        user_groups = _get_user_groups(pw.pw_name)
-        if ecube_only and not any(g in ECUBE_GROUPS for g in user_groups):
+        groups = list(user_group_map.get(pw.pw_name, []))
+        # Include the primary group.
+        try:
+            primary = grp.getgrgid(pw.pw_gid).gr_name
+            if primary not in groups:
+                groups.append(primary)
+        except KeyError:
+            pass
+        groups.sort()
+        if ecube_only and not any(g in ECUBE_GROUPS for g in groups):
             continue
         result.append(
             OSUser(
@@ -223,7 +239,7 @@ def list_users(ecube_only: bool = True) -> List[OSUser]:
                 gid=pw.pw_gid,
                 home=pw.pw_dir,
                 shell=pw.pw_shell,
-                groups=user_groups,
+                groups=groups,
             )
         )
     result.sort(key=lambda u: u.username)
