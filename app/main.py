@@ -89,6 +89,9 @@ async def lifespan(application: FastAPI):
                         run_discovery_sync(db, actor="system")
                     finally:
                         db.close()
+                except asyncio.CancelledError:
+                    # Propagate cancellation so the task can be awaited cleanly on shutdown.
+                    raise
                 except Exception:
                     logger.exception("Periodic USB discovery failed")
 
