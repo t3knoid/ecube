@@ -235,18 +235,24 @@ sudo systemctl daemon-reload
 sudo -u ecube /opt/ecube/venv/bin/alembic upgrade head
 ```
 
-#### 6. Run First-Run Setup Script
+#### 6. Run First-Run Setup
 
-The setup script creates OS groups, an initial admin user, generates the `.env` configuration, and seeds the database with the admin role.
+The setup creates OS groups, an initial admin user, and seeds the database with the admin role.
 
 ```bash
+# Option A: API-based (after starting the service)
+curl -k -X POST https://localhost:8443/setup/initialize \
+  -H "Content-Type: application/json" \
+  -d '{"username": "ecube-admin", "password": "s3cret"}'
+
+# Option B: CLI script
 sudo /opt/ecube/venv/bin/ecube-setup
 ```
 
-See [First-Run Setup Script](#first-run-setup-script) below for full details.
+See [First-Run Setup](#first-run-setup) below for full details.
 
-> **Important:** The setup script must run **after** `alembic upgrade head`
-> because it writes to the `user_roles` table.
+> **Important:** Setup must run **after** `alembic upgrade head`
+> because it writes to the `user_roles` and `system_initialization` tables.
 
 #### 7. Enable and Start Service
 
@@ -277,6 +283,11 @@ docker compose up -d
 docker compose exec app alembic upgrade head
 
 # Run first-run setup (creates admin user, seeds DB role)
+# Option A: API-based (after service starts)
+curl -k -X POST https://localhost:8443/setup/initialize \
+  -H "Content-Type: application/json" \
+  -d '{"username": "ecube-admin", "password": "s3cret"}'
+# Option B: CLI
 docker compose exec app ecube-setup
 
 # View logs
@@ -559,23 +570,25 @@ curl -k -H "Authorization: Bearer $TOKEN" https://localhost:8443/drives
 
 **Setup:**
 
-The recommended approach is to use the first-run setup script, which creates OS groups, an admin user, and seeds the database automatically:
+The recommended approach is to use the first-run setup (API or CLI), which
+creates OS groups, an admin user, and seeds the database automatically.
+See [First-Run Setup](#first-run-setup) for details.
+
+To add additional users after initial setup:
 
 ```bash
-sudo /opt/ecube/venv/bin/ecube-setup
-```
+# Option A: Via admin API (recommended)
+curl -k -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"username": "frank", "password": "s3cret", "groups": ["ecube-processors"]}' \
+  https://localhost:8443/admin/os-users
 
-See [First-Run Setup Script](#first-run-setup-script) for details.
-
-To add additional users manually after initial setup:
-
-```bash
-# Create a user and assign to an ECUBE group (for group-based fallback)
+# Option B: Manual OS commands
 sudo useradd -m frank
 sudo passwd frank
 sudo usermod -aG ecube-processors frank
 
-# Or assign roles directly via the admin API (preferred)
+# Assign roles directly via the admin API (preferred over group fallback)
 curl -k -X PUT -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"roles": ["processor"]}' \
@@ -740,7 +753,7 @@ User "bob" calls POST /auth/token
 | Day-to-day operations | `user_roles` table (DB) | Admin via API |
 
 The OS group fallback ensures that a freshly deployed system works immediately
-after `sudo ecube-setup` — the admin user is a member of `ecube-admins`
+after first-run setup — the admin user is a member of `ecube-admins`
 **and** has an explicit DB role. As the deployment matures, admins can manage
 all role assignments through the API and the DB takes precedence.
 
@@ -816,25 +829,123 @@ Response:
 > have OS group memberships that map to ECUBE roles — the fallback will
 > apply on their next login.
 
-### First-Run Setup Script
+### OS User & Group Management API
 
-The first-run setup script bootstraps a new ECUBE installation. It must be
-run as root.
+Administrators can create and manage OS-level user accounts and groups
+directly through the API. All endpoints require the `admin` role.
+
+#### List OS users
+
+```bash
+curl -k -H "Authorization: Bearer $TOKEN" \
+  https://localhost:8443/admin/os-users
+```
+
+#### Create an OS user
+
+```bash
+curl -k -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"username": "frank", "password": "s3cret", "groups": ["ecube-processors"]}' \
+  https://localhost:8443/admin/os-users
+```
+
+#### Reset a user's password
+
+```bash
+curl -k -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"password": "newpassword"}' \
+  https://localhost:8443/admin/os-users/frank/reset-password
+```
+
+#### Delete an OS user
+
+```bash
+curl -k -X DELETE -H "Authorization: Bearer $TOKEN" \
+  https://localhost:8443/admin/os-users/frank
+```
+
+#### Set a user's group memberships (replaces all ECUBE groups)
+
+```bash
+curl -k -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"groups": ["ecube-processors", "ecube-auditors"]}' \
+  https://localhost:8443/admin/os-users/frank/groups
+```
+
+#### Add a user to additional groups
+
+```bash
+curl -k -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"groups": ["ecube-managers"]}' \
+  https://localhost:8443/admin/os-users/frank/groups
+```
+
+#### List OS groups / Create / Delete a group
+
+```bash
+# List
+curl -k -H "Authorization: Bearer $TOKEN" https://localhost:8443/admin/os-groups
+
+# Create
+curl -k -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "ecube-reviewers"}' \
+  https://localhost:8443/admin/os-groups
+
+# Delete
+curl -k -X DELETE -H "Authorization: Bearer $TOKEN" \
+  https://localhost:8443/admin/os-groups/ecube-reviewers
+```
+
+> **Security:** Reserved system usernames (root, daemon, bin, etc.) are
+> rejected by all mutation endpoints. All operations are recorded in
+> `audit_logs`.
+
+### First-Run Setup
+
+The first-run setup bootstraps a new ECUBE installation.  Two options are available:
+
+#### Option A: API-Based Setup (Recommended)
+
+After starting the ECUBE service and applying migrations, call the setup API:
+
+```bash
+# Check if initialization is needed
+curl -k https://localhost:8443/setup/status
+# {"initialized": false}
+
+# Initialize (creates OS groups, admin user, seeds DB)
+curl -k -X POST https://localhost:8443/setup/initialize \
+  -H "Content-Type: application/json" \
+  -d '{"username": "ecube-admin", "password": "s3cret"}'
+```
+
+The API endpoint is **unauthenticated** but can only succeed once.  A
+`system_initialization` single-row table provides a cross-process guard,
+ensuring only one worker can complete initialization even in multi-worker
+deployments.  Subsequent calls return `409 Conflict`.
+
+#### Option B: CLI Setup Script
+
+Alternatively, run the setup script as root:
 
 ```bash
 sudo /opt/ecube/venv/bin/ecube-setup
 ```
 
-**What it creates:**
+#### What setup creates
 
 1. **OS groups:** `ecube-admins`, `ecube-managers`, `ecube-processors`, `ecube-auditors`
-2. **Admin OS user:** Prompted interactively (default: `ecube-admin`), added to `ecube-admins`
-3. **`.env` configuration:** Generated at `/opt/ecube/.env` with a random `SECRET_KEY`, `DATABASE_URL`, `ROLE_RESOLVER=local`, and `LOCAL_GROUP_ROLE_MAP`
-4. **DB admin role seed:** Inserts the admin user into the `user_roles` table with the `admin` role
+2. **Admin OS user:** Created with the specified username, added to `ecube-admins`
+3. **DB admin role seed:** Inserts the admin user into the `user_roles` table with the `admin` role
+4. **Initialization marker:** A row in `system_initialization` recording who initialized the system and when (API-based setup only)
 
 **Prerequisites:**
 
-- Must run as root (`sudo`)
 - Database migrations must be applied first: `alembic upgrade head`
 - Refuses to re-seed if an admin role already exists in the database
 
