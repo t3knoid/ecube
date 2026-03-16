@@ -9,3 +9,4 @@ from app.models.jobs import (  # noqa: F401
     FileStatus,
 )
 from app.models.audit import AuditLog  # noqa: F401
+from app.models.users import UserRole  # noqa: F401
