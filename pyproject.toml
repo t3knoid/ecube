@@ -22,6 +22,9 @@ dependencies = [
     "python-pam>=2.0.0",
 ]
 
+[project.scripts]
+ecube-setup = "app.setup:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
