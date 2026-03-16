@@ -51,6 +51,44 @@ from app.services import os_user_service
 
 logger = logging.getLogger(__name__)
 
+
+def _os_user_error_to_http(exc: Exception) -> HTTPException:
+    """
+    Map OSUserError instances to more specific HTTP status codes so clients
+    can react appropriately.
+
+    This relies on simple pattern matching on the error message. If no
+    pattern matches, the error is treated as an internal server error.
+    """
+    # Prefer a dedicated `message` attribute if present; fall back to str(exc).
+    message = getattr(exc, "message", None) or str(exc) or "OS user operation failed"
+    lowered = message.lower()
+
+    status_code = 500
+
+    # Conflict: user already exists.
+    if "already exists" in lowered or "user exists" in lowered or "exists" in lowered:
+        status_code = 409
+    # Input / state issues: missing/invalid groups or similar problems.
+    elif (
+        ("group" in lowered and ("not found" in lowered or "missing" in lowered or "unknown" in lowered))
+        or "invalid" in lowered
+        or "bad request" in lowered
+    ):
+        status_code = 422
+    # Timeouts talking to OS / subprocess.
+    elif "timeout" in lowered or "timed out" in lowered:
+        status_code = 504
+    # Sudo/subprocess or generic permission failures.
+    elif "sudo" in lowered or "permission denied" in lowered:
+        status_code = 500
+
+    if status_code >= 500:
+        # Log server-side issues with full exception context for debugging.
+        logger.error("OS user operation failed: %s", message, exc_info=True)
+
+    return HTTPException(status_code=status_code, detail=message)
+
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
@@ -247,7 +285,7 @@ def create_os_user(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except os_user_service.OSUserError as exc:
-        raise HTTPException(status_code=409, detail=exc.message)
+        raise _os_user_error_to_http(exc)
 
     # Assign ECUBE DB roles if requested.
     if body.roles:
