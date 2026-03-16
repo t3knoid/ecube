@@ -102,7 +102,26 @@ class LdapGroupRoleResolver(_MappedRoleResolver):
     Groups absent from the mapping contribute no roles (deny-by-default).
 
     This provider is selected when ``role_resolver = "ldap"`` in settings.
+
+    LDAP connection parameters (``ldap_server``, ``ldap_bind_dn``,
+    ``ldap_bind_password``, ``ldap_base_dn``) are stored on the instance for
+    use by future LDAP-aware group enumeration features.
     """
+
+    def __init__(
+        self,
+        group_role_map: Dict[str, List[str]],
+        *,
+        ldap_server: str | None = None,
+        ldap_bind_dn: str | None = None,
+        ldap_bind_password: str | None = None,
+        ldap_base_dn: str | None = None,
+    ) -> None:
+        super().__init__(group_role_map)
+        self.ldap_server = ldap_server
+        self.ldap_bind_dn = ldap_bind_dn
+        self.ldap_bind_password = ldap_bind_password
+        self.ldap_base_dn = ldap_base_dn
 
 
 class OidcGroupRoleResolver(_MappedRoleResolver):
@@ -142,7 +161,13 @@ def get_role_resolver() -> RoleResolver:
         ValueError: If ``settings.role_resolver`` is an unrecognised value.
     """
     if settings.role_resolver == "ldap":
-        return LdapGroupRoleResolver(settings.ldap_group_role_map)
+        return LdapGroupRoleResolver(
+            settings.ldap_group_role_map,
+            ldap_server=settings.ldap_server,
+            ldap_bind_dn=settings.ldap_bind_dn,
+            ldap_bind_password=settings.ldap_bind_password,
+            ldap_base_dn=settings.ldap_base_dn,
+        )
     if settings.role_resolver == "local":
         return LocalGroupRoleResolver(settings.local_group_role_map)
     if settings.role_resolver == "oidc":
