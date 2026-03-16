@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.config import settings
 from app.models.users import UserRole
 from app.models.system import SystemInitialization
 from app.repositories.user_role_repository import UserRoleRepository
@@ -734,6 +735,21 @@ class TestSetupEndpoints:
         data = resp.json()
         assert isinstance(data["groups_created"], list)
         assert len(data["groups_created"]) == 4
+
+    def test_status_returns_404_when_not_local(self, unauthenticated_client):
+        """GET /setup/status returns 404 when role_resolver is not 'local'."""
+        with patch.object(settings, "role_resolver", "ldap"):
+            resp = unauthenticated_client.get("/setup/status")
+        assert resp.status_code == 404
+
+    def test_initialize_returns_404_when_not_local(self, unauthenticated_client):
+        """POST /setup/initialize returns 404 when role_resolver is not 'local'."""
+        with patch.object(settings, "role_resolver", "oidc"):
+            resp = unauthenticated_client.post("/setup/initialize", json={
+                "username": "admin1",
+                "password": "s3cret",
+            })
+        assert resp.status_code == 404
 
 
 # ===========================================================================
