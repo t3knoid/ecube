@@ -2,6 +2,7 @@
 from unittest.mock import patch, mock_open
 import subprocess
 
+from app.config import settings
 from app.infrastructure.drive_eject import _find_device_mountpoints, unmount_device
 
 
@@ -746,10 +747,10 @@ class TestUnmountDevice:
         assert error is None
         mock_run.assert_called_once()
         mock_run.assert_called_with(
-            ["/bin/umount", "/media/usb"],
+            [settings.umount_binary_path, "/media/usb"],
             check=True,
             capture_output=True,
-            timeout=30,
+            timeout=settings.subprocess_timeout_seconds,
         )
 
     def test_unmount_not_mounted_race_is_success(self):

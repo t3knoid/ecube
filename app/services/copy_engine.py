@@ -37,8 +37,9 @@ def copy_file(
     try:
         dst.parent.mkdir(parents=True, exist_ok=True)
         h = hashlib.new(checksum_algorithm)
+        chunk_size = settings.copy_chunk_size_bytes
         with open(src, "rb") as fsrc, open(dst, "wb") as fdst:
-            while chunk := fsrc.read(1024 * 1024):
+            while chunk := fsrc.read(chunk_size):
                 h.update(chunk)
                 fdst.write(chunk)
         return True, h.hexdigest(), None
@@ -50,8 +51,9 @@ def _checksum_only(src: Path) -> Tuple[bool, Optional[str], Optional[str]]:
     """Compute a SHA-256 checksum without copying."""
     try:
         h = hashlib.sha256()
+        chunk_size = settings.copy_chunk_size_bytes
         with open(src, "rb") as f:
-            while chunk := f.read(1024 * 1024):
+            while chunk := f.read(chunk_size):
                 h.update(chunk)
         return True, h.hexdigest(), None
     except Exception as exc:
@@ -246,14 +248,14 @@ def run_copy_job(job_id: int) -> None:
             if ef.relative_path in src_by_rel
         ]
 
-        max_retries = job.max_file_retries if job.max_file_retries is not None else 3
-        retry_delay = float(job.retry_delay_seconds) if job.retry_delay_seconds is not None else 1.0
+        max_retries = job.max_file_retries if job.max_file_retries is not None else settings.copy_default_max_retries
+        retry_delay = float(job.retry_delay_seconds) if job.retry_delay_seconds is not None else settings.copy_default_retry_delay_seconds
 
         timeout = settings.copy_job_timeout
         job_start = time.monotonic()
         timed_out = False
 
-        executor = ThreadPoolExecutor(max_workers=job.thread_count or 4)
+        executor = ThreadPoolExecutor(max_workers=job.thread_count or settings.copy_default_thread_count)
         try:
             futures = {
                 executor.submit(_process_file, ef_id, src, target, max_retries, retry_delay): ef_id
