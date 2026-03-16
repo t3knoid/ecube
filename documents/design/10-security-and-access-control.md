@@ -10,13 +10,43 @@
 
 ### Local mode (default)
 
-- Resolve identity from local OS authentication context.
-- Map local groups to ECUBE roles via configuration.
+- Authenticate users via PAM (Pluggable Authentication Modules) on the host OS.
+- The `POST /auth/token` endpoint accepts `username` and `password`, validates
+  credentials through PAM, reads the user's OS group memberships, maps groups
+  to ECUBE roles via `LOCAL_GROUP_ROLE_MAP`, and returns a signed JWT.
+- Token expiration is configurable via `TOKEN_EXPIRE_MINUTES` (default: 60).
+- No user database is required — PAM delegates to whatever authentication
+  backend the host is configured for (`/etc/shadow`, SSSD, Kerberos, etc.).
+
+#### Local mode authentication flow
+
+```text
+ Client                  ECUBE System Layer               Linux PAM
+   │                          │                               │
+   │  POST /auth/token        │                               │
+   │  {username, password}    │                               │
+   │────────────────────────▶│                               │
+   │                          │  pam.authenticate(user, pass) │
+   │                          │──────────────────────────────▶│
+   │                          │  success / failure            │
+   │                          │◀──────────────────────────────│
+   │                          │                               │
+   │                          │  os.getgrouplist() → group IDs│
+   │                          │  grp.getgrgid() → OS groups   │
+   │                          │  LOCAL_GROUP_ROLE_MAP → roles │
+   │                          │  sign JWT(sub, groups, roles) │
+   │                          │                               │
+   │  {access_token, bearer}  │                               │
+   │◀────────────────────────│                               │
+```
 
 ### LDAP mode (optional)
 
-- Authenticate users against LDAP.
-- Resolve group membership and map to ECUBE roles.
+- Authenticate users via PAM with an LDAP backend (e.g., SSSD or pam_ldap).
+- The same `POST /auth/token` endpoint handles login — PAM transparently
+  delegates to the LDAP directory when the host is configured for it.
+- LDAP group memberships appear as OS groups (via `nsswitch.conf` / SSSD)
+  and are mapped to ECUBE roles via `LDAP_GROUP_ROLE_MAP`.
 - Keep the same downstream role evaluation path used in local mode.
 
 ### OIDC mode (optional)
