@@ -160,6 +160,9 @@ class Settings(BaseSettings):
     #: Timeout in seconds for subprocess calls (mount, umount, sync, etc.).
     subprocess_timeout_seconds: int = 30
 
+    #: Path to the ``mount`` binary.
+    mount_binary_path: str = "/bin/mount"
+
     #: Path to the ``sync`` binary.
     sync_binary_path: str = "/bin/sync"
 
