@@ -195,6 +195,10 @@ class TestResetPassword:
         assert call.args[0] == ["sudo", "/usr/sbin/chpasswd"]
         assert call.kwargs["input"] == "testuser:newpass"
 
+    def test_reset_password_reserved_username(self):
+        with pytest.raises(ValueError, match="reserved"):
+            reset_password("root", "newpass")
+
 
 class TestSetUserGroups:
     """os_user_service.set_user_groups()."""
