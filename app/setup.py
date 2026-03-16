@@ -13,6 +13,7 @@ from __future__ import annotations
 import getpass
 import os
 import secrets
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -31,6 +32,17 @@ DEFAULT_INSTALL_DIR = "/opt/ecube"
 def _run(cmd: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
     """Run a subprocess command and return the result."""
     return subprocess.run(cmd, capture_output=True, text=True, check=check)
+
+
+def _chown_as_dir_owner(file_path: Path) -> None:
+    """Set *file_path* ownership to match its parent directory's owner.
+
+    The setup script runs as root, but the service runs as a non-root
+    account (typically ``ecube``).  Aligning the ``.env`` file owner with
+    the install directory owner ensures the service can read it.
+    """
+    parent_stat = file_path.parent.stat()
+    shutil.chown(file_path, user=parent_stat.st_uid, group=parent_stat.st_gid)
 
 
 def _group_exists(name: str) -> bool:
@@ -104,6 +116,7 @@ def _generate_env(install_dir: str) -> None:
             print("  Rotated SECRET_KEY to a random value")
         # Always enforce restrictive permissions on existing .env
         os.chmod(env_path, 0o600)
+        _chown_as_dir_owner(env_path)
         return
 
     secret = secrets.token_hex(32)
@@ -120,6 +133,7 @@ def _generate_env(install_dir: str) -> None:
     )
     # Restrict permissions — contains SECRET_KEY
     os.chmod(env_path, 0o600)
+    _chown_as_dir_owner(env_path)
     print(f"  Generated {env_path} with random SECRET_KEY")
 
 
