@@ -5,7 +5,7 @@ and seeds the database with the admin role mapping.
 
 Must be run as root/sudo::
 
-    sudo python -m app.setup
+    sudo ecube-setup
 """
 
 from __future__ import annotations
@@ -215,7 +215,7 @@ def _seed_database(username: str, install_dir: str) -> bool:
 
 def main() -> None:
     if os.geteuid() != 0:
-        print("Error: this script must be run as root (sudo python -m app.setup)", file=sys.stderr)
+        print("Error: this script must be run as root (sudo ecube-setup)", file=sys.stderr)
         sys.exit(1)
 
     install_dir = os.environ.get("ECUBE_INSTALL_DIR", DEFAULT_INSTALL_DIR)
