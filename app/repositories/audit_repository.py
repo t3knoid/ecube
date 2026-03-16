@@ -31,6 +31,16 @@ class AuditRepository:
         self.db.refresh(entry)
         return entry
 
+    def delete_older_than(self, cutoff: datetime) -> int:
+        """Delete audit log entries older than *cutoff*. Returns count deleted."""
+        count = (
+            self.db.query(AuditLog)
+            .filter(AuditLog.timestamp < cutoff)
+            .delete(synchronize_session="fetch")
+        )
+        self.db.commit()
+        return count
+
     def query(
         self,
         user: Optional[str] = None,
