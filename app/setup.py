@@ -125,8 +125,27 @@ def _generate_env(install_dir: str) -> None:
         '"ecube-processors": ["processor"], "ecube-auditors": ["auditor"]}'
     )
 
+    # Determine DATABASE_URL without using a fixed default password.
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        print("  No DATABASE_URL found in environment.")
+        print("  Please enter the PostgreSQL connection URL to store in .env.")
+        print("  Example: postgresql://ecube:YOUR_PASSWORD@localhost/ecube")
+        user_input = input("  DATABASE_URL (leave empty to build it interactively): ").strip()
+        if user_input:
+            db_url = user_input
+        else:
+            default_user = "ecube"
+            default_host = "localhost"
+            default_db = "ecube"
+            username = input(f"  DB username [{default_user}]: ").strip() or default_user
+            host = input(f"  DB host [{default_host}]: ").strip() or default_host
+            dbname = input(f"  DB name [{default_db}]: ").strip() or default_db
+            password = getpass.getpass("  DB password (will not echo): ")
+            db_url = f"postgresql://{username}:{password}@{host}/{dbname}"
+
     env_path.write_text(
-        f"DATABASE_URL=postgresql://ecube:ecube@localhost/ecube\n"
+        f"DATABASE_URL={db_url}\n"
         f"SECRET_KEY={secret}\n"
         f"ROLE_RESOLVER=local\n"
         f"LOCAL_GROUP_ROLE_MAP={role_map}\n"
