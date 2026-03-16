@@ -237,8 +237,7 @@ sudo -u ecube /opt/ecube/venv/bin/alembic upgrade head
 
 #### 6. Run First-Run Setup Script
 
-The setup script creates OS groups, an initial admin user, generates the `.env`
-configuration, and seeds the database with the admin role.
+The setup script creates OS groups, an initial admin user, generates the `.env` configuration, and seeds the database with the admin role.
 
 ```bash
 sudo /opt/ecube/venv/bin/ecube-setup
@@ -538,8 +537,9 @@ curl -k https://localhost:8443/introspection/version
 
 ECUBE authenticates users via PAM on the host OS. Users log in by calling
 `POST /auth/token` with their OS username and password. The system validates
-credentials through PAM, reads the user's OS group memberships, maps groups to
-ECUBE roles, and returns a signed JWT.
+credentials through PAM, then resolves roles using a **DB-first hybrid model**:
+explicit role assignments in the `user_roles` table take priority, with OS group memberships serving as a fallback. A signed JWT is returned containing the resolved roles. See [Assigning Roles](#assigning-roles) for the full resolution
+flow.
 
 **Login example:**
 
@@ -559,26 +559,36 @@ curl -k -H "Authorization: Bearer $TOKEN" https://localhost:8443/drives
 
 **Setup:**
 
-1. Create OS users and groups on the ECUBE host:
+The recommended approach is to use the first-run setup script, which creates OS groups, an admin user, and seeds the database automatically:
 
 ```bash
-# Create ECUBE role groups
-sudo groupadd evidence-admins
-sudo groupadd evidence-ops
+sudo /opt/ecube/venv/bin/ecube-setup
+```
 
-# Create a user and assign to groups
+See [First-Run Setup Script](#first-run-setup-script) for details.
+
+To add additional users manually after initial setup:
+
+```bash
+# Create a user and assign to an ECUBE group (for group-based fallback)
 sudo useradd -m frank
 sudo passwd frank
-sudo usermod -aG evidence-admins frank
+sudo usermod -aG ecube-processors frank
+
+# Or assign roles directly via the admin API (preferred)
+curl -k -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"roles": ["processor"]}' \
+  https://localhost:8443/users/frank/roles
 ```
 
-2. Map OS groups to ECUBE roles in `.env`:
+The OS group-to-role mapping is configured in `.env`:
 
 ```bash
-LOCAL_GROUP_ROLE_MAP='{"evidence-admins": ["admin"], "evidence-ops": ["manager", "processor"]}'
+LOCAL_GROUP_ROLE_MAP='{"ecube-admins": ["admin"], "ecube-managers": ["manager"], "ecube-processors": ["processor"], "ecube-auditors": ["auditor"]}'
 ```
 
-3. Configure token expiration (optional):
+Configure token expiration (optional):
 
 ```bash
 # Token lifetime in minutes (default: 60)
@@ -589,8 +599,7 @@ TOKEN_EXPIRE_MINUTES=60
 
 - The ECUBE service account must have PAM access (typically membership in
   the `shadow` group or equivalent).
-- No user database is required — PAM delegates to whatever backend the
-  host is configured for (`/etc/shadow`, SSSD, Kerberos, etc.).
+- No external user database is required — PAM delegates credential validation to whatever backend the host is configured for (`/etc/shadow`, SSSD, Kerberos, etc.). Role assignments are stored in the ECUBE database (`user_roles` table), with OS group memberships as a fallback.
 - Passwords are never logged or stored by ECUBE.
 
 #### LDAP Integration
