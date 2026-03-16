@@ -36,7 +36,7 @@ class AuditRepository:
         count = (
             self.db.query(AuditLog)
             .filter(AuditLog.timestamp < cutoff)
-            .delete(synchronize_session="fetch")
+            .delete(synchronize_session=False)
         )
         self.db.commit()
         return count
