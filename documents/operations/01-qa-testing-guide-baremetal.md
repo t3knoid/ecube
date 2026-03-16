@@ -484,6 +484,34 @@ curl -sk -X POST https://localhost:8443/files/compare \
   -d '{"file_id_a": 1, "file_id_b": 2}' | jq
 ```
 
+### 11.7 User Role Management (Admin Only)
+
+These endpoints manage DB-backed role assignments. They require the `admin` role.
+
+```bash
+# List all users with role assignments
+curl -sk https://localhost:8443/users \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# Get roles for a specific user
+curl -sk https://localhost:8443/users/qa-processor/roles \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# Assign roles to a user (replaces all existing assignments)
+curl -sk -X PUT https://localhost:8443/users/qa-processor/roles \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"roles": ["processor", "auditor"]}' | jq
+
+# Remove all role assignments for a user (reverts to OS group fallback)
+curl -sk -X DELETE https://localhost:8443/users/qa-processor/roles \
+  -H "Authorization: Bearer $TOKEN" | jq
+```
+
+> **Note:** These endpoints manage authorization only — they do not create or
+> delete OS user accounts. The admin still uses OS/LDAP tools to create users,
+> then assigns ECUBE roles through the API or a future admin GUI.
+
 ---
 
 ## 12. QA Test Cases
@@ -498,7 +526,7 @@ curl -sk -X POST https://localhost:8443/files/compare \
 | 4 | Missing username | `POST /auth/token` with `{"password": "x"}` | 422 |
 | 5 | Missing password | `POST /auth/token` with `{"username": "x"}` | 422 |
 | 6 | Empty username | `POST /auth/token` with `{"username": "", "password": "x"}` | 422 |
-| 7 | Token contains correct roles | Decode JWT from login response | `roles` matches group mapping in `LOCAL_GROUP_ROLE_MAP` |
+| 7 | Token contains correct roles | Decode JWT from login response | `roles` matches DB `user_roles` entry if present, otherwise matches group mapping in `LOCAL_GROUP_ROLE_MAP` |
 | 8 | Token contains groups | Decode JWT from login response | `groups` lists the user's OS groups |
 | 9 | Token is usable | Use returned token to call `GET /drives` | 200 |
 | 10 | Login audit log | `GET /audit?action=AUTH_SUCCESS` after successful login | `AUTH_SUCCESS` entry with username |
@@ -621,6 +649,32 @@ Walk through the complete data export lifecycle:
 | 3 | Start an already-running job | 409, `CONFLICT` |
 | 4 | All error responses | JSON body includes `code`, `message`, and `trace_id` |
 
+### 12.8 User Role Management
+
+All user role management endpoints require the `admin` role.
+
+| # | Test | How | Expected |
+|---|------|-----|----------|
+| 1 | List users (empty) | `GET /users` with admin token (no roles assigned yet) | 200, `{"users": []}` |
+| 2 | Assign roles | `PUT /users/qa-processor/roles` with `{"roles": ["processor", "auditor"]}` | 200, returns username and sorted roles |
+| 3 | Get roles | `GET /users/qa-processor/roles` after assignment | 200, `{"username": "qa-processor", "roles": ["auditor", "processor"]}` |
+| 4 | List users after assignment | `GET /users` after assigning roles | 200, user appears in list with correct roles |
+| 5 | Replace roles | `PUT /users/qa-processor/roles` with `{"roles": ["manager"]}` | 200, only `["manager"]` returned; old roles removed |
+| 6 | Deduplicate roles | `PUT /users/qa-processor/roles` with `{"roles": ["admin", "admin", "processor"]}` | 200, deduplicated to `["admin", "processor"]` |
+| 7 | Invalid role name | `PUT /users/qa-processor/roles` with `{"roles": ["superuser"]}` | 422, error message mentions `superuser` |
+| 8 | Empty role list | `PUT /users/qa-processor/roles` with `{"roles": []}` | 422, at least one role required |
+| 9 | Remove roles | `DELETE /users/qa-processor/roles` | 200, `{"username": "qa-processor", "roles": []}` |
+| 10 | Get roles after removal | `GET /users/qa-processor/roles` after DELETE | 200, `{"roles": []}` |
+| 11 | Get roles for unknown user | `GET /users/nonexistent/roles` | 200, `{"username": "nonexistent", "roles": []}` |
+| 12 | Processor cannot list users | `GET /users` with processor token | 403, `FORBIDDEN` |
+| 13 | Processor cannot set roles | `PUT /users/x/roles` with processor token | 403, `FORBIDDEN` |
+| 14 | Processor cannot delete roles | `DELETE /users/x/roles` with processor token | 403, `FORBIDDEN` |
+| 15 | Unauthenticated access | `GET /users` without Authorization header | 401, `UNAUTHORIZED` |
+| 16 | ROLE_ASSIGNED audit log | `GET /audit?action=ROLE_ASSIGNED` after assigning roles | Audit entry with actor, target user, and roles |
+| 17 | ROLE_REMOVED audit log | `GET /audit?action=ROLE_REMOVED` after removing roles | Audit entry with actor and target user |
+| 18 | DB roles override groups | Assign `["manager"]` to `qa-processor` via `PUT`, then login as `qa-processor` | JWT `roles` is `["manager"]`, not `["processor"]` from OS groups |
+| 19 | Fallback to group roles | `DELETE /users/qa-processor/roles`, then login as `qa-processor` | JWT `roles` falls back to OS group mapping (`["processor"]`) |
+
 ---
 
 ## 13. Environment Reset Between Test Runs
@@ -652,6 +706,13 @@ sudo -u postgres psql -c "CREATE DATABASE ecube OWNER ecube;"
 # 3. Re-run migrations
 cd /opt/ecube
 sudo -u ecube /opt/ecube/venv/bin/alembic upgrade head
+
+# 4. (Optional) Re-seed admin role in user_roles table
+#    If using DB-managed roles, re-assign after migration:
+#    curl -sk -X PUT https://localhost:8443/users/qa-admin/roles \
+#      -H "Authorization: Bearer $TOKEN" \
+#      -H "Content-Type: application/json" \
+#      -d '{"roles": ["admin"]}'
 
 # 4. Clear test evidence data
 sudo rm -rf /mnt/test-evidence/case-001
