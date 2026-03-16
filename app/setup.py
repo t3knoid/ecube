@@ -90,15 +90,20 @@ def _generate_env(install_dir: str) -> None:
     env_path = Path(install_dir) / ".env"
     if env_path.exists():
         print(f"  {env_path} already exists — not overwriting")
-        # Check if SECRET_KEY is the default and warn
+        # Check if SECRET_KEY is the default placeholder and rotate if so
         content = env_path.read_text()
-        if "change-me-in-production" in content:
+        placeholder = "change-me-in-production-please-rotate-32b"
+        rotated = False
+        if placeholder in content:
             secret = secrets.token_hex(32)
-            new_content = content.replace(
-                "change-me-in-production-please-rotate-32b", secret,
-            )
-            env_path.write_text(new_content)
+            new_content = content.replace(placeholder, secret)
+            if new_content != content:
+                env_path.write_text(new_content)
+                rotated = True
+        if rotated:
             print("  Rotated SECRET_KEY to a random value")
+        # Always enforce restrictive permissions on existing .env
+        os.chmod(env_path, 0o600)
         return
 
     secret = secrets.token_hex(32)
