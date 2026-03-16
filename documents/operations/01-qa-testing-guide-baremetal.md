@@ -426,7 +426,7 @@ curl -sk -X POST https://localhost:8443/drives/{id}/prepare-eject \
 ### 11.4 Job Management
 
 ```bash
-# Create a copy job
+# Create a copy job targeting the initialized USB drive (replace {drive_id})
 curl -sk -X POST https://localhost:8443/jobs \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -434,6 +434,8 @@ curl -sk -X POST https://localhost:8443/jobs \
     "project_id": "PROJ-QA-001",
     "evidence_number": "EV-001",
     "source_path": "/mnt/evidence/case-001",
+    "drive_id": "{drive_id}",
+    "target_mount_path": "/mnt/usb/{drive_id}",
     "thread_count": 4
   }' | jq
 
