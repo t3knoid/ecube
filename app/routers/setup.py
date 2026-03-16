@@ -95,16 +95,26 @@ def initialize_system(
         raise HTTPException(status_code=422, detail=str(exc))
     except os_user_service.OSUserError as exc:
         # User may already exist (e.g. re-running setup after partial failure).
-        if "already exists" in exc.message:
-            # Add to ecube-admins group anyway.
-            try:
-                os_user_service.set_user_groups(body.username, ["ecube-admins"])
-            except os_user_service.OSUserError:
-                pass
-        else:
+        if "already exists" not in exc.message:
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to create admin user: {exc.message}",
+            )
+        # Recover: append to ecube-admins (preserving existing groups) and
+        # reset the password so the caller's credentials are guaranteed valid.
+        try:
+            os_user_service.add_user_to_groups(body.username, ["ecube-admins"])
+        except os_user_service.OSUserError as grp_exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"User exists but failed to add to ecube-admins: {grp_exc.message}",
+            )
+        try:
+            os_user_service.reset_password(body.username, body.password)
+        except (os_user_service.OSUserError, ValueError) as pw_exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"User exists but failed to reset password: {pw_exc}",
             )
 
     # Step 3: Seed database with admin role.
