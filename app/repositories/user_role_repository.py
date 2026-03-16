@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.models.users import UserRole
 
+VALID_ROLES = {"admin", "manager", "processor", "auditor"}
+
 
 class UserRoleRepository:
     """CRUD operations for user-role assignments."""
@@ -27,7 +29,15 @@ class UserRoleRepository:
         """Replace all roles for *username* with *roles*.
 
         Returns the new role list.
+
+        Raises ``ValueError`` if any role string is not in ``VALID_ROLES``.
         """
+        invalid = set(roles) - VALID_ROLES
+        if invalid:
+            raise ValueError(
+                f"Invalid roles: {', '.join(sorted(invalid))}. "
+                f"Valid roles are: {', '.join(sorted(VALID_ROLES))}"
+            )
         self.db.query(UserRole).filter(UserRole.username == username).delete(
             synchronize_session=False,
         )
