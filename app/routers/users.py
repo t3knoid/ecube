@@ -93,7 +93,11 @@ def set_user_roles(
     return UserRolesResponse(username=username, roles=deduplicated)
 
 
-@router.delete("/{username}/roles", status_code=status.HTTP_200_OK)
+@router.delete(
+    "/{username}/roles",
+    response_model=UserRolesResponse,
+    status_code=status.HTTP_200_OK,
+)
 def delete_user_roles(
     username: str,
     request: Request,
