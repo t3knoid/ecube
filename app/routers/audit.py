@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, require_roles
+from app.config import settings
 from app.database import get_db
 from app.repositories.audit_repository import AuditRepository
 from app.schemas.audit import AuditLogSchema
@@ -24,7 +25,7 @@ def list_audit_logs(
     job_id: Optional[int] = Query(default=None, description="Filter by job ID"),
     since: Optional[datetime] = Query(default=None, description="Filter entries at or after this timestamp (ISO 8601)"),
     until: Optional[datetime] = Query(default=None, description="Filter entries at or before this timestamp (ISO 8601)"),
-    limit: int = Query(default=100, ge=1, le=1000, description="Maximum number of results"),
+    limit: int = Query(default=settings.audit_log_default_limit, ge=1, le=settings.audit_log_max_limit, description="Maximum number of results"),
     offset: int = Query(default=0, ge=0, description="Number of results to skip"),
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_ALLOWED),
