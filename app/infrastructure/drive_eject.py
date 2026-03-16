@@ -16,12 +16,15 @@ import re
 import subprocess
 from typing import List, Optional, Tuple
 
+from app.config import settings
+
 # Allowed block-device path pattern: /dev/<name>, e.g. /dev/sdb, /dev/sdc1.
 _DEVICE_PATH_RE = re.compile(r"^/dev/[a-zA-Z][a-zA-Z0-9]*$")
 
 # Absolute paths to system utilities so PATH manipulation cannot redirect them.
-_SYNC_BIN = "/bin/sync"
-_UMOUNT_BIN = "/bin/umount"
+# Actual values come from settings; these module-level names kept for readability.
+_SYNC_BIN = settings.sync_binary_path
+_UMOUNT_BIN = settings.umount_binary_path
 
 
 def _unescape_mountpoint(escaped_path: str) -> str:
@@ -83,10 +86,10 @@ def sync_filesystem() -> Tuple[bool, Optional[str]]:
     success or ``(False, error_message)`` on failure.
     """
     try:
-        subprocess.run([_SYNC_BIN], check=True, capture_output=True, timeout=30)
+        subprocess.run([_SYNC_BIN], check=True, capture_output=True, timeout=settings.subprocess_timeout_seconds)
         return True, None
     except subprocess.TimeoutExpired:
-        return False, "sync timed out after 30 seconds"
+        return False, f"sync timed out after {settings.subprocess_timeout_seconds} seconds"
     except subprocess.CalledProcessError as exc:
         stderr = (exc.stderr or b"").decode(errors="replace").strip()
         return False, f"sync failed: {stderr}" if stderr else "sync failed"
@@ -123,7 +126,7 @@ def _resolve_mapper_device_to_parent(mapper_path: str) -> List[str]:
         return []
     
     device_name = os.path.basename(normalized_path)  # e.g., "dm-0"
-    slaves_path = f"/sys/block/{device_name}/slaves"
+    slaves_path = f"{settings.sysfs_block_path}/{device_name}/slaves"
     
     try:
         if os.path.isdir(slaves_path):
@@ -165,7 +168,7 @@ def _find_device_mountpoints(device_base: str) -> Tuple[List[str], Optional[str]
         or partition paths are reported in such cases.
     """
     try:
-        with open("/proc/mounts", "r") as f:
+        with open(settings.procfs_mounts_path, "r") as f:
             mountpoints = []
             device_prefix = f"/dev/{device_base}"
             
@@ -209,7 +212,7 @@ def _find_device_mountpoints(device_base: str) -> Tuple[List[str], Optional[str]
             return mountpoints, None
     except OSError as exc:
         # Return read error in tuple; caller decides whether to treat as fatal or no-op
-        return [], f"could not read /proc/mounts: {exc}"
+        return [], f"could not read {settings.procfs_mounts_path}: {exc}"
 
 
 def unmount_device(device_path: str) -> Tuple[bool, Optional[str]]:
@@ -255,7 +258,7 @@ def unmount_device(device_path: str) -> Tuple[bool, Optional[str]]:
                 [_UMOUNT_BIN, mount_point],
                 check=True,
                 capture_output=True,
-                timeout=30,
+                timeout=settings.subprocess_timeout_seconds,
             )
         except subprocess.TimeoutExpired:
             errors.append(f"umount timed out for {mount_point}")
