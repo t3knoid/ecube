@@ -667,6 +667,48 @@ class TestSetupEndpoints:
         })
         assert resp.status_code == 422
 
+    @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_initialize_existing_user_recovery(
+        self, mock_pwd, mock_grp, mock_subprocess, unauthenticated_client, db
+    ):
+        """When the OS user already exists, setup should append to ecube-admins
+        (preserving existing groups) and reset the password."""
+        mock_grp.getgrnam.side_effect = [
+            KeyError("no such group"),  # ensure: ecube-admins
+            KeyError("no such group"),  # ensure: ecube-auditors
+            KeyError("no such group"),  # ensure: ecube-managers
+            KeyError("no such group"),  # ensure: ecube-processors
+            _make_grp(name="ecube-admins"),  # add_user_to_groups validation
+        ]
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="ecube-admins", members=["admin1"]),
+        ]
+        mock_grp.getgrgid.return_value = _make_grp(name="admin1", gid=1000)
+        pw = _make_pw(name="admin1")
+        mock_pwd.getpwnam.side_effect = [
+            pw,                        # create_user → user_exists (True → raises)
+            pw,                        # add_user_to_groups → user_exists
+            pw,                        # add_user_to_groups → _get_user_groups
+            pw,                        # reset_password → user_exists
+        ]
+        mock_subprocess.return_value = _ok_result()
+
+        resp = unauthenticated_client.post("/setup/initialize", json={
+            "username": "admin1",
+            "password": "s3cret",
+        })
+        assert resp.status_code == 200
+
+        # Verify usermod -aG was called (not -G).
+        calls = [c.args[0] for c in mock_subprocess.call_args_list]
+        aG_calls = [c for c in calls if "-aG" in c]
+        assert len(aG_calls) >= 1
+        # Verify password was reset via chpasswd.
+        chpasswd_calls = [c for c in calls if "/usr/sbin/chpasswd" in c]
+        assert len(chpasswd_calls) >= 1
+
 
 # ===========================================================================
 # Audit logging tests

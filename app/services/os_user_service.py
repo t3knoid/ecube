@@ -277,6 +277,25 @@ def set_user_groups(username: str, groups: List[str]) -> List[str]:
     return _get_user_groups(username)
 
 
+def add_user_to_groups(username: str, groups: List[str]) -> List[str]:
+    """Add a user to supplementary groups without removing existing memberships.
+
+    Uses ``usermod -aG`` (append) instead of ``-G`` (replace).
+    Returns the resulting group list.
+    """
+    validate_username(username)
+    if not user_exists(username):
+        raise OSUserError(f"User '{username}' does not exist")
+
+    for g in groups:
+        validate_group_name(g)
+        if not group_exists(g):
+            raise OSUserError(f"Group '{g}' does not exist")
+
+    _run_sudo([settings.usermod_binary_path, "-aG", ",".join(groups), username])
+    return _get_user_groups(username)
+
+
 # ---------------------------------------------------------------------------
 # Group operations
 # ---------------------------------------------------------------------------
