@@ -319,7 +319,7 @@ def reset_os_user_password(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except os_user_service.OSUserError as exc:
-        raise HTTPException(status_code=404, detail=exc.message)
+        raise HTTPException(status_code=500, detail=exc.message)
 
     _audit(db, "OS_PASSWORD_RESET", current_user.username, {
         "target_user": username,
