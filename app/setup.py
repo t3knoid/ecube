@@ -118,9 +118,17 @@ def _generate_env(install_dir: str) -> None:
     print(f"  Generated {env_path} with random SECRET_KEY")
 
 
-def _seed_database(username: str) -> None:
+def _seed_database(username: str, install_dir: str) -> None:
     """Insert admin role mapping into user_roles table."""
-    # Import here to avoid import-time side effects when running as CLI
+    # Load .env from install_dir so we use the same DATABASE_URL / SECRET_KEY
+    # that _generate_env() wrote, regardless of the caller's working directory.
+    env_path = Path(install_dir) / ".env"
+    if env_path.exists():
+        os.environ.setdefault("ENV_FILE", str(env_path))
+        from dotenv import load_dotenv
+        load_dotenv(env_path, override=True)
+
+    # Import after env is loaded to pick up the correct DATABASE_URL.
     from app.database import SessionLocal
     from app.models.users import UserRole
     from app.repositories.user_role_repository import UserRoleRepository
@@ -172,7 +180,7 @@ def main() -> None:
     print()
 
     print("Step 4: Seeding database...")
-    _seed_database(admin_username)
+    _seed_database(admin_username, install_dir)
     print()
 
     print("=" * 60)
