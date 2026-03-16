@@ -1,8 +1,9 @@
 """Authentication router — issues JWTs for locally authenticated users.
 
 The ``POST /auth/token`` endpoint is **unauthenticated** (it is the login
-route).  It validates OS credentials via PAM, resolves group memberships to
-ECUBE roles, and returns a signed JWT.
+route).  It validates OS credentials via PAM, determines ECUBE roles for the
+user (first from the DB ``user_roles`` table, then from OS group mappings via
+the configured role resolver), and returns a signed JWT.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from app.auth_providers import get_role_resolver
 from app.config import settings
 from app.database import get_db
 from app.repositories.audit_repository import AuditRepository
+from app.repositories.user_role_repository import UserRoleRepository
 from app.services.pam_service import LinuxPamAuthenticator, get_user_groups
 
 logger = logging.getLogger(__name__)
@@ -90,9 +92,12 @@ def login(
             detail="Invalid credentials",
         )
 
-    # Resolve OS groups → ECUBE roles
+    # Resolve ECUBE roles for the user.
+    # Priority: 1) Explicit roles from DB ``user_roles`` table,
+    #            2) Roles derived from OS groups via the configured resolver.
     groups = get_user_groups(body.username)
-    roles = get_role_resolver().resolve(groups)
+    db_roles = UserRoleRepository(db).get_roles(body.username)
+    roles = db_roles if db_roles else get_role_resolver().resolve(groups)
 
     # Build JWT payload
     now = datetime.now(timezone.utc)

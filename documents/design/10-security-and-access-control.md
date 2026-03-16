@@ -12,11 +12,40 @@
 
 - Authenticate users via PAM (Pluggable Authentication Modules) on the host OS.
 - The `POST /auth/token` endpoint accepts `username` and `password`, validates
-  credentials through PAM, reads the user's OS group memberships, maps groups
-  to ECUBE roles via `LOCAL_GROUP_ROLE_MAP`, and returns a signed JWT.
+  credentials through PAM, and resolves ECUBE roles using the hybrid model below.
 - Token expiration is configurable via `TOKEN_EXPIRE_MINUTES` (default: 60).
-- No user database is required — PAM delegates to whatever authentication
+- No user/password database is required — PAM delegates to whatever authentication
   backend the host is configured for (`/etc/shadow`, SSSD, Kerberos, etc.).
+
+### Hybrid authorization model (PAM auth + DB roles)
+
+Authentication and authorization are separated:
+
+- **Authentication** stays with PAM — the OS validates credentials.
+- **Authorization** is managed through the `user_roles` database table, with
+  OS group mappings as a fallback.
+
+**Role resolution priority:**
+
+1. Check the `user_roles` table for explicit role assignments → use if found.
+2. Fall back to OS group memberships + `LOCAL_GROUP_ROLE_MAP` config → use if found.
+3. No roles → empty list → `require_roles()` rejects with 403.
+
+This design allows the system to work immediately after first-run setup (OS
+groups provide roles) while the admin GUI can override and refine assignments
+via the database as needed.
+
+**`user_roles` table:**
+
+| Column     | Type                                          | Constraints                          |
+|------------|-----------------------------------------------|--------------------------------------|
+| `id`       | Integer (PK)                                  | Auto-increment                       |
+| `username` | String (indexed)                              | Not null                             |
+| `role`     | Enum: admin, manager, processor, auditor      | Not null, `native_enum=False`        |
+|            |                                               | Unique on (`username`, `role`)       |
+
+This table stores no credentials — it is a lightweight role assignment store
+managed through the `/users/*/roles` admin API endpoints.
 
 #### Local mode authentication flow
 
@@ -31,10 +60,13 @@
    │                          │  success / failure            │
    │                          │◀──────────────────────────────│
    │                          │                               │
-   │                          │  os.getgrouplist() → group IDs│
-   │                          │  grp.getgrgid() → OS groups   │
-   │                          │  LOCAL_GROUP_ROLE_MAP → roles │
-   │                          │  sign JWT(sub, groups, roles) │
+   │                          │  SELECT role FROM user_roles   │
+   │                          │    WHERE username = ?          │
+   │                          │  if DB roles → use them        │
+   │                          │  else:                         │
+   │                          │    os.getgrouplist() → groups  │
+   │                          │    LOCAL_GROUP_ROLE_MAP → roles│
+   │                          │  sign JWT(sub, groups, roles)  │
    │                          │                               │
    │  {access_token, bearer}  │                               │
    │◀────────────────────────│                               │
@@ -117,7 +149,7 @@ groups are entirely unmapped receives an empty role list, which causes
 
 | Operation / API area                       | Admin | Manager | Processor | Auditor |
 |--------------------------------------------|:-----:|:-------:|:---------:|:-------:|
-| Manage users / security config (future)    |  ✔    |    ✖    |     ✖     |    ✖    |
+| Manage user roles (`/users/*/roles`)       |  ✔    |    ✖    |     ✖     |    ✖    |
 | Add/remove mounts                          |  ✔    |    ✔    |     ✖     |    ✖    |
 | List mounts                                |  ✔    |    ✔    |     ✔     |    ✔    |
 | Initialize drives / assign to projects     |  ✔    |    ✔    |     ✖     |    ✖    |
@@ -177,5 +209,7 @@ def get_audit_logs(user: UserContext):
 ## Recommended Controls
 
 - Log role-evaluation denials in `audit_logs` with action and endpoint.
+- Log all role assignment/removal events (`ROLE_ASSIGNED`, `ROLE_REMOVED`) with actor identity.
 - Add explicit `403` response schema for authorization failures.
 - Keep introspection and audit endpoints read-only and role-gated.
+- First-run setup (`python -m app.setup`) must be run as root and must refuse to re-seed if an admin already exists.
