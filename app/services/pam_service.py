@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import grp
 import logging
+import os
 import pwd
 from typing import List, Protocol
 
@@ -43,29 +44,21 @@ def get_user_groups(username: str) -> List[str]:
     """
     groups: set[str] = set()
 
-    # Primary group
     try:
         pw = pwd.getpwnam(username)
     except KeyError:
         logger.warning(
-            "OS user %s not found in passwd database when resolving primary group",
+            "OS user %s not found in passwd database",
             username,
         )
-    else:
-        try:
-            primary = grp.getgrgid(pw.pw_gid)
-        except KeyError:
-            logger.warning(
-                "Primary GID %s for user %s not found in group database",
-                pw.pw_gid,
-                username,
-            )
-        else:
-            groups.add(primary.gr_name)
+        return sorted(groups)
 
-    # Supplementary groups
-    for g in grp.getgrall():
-        if username in g.gr_mem:
-            groups.add(g.gr_name)
+    # All groups (primary + supplementary) via getgrouplist(3),
+    # avoids the O(total-groups) scan of grp.getgrall().
+    for gid in os.getgrouplist(username, pw.pw_gid):
+        try:
+            groups.add(grp.getgrgid(gid).gr_name)
+        except KeyError:
+            logger.debug("GID %s has no group database entry", gid)
 
     return sorted(groups)
