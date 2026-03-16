@@ -690,7 +690,9 @@ export INTEGRATION_DATABASE_URL="postgresql://ecube_test:ecube_test@localhost:54
 /opt/ecube/venv/bin/python -m pytest tests/integration/ -v --run-integration
 ```
 
-### Run unit tests (no database required)
+### Run unit tests (in-memory SQLite; no external DB server)
+
+Unit tests use a pytest fixture–managed in-memory SQLite database (no PostgreSQL instance needed), so DB-related failures can still occur.
 
 ```bash
 cd /opt/ecube
