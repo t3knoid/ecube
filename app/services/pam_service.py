@@ -32,6 +32,7 @@ class LinuxPamAuthenticator:
 
     def authenticate(self, username: str, password: str) -> bool:
         import pam as _pam  # type: ignore[import-untyped]
+                            # lazy import avoids import-time failure on non-Linux platforms
 
         p = _pam.pam()
         return bool(p.authenticate(username, password))
