@@ -60,10 +60,16 @@ Authenticate with OS credentials and receive a signed JWT.
 **Behavior:**
 
 1. Validates credentials against the host OS via PAM.
-2. Reads the authenticated user's OS group memberships.
-3. Maps groups to ECUBE roles using the configured role resolver.
+2. Checks the `user_roles` table for explicit role assignments for this user.
+3. If DB roles exist, uses those. Otherwise, reads OS group memberships and maps groups to ECUBE roles using the configured role resolver (fallback).
 4. Signs a JWT containing `sub`, `username`, `groups`, `roles`, `iat`, and `exp`.
 5. Token expiration is configurable via `TOKEN_EXPIRE_MINUTES` (default: 60 minutes).
+
+**Role resolution priority:**
+
+1. `user_roles` table (DB) — explicit admin-managed assignments
+2. OS group memberships + role resolver config — automatic fallback
+3. No roles found — empty list — endpoints return 403
 
 **Audit events:**
 
@@ -127,6 +133,7 @@ Every authenticated request resolves to:
 
 | API Area / Operation | Admin | Manager | Processor | Auditor |
 | ---------------------- | :-----: | :-------: | :---------: | :-------: |
+| Manage user roles | ✔ | ✖ | ✖ | ✖ |
 | Add/remove mounts | ✔ | ✔ | ✖ | ✖ |
 | List mounts | ✔ | ✔ | ✔ | ✔ |
 | Initialize drives | ✔ | ✔ | ✖ | ✖ |
@@ -295,7 +302,101 @@ Compare two files by hash/size/path.
 
 ---
 
-## 3.6 Introspection API (Read‑Only)
+## 3.6 User Role Management
+
+All user role management endpoints require the `admin` role. These endpoints manage authorization (role assignments) only — they do not create or delete OS/LDAP user accounts.
+
+### `GET /users`
+
+List all users with their ECUBE role assignments.
+
+**Roles:** `admin`
+
+**Response (200 OK):**
+
+```json
+{
+    "users": [
+        { "username": "frank", "roles": ["admin"] },
+        { "username": "alice", "roles": ["processor", "auditor"] }
+    ]
+}
+```
+
+### `GET /users/{username}/roles`
+
+Get role assignments for a specific user.
+
+**Roles:** `admin`
+
+**Response (200 OK):**
+
+```json
+{
+    "username": "alice",
+    "roles": ["processor", "auditor"]
+}
+```
+
+Returns an empty `roles` list if the user has no DB-managed role assignments (OS group fallback still applies at login time).
+
+### `PUT /users/{username}/roles`
+
+Set roles for a user. Replaces all existing role assignments.
+
+**Roles:** `admin`
+
+**Request body (JSON):**
+
+```json
+{
+    "roles": ["processor", "auditor"]
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+    "username": "alice",
+    "roles": ["auditor", "processor"]
+}
+```
+
+**Error responses:**
+
+- `422 Unprocessable Entity` — Invalid role name or empty list
+
+**Valid roles:** `admin`, `manager`, `processor`, `auditor`
+
+Duplicate roles in the request are deduplicated. Roles are returned sorted alphabetically.
+
+**Audit events:**
+
+- `ROLE_ASSIGNED` — Includes actor, target user, and new roles
+
+### `DELETE /users/{username}/roles`
+
+Remove all role assignments for a user. The user will fall back to OS group-based role resolution on next login.
+
+**Roles:** `admin`
+
+**Response (200 OK):**
+
+```json
+{
+    "username": "alice",
+    "roles": []
+}
+```
+
+**Audit events:**
+
+- `ROLE_REMOVED` — Includes actor and target user
+
+---
+
+## 3.7 Introspection API (Read‑Only)
 
 ### `GET /introspection/usb/topology`
 
@@ -352,6 +453,7 @@ Returned when:
 Every security‑relevant event is logged:
 
 - Authentication success/failure
+- Role assignment/removal (`ROLE_ASSIGNED`, `ROLE_REMOVED`)
 - Role resolution
 - Access denied events
 - Drive initialization attempts
