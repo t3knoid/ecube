@@ -30,6 +30,45 @@ class Settings(BaseSettings):
     #: Example: ``{"CN=EvidenceAdmins,DC=corp,DC=example,DC=com": ["admin"]}``
     ldap_group_role_map: Dict[str, List[str]] = {}
 
+    #: LDAP server URI for group lookups when ``role_resolver = "ldap"``.
+    #: Example: ``ldap://ldap.example.com`` or ``ldaps://ldap.example.com:636``
+    ldap_server: Optional[str] = None
+
+    #: Distinguished name used to bind to the LDAP server.
+    ldap_bind_dn: Optional[str] = None
+
+    #: Password for the LDAP bind DN.
+    ldap_bind_password: Optional[str] = None
+
+    #: Base DN for LDAP search queries (e.g. ``DC=corp,DC=example,DC=com``).
+    ldap_base_dn: Optional[str] = None
+
+    # ---------------------------------------------------------------------------
+    # TLS configuration
+    # ---------------------------------------------------------------------------
+
+    #: Path to the TLS certificate file used by the application / uvicorn.
+    tls_certfile: str = "/opt/ecube/certs/cert.pem"
+
+    #: Path to the TLS private key file.
+    tls_keyfile: str = "/opt/ecube/certs/key.pem"
+
+    # ---------------------------------------------------------------------------
+    # Operational tuning
+    # ---------------------------------------------------------------------------
+
+    #: Number of days to retain audit log records. Records older than this are
+    #: purged on application startup.  ``0`` disables automatic cleanup.
+    audit_log_retention_days: int = 365
+
+    #: Maximum elapsed seconds for a copy job before it is marked FAILED with
+    #: a timeout reason.  ``0`` disables timeout enforcement.
+    copy_job_timeout: int = 3600
+
+    #: Interval in seconds between automatic USB discovery sweeps.
+    #: ``0`` disables periodic discovery.
+    usb_discovery_interval: int = 30
+
     # ---------------------------------------------------------------------------
     # Logging configuration
     # ---------------------------------------------------------------------------

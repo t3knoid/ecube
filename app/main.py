@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import traceback
 import uuid
@@ -8,6 +9,7 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
 from app.auth import get_current_user
+from app.config import settings
 from app.exceptions import AuthenticationError, AuthorizationError, ConflictError, ECUBEException
 from app.logging_config import configure_logging
 from app.routers import admin, audit, drives, files, introspection, jobs, mounts
@@ -50,7 +52,63 @@ tags_metadata = [
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     logger.info("ECUBE application starting")
+
+    # ------------------------------------------------------------------
+    # Startup: purge expired audit logs
+    # ------------------------------------------------------------------
+    if settings.audit_log_retention_days > 0:
+        try:
+            from app.database import SessionLocal
+            from app.services.audit_service import purge_expired_audit_logs
+
+            db = SessionLocal()
+            try:
+                purged = purge_expired_audit_logs(db, settings.audit_log_retention_days)
+                if purged:
+                    logger.info("Startup audit cleanup: purged %d records", purged)
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("Audit log cleanup failed during startup")
+
+    # ------------------------------------------------------------------
+    # Background: periodic USB discovery
+    # ------------------------------------------------------------------
+    discovery_task = None
+    if settings.usb_discovery_interval > 0:
+        async def _usb_discovery_loop() -> None:
+            from app.database import SessionLocal
+            from app.services.discovery_service import run_discovery_sync
+
+            interval = settings.usb_discovery_interval
+            while True:
+                await asyncio.sleep(interval)
+                try:
+                    db = SessionLocal()
+                    try:
+                        run_discovery_sync(db, actor="system")
+                    finally:
+                        db.close()
+                except asyncio.CancelledError:
+                    # Propagate cancellation so the task can be awaited cleanly on shutdown.
+                    raise
+                except Exception:
+                    logger.exception("Periodic USB discovery failed")
+
+        discovery_task = asyncio.create_task(_usb_discovery_loop())
+
     yield
+
+    # ------------------------------------------------------------------
+    # Shutdown
+    # ------------------------------------------------------------------
+    if discovery_task is not None:
+        discovery_task.cancel()
+        try:
+            await discovery_task
+        except asyncio.CancelledError:
+            pass
+
     logger.info("ECUBE application shutting down")
 
 
