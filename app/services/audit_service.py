@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
@@ -78,3 +79,18 @@ def log_and_audit(
         job_id=job_id,
         details=details or None,
     )
+
+
+def purge_expired_audit_logs(db: Session, retention_days: int) -> int:
+    """Delete audit log records older than *retention_days*.
+
+    Returns the number of records deleted.  When *retention_days* is ``0``,
+    cleanup is skipped and ``0`` is returned.
+    """
+    if retention_days <= 0:
+        return 0
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    count = AuditRepository(db).delete_older_than(cutoff)
+    if count:
+        logger.info("Purged %d audit log records older than %s", count, cutoff.isoformat())
+    return count
