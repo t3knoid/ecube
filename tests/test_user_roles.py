@@ -8,8 +8,6 @@ Covers:
 - Setup script helpers (non-root checks)
 """
 
-import time
-
 import jwt
 import pytest
 from sqlalchemy.exc import IntegrityError
