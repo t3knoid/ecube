@@ -286,6 +286,9 @@ SECRET_KEY=your-32-byte-hex-string-here
 # Signing algorithm
 ALGORITHM=HS256
 
+# Token lifetime in minutes (default: 60)
+TOKEN_EXPIRE_MINUTES=60
+
 # Role resolver provider: "local" (default), "ldap", or "oidc"
 ROLE_RESOLVER=local
 
@@ -410,6 +413,7 @@ DATABASE_URL=postgresql://ecube:ecube123@localhost:5432/ecube
 # Security (generate with: openssl rand -hex 32)
 SECRET_KEY=abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789
 ALGORITHM=HS256
+TOKEN_EXPIRE_MINUTES=60
 
 # Local identity (default: no setup needed)
 ROLE_RESOLVER=local
@@ -508,16 +512,64 @@ curl -k https://localhost:8443/introspection/version
 
 ### Authentication Methods
 
-#### Local Identity (Default)
+#### Local Identity (Default — PAM Authentication)
 
-Groups are configured in environment variables. Map local OS groups to ECUBE roles:
+ECUBE authenticates users via PAM on the host OS. Users log in by calling
+`POST /auth/token` with their OS username and password. The system validates
+credentials through PAM, reads the user's OS group memberships, maps groups to
+ECUBE roles, and returns a signed JWT.
+
+**Login example:**
 
 ```bash
-# In .env
+# Authenticate and receive a token
+curl -k -X POST https://localhost:8443/auth/token \
+  -H "Content-Type: application/json" \
+  -d '{"username": "frank", "password": "mypassword"}'
+
+# Response:
+# {"access_token": "eyJhbGciOiJIUzI1NiIs...", "token_type": "bearer"}
+
+# Use the token for subsequent API calls
+export TOKEN="eyJhbGciOiJIUzI1NiIs..."
+curl -k -H "Authorization: Bearer $TOKEN" https://localhost:8443/drives
+```
+
+**Setup:**
+
+1. Create OS users and groups on the ECUBE host:
+
+```bash
+# Create ECUBE role groups
+sudo groupadd evidence-admins
+sudo groupadd evidence-ops
+
+# Create a user and assign to groups
+sudo useradd -m frank
+sudo passwd frank
+sudo usermod -aG evidence-admins frank
+```
+
+2. Map OS groups to ECUBE roles in `.env`:
+
+```bash
 LOCAL_GROUP_ROLE_MAP='{"evidence-admins": ["admin"], "evidence-ops": ["manager", "processor"]}'
 ```
 
-No user database setup required. Tokens should carry a `groups` claim in JWT.
+3. Configure token expiration (optional):
+
+```bash
+# Token lifetime in minutes (default: 60)
+TOKEN_EXPIRE_MINUTES=60
+```
+
+**Requirements:**
+
+- The ECUBE service account must have PAM access (typically membership in
+  the `shadow` group or equivalent).
+- No user database is required — PAM delegates to whatever backend the
+  host is configured for (`/etc/shadow`, SSSD, Kerberos, etc.).
+- Passwords are never logged or stored by ECUBE.
 
 #### LDAP Integration
 
@@ -622,23 +674,29 @@ OIDC_GROUP_ROLE_MAP='{"evidence-admins@example.com": ["admin"]}'
 
 ### Assigning Roles
 
-Roles are derived from group memberships via the configured identity provider:
+Roles are derived from group memberships at login time:
 
-1. User logs in with credentials (username/password or SSO)
-2. Identity system returns user's group memberships
-3. System maps groups → ECUBE roles using configured mapping
-4. User receives token with roles in claim
-5. Each API call validates user's roles
+1. User calls `POST /auth/token` with username and password
+2. PAM validates credentials against the host OS (or LDAP/Kerberos via PAM)
+3. ECUBE resolves the user's OS group memberships
+4. Groups are mapped to ECUBE roles using `LOCAL_GROUP_ROLE_MAP` (or `LDAP_GROUP_ROLE_MAP`)
+5. A signed JWT is issued containing the resolved roles
+6. Each subsequent API call validates roles from the JWT claims
 
 **Example Flow:**
 
 ```text
-User "alice" in AD group "EvidenceAdmins" 
-    → System checks GROUP_ROLE_MAP
-    → "EvidenceAdmins" maps to ["admin"]
-    → Token issued with roles=["admin"]
-    → All endpoints accessible
+User "alice" calls POST /auth/token
+    → PAM validates password
+    → OS groups: ["evidence-admins", "users"]
+    → LOCAL_GROUP_ROLE_MAP: "evidence-admins" → ["admin"]
+    → JWT issued with roles=["admin"]
+    → All endpoints accessible until token expires
 ```
+
+**Note:** If a user's group memberships change, they must re-authenticate
+(obtain a new token) for the updated roles to take effect. The old token
+retains the previous roles until it expires.
 
 ---
 
