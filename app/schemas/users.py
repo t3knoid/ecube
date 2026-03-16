@@ -1,17 +1,17 @@
 """Pydantic schemas for user-role management endpoints."""
 
-from typing import List
+from typing import List, Literal
 
 from pydantic import BaseModel, Field
 
-from app.repositories.user_role_repository import VALID_ROLES  # noqa: F401
+RoleName = Literal["admin", "manager", "processor", "auditor"]
 
 
 class UserRolesResponse(BaseModel):
     """Role assignments for a single user."""
 
     username: str
-    roles: List[str]
+    roles: List[RoleName]
 
 
 class UserListResponse(BaseModel):
@@ -23,7 +23,7 @@ class UserListResponse(BaseModel):
 class SetRolesRequest(BaseModel):
     """Request body for ``PUT /users/{username}/roles``."""
 
-    roles: List[str] = Field(
+    roles: List[RoleName] = Field(
         ...,
         min_length=1,
         description="List of ECUBE roles to assign (admin, manager, processor, auditor)",
