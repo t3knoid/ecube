@@ -115,8 +115,8 @@ class TestCreateUser:
         assert user.uid == 1000
         # Should have called sudo useradd and sudo chpasswd.
         calls = [c.args[0] for c in mock_subprocess.call_args_list]
-        assert ["sudo", "useradd", "-m", "testuser"] in calls
-        assert ["sudo", "chpasswd"] in calls
+        assert ["sudo", "/usr/sbin/useradd", "-m", "testuser"] in calls
+        assert ["sudo", "/usr/sbin/chpasswd"] in calls
 
     @patch("app.services.os_user_service.pwd")
     def test_create_user_already_exists(self, mock_pwd):
@@ -153,7 +153,7 @@ class TestCreateUser:
         user = create_user("testuser", "s3cret", groups=["ecube-admins"])
 
         calls = [c.args[0] for c in mock_subprocess.call_args_list]
-        assert ["sudo", "usermod", "-aG", "ecube-admins", "testuser"] in calls
+        assert ["sudo", "/usr/sbin/usermod", "-aG", "ecube-admins", "testuser"] in calls
 
 
 class TestDeleteUser:
@@ -168,7 +168,7 @@ class TestDeleteUser:
         delete_user("testuser")
 
         calls = [c.args[0] for c in mock_subprocess.call_args_list]
-        assert ["sudo", "userdel", "-r", "testuser"] in calls
+        assert ["sudo", "/usr/sbin/userdel", "-r", "testuser"] in calls
 
     @patch("app.services.os_user_service.pwd")
     def test_delete_nonexistent_user(self, mock_pwd):
@@ -193,7 +193,7 @@ class TestResetPassword:
         reset_password("testuser", "newpass")
 
         call = mock_subprocess.call_args_list[-1]
-        assert call.args[0] == ["sudo", "chpasswd"]
+        assert call.args[0] == ["sudo", "/usr/sbin/chpasswd"]
         assert call.kwargs["input"] == "testuser:newpass"
 
 
@@ -251,7 +251,7 @@ class TestDeleteGroup:
         delete_group("oldgroup")
 
         calls = [c.args[0] for c in mock_subprocess.call_args_list]
-        assert ["sudo", "groupdel", "oldgroup"] in calls
+        assert ["sudo", "/usr/sbin/groupdel", "oldgroup"] in calls
 
     @patch("app.services.os_user_service.grp")
     def test_delete_nonexistent_group(self, mock_grp):
