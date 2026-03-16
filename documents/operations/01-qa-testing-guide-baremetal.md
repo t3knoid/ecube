@@ -11,16 +11,17 @@
 2. [Install System Packages](#2-install-system-packages)
 3. [Install and Configure PostgreSQL](#3-install-and-configure-postgresql)
 4. [Install ECUBE](#4-install-ecube)
-5. [Create the Environment File](#5-create-the-environment-file)
-6. [Generate TLS Certificates](#6-generate-tls-certificates)
-7. [Run Database Migrations](#7-run-database-migrations)
-8. [Start the Service](#8-start-the-service)
-9. [Generate Test Tokens](#9-generate-test-tokens)
-10. [API Test Scenarios](#10-api-test-scenarios)
-11. [QA Test Cases](#11-qa-test-cases)
-12. [Running the Automated Integration Tests](#12-running-the-automated-integration-tests)
-13. [Service Management](#13-service-management)
-14. [Troubleshooting](#14-troubleshooting)
+5. [Create QA Test Users and Groups](#5-create-qa-test-users-and-groups)
+6. [Configure the Environment (Optional)](#6-configure-the-environment-optional)
+7. [Generate TLS Certificates](#7-generate-tls-certificates)
+8. [Run Database Migrations](#8-run-database-migrations)
+9. [Start the Service](#9-start-the-service)
+10. [Authenticate and Obtain Tokens](#10-authenticate-and-obtain-tokens)
+11. [API Test Scenarios](#11-api-test-scenarios)
+12. [QA Test Cases](#12-qa-test-cases)
+13. [Running the Automated Integration Tests](#13-running-the-automated-integration-tests)
+14. [Service Management](#14-service-management)
+15. [Troubleshooting](#15-troubleshooting)
 
 ---
 
@@ -123,7 +124,43 @@ sudo -u ecube /opt/ecube/venv/bin/pip install -e /opt/ecube/
 
 ---
 
-## 5. Configure the Environment (Optional)
+## 5. Create QA Test Users and Groups
+
+ECUBE authenticates users via PAM on the host OS. Create OS users and groups
+that map to ECUBE roles so QA can log in via the `POST /auth/token` endpoint.
+
+```bash
+# Create groups that will map to ECUBE roles
+sudo groupadd qa-admins
+sudo groupadd qa-managers
+sudo groupadd qa-processors
+sudo groupadd qa-auditors
+
+# Create QA user accounts with passwords
+for ROLE in admin manager processor auditor; do
+  sudo useradd -m "qa-${ROLE}" -G "qa-${ROLE}s"
+  echo "qa-${ROLE}:QaPass-${ROLE}!" | sudo chpasswd
+done
+```
+
+> **PAM access:** The ECUBE service account must be able to call PAM
+> for authentication. On Ubuntu/Debian this typically requires membership
+> in the `shadow` group:
+> ```bash
+> sudo usermod -aG shadow ecube
+> ```
+
+Verify the users and groups were created:
+
+```bash
+for ROLE in admin manager processor auditor; do
+  echo "qa-${ROLE}: $(id qa-${ROLE})"
+done
+```
+
+---
+
+## 6. Configure the Environment (Optional)
 
 The `.env` file is **optional**. All settings have built-in defaults (see `.env.example` in the
 release package for the full list with descriptions). You only need to create a `.env` file if
@@ -146,6 +183,12 @@ For example, if your database password is `ecube123` instead of the default `ecu
 # Only override what differs from defaults
 sudo -u ecube tee /opt/ecube/.env > /dev/null << 'EOF'
 DATABASE_URL=postgresql://ecube:ecube123@localhost:5432/ecube
+
+# Map the QA groups created in step 5 to ECUBE roles
+LOCAL_GROUP_ROLE_MAP='{"qa-admins": ["admin"], "qa-managers": ["manager"], "qa-processors": ["processor"], "qa-auditors": ["auditor"]}'
+
+# Token lifetime (default: 60 minutes; increase for long QA sessions)
+TOKEN_EXPIRE_MINUTES=480
 EOF
 ```
 
@@ -153,7 +196,7 @@ EOF
 
 ---
 
-## 6. Generate TLS Certificates
+## 7. Generate TLS Certificates
 
 For QA testing, self-signed certificates are fine:
 
@@ -172,7 +215,7 @@ sudo chmod 644 /opt/ecube/certs/cert.pem
 
 ---
 
-## 7. Run Database Migrations
+## 8. Run Database Migrations
 
 ```bash
 cd /opt/ecube
@@ -181,7 +224,7 @@ sudo -u ecube /opt/ecube/venv/bin/alembic upgrade head
 
 ---
 
-## 8. Start the Service
+## 9. Start the Service
 
 ### Option A — Run directly (foreground, good for initial testing)
 
@@ -243,52 +286,30 @@ curl -k https://localhost:8443/health
 
 ---
 
-## 9. Generate Test Tokens
+## 10. Authenticate and Obtain Tokens
 
-All endpoints except `/health` require a JWT bearer token. Generate tokens for each role you need to test.
+All endpoints except `/health` and `/auth/token` require a JWT bearer token.
+Log in via `POST /auth/token` using the OS accounts created in step 5.
 
-### Admin Token
+### Log in as admin
 
 ```bash
-TOKEN=$(/opt/ecube/venv/bin/python3 -c "
-import jwt, time
-token = jwt.encode({
-    'sub': 'qa-admin-001',
-    'username': 'qa-admin',
-    'groups': ['qa-admins'],
-    'roles': ['admin'],
-    'exp': int(time.time()) + 86400
-}, 'change-me-in-production-please-rotate-32b', algorithm='HS256')
-print(token)
-")
+TOKEN=$(curl -sk -X POST https://localhost:8443/auth/token \
+  -H "Content-Type: application/json" \
+  -d '{"username": "qa-admin", "password": "QaPass-admin!"}' \
+  | jq -r '.access_token')
+
 echo "Admin token: $TOKEN"
 ```
 
-### Tokens for Other Roles
-
-Generate tokens by changing the `roles` value:
-
-| Role | `roles` value | Create command |
-|------|---------------|----------------|
-| Manager | `["manager"]` | Same as above, replace `'roles': ['manager']` |
-| Processor | `["processor"]` | Same as above, replace `'roles': ['processor']` |
-| Auditor | `["auditor"]` | Same as above, replace `'roles': ['auditor']` |
-
-**Convenience — generate all four tokens at once:**
+### Tokens for other roles
 
 ```bash
 for ROLE in admin manager processor auditor; do
-  TOK=$(/opt/ecube/venv/bin/python3 -c "
-import jwt, time
-t = jwt.encode({
-    'sub': 'qa-${ROLE}-001',
-    'username': 'qa-${ROLE}',
-    'groups': ['qa-${ROLE}s'],
-    'roles': ['${ROLE}'],
-    'exp': int(time.time()) + 86400
-}, 'change-me-in-production-please-rotate-32b', algorithm='HS256')
-print(t)
-")
+  TOK=$(curl -sk -X POST https://localhost:8443/auth/token \
+    -H "Content-Type: application/json" \
+    -d "{\"username\": \"qa-${ROLE}\", \"password\": \"QaPass-${ROLE}!\"}" \
+    | jq -r '.access_token')
   echo "${ROLE^^}_TOKEN=${TOK}"
 done
 ```
@@ -299,15 +320,34 @@ Save the admin token for the examples below:
 export TOKEN="<paste admin token here>"
 ```
 
+> **Fallback — manual token generation:** If PAM authentication is not
+> available (e.g. running tests on a machine where the QA users haven't
+> been created), you can still generate tokens directly with the signing
+> key:
+>
+> ```bash
+> TOKEN=$(/opt/ecube/venv/bin/python3 -c "
+> import jwt, time
+> token = jwt.encode({
+>     'sub': 'qa-admin-001',
+>     'username': 'qa-admin',
+>     'groups': ['qa-admins'],
+>     'roles': ['admin'],
+>     'exp': int(time.time()) + 86400
+> }, 'change-me-in-production-please-rotate-32b', algorithm='HS256')
+> print(token)
+> ")
+> ```
+
 ---
 
-## 10. API Test Scenarios
+## 11. API Test Scenarios
 
 > **Note:** Because the service runs with TLS, all `curl` commands use `-k` (skip certificate verification for self-signed certs) and port `8443`.
 
 Open the interactive **Swagger UI** at: `https://localhost:8443/docs`
 
-### 10.1 Health & Introspection
+### 11.1 Health & Introspection
 
 ```bash
 # Health (no auth)
@@ -330,7 +370,7 @@ curl -sk https://localhost:8443/introspection/mounts \
   -H "Authorization: Bearer $TOKEN" | jq
 ```
 
-### 10.2 Mount Management
+### 11.2 Mount Management
 
 ```bash
 # Add an NFS mount
@@ -352,7 +392,7 @@ curl -sk -X DELETE https://localhost:8443/mounts/{id} \
   -H "Authorization: Bearer $TOKEN" | jq
 ```
 
-### 10.3 Drive Management
+### 11.3 Drive Management
 
 Plug a USB drive into the machine and wait ~30 seconds for automatic discovery.
 
@@ -372,7 +412,7 @@ curl -sk -X POST https://localhost:8443/drives/{id}/prepare-eject \
   -H "Authorization: Bearer $TOKEN" | jq
 ```
 
-### 10.4 Job Management
+### 11.4 Job Management
 
 ```bash
 # Create a copy job
@@ -405,7 +445,7 @@ curl -sk -X POST https://localhost:8443/jobs/{id}/manifest \
   -H "Authorization: Bearer $TOKEN" | jq
 ```
 
-### 10.5 Audit Logs
+### 11.5 Audit Logs
 
 ```bash
 # View recent audit logs
@@ -417,7 +457,7 @@ curl -sk "https://localhost:8443/audit?action=DRIVE_INITIALIZED" \
   -H "Authorization: Bearer $TOKEN" | jq
 ```
 
-### 10.6 File Operations
+### 11.6 File Operations
 
 ```bash
 # Get file hashes (replace {file_id})
@@ -433,9 +473,26 @@ curl -sk -X POST https://localhost:8443/files/compare \
 
 ---
 
-## 11. QA Test Cases
+## 12. QA Test Cases
 
-### 11.1 Authentication & Authorization
+### 12.1 Login Endpoint (`POST /auth/token`)
+
+| # | Test | How | Expected |
+|---|------|-----|----------|
+| 1 | Valid login | `POST /auth/token` with valid OS username/password | 200, response contains `access_token` and `token_type: "bearer"` |
+| 2 | Invalid password | `POST /auth/token` with wrong password | 401, `Invalid credentials` |
+| 3 | Unknown user | `POST /auth/token` with non-existent username | 401, `Invalid credentials` |
+| 4 | Missing username | `POST /auth/token` with `{"password": "x"}` | 422 |
+| 5 | Missing password | `POST /auth/token` with `{"username": "x"}` | 422 |
+| 6 | Empty username | `POST /auth/token` with `{"username": "", "password": "x"}` | 422 |
+| 7 | Token contains correct roles | Decode JWT from login response | `roles` matches group mapping in `LOCAL_GROUP_ROLE_MAP` |
+| 8 | Token contains groups | Decode JWT from login response | `groups` lists the user's OS groups |
+| 9 | Token is usable | Use returned token to call `GET /drives` | 200 |
+| 10 | Login audit log | `GET /audit?action=AUTH_SUCCESS` after successful login | `AUTH_SUCCESS` entry with username |
+| 11 | Failed login audit log | `GET /audit?action=AUTH_FAILURE` after failed login | `AUTH_FAILURE` entry with username |
+| 12 | No auth required for login | `POST /auth/token` without `Authorization` header | 200 (not 401) |
+
+### 12.2 Authorization
 
 | # | Test | How | Expected |
 |---|------|-----|----------|
@@ -449,7 +506,7 @@ curl -sk -X POST https://localhost:8443/files/compare \
 | 8 | Processor creates job | `POST /jobs` with processor token | 200 |
 | 9 | All error responses have `trace_id` | Inspect any 4xx/5xx JSON body | `trace_id` field present |
 
-### 11.2 Project Isolation
+### 12.3 Project Isolation
 
 | # | Test | Expected |
 |---|------|----------|
@@ -457,7 +514,7 @@ curl -sk -X POST https://localhost:8443/files/compare \
 | 2 | Re-initialize same drive with `PROJ-B` | 403, `FORBIDDEN` — isolation violation |
 | 3 | Check audit log for `PROJECT_ISOLATION_VIOLATION` | Record present with `requested_project_id: PROJ-B` |
 
-### 11.3 Drive State Machine
+### 12.4 Drive State Machine
 
 | # | Test | Expected |
 |---|------|----------|
@@ -466,7 +523,7 @@ curl -sk -X POST https://localhost:8443/files/compare \
 | 3 | Prepare-eject an `IN_USE` drive | 200, state → `AVAILABLE` |
 | 4 | Prepare-eject an `AVAILABLE` drive | 409, `CONFLICT` |
 
-### 11.4 USB Hardware (Bare-Metal Specific)
+### 12.5 USB Hardware (Bare-Metal Specific)
 
 These tests exercise real hardware paths and are the primary reason to use bare-metal.
 
@@ -479,7 +536,7 @@ These tests exercise real hardware paths and are the primary reason to use bare-
 | 5 | Multiple drives | Plug in 2+ drives simultaneously | All drives appear in `/drives`; each can be initialized to different projects |
 | 6 | Sync + unmount | Initialize drive, create/start a job, then prepare-eject | Filesystem flushed and unmounted before eject (verify via `mount` command — no partitions from that drive should be listed) |
 
-### 11.5 End-to-End Copy Workflow
+### 12.6 End-to-End Copy Workflow
 
 Walk through the complete data export lifecycle:
 
@@ -515,7 +572,7 @@ Walk through the complete data export lifecycle:
 13. **Check audit trail** — `GET /audit` — confirm the complete chain:
     `MOUNT_ADDED → DRIVE_INITIALIZED → JOB_CREATED → JOB_STARTED → JOB_COMPLETED → DRIVE_EJECT_PREPARED`
 
-### 11.6 Error Handling
+### 12.7 Error Handling
 
 | # | Test | Expected |
 |---|------|----------|
@@ -526,7 +583,7 @@ Walk through the complete data export lifecycle:
 
 ---
 
-## 12. Running the Automated Integration Tests
+## 13. Running the Automated Integration Tests
 
 The project includes an automated integration test suite that runs against a real PostgreSQL database.
 
@@ -560,7 +617,7 @@ cd /opt/ecube/src
 
 ---
 
-## 13. Service Management
+## 14. Service Management
 
 ### Systemd Commands
 
@@ -604,14 +661,15 @@ sudo ss -tlnp | grep 8443
 
 ---
 
-## 14. Troubleshooting
+## 15. Troubleshooting
 
 | Symptom | Possible Cause | Resolution |
 |---------|---------------|------------|
 | Service won't start | Missing `.env` or bad `DATABASE_URL` | Check `sudo journalctl -u ecube -n 50`; verify `/opt/ecube/.env`; test DB with `psql -U ecube -d ecube -h localhost -c "SELECT 1"` |
 | Migration fails | Wrong DB credentials or DB doesn't exist | Re-run `CREATE DATABASE` and `CREATE USER` commands from step 3 |
-| 401 on all requests | Token expired or wrong `SECRET_KEY` | Regenerate token; ensure `.env SECRET_KEY` matches the key used to sign the token |
-| 403 on all requests | Groups not mapped to roles | Check `LOCAL_GROUP_ROLE_MAP` in `.env`; ensure token `groups` claim has a mapped group |
+| 401 on all requests | Token expired or wrong `SECRET_KEY` | Re-authenticate via `POST /auth/token`; ensure `.env SECRET_KEY` has not changed since the token was issued |
+| 401 on login (`POST /auth/token`) | PAM authentication failed | Verify user exists (`id qa-admin`); verify password (`su - qa-admin`); ensure `ecube` user is in the `shadow` group |
+| 403 on all requests | Groups not mapped to roles | Check `LOCAL_GROUP_ROLE_MAP` in `.env`; ensure the OS user belongs to a mapped group (`id qa-admin`) |
 | No USB drives detected | `ecube` user lacks permission | Add user to `disk` and `plugdev` groups: `sudo usermod -aG disk,plugdev ecube` then restart |
 | `lsusb` shows device but ECUBE doesn't | sysfs path may differ | Check `USB_DISCOVERY_INTERVAL` > 0; check `/sys/bus/usb/devices` is readable by `ecube` user |
 | TLS certificate errors in curl | Self-signed cert | Always use `curl -k` for self-signed certs |
