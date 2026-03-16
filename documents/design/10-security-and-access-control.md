@@ -212,4 +212,4 @@ def get_audit_logs(user: UserContext):
 - Log all role assignment/removal events (`ROLE_ASSIGNED`, `ROLE_REMOVED`) with actor identity.
 - Add explicit `403` response schema for authorization failures.
 - Keep introspection and audit endpoints read-only and role-gated.
-- First-run setup (`python -m app.setup`) must be run as root and must refuse to re-seed if an admin already exists.
+- First-run setup is available via the unauthenticated `POST /setup/initialize` API endpoint or the CLI `python -m app.setup` script.  Both refuse to re-seed if an admin already exists.  The API endpoint uses a `system_initialization` single-row table with a uniqueness constraint as a cross-process guard, ensuring only one worker can complete initialization even in multi-worker deployments.
