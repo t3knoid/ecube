@@ -214,13 +214,14 @@ class TestOpenAPISchema:
             )
 
     def test_protected_endpoints_have_security_requirement(self):
-        """All non-health endpoints must declare the HTTPBearer security requirement."""
+        """All non-health, non-login endpoints must declare the HTTPBearer security requirement."""
         from app.main import app
 
         openapi_schema = app.openapi()
+        unauthenticated_paths = {"/health", "/auth/token"}
         violations = []
         for path, path_item in openapi_schema.get("paths", {}).items():
-            if path == "/health":
+            if path in unauthenticated_paths:
                 continue
             for method, operation in path_item.items():
                 if isinstance(operation, dict) and "responses" in operation:
