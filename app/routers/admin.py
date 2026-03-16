@@ -345,7 +345,10 @@ def set_os_user_groups(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except os_user_service.OSUserError as exc:
-        raise HTTPException(status_code=404, detail=exc.message)
+        # "does not exist" → 404; anything else is a subprocess/system failure → 500
+        if "does not exist" in exc.message:
+            raise HTTPException(status_code=404, detail=exc.message)
+        raise HTTPException(status_code=500, detail=exc.message)
 
     pw = _pwd.getpwnam(username)
 
