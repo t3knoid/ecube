@@ -1,8 +1,10 @@
 """PAM-based local authentication and group enumeration (Linux only).
 
 This module provides OS-level credential validation via PAM and reads
-group memberships from the system group database.  It is used by the
-``POST /auth/token`` endpoint when ``role_resolver = "local"``.
+group memberships from the system group database. It is used by the
+``POST /auth/token`` endpoint whenever system/PAM-backed authentication
+is enabled (for example, when ``role_resolver`` is set to ``"local"`` or
+``"ldap"`` with LDAP provided via PAM/SSSD).
 """
 
 from __future__ import annotations
