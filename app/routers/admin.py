@@ -2,7 +2,8 @@
 
 Log endpoints allow authenticated users to list and download application log
 files.  OS user/group endpoints allow ``admin``-role users to create, list,
-and delete OS users and groups through the API.
+delete, reset passwords, and modify group memberships for OS users, as well
+as create, list, and delete OS groups through the API.
 
 Security considerations
 -----------------------
