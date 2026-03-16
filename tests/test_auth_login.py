@@ -247,49 +247,38 @@ def test_login_returns_404_when_oidc_mode(unauthenticated_client):
 def test_get_user_groups_reads_os_groups():
     """get_user_groups should return primary + supplementary groups."""
     import grp
+    import os
     import pwd
     from app.services.pam_service import get_user_groups
 
     mock_pw = MagicMock()
     mock_pw.pw_gid = 1000
 
-    mock_primary_grp = MagicMock()
-    mock_primary_grp.gr_name = "primary"
-
-    mock_extra_grp = MagicMock()
-    mock_extra_grp.gr_name = "extra"
-    mock_extra_grp.gr_mem = ["testuser"]
-
-    mock_other_grp = MagicMock()
-    mock_other_grp.gr_name = "other"
-    mock_other_grp.gr_mem = ["someone-else"]
+    def _getgrgid(gid):
+        mapping = {1000: "primary", 2000: "extra"}
+        if gid not in mapping:
+            raise KeyError(gid)
+        m = MagicMock()
+        m.gr_name = mapping[gid]
+        return m
 
     with (
         patch.object(pwd, "getpwnam", return_value=mock_pw),
-        patch.object(grp, "getgrgid", return_value=mock_primary_grp),
-        patch.object(grp, "getgrall", return_value=[mock_extra_grp, mock_other_grp]),
+        patch.object(os, "getgrouplist", return_value=[1000, 2000]),
+        patch.object(grp, "getgrgid", side_effect=_getgrgid),
     ):
         groups = get_user_groups("testuser")
 
     assert "primary" in groups
     assert "extra" in groups
-    assert "other" not in groups
 
 
 def test_get_user_groups_handles_unknown_user():
     """get_user_groups should return empty list for unknown users."""
-    import grp
     import pwd
     from app.services.pam_service import get_user_groups
 
-    mock_grp = MagicMock()
-    mock_grp.gr_name = "somegroup"
-    mock_grp.gr_mem = ["other"]
-
-    with (
-        patch.object(pwd, "getpwnam", side_effect=KeyError("unknown")),
-        patch.object(grp, "getgrall", return_value=[mock_grp]),
-    ):
+    with patch.object(pwd, "getpwnam", side_effect=KeyError("unknown")):
         groups = get_user_groups("nonexistent")
 
     assert groups == []
