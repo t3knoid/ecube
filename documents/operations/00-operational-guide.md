@@ -328,6 +328,79 @@ COPY_JOB_TIMEOUT=3600
 USB_DISCOVERY_INTERVAL=30
 ```
 
+#### Copy Engine Tuning
+
+```bash
+# Chunk size in bytes for file copy and checksum computation (default: 1 MB)
+COPY_CHUNK_SIZE_BYTES=1048576
+
+# Default thread pool size when job thread_count is not set
+COPY_DEFAULT_THREAD_COUNT=4
+
+# Default max retries per file when job max_file_retries is not set
+COPY_DEFAULT_MAX_RETRIES=3
+
+# Default retry delay in seconds when job retry_delay_seconds is not set
+COPY_DEFAULT_RETRY_DELAY_SECONDS=1.0
+```
+
+#### Subprocess & System Paths
+
+```bash
+# Timeout in seconds for subprocess calls (mount, umount, sync)
+SUBPROCESS_TIMEOUT_SECONDS=30
+
+# Paths to system binaries (Linux defaults; override for non-standard installs)
+SYNC_BINARY_PATH=/bin/sync
+UMOUNT_BINARY_PATH=/bin/umount
+
+# Filesystem paths (Linux defaults; override for portability/testing)
+PROCFS_MOUNTS_PATH=/proc/mounts
+SYSFS_USB_DEVICES_PATH=/sys/bus/usb/devices
+SYSFS_BLOCK_PATH=/sys/block
+```
+
+#### Audit Log Pagination
+
+```bash
+# Default page size for audit log queries
+AUDIT_LOG_DEFAULT_LIMIT=100
+
+# Maximum allowed page size for audit log queries
+AUDIT_LOG_MAX_LIMIT=1000
+```
+
+#### Database Connection Pool
+
+```bash
+# Number of persistent connections in the connection pool
+DB_POOL_SIZE=5
+
+# Maximum overflow connections above pool_size
+DB_POOL_MAX_OVERFLOW=10
+
+# Seconds after which a connection is recycled (-1 disables)
+DB_POOL_RECYCLE_SECONDS=-1
+```
+
+#### OIDC Advanced
+
+```bash
+# Timeout in seconds for OIDC discovery document fetch
+OIDC_DISCOVERY_TIMEOUT_SECONDS=10
+
+# Allowed JWT signing algorithms (JSON list)
+OIDC_ALLOWED_ALGORITHMS='["RS256","RS384","RS512","ES256","ES384","ES512"]'
+```
+
+#### OpenAPI Metadata
+
+```bash
+# Contact information shown in the OpenAPI spec
+API_CONTACT_NAME="ECUBE Support"
+API_CONTACT_EMAIL="support@ecube.local"
+```
+
 ### Example `.env` File
 
 ```bash
