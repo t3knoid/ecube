@@ -13,7 +13,7 @@ from app.auth import get_current_user
 from app.config import settings
 from app.exceptions import AuthenticationError, AuthorizationError, ConflictError, ECUBEException
 from app.logging_config import configure_logging
-from app.routers import admin, audit, auth, drives, files, introspection, jobs, mounts, users
+from app.routers import admin, audit, auth, drives, files, introspection, jobs, mounts, setup, users
 from app.schemas.errors import ErrorResponse
 
 # Configure logging before anything else.
@@ -54,6 +54,14 @@ tags_metadata = [
     {
         "name": "users",
         "description": "User role management — assign, update, and remove ECUBE role assignments.",
+    },
+    {
+        "name": "admin",
+        "description": "Administration — log file access, OS user and group management.",
+    },
+    {
+        "name": "setup",
+        "description": "First-run setup wizard — system initialization and status check.",
     },
 ]
 
@@ -170,7 +178,7 @@ def custom_openapi():
     })
 
     # Apply security requirement to all endpoints except unauthenticated routes
-    _unauthenticated_paths = {"/health", "/auth/token"}
+    _unauthenticated_paths = {"/health", "/auth/token", "/setup/status", "/setup/initialize"}
     for path, path_item in openapi_schema["paths"].items():
         if path not in _unauthenticated_paths:
             for operation in path_item.values():
@@ -188,6 +196,9 @@ app.openapi = custom_openapi
 
 # Auth router — unauthenticated (login endpoint)
 app.include_router(auth.router)
+
+# Setup router — unauthenticated (first-run wizard; guarded by has_any_admin check)
+app.include_router(setup.router)
 
 app.include_router(drives.router, dependencies=[Depends(get_current_user)])
 app.include_router(mounts.router, dependencies=[Depends(get_current_user)])

@@ -10,6 +10,7 @@ from sqlalchemy.pool import StaticPool
 from app.config import settings
 from app.database import Base, get_db
 from app.main import app
+import app.database as _app_database
 
 SQLALCHEMY_DATABASE_URL = "sqlite://"
 
@@ -19,6 +20,12 @@ engine = create_engine(
     poolclass=StaticPool,
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# Redirect the app-level SessionLocal so the lifespan (audit purge, USB
+# discovery) and anything else that uses ``from app.database import
+# SessionLocal`` also hit the in-memory SQLite database instead of
+# attempting to connect to PostgreSQL.
+_app_database.SessionLocal = TestingSessionLocal
 
 
 def pytest_addoption(parser):
