@@ -536,7 +536,7 @@ These tests exercise real hardware paths and are the primary reason to use bare-
 |---|------|-------|----------|
 | 1 | Hot-plug detection | Plug in a USB drive, wait 30 seconds | `GET /drives` shows the new drive in `AVAILABLE` state (discovery auto-transitions `EMPTY → AVAILABLE`) |
 | 2 | USB topology | `GET /introspection/usb/topology` | Shows real hub serial numbers, port numbers, connected devices |
-| 3 | Physical eject | Initialize drive → prepare-eject → physically remove | Drive disappears from `/drives` list; audit shows `DRIVE_EJECT_PREPARED` |
+| 3 | Physical eject | Initialize drive → prepare-eject → physically remove | After the next discovery cycle, `GET /drives` still lists the drive with `current_state=EMPTY`; audit shows `DRIVE_EJECT_PREPARED` |
 | 4 | Re-plug same drive | Remove and re-insert the same drive | Drive reappears as `AVAILABLE` with same `device_identifier` (after discovery cycle) |
 | 5 | Multiple drives | Plug in 2+ drives simultaneously | All drives appear in `/drives`; each can be initialized to different projects |
 | 6 | Sync + unmount | Initialize drive, create/start a job, then prepare-eject | Filesystem flushed and unmounted before eject (verify via `mount` command — no partitions from that drive should be listed) |
