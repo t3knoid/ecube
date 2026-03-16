@@ -266,6 +266,8 @@ def reset_password(username: str, password: str) -> None:
     Raises :class:`OSUserError` on failure, :class:`ValueError` for bad input.
     """
     validate_username(username)
+    if _is_reserved_username(username):
+        raise ValueError(f"Cannot reset password for reserved username: {username}")
     if not password:
         raise ValueError("Password cannot be empty")
     if not user_exists(username):
