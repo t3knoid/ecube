@@ -509,8 +509,9 @@ curl -sk -X DELETE https://localhost:8443/users/qa-processor/roles \
 ```
 
 > **Note:** These endpoints manage authorization only — they do not create or
-> delete OS user accounts. The admin still uses OS/LDAP tools to create users,
-> then assigns ECUBE roles through the API or a future admin GUI.
+> delete OS user accounts. To manage OS-level accounts through the API, use
+> the `/admin/os-users` and `/admin/os-groups` endpoints (requires `admin`
+> role). Alternatively, the admin can use OS/LDAP tools directly.
 
 ---
 
