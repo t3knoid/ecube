@@ -258,7 +258,7 @@ Type=simple
 User=ecube
 Group=ecube
 WorkingDirectory=/opt/ecube
-EnvironmentFile=/opt/ecube/.env
+EnvironmentFile=-/opt/ecube/.env
 
 ExecStart=/opt/ecube/venv/bin/uvicorn \
   --host 0.0.0.0 \
