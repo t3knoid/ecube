@@ -67,6 +67,82 @@ class TestSettingsDefaults:
         s = Settings(database_url="sqlite://")
         assert s.ldap_base_dn is None
 
+    def test_copy_chunk_size_bytes_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.copy_chunk_size_bytes == 1_048_576
+
+    def test_copy_default_thread_count_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.copy_default_thread_count == 4
+
+    def test_copy_default_max_retries_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.copy_default_max_retries == 3
+
+    def test_copy_default_retry_delay_seconds_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.copy_default_retry_delay_seconds == 1.0
+
+    def test_subprocess_timeout_seconds_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.subprocess_timeout_seconds == 30
+
+    def test_sync_binary_path_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.sync_binary_path == "/bin/sync"
+
+    def test_umount_binary_path_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.umount_binary_path == "/bin/umount"
+
+    def test_procfs_mounts_path_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.procfs_mounts_path == "/proc/mounts"
+
+    def test_sysfs_usb_devices_path_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.sysfs_usb_devices_path == "/sys/bus/usb/devices"
+
+    def test_sysfs_block_path_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.sysfs_block_path == "/sys/block"
+
+    def test_audit_log_default_limit_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.audit_log_default_limit == 100
+
+    def test_audit_log_max_limit_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.audit_log_max_limit == 1000
+
+    def test_db_pool_size_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.db_pool_size == 5
+
+    def test_db_pool_max_overflow_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.db_pool_max_overflow == 10
+
+    def test_db_pool_recycle_seconds_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.db_pool_recycle_seconds == -1
+
+    def test_oidc_allowed_algorithms_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.oidc_allowed_algorithms == ["RS256", "RS384", "RS512", "ES256", "ES384", "ES512"]
+
+    def test_oidc_discovery_timeout_seconds_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.oidc_discovery_timeout_seconds == 10
+
+    def test_api_contact_name_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.api_contact_name == "ECUBE Support"
+
+    def test_api_contact_email_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.api_contact_email == "support@ecube.local"
+
 
 # ---------------------------------------------------------------------------
 # Audit log retention cleanup
@@ -191,6 +267,10 @@ class TestCopyJobTimeout:
         with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
             with patch("app.services.copy_engine.settings") as mock_settings:
                 mock_settings.copy_job_timeout = 1  # 1 second timeout
+                mock_settings.copy_chunk_size_bytes = 1_048_576
+                mock_settings.copy_default_max_retries = 3
+                mock_settings.copy_default_retry_delay_seconds = 1.0
+                mock_settings.copy_default_thread_count = 4
                 with patch("app.services.copy_engine.time") as mock_time:
                     mock_time.monotonic = _fast_monotonic
                     mock_time.sleep = _time.sleep
@@ -223,6 +303,10 @@ class TestCopyJobTimeout:
         with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
             with patch("app.services.copy_engine.settings") as mock_settings:
                 mock_settings.copy_job_timeout = 0
+                mock_settings.copy_chunk_size_bytes = 1_048_576
+                mock_settings.copy_default_max_retries = 3
+                mock_settings.copy_default_retry_delay_seconds = 1.0
+                mock_settings.copy_default_thread_count = 4
                 copy_engine.run_copy_job(job.id)
 
         db.expire_all()
