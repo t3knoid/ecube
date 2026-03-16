@@ -12,7 +12,7 @@ from app.auth import get_current_user
 from app.config import settings
 from app.exceptions import AuthenticationError, AuthorizationError, ConflictError, ECUBEException
 from app.logging_config import configure_logging
-from app.routers import admin, audit, drives, files, introspection, jobs, mounts
+from app.routers import admin, audit, auth, drives, files, introspection, jobs, mounts
 from app.schemas.errors import ErrorResponse
 
 # Configure logging before anything else.
@@ -22,6 +22,10 @@ logger = logging.getLogger(__name__)
 
 # OpenAPI tags with descriptions for organizing endpoints
 tags_metadata = [
+    {
+        "name": "auth",
+        "description": "Authentication — local login and token issuance.",
+    },
     {
         "name": "drives",
         "description": "USB drive lifecycle management — initialization, state transitions, and eject preparation.",
@@ -160,9 +164,10 @@ def custom_openapi():
         }
     })
 
-    # Apply security requirement to all endpoints except /health
+    # Apply security requirement to all endpoints except unauthenticated routes
+    _unauthenticated_paths = {"/health", "/auth/token"}
     for path, path_item in openapi_schema["paths"].items():
-        if path != "/health":
+        if path not in _unauthenticated_paths:
             for operation in path_item.values():
                 if isinstance(operation, dict) and "responses" in operation:
                     if "security" not in operation:
@@ -175,6 +180,9 @@ def custom_openapi():
 app.openapi = custom_openapi
 
 
+
+# Auth router — unauthenticated (login endpoint)
+app.include_router(auth.router)
 
 app.include_router(drives.router, dependencies=[Depends(get_current_user)])
 app.include_router(mounts.router, dependencies=[Depends(get_current_user)])
