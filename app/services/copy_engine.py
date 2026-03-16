@@ -253,7 +253,8 @@ def run_copy_job(job_id: int) -> None:
         job_start = time.monotonic()
         timed_out = False
 
-        with ThreadPoolExecutor(max_workers=job.thread_count or 4) as executor:
+        executor = ThreadPoolExecutor(max_workers=job.thread_count or 4)
+        try:
             futures = {
                 executor.submit(_process_file, ef_id, src, target, max_retries, retry_delay): ef_id
                 for src, ef_id in file_pairs
@@ -269,10 +270,17 @@ def run_copy_job(job_id: int) -> None:
                 # Check timeout after each file completes.
                 if timeout > 0 and (time.monotonic() - job_start) > timeout:
                     timed_out = True
-                    # Cancel remaining pending futures.
+                    # Cancel remaining pending futures and stop the executor without waiting.
                     for pending in futures:
-                        pending.cancel()
+                        if not pending.done():
+                            pending.cancel()
+                    executor.shutdown(wait=False, cancel_futures=True)
                     break
+        finally:
+            # On normal completion, wait for all tasks to finish; on timeout we already
+            # performed a non-blocking shutdown above.
+            if not timed_out:
+                executor.shutdown(wait=True)
 
         # Determine final job status.
         db.expire_all()
