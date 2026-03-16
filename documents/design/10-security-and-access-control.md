@@ -31,9 +31,10 @@
    │                          │  success / failure            │
    │                          │◀──────────────────────────────│
    │                          │                               │
-   │                          │  grp.getgrall() → OS groups   │
-   │                          │  LOCAL_GROUP_ROLE_MAP → roles  │
-   │                          │  sign JWT(sub, groups, roles)  │
+   │                          │  os.getgrouplist() → group IDs│
+   │                          │  grp.getgrgid() → OS groups   │
+   │                          │  LOCAL_GROUP_ROLE_MAP → roles │
+   │                          │  sign JWT(sub, groups, roles) │
    │                          │                               │
    │  {access_token, bearer}  │                               │
    │◀────────────────────────│                               │
