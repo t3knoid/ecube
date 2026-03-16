@@ -77,7 +77,6 @@ def login(
             detail="Local login is not available when OIDC authentication is enabled",
         )
 
-    request.state.db = db
     pam = LinuxPamAuthenticator()
     if not pam.authenticate(body.username, body.password):
         _audit_log(
@@ -90,6 +89,9 @@ def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
         )
+
+    # Only expose the DB session in request.state after successful authentication
+    request.state.db = db
 
     # Resolve OS groups → ECUBE roles
     groups = get_user_groups(body.username)
