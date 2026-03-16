@@ -1,6 +1,6 @@
 """Data-access layer for :class:`~app.models.users.UserRole`."""
 
-from typing import List, Optional
+from typing import List
 
 from sqlalchemy.orm import Session
 
