@@ -241,7 +241,7 @@ The setup script creates OS groups, an initial admin user, generates the `.env`
 configuration, and seeds the database with the admin role.
 
 ```bash
-sudo python -m app.setup
+sudo /opt/ecube/venv/bin/ecube-setup
 ```
 
 See [First-Run Setup Script](#first-run-setup-script) below for full details.
@@ -278,7 +278,7 @@ docker compose up -d
 docker compose exec app alembic upgrade head
 
 # Run first-run setup (creates admin user, seeds DB role)
-docker compose exec app python -m app.setup
+docker compose exec app ecube-setup
 
 # View logs
 docker compose logs -f app
@@ -731,7 +731,7 @@ User "bob" calls POST /auth/token
 | Day-to-day operations | `user_roles` table (DB) | Admin via API |
 
 The OS group fallback ensures that a freshly deployed system works immediately
-after `sudo python -m app.setup` — the admin user is a member of `ecube-admins`
+after `sudo ecube-setup` — the admin user is a member of `ecube-admins`
 **and** has an explicit DB role. As the deployment matures, admins can manage
 all role assignments through the API and the DB takes precedence.
 
@@ -813,7 +813,7 @@ The first-run setup script bootstraps a new ECUBE installation. It must be
 run as root.
 
 ```bash
-sudo python -m app.setup
+sudo /opt/ecube/venv/bin/ecube-setup
 ```
 
 **What it creates:**
