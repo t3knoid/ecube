@@ -264,6 +264,8 @@ def set_user_groups(username: str, groups: List[str]) -> OSUser:
     Returns the updated :class:`OSUser`.
     """
     validate_username(username)
+    if _is_reserved_username(username):
+        raise ValueError(f"Cannot modify groups for reserved username: {username}")
     if not user_exists(username):
         raise OSUserError(f"User '{username}' does not exist")
 
@@ -293,6 +295,8 @@ def add_user_to_groups(username: str, groups: List[str]) -> List[str]:
     Returns the resulting group list.
     """
     validate_username(username)
+    if _is_reserved_username(username):
+        raise ValueError(f"Cannot modify groups for reserved username: {username}")
     if not user_exists(username):
         raise OSUserError(f"User '{username}' does not exist")
 
