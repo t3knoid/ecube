@@ -90,9 +90,6 @@ def login(
             detail="Invalid credentials",
         )
 
-    # Only expose the DB session in request.state after successful authentication
-    request.state.db = db
-
     # Resolve OS groups → ECUBE roles
     groups = get_user_groups(body.username)
     roles = get_role_resolver().resolve(groups)
