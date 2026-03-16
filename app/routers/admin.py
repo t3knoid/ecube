@@ -22,7 +22,6 @@ Security considerations
 
 import logging
 import os
-import pwd as _pwd
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -52,42 +51,27 @@ from app.services import os_user_service
 logger = logging.getLogger(__name__)
 
 
-def _os_user_error_to_http(exc: Exception) -> HTTPException:
+def _raise_os_error(exc: os_user_service.OSUserError, *, context: str = "OS operation") -> None:
+    """Map an :class:`OSUserError` to an appropriate HTTP error and raise it.
+
+    * ``"already exists"`` → 409 Conflict
+    * ``"does not exist"`` → 404 Not Found
+    * ``"timed out"``      → 504 Gateway Timeout
+    * everything else      → 500 Internal Server Error
     """
-    Map OSUserError instances to more specific HTTP status codes so clients
-    can react appropriately.
+    msg = exc.message or str(exc) or f"{context} failed"
+    lowered = msg.lower()
 
-    This relies on simple pattern matching on the error message. If no
-    pattern matches, the error is treated as an internal server error.
-    """
-    # Prefer a dedicated `message` attribute if present; fall back to str(exc).
-    message = getattr(exc, "message", None) or str(exc) or "OS user operation failed"
-    lowered = message.lower()
+    if "already exists" in lowered:
+        raise HTTPException(status_code=409, detail=msg)
+    if "does not exist" in lowered:
+        raise HTTPException(status_code=404, detail=msg)
+    if "timed out" in lowered:
+        raise HTTPException(status_code=504, detail=msg)
 
-    status_code = 500
+    logger.error("%s failed: %s", context, msg, exc_info=True)
+    raise HTTPException(status_code=500, detail=msg)
 
-    # Conflict: user already exists.
-    if "already exists" in lowered or "user exists" in lowered or "exists" in lowered:
-        status_code = 409
-    # Input / state issues: missing/invalid groups or similar problems.
-    elif (
-        ("group" in lowered and ("not found" in lowered or "missing" in lowered or "unknown" in lowered))
-        or "invalid" in lowered
-        or "bad request" in lowered
-    ):
-        status_code = 422
-    # Timeouts talking to OS / subprocess.
-    elif "timeout" in lowered or "timed out" in lowered:
-        status_code = 504
-    # Sudo/subprocess or generic permission failures.
-    elif "sudo" in lowered or "permission denied" in lowered:
-        status_code = 500
-
-    if status_code >= 500:
-        # Log server-side issues with full exception context for debugging.
-        logger.error("OS user operation failed: %s", message, exc_info=True)
-
-    return HTTPException(status_code=status_code, detail=message)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -220,18 +204,13 @@ def download_log_file(
 # Helpers
 # ---------------------------------------------------------------------------
 
-_USERNAME_RE = os_user_service._USERNAME_RE
-
 
 def _validate_path_username(username: str) -> str:
     """Validate a username path parameter."""
-    if not _USERNAME_RE.match(username):
-        raise HTTPException(
-            status_code=422,
-            detail="Invalid username. Must start with a lowercase letter or "
-            "underscore, contain only lowercase letters, digits, hyphens, "
-            "or underscores, and be 1-32 characters.",
-        )
+    try:
+        os_user_service.validate_username(username)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     return username
 
 
@@ -285,7 +264,7 @@ def create_os_user(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except os_user_service.OSUserError as exc:
-        raise _os_user_error_to_http(exc)
+        _raise_os_error(exc, context="Create OS user")
 
     # Assign ECUBE DB roles if requested.
     if body.roles:
@@ -313,10 +292,10 @@ def create_os_user(
 @router.get("/os-users", response_model=OSUserListResponse)
 def list_os_users(
     request: Request,
-    db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSUserListResponse:
     """List OS users filtered to ECUBE-relevant groups."""
+    _ensure_local_role_resolver(request)
     users = os_user_service.list_users(ecube_only=True)
     return OSUserListResponse(
         users=[
@@ -341,6 +320,7 @@ def delete_os_user(
     current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> dict:
     """Delete an OS user and remove their DB role assignments."""
+    _ensure_local_role_resolver(request)
     _validate_path_username(username)
 
     try:
@@ -348,7 +328,7 @@ def delete_os_user(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except os_user_service.OSUserError as exc:
-        raise HTTPException(status_code=404, detail=exc.message)
+        _raise_os_error(exc, context="Delete OS user")
 
     # Clean up DB role assignments.
     UserRoleRepository(db).delete_roles(username)
@@ -370,6 +350,7 @@ def reset_os_user_password(
     current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> dict:
     """Reset an OS user's password via ``chpasswd``."""
+    _ensure_local_role_resolver(request)
     _validate_path_username(username)
 
     try:
@@ -377,7 +358,7 @@ def reset_os_user_password(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except os_user_service.OSUserError as exc:
-        raise HTTPException(status_code=500, detail=exc.message)
+        _raise_os_error(exc, context="Reset OS password")
 
     _audit(db, "OS_PASSWORD_RESET", current_user.username, {
         "target_user": username,
@@ -396,19 +377,15 @@ def set_os_user_groups(
     current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSUserResponse:
     """Modify an OS user's group memberships."""
+    _ensure_local_role_resolver(request)
     _validate_path_username(username)
 
     try:
-        new_groups = os_user_service.set_user_groups(username, body.groups)
+        os_user = os_user_service.set_user_groups(username, body.groups)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except os_user_service.OSUserError as exc:
-        # "does not exist" → 404; anything else is a subprocess/system failure → 500
-        if "does not exist" in exc.message:
-            raise HTTPException(status_code=404, detail=exc.message)
-        raise HTTPException(status_code=500, detail=exc.message)
-
-    pw = _pwd.getpwnam(username)
+        _raise_os_error(exc, context="Set OS user groups")
 
     _audit(db, "OS_USER_GROUPS_MODIFIED", current_user.username, {
         "target_user": username,
@@ -417,12 +394,12 @@ def set_os_user_groups(
     })
 
     return OSUserResponse(
-        username=username,
-        uid=pw.pw_uid,
-        gid=pw.pw_gid,
-        home=pw.pw_dir,
-        shell=pw.pw_shell,
-        groups=new_groups,
+        username=os_user.username,
+        uid=os_user.uid,
+        gid=os_user.gid,
+        home=os_user.home,
+        shell=os_user.shell,
+        groups=os_user.groups,
     )
 
 
@@ -439,12 +416,13 @@ def create_os_group(
     current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSGroupResponse:
     """Create an OS group."""
+    _ensure_local_role_resolver(request)
     try:
         os_group = os_user_service.create_group(body.name)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except os_user_service.OSUserError as exc:
-        raise HTTPException(status_code=409, detail=exc.message)
+        _raise_os_error(exc, context="Create OS group")
 
     _audit(db, "OS_GROUP_CREATED", current_user.username, {
         "group_name": body.name,
@@ -465,6 +443,7 @@ def list_os_groups(
     current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSGroupListResponse:
     """List OS groups filtered to ECUBE-relevant names."""
+    _ensure_local_role_resolver(request)
     groups = os_user_service.list_groups(ecube_only=True)
     return OSGroupListResponse(
         groups=[
@@ -482,18 +461,18 @@ def delete_os_group(
     current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> dict:
     """Delete an OS group."""
-    if not os_user_service._GROUPNAME_RE.match(name):
-        raise HTTPException(
-            status_code=422,
-            detail="Invalid group name.",
-        )
+    _ensure_local_role_resolver(request)
+    try:
+        os_user_service.validate_group_name(name)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
     try:
         os_user_service.delete_group(name)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except os_user_service.OSUserError as exc:
-        raise HTTPException(status_code=404, detail=exc.message)
+        _raise_os_error(exc, context="Delete OS group")
 
     _audit(db, "OS_GROUP_DELETED", current_user.username, {
         "group_name": name,

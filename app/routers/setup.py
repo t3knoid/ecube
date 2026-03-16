@@ -12,6 +12,7 @@ wizard UI can check whether initialization is needed before any users exist.
 from __future__ import annotations
 
 import logging
+import threading
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -30,6 +31,9 @@ from app.services import os_user_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/setup", tags=["setup"])
+
+# Serialize concurrent initialization attempts so only one runs at a time.
+_init_lock = threading.Lock()
 
 
 @router.get("/status", response_model=SetupStatusResponse)
@@ -74,6 +78,28 @@ def initialize_system(
             status_code=status.HTTP_409_CONFLICT,
             detail="System is already initialized. An admin user exists.",
         )
+
+    if not _init_lock.acquire(blocking=False):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Initialization is already in progress.",
+        )
+    try:
+        # Re-check under the lock to prevent TOCTOU races.
+        if repo.has_any_admin():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="System is already initialized. An admin user exists.",
+            )
+        return _do_initialize(body, db)
+    finally:
+        _init_lock.release()
+
+
+def _do_initialize(
+    body: SetupInitializeRequest,
+    db: Session,
+) -> SetupInitializeResponse:
 
     # Step 1: Create ECUBE OS groups.
     try:
