@@ -124,6 +124,7 @@ def _seed_database(username: str) -> None:
     from app.database import SessionLocal
     from app.models.users import UserRole
     from app.repositories.user_role_repository import UserRoleRepository
+    from sqlalchemy import exc as sa_exc
 
     db = SessionLocal()
     try:
@@ -138,6 +139,10 @@ def _seed_database(username: str) -> None:
             print(f"  Seeded database: '{username}' → admin")
         else:
             print(f"  User '{username}' already has admin role — skipping")
+    except (sa_exc.ProgrammingError, sa_exc.OperationalError) as exc:
+        print("  Error while seeding admin role in database.")
+        print(f"  Details: {exc}")
+        print("  The database schema may not be initialized. Run 'alembic upgrade head' and re-run this setup step.")
     finally:
         db.close()
 
