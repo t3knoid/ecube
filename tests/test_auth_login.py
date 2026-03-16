@@ -1,6 +1,5 @@
 """Tests for POST /auth/token local login endpoint."""
 
-import time
 from unittest.mock import MagicMock, patch
 
 import jwt
