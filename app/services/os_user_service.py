@@ -22,6 +22,8 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+from app.config import settings
+
 logger = logging.getLogger(__name__)
 
 # Groups considered ECUBE-relevant for listing/filtering.
@@ -183,10 +185,10 @@ def create_user(
         raise ValueError("Password cannot be empty")
 
     # Create user with home directory.
-    _run_sudo(["useradd", "-m", username])
+    _run_sudo([settings.useradd_binary_path, "-m", username])
 
     # Set password via stdin (never on command line).
-    _run_sudo(["chpasswd"], stdin_data=f"{username}:{password}")
+    _run_sudo([settings.chpasswd_binary_path], stdin_data=f"{username}:{password}")
 
     # Add to requested groups.
     if groups:
@@ -194,7 +196,7 @@ def create_user(
             validate_group_name(g)
             if not group_exists(g):
                 raise OSUserError(f"Group '{g}' does not exist")
-        _run_sudo(["usermod", "-aG", ",".join(groups), username])
+        _run_sudo([settings.usermod_binary_path, "-aG", ",".join(groups), username])
 
     pw = pwd.getpwnam(username)
     return OSUser(
@@ -239,7 +241,7 @@ def delete_user(username: str) -> None:
     if not user_exists(username):
         raise OSUserError(f"User '{username}' does not exist")
 
-    _run_sudo(["userdel", "-r", username])
+    _run_sudo([settings.userdel_binary_path, "-r", username])
 
 
 def reset_password(username: str, password: str) -> None:
@@ -253,7 +255,7 @@ def reset_password(username: str, password: str) -> None:
     if not user_exists(username):
         raise OSUserError(f"User '{username}' does not exist")
 
-    _run_sudo(["chpasswd"], stdin_data=f"{username}:{password}")
+    _run_sudo([settings.chpasswd_binary_path], stdin_data=f"{username}:{password}")
 
 
 def set_user_groups(username: str, groups: List[str]) -> List[str]:
@@ -271,7 +273,7 @@ def set_user_groups(username: str, groups: List[str]) -> List[str]:
             raise OSUserError(f"Group '{g}' does not exist")
 
     # -G replaces all supplementary groups.
-    _run_sudo(["usermod", "-G", ",".join(groups), username])
+    _run_sudo([settings.usermod_binary_path, "-G", ",".join(groups), username])
     return _get_user_groups(username)
 
 
@@ -288,7 +290,7 @@ def create_group(name: str) -> OSGroup:
     if group_exists(name):
         raise OSUserError(f"Group '{name}' already exists")
 
-    _run_sudo(["groupadd", name])
+    _run_sudo([settings.groupadd_binary_path, name])
 
     g = grp.getgrnam(name)
     return OSGroup(name=g.gr_name, gid=g.gr_gid, members=list(g.gr_mem))
@@ -316,7 +318,7 @@ def delete_group(name: str) -> None:
     if not group_exists(name):
         raise OSUserError(f"Group '{name}' does not exist")
 
-    _run_sudo(["groupdel", name])
+    _run_sudo([settings.groupdel_binary_path, name])
 
 
 # ---------------------------------------------------------------------------
@@ -331,6 +333,6 @@ def ensure_ecube_groups() -> List[str]:
     created = []
     for group_name in sorted(ECUBE_GROUPS):
         if not group_exists(group_name):
-            _run_sudo(["groupadd", group_name])
+            _run_sudo([settings.groupadd_binary_path, group_name])
             created.append(group_name)
     return created
