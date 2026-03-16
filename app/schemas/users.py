@@ -4,8 +4,7 @@ from typing import List
 
 from pydantic import BaseModel, Field
 
-
-VALID_ROLES = {"admin", "manager", "processor", "auditor"}
+from app.repositories.user_role_repository import VALID_ROLES  # noqa: F401
 
 
 class UserRolesResponse(BaseModel):
