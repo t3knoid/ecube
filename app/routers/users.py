@@ -7,6 +7,7 @@ All endpoints require the ``admin`` role.  These manage authorization
 from __future__ import annotations
 
 import logging
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
@@ -25,6 +26,20 @@ from app.schemas.users import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+_USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
+
+
+def _validate_username(username: str) -> str:
+    """Reject usernames with shell metacharacters or invalid format."""
+    if not _USERNAME_RE.match(username):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid username. Must start with a lowercase letter or "
+            "underscore, contain only lowercase letters, digits, hyphens, "
+            "or underscores, and be 1–32 characters.",
+        )
+    return username
 
 
 def _audit_log(db: Session, action: str, actor: str, details: dict) -> None:
@@ -54,6 +69,7 @@ def get_user_roles(
     _: CurrentUser = Depends(require_roles("admin")),
 ) -> UserRolesResponse:
     """Get role assignments for a specific user."""
+    _validate_username(username)
     roles = UserRoleRepository(db).get_roles(username)
     return UserRolesResponse(username=username, roles=roles)
 
@@ -67,6 +83,7 @@ def set_user_roles(
     current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> UserRolesResponse:
     """Set roles for a user (replaces all existing role assignments)."""
+    _validate_username(username)
     invalid = set(body.roles) - VALID_ROLES
     if invalid:
         raise HTTPException(
@@ -105,6 +122,7 @@ def delete_user_roles(
     current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> UserRolesResponse:
     """Remove all role assignments for a user."""
+    _validate_username(username)
     repo = UserRoleRepository(db)
     repo.delete_roles(username)
 
