@@ -5,6 +5,7 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
@@ -12,7 +13,7 @@ from app.auth import get_current_user
 from app.config import settings
 from app.exceptions import AuthenticationError, AuthorizationError, ConflictError, ECUBEException
 from app.logging_config import configure_logging
-from app.routers import admin, audit, auth, drives, files, introspection, jobs, mounts
+from app.routers import admin, audit, auth, drives, files, introspection, jobs, mounts, users
 from app.schemas.errors import ErrorResponse
 
 # Configure logging before anything else.
@@ -49,6 +50,10 @@ tags_metadata = [
     {
         "name": "files",
         "description": "File audit operations — hash computation and file comparison.",
+    },
+    {
+        "name": "users",
+        "description": "User role management — assign, update, and remove ECUBE role assignments.",
     },
 ]
 
@@ -191,6 +196,7 @@ app.include_router(files.router, dependencies=[Depends(get_current_user)])
 app.include_router(introspection.router, dependencies=[Depends(get_current_user)])
 app.include_router(audit.router, dependencies=[Depends(get_current_user)])
 app.include_router(admin.router, dependencies=[Depends(get_current_user)])
+app.include_router(users.router, dependencies=[Depends(get_current_user)])
 
 
 def _error_response(status_code: int, code: str, message: str, trace_id: str | None = None) -> JSONResponse:
@@ -246,6 +252,18 @@ async def ecube_exception_handler(request: Request, exc: ECUBEException) -> JSON
     trace_id = str(uuid.uuid4())
     logger.error("%d %s trace_id=%s path=%s", exc.status_code, exc.code, trace_id, request.url.path)
     return _error_response(exc.status_code, exc.code, exc.message, trace_id)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    trace_id = str(uuid.uuid4())
+    messages = []
+    for error in exc.errors():
+        loc = " -> ".join(str(part) for part in error["loc"])
+        messages.append(f"{loc}: {error['msg']}")
+    detail = "; ".join(messages)
+    logger.info("422 VALIDATION_ERROR trace_id=%s path=%s", trace_id, request.url.path)
+    return _error_response(422, "VALIDATION_ERROR", detail, trace_id)
 
 
 @app.exception_handler(HTTPException)
