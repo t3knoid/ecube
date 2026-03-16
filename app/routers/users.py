@@ -15,9 +15,8 @@ from sqlalchemy.orm import Session
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
 from app.repositories.audit_repository import AuditRepository
-from app.repositories.user_role_repository import UserRoleRepository
+from app.repositories.user_role_repository import VALID_ROLES, UserRoleRepository
 from app.schemas.users import (
-    VALID_ROLES,
     SetRolesRequest,
     UserListResponse,
     UserRolesResponse,
