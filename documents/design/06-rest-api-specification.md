@@ -12,28 +12,84 @@ For the complete role model and policy context, see [10-security-and-access-cont
 
 ### 1.1 Identity Sources
 
-ECUBE supports two identity modes:
+ECUBE supports three identity modes:
 
 - **Local mode (default)**
-  - Uses Linux system users and groups (`/etc/passwd`, `/etc/group`).
-  - Group membership determines ECUBE roles.
+  - Authenticates users via PAM (Pluggable Authentication Modules) on the host OS.
+  - Reads OS group memberships and maps to ECUBE roles via `LOCAL_GROUP_ROLE_MAP`.
 
 - **LDAP mode (optional)**
-  - Uses LDAP bind for authentication.
-  - LDAP group membership maps to ECUBE roles.
+  - Authenticates users via PAM with an LDAP backend (SSSD, pam_ldap, etc.).
+  - LDAP group membership maps to ECUBE roles via `LDAP_GROUP_ROLE_MAP`.
 
-### 1.2 Authentication Mechanism
+- **OIDC mode (optional)**
+  - Accepts OIDC ID tokens (JWTs) issued by a third-party identity provider.
+  - Validates token signature via JWKS; maps group claims to ECUBE roles.
 
-- API uses **token-based authentication** (JWT or signed session token).
+### 1.2 Login Endpoint
+
+#### `POST /auth/token`
+
+Authenticate with OS credentials and receive a signed JWT.
+
+**Roles:** None (unauthenticated — this is the login route)
+
+**Request body (JSON):**
+
+```json
+{
+    "username": "frank",
+    "password": "secret"
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+    "access_token": "eyJhbGciOiJIUzI1NiIs...",
+    "token_type": "bearer"
+}
+```
+
+**Error responses:**
+
+- `401 Unauthorized` — Invalid credentials
+- `422 Unprocessable Entity` — Missing or empty username/password
+
+**Behavior:**
+
+1. Validates credentials against the host OS via PAM.
+2. Reads the authenticated user's OS group memberships.
+3. Maps groups to ECUBE roles using the configured role resolver.
+4. Signs a JWT containing `sub`, `username`, `groups`, `roles`, `iat`, and `exp`.
+5. Token expiration is configurable via `TOKEN_EXPIRE_MINUTES` (default: 60 minutes).
+
+**Audit events:**
+
+- `AUTH_SUCCESS` — Successful login; includes username, groups, roles
+- `AUTH_FAILURE` — Failed login; includes username and reason
+
+**Security notes:**
+
+- Passwords are never logged or stored by ECUBE.
+- The ECUBE service account must have PAM access on the host.
+- For LDAP authentication, configure PAM on the host to use SSSD or pam_ldap.
+
+### 1.3 Authentication Mechanism
+
+- All endpoints except `/health` and `/auth/token` require a bearer token.
 - Token includes:
-  - `username`
-  - `roles` (resolved from local groups or LDAP groups)
-  - `issued_at`
-  - `expires_at`
+  - `sub` — user identifier (username)
+  - `username` — display name
+  - `groups` — OS group memberships
+  - `roles` — ECUBE roles (resolved from groups)
+  - `iat` — issued-at timestamp
+  - `exp` — expiration timestamp
 
-### 1.3 User Context
+### 1.4 User Context
 
-Every request resolves to:
+Every authenticated request resolves to:
 
 ```json
 {

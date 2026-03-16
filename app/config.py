@@ -129,6 +129,13 @@ class Settings(BaseSettings):
     oidc_discovery_timeout_seconds: int = 10
 
     # ---------------------------------------------------------------------------
+    # Token expiration
+    # ---------------------------------------------------------------------------
+
+    #: Number of minutes before a locally-issued JWT expires.
+    token_expire_minutes: int = 60
+
+    # ---------------------------------------------------------------------------
     # Copy engine tuning
     # ---------------------------------------------------------------------------
 
