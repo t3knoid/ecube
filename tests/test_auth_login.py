@@ -51,7 +51,7 @@ def test_login_success_returns_token(unauthenticated_client):
     assert "iat" in claims
 
 
-def test_login_success_token_is_usable(unauthenticated_client, client):
+def test_login_success_token_is_usable(unauthenticated_client):
     """A token obtained from /auth/token can authenticate subsequent requests."""
     with (
         patch("app.routers.auth.LinuxPamAuthenticator") as mock_pam_cls,
