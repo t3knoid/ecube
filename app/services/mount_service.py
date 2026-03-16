@@ -10,6 +10,7 @@ from app.models.network import MountStatus, MountType, NetworkMount
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.mount_repository import MountRepository
 from app.schemas.network import MountCreate
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None)
                 # supplied via credentials_file to avoid exposure in process listings.
                 cmd += ["-o", f"username={mount_data.username}"]
 
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=settings.subprocess_timeout_seconds)
         if result.returncode == 0:
             mount.status = MountStatus.MOUNTED
         else:
@@ -77,7 +78,7 @@ def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None) -> Non
             ["umount", mount.local_mount_point],
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=settings.subprocess_timeout_seconds,
         )
     except Exception:
         # Unmount failures are non-fatal; the record is still deleted so the

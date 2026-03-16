@@ -1,6 +1,7 @@
 from typing import Dict, List, Literal, Optional, Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
 
 
 class Settings(BaseSettings):
@@ -118,6 +119,87 @@ class Settings(BaseSettings):
     #: Keys are OIDC group/claim values; values are lists of ECUBE role strings.
     #: Example: ``{"evidence-admins": ["admin"], "evidence-team": ["processor"]}``
     oidc_group_role_map: Dict[str, List[str]] = {}
+
+    #: Allowed JWT algorithms for OIDC token validation.
+    oidc_allowed_algorithms: List[str] = Field(
+        default=["RS256", "RS384", "RS512", "ES256", "ES384", "ES512"]
+    )
+
+    #: Timeout in seconds for fetching the OIDC discovery document.
+    oidc_discovery_timeout_seconds: int = 10
+
+    # ---------------------------------------------------------------------------
+    # Copy engine tuning
+    # ---------------------------------------------------------------------------
+
+    #: Chunk size in bytes for file copy and checksum computation.
+    copy_chunk_size_bytes: int = 1_048_576
+
+    #: Default thread pool size when ``ExportJob.thread_count`` is ``None``.
+    copy_default_thread_count: int = 4
+
+    #: Default maximum file-level retries when ``ExportJob.max_file_retries``
+    #: is ``None``.
+    copy_default_max_retries: int = 3
+
+    #: Default retry delay in seconds when ``ExportJob.retry_delay_seconds``
+    #: is ``None``.
+    copy_default_retry_delay_seconds: float = 1.0
+
+    # ---------------------------------------------------------------------------
+    # Subprocess / system binary paths
+    # ---------------------------------------------------------------------------
+
+    #: Timeout in seconds for subprocess calls (mount, umount, sync, etc.).
+    subprocess_timeout_seconds: int = 30
+
+    #: Path to the ``sync`` binary.
+    sync_binary_path: str = "/bin/sync"
+
+    #: Path to the ``umount`` binary.
+    umount_binary_path: str = "/bin/umount"
+
+    #: Path to ``/proc/mounts`` for reading active mount information.
+    procfs_mounts_path: str = "/proc/mounts"
+
+    #: Path to the sysfs USB devices directory.
+    sysfs_usb_devices_path: str = "/sys/bus/usb/devices"
+
+    #: Path to the sysfs block devices directory.
+    sysfs_block_path: str = "/sys/block"
+
+    # ---------------------------------------------------------------------------
+    # Audit log pagination
+    # ---------------------------------------------------------------------------
+
+    #: Default page size for audit log queries.
+    audit_log_default_limit: int = 100
+
+    #: Maximum allowed page size for audit log queries.
+    audit_log_max_limit: int = 1000
+
+    # ---------------------------------------------------------------------------
+    # Database pool settings
+    # ---------------------------------------------------------------------------
+
+    #: Number of persistent connections in the SQLAlchemy connection pool.
+    db_pool_size: int = 5
+
+    #: Maximum overflow connections above ``db_pool_size``.
+    db_pool_max_overflow: int = 10
+
+    #: Seconds after which a connection is recycled.  ``-1`` disables recycling.
+    db_pool_recycle_seconds: int = -1
+
+    # ---------------------------------------------------------------------------
+    # OpenAPI metadata
+    # ---------------------------------------------------------------------------
+
+    #: Contact name shown in the OpenAPI spec.
+    api_contact_name: str = "ECUBE Support"
+
+    #: Contact email shown in the OpenAPI spec.
+    api_contact_email: str = "support@ecube.local"
 
 
 settings = Settings()

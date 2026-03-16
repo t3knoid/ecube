@@ -12,6 +12,8 @@ import os
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+from app.config import settings
+
 
 @dataclass
 class DiscoveredHub:
@@ -108,7 +110,7 @@ def discover_usb_topology() -> DiscoveredTopology:
     sysfs tree is unavailable (e.g. non-Linux hosts or unit-test environments)
     an empty topology is returned without raising.
     """
-    usb_path = "/sys/bus/usb/devices"
+    usb_path = settings.sysfs_usb_devices_path
     topology = DiscoveredTopology()
 
     try:
@@ -158,7 +160,7 @@ def discover_usb_topology() -> DiscoveredTopology:
                         # Attempt to read capacity from /sys/block/<name>/size
                         block_name = os.path.basename(block_node)
                         cap = _read_capacity_bytes(
-                            f"/sys/block/{block_name}"
+                            f"{settings.sysfs_block_path}/{block_name}"
                         )
                         capacity = cap
                     topology.drives.append(
