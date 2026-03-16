@@ -683,7 +683,7 @@ sudo -u postgres psql -c "CREATE DATABASE ecube_integration OWNER ecube_test;"
 ### Run the tests
 
 ```bash
-cd /opt/ecube/src
+cd /opt/ecube
 
 export INTEGRATION_DATABASE_URL="postgresql://ecube_test:ecube_test@localhost:5432/ecube_integration"
 
@@ -693,7 +693,7 @@ export INTEGRATION_DATABASE_URL="postgresql://ecube_test:ecube_test@localhost:54
 ### Run unit tests (no database required)
 
 ```bash
-cd /opt/ecube/src
+cd /opt/ecube
 /opt/ecube/venv/bin/python -m pytest tests/ \
   --ignore=tests/integration \
   --ignore=tests/hardware \
