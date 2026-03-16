@@ -46,10 +46,22 @@ def get_user_groups(username: str) -> List[str]:
     # Primary group
     try:
         pw = pwd.getpwnam(username)
-        primary = grp.getgrgid(pw.pw_gid)
-        groups.add(primary.gr_name)
     except KeyError:
-        pass
+        logger.warning(
+            "OS user %s not found in passwd database when resolving primary group",
+            username,
+        )
+    else:
+        try:
+            primary = grp.getgrgid(pw.pw_gid)
+        except KeyError:
+            logger.warning(
+                "Primary GID %s for user %s not found in group database",
+                pw.pw_gid,
+                username,
+            )
+        else:
+            groups.add(primary.gr_name)
 
     # Supplementary groups
     for g in grp.getgrall():
