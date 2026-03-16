@@ -5,6 +5,12 @@ for bootstrapping an ECUBE installation.  They are guarded by a **first-run
 check**: once at least one admin user exists in ``user_roles``, the
 ``POST /setup/initialize`` endpoint returns ``409 Conflict``.
 
+A cross-process guard (the ``system_initialization`` table with a single-row
+constraint) ensures that only one worker can successfully complete
+initialization, even when running multiple uvicorn workers.  A process-local
+thread lock provides an additional optimization to avoid redundant OS
+operations within the same process.
+
 The ``GET /setup/status`` endpoint is **unauthenticated** so that a setup
 wizard UI can check whether initialization is needed before any users exist.
 """
@@ -13,11 +19,14 @@ from __future__ import annotations
 
 import logging
 import threading
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models.system import SystemInitialization
 from app.models.users import UserRole
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.user_role_repository import UserRoleRepository
@@ -143,9 +152,24 @@ def _do_initialize(
                 detail=f"User exists but failed to reset password: {pw_exc}",
             )
 
-    # Step 3: Seed database with admin role.
+    # Step 3: Seed database with admin role and mark system as initialized.
+    # The single-row constraint on system_initialization ensures that even
+    # if two workers race past the has_any_admin() check and both complete
+    # OS operations, only one can successfully commit.
+    db.add(SystemInitialization(
+        id=1,
+        initialized_by=body.username,
+        initialized_at=datetime.now(timezone.utc),
+    ))
     db.add(UserRole(username=body.username, role="admin"))
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="System was initialized by another process.",
+        )
 
     # Step 4: Audit log.
     try:

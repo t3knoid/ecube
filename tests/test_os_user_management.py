@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.models.users import UserRole
+from app.models.system import SystemInitialization
 from app.repositories.user_role_repository import UserRoleRepository
 from app.services import os_user_service
 from app.services.os_user_service import (
@@ -630,6 +631,11 @@ class TestSetupEndpoints:
         repo = UserRoleRepository(db)
         assert repo.has_any_admin()
         assert "admin" in repo.get_roles("admin1")
+
+        # Verify system_initialization row was created.
+        init_row = db.query(SystemInitialization).first()
+        assert init_row is not None
+        assert init_row.initialized_by == "admin1"
 
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
