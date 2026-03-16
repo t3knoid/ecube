@@ -123,15 +123,24 @@ def _generate_env(install_dir: str) -> None:
     print(f"  Generated {env_path} with random SECRET_KEY")
 
 
+def _load_env_file(env_path: Path) -> None:
+    """Read a simple KEY=VALUE .env file into ``os.environ``."""
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        key, _, value = line.partition("=")
+        if key:
+            os.environ[key.strip()] = value.strip()
+
+
 def _seed_database(username: str, install_dir: str) -> None:
     """Insert admin role mapping into user_roles table."""
     # Load .env from install_dir so we use the same DATABASE_URL / SECRET_KEY
     # that _generate_env() wrote, regardless of the caller's working directory.
     env_path = Path(install_dir) / ".env"
     if env_path.exists():
-        os.environ.setdefault("ENV_FILE", str(env_path))
-        from dotenv import load_dotenv
-        load_dotenv(env_path, override=True)
+        _load_env_file(env_path)
 
     # Import after env is loaded to pick up the correct DATABASE_URL.
     from app.database import SessionLocal
