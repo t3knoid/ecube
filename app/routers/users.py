@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
 from app.repositories.audit_repository import AuditRepository
-from app.repositories.user_role_repository import VALID_ROLES, UserRoleRepository
+from app.repositories.user_role_repository import UserRoleRepository
 from app.schemas.users import (
     SetRolesRequest,
     UserListResponse,
@@ -83,13 +83,6 @@ def set_user_roles(
 ) -> UserRolesResponse:
     """Set roles for a user (replaces all existing role assignments)."""
     _validate_username(username)
-    invalid = set(body.roles) - VALID_ROLES
-    if invalid:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Invalid roles: {', '.join(sorted(invalid))}. "
-            f"Valid roles are: {', '.join(sorted(VALID_ROLES))}",
-        )
 
     repo = UserRoleRepository(db)
     deduplicated = sorted(set(body.roles))
