@@ -205,6 +205,25 @@ def _audit(db: Session, action: str, actor: str, details: dict) -> None:
         logger.exception("Failed to write audit log for %s", action)
 
 
+def _ensure_local_role_resolver(request: Request) -> None:
+    """
+    Ensure OS user/group endpoints are only available when using the local
+    role resolver.
+
+    In OIDC/LDAP deployments, OS-level user management via this API is
+    unsupported and potentially unsafe, so we behave as though the endpoint
+    does not exist.
+    """
+    if getattr(settings, "role_resolver", "local") != "local":
+        logger.warning(
+            "OS user/group endpoint called while role_resolver=%s; path=%s",
+            getattr(settings, "role_resolver", None),
+            request.url.path,
+        )
+        # Hide the endpoint when not in local mode to avoid unsafe configs.
+        raise HTTPException(status_code=404, detail="Not found")
+
+
 # ---------------------------------------------------------------------------
 # OS user management endpoints — all require admin role
 # ---------------------------------------------------------------------------
@@ -218,6 +237,7 @@ def create_os_user(
     current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSUserResponse:
     """Create an OS user, set password, and optionally add to groups."""
+    _ensure_local_role_resolver(request)
     try:
         os_user = os_user_service.create_user(
             username=body.username,
