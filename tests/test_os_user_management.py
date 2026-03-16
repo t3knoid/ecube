@@ -216,6 +216,18 @@ class TestSetUserGroups:
         assert isinstance(result, OSUser)
         assert "ecube-admins" in result.groups
 
+    def test_set_groups_reserved_username(self):
+        with pytest.raises(ValueError, match="reserved"):
+            set_user_groups("root", ["ecube-admins"])
+
+
+class TestAddUserToGroups:
+    """os_user_service.add_user_to_groups()."""
+
+    def test_add_to_groups_reserved_username(self):
+        with pytest.raises(ValueError, match="reserved"):
+            os_user_service.add_user_to_groups("ecube", ["ecube-admins"])
+
 
 class TestCreateGroup:
     """os_user_service.create_group()."""
