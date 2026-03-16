@@ -127,7 +127,7 @@ sudo -u ecube tar -xzf "ecube-package-${LATEST_TAG}.tar.gz" -C /opt/ecube/
 # Set up Python virtual environment and install
 sudo -u ecube python3.11 -m venv /opt/ecube/venv
 sudo -u ecube /opt/ecube/venv/bin/pip install --upgrade pip setuptools wheel
-sudo -u ecube /opt/ecube/venv/bin/pip install -e /opt/ecube/
+sudo -u ecube /opt/ecube/venv/bin/pip install -e "/opt/ecube/[dev]"
 ```
 
 ---
