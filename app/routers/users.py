@@ -33,7 +33,7 @@ def _validate_username(username: str) -> str:
     """Reject usernames with shell metacharacters or invalid format."""
     if not _USERNAME_RE.match(username):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Invalid username. Must start with a lowercase letter or "
             "underscore, contain only lowercase letters, digits, hyphens, "
             "or underscores, and be 1–32 characters.",
@@ -90,7 +90,7 @@ def set_user_roles(
         repo.set_roles(username, deduplicated)
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         )
     except Exception:
