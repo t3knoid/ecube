@@ -135,12 +135,17 @@ def provision_database(
         conn.close()
 
     # Step 2: Run Alembic migrations against the new database
-    app_url = f"postgresql://{app_username}:{app_password}@{host}:{port}/{app_database}"
-    migrations_applied = _run_migrations(app_url)
+    new_url = f"postgresql://{app_username}:{app_password}@{host}:{port}/{app_database}"
+    migrations_applied = _run_migrations(new_url)
 
     # Step 3: Write DATABASE_URL to .env
-    new_url = f"postgresql://{app_username}:{app_password}@{host}:{port}/{app_database}"
     _write_env_setting("DATABASE_URL", new_url)
+
+    # Step 4: Switch the running process to the newly provisioned database
+    from app.config import settings
+
+    settings.database_url = new_url
+    _reinitialize_engine(new_url, settings.db_pool_size, settings.db_pool_max_overflow)
 
     return migrations_applied
 
