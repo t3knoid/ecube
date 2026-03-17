@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, get_current_user, require_roles, _try_log_authorization_denied
 from app.database import get_db
-from app.exceptions import AuthorizationError
+from app.exceptions import AuthorizationError, DatabaseStatusUnknownError
 from app.routing import LocalOnlyRoute
 from app.repositories.user_role_repository import UserRoleRepository
 from app.schemas.database import (
@@ -247,7 +247,7 @@ def provision_database(
     if not body.force:
         try:
             already_provisioned = database_service.is_database_provisioned()
-        except Exception:
+        except DatabaseStatusUnknownError:
             # Connectivity failure — fail closed so a transient outage
             # cannot be misinterpreted as "not provisioned".
             raise HTTPException(

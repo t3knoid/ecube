@@ -504,6 +504,34 @@ class TestProvisionEndpoint:
         assert resp.status_code == 503
         assert "provisioning state" in resp.json()["message"].lower()
 
+    def test_provision_unexpected_error_is_not_swallowed(
+        self, unauthenticated_client
+    ):
+        """Unexpected errors from is_database_provisioned are not caught as 503.
+
+        Only DatabaseStatusUnknownError should be caught and converted to
+        503.  Other exceptions (coding bugs, ImportError, etc.) must
+        propagate so they surface as real failures rather than misleading
+        "temporarily unreachable" messages.
+        """
+        with patch(
+            "app.services.database_service.is_database_provisioned",
+            side_effect=RuntimeError("unexpected coding bug"),
+        ):
+            with pytest.raises(RuntimeError, match="unexpected coding bug"):
+                unauthenticated_client.post(
+                    "/setup/database/provision",
+                    json={
+                        "host": "localhost",
+                        "port": 5432,
+                        "admin_username": "postgres",
+                        "admin_password": "secret",
+                        "app_database": "ecube",
+                        "app_username": "ecube",
+                        "app_password": "ecube123",
+                    },
+                )
+
     @patch("app.services.database_service.provision_database", return_value=4)
     @patch("app.services.database_service.is_database_provisioned", return_value=False)
     def test_provision_proceeds_when_db_does_not_exist(
