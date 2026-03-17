@@ -176,8 +176,15 @@ def _do_initialize(
         raise
 
     # Step 4: Seed admin role now that OS setup succeeded.
-    db.add(UserRole(username=body.username, role="admin"))
-    db.commit()
+    try:
+        db.add(UserRole(username=body.username, role="admin"))
+        db.commit()
+    except Exception:
+        # If seeding the admin role fails, roll back and release the
+        # initialization lock so that setup can be retried safely.
+        db.rollback()
+        _release_init_lock(db)
+        raise
 
     # Step 5: Audit log.
     try:
