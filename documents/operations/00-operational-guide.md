@@ -231,7 +231,30 @@ sudo systemctl daemon-reload
 
 #### 5. Initialize Database
 
+Database setup can be done manually or via the API-based setup wizard.
+
+**Option A: API-Based Database Provisioning (Recommended)**
+
+Start the service first (step 7), then use the setup wizard endpoints:
+
 ```bash
+# Test PostgreSQL connectivity
+curl -k -X POST https://localhost:8443/setup/database/test-connection \
+  -H "Content-Type: application/json" \
+  -d '{"host": "localhost", "port": 5432, "admin_username": "postgres", "admin_password": "secret"}'
+
+# Provision the application database, user, and run migrations
+curl -k -X POST https://localhost:8443/setup/database/provision \
+  -H "Content-Type: application/json" \
+  -d '{"host": "localhost", "port": 5432, "admin_username": "postgres", "admin_password": "secret", "app_database": "ecube", "app_username": "ecube", "app_password": "ecube123"}'
+```
+
+The provision endpoint creates the PostgreSQL user and database, runs Alembic migrations, and updates the application's `.env` and connection pool automatically.
+
+**Option B: Manual Setup**
+
+```bash
+# Create database and user (see PostgreSQL section above)
 sudo -u ecube /opt/ecube/venv/bin/alembic upgrade head
 ```
 
@@ -251,7 +274,7 @@ sudo /opt/ecube/venv/bin/ecube-setup
 
 See [First-Run Setup](#first-run-setup) below for full details.
 
-> **Important:** Setup must run **after** `alembic upgrade head`
+> **Important:** Setup must run **after** database initialization (step 5)
 > because it writes to the `user_roles` and `system_initialization` tables.
 
 #### 7. Enable and Start Service
