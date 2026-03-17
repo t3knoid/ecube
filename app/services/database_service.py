@@ -188,11 +188,54 @@ def _run_migrations(database_url: str) -> int:
     alembic_cfg.set_main_option("sqlalchemy.url", database_url)
 
     script = ScriptDirectory.from_config(alembic_cfg)
-    total_revisions = len(list(script.walk_revisions()))
+
+    # Determine how many revisions are pending before upgrading
+    current_rev = _get_current_revision(database_url)
+    heads = script.get_heads()
+
+    if current_rev and current_rev in heads:
+        # Already at head — nothing to apply
+        pending = 0
+    elif current_rev is None:
+        # Fresh database — all revisions are pending
+        pending = len(list(script.walk_revisions()))
+    else:
+        # Count revisions between current and head
+        pending = 0
+        for rev in script.walk_revisions():
+            if rev.revision == current_rev:
+                break
+            pending += 1
 
     alembic_command.upgrade(alembic_cfg, "head")
 
-    return total_revisions
+    return pending
+
+
+def _get_current_revision(database_url: str) -> Optional[str]:
+    """Read the current Alembic revision from the database, or None."""
+    try:
+        conn = psycopg2.connect(database_url, connect_timeout=5)
+        try:
+            cur = conn.cursor()
+            try:
+                cur.execute(
+                    "SELECT EXISTS ("
+                    "  SELECT FROM information_schema.tables "
+                    "  WHERE table_name = 'alembic_version'"
+                    ")"
+                )
+                if not cur.fetchone()[0]:
+                    return None
+                cur.execute("SELECT version_num FROM alembic_version")
+                row = cur.fetchone()
+                return row[0] if row else None
+            finally:
+                cur.close()
+        finally:
+            conn.close()
+    except Exception:
+        return None
 
 
 def get_database_status() -> Dict[str, Any]:
