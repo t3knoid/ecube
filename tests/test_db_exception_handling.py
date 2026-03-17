@@ -262,6 +262,25 @@ class TestMountDBFailures:
             response = manager_client.delete(f"/mounts/{mount.id}")
         assert response.status_code == 204
 
+    def test_add_mount_save_failure_after_os_mount_returns_500(self, manager_client, db):
+        """If mount_repo.save() fails after a successful OS mount, return 500."""
+        with patch(
+            "subprocess.run",
+            return_value=MagicMock(returncode=0, stderr="", stdout=""),
+        ), patch(
+            "app.repositories.mount_repository.MountRepository.save",
+            side_effect=Exception("simulated save DB failure"),
+        ):
+            response = manager_client.post(
+                "/mounts",
+                json={
+                    "type": "NFS",
+                    "remote_path": "server:/share",
+                    "local_mount_point": "/mnt/test",
+                },
+            )
+        assert response.status_code == 500
+
 
 # ---------------------------------------------------------------------------
 # Repository layer — rollback on commit failure
