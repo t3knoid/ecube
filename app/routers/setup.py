@@ -127,7 +127,11 @@ def _do_initialize(
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="System was initialized by another process.",
+            detail=(
+                "System initialization is already in progress or has completed. "
+                "If a previous attempt failed, the lock row may need to be "
+                "removed manually: DELETE FROM system_initialization WHERE id = 1;"
+            ),
         )
 
     # From here on, this worker owns initialization.  If OS operations fail,
@@ -141,8 +145,16 @@ def _do_initialize(
     except Exception:
         lock_released = _release_init_lock(db)
         logger.exception("Unexpected error during OS setup")
-        detail = "Unexpected error during system initialization."
-        if not lock_released:
+        detail = (
+            "An unexpected error occurred during system initialization. "
+            "OS groups or the admin user may have been partially created. "
+        )
+        if lock_released:
+            detail += (
+                "The initialization lock has been released so you can "
+                "safely retry POST /setup/initialize."
+            )
+        else:
             detail += _LOCK_STUCK_SUFFIX
         raise HTTPException(status_code=500, detail=detail)
 
@@ -156,8 +168,18 @@ def _do_initialize(
         db.rollback()
         lock_released = _release_init_lock(db)
         logger.exception("Failed to seed admin role for %s", body.username)
-        detail = "OS setup succeeded but failed to seed admin role in the database."
-        if not lock_released:
+        detail = (
+            f"OS setup completed successfully (user '{body.username}' was created "
+            "and ECUBE groups exist), but writing the admin role to the database "
+            "failed. The user exists on the host but has no ECUBE role assignment. "
+        )
+        if lock_released:
+            detail += (
+                "The initialization lock has been released so you can "
+                "safely retry POST /setup/initialize. The retry will "
+                "detect the existing OS user and reset its password."
+            )
+        else:
             detail += _LOCK_STUCK_SUFFIX
         raise HTTPException(status_code=500, detail=detail)
 
