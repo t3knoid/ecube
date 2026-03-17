@@ -259,11 +259,21 @@ def create_user(
 
     # Validate all requested groups BEFORE creating the user so that
     # invalid input never leaves a partially-created account behind.
+    ecube_groups_found = False
     if groups:
         for g in groups:
             validate_group_name(g)
             if not group_exists(g):
                 raise OSUserError(f"Group '{g}' does not exist")
+            if g.startswith(ECUBE_GROUP_PREFIX):
+                ecube_groups_found = True
+
+    if not ecube_groups_found:
+        raise ValueError(
+            "At least one group starting with '"
+            f"{ECUBE_GROUP_PREFIX}' is required so the account "
+            "remains manageable through the API."
+        )
 
     # Create user with home directory.
     _run_sudo([settings.useradd_binary_path, "-m", username])
