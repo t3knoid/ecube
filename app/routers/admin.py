@@ -352,8 +352,16 @@ def delete_os_user(
     except os_user_service.OSUserError as exc:
         _raise_os_error(exc, context="Delete OS user")
 
-    # Clean up DB role assignments.
-    UserRoleRepository(db).delete_roles(username)
+    # Clean up DB role assignments (best-effort: OS user is already gone).
+    try:
+        UserRoleRepository(db).delete_roles(username)
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "Failed to delete DB roles for OS user '%s' after OS deletion. "
+            "Stale rows may remain in user_roles.",
+            username,
+        )
 
     _audit(db, "OS_USER_DELETED", current_user.username, {
         "target_user": username,
