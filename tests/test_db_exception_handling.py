@@ -11,6 +11,8 @@ from unittest.mock import MagicMock, patch
 
 import os
 import tempfile
+from pathlib import Path
+
 import pytest
 
 from app.models.hardware import DriveState, UsbDrive
@@ -382,12 +384,79 @@ class TestCopyEngineDBFailures:
                 "app.repositories.audit_repository.AuditRepository.add",
                 side_effect=Exception("simulated audit DB failure"),
             ):
-                from pathlib import Path
                 _process_file(ef_id, Path(src_path), None)
 
             # File should still be processed successfully despite audit failure
             db.expire_all()
             ef = db.get(ExportFile, ef_id)
             assert ef.status == FileStatus.DONE
+        finally:
+            os.unlink(src_path)
+
+    def test_process_file_skips_increment_when_done_save_fails(self, db):
+        """If saving DONE status fails, copied_bytes must NOT be incremented."""
+        from app.models.jobs import ExportFile, FileStatus
+        from app.services.copy_engine import _process_file
+
+        job = ExportJob(
+            project_id="PROJ-001",
+            evidence_number="EV-001",
+            source_path="/tmp",
+            status=JobStatus.RUNNING,
+            copied_bytes=0,
+        )
+        db.add(job)
+        db.commit()
+
+        ef = ExportFile(
+            job_id=job.id,
+            relative_path="important.txt",
+            size_bytes=100,
+            status=FileStatus.PENDING,
+        )
+        db.add(ef)
+        db.commit()
+        ef_id = ef.id
+        job_id = job.id
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+            f.write("x" * 100)
+            src_path = f.name
+
+        try:
+            original_save = db.commit
+
+            call_count = 0
+
+            def commit_fails_on_done_save(*a, **kw):
+                """Fail the commit that persists DONE status (second commit),
+                but allow others (COPYING status, audit, etc.)."""
+                nonlocal call_count
+                call_count += 1
+                # The DONE-status save is the 2nd real commit in _process_file
+                # (1st = COPYING status). Fail it to simulate DB error.
+                if call_count == 2:
+                    raise Exception("simulated DONE-save failure")
+                return original_save()
+
+            with patch(
+                "app.repositories.audit_repository.AuditRepository.add",
+                return_value=None,  # silence audit to simplify commit counting
+            ), patch(
+                "app.services.copy_engine.SessionLocal",
+                return_value=db,
+            ):
+                # Patch commit on the session used by the worker
+                with patch.object(db, "commit", side_effect=commit_fails_on_done_save):
+                    _process_file(ef_id, Path(src_path), None)
+
+            # copied_bytes on the job should remain 0 because the DONE save
+            # failed — the increment must have been skipped.
+            db.expire_all()
+            refreshed_job = db.get(ExportJob, job_id)
+            assert refreshed_job.copied_bytes == 0, (
+                f"Expected copied_bytes=0 but got {refreshed_job.copied_bytes}; "
+                "increment_job_bytes should be skipped when DONE save fails"
+            )
         finally:
             os.unlink(src_path)
