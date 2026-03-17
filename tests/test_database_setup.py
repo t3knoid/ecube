@@ -15,6 +15,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from pydantic import ValidationError
+
 from app.models.users import UserRole
 from app.schemas.database import (
     DatabaseProvisionRequest,
@@ -32,7 +34,7 @@ class TestDatabaseSchemaValidation:
     """Validate Pydantic schemas reject unsafe inputs."""
 
     def test_host_rejects_url_with_scheme(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError, match="host"):
             DatabaseTestConnectionRequest(
                 host="http://localhost",
                 port=5432,
@@ -41,7 +43,7 @@ class TestDatabaseSchemaValidation:
             )
 
     def test_host_rejects_url_with_path(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError, match="host"):
             DatabaseTestConnectionRequest(
                 host="localhost/admin",
                 port=5432,
@@ -50,7 +52,7 @@ class TestDatabaseSchemaValidation:
             )
 
     def test_host_rejects_url_with_at_sign(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError, match="host"):
             DatabaseTestConnectionRequest(
                 host="user@localhost",
                 port=5432,
@@ -86,7 +88,7 @@ class TestDatabaseSchemaValidation:
         assert req.host == "localhost"
 
     def test_port_rejects_zero(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError, match="port"):
             DatabaseTestConnectionRequest(
                 host="localhost",
                 port=0,
@@ -95,7 +97,7 @@ class TestDatabaseSchemaValidation:
             )
 
     def test_port_rejects_negative(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError, match="port"):
             DatabaseTestConnectionRequest(
                 host="localhost",
                 port=-1,
@@ -104,7 +106,7 @@ class TestDatabaseSchemaValidation:
             )
 
     def test_port_rejects_too_high(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError, match="port"):
             DatabaseTestConnectionRequest(
                 host="localhost",
                 port=70000,
@@ -113,7 +115,7 @@ class TestDatabaseSchemaValidation:
             )
 
     def test_provision_rejects_invalid_db_name(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError, match="app_database"):
             DatabaseProvisionRequest(
                 host="localhost",
                 port=5432,
@@ -125,7 +127,7 @@ class TestDatabaseSchemaValidation:
             )
 
     def test_provision_rejects_invalid_username(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError, match="app_username"):
             DatabaseProvisionRequest(
                 host="localhost",
                 port=5432,
@@ -150,7 +152,7 @@ class TestDatabaseSchemaValidation:
         assert req.app_username == "ecube_user"
 
     def test_settings_rejects_empty(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError, match="At least one setting"):
             DatabaseSettingsUpdateRequest()
 
     def test_settings_partial_update(self):
@@ -160,15 +162,15 @@ class TestDatabaseSchemaValidation:
         assert req.port is None
 
     def test_settings_rejects_invalid_pool_size(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError, match="pool_size"):
             DatabaseSettingsUpdateRequest(pool_size=0)
 
     def test_settings_rejects_pool_size_too_high(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError, match="pool_size"):
             DatabaseSettingsUpdateRequest(pool_size=200)
 
     def test_settings_rejects_invalid_host(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError, match="host"):
             DatabaseSettingsUpdateRequest(host="http://evil.com")
 
 
