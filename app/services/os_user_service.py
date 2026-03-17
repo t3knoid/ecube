@@ -26,7 +26,10 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Groups considered ECUBE-relevant for listing/filtering.
+# Prefix used to identify ECUBE-managed groups for listing/filtering.
+ECUBE_GROUP_PREFIX = "ecube-"
+
+# Fixed set of role groups created during first-run setup.
 ECUBE_GROUPS = {"ecube-admins", "ecube-managers", "ecube-processors", "ecube-auditors"}
 
 # Reserved usernames that cannot be created/deleted through the API.
@@ -230,7 +233,7 @@ def list_users(ecube_only: bool = True) -> List[OSUser]:
         except KeyError:
             pass
         groups.sort()
-        if ecube_only and not any(g in ECUBE_GROUPS for g in groups):
+        if ecube_only and not any(g.startswith(ECUBE_GROUP_PREFIX) for g in groups):
             continue
         result.append(
             OSUser(
@@ -359,7 +362,7 @@ def list_groups(ecube_only: bool = True) -> List[OSGroup]:
     """List OS groups, optionally filtered to ECUBE-relevant names."""
     result: List[OSGroup] = []
     for g in grp.getgrall():
-        if ecube_only and g.gr_name not in ECUBE_GROUPS:
+        if ecube_only and not g.gr_name.startswith(ECUBE_GROUP_PREFIX):
             continue
         result.append(
             OSGroup(name=g.gr_name, gid=g.gr_gid, members=list(g.gr_mem))
