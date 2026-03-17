@@ -175,6 +175,46 @@ class TestCreateUser:
         calls = [c.args[0] for c in mock_subprocess.call_args_list]
         assert ["sudo", "/usr/sbin/usermod", "-aG", "ecube-admins", "testuser"] in calls
 
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_create_user_missing_group_no_account_created(self, mock_pwd, mock_grp):
+        """If a requested group doesn't exist, the user should never be created."""
+        mock_pwd.getpwnam.side_effect = KeyError("no such user")  # user_exists
+        mock_grp.getgrnam.side_effect = KeyError("no such group")  # group_exists
+
+        with pytest.raises(OSUserError, match="does not exist"):
+            create_user("testuser", "s3cret", groups=["no-such-group"])
+
+        # useradd should never have been called.
+        # pwd.getpwnam was only called once (for user_exists), never for
+        # the post-creation lookup, proving useradd was not invoked.
+        assert mock_pwd.getpwnam.call_count == 1
+
+    @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_create_user_usermod_failure_deletes_user(self, mock_pwd, mock_grp, mock_subprocess):
+        """If usermod (group assignment) fails, the created user is cleaned up."""
+        mock_pwd.getpwnam.side_effect = [
+            KeyError("no such user"),   # user_exists
+        ]
+        mock_grp.getgrnam.return_value = _make_grp(name="ecube-admins")
+
+        # useradd and chpasswd succeed, usermod fails, userdel succeeds.
+        mock_subprocess.side_effect = [
+            _ok_result(),       # useradd
+            _ok_result(),       # chpasswd
+            _fail_result(stderr="usermod: group 'ecube-admins' does not exist"),  # usermod
+            _ok_result(),       # userdel (compensation)
+        ]
+
+        with pytest.raises(OSUserError, match="usermod"):
+            create_user("testuser", "s3cret", groups=["ecube-admins"])
+
+        # Verify userdel was called as compensation.
+        calls = [c.args[0] for c in mock_subprocess.call_args_list]
+        assert ["sudo", "/usr/sbin/userdel", "-r", "testuser"] in calls
+
 
 class TestDeleteUser:
     """os_user_service.delete_user()."""
