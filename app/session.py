@@ -19,6 +19,7 @@ import json
 import logging
 import secrets
 from typing import TYPE_CHECKING, Any, MutableMapping
+from urllib.parse import urlparse, urlunparse
 
 from starlette.datastructures import MutableHeaders
 from starlette.middleware.sessions import SessionMiddleware
@@ -180,6 +181,22 @@ class RedisSessionMiddleware:
 # Redis connection helper
 # ---------------------------------------------------------------------------
 
+def _redact_url(url: str) -> str:
+    """Return *url* with any userinfo (username/password) replaced by ``***``."""
+    try:
+        parsed = urlparse(url)
+        if parsed.username or parsed.password:
+            # Rebuild netloc as ***@host:port
+            host_port = parsed.hostname or ""
+            if parsed.port:
+                host_port += f":{parsed.port}"
+            redacted_netloc = f"***@{host_port}"
+            return urlunparse(parsed._replace(netloc=redacted_netloc))
+        return url
+    except Exception:
+        return "<unparseable>"
+
+
 def _try_redis_backend() -> "object | None":
     """Attempt to connect to Redis and return a client object.
 
@@ -203,6 +220,8 @@ def _try_redis_backend() -> "object | None":
         )
         return None
 
+    safe_url = _redact_url(url)
+
     try:
         client = redis_lib.Redis.from_url(
             url,
@@ -210,13 +229,13 @@ def _try_redis_backend() -> "object | None":
             socket_keepalive=settings.redis_socket_keepalive,
         )
         client.ping()
-        logger.info("Redis session backend connected: %s", url)
+        logger.info("Redis session backend connected: %s", safe_url)
         return client
     except Exception:
         logger.warning(
             "Redis session backend unavailable (url=%s); "
             "falling back to cookie-based sessions",
-            url,
+            safe_url,
             exc_info=True,
         )
         return None
