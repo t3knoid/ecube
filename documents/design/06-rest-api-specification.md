@@ -588,7 +588,7 @@ These endpoints support the setup wizard's database configuration step.  They li
 
 Test connectivity to a PostgreSQL server.
 
-**Authentication:** Unauthenticated during initial setup (no admin exists); `admin` role required after.
+**Authentication:** Unauthenticated during initial setup (no admin exists); `admin` role required after.  **Fail-closed:** if the database is unreachable and no valid admin JWT is provided, returns `503`.
 
 **Request body:**
 
@@ -618,6 +618,7 @@ Test connectivity to a PostgreSQL server.
 - `401 Unauthorized` — Missing token (after setup)
 - `403 Forbidden` — Non-admin role (after setup)
 - `422 Unprocessable Entity` — Invalid host or port
+- `503 Service Unavailable` — Database unreachable and no valid admin JWT provided (fail-closed)
 
 **Audit events:** `DATABASE_CONNECTION_TEST` (best-effort; may not persist if the database doesn't exist yet)
 
@@ -625,7 +626,7 @@ Test connectivity to a PostgreSQL server.
 
 Create the application database user, database, and run Alembic migrations.
 
-**Authentication:** Unauthenticated during initial setup; `admin` role required after.
+**Authentication:** Unauthenticated during initial setup; `admin` role required after.  **Fail-closed:** if the database is unreachable and no valid admin JWT is provided, returns `503`.
 
 **Request body:**
 
@@ -662,8 +663,12 @@ Create the application database user, database, and run Alembic migrations.
 **Error responses:**
 
 - `400 Bad Request` — Connection to PostgreSQL failed
+- `401 Unauthorized` — Missing token (after setup)
+- `403 Forbidden` — Non-admin role (after setup)
+- `409 Conflict` — Database already provisioned (use `"force": true` to override)
 - `500 Internal Server Error` — Provisioning or migration failed
 - `422 Unprocessable Entity` — Invalid identifiers
+- `503 Service Unavailable` — Database unreachable and no valid admin JWT provided (fail-closed)
 
 **Audit events:** `DATABASE_PROVISIONED`
 
