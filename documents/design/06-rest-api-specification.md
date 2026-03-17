@@ -134,6 +134,7 @@ Every authenticated request resolves to:
 | API Area / Operation | Admin | Manager | Processor | Auditor |
 | ---------------------- | :-----: | :-------: | :---------: | :-------: |
 | Manage user roles | ✔ | ✖ | ✖ | ✖ |
+| Manage OS users/groups (local only) | ✔ | ✖ | ✖ | ✖ |
 | Add/remove mounts | ✔ | ✔ | ✖ | ✖ |
 | List mounts | ✔ | ✔ | ✔ | ✔ |
 | Initialize drives | ✔ | ✔ | ✖ | ✖ |
@@ -443,7 +444,7 @@ Delete an OS user and remove their DB role assignments.
 **Error responses:**
 
 - `404 Not Found` — User does not exist
-- `422 Unprocessable Entity` — Invalid or reserved username
+- `422 Unprocessable Entity` — Invalid or reserved username, or user is not a member of any `ecube-*` group (see [ECUBE-managed user guard](#ecube-managed-user-guard))
 
 **Audit events:** `OS_USER_DELETED`
 
@@ -458,7 +459,7 @@ Reset an OS user's password via `chpasswd`.
 **Error responses:**
 
 - `404 Not Found` — User does not exist
-- `422 Unprocessable Entity` — Invalid/reserved username or empty password
+- `422 Unprocessable Entity` — Invalid/reserved username, empty password, or user is not ECUBE-managed (see [ECUBE-managed user guard](#ecube-managed-user-guard))
 
 **Audit events:** `OS_PASSWORD_RESET` (password never appears in audit details)
 
@@ -472,6 +473,10 @@ Replace an OS user's supplementary group memberships.
 
 **Response (200 OK):** `OSUserResponse` with updated group list.
 
+**Error responses:**
+
+- `422 Unprocessable Entity` — User is not ECUBE-managed (see [ECUBE-managed user guard](#ecube-managed-user-guard))
+
 **Audit events:** `OS_USER_GROUPS_MODIFIED`
 
 ### `POST /admin/os-users/{username}/groups`
@@ -484,11 +489,15 @@ Add supplementary groups to an OS user without removing existing memberships.
 
 **Response (200 OK):** `OSUserResponse` with updated group list.
 
+**Error responses:**
+
+- `422 Unprocessable Entity` — User is not ECUBE-managed (see [ECUBE-managed user guard](#ecube-managed-user-guard))
+
 **Audit events:** `OS_USER_GROUPS_APPENDED`
 
 ### `POST /admin/os-groups`
 
-Create an OS group.
+Create an OS group. The group name **must** start with the `ecube-` prefix.
 
 **Roles:** `admin`
 
@@ -496,21 +505,35 @@ Create an OS group.
 
 **Response (201 Created):** `OSGroupResponse` with `name`, `gid`, `members`.
 
+**Error responses:**
+
+- `422 Unprocessable Entity` — Group name does not start with `ecube-`
+
 **Audit events:** `OS_GROUP_CREATED`
 
 ### `GET /admin/os-groups`
 
-List OS groups filtered to ECUBE-relevant names.
+List OS groups filtered to the `ecube-` prefix.
 
 **Roles:** `admin`
 
 ### `DELETE /admin/os-groups/{name}`
 
-Delete an OS group.
+Delete an OS group. The group name **must** start with the `ecube-` prefix.
 
 **Roles:** `admin`
 
+**Error responses:**
+
+- `422 Unprocessable Entity` — Group name does not start with `ecube-`
+
 **Audit events:** `OS_GROUP_DELETED`
+
+### ECUBE-Managed User Guard
+
+Mutative user operations (`DELETE`, `PUT /password`, `PUT /groups`, `POST /groups`) enforce that the target user is **ECUBE-managed** before proceeding. A user is considered ECUBE-managed if they belong to at least one OS group whose name starts with `ecube-`. This prevents accidental modification or deletion of host system accounts (e.g., `postgres`, `www-data`). Reserved system usernames (`root`, `nobody`, `daemon`, etc.) are also rejected regardless of group membership.
+
+Operations that fail this check return `422 Unprocessable Entity` with a descriptive message. The check is bypassed for internal compensation paths (e.g., setup recovery) where the user may not yet be in an `ecube-*` group.
 
 ---
 
