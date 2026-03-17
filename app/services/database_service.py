@@ -157,6 +157,11 @@ def provision_database(
             logger.info("Database already exists: %s", app_database)
 
         cur.close()
+    except psycopg2.Error as exc:
+        logger.error("Database provisioning failed: %s", exc)
+        raise RuntimeError(
+            "Database provisioning failed during user/database creation"
+        ) from exc
     finally:
         conn.close()
 
