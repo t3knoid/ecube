@@ -114,20 +114,26 @@ class RedisSessionMiddleware:
                 elif current_snapshot != initial_snapshot or (
                     session and session_id is None
                 ):
-                    # Session data was added / changed — persist to Redis
+                    # Session data was added / changed — persist to Redis.
+                    # Only issue a Set-Cookie when persistence succeeds;
+                    # otherwise the client would hold a session-id with no
+                    # server-side data, causing "lost session" on the next
+                    # request.
                     sid = session_id or secrets.token_urlsafe(32)
                     key = self._KEY_PREFIX + sid
                     try:
-                        self.redis.setex(key, self.max_age, json.dumps(dict(session)))
+                        payload = json.dumps(dict(session))
+                        self.redis.setex(key, self.max_age, payload)
                     except Exception:
                         logger.warning(
                             "Failed to persist session %s to Redis",
                             sid,
                             exc_info=True,
                         )
-                    headers = MutableHeaders(scope=message)
-                    cookie = self._build_cookie(sid)
-                    headers.append("set-cookie", cookie)
+                    else:
+                        headers = MutableHeaders(scope=message)
+                        cookie = self._build_cookie(sid)
+                        headers.append("set-cookie", cookie)
 
             await send(message)
 
