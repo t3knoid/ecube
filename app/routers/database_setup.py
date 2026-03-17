@@ -167,8 +167,9 @@ def test_database_connection(
 ) -> DatabaseTestConnectionResponse:
     """Test connectivity to a PostgreSQL server.
 
-    Available to unauthenticated users during initial setup, or to admins
-    after setup is complete.
+    **Authentication:** During initial setup (no admin user exists), this
+    endpoint accepts unauthenticated requests.  Once the system is
+    initialized, a valid admin JWT is required.
     """
     try:
         server_version = database_service.test_connection(
@@ -217,7 +218,10 @@ def provision_database(
 ) -> DatabaseProvisionResponse:
     """Create the application user, database, and run Alembic migrations.
 
-    Available during initial setup (unauthenticated) or to admins.
+    **Authentication:** During initial setup (no admin user exists), this
+    endpoint accepts unauthenticated requests.  Once the system is
+    initialized, a valid admin JWT is required.
+
     Returns ``409 Conflict`` if the database has already been provisioned,
     unless ``force`` is set to ``true`` in the request body.
     """
