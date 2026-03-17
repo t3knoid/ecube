@@ -19,6 +19,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.exc import OperationalError as SAOperationalError, ProgrammingError
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, get_current_user, require_roles, _try_log_authorization_denied
@@ -90,24 +91,37 @@ def _require_admin_or_initial_setup(
             repo = UserRoleRepository(db)
             has_admin = repo.has_any_admin()
             db_checked = True
-        except Exception:
-            # The query failed — either the DB is truly unreachable, or it
-            # is reachable but the schema hasn't been migrated yet (e.g.
-            # user_roles table doesn't exist).  Distinguish the two cases
-            # so that a pre-migration database is treated as initial setup
-            # rather than triggering a 503 that blocks bootstrapping.
-            db.rollback()  # clear the failed transaction
+        except ProgrammingError:
+            # ProgrammingError with "undefined table" / "relation does not
+            # exist" means the schema hasn't been migrated yet.
+            # Treat as initial setup so bootstrapping isn't blocked.
+            db.rollback()
+            db_checked = True
+            has_admin = False
+        except SAOperationalError:
+            # Connectivity / permission error that surfaced through
+            # SQLAlchemy.  Try a lightweight probe to distinguish
+            # "reachable but broken query" from "truly unreachable".
+            db.rollback()
             try:
                 db.execute(__import__("sqlalchemy").text("SELECT 1"))
-                # DB is reachable but the admin-check query failed
-                # (missing table / unmigrated schema) → initial setup.
-                db_checked = True
-                has_admin = False
+                # DB is reachable but the admin query failed for an
+                # operational reason (e.g. permission denied on the
+                # table).  Fail closed — do NOT assume initial setup.
             except Exception:
                 logger.debug(
                     "Admin check failed (DB unreachable)",
                     exc_info=True,
                 )
+        except Exception:
+            # Any other unexpected error (import bug, attribute error,
+            # etc.) — do NOT treat as initial setup.  Leave db_checked
+            # False so the fail-closed path below fires.
+            db.rollback()
+            logger.debug(
+                "Admin check failed (unexpected error)",
+                exc_info=True,
+            )
 
     if db_checked and not has_admin:
         # Positively confirmed: no admin exists → initial setup mode
