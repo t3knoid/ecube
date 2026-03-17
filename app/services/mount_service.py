@@ -60,6 +60,13 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None)
                 "DB commit failed while updating mount status after OS mount for mount %s",
                 mount.id,
             )
+            # At this point the OS mount may have succeeded but the database did not
+            # reflect the new status. Surface this as a server error rather than
+            # returning an inconsistent mount object to the caller.
+            raise HTTPException(
+                status_code=500,
+                detail="Database error while updating mount status after OS mount; mount may be active at OS level.",
+            )
     except Exception as exc:
         mount.status = MountStatus.ERROR
         try:
