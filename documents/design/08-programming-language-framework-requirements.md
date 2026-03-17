@@ -6,6 +6,7 @@
 - SQLAlchemy ORM with Alembic migrations for schema management.
 - Celery or RQ for background copy/verify/manifest jobs.
 - Service boundaries: API handlers, domain services, infrastructure adapters.
+- **Platform abstraction:** All OS-specific operations (drive discovery, filesystem detection, formatting, mount/unmount, user management) are defined as `typing.Protocol` or `abc.ABC` interfaces in `app/infrastructure/`. Concrete implementations satisfy those interfaces for a specific platform (Linux is the reference). Services depend on the interface, not the implementation, enabling cross-platform extensibility and test mocking without hardware.
 
 ## 8.2 UI Layer
 
