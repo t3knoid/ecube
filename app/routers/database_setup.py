@@ -90,7 +90,6 @@ def _require_admin_or_initial_setup(
         # DB query failed — treat as initial setup
         logger.debug("Admin check failed (DB may not be provisioned yet)", exc_info=True)
         return None
-        return None
 
     # System is initialized — require admin authentication
     if credentials is None:
@@ -169,7 +168,18 @@ def provision_database(
     """Create the application user, database, and run Alembic migrations.
 
     Available during initial setup (unauthenticated) or to admins.
+    Returns ``409 Conflict`` if the database has already been provisioned,
+    unless ``force`` is set to ``true`` in the request body.
     """
+    if not body.force and database_service.is_database_provisioned():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Database is already provisioned. "
+                "Set 'force' to true to re-provision."
+            ),
+        )
+
     try:
         migrations_applied = database_service.provision_database(
             host=body.host,

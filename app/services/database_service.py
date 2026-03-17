@@ -176,6 +176,21 @@ def provision_database(
     return migrations_applied
 
 
+def is_database_provisioned() -> bool:
+    """Check whether the configured database is already provisioned.
+
+    Returns ``True`` when the configured ``DATABASE_URL`` connects
+    successfully and the ``alembic_version`` table contains a revision,
+    indicating that provisioning has already been completed.
+    """
+    from app.config import settings
+
+    try:
+        return _get_current_revision(settings.database_url) is not None
+    except Exception:
+        return False
+
+
 def _run_migrations(database_url: str) -> int:
     """Run Alembic migrations programmatically and return the count applied."""
     # Import alembic lazily to avoid conflict with local alembic/ directory

@@ -82,6 +82,7 @@ class DatabaseProvisionRequest(BaseModel):
     app_database: str = Field(default="ecube", min_length=1, max_length=63, description="Application database name")
     app_username: str = Field(default="ecube", min_length=1, max_length=63, description="Application database user")
     app_password: str = Field(..., min_length=1, description="Application database user password")
+    force: bool = Field(default=False, description="Allow re-provisioning an already-provisioned database")
 
     @field_validator("host")
     @classmethod
