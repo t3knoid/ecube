@@ -480,6 +480,19 @@ class TestRedisBackendStoresServerSide:
         key = next(iter(fake))
         assert "short" not in key
 
+    def test_corrupted_redis_data_starts_fresh_session(self):
+        """Non-dict JSON in Redis is treated as an empty session."""
+        valid_id = "A" * 43
+        fake = _FakeRedis()
+        # Store a JSON list instead of a dict
+        fake["ecube:session:" + valid_id] = json.dumps(["not", "a", "dict"])
+        app = self._make_app(fake)
+        client = TestClient(app, cookies={"sid": valid_id})
+
+        resp = client.get("/get")
+        assert resp.status_code == 200
+        assert resp.json() == {"user": None}
+
 
 class TestRedisSessionNestedMutations:
     """Snapshot/compare detects mutations that simple flag-tracking would miss."""

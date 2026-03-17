@@ -82,8 +82,15 @@ class RedisSessionMiddleware:
             try:
                 raw = await self.redis.get(key)
                 if raw is not None:
-                    session_id = cookie_value
-                    initial_data = json.loads(raw)
+                    data = json.loads(raw)
+                    if isinstance(data, dict):
+                        session_id = cookie_value
+                        initial_data = data
+                    else:
+                        logger.warning(
+                            "Session data in Redis is not a dict; "
+                            "starting fresh session",
+                        )
             except Exception:
                 logger.warning(
                     "Failed to load session from Redis; starting fresh session",
