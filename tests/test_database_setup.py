@@ -702,3 +702,43 @@ class TestDatabaseService:
             settings.database_url = original_url
             settings.db_pool_size = original_pool
             settings.db_pool_max_overflow = original_overflow
+
+    @patch("app.services.database_service._write_env_setting")
+    @patch("app.services.database_service._reinitialize_engine")
+    @patch("app.services.database_service._run_migrations", return_value=4)
+    @patch("app.services.database_service.psycopg2")
+    def test_provision_reinitializes_engine_and_settings(
+        self, mock_psycopg2, mock_migrations, mock_reinit, mock_write
+    ):
+        """provision_database() must update in-memory settings and reinitialize the engine."""
+        from app.config import settings
+        from app.services.database_service import provision_database
+
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        mock_cur.fetchone.return_value = None  # user/db don't exist yet
+        mock_conn.cursor.return_value = mock_cur
+        mock_psycopg2.connect.return_value = mock_conn
+        mock_psycopg2.OperationalError = Exception
+        mock_psycopg2.sql = __import__("psycopg2").sql
+
+        original_url = settings.database_url
+        try:
+            result = provision_database(
+                host="provhost",
+                port=5434,
+                admin_username="postgres",
+                admin_password="adminpw",
+                app_database="newecube",
+                app_username="appuser",
+                app_password="apppw",
+            )
+
+            expected_url = "postgresql://appuser:apppw@provhost:5434/newecube"
+            assert result == 4
+            assert settings.database_url == expected_url
+            mock_reinit.assert_called_once_with(
+                expected_url, settings.db_pool_size, settings.db_pool_max_overflow
+            )
+        finally:
+            settings.database_url = original_url
