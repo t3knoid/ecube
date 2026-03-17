@@ -212,6 +212,7 @@ async def _try_redis_backend() -> "object | None":
 
     safe_url = _redact_url(url)
 
+    client = None
     try:
         client = aioredis.Redis.from_url(
             url,
@@ -223,10 +224,11 @@ async def _try_redis_backend() -> "object | None":
         return client
     except Exception:
         # Close the client if it was created, to avoid leaking connections.
-        try:
-            await client.aclose()
-        except Exception:
-            pass
+        if client is not None:
+            try:
+                await client.aclose()
+            except Exception:
+                pass
         logger.warning(
             "Redis session backend unavailable (url=%s); "
             "falling back to cookie-based sessions",
