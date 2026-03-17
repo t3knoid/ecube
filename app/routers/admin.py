@@ -283,8 +283,7 @@ def create_os_user(
 
 @_os_router.get("/os-users", response_model=OSUserListResponse)
 def list_os_users(
-    request: Request,
-    current_user: CurrentUser = Depends(require_roles("admin")),
+    _current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSUserListResponse:
     """List OS users filtered to ECUBE-relevant groups."""
     users = os_user_service.list_users(ecube_only=True)
