@@ -223,8 +223,14 @@ def provision_database(
     initialized, a valid admin JWT is required.
 
     Returns ``409 Conflict`` if the database has already been provisioned,
-    unless ``force`` is set to ``true`` in the request body.
+    unless ``force`` is set to ``true`` in the request body (admin-only).
     """
+    if body.force and current_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The 'force' option requires an authenticated admin user.",
+        )
+
     if not body.force and database_service.is_database_provisioned():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
