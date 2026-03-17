@@ -229,6 +229,7 @@ class TestGracefulRedisFailover:
 
         assert result is None
         assert "unavailable" in caplog.text
+        mock_client.aclose.assert_awaited_once()
 
     def test_init_session_backend_redis_fallback(self, caplog):
         """init_session_backend gracefully falls back and sets backend_name."""
