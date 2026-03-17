@@ -38,39 +38,6 @@ logger = logging.getLogger(__name__)
 # Redis session middleware
 # ---------------------------------------------------------------------------
 
-class _RedisSessionDict(dict):
-    """A dict subclass that tracks whether it has been modified."""
-
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        self._modified = False
-        super().__init__(*args, **kwargs)
-
-    # Track mutations -------------------------------------------------------
-    def __setitem__(self, key: Any, value: Any) -> None:
-        self._modified = True
-        super().__setitem__(key, value)
-
-    def __delitem__(self, key: Any) -> None:
-        self._modified = True
-        super().__delitem__(key)
-
-    def clear(self) -> None:
-        self._modified = True
-        super().clear()
-
-    def pop(self, *args: Any) -> Any:
-        self._modified = True
-        return super().pop(*args)
-
-    def update(self, *args: Any, **kwargs: Any) -> None:
-        self._modified = True
-        super().update(*args, **kwargs)
-
-    @property
-    def is_modified(self) -> bool:
-        return self._modified
-
-
 class RedisSessionMiddleware:
     """ASGI middleware that stores session data in Redis.
 
@@ -124,12 +91,16 @@ class RedisSessionMiddleware:
                     exc_info=True,
                 )
 
-        scope["session"] = _RedisSessionDict(initial_data)
+        scope["session"] = dict(initial_data)
+        # Snapshot the initial state so we can detect *any* change at
+        # response time — including nested mutations, setdefault, etc.
+        initial_snapshot = json.dumps(initial_data, sort_keys=True)
 
         # --- Intercept the response to persist session -----------------------
         async def send_wrapper(message: Message) -> None:
             if message["type"] == "http.response.start":
-                session: _RedisSessionDict = scope["session"]
+                session: dict = scope["session"]
+                current_snapshot = json.dumps(dict(session), sort_keys=True)
 
                 if not session and session_id is not None:
                     # Session was cleared — delete from Redis and expire cookie
@@ -141,7 +112,9 @@ class RedisSessionMiddleware:
                     cookie = self._build_cookie(session_id, delete=True)
                     headers.append("set-cookie", cookie)
 
-                elif session.is_modified or (session and session_id is None):
+                elif current_snapshot != initial_snapshot or (
+                    session and session_id is None
+                ):
                     # Session data was added / changed — persist to Redis
                     sid = session_id or secrets.token_urlsafe(32)
                     key = self._KEY_PREFIX + sid

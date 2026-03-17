@@ -415,6 +415,91 @@ class TestRedisBackendStoresServerSide:
         assert resp.json() == {"user": None}
 
 
+class TestRedisSessionNestedMutations:
+    """Snapshot/compare detects mutations that simple flag-tracking would miss."""
+
+    @staticmethod
+    def _make_app(fake_redis):
+        inner = FastAPI()
+
+        @inner.get("/set-list")
+        async def set_list(request: Request):
+            request.session["items"] = ["a"]
+            return JSONResponse({"ok": True})
+
+        @inner.get("/append")
+        async def append_item(request: Request):
+            request.session["items"].append("b")
+            return JSONResponse({"ok": True})
+
+        @inner.get("/setdefault-append")
+        async def setdefault_append(request: Request):
+            request.session.setdefault("roles", []).append("admin")
+            return JSONResponse({"ok": True})
+
+        @inner.get("/nested-dict")
+        async def nested_dict(request: Request):
+            request.session.setdefault("prefs", {})["theme"] = "dark"
+            return JSONResponse({"ok": True})
+
+        @inner.get("/popitem")
+        async def popitem_route(request: Request):
+            request.session.popitem()
+            return JSONResponse({"ok": True})
+
+        @inner.get("/get")
+        async def get_session(request: Request):
+            return JSONResponse(dict(request.session))
+
+        inner.add_middleware(
+            RedisSessionMiddleware,
+            redis_client=fake_redis,
+            session_cookie="sid",
+            max_age=3600,
+            same_site="lax",
+            https_only=False,
+        )
+        return inner
+
+    def test_nested_list_append_persisted(self):
+        fake = _FakeRedis()
+        app = self._make_app(fake)
+        client = TestClient(app)
+
+        client.get("/set-list")
+        client.get("/append")
+        resp = client.get("/get")
+        assert resp.json()["items"] == ["a", "b"]
+
+    def test_setdefault_append_persisted(self):
+        fake = _FakeRedis()
+        app = self._make_app(fake)
+        client = TestClient(app)
+
+        client.get("/setdefault-append")
+        resp = client.get("/get")
+        assert resp.json()["roles"] == ["admin"]
+
+    def test_nested_dict_mutation_persisted(self):
+        fake = _FakeRedis()
+        app = self._make_app(fake)
+        client = TestClient(app)
+
+        client.get("/nested-dict")
+        resp = client.get("/get")
+        assert resp.json()["prefs"] == {"theme": "dark"}
+
+    def test_popitem_persisted(self):
+        fake = _FakeRedis()
+        app = self._make_app(fake)
+        client = TestClient(app)
+
+        client.get("/set-list")
+        client.get("/popitem")
+        resp = client.get("/get")
+        assert resp.json() == {}
+
+
 class TestInitSessionBackendRedis:
     """init_session_backend upgrades the proxy to Redis when Redis works."""
 
