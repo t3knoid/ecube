@@ -940,6 +940,9 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 | 26 | Fresh install — DB/role missing | With PostgreSQL running but the application database or role not yet created, `POST /setup/database/provision` without `force` | 200, provisioning proceeds (not 503) |
 | 27 | Fail-closed — OperationalError on reachable DB | Revoke SELECT on `user_roles` (or simulate permission denied), `POST /setup/database/test-connection` without token | 503, does NOT grant unauthenticated access |
 | 28 | Fail-closed — unexpected error | Trigger an unexpected exception from admin-check (e.g. coding bug), `POST /setup/database/test-connection` without token | 503, does NOT grant unauthenticated access |
+| 29 | Provision — migration failure | `POST /setup/database/provision` with valid credentials but a broken Alembic migration (e.g. conflicting schema) | 500, "migration failed" message; `.env` not updated, engine not swapped |
+| 30 | Provision — .env write failure | `POST /setup/database/provision` after making `.env` read-only (or disk full) | 500, "failed to persist" message; engine not swapped |
+| 31 | Provision — engine reinit failure | `POST /setup/database/provision` while another reinit is in progress (lock contention) | 500, "engine could not be switched" message; `.env` already written |
 
 ---
 
