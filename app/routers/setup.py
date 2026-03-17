@@ -133,7 +133,7 @@ def _do_initialize(
     # From here on, this worker owns initialization.  If OS operations fail,
     # we must remove the lock row so that setup can be retried.
     try:
-        groups_created, admin_username = _run_os_setup(body)
+        groups_created = _run_os_setup(body)
     except HTTPException:
         _release_init_lock(db)
         raise
@@ -194,10 +194,10 @@ def _release_init_lock(db: Session) -> None:
 
 def _run_os_setup(
     body: SetupInitializeRequest,
-) -> tuple[list[str], str]:
+) -> list[str]:
     """Execute OS-level setup: create groups and the admin user.
 
-    Returns ``(groups_created, username)``.
+    Returns the list of groups created.
     Raises :class:`HTTPException` on failure.
     """
     # Step 2: Create ECUBE OS groups.
@@ -242,4 +242,4 @@ def _run_os_setup(
                 detail=f"User exists but failed to reset password: {pw_exc}",
             )
 
-    return groups_created, body.username
+    return groups_created
