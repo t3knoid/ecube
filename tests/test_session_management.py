@@ -598,3 +598,42 @@ class TestSessionEventLogging:
 
         assert "Session backend: cookie" in caplog.text
         assert "REDIS_URL" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# 11. URL credential redaction
+# ---------------------------------------------------------------------------
+class TestRedactUrl:
+    """Verify _redact_url strips credentials from Redis URLs."""
+
+    def test_redacts_user_and_password(self):
+        from app.session import _redact_url
+
+        assert _redact_url("redis://alice:s3cret@db.host:6379/0") == "redis://***@db.host:6379/0"
+
+    def test_redacts_password_only(self):
+        from app.session import _redact_url
+
+        assert _redact_url("redis://:s3cret@db.host:6379/0") == "redis://***@db.host:6379/0"
+
+    def test_redacts_user_only(self):
+        from app.session import _redact_url
+
+        assert _redact_url("redis://alice@db.host:6379/0") == "redis://***@db.host:6379/0"
+
+    def test_no_credentials_unchanged(self):
+        from app.session import _redact_url
+
+        assert _redact_url("redis://db.host:6379/0") == "redis://db.host:6379/0"
+
+    def test_no_port_with_credentials(self):
+        from app.session import _redact_url
+
+        assert _redact_url("redis://alice:pass@db.host/2") == "redis://***@db.host/2"
+
+    def test_unparseable_returns_placeholder(self):
+        from app.session import _redact_url
+
+        # Force an exception inside _redact_url
+        with patch("app.session.urlparse", side_effect=ValueError("bad")):
+            assert _redact_url("redis://host:6379") == "<unparseable>"
