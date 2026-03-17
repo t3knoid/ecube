@@ -113,7 +113,7 @@ alembic revision -m "describe change"
 #### Typical startup sequence
 
 1. Start PostgreSQL and ensure `DATABASE_URL` is correct.
-2. Run `alembic upgrade head`.
+2. Run `alembic upgrade head` (or use the API-based provisioning wizard at `/setup/database/provision` after starting the server — see the Operational Guide for details).
 3. Start the API server (`uvicorn app.main:app --reload`).
 
 ## API Documentation

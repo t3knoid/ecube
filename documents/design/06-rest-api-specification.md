@@ -580,6 +580,170 @@ Perform first-run system initialization: create OS groups, create admin user, se
 
 **Audit events:** `SYSTEM_INITIALIZED`
 
+### 3.8.1 Database Provisioning API
+
+These endpoints support the setup wizard's database configuration step.  They live under `/setup/database/`.
+
+#### `POST /setup/database/test-connection`
+
+Test connectivity to a PostgreSQL server.
+
+**Authentication:** Unauthenticated during initial setup (no admin exists); `admin` role required after.
+
+**Request body:**
+
+```json
+{
+    "host": "localhost",
+    "port": 5432,
+    "admin_username": "postgres",
+    "admin_password": "secret"
+}
+```
+
+**Validation:**
+
+- `host` must be a valid hostname or IPv4 address (SSRF-safe — no URLs, schemes, or paths).
+- `port` must be 1–65535.
+
+**Response (200 OK):**
+
+```json
+{"status": "ok", "server_version": "16.2"}
+```
+
+**Error responses:**
+
+- `400 Bad Request` — Connection failed (timeout, auth error, host unreachable)
+- `401 Unauthorized` — Missing token (after setup)
+- `403 Forbidden` — Non-admin role (after setup)
+- `422 Unprocessable Entity` — Invalid host or port
+
+**Audit events:** `DATABASE_CONNECTION_TEST` (best-effort; may not persist if the database doesn't exist yet)
+
+#### `POST /setup/database/provision`
+
+Create the application database user, database, and run Alembic migrations.
+
+**Authentication:** Unauthenticated during initial setup; `admin` role required after.
+
+**Request body:**
+
+```json
+{
+    "host": "localhost",
+    "port": 5432,
+    "admin_username": "postgres",
+    "admin_password": "secret",
+    "app_database": "ecube",
+    "app_username": "ecube",
+    "app_password": "app-secret"
+}
+```
+
+**Validation:**
+
+- `host`: same as test-connection.
+- `app_database`, `app_username`: valid PostgreSQL identifiers (letters, digits, underscores; max 63 chars).
+
+**Response (200 OK):**
+
+```json
+{
+    "status": "provisioned",
+    "database": "ecube",
+    "user": "ecube",
+    "migrations_applied": 4
+}
+```
+
+**Side effects:** Writes `DATABASE_URL` to `.env`, reinitializes the database engine and in-memory settings.
+
+**Error responses:**
+
+- `400 Bad Request` — Connection to PostgreSQL failed
+- `500 Internal Server Error` — Provisioning or migration failed
+- `422 Unprocessable Entity` — Invalid identifiers
+
+**Audit events:** `DATABASE_PROVISIONED`
+
+#### `GET /setup/database/status`
+
+Report the current database connection health and migration state.
+
+**Authentication:** `admin` role required.
+
+**Response (200 OK):**
+
+```json
+{
+    "connected": true,
+    "database": "ecube",
+    "host": "localhost",
+    "port": 5432,
+    "current_migration": "0004_system_initialization",
+    "pending_migrations": 0
+}
+```
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Non-admin role
+
+#### `PUT /setup/database/settings`
+
+Partially update database connection settings.  All fields are optional — only supplied fields are changed.
+
+**Authentication:** `admin` role required.
+
+**Request body (all fields optional):**
+
+```json
+{
+    "host": "db.example.com",
+    "port": 5432,
+    "app_database": "ecube",
+    "app_username": "ecube",
+    "app_password": "new-password",
+    "pool_size": 10,
+    "pool_max_overflow": 20
+}
+```
+
+**Validation:**
+
+- `pool_size`: 1–100
+- `pool_max_overflow`: 0–200
+
+**Response (200 OK):**
+
+```json
+{
+    "status": "updated",
+    "host": "db.example.com",
+    "port": 5432,
+    "database": "ecube",
+    "connected": true
+}
+```
+
+**Side effects:** Tests the new settings before committing, writes `.env`, reinitializes the connection pool, and updates in-memory settings.
+
+**Error responses:**
+
+- `400 Bad Request` — New settings fail connection test
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Non-admin role
+- `422 Unprocessable Entity` — Invalid field values or empty body
+
+**Audit events:** `DATABASE_SETTINGS_UPDATED`
+
+**Security notes:**
+
+- Passwords are redacted from all responses and audit log metadata.
+- The `admin_password` (for test-connection and provision) is transient — used only for the PostgreSQL operation and never persisted.
+
 ---
 
 ## 3.9 Introspection API (Read‑Only)
