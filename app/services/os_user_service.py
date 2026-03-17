@@ -383,22 +383,45 @@ def reset_password(username: str, password: str, *, _skip_managed_check: bool = 
 
 
 def set_user_groups(username: str, groups: List[str]) -> OSUser:
-    """Replace a user's supplementary group memberships.
+    """Replace a user's ``ecube-*`` supplementary groups.
 
+    Only group names starting with the ``ecube-`` prefix are accepted.
+    Non-ECUBE supplementary groups are preserved automatically so that
+    ``usermod -G`` never strips memberships the API does not manage.
+
+    Raises :class:`ValueError` on bad input, :class:`OSUserError` on failure.
     Returns the updated :class:`OSUser`.
     """
     validate_username(username)
+
+    if not groups:
+        raise ValueError(
+            "At least one group starting with '"
+            f"{ECUBE_GROUP_PREFIX}' is required so the account "
+            "remains manageable through the API."
+        )
+
     if not user_exists(username):
         raise OSUserError(f"User '{username}' does not exist")
     _require_ecube_managed_user(username)
 
     for g in groups:
         validate_group_name(g)
+        if not g.startswith(ECUBE_GROUP_PREFIX):
+            raise ValueError(
+                f"Group '{g}' does not start with '{ECUBE_GROUP_PREFIX}'. "
+                "Use the append endpoint (POST) to add non-ECUBE groups."
+            )
         if not group_exists(g):
             raise OSUserError(f"Group '{g}' does not exist")
 
+    # Preserve existing non-ecube-* supplementary groups.
+    current_groups = _get_user_groups(username)
+    non_ecube = [g for g in current_groups if not g.startswith(ECUBE_GROUP_PREFIX)]
+    final_groups = sorted(set(groups) | set(non_ecube))
+
     # -G replaces all supplementary groups.
-    _run_sudo([settings.usermod_binary_path, "-G", ",".join(groups), username])
+    _run_sudo([settings.usermod_binary_path, "-G", ",".join(final_groups), username])
 
     pw = pwd.getpwnam(username)
     return OSUser(
