@@ -1,7 +1,7 @@
 from typing import Dict, List, Literal, Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+from pydantic import Field, field_validator
 
 
 class Settings(BaseSettings):
@@ -232,6 +232,52 @@ class Settings(BaseSettings):
 
     #: Contact email shown in the OpenAPI spec.
     api_contact_email: str = "support@ecube.local"
+
+    # ---------------------------------------------------------------------------
+    # Session / cookie configuration
+    # ---------------------------------------------------------------------------
+
+    #: Session storage backend.  ``"cookie"`` uses signed browser cookies;
+    #: ``"redis"`` stores session data in Redis (requires ``redis`` package).
+    session_backend: Literal["cookie", "redis"] = "cookie"
+
+    #: Name of the session cookie sent to browsers.
+    session_cookie_name: str = "ecube_session"
+
+    #: Session cookie lifetime in seconds.  Default: 3600 (1 hour).
+    session_cookie_expiration_seconds: int = 3600
+
+    #: Domain scope for the session cookie.  ``None`` lets the browser apply
+    #: its default rules.
+    session_cookie_domain: Optional[str] = None
+
+    #: Send the cookie only over HTTPS.  Should be ``True`` in production.
+    session_cookie_secure: bool = True
+
+    #: Prevent JavaScript access to the cookie.
+    session_cookie_httponly: bool = True
+
+    #: SameSite attribute for the session cookie.
+    session_cookie_samesite: Literal["strict", "lax", "none"] = "lax"
+
+    # ---------------------------------------------------------------------------
+    # Redis configuration (used when session_backend = "redis")
+    # ---------------------------------------------------------------------------
+
+    #: Redis connection URL.  Only used when ``session_backend = "redis"``.
+    #: Example: ``redis://localhost:6379/0``
+    redis_url: Optional[str] = None
+
+    #: Timeout in seconds for establishing a Redis connection.
+    redis_connection_timeout: int = 5
+
+    #: Enable TCP keepalive on the Redis socket to detect dead connections.
+    redis_socket_keepalive: bool = True
+
+    @field_validator("session_cookie_samesite", mode="before")
+    @classmethod
+    def _normalise_samesite(cls, v: str) -> str:  # noqa: N805
+        return v.lower() if isinstance(v, str) else v
 
 
 settings = Settings()
