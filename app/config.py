@@ -169,6 +169,28 @@ class Settings(BaseSettings):
     #: Path to the ``umount`` binary.
     umount_binary_path: str = "/bin/umount"
 
+    # ---------------------------------------------------------------------------
+    # OS user/group management binary paths
+    # ---------------------------------------------------------------------------
+
+    #: Path to the ``useradd`` binary (must match sudoers whitelist).
+    useradd_binary_path: str = "/usr/sbin/useradd"
+
+    #: Path to the ``usermod`` binary (must match sudoers whitelist).
+    usermod_binary_path: str = "/usr/sbin/usermod"
+
+    #: Path to the ``userdel`` binary (must match sudoers whitelist).
+    userdel_binary_path: str = "/usr/sbin/userdel"
+
+    #: Path to the ``groupadd`` binary (must match sudoers whitelist).
+    groupadd_binary_path: str = "/usr/sbin/groupadd"
+
+    #: Path to the ``groupdel`` binary (must match sudoers whitelist).
+    groupdel_binary_path: str = "/usr/sbin/groupdel"
+
+    #: Path to the ``chpasswd`` binary (must match sudoers whitelist).
+    chpasswd_binary_path: str = "/usr/sbin/chpasswd"
+
     #: Path to ``/proc/mounts`` for reading active mount information.
     procfs_mounts_path: str = "/proc/mounts"
 

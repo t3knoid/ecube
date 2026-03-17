@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import getpass
 import os
+import re
 import secrets
 import shutil
 import subprocess
@@ -27,6 +28,9 @@ ECUBE_GROUPS = {
 }
 
 DEFAULT_INSTALL_DIR = "/opt/ecube"
+
+_USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
+_UNSAFE_PASSWORD_CHARS = frozenset("\n\r:")
 
 
 def _run(cmd: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -69,12 +73,27 @@ def _create_admin_user() -> str:
     """Prompt for admin credentials, create the OS user, return username."""
     username = input("Enter admin username [ecube-admin]: ").strip() or "ecube-admin"
 
+    if not _USERNAME_RE.match(username):
+        print(
+            "Error: invalid username. Must start with a lowercase letter or "
+            "underscore, contain only lowercase letters, digits, hyphens, or "
+            "underscores, and be 1-32 characters.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     if _user_exists(username):
         print(f"  OS user '{username}' already exists — adding to ecube-admins")
     else:
         password = getpass.getpass("Enter admin password: ")
         if not password:
             print("Error: password cannot be empty", file=sys.stderr)
+            sys.exit(1)
+        if _UNSAFE_PASSWORD_CHARS.intersection(password):
+            print(
+                "Error: password must not contain newline or colon characters.",
+                file=sys.stderr,
+            )
             sys.exit(1)
         confirm = getpass.getpass("Confirm admin password: ")
         if password != confirm:

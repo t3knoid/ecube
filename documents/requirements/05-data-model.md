@@ -92,3 +92,18 @@
 - `action`
 - `job_id`
 - `details` (JSONB)
+
+## 5.4 User & System Tables
+
+### `user_roles`
+
+- `id`
+- `username`
+- `role` (Enum: admin, manager, processor, auditor)
+- Unique constraint on (`username`, `role`)
+
+### `system_initialization`
+
+- `id` (constrained to 1 — single-row table)
+- `initialized_by`
+- `initialized_at`
