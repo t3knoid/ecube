@@ -294,8 +294,9 @@ class TestTestConnectionEndpoint:
 class TestProvisionEndpoint:
     """Tests for POST /setup/database/provision."""
 
+    @patch("app.services.database_service.is_database_provisioned", return_value=False)
     @patch("app.services.database_service.provision_database")
-    def test_provision_success(self, mock_provision, unauthenticated_client):
+    def test_provision_success(self, mock_provision, mock_provisioned, unauthenticated_client):
         mock_provision.return_value = 4
 
         resp = unauthenticated_client.post(
@@ -318,8 +319,9 @@ class TestProvisionEndpoint:
         assert data["user"] == "ecube"
         assert data["migrations_applied"] == 4
 
+    @patch("app.services.database_service.is_database_provisioned", return_value=False)
     @patch("app.services.database_service.provision_database")
-    def test_provision_connection_error(self, mock_provision, unauthenticated_client):
+    def test_provision_connection_error(self, mock_provision, mock_provisioned, unauthenticated_client):
         mock_provision.side_effect = ConnectionError("auth failed")
 
         resp = unauthenticated_client.post(
@@ -338,8 +340,9 @@ class TestProvisionEndpoint:
         assert resp.status_code == 400
         assert "auth failed" in resp.json()["message"]
 
+    @patch("app.services.database_service.is_database_provisioned", return_value=False)
     @patch("app.services.database_service.provision_database")
-    def test_provision_runtime_error(self, mock_provision, unauthenticated_client):
+    def test_provision_runtime_error(self, mock_provision, mock_provisioned, unauthenticated_client):
         mock_provision.side_effect = RuntimeError("migration failed")
 
         resp = unauthenticated_client.post(
@@ -384,7 +387,8 @@ class TestProvisionEndpoint:
 
     def test_provision_password_not_in_response(self, unauthenticated_client):
         """Ensure passwords never appear in the response body."""
-        with patch("app.services.database_service.provision_database", return_value=4):
+        with patch("app.services.database_service.is_database_provisioned", return_value=False), \
+             patch("app.services.database_service.provision_database", return_value=4):
             resp = unauthenticated_client.post(
                 "/setup/database/provision",
                 json={
@@ -473,6 +477,61 @@ class TestProvisionEndpoint:
 
         assert resp.status_code == 403
         assert "force" in resp.json()["message"].lower()
+
+    def test_provision_503_when_provisioning_state_unknown(
+        self, unauthenticated_client
+    ):
+        """POST /provision returns 503 when DB is unreachable (fail-closed)."""
+        from app.exceptions import DatabaseStatusUnknownError
+
+        with patch(
+            "app.services.database_service.is_database_provisioned",
+            side_effect=DatabaseStatusUnknownError(),
+        ):
+            resp = unauthenticated_client.post(
+                "/setup/database/provision",
+                json={
+                    "host": "localhost",
+                    "port": 5432,
+                    "admin_username": "postgres",
+                    "admin_password": "secret",
+                    "app_database": "ecube",
+                    "app_username": "ecube",
+                    "app_password": "ecube123",
+                },
+            )
+
+        assert resp.status_code == 503
+        assert "provisioning state" in resp.json()["message"].lower()
+
+    @patch("app.services.database_service.provision_database", return_value=0)
+    def test_provision_force_skips_provisioned_check(
+        self, mock_provision, admin_client, db
+    ):
+        """force=true skips the is_database_provisioned check entirely.
+
+        is_database_provisioned is NOT mocked here.  In the test environment
+        it would raise (no real PostgreSQL), which proves the check is
+        skipped when force=true — otherwise we'd get a 503.
+        """
+        db.add(UserRole(username="admin-user", role="admin"))
+        db.commit()
+
+        resp = admin_client.post(
+            "/setup/database/provision",
+            json={
+                "host": "localhost",
+                "port": 5432,
+                "admin_username": "postgres",
+                "admin_password": "secret",
+                "app_database": "ecube",
+                "app_username": "ecube",
+                "app_password": "ecube123",
+                "force": True,
+            },
+        )
+
+        assert resp.status_code == 200
 
 
 # ---------------------------------------------------------------------------
