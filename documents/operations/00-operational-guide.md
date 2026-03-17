@@ -102,7 +102,7 @@ ECUBE consists of three components:
 
 - HTTPS network access to identity provider (LDAP, OIDC provider, or local authentication)
 - NFS/SMB mount access to evidence source shares
-- PostgreSQL database over network or localhost
+- PostgreSQL 14+ database over network or localhost
 
 ### Software Requirements
 
