@@ -28,6 +28,11 @@
 
 - `audit_logs` provides append-only operation history with actor and context.
 
+### User & System Domain
+
+- `user_roles` stores explicit username→role assignments managed through the admin API.
+- `system_initialization` is a single-row table (constrained by `CHECK (id = 1)`) that records when and by whom the system was first initialized, providing a cross-process guard against concurrent initialization attempts.
+
 ## Integrity & Constraints
 
 - Foreign keys enforce hub→port→drive and job→file relationships.
