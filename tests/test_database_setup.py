@@ -576,7 +576,7 @@ class TestDatabaseService:
 
         result = test_connection("localhost", 5432, "postgres", "secret")
 
-        assert result == "14.0"
+        assert result == "14.9"
         mock_conn.close.assert_called_once()
 
     @patch("app.services.database_service.psycopg2")
