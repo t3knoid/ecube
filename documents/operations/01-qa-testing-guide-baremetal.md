@@ -899,6 +899,8 @@ Database provisioning endpoints use a dual-auth model with fail-closed semantics
 | 20 | Force rejected unauthenticated | `POST /setup/database/provision` with `"force": true` during initial setup (no admin exists) | 403, force requires admin |
 | 21 | Fail-closed — DB unreachable, no JWT | Stop PostgreSQL, `POST /setup/database/test-connection` without token | 503, database unavailable message |
 | 22 | Fail-closed — DB unreachable, admin JWT | Stop PostgreSQL, `POST /setup/database/test-connection` with valid admin token | Request proceeds (not blocked by 503) |
+| 23 | Fail-closed — provision state unknown | Stop PostgreSQL, `POST /setup/database/provision` without `"force": true` | 503, cannot determine provisioning state |
+| 24 | Force bypasses state check | Stop PostgreSQL, `POST /setup/database/provision` with `"force": true` and admin token | Proceeds to provisioning (no 503 from state check) |
 
 ---
 
