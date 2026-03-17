@@ -24,5 +24,6 @@ ECUBE must:
 - Identify hubs and ports via Linux sysfs (`/sys/bus/usb/devices`)
 - Map physical port → block device → mount point
 - Detect insertion/removal events
+- Detect filesystem type on inserted drives (e.g., ext4, exFAT, NTFS, or unformatted)
 - Track drive states: `EMPTY`, `AVAILABLE`, `IN_USE`
 - Persist stable identifiers for hubs and ports

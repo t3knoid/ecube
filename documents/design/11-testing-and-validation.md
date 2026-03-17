@@ -98,6 +98,27 @@ Run drive eject tests:
 python -m pytest tests/test_drive_eject.py -q
 ```
 
+### Filesystem Detection & Drive Formatting Tests
+
+Tests for filesystem type detection and drive formatting should cover:
+
+**Filesystem Detection:**
+
+- **`blkid` happy path:** Mock `blkid -o value -s TYPE` returning known types (`ext4`, `exfat`, `ntfs`, `fat32`, `xfs`) and verify the parsed value is stored correctly.
+- **Unformatted drive:** Mock `blkid` returning empty output (no filesystem signature) and verify the result is `unformatted`.
+- **Detection failure:** Mock `blkid` subprocess failure (non-zero exit, timeout, OSError) and verify the result is `unknown`.
+- **Discovery integration:** Verify that a discovery cycle updates `usb_drives.filesystem_type` for newly inserted drives.
+
+**Drive Formatting:**
+
+- **Happy path:** Mock `mkfs.ext4` or `mkfs.exfat` succeeding and verify the drive's `filesystem_type` is updated and `DRIVE_FORMATTED` audit event is emitted.
+- **Unsupported type:** Request format with an unsupported filesystem type and verify `400` response.
+- **Precondition enforcement:** Verify `409` when drive is not in `AVAILABLE` state, when drive is currently mounted, or when drive is in `IN_USE` state.
+- **Missing device path:** Verify `400` when the drive has no `filesystem_path`.
+- **Format failure:** Mock `mkfs` failing and verify the drive state is unchanged, `DRIVE_FORMAT_FAILED` is audit-logged, and `500` is returned.
+- **Device path validation:** Verify that invalid device paths (e.g., path traversal) are rejected before any subprocess is spawned.
+- **Role enforcement:** Verify that `processor` and `auditor` roles receive `403`.
+
 ### OS User & Group Management Tests
 
 The `tests/test_os_user_management.py` module validates the OS user and group management service layer and admin API endpoints.

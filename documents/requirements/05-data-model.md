@@ -24,6 +24,7 @@
 - `device_identifier`
 - `filesystem_path`
 - `capacity_bytes`
+- `filesystem_type` — detected filesystem (e.g., `ext4`, `exfat`, `ntfs`, `fat32`, `unformatted`, `unknown`)
 - `encryption_status`
 - `current_state`
 - `current_project_id`
