@@ -134,6 +134,7 @@ Every authenticated request resolves to:
 | API Area / Operation | Admin | Manager | Processor | Auditor |
 | ---------------------- | :-----: | :-------: | :---------: | :-------: |
 | Manage user roles | ✔ | ✖ | ✖ | ✖ |
+| Manage OS users/groups (local only) | ✔ | ✖ | ✖ | ✖ |
 | Add/remove mounts | ✔ | ✔ | ✖ | ✖ |
 | List mounts | ✔ | ✔ | ✔ | ✔ |
 | Initialize drives | ✔ | ✔ | ✖ | ✖ |
@@ -396,7 +397,192 @@ Remove all role assignments for a user. The user will fall back to OS group-base
 
 ---
 
-## 3.7 Introspection API (Read‑Only)
+## 3.7 OS User & Group Management API
+
+All endpoints require `admin` role and are only available when `role_resolver = "local"` (returns `404` otherwise).
+
+### `POST /admin/os-users`
+
+Create an OS user, set password, and add to groups and optionally assign DB roles. At least one `ecube-*` group is required so the account remains manageable through the API.
+
+**Roles:** `admin`
+
+**Request body (JSON):**
+
+```json
+{
+    "username": "alice",
+    "password": "s3cret",
+    "groups": ["ecube-processors"],
+    "roles": ["processor"]
+}
+```
+
+**Response (201 Created):** `OSUserResponse` with `username`, `uid`, `gid`, `home`, `shell`, `groups`.
+
+**Error responses:**
+
+- `409 Conflict` — User already exists
+- `422 Unprocessable Entity` — Invalid username, empty password, reserved username, or no `ecube-*` group provided
+
+**Audit events:** `OS_USER_CREATED`
+
+### `GET /admin/os-users`
+
+List OS users filtered to ECUBE-relevant groups.
+
+**Roles:** `admin`
+
+**Response (200 OK):** `OSUserListResponse` with array of `OSUserResponse`.
+
+### `DELETE /admin/os-users/{username}`
+
+Delete an OS user and remove their DB role assignments.
+
+**Roles:** `admin`
+
+**Error responses:**
+
+- `404 Not Found` — User does not exist
+- `422 Unprocessable Entity` — Invalid or reserved username, or user is not a member of any `ecube-*` group (see [ECUBE-managed user guard](#ecube-managed-user-guard))
+
+**Audit events:** `OS_USER_DELETED`
+
+### `PUT /admin/os-users/{username}/password`
+
+Reset an OS user's password via `chpasswd`.
+
+**Roles:** `admin`
+
+**Request body:** `{"password": "newpass"}`
+
+**Error responses:**
+
+- `404 Not Found` — User does not exist
+- `422 Unprocessable Entity` — Invalid/reserved username, empty password, or user is not ECUBE-managed (see [ECUBE-managed user guard](#ecube-managed-user-guard))
+
+**Audit events:** `OS_PASSWORD_RESET` (password never appears in audit details)
+
+### `PUT /admin/os-users/{username}/groups`
+
+Replace an OS user's `ecube-*` supplementary group memberships. Only group names starting with the `ecube-` prefix are accepted; non-ECUBE supplementary groups are preserved automatically. At least one `ecube-*` group is required.
+
+**Roles:** `admin`
+
+**Request body:** `{"groups": ["ecube-admins", "ecube-processors"]}`
+
+**Response (200 OK):** `OSUserResponse` with updated group list.
+
+**Error responses:**
+
+- `422 Unprocessable Entity` — Empty group list, non-`ecube-*` group name, or user is not ECUBE-managed (see [ECUBE-managed user guard](#ecube-managed-user-guard))
+
+**Audit events:** `OS_USER_GROUPS_MODIFIED`
+
+### `POST /admin/os-users/{username}/groups`
+
+Add supplementary groups to an OS user without removing existing memberships.
+
+**Roles:** `admin`
+
+**Request body:** `{"groups": ["ecube-managers"]}`
+
+**Response (200 OK):** `OSUserResponse` with updated group list.
+
+**Error responses:**
+
+- `422 Unprocessable Entity` — User is not ECUBE-managed (see [ECUBE-managed user guard](#ecube-managed-user-guard))
+
+**Audit events:** `OS_USER_GROUPS_APPENDED`
+
+### `POST /admin/os-groups`
+
+Create an OS group. The group name **must** start with the `ecube-` prefix.
+
+**Roles:** `admin`
+
+**Request body:** `{"name": "ecube-custom"}`
+
+**Response (201 Created):** `OSGroupResponse` with `name`, `gid`, `members`.
+
+**Error responses:**
+
+- `422 Unprocessable Entity` — Group name does not start with `ecube-`
+
+**Audit events:** `OS_GROUP_CREATED`
+
+### `GET /admin/os-groups`
+
+List OS groups filtered to the `ecube-` prefix.
+
+**Roles:** `admin`
+
+### `DELETE /admin/os-groups/{name}`
+
+Delete an OS group. The group name **must** start with the `ecube-` prefix.
+
+**Roles:** `admin`
+
+**Error responses:**
+
+- `422 Unprocessable Entity` — Group name does not start with `ecube-`
+
+**Audit events:** `OS_GROUP_DELETED`
+
+### ECUBE-Managed User Guard
+
+Mutative user operations (`DELETE`, `PUT /password`, `PUT /groups`, `POST /groups`) enforce that the target user is **ECUBE-managed** before proceeding. A user is considered ECUBE-managed if they belong to at least one OS group whose name starts with `ecube-`. This prevents accidental modification or deletion of host system accounts (e.g., `postgres`, `www-data`). Reserved system usernames (`root`, `nobody`, `daemon`, etc.) are also rejected regardless of group membership.
+
+Operations that fail this check return `422 Unprocessable Entity` with a descriptive message. The check is bypassed for internal compensation paths (e.g., setup recovery) where the user may not yet be in an `ecube-*` group.
+
+---
+
+## 3.8 First-Run Setup API
+
+These endpoints are **unauthenticated** and guarded by a first-run check.
+
+### `GET /setup/status`
+
+Check whether the system has been initialized.
+
+**Authentication:** None required.
+
+**Response (200 OK):**
+
+```json
+{"initialized": false}
+```
+
+### `POST /setup/initialize`
+
+Perform first-run system initialization: create OS groups, create admin user, set password, seed DB role, and mark system as initialized.
+
+**Authentication:** None required. Can only succeed once.
+
+**Request body:**
+
+```json
+{
+    "username": "ecube-admin",
+    "password": "s3cret"
+}
+```
+
+**Response (200 OK):** `SetupInitializeResponse` with `message`, `username`, `groups_created`.
+
+**Error responses:**
+
+- `409 Conflict` — System already initialized, or initialization is in progress by another worker. If a previous attempt failed and left the lock row stuck, the response detail includes manual remediation steps.
+- `422 Unprocessable Entity` — Invalid username, empty password, or password containing unsafe characters (newlines, colons)
+- `500 Internal Server Error` — OS group/user creation or DB role seeding failed. The response detail describes what succeeded, what failed, and whether the initialization lock was released for a safe retry. See the Operational Guide troubleshooting section for resolution steps.
+
+**Cross-process guard:** Uses a `system_initialization` single-row table with a uniqueness constraint to ensure only one worker can complete initialization, even in multi-worker deployments.
+
+**Audit events:** `SYSTEM_INITIALIZED`
+
+---
+
+## 3.9 Introspection API (Read‑Only)
 
 ### `GET /introspection/usb/topology`
 
@@ -458,3 +644,5 @@ Every security‑relevant event is logged:
 - Access denied events
 - Drive initialization attempts
 - File hash/compare operations
+- OS user/group management (`OS_USER_CREATED`, `OS_USER_DELETED`, `OS_PASSWORD_RESET`, `OS_USER_GROUPS_MODIFIED`, `OS_USER_GROUPS_APPENDED`, `OS_GROUP_CREATED`, `OS_GROUP_DELETED`)
+- System initialization (`SYSTEM_INITIALIZED`)
