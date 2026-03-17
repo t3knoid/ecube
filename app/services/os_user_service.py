@@ -349,6 +349,13 @@ def create_group(name: str) -> OSGroup:
     Raises :class:`OSUserError` on failure, :class:`ValueError` on bad input.
     """
     validate_group_name(name)
+    if not name.startswith(ECUBE_GROUP_PREFIX):
+        logger.warning(
+            "Creating group '%s' without '%s' prefix; "
+            "it will not appear in default group listings",
+            name,
+            ECUBE_GROUP_PREFIX,
+        )
     if group_exists(name):
         raise OSUserError(f"Group '{name}' already exists")
 
