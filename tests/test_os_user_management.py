@@ -286,19 +286,25 @@ class TestListUsers:
     def test_list_users_ecube_only(self, mock_pwd, mock_grp):
         mock_pwd.getpwall.return_value = [
             _make_pw(name="admin1", uid=1001),
+            _make_pw(name="customuser", uid=1002),
             _make_pw(name="sysuser", uid=999),
         ]
         mock_grp.getgrall.return_value = [
             _make_grp(name="ecube-admins", members=["admin1"]),
+            _make_grp(name="ecube-reviewers", members=["customuser"]),
         ]
         mock_grp.getgrgid.side_effect = [
             _make_grp(name="admin1", gid=1001),
+            _make_grp(name="customuser", gid=1002),
             _make_grp(name="sysuser", gid=999),
         ]
 
         users = list_users(ecube_only=True)
-        assert len(users) == 1
-        assert users[0].username == "admin1"
+        assert len(users) == 2
+        names = [u.username for u in users]
+        assert "admin1" in names
+        assert "customuser" in names
+        assert "sysuser" not in names
 
 
 class TestListGroups:
@@ -309,13 +315,15 @@ class TestListGroups:
         mock_grp.getgrall.return_value = [
             _make_grp(name="ecube-admins", gid=3001),
             _make_grp(name="ecube-managers", gid=3002),
+            _make_grp(name="ecube-custom", gid=3010),
             _make_grp(name="wheel", gid=10),
         ]
 
         groups = list_groups(ecube_only=True)
-        assert len(groups) == 2
+        assert len(groups) == 3
         names = [g.name for g in groups]
         assert "ecube-admins" in names
+        assert "ecube-custom" in names
         assert "wheel" not in names
 
 
@@ -572,6 +580,7 @@ class TestOSGroupEndpoints:
         mock_grp.getgrall.return_value = [
             _make_grp(name="ecube-admins", gid=3001),
             _make_grp(name="ecube-managers", gid=3002),
+            _make_grp(name="ecube-reviewers", gid=3010),
             _make_grp(name="wheel", gid=10),
         ]
 
@@ -579,6 +588,7 @@ class TestOSGroupEndpoints:
         assert resp.status_code == 200
         names = [g["name"] for g in resp.json()["groups"]]
         assert "ecube-admins" in names
+        assert "ecube-reviewers" in names
         assert "wheel" not in names
 
     @patch("app.services.os_user_service.subprocess.run")
