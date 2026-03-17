@@ -220,9 +220,13 @@ class TestDeleteUser:
     """os_user_service.delete_user()."""
 
     @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
-    def test_delete_user(self, mock_pwd, mock_subprocess):
+    def test_delete_user(self, mock_pwd, mock_grp, mock_subprocess):
         mock_pwd.getpwnam.return_value = _make_pw()
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="ecube-admins", members=["testuser"]),
+        ]
         mock_subprocess.return_value = _ok_result()
 
         delete_user("testuser")
@@ -236,18 +240,35 @@ class TestDeleteUser:
         with pytest.raises(OSUserError, match="does not exist"):
             delete_user("nobody_here")
 
-    def test_delete_reserved_user(self):
+    @patch("app.services.os_user_service.pwd")
+    def test_delete_reserved_user(self, mock_pwd):
+        mock_pwd.getpwnam.return_value = _make_pw(name="ecube")
         with pytest.raises(ValueError, match="reserved"):
             delete_user("ecube")
+
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_delete_non_ecube_user_rejected(self, mock_pwd, mock_grp):
+        """Users not in any ecube-* group cannot be deleted."""
+        mock_pwd.getpwnam.return_value = _make_pw(name="postgres")
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="postgres", members=["postgres"]),
+        ]
+        with pytest.raises(ValueError, match="not in any ecube"):
+            delete_user("postgres")
 
 
 class TestResetPassword:
     """os_user_service.reset_password()."""
 
     @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
-    def test_reset_password(self, mock_pwd, mock_subprocess):
+    def test_reset_password(self, mock_pwd, mock_grp, mock_subprocess):
         mock_pwd.getpwnam.return_value = _make_pw()
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="ecube-admins", members=["testuser"]),
+        ]
         mock_subprocess.return_value = _ok_result()
 
         reset_password("testuser", "newpass")
@@ -256,9 +277,22 @@ class TestResetPassword:
         assert call.args[0] == ["sudo", "/usr/sbin/chpasswd"]
         assert call.kwargs["input"] == "testuser:newpass"
 
-    def test_reset_password_reserved_username(self):
+    @patch("app.services.os_user_service.pwd")
+    def test_reset_password_reserved_username(self, mock_pwd):
+        mock_pwd.getpwnam.return_value = _make_pw(name="root")
         with pytest.raises(ValueError, match="reserved"):
             reset_password("root", "newpass")
+
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_reset_password_non_ecube_user_rejected(self, mock_pwd, mock_grp):
+        """Users not in any ecube-* group cannot have passwords reset."""
+        mock_pwd.getpwnam.return_value = _make_pw(name="postgres")
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="postgres", members=["postgres"]),
+        ]
+        with pytest.raises(ValueError, match="not in any ecube"):
+            reset_password("postgres", "newpass")
 
 
 class TestSetUserGroups:
@@ -280,17 +314,43 @@ class TestSetUserGroups:
         assert isinstance(result, OSUser)
         assert "ecube-admins" in result.groups
 
-    def test_set_groups_reserved_username(self):
+    @patch("app.services.os_user_service.pwd")
+    def test_set_groups_reserved_username(self, mock_pwd):
+        mock_pwd.getpwnam.return_value = _make_pw(name="root")
         with pytest.raises(ValueError, match="reserved"):
             set_user_groups("root", ["ecube-admins"])
+
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_set_groups_non_ecube_user_rejected(self, mock_pwd, mock_grp):
+        """Users not in any ecube-* group cannot have groups modified."""
+        mock_pwd.getpwnam.return_value = _make_pw(name="postgres")
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="postgres", members=["postgres"]),
+        ]
+        with pytest.raises(ValueError, match="not in any ecube"):
+            set_user_groups("postgres", ["ecube-admins"])
 
 
 class TestAddUserToGroups:
     """os_user_service.add_user_to_groups()."""
 
-    def test_add_to_groups_reserved_username(self):
+    @patch("app.services.os_user_service.pwd")
+    def test_add_to_groups_reserved_username(self, mock_pwd):
+        mock_pwd.getpwnam.return_value = _make_pw(name="ecube")
         with pytest.raises(ValueError, match="reserved"):
             os_user_service.add_user_to_groups("ecube", ["ecube-admins"])
+
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_add_to_groups_non_ecube_user_rejected(self, mock_pwd, mock_grp):
+        """Users not in any ecube-* group cannot have groups appended."""
+        mock_pwd.getpwnam.return_value = _make_pw(name="www-data")
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="www-data", members=["www-data"]),
+        ]
+        with pytest.raises(ValueError, match="not in any ecube"):
+            os_user_service.add_user_to_groups("www-data", ["ecube-admins"])
 
 
 class TestCreateGroup:
@@ -503,7 +563,10 @@ class TestOSUserEndpoints:
             pw,                        # _get_user_groups (create_user)
             pw,                        # user_exists (delete_user compensation)
         ]
-        mock_grp.getgrall.return_value = []
+        # After user creation, user is in ecube-admins (requested groups).
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="ecube-admins", members=["dbfail"]),
+        ]
         mock_grp.getgrgid.return_value = _make_grp(name="dbfail", gid=1060)
         mock_subprocess.return_value = _ok_result()
 
@@ -559,9 +622,13 @@ class TestOSUserEndpoints:
         assert data["users"][0]["username"] == "admin1"
 
     @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
-    def test_delete_os_user(self, mock_pwd, mock_subprocess, admin_client, db):
+    def test_delete_os_user(self, mock_pwd, mock_grp, mock_subprocess, admin_client, db):
         mock_pwd.getpwnam.return_value = _make_pw(name="deluser")
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="ecube-admins", members=["deluser"]),
+        ]
         mock_subprocess.return_value = _ok_result()
 
         # Seed some DB roles so we can verify cleanup.
@@ -575,18 +642,36 @@ class TestOSUserEndpoints:
         roles = UserRoleRepository(db).get_roles("deluser")
         assert roles == []
 
-    def test_delete_reserved_user(self, admin_client):
+    @patch("app.services.os_user_service.pwd")
+    def test_delete_reserved_user(self, mock_pwd, admin_client):
+        mock_pwd.getpwnam.return_value = _make_pw(name="root")
         resp = admin_client.delete("/admin/os-users/root")
         assert resp.status_code == 422
+
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_delete_non_ecube_user_rejected(self, mock_pwd, mock_grp, admin_client):
+        """Users not in any ecube-* group cannot be deleted via the API."""
+        mock_pwd.getpwnam.return_value = _make_pw(name="postgres")
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="postgres", members=["postgres"]),
+        ]
+        resp = admin_client.delete("/admin/os-users/postgres")
+        assert resp.status_code == 422
+        assert "ecube" in resp.json()["message"].lower()
 
     def test_delete_invalid_username(self, admin_client):
         resp = admin_client.delete("/admin/os-users/Bob;rm")
         assert resp.status_code == 422
 
     @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
-    def test_reset_password(self, mock_pwd, mock_subprocess, admin_client):
+    def test_reset_password(self, mock_pwd, mock_grp, mock_subprocess, admin_client):
         mock_pwd.getpwnam.return_value = _make_pw()
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="ecube-admins", members=["testuser"]),
+        ]
         mock_subprocess.return_value = _ok_result()
 
         resp = admin_client.put("/admin/os-users/testuser/password", json={
@@ -656,9 +741,11 @@ class TestOSUserEndpoints:
         aG_calls = [c for c in calls if "-aG" in c]
         assert len(aG_calls) == 1
 
+    @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
-    def test_add_user_to_groups_reserved_username(self, mock_pwd, admin_client):
+    def test_add_user_to_groups_reserved_username(self, mock_pwd, mock_grp, admin_client):
         mock_pwd.getpwnam.return_value = _make_pw(name="root")
+        mock_grp.getgrall.return_value = []
         resp = admin_client.post("/admin/os-users/root/groups", json={
             "groups": ["ecube-admins"],
         })
@@ -1028,9 +1115,13 @@ class TestOSUserAuditLogging:
         assert logs[0].details["target_user"] == "audituser"
 
     @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
-    def test_delete_user_audit(self, mock_pwd, mock_subprocess, admin_client, db):
+    def test_delete_user_audit(self, mock_pwd, mock_grp, mock_subprocess, admin_client, db):
         mock_pwd.getpwnam.return_value = _make_pw(name="delaudit")
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="ecube-admins", members=["delaudit"]),
+        ]
         mock_subprocess.return_value = _ok_result()
 
         admin_client.delete("/admin/os-users/delaudit")
@@ -1040,9 +1131,13 @@ class TestOSUserAuditLogging:
         assert len(logs) >= 1
 
     @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
-    def test_password_reset_audit(self, mock_pwd, mock_subprocess, admin_client, db):
+    def test_password_reset_audit(self, mock_pwd, mock_grp, mock_subprocess, admin_client, db):
         mock_pwd.getpwnam.return_value = _make_pw()
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="ecube-admins", members=["testuser"]),
+        ]
         mock_subprocess.return_value = _ok_result()
 
         sentinel_password = "SENTINEL-p4ssw0rd-MUST-NOT-APPEAR"
