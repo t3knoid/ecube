@@ -15,7 +15,7 @@ from app.exceptions import AuthenticationError, AuthorizationError, ConflictErro
 from app.logging_config import configure_logging
 from app.routers import admin, audit, auth, database_setup, drives, files, introspection, jobs, mounts, setup, users
 from app.schemas.errors import ErrorResponse
-from app.session import mount_session_middleware
+from app.session import close_session_backend, init_session_backend, mount_session_middleware
 
 # Configure logging before anything else.
 configure_logging()
@@ -72,6 +72,11 @@ async def lifespan(application: FastAPI):
     logger.info("ECUBE application starting")
 
     # ------------------------------------------------------------------
+    # Startup: initialise session backend (Redis ping if configured)
+    # ------------------------------------------------------------------
+    init_session_backend(application)
+
+    # ------------------------------------------------------------------
     # Startup: purge expired audit logs
     # ------------------------------------------------------------------
     if settings.audit_log_retention_days > 0:
@@ -126,6 +131,8 @@ async def lifespan(application: FastAPI):
             await discovery_task
         except asyncio.CancelledError:
             pass
+
+    close_session_backend(application)
 
     logger.info("ECUBE application shutting down")
 
