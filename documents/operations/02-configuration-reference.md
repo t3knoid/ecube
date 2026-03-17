@@ -29,7 +29,7 @@ See `.env.example` in the release package for a copy-paste starting point.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SECRET_KEY` | `change-me-in-production-please-rotate-32b` | JWT signing key. Generate with `openssl rand -hex 32`. |
+| `SECRET_KEY` | `change-me-in-production-please-rotate-32b` | Signing key for JWT tokens **and** cookie-based sessions (`SESSION_BACKEND=cookie`). Rotating this value invalidates all outstanding JWTs and active cookie sessions. Generate with `openssl rand -hex 32`. |
 | `ALGORITHM` | `HS256` | JWT signing algorithm. |
 | `TOKEN_EXPIRE_MINUTES` | `60` | Minutes before a locally-issued JWT expires. |
 | `ROLE_RESOLVER` | `local` | Role resolver provider: `local`, `ldap`, or `oidc`. |
