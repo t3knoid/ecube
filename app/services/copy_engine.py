@@ -88,13 +88,20 @@ def _process_file(
             return
 
         ef.status = FileStatus.COPYING
-        file_repo.save(ef)
+        try:
+            file_repo.save(ef)
+        except Exception:
+            logger.exception("DB commit failed setting file %s to COPYING", export_file_id)
+            return
 
-        audit_repo.add(
-            action="FILE_COPY_START",
-            job_id=ef.job_id,
-            details={"file_id": ef.id, "relative_path": ef.relative_path},
-        )
+        try:
+            audit_repo.add(
+                action="FILE_COPY_START",
+                job_id=ef.job_id,
+                details={"file_id": ef.id, "relative_path": ef.relative_path},
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for FILE_COPY_START")
 
         last_err: Optional[str] = None
         success = False
@@ -106,20 +113,29 @@ def _process_file(
                 delay = retry_delay * (2 ** (attempt - 1))
                 ef.status = FileStatus.RETRYING
                 ef.retry_attempts = attempt
-                file_repo.save(ef)
-                audit_repo.add(
-                    action="FILE_COPY_RETRY",
-                    job_id=ef.job_id,
-                    details={
-                        "file_id": ef.id,
-                        "relative_path": ef.relative_path,
-                        "attempt": attempt,
-                        "delay_seconds": delay,
-                    },
-                )
+                try:
+                    file_repo.save(ef)
+                except Exception:
+                    logger.exception("DB commit failed setting file %s to RETRYING", export_file_id)
+                try:
+                    audit_repo.add(
+                        action="FILE_COPY_RETRY",
+                        job_id=ef.job_id,
+                        details={
+                            "file_id": ef.id,
+                            "relative_path": ef.relative_path,
+                            "attempt": attempt,
+                            "delay_seconds": delay,
+                        },
+                    )
+                except Exception:
+                    logger.exception("Failed to write audit log for FILE_COPY_RETRY")
                 time.sleep(delay)
                 ef.status = FileStatus.COPYING
-                file_repo.save(ef)
+                try:
+                    file_repo.save(ef)
+                except Exception:
+                    logger.exception("DB commit failed setting file %s to COPYING on retry", export_file_id)
 
             if target is not None:
                 dst = target / ef.relative_path
@@ -131,34 +147,49 @@ def _process_file(
                 break
 
             last_err = err
-            audit_repo.add(
-                action="FILE_COPY_FAILURE",
-                job_id=ef.job_id,
-                details={
-                    "file_id": ef.id,
-                    "relative_path": ef.relative_path,
-                    "attempt": attempt,
-                    "error": err,
-                },
-            )
+            try:
+                audit_repo.add(
+                    action="FILE_COPY_FAILURE",
+                    job_id=ef.job_id,
+                    details={
+                        "file_id": ef.id,
+                        "relative_path": ef.relative_path,
+                        "attempt": attempt,
+                        "error": err,
+                    },
+                )
+            except Exception:
+                logger.exception("Failed to write audit log for FILE_COPY_FAILURE")
 
         ef.checksum = checksum
         if success:
             ef.status = FileStatus.DONE
-            file_repo.save(ef)
-            audit_repo.add(
-                action="FILE_COPY_SUCCESS",
-                job_id=ef.job_id,
-                details={"file_id": ef.id, "relative_path": ef.relative_path},
-            )
+            try:
+                file_repo.save(ef)
+            except Exception:
+                logger.exception("DB commit failed saving DONE status for file %s", export_file_id)
+            try:
+                audit_repo.add(
+                    action="FILE_COPY_SUCCESS",
+                    job_id=ef.job_id,
+                    details={"file_id": ef.id, "relative_path": ef.relative_path},
+                )
+            except Exception:
+                logger.exception("Failed to write audit log for FILE_COPY_SUCCESS")
         else:
             ef.status = FileStatus.ERROR
             ef.error_message = last_err
-            file_repo.save(ef)
+            try:
+                file_repo.save(ef)
+            except Exception:
+                logger.exception("DB commit failed saving ERROR status for file %s", export_file_id)
 
         # Atomically increment copied_bytes to avoid lost-update races between threads.
         if success and ef.size_bytes:
-            file_repo.increment_job_bytes(ef.job_id, ef.size_bytes)
+            try:
+                file_repo.increment_job_bytes(ef.job_id, ef.size_bytes)
+            except Exception:
+                logger.exception("DB commit failed incrementing copied_bytes for file %s", export_file_id)
     finally:
         db.close()
 
@@ -186,7 +217,11 @@ def run_copy_job(job_id: int) -> None:
 
         job.status = JobStatus.RUNNING
         job.started_at = datetime.now(timezone.utc)
-        job_repo.save(job)
+        try:
+            job_repo.save(job)
+        except Exception:
+            logger.exception("DB commit failed setting job %s to RUNNING", job_id)
+            return
 
         source = Path(job.source_path)
         target = Path(job.target_mount_path) if job.target_mount_path else None
@@ -209,7 +244,12 @@ def run_copy_job(job_id: int) -> None:
                 ef.status = FileStatus.PENDING
                 ef.retry_attempts = 0
                 ef.error_message = None
-        db.commit()
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("DB commit failed resetting file statuses for job %s", job_id)
+            return
 
         # Add records for source files not yet tracked.
         new_files = [
@@ -293,20 +333,29 @@ def run_copy_job(job_id: int) -> None:
             if timed_out:
                 job.status = JobStatus.FAILED
                 job.completed_at = datetime.now(timezone.utc)
-                job_repo.save(job)
+                try:
+                    job_repo.save(job)
+                except Exception:
+                    logger.exception("DB commit failed setting job %s to FAILED (timeout)", job_id)
 
-                AuditRepository(db).add(
-                    action="JOB_TIMEOUT",
-                    job_id=job_id,
-                    details={
-                        "timeout_seconds": timeout,
-                        "elapsed_seconds": round(time.monotonic() - job_start, 2),
-                    },
-                )
+                try:
+                    AuditRepository(db).add(
+                        action="JOB_TIMEOUT",
+                        job_id=job_id,
+                        details={
+                            "timeout_seconds": timeout,
+                            "elapsed_seconds": round(time.monotonic() - job_start, 2),
+                        },
+                    )
+                except Exception:
+                    logger.exception("Failed to write audit log for JOB_TIMEOUT")
             else:
                 job.status = JobStatus.FAILED if error_count > 0 else JobStatus.COMPLETED
                 job.completed_at = datetime.now(timezone.utc)
-                job_repo.save(job)
+                try:
+                    job_repo.save(job)
+                except Exception:
+                    logger.exception("DB commit failed setting final status for job %s", job_id)
     finally:
         db.close()
 
@@ -349,12 +398,20 @@ def run_verify_job(job_id: int) -> None:
                 ef.error_message = f"Checksum mismatch: expected {ef.checksum}, got {checksum}"
                 any_mismatch = True
 
-        db.commit()
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("DB commit failed during verification for job %s", job_id)
+            return
 
         job = job_repo.get(job_id)
         if job:
             job.status = JobStatus.FAILED if any_mismatch else JobStatus.COMPLETED
             job.completed_at = datetime.now(timezone.utc)
-            job_repo.save(job)
+            try:
+                job_repo.save(job)
+            except Exception:
+                logger.exception("DB commit failed setting verification result for job %s", job_id)
     finally:
         db.close()
