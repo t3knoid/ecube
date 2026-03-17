@@ -289,6 +289,11 @@ def update_database_settings(
     if pool_max_overflow is not None:
         _write_env_setting("DB_POOL_MAX_OVERFLOW", str(new_pool_max_overflow))
 
+    # Update in-memory settings so subsequent reads are consistent
+    settings.database_url = new_url
+    settings.db_pool_size = new_pool_size
+    settings.db_pool_max_overflow = new_pool_max_overflow
+
     # Re-initialise the SQLAlchemy engine
     _reinitialize_engine(new_url, new_pool_size, new_pool_max_overflow)
 
