@@ -504,6 +504,34 @@ class TestProvisionEndpoint:
         assert resp.status_code == 503
         assert "provisioning state" in resp.json()["message"].lower()
 
+    @patch("app.services.database_service.provision_database", return_value=4)
+    @patch("app.services.database_service.is_database_provisioned", return_value=False)
+    def test_provision_proceeds_when_db_does_not_exist(
+        self, mock_provisioned, mock_provision, unauthenticated_client
+    ):
+        """POST /provision succeeds when is_database_provisioned returns False.
+
+        On a true first-run install, the target database/role doesn't
+        exist yet.  is_database_provisioned() should return False (not
+        raise), allowing provisioning to proceed without force=true.
+        """
+        resp = unauthenticated_client.post(
+            "/setup/database/provision",
+            json={
+                "host": "localhost",
+                "port": 5432,
+                "admin_username": "postgres",
+                "admin_password": "secret",
+                "app_database": "ecube",
+                "app_username": "ecube",
+                "app_password": "ecube123",
+            },
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "provisioned"
+        mock_provision.assert_called_once()
+
     @patch("app.services.database_service.provision_database", return_value=0)
     def test_provision_force_skips_provisioned_check(
         self, mock_provision, admin_client, db
@@ -981,3 +1009,64 @@ class TestDatabaseService:
             )
         finally:
             settings.database_url = original_url
+
+    def test_get_current_revision_returns_none_when_database_missing(self):
+        """pgcode 3D000 (database does not exist) → None, not 503."""
+        import psycopg2 as real_psycopg2
+        from app.services.database_service import _get_current_revision
+
+        # psycopg2's pgcode is a readonly C-level attr; subclass to override.
+        class _PgError(real_psycopg2.OperationalError):
+            pgcode = "3D000"
+
+        with patch("app.services.database_service.psycopg2") as mock_pg:
+            mock_pg.OperationalError = real_psycopg2.OperationalError
+            mock_pg.connect.side_effect = _PgError('database "ecube" does not exist')
+
+            result = _get_current_revision("postgresql://ecube:pw@localhost/ecube")
+            assert result is None
+
+    def test_get_current_revision_returns_none_when_role_missing(self):
+        """pgcode 28000 (role does not exist) → None, not 503."""
+        import psycopg2 as real_psycopg2
+        from app.services.database_service import _get_current_revision
+
+        class _PgError(real_psycopg2.OperationalError):
+            pgcode = "28000"
+
+        with patch("app.services.database_service.psycopg2") as mock_pg:
+            mock_pg.OperationalError = real_psycopg2.OperationalError
+            mock_pg.connect.side_effect = _PgError('role "ecube" does not exist')
+
+            result = _get_current_revision("postgresql://ecube:pw@localhost/ecube")
+            assert result is None
+
+    def test_get_current_revision_raises_on_other_operational_errors(self):
+        """Connection refused (no pgcode) still raises DatabaseStatusUnknownError."""
+        import psycopg2 as real_psycopg2
+        from app.exceptions import DatabaseStatusUnknownError
+        from app.services.database_service import _get_current_revision
+
+        exc = real_psycopg2.OperationalError("connection refused")
+        # No pgcode set — simulates server unreachable
+
+        with patch("app.services.database_service.psycopg2") as mock_pg:
+            mock_pg.OperationalError = real_psycopg2.OperationalError
+            mock_pg.connect.side_effect = exc
+
+            with pytest.raises(DatabaseStatusUnknownError, match="provisioning state"):
+                _get_current_revision("postgresql://ecube:pw@localhost/ecube")
+
+    def test_is_database_provisioned_returns_false_when_db_missing(self):
+        """is_database_provisioned() returns False when the target DB doesn't exist."""
+        import psycopg2 as real_psycopg2
+
+        class _PgError(real_psycopg2.OperationalError):
+            pgcode = "3D000"
+
+        with patch("app.services.database_service.psycopg2") as mock_pg:
+            mock_pg.OperationalError = real_psycopg2.OperationalError
+            mock_pg.connect.side_effect = _PgError('database "ecube" does not exist')
+
+            from app.services.database_service import is_database_provisioned
+            assert is_database_provisioned() is False
