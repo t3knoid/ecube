@@ -549,8 +549,9 @@ Perform first-run system initialization: create OS groups, create admin user, se
 
 **Error responses:**
 
-- `409 Conflict` — System already initialized, or initialization in progress
-- `422 Unprocessable Entity` — Invalid username or empty password
+- `409 Conflict` — System already initialized, or initialization is in progress by another worker. If a previous attempt failed and left the lock row stuck, the response detail includes manual remediation steps.
+- `422 Unprocessable Entity` — Invalid username, empty password, or password containing unsafe characters (newlines, colons)
+- `500 Internal Server Error` — OS group/user creation or DB role seeding failed. The response detail describes what succeeded, what failed, and whether the initialization lock was released for a safe retry. See the Operational Guide troubleshooting section for resolution steps.
 
 **Cross-process guard:** Uses a `system_initialization` single-row table with a uniqueness constraint to ensure only one worker can complete initialization, even in multi-worker deployments.
 
