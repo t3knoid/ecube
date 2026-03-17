@@ -12,7 +12,7 @@ Covers:
 
 import json
 import logging
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -187,43 +187,45 @@ class TestGracefulRedisFailover:
         _real_import = __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
 
         def _block_redis(name, *args, **kwargs):
-            if name == "redis":
+            if name == "redis" or name.startswith("redis."):
                 raise ImportError("No module named 'redis'")
             return _real_import(name, *args, **kwargs)
 
+        import asyncio
         with patch("builtins.__import__", side_effect=_block_redis):
             with caplog.at_level(logging.WARNING):
-                result = _try_redis_backend()
+                result = asyncio.run(_try_redis_backend())
         assert result is None
         assert "not installed" in caplog.text
 
     def test_fallback_when_redis_url_not_set(self, caplog):
         from app.session import _try_redis_backend
 
+        import asyncio
         with patch("app.session.settings") as mock_settings:
             mock_settings.session_backend = "redis"
             mock_settings.redis_url = None
             with caplog.at_level(logging.WARNING):
-                result = _try_redis_backend()
+                result = asyncio.run(_try_redis_backend())
         assert result is None
         assert "REDIS_URL" in caplog.text
 
     def test_fallback_when_redis_connection_fails(self, caplog):
         from app.session import _try_redis_backend
 
-        mock_redis_mod = MagicMock()
-        mock_client = MagicMock()
+        mock_client = AsyncMock()
         mock_client.ping.side_effect = ConnectionError("Connection refused")
-        mock_redis_mod.Redis.from_url.return_value = mock_client
 
-        with patch.dict("sys.modules", {"redis": mock_redis_mod}):
+        import asyncio
+        with patch("redis.asyncio.Redis") as MockRedisClass:
+            MockRedisClass.from_url.return_value = mock_client
             with patch("app.session.settings") as mock_settings:
                 mock_settings.session_backend = "redis"
                 mock_settings.redis_url = "redis://localhost:6379/0"
                 mock_settings.redis_connection_timeout = 5
                 mock_settings.redis_socket_keepalive = True
                 with caplog.at_level(logging.WARNING):
-                    result = _try_redis_backend()
+                    result = asyncio.run(_try_redis_backend())
 
         assert result is None
         assert "unavailable" in caplog.text
@@ -234,6 +236,7 @@ class TestGracefulRedisFailover:
 
         test_app = FastAPI()
 
+        import asyncio
         with patch("app.session.settings") as mock_settings:
             mock_settings.session_backend = "redis"
             mock_settings.redis_url = None
@@ -246,7 +249,7 @@ class TestGracefulRedisFailover:
 
             mount_session_middleware(test_app)
             with caplog.at_level(logging.WARNING):
-                init_session_backend(test_app)
+                asyncio.run(init_session_backend(test_app))
 
         assert test_app.state.session_backend_name == "cookie"
         assert test_app.state.session_redis_client is None
@@ -256,6 +259,7 @@ class TestGracefulRedisFailover:
         from app.session import init_session_backend, mount_session_middleware
 
         test_app = FastAPI()
+        import asyncio
         with patch("app.session.settings") as mock_settings:
             mock_settings.session_backend = "redis"
             mock_settings.redis_url = None
@@ -268,7 +272,7 @@ class TestGracefulRedisFailover:
 
             mount_session_middleware(test_app)
             with caplog.at_level(logging.WARNING):
-                init_session_backend(test_app)
+                asyncio.run(init_session_backend(test_app))
 
         assert test_app.state.session_backend_name == "cookie"
         assert test_app.state.session_redis_client is None
@@ -298,19 +302,22 @@ class TestGracefulRedisFailover:
 # ---------------------------------------------------------------------------
 
 class _FakeRedis(dict):
-    """Minimal in-memory Redis stand-in for testing."""
+    """Minimal in-memory async Redis stand-in for testing."""
 
-    def get(self, key):
+    async def get(self, key):
         return super().get(key)
 
-    def setex(self, key, ttl, value):
+    async def setex(self, key, ttl, value):
         self[key] = value
 
-    def delete(self, key):
+    async def delete(self, key):
         self.pop(key, None)
 
-    def ping(self):
+    async def ping(self):
         return True
+
+    async def aclose(self):
+        pass
 
 
 class TestRedisBackendStoresServerSide:
@@ -405,7 +412,7 @@ class TestRedisBackendStoresServerSide:
         """If Redis write fails, the request still succeeds and no
         session-id cookie is issued (avoids orphan cookie with no
         server-side data)."""
-        failing = MagicMock()
+        failing = AsyncMock()
         failing.get.return_value = None
         failing.setex.side_effect = ConnectionError("write failed")
         app = self._make_app(failing)
@@ -418,9 +425,9 @@ class TestRedisBackendStoresServerSide:
 
     def test_redis_get_failure_starts_empty_session(self):
         """If Redis read fails, the session starts empty."""
-        failing = MagicMock()
+        failing = AsyncMock()
         failing.get.side_effect = ConnectionError("read failed")
-        failing.setex = MagicMock()
+        failing.setex = AsyncMock()
         app = self._make_app(failing)
         valid_id = "A" * 43  # valid format
         client = TestClient(app, cookies={"sid": valid_id})
@@ -564,14 +571,13 @@ class TestInitSessionBackendRedis:
     def test_redis_backend_upgrades_proxy(self, caplog):
         from app.session import init_session_backend, mount_session_middleware
 
-        mock_redis = MagicMock()
+        mock_redis = AsyncMock()
         mock_redis.ping.return_value = True
 
-        mock_redis_mod = MagicMock()
-        mock_redis_mod.Redis.from_url.return_value = mock_redis
-
         test_app = FastAPI()
-        with patch.dict("sys.modules", {"redis": mock_redis_mod}):
+        import asyncio
+        with patch("redis.asyncio.Redis") as MockRedisClass:
+            MockRedisClass.from_url.return_value = mock_redis
             with patch("app.session.settings") as mock_settings:
                 mock_settings.session_backend = "redis"
                 mock_settings.redis_url = "redis://localhost:6379/0"
@@ -586,7 +592,7 @@ class TestInitSessionBackendRedis:
 
                 mount_session_middleware(test_app)
                 with caplog.at_level(logging.INFO):
-                    init_session_backend(test_app)
+                    asyncio.run(init_session_backend(test_app))
 
         assert test_app.state.session_backend_name == "redis"
         assert test_app.state.session_redis_client is mock_redis
@@ -731,6 +737,7 @@ class TestSessionEventLogging:
         from app.session import init_session_backend, mount_session_middleware
 
         test_app = FastAPI()
+        import asyncio
         with patch("app.session.settings") as mock_settings:
             mock_settings.session_backend = "cookie"
             mock_settings.secret_key = "test-secret"
@@ -742,7 +749,7 @@ class TestSessionEventLogging:
 
             mount_session_middleware(test_app)
             with caplog.at_level(logging.INFO):
-                init_session_backend(test_app)
+                asyncio.run(init_session_backend(test_app))
 
         assert "Session backend: cookie" in caplog.text
 
@@ -750,6 +757,7 @@ class TestSessionEventLogging:
         from app.session import init_session_backend, mount_session_middleware
 
         test_app = FastAPI()
+        import asyncio
         with patch("app.session.settings") as mock_settings:
             mock_settings.session_backend = "redis"
             mock_settings.redis_url = None
@@ -762,7 +770,7 @@ class TestSessionEventLogging:
 
             mount_session_middleware(test_app)
             with caplog.at_level(logging.INFO):
-                init_session_backend(test_app)
+                asyncio.run(init_session_backend(test_app))
 
         assert "Session backend: cookie" in caplog.text
         assert "REDIS_URL" in caplog.text
@@ -779,12 +787,13 @@ class TestCloseSessionBackend:
         from app.session import close_session_backend
 
         test_app = FastAPI()
-        mock_client = MagicMock()
+        mock_client = AsyncMock()
         test_app.state.session_redis_client = mock_client
 
-        close_session_backend(test_app)
+        import asyncio
+        asyncio.run(close_session_backend(test_app))
 
-        mock_client.close.assert_called_once()
+        mock_client.aclose.assert_awaited_once()
         assert test_app.state.session_redis_client is None
 
     def test_noop_when_no_redis(self):
@@ -793,18 +802,20 @@ class TestCloseSessionBackend:
         test_app = FastAPI()
         test_app.state.session_redis_client = None
 
-        close_session_backend(test_app)  # should not raise
+        import asyncio
+        asyncio.run(close_session_backend(test_app))  # should not raise
 
     def test_handles_close_exception(self, caplog):
         from app.session import close_session_backend
 
         test_app = FastAPI()
-        mock_client = MagicMock()
-        mock_client.close.side_effect = RuntimeError("close failed")
+        mock_client = AsyncMock()
+        mock_client.aclose.side_effect = RuntimeError("close failed")
         test_app.state.session_redis_client = mock_client
 
+        import asyncio
         with caplog.at_level(logging.WARNING):
-            close_session_backend(test_app)
+            asyncio.run(close_session_backend(test_app))
 
         assert test_app.state.session_redis_client is None
         assert "Failed to close" in caplog.text
