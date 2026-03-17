@@ -242,49 +242,132 @@ def _try_redis_backend() -> "object | None":
 
 
 # ---------------------------------------------------------------------------
-# Public API — called once from app/main.py
+# Session proxy — always mounted at import time (no network I/O)
+# ---------------------------------------------------------------------------
+
+class _SessionProxy:
+    """Thin ASGI proxy that delegates to a cookie or Redis session backend.
+
+    Mounted at import time with a cookie backend (no network I/O).  During
+    lifespan startup, :func:`init_session_backend` sets
+    ``app.state.session_redis_client``; the proxy detects this on the first
+    HTTP request and transparently upgrades to the Redis backend.
+    """
+
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        secret_key: str,
+        session_cookie: str = "ecube_session",
+        max_age: int = 3600,
+        same_site: str = "lax",
+        https_only: bool = True,
+        domain: str | None = None,
+    ) -> None:
+        self.app = app  # next ASGI app in the middleware chain
+        self._session_kwargs = dict(
+            session_cookie=session_cookie,
+            max_age=max_age,
+            same_site=same_site,
+            https_only=https_only,
+            domain=domain,
+        )
+        self._secret_key = secret_key
+        # Start with cookie-based sessions (no network I/O required).
+        self._cookie_backend: ASGIApp = SessionMiddleware(
+            app,
+            secret_key=secret_key,
+            **self._session_kwargs,
+        )
+        self._redis_backend: ASGIApp | None = None
+        self._using_redis = False
+
+    def _ensure_redis_backend(self, redis_client: Any) -> None:
+        """Lazily build the Redis backend the first time it's needed."""
+        if self._redis_backend is None:
+            self._redis_backend = RedisSessionMiddleware(
+                self.app, redis_client=redis_client, **self._session_kwargs,
+            )
+            self._using_redis = True
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        # For non-HTTP scopes (e.g. lifespan), always pass through.
+        if scope["type"] not in ("http", "websocket"):
+            await self._cookie_backend(scope, receive, send)
+            return
+
+        # Check if a Redis client was provided during lifespan startup.
+        if not self._using_redis:
+            fastapi_app = scope.get("app")
+            redis_client = (
+                getattr(fastapi_app.state, "session_redis_client", None)
+                if fastapi_app is not None
+                else None
+            )
+            if redis_client is not None:
+                self._ensure_redis_backend(redis_client)
+
+        if self._using_redis:
+            await self._redis_backend(scope, receive, send)  # type: ignore[arg-type]
+        else:
+            await self._cookie_backend(scope, receive, send)
+
+
+# ---------------------------------------------------------------------------
+# Public API — called from app/main.py
 # ---------------------------------------------------------------------------
 
 def mount_session_middleware(application: "FastAPI") -> None:
-    """Add session middleware to *application* using the configured backend.
+    """Add the session middleware proxy to *application*.  **No network I/O.**
 
-    * ``cookie`` → Starlette ``SessionMiddleware`` (signed cookie payloads).
-    * ``redis``  → :class:`RedisSessionMiddleware`` (server-side storage,
-      session-id cookie only).
-
-    Called once during application startup (lifespan).
+    The proxy starts with a cookie-based backend.  Call
+    :func:`init_session_backend` during lifespan startup to optionally
+    upgrade to a Redis backend.
     """
-    backend_name = settings.session_backend
-    redis_client = None
+    application.add_middleware(
+        _SessionProxy,
+        secret_key=settings.secret_key,
+        session_cookie=settings.session_cookie_name,
+        max_age=settings.session_cookie_expiration_seconds,
+        same_site=settings.session_cookie_samesite,
+        https_only=settings.session_cookie_secure,
+        domain=settings.session_cookie_domain,
+    )
+    application.state.session_backend_name = "cookie"
+    application.state.session_redis_client = None
 
-    if backend_name == "redis":
-        redis_client = _try_redis_backend()
-        if redis_client is None:
-            backend_name = "cookie"  # graceful fallback
 
-    logger.info("Session backend: %s", backend_name)
+def init_session_backend(application: "FastAPI") -> None:
+    """Initialise the session backend.  Called during lifespan startup.
 
-    if backend_name == "redis":
-        application.add_middleware(
-            RedisSessionMiddleware,
-            redis_client=redis_client,
-            session_cookie=settings.session_cookie_name,
-            max_age=settings.session_cookie_expiration_seconds,
-            same_site=settings.session_cookie_samesite,
-            https_only=settings.session_cookie_secure,
-            domain=settings.session_cookie_domain,
-        )
-    else:
-        application.add_middleware(
-            SessionMiddleware,
-            secret_key=settings.secret_key,
-            session_cookie=settings.session_cookie_name,
-            max_age=settings.session_cookie_expiration_seconds,
-            same_site=settings.session_cookie_samesite,
-            https_only=settings.session_cookie_secure,
-            domain=settings.session_cookie_domain,
-        )
+    For the ``cookie`` backend this is a no-op.  For ``redis`` it attempts a
+    connection and, on success, upgrades the session proxy to Redis-backed
+    sessions.  On failure the cookie backend remains active (graceful fallback).
+    """
+    if settings.session_backend != "redis":
+        logger.info("Session backend: cookie")
+        return
 
-    # Stash on app.state so other code can interact with the backend.
-    application.state.session_backend_name = backend_name
+    redis_client = _try_redis_backend()
+    if redis_client is None:
+        logger.info("Session backend: cookie (Redis fallback)")
+        return
+
+    application.state.session_backend_name = "redis"
     application.state.session_redis_client = redis_client
+    logger.info("Session backend: redis")
+
+
+def close_session_backend(application: "FastAPI") -> None:
+    """Shut down the session backend.  Called during lifespan shutdown."""
+    redis_client = getattr(application.state, "session_redis_client", None)
+    if redis_client is not None:
+        try:
+            redis_client.close()
+            logger.info("Redis session client closed")
+        except Exception:
+            logger.warning(
+                "Failed to close Redis session client", exc_info=True,
+            )
+        application.state.session_redis_client = None
