@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env")
 
     database_url: str = "postgresql://ecube:ecube@localhost/ecube"
+    #: Shared signing key for JWT tokens **and** cookie-based sessions
+    #: (when ``SESSION_BACKEND=cookie``).  Rotating this key invalidates
+    #: all outstanding JWTs and active cookie sessions.
     secret_key: str = "change-me-in-production-please-rotate-32b"
     algorithm: str = "HS256"
 
