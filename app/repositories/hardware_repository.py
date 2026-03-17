@@ -61,7 +61,11 @@ class HubRepository:
             hub.name = name
             if location_hint is not None:
                 hub.location_hint = location_hint
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
         self.db.refresh(hub)
         return hub
 
@@ -116,6 +120,10 @@ class PortRepository:
             port.port_number = port_number
             if friendly_label is not None:
                 port.friendly_label = friendly_label
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
         self.db.refresh(port)
         return port

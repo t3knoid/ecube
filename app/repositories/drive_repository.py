@@ -54,12 +54,20 @@ class DriveRepository:
     def add(self, drive: UsbDrive) -> UsbDrive:
         """Persist a new drive and flush it to obtain its ID."""
         self.db.add(drive)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
         self.db.refresh(drive)
         return drive
 
     def save(self, drive: UsbDrive) -> UsbDrive:
         """Commit pending changes to an existing drive and refresh it."""
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
         self.db.refresh(drive)
         return drive
