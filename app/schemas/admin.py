@@ -120,7 +120,11 @@ class SetOSGroupsRequest(BaseModel):
 
     groups: List[str] = Field(
         ...,
-        description="OS groups to set for the user (replaces existing supplementary groups)",
+        min_length=1,
+        description=(
+            "ECUBE groups to set for the user (replaces only ecube-* groups; "
+            "non-ECUBE supplementary groups are preserved automatically)"
+        ),
     )
 
 
