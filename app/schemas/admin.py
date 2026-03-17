@@ -3,9 +3,26 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.users import RoleName
+
+_UNSAFE_PASSWORD_CHARS = frozenset("\n\r:")
+
+
+def _check_password_safety(v: str) -> str:
+    """Reject passwords containing characters that are unsafe for chpasswd."""
+    found = _UNSAFE_PASSWORD_CHARS.intersection(v)
+    if found:
+        labels = sorted(
+            "newline" if c == "\n" else "carriage-return" if c == "\r" else "colon"
+            for c in found
+        )
+        raise ValueError(
+            f"Password contains unsafe characters: {', '.join(labels)}. "
+            "Newlines and colons are not permitted."
+        )
+    return v
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +67,12 @@ class CreateOSUserRequest(BaseModel):
         min_length=1,
         description="Initial password for the user",
     )
+
+    @field_validator("password")
+    @classmethod
+    def password_safe_chars(cls, v: str) -> str:
+        return _check_password_safety(v)
+
     groups: Optional[List[str]] = Field(
         default=None,
         description="OS groups to add the user to",
@@ -85,6 +108,11 @@ class ResetPasswordRequest(BaseModel):
         min_length=1,
         description="New password for the user",
     )
+
+    @field_validator("password")
+    @classmethod
+    def password_safe_chars(cls, v: str) -> str:
+        return _check_password_safety(v)
 
 
 class SetOSGroupsRequest(BaseModel):
@@ -166,6 +194,11 @@ class SetupInitializeRequest(BaseModel):
         min_length=1,
         description="Admin password",
     )
+
+    @field_validator("password")
+    @classmethod
+    def password_safe_chars(cls, v: str) -> str:
+        return _check_password_safety(v)
 
 
 class SetupInitializeResponse(BaseModel):

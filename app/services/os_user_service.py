@@ -117,6 +117,31 @@ def validate_username(username: str) -> None:
         )
 
 
+_UNSAFE_PASSWORD_CHARS = frozenset("\n\r:")
+
+
+def validate_password(password: str) -> None:
+    """Raise :class:`ValueError` if *password* contains characters unsafe for chpasswd.
+
+    ``chpasswd`` parses ``username:password`` lines delimited by newlines, so
+    ``\\n``, ``\\r``, and ``:`` in the password could cause it to misinterpret
+    the input and change passwords for unintended accounts.
+    """
+    if not password:
+        raise ValueError("Password cannot be empty")
+    found = _UNSAFE_PASSWORD_CHARS.intersection(password)
+    if found:
+        # Describe offending characters without echoing the password itself.
+        labels = sorted(
+            "newline" if c == "\n" else "carriage-return" if c == "\r" else "colon"
+            for c in found
+        )
+        raise ValueError(
+            f"Password contains unsafe characters: {', '.join(labels)}. "
+            "Newlines and colons are not permitted."
+        )
+
+
 def validate_group_name(name: str) -> None:
     """Raise :class:`ValueError` if *name* is not a valid POSIX group name."""
     if not GROUPNAME_RE.match(name):
@@ -184,8 +209,7 @@ def create_user(
         raise ValueError(f"Cannot create reserved username: {username}")
     if user_exists(username):
         raise OSUserError(f"User '{username}' already exists")
-    if not password:
-        raise ValueError("Password cannot be empty")
+    validate_password(password)
 
     # Create user with home directory.
     _run_sudo([settings.useradd_binary_path, "-m", username])
@@ -271,8 +295,7 @@ def reset_password(username: str, password: str) -> None:
     validate_username(username)
     if _is_reserved_username(username):
         raise ValueError(f"Cannot reset password for reserved username: {username}")
-    if not password:
-        raise ValueError("Password cannot be empty")
+    validate_password(password)
     if not user_exists(username):
         raise OSUserError(f"User '{username}' does not exist")
 
