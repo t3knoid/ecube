@@ -853,10 +853,10 @@ curl -k -X POST -H "Authorization: Bearer $TOKEN" \
 #### Reset a user's password
 
 ```bash
-curl -k -X POST -H "Authorization: Bearer $TOKEN" \
+curl -k -X PUT -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"password": "newpassword"}' \
-  https://localhost:8443/admin/os-users/frank/reset-password
+  https://localhost:8443/admin/os-users/frank/password
 ```
 
 #### Delete an OS user
