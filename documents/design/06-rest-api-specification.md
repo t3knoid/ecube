@@ -465,7 +465,7 @@ Reset an OS user's password via `chpasswd`.
 
 ### `PUT /admin/os-users/{username}/groups`
 
-Replace an OS user's supplementary group memberships.
+Replace an OS user's `ecube-*` supplementary group memberships. Only group names starting with the `ecube-` prefix are accepted; non-ECUBE supplementary groups are preserved automatically. At least one `ecube-*` group is required.
 
 **Roles:** `admin`
 
@@ -475,7 +475,7 @@ Replace an OS user's supplementary group memberships.
 
 **Error responses:**
 
-- `422 Unprocessable Entity` — User is not ECUBE-managed (see [ECUBE-managed user guard](#ecube-managed-user-guard))
+- `422 Unprocessable Entity` — Empty group list, non-`ecube-*` group name, or user is not ECUBE-managed (see [ECUBE-managed user guard](#ecube-managed-user-guard))
 
 **Audit events:** `OS_USER_GROUPS_MODIFIED`
 
