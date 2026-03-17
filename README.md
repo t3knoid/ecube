@@ -7,7 +7,7 @@ ECUBE is a secure evidence export platform designed to copy eDiscovery data onto
 ## Application Stack
 
 - **System Layer API:** Python 3.11+, FastAPI
-- **Data Layer:** PostgreSQL with SQLAlchemy + Alembic
+- **Data Layer:** PostgreSQL 14+ with SQLAlchemy + Alembic
 - **Background Processing:** Celery or RQ workers for copy, verification, and manifest tasks
 - **UI Layer:** React, Vue, or server-rendered templates (HTTPS-only)
 - **Runtime Platform:** Linux-based copy machine with USB hub integration and NFS/SMB mount support
@@ -15,7 +15,7 @@ ECUBE is a secure evidence export platform designed to copy eDiscovery data onto
 
 ## PostgreSQL and Alembic Setup
 
-ECUBE uses PostgreSQL as the system-of-record database and Alembic for database schema versioning.
+ECUBE uses PostgreSQL (14+) as the system-of-record database and Alembic for database schema versioning.
 
 ### PostgreSQL (Data Layer)
 
