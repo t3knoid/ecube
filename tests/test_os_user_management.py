@@ -301,19 +301,23 @@ class TestCreateGroup:
     def test_create_group(self, mock_grp, mock_subprocess):
         mock_grp.getgrnam.side_effect = [
             KeyError("no such group"),  # group_exists check
-            _make_grp(name="newgroup", gid=3000),  # lookup after creation
+            _make_grp(name="ecube-newgroup", gid=3000),  # lookup after creation
         ]
         mock_subprocess.return_value = _ok_result()
 
-        group = create_group("newgroup")
-        assert group.name == "newgroup"
+        group = create_group("ecube-newgroup")
+        assert group.name == "ecube-newgroup"
         assert group.gid == 3000
 
     @patch("app.services.os_user_service.grp")
     def test_create_existing_group(self, mock_grp):
-        mock_grp.getgrnam.return_value = _make_grp(name="existing")
+        mock_grp.getgrnam.return_value = _make_grp(name="ecube-existing")
         with pytest.raises(OSUserError, match="already exists"):
-            create_group("existing")
+            create_group("ecube-existing")
+
+    def test_create_group_without_ecube_prefix_rejected(self):
+        with pytest.raises(ValueError, match="must start with"):
+            create_group("wheel")
 
 
 class TestDeleteGroup:
@@ -322,19 +326,23 @@ class TestDeleteGroup:
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
     def test_delete_group(self, mock_grp, mock_subprocess):
-        mock_grp.getgrnam.return_value = _make_grp(name="oldgroup")
+        mock_grp.getgrnam.return_value = _make_grp(name="ecube-oldgroup")
         mock_subprocess.return_value = _ok_result()
 
-        delete_group("oldgroup")
+        delete_group("ecube-oldgroup")
 
         calls = [c.args[0] for c in mock_subprocess.call_args_list]
-        assert ["sudo", "/usr/sbin/groupdel", "oldgroup"] in calls
+        assert ["sudo", "/usr/sbin/groupdel", "ecube-oldgroup"] in calls
 
     @patch("app.services.os_user_service.grp")
     def test_delete_nonexistent_group(self, mock_grp):
         mock_grp.getgrnam.side_effect = KeyError("no such group")
         with pytest.raises(OSUserError, match="does not exist"):
-            delete_group("nope")
+            delete_group("ecube-nope")
+
+    def test_delete_group_without_ecube_prefix_rejected(self):
+        with pytest.raises(ValueError, match="must start with"):
+            delete_group("wheel")
 
 
 class TestListUsers:
@@ -670,20 +678,25 @@ class TestOSGroupEndpoints:
     def test_create_group(self, mock_grp, mock_subprocess, admin_client):
         mock_grp.getgrnam.side_effect = [
             KeyError("no such group"),
-            _make_grp(name="newgroup", gid=4000),
+            _make_grp(name="ecube-newgroup", gid=4000),
         ]
         mock_subprocess.return_value = _ok_result()
 
-        resp = admin_client.post("/admin/os-groups", json={"name": "newgroup"})
+        resp = admin_client.post("/admin/os-groups", json={"name": "ecube-newgroup"})
         assert resp.status_code == 201
-        assert resp.json()["name"] == "newgroup"
+        assert resp.json()["name"] == "ecube-newgroup"
 
     @patch("app.services.os_user_service.grp")
     def test_create_existing_group(self, mock_grp, admin_client):
-        mock_grp.getgrnam.return_value = _make_grp(name="existing")
+        mock_grp.getgrnam.return_value = _make_grp(name="ecube-existing")
 
-        resp = admin_client.post("/admin/os-groups", json={"name": "existing"})
+        resp = admin_client.post("/admin/os-groups", json={"name": "ecube-existing"})
         assert resp.status_code == 409
+
+    def test_create_group_without_ecube_prefix(self, admin_client):
+        resp = admin_client.post("/admin/os-groups", json={"name": "wheel"})
+        assert resp.status_code == 422
+        assert "ecube-" in resp.json()["message"]
 
     @patch("app.services.os_user_service.grp")
     def test_list_groups(self, mock_grp, admin_client):
@@ -704,18 +717,23 @@ class TestOSGroupEndpoints:
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
     def test_delete_group(self, mock_grp, mock_subprocess, admin_client):
-        mock_grp.getgrnam.return_value = _make_grp(name="oldgroup")
+        mock_grp.getgrnam.return_value = _make_grp(name="ecube-oldgroup")
         mock_subprocess.return_value = _ok_result()
 
-        resp = admin_client.delete("/admin/os-groups/oldgroup")
+        resp = admin_client.delete("/admin/os-groups/ecube-oldgroup")
         assert resp.status_code == 200
 
     @patch("app.services.os_user_service.grp")
     def test_delete_nonexistent_group(self, mock_grp, admin_client):
         mock_grp.getgrnam.side_effect = KeyError("no such group")
 
-        resp = admin_client.delete("/admin/os-groups/nope")
+        resp = admin_client.delete("/admin/os-groups/ecube-nope")
         assert resp.status_code == 404
+
+    def test_delete_group_without_ecube_prefix(self, admin_client):
+        resp = admin_client.delete("/admin/os-groups/wheel")
+        assert resp.status_code == 422
+        assert "ecube-" in resp.json()["message"]
 
     def test_delete_invalid_group_name(self, admin_client):
         resp = admin_client.delete("/admin/os-groups/Bad;Name")
@@ -1046,13 +1064,13 @@ class TestOSUserAuditLogging:
     def test_create_group_audit(self, mock_grp, mock_subprocess, admin_client, db):
         mock_grp.getgrnam.side_effect = [
             KeyError("no such group"),
-            _make_grp(name="audgrp", gid=5000),
+            _make_grp(name="ecube-audgrp", gid=5000),
         ]
         mock_subprocess.return_value = _ok_result()
 
-        admin_client.post("/admin/os-groups", json={"name": "audgrp"})
+        admin_client.post("/admin/os-groups", json={"name": "ecube-audgrp"})
 
         from app.repositories.audit_repository import AuditRepository
         logs = AuditRepository(db).query(action="OS_GROUP_CREATED")
         assert len(logs) >= 1
-        assert logs[0].details["group_name"] == "audgrp"
+        assert logs[0].details["group_name"] == "ecube-audgrp"
