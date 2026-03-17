@@ -28,13 +28,11 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
-from fastapi.routing import APIRoute
 from sqlalchemy.orm import Session
-from starlette.requests import Request as StarletteRequest
-from starlette.responses import JSONResponse
 
 from app.auth import CurrentUser, get_current_user, require_roles
 from app.config import settings
+from app.routing import LocalOnlyRoute
 from app.database import get_db
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.user_role_repository import UserRoleRepository
@@ -227,58 +225,12 @@ def _audit(db: Session, action: str, actor: str, details: dict) -> None:
         logger.exception("Failed to write audit log for %s", action)
 
 
-def _ensure_local_role_resolver(request: Request) -> None:
-    """
-    Ensure OS user/group endpoints are only available when using the local
-    role resolver.
-
-    In OIDC/LDAP deployments, OS-level user management via this API is
-    unsupported and potentially unsafe, so we behave as though the endpoint
-    does not exist.
-    """
-    if getattr(settings, "role_resolver", "local") != "local":
-        logger.warning(
-            "OS user/group endpoint called while role_resolver=%s; path=%s",
-            getattr(settings, "role_resolver", None),
-            request.url.path,
-        )
-        # Hide the endpoint when not in local mode to avoid unsafe configs.
-        raise HTTPException(status_code=404, detail="Not found")
-
-
-class _LocalOnlyRoute(APIRoute):
-    """Custom route class that short-circuits with 404 *before* dependency
-    resolution when the role resolver is not ``"local"``.
-
-    This guarantees that non-local deployments never leak 401/403 responses
-    for endpoints that should appear non-existent.
-    """
-
-    def get_route_handler(self):  # type: ignore[override]
-        original = super().get_route_handler()
-
-        async def _guarded(request: StarletteRequest):
-            if getattr(settings, "role_resolver", "local") != "local":
-                logger.warning(
-                    "OS user/group endpoint called while role_resolver=%s; path=%s",
-                    getattr(settings, "role_resolver", None),
-                    request.url.path,
-                )
-                return JSONResponse(
-                    status_code=404,
-                    content={"detail": "Not found"},
-                )
-            return await original(request)
-
-        return _guarded
-
-
 # Sub-router for OS user/group endpoints.  The custom route class
 # ensures that non-local deployments get a clean 404 *before* any auth
 # dependency resolution, so callers never see 401/403 for endpoints
 # that conceptually don't exist in that deployment mode.
 _os_router = APIRouter(
-    route_class=_LocalOnlyRoute,
+    route_class=LocalOnlyRoute,
 )
 
 
