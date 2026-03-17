@@ -2,9 +2,9 @@
 
 import logging
 
+from fastapi import HTTPException
 from fastapi.routing import APIRoute
 from starlette.requests import Request
-from starlette.responses import JSONResponse
 
 from app.config import settings
 
@@ -16,7 +16,9 @@ class LocalOnlyRoute(APIRoute):
     resolution when the role resolver is not ``"local"``.
 
     This guarantees that non-local deployments never leak 401/403 responses
-    for endpoints that should appear non-existent.
+    for endpoints that should appear non-existent.  The raised
+    ``HTTPException`` is caught by the global handler in ``app.main`` so
+    callers receive the standard ``ErrorResponse`` payload.
     """
 
     def get_route_handler(self):  # type: ignore[override]
@@ -29,10 +31,7 @@ class LocalOnlyRoute(APIRoute):
                     getattr(settings, "role_resolver", None),
                     request.url.path,
                 )
-                return JSONResponse(
-                    status_code=404,
-                    content={"detail": "Not found"},
-                )
+                raise HTTPException(status_code=404, detail="Not found")
             return await original(request)
 
         return _guarded
