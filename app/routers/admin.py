@@ -269,7 +269,7 @@ def create_os_user(
             # guard defensively.  The OS user was already created; delete it to
             # avoid leaving partial state.
             try:
-                os_user_service.delete_user(body.username)
+                os_user_service.delete_user(body.username, _skip_managed_check=True)
             except Exception:
                 logger.exception(
                     "Failed to clean up OS user '%s' after role validation error",
@@ -280,7 +280,7 @@ def create_os_user(
             # DB failure — OS user exists but role assignment failed.
             db.rollback()
             try:
-                os_user_service.delete_user(body.username)
+                os_user_service.delete_user(body.username, _skip_managed_check=True)
             except Exception:
                 logger.exception(
                     "Failed to clean up OS user '%s' after DB error in set_roles",
