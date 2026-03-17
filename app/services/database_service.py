@@ -12,7 +12,7 @@ import logging
 import os
 import re
 import tempfile
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 from urllib.parse import quote, urlparse
 
 import psycopg2
