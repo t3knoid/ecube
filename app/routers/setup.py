@@ -27,7 +27,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.routing import LocalOnlyRoute
 from app.database import get_db
 from app.models.system import SystemInitialization
