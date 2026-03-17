@@ -31,34 +31,40 @@ from app.session import RedisSessionMiddleware, _SessionProxy
 class TestCookieConfigurationDefaults:
     """Verify default values for all session-related settings."""
 
-    def test_default_backend(self):
+    def test_default_backend(self, monkeypatch):
         from app.config import Settings
-        s = Settings()
+        monkeypatch.delenv("SESSION_BACKEND", raising=False)
+        s = Settings(_env_file=None)
         assert s.session_backend == "cookie"
 
-    def test_default_cookie_name(self):
+    def test_default_cookie_name(self, monkeypatch):
         from app.config import Settings
-        s = Settings()
+        monkeypatch.delenv("SESSION_COOKIE_NAME", raising=False)
+        s = Settings(_env_file=None)
         assert s.session_cookie_name == "ecube_session"
 
-    def test_default_expiration(self):
+    def test_default_expiration(self, monkeypatch):
         from app.config import Settings
-        s = Settings()
+        monkeypatch.delenv("SESSION_COOKIE_EXPIRATION_SECONDS", raising=False)
+        s = Settings(_env_file=None)
         assert s.session_cookie_expiration_seconds == 3600
 
-    def test_default_domain_is_none(self):
+    def test_default_domain_is_none(self, monkeypatch):
         from app.config import Settings
-        s = Settings()
+        monkeypatch.delenv("SESSION_COOKIE_DOMAIN", raising=False)
+        s = Settings(_env_file=None)
         assert s.session_cookie_domain is None
 
-    def test_default_secure(self):
+    def test_default_secure(self, monkeypatch):
         from app.config import Settings
-        s = Settings()
+        monkeypatch.delenv("SESSION_COOKIE_SECURE", raising=False)
+        s = Settings(_env_file=None)
         assert s.session_cookie_secure is True
 
-    def test_default_samesite(self):
+    def test_default_samesite(self, monkeypatch):
         from app.config import Settings
-        s = Settings()
+        monkeypatch.delenv("SESSION_COOKIE_SAMESITE", raising=False)
+        s = Settings(_env_file=None)
         assert s.session_cookie_samesite == "lax"
 
 
@@ -67,52 +73,52 @@ class TestCookieConfigurationOverrides:
 
     def test_override_cookie_name(self):
         from app.config import Settings
-        s = Settings(session_cookie_name="my_session")
+        s = Settings(session_cookie_name="my_session", _env_file=None)
         assert s.session_cookie_name == "my_session"
 
     def test_override_expiration(self):
         from app.config import Settings
-        s = Settings(session_cookie_expiration_seconds=86400)
+        s = Settings(session_cookie_expiration_seconds=86400, _env_file=None)
         assert s.session_cookie_expiration_seconds == 86400
 
     def test_override_domain(self):
         from app.config import Settings
-        s = Settings(session_cookie_domain=".example.com")
+        s = Settings(session_cookie_domain=".example.com", _env_file=None)
         assert s.session_cookie_domain == ".example.com"
 
     def test_empty_string_domain_normalised_to_none(self):
         from app.config import Settings
-        s = Settings(session_cookie_domain="")
+        s = Settings(session_cookie_domain="", _env_file=None)
         assert s.session_cookie_domain is None
 
     def test_whitespace_only_domain_normalised_to_none(self):
         from app.config import Settings
-        s = Settings(session_cookie_domain="  ")
+        s = Settings(session_cookie_domain="  ", _env_file=None)
         assert s.session_cookie_domain is None
 
     def test_override_secure_false(self):
         from app.config import Settings
-        s = Settings(session_cookie_secure=False)
+        s = Settings(session_cookie_secure=False, _env_file=None)
         assert s.session_cookie_secure is False
 
     def test_override_samesite_strict(self):
         from app.config import Settings
-        s = Settings(session_cookie_samesite="strict")
+        s = Settings(session_cookie_samesite="strict", _env_file=None)
         assert s.session_cookie_samesite == "strict"
 
     def test_samesite_normalised_to_lowercase(self):
         from app.config import Settings
-        s = Settings(session_cookie_samesite="Lax")
+        s = Settings(session_cookie_samesite="Lax", _env_file=None)
         assert s.session_cookie_samesite == "lax"
 
     def test_samesite_none_requires_secure(self):
         from app.config import Settings
         with pytest.raises(Exception, match="SESSION_COOKIE_SECURE must be true"):
-            Settings(session_cookie_samesite="none", session_cookie_secure=False)
+            Settings(session_cookie_samesite="none", session_cookie_secure=False, _env_file=None)
 
     def test_samesite_none_with_secure_allowed(self):
         from app.config import Settings
-        s = Settings(session_cookie_samesite="none", session_cookie_secure=True)
+        s = Settings(session_cookie_samesite="none", session_cookie_secure=True, _env_file=None)
         assert s.session_cookie_samesite == "none"
         assert s.session_cookie_secure is True
 
@@ -126,29 +132,32 @@ class TestBackendSelection:
 
     def test_backend_cookie(self):
         from app.config import Settings
-        s = Settings(session_backend="cookie")
+        s = Settings(session_backend="cookie", _env_file=None)
         assert s.session_backend == "cookie"
 
     def test_backend_redis(self):
         from app.config import Settings
-        s = Settings(session_backend="redis")
+        s = Settings(session_backend="redis", _env_file=None)
         assert s.session_backend == "redis"
 
     def test_backend_invalid_rejected(self):
         from app.config import Settings
         with pytest.raises(Exception):
-            Settings(session_backend="memcached")
+            Settings(session_backend="memcached", _env_file=None)
 
-    def test_redis_defaults(self):
+    def test_redis_defaults(self, monkeypatch):
         from app.config import Settings
-        s = Settings()
+        monkeypatch.delenv("REDIS_URL", raising=False)
+        monkeypatch.delenv("REDIS_CONNECTION_TIMEOUT", raising=False)
+        monkeypatch.delenv("REDIS_SOCKET_KEEPALIVE", raising=False)
+        s = Settings(_env_file=None)
         assert s.redis_url is None
         assert s.redis_connection_timeout == 5
         assert s.redis_socket_keepalive is True
 
     def test_redis_url_override(self):
         from app.config import Settings
-        s = Settings(redis_url="redis://localhost:6379/1")
+        s = Settings(redis_url="redis://localhost:6379/1", _env_file=None)
         assert s.redis_url == "redis://localhost:6379/1"
 
 
