@@ -6,10 +6,12 @@ check**: once at least one admin user exists in ``user_roles``, the
 ``POST /setup/initialize`` endpoint returns ``409 Conflict``.
 
 A cross-process guard (the ``system_initialization`` table with a single-row
-constraint) ensures that only one worker can successfully complete
-initialization, even when running multiple uvicorn workers.  A process-local
-thread lock provides an additional optimization to avoid redundant OS
-operations within the same process.
+``CHECK (id = 1)`` constraint) ensures that only one worker can win
+initialization across multiple uvicorn workers.  The guard is acquired
+**before** any OS side-effects: the row is inserted and committed first; if
+OS operations subsequently fail, the row is deleted so that setup can be
+retried.  A process-local thread lock provides an additional optimization to
+avoid redundant OS work within the same process.
 
 The ``GET /setup/status`` endpoint is **unauthenticated** so that a setup
 wizard UI can check whether initialization is needed before any users exist.
@@ -126,7 +128,78 @@ def _do_initialize(
     db: Session,
 ) -> SetupInitializeResponse:
 
-    # Step 1: Create ECUBE OS groups.
+    # Step 1: Acquire the cross-process guard BEFORE any OS side-effects.
+    # The single-row CHECK constraint ensures only one worker can succeed.
+    db.add(SystemInitialization(
+        id=1,
+        initialized_by=body.username,
+        initialized_at=datetime.now(timezone.utc),
+    ))
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="System was initialized by another process.",
+        )
+
+    # From here on, this worker owns initialization.  If OS operations fail,
+    # we must remove the lock row so that setup can be retried.
+    try:
+        groups_created, admin_username = _run_os_setup(body)
+    except HTTPException:
+        _release_init_lock(db)
+        raise
+    except Exception:
+        _release_init_lock(db)
+        raise
+
+    # Step 4: Seed admin role now that OS setup succeeded.
+    db.add(UserRole(username=body.username, role="admin"))
+    db.commit()
+
+    # Step 5: Audit log.
+    try:
+        AuditRepository(db).add(
+            action="SYSTEM_INITIALIZED",
+            user=body.username,
+            details={
+                "groups_created": groups_created,
+                "admin_user": body.username,
+            },
+        )
+    except Exception:
+        logger.exception("Failed to write audit log for SYSTEM_INITIALIZED")
+
+    return SetupInitializeResponse(
+        message="Setup complete",
+        username=body.username,
+        groups_created=groups_created,
+    )
+
+
+def _release_init_lock(db: Session) -> None:
+    """Delete the system_initialization row so setup can be retried."""
+    try:
+        db.query(SystemInitialization).filter(
+            SystemInitialization.id == 1,
+        ).delete()
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to release initialization lock")
+
+
+def _run_os_setup(
+    body: SetupInitializeRequest,
+) -> tuple[list[str], str]:
+    """Execute OS-level setup: create groups and the admin user.
+
+    Returns ``(groups_created, username)``.
+    Raises :class:`HTTPException` on failure.
+    """
+    # Step 2: Create ECUBE OS groups.
     try:
         groups_created = os_user_service.ensure_ecube_groups()
     except os_user_service.OSUserError as exc:
@@ -135,7 +208,7 @@ def _do_initialize(
             detail=f"Failed to create OS groups: {exc.message}",
         )
 
-    # Step 2: Create the admin OS user.
+    # Step 3: Create the admin OS user.
     try:
         os_user_service.create_user(
             username=body.username,
@@ -168,40 +241,4 @@ def _do_initialize(
                 detail=f"User exists but failed to reset password: {pw_exc}",
             )
 
-    # Step 3: Seed database with admin role and mark system as initialized.
-    # The single-row constraint on system_initialization ensures that even
-    # if two workers race past the has_any_admin() check and both complete
-    # OS operations, only one can successfully commit.
-    db.add(SystemInitialization(
-        id=1,
-        initialized_by=body.username,
-        initialized_at=datetime.now(timezone.utc),
-    ))
-    db.add(UserRole(username=body.username, role="admin"))
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="System was initialized by another process.",
-        )
-
-    # Step 4: Audit log.
-    try:
-        AuditRepository(db).add(
-            action="SYSTEM_INITIALIZED",
-            user=body.username,
-            details={
-                "groups_created": groups_created,
-                "admin_user": body.username,
-            },
-        )
-    except Exception:
-        logger.exception("Failed to write audit log for SYSTEM_INITIALIZED")
-
-    return SetupInitializeResponse(
-        message="Setup complete",
-        username=body.username,
-        groups_created=groups_created,
-    )
+    return groups_created, body.username

@@ -736,6 +736,35 @@ class TestSetupEndpoints:
         assert isinstance(data["groups_created"], list)
         assert len(data["groups_created"]) == 4
 
+    @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_initialize_releases_lock_on_os_failure(
+        self, mock_pwd, mock_grp, mock_subprocess, unauthenticated_client, db
+    ):
+        """If OS group creation fails, the init lock row is removed so setup
+        can be retried."""
+        mock_grp.getgrnam.side_effect = KeyError("no such group")
+        mock_subprocess.return_value = _fail_result("groupadd failed")
+
+        resp = unauthenticated_client.post("/setup/initialize", json={
+            "username": "admin1",
+            "password": "s3cret",
+        })
+        assert resp.status_code == 500
+
+        # Lock row must be gone so a retry can succeed.
+        assert db.query(SystemInitialization).first() is None
+
+        # A subsequent attempt should NOT return 409 — it should be retryable.
+        # (It will still fail because mocks haven't changed, but the status
+        # code proves the guard was released.)
+        resp2 = unauthenticated_client.post("/setup/initialize", json={
+            "username": "admin1",
+            "password": "s3cret",
+        })
+        assert resp2.status_code == 500  # OS failure again, not 409
+
     def test_status_returns_404_when_not_local(self, unauthenticated_client):
         """GET /setup/status returns 404 when role_resolver is not 'local'."""
         with patch.object(settings, "role_resolver", "ldap"):
