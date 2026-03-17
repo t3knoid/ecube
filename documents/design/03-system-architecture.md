@@ -4,7 +4,7 @@
 
 - **UI Layer (untrusted):** Displays status, submits requests, never talks directly to DB/hardware.
 - **System Layer (trusted):** Enforces policy, executes mounts/copies, writes audit logs.
-- **PostgreSQL (private):** Stores source-of-truth state for jobs, drives, assignments, and logs.
+- **PostgreSQL 14+ (private):** Stores source-of-truth state for jobs, drives, assignments, and logs.
 
 ## Interaction Pattern
 
