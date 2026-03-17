@@ -46,9 +46,25 @@ _ADMIN_ONLY = require_roles("admin")
 _bearer_scheme = HTTPBearer(auto_error=False)
 
 
+def _get_db_or_none():
+    """Yield a DB session, or ``None`` when the database is unreachable.
+
+    Used by provisioning endpoints where the database may not exist yet.
+    """
+    try:
+        db = __import__("app.database", fromlist=["SessionLocal"]).SessionLocal()
+    except Exception:
+        yield None
+        return
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 def _require_admin_or_initial_setup(
     request: Request,
-    db: Session = Depends(get_db),
+    db: Optional[Session] = Depends(_get_db_or_none),
     credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
 ) -> Optional[CurrentUser]:
     """Allow unauthenticated access during initial setup (no admin exists).
@@ -58,9 +74,22 @@ def _require_admin_or_initial_setup(
 
     Returns ``None`` during initial setup, or a ``CurrentUser`` with admin
     role after setup.
+
+    If the database is unreachable (e.g. not yet provisioned), the system is
+    treated as being in initial-setup mode.
     """
-    repo = UserRoleRepository(db)
-    if not repo.has_any_admin():
+    if db is None:
+        # DB unreachable — treat as initial setup
+        return None
+
+    try:
+        repo = UserRoleRepository(db)
+        if not repo.has_any_admin():
+            return None
+    except Exception:
+        # DB query failed — treat as initial setup
+        logger.debug("Admin check failed (DB may not be provisioned yet)", exc_info=True)
+        return None
         return None
 
     # System is initialized — require admin authentication
@@ -84,7 +113,7 @@ def _require_admin_or_initial_setup(
 )
 def test_database_connection(
     body: DatabaseTestConnectionRequest,
-    db: Session = Depends(get_db),
+    db: Optional[Session] = Depends(_get_db_or_none),
     current_user: Optional[CurrentUser] = Depends(_require_admin_or_initial_setup),
 ) -> DatabaseTestConnectionResponse:
     """Test connectivity to a PostgreSQL server.
@@ -107,12 +136,15 @@ def test_database_connection(
 
     # Best-effort audit (may fail if DB doesn't exist yet)
     try:
-        log_and_audit(
-            db,
-            action="DATABASE_CONNECTION_TEST",
-            actor_id=current_user.username if current_user else "setup",
-            metadata={"host": body.host, "port": body.port, "result": "ok"},
-        )
+        if db is not None:
+            log_and_audit(
+                db,
+                action="DATABASE_CONNECTION_TEST",
+                actor_id=current_user.username if current_user else "setup",
+                metadata={"host": body.host, "port": body.port, "result": "ok"},
+            )
+        else:
+            raise RuntimeError("no db session")
     except Exception:
         logger.info(
             "DATABASE_CONNECTION_TEST host=%s port=%s result=ok",
@@ -131,7 +163,7 @@ def test_database_connection(
 )
 def provision_database(
     body: DatabaseProvisionRequest,
-    db: Session = Depends(get_db),
+    db: Optional[Session] = Depends(_get_db_or_none),
     current_user: Optional[CurrentUser] = Depends(_require_admin_or_initial_setup),
 ) -> DatabaseProvisionResponse:
     """Create the application user, database, and run Alembic migrations.
@@ -161,18 +193,21 @@ def provision_database(
 
     # Best-effort audit
     try:
-        log_and_audit(
-            db,
-            action="DATABASE_PROVISIONED",
-            actor_id=current_user.username if current_user else "setup",
-            metadata={
-                "host": body.host,
-                "port": body.port,
-                "database": body.app_database,
-                "user": body.app_username,
-                "migrations_applied": migrations_applied,
-            },
-        )
+        if db is not None:
+            log_and_audit(
+                db,
+                action="DATABASE_PROVISIONED",
+                actor_id=current_user.username if current_user else "setup",
+                metadata={
+                    "host": body.host,
+                    "port": body.port,
+                    "database": body.app_database,
+                    "user": body.app_username,
+                    "migrations_applied": migrations_applied,
+                },
+            )
+        else:
+            raise RuntimeError("no db session")
     except Exception:
         logger.info(
             "DATABASE_PROVISIONED host=%s port=%s database=%s user=%s migrations=%d",
