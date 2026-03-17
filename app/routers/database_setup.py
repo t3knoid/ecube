@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 from app.auth import CurrentUser, get_current_user, require_roles
 from app.database import get_db
 from app.exceptions import AuthorizationError
+from app.routing import LocalOnlyRoute
 from app.repositories.user_role_repository import UserRoleRepository
 from app.schemas.database import (
     DatabaseProvisionRequest,
@@ -39,7 +40,7 @@ from app.services.audit_service import log_and_audit
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/setup/database", tags=["setup"])
+router = APIRouter(prefix="/setup/database", tags=["setup"], route_class=LocalOnlyRoute)
 
 _ADMIN_ONLY = require_roles("admin")
 _bearer_scheme = HTTPBearer(auto_error=False)
