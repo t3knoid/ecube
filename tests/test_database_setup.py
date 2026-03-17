@@ -830,6 +830,68 @@ class TestFailClosedBehavior:
         finally:
             UserRoleRepository.has_any_admin = original_has_any_admin
 
+    @patch("app.services.database_service.test_connection", return_value="16.2")
+    def test_operational_error_fails_closed(
+        self, mock_test_conn, unauthenticated_client, db
+    ):
+        """An OperationalError from has_any_admin on a reachable DB must NOT
+        be treated as initial setup — fail closed (require auth → 401/403)."""
+        from app.repositories.user_role_repository import UserRoleRepository
+        from sqlalchemy.exc import OperationalError as SAOperationalError
+
+        original_has_any_admin = UserRoleRepository.has_any_admin
+
+        def _raise_operational(self):
+            raise SAOperationalError(
+                "SELECT", {}, Exception("permission denied for table user_roles")
+            )
+
+        UserRoleRepository.has_any_admin = _raise_operational
+        try:
+            resp = unauthenticated_client.post(
+                "/setup/database/test-connection",
+                json={
+                    "host": "localhost",
+                    "port": 5432,
+                    "admin_username": "postgres",
+                    "admin_password": "secret",
+                },
+            )
+            # Must NOT return 200; unauthenticated requests should be
+            # rejected because we couldn't confirm there are no admins.
+            assert resp.status_code in (401, 403, 503)
+        finally:
+            UserRoleRepository.has_any_admin = original_has_any_admin
+
+    @patch("app.services.database_service.test_connection", return_value="16.2")
+    def test_unexpected_error_fails_closed(
+        self, mock_test_conn, unauthenticated_client, db
+    ):
+        """An unexpected exception (e.g. AttributeError) from has_any_admin
+        must NOT be treated as initial setup — fail closed."""
+        from app.repositories.user_role_repository import UserRoleRepository
+
+        original_has_any_admin = UserRoleRepository.has_any_admin
+
+        def _raise_unexpected(self):
+            raise AttributeError("some coding bug")
+
+        UserRoleRepository.has_any_admin = _raise_unexpected
+        try:
+            resp = unauthenticated_client.post(
+                "/setup/database/test-connection",
+                json={
+                    "host": "localhost",
+                    "port": 5432,
+                    "admin_username": "postgres",
+                    "admin_password": "secret",
+                },
+            )
+            # Must NOT return 200
+            assert resp.status_code in (401, 403, 500, 503)
+        finally:
+            UserRoleRepository.has_any_admin = original_has_any_admin
+
 
 # ---------------------------------------------------------------------------
 # Service-level tests

@@ -908,7 +908,7 @@ Database provisioning endpoints use a dual-auth model with fail-closed semantics
 - The application role does not exist yet (PostgreSQL SQLSTATE `28000`).
 - The database is reachable but the schema has not been migrated (e.g. `user_roles` table missing).
 
-Only a truly unreachable server (connection refused, timeout, network failure) triggers the fail-closed 503.
+Only a truly unreachable server (connection refused, timeout, network failure) triggers the fail-closed 503.  Transient query errors (e.g. permission denied on the `user_roles` table) on a reachable database also fail closed — they are **not** treated as initial setup.
 
 | # | Test | How | Expected |
 |---|------|-----|----------|
@@ -938,6 +938,8 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 | 24 | Force bypasses state check | Stop PostgreSQL, `POST /setup/database/provision` with `"force": true` and admin token | Proceeds to provisioning (no 503 from state check) |
 | 25 | Unmigrated DB treated as initial setup | Drop `user_roles` table (or use a fresh empty database), `POST /setup/database/test-connection` without token | 200, request allowed (not 503) |
 | 26 | Fresh install — DB/role missing | With PostgreSQL running but the application database or role not yet created, `POST /setup/database/provision` without `force` | 200, provisioning proceeds (not 503) |
+| 27 | Fail-closed — OperationalError on reachable DB | Revoke SELECT on `user_roles` (or simulate permission denied), `POST /setup/database/test-connection` without token | 503, does NOT grant unauthenticated access |
+| 28 | Fail-closed — unexpected error | Trigger an unexpected exception from admin-check (e.g. coding bug), `POST /setup/database/test-connection` without token | 503, does NOT grant unauthenticated access |
 
 ---
 
