@@ -27,7 +27,7 @@ class LocalOnlyRoute(APIRoute):
         async def _guarded(request: Request):
             if getattr(settings, "role_resolver", "local") != "local":
                 logger.warning(
-                    "OS user/group endpoint called while role_resolver=%s; path=%s",
+                    "Local-only endpoint called while role_resolver=%s; path=%s",
                     getattr(settings, "role_resolver", None),
                     request.url.path,
                 )
