@@ -96,6 +96,16 @@ class SetOSGroupsRequest(BaseModel):
     )
 
 
+class AddOSGroupsRequest(BaseModel):
+    """Request body for ``POST /admin/os-users/{username}/groups``."""
+
+    groups: List[str] = Field(
+        ...,
+        min_length=1,
+        description="OS groups to add to the user (appends without removing existing groups)",
+    )
+
+
 # ---------------------------------------------------------------------------
 # OS group management schemas
 # ---------------------------------------------------------------------------

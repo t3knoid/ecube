@@ -36,6 +36,7 @@ from app.database import get_db
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.user_role_repository import UserRoleRepository
 from app.schemas.admin import (
+    AddOSGroupsRequest,
     CreateOSGroupRequest,
     CreateOSUserRequest,
     LogFileInfo,
@@ -404,6 +405,42 @@ def set_os_user_groups(
     )
 
 
+@router.post("/os-users/{username}/groups", response_model=OSUserResponse)
+def add_os_user_groups(
+    username: str,
+    body: AddOSGroupsRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_roles("admin")),
+) -> OSUserResponse:
+    """Add an OS user to additional groups without removing existing memberships."""
+    _ensure_local_role_resolver(request)
+    _validate_path_username(username)
+
+    try:
+        os_user = os_user_service.add_user_to_groups(username, body.groups)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except os_user_service.OSUserError as exc:
+        _raise_os_error(exc, context="Add OS user to groups")
+
+    _audit(db, "OS_USER_GROUPS_APPENDED", current_user.username, {
+        "target_user": username,
+        "groups_added": body.groups,
+        "resulting_groups": os_user.groups,
+        "path": str(request.url.path),
+    })
+
+    return OSUserResponse(
+        username=os_user.username,
+        uid=os_user.uid,
+        gid=os_user.gid,
+        home=os_user.home,
+        shell=os_user.shell,
+        groups=os_user.groups,
+    )
+
+
 # ---------------------------------------------------------------------------
 # OS group management endpoints — all require admin role
 # ---------------------------------------------------------------------------
@@ -416,7 +453,7 @@ def create_os_group(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSGroupResponse:
-    """Create an OS group."""
+    """Create a new OS group on the host system."""
     _ensure_local_role_resolver(request)
     try:
         os_group = os_user_service.create_group(body.name)
@@ -461,7 +498,7 @@ def delete_os_group(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> dict:
-    """Delete an OS group."""
+    """Delete an OS group from the host system."""
     _ensure_local_role_resolver(request)
     try:
         os_user_service.validate_group_name(name)
