@@ -34,6 +34,22 @@ def _get_env_file_path() -> str:
     return os.path.abspath(str(env_file))
 
 
+def _get_alembic_ini_path() -> str:
+    """Return the absolute path to ``alembic.ini``.
+
+    The file lives at the repository/project root, which is the CWD when
+    the application or ``alembic`` CLI is started.  Raises ``FileNotFoundError``
+    if the config file cannot be located.
+    """
+    path = os.path.abspath("alembic.ini")
+    if not os.path.isfile(path):
+        raise FileNotFoundError(
+            f"Alembic configuration not found at {path}. "
+            "Ensure the application is started from the project root directory."
+        )
+    return path
+
+
 def test_connection(
     host: str,
     port: int,
@@ -167,7 +183,7 @@ def _run_migrations(database_url: str) -> int:
     AlembicConfig = importlib.import_module("alembic.config").Config
     ScriptDirectory = importlib.import_module("alembic.script").ScriptDirectory
 
-    alembic_ini = os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini")
+    alembic_ini = _get_alembic_ini_path()
     alembic_cfg = AlembicConfig(alembic_ini)
     alembic_cfg.set_main_option("sqlalchemy.url", database_url)
 
@@ -224,9 +240,7 @@ def get_database_status() -> Dict[str, Any]:
             AlembicConfig = importlib.import_module("alembic.config").Config
             ScriptDirectory = importlib.import_module("alembic.script").ScriptDirectory
 
-            alembic_ini = os.path.join(
-                os.path.dirname(os.path.dirname(__file__)), "alembic.ini"
-            )
+            alembic_ini = _get_alembic_ini_path()
             alembic_cfg = AlembicConfig(alembic_ini)
             script = ScriptDirectory.from_config(alembic_cfg)
 
