@@ -418,11 +418,55 @@ class TestRedisBackendStoresServerSide:
         failing.get.side_effect = ConnectionError("read failed")
         failing.setex = MagicMock()
         app = self._make_app(failing)
-        client = TestClient(app, cookies={"sid": "bogus-id"})
+        valid_id = "A" * 43  # valid format
+        client = TestClient(app, cookies={"sid": valid_id})
 
         resp = client.get("/get")
         assert resp.status_code == 200
         assert resp.json() == {"user": None}
+
+    def test_missing_redis_key_generates_new_session_id(self):
+        """Cookie present but Redis key absent must not reuse the cookie ID
+        (prevents session fixation)."""
+        fake = _FakeRedis()  # empty — no keys at all
+        app = self._make_app(fake)
+        attacker_id = "attacker-chosen-id-that-is-long-enough1"
+        client = TestClient(app, cookies={"sid": attacker_id})
+
+        resp = client.get("/set")
+        assert resp.status_code == 200
+
+        # The stored key must NOT use the attacker-chosen ID
+        assert f"ecube:session:{attacker_id}" not in fake
+        assert len(fake) == 1
+        stored_key = next(iter(fake))
+        assert stored_key.startswith("ecube:session:")
+        actual_id = stored_key.removeprefix("ecube:session:")
+        assert actual_id != attacker_id
+
+    def test_malformed_cookie_ignored(self):
+        """A session cookie with invalid characters is silently ignored."""
+        fake = _FakeRedis()
+        app = self._make_app(fake)
+        client = TestClient(app, cookies={"sid": "../../../etc/passwd"})
+
+        resp = client.get("/set")
+        assert resp.status_code == 200
+        assert len(fake) == 1
+        key = next(iter(fake))
+        assert "etc/passwd" not in key
+
+    def test_too_short_cookie_ignored(self):
+        """A cookie value shorter than 22 chars is rejected."""
+        fake = _FakeRedis()
+        app = self._make_app(fake)
+        client = TestClient(app, cookies={"sid": "short"})
+
+        resp = client.get("/set")
+        assert resp.status_code == 200
+        assert len(fake) == 1
+        key = next(iter(fake))
+        assert "short" not in key
 
 
 class TestRedisSessionNestedMutations:
