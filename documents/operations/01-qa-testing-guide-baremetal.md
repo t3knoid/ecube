@@ -902,7 +902,13 @@ Setup endpoints are unauthenticated and can only succeed once.
 
 ### 12.11 Database Provisioning API
 
-Database provisioning endpoints use a dual-auth model with fail-closed semantics: unauthenticated during initial setup, admin-only after, and 503 when the database is unreachable without a valid admin JWT.  A reachable database whose schema has not been migrated yet (e.g. `user_roles` table missing) is treated as initial setup, not as unreachable.
+Database provisioning endpoints use a dual-auth model with fail-closed semantics: unauthenticated during initial setup, admin-only after, and 503 when the database server is unreachable without a valid admin JWT.  The following conditions are treated as "not provisioned" (allowing initial provisioning to proceed without `force`):
+
+- The target database does not exist yet (PostgreSQL SQLSTATE `3D000`).
+- The application role does not exist yet (PostgreSQL SQLSTATE `28000`).
+- The database is reachable but the schema has not been migrated (e.g. `user_roles` table missing).
+
+Only a truly unreachable server (connection refused, timeout, network failure) triggers the fail-closed 503.
 
 | # | Test | How | Expected |
 |---|------|-----|----------|
@@ -931,6 +937,7 @@ Database provisioning endpoints use a dual-auth model with fail-closed semantics
 | 23 | Fail-closed — provision state unknown | Stop PostgreSQL, `POST /setup/database/provision` without `"force": true` | 503, cannot determine provisioning state |
 | 24 | Force bypasses state check | Stop PostgreSQL, `POST /setup/database/provision` with `"force": true` and admin token | Proceeds to provisioning (no 503 from state check) |
 | 25 | Unmigrated DB treated as initial setup | Drop `user_roles` table (or use a fresh empty database), `POST /setup/database/test-connection` without token | 200, request allowed (not 503) |
+| 26 | Fresh install — DB/role missing | With PostgreSQL running but the application database or role not yet created, `POST /setup/database/provision` without `force` | 200, provisioning proceeds (not 503) |
 
 ---
 
