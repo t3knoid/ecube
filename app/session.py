@@ -80,7 +80,7 @@ class RedisSessionMiddleware:
         if cookie_value and self._is_valid_session_id(cookie_value):
             key = self._KEY_PREFIX + cookie_value
             try:
-                raw = self.redis.get(key)
+                raw = await self.redis.get(key)
                 if raw is not None:
                     session_id = cookie_value
                     initial_data = json.loads(raw)
@@ -104,7 +104,7 @@ class RedisSessionMiddleware:
                 if not session and session_id is not None:
                     # Session was cleared — delete from Redis and expire cookie
                     try:
-                        self.redis.delete(self._KEY_PREFIX + session_id)
+                        await self.redis.delete(self._KEY_PREFIX + session_id)
                     except Exception:
                         pass
                     headers = MutableHeaders(scope=message)
@@ -123,7 +123,7 @@ class RedisSessionMiddleware:
                     key = self._KEY_PREFIX + sid
                     try:
                         payload = json.dumps(dict(session))
-                        self.redis.setex(key, self.max_age, payload)
+                        await self.redis.setex(key, self.max_age, payload)
                     except Exception:
                         logger.warning(
                             "Failed to persist session %s to Redis",
@@ -187,14 +187,14 @@ def _redact_url(url: str) -> str:
         return "<unparseable>"
 
 
-def _try_redis_backend() -> "object | None":
-    """Attempt to connect to Redis and return a client object.
+async def _try_redis_backend() -> "object | None":
+    """Attempt to connect to Redis and return an async client object.
 
     Returns ``None`` when Redis is unavailable or the ``redis`` package is
     not installed, allowing the caller to fall back to cookie-based sessions.
     """
     try:
-        import redis as redis_lib  # optional dependency
+        import redis.asyncio as aioredis  # optional dependency
     except ImportError:
         logger.warning(
             "SESSION_BACKEND=redis but the 'redis' package is not installed; "
@@ -213,12 +213,12 @@ def _try_redis_backend() -> "object | None":
     safe_url = _redact_url(url)
 
     try:
-        client = redis_lib.Redis.from_url(
+        client = aioredis.Redis.from_url(
             url,
             socket_connect_timeout=settings.redis_connection_timeout,
             socket_keepalive=settings.redis_socket_keepalive,
         )
-        client.ping()
+        await client.ping()
         logger.info("Redis session backend connected: %s", safe_url)
         return client
     except Exception:
@@ -328,7 +328,7 @@ def mount_session_middleware(application: "FastAPI") -> None:
     application.state.session_redis_client = None
 
 
-def init_session_backend(application: "FastAPI") -> None:
+async def init_session_backend(application: "FastAPI") -> None:
     """Initialise the session backend.  Called during lifespan startup.
 
     For the ``cookie`` backend this is a no-op.  For ``redis`` it attempts a
@@ -339,7 +339,7 @@ def init_session_backend(application: "FastAPI") -> None:
         logger.info("Session backend: cookie")
         return
 
-    redis_client = _try_redis_backend()
+    redis_client = await _try_redis_backend()
     if redis_client is None:
         logger.info("Session backend: cookie (Redis fallback)")
         return
@@ -349,12 +349,12 @@ def init_session_backend(application: "FastAPI") -> None:
     logger.info("Session backend: redis")
 
 
-def close_session_backend(application: "FastAPI") -> None:
+async def close_session_backend(application: "FastAPI") -> None:
     """Shut down the session backend.  Called during lifespan shutdown."""
     redis_client = getattr(application.state, "session_redis_client", None)
     if redis_client is not None:
         try:
-            redis_client.close()
+            await redis_client.aclose()
             logger.info("Redis session client closed")
         except Exception:
             logger.warning(
