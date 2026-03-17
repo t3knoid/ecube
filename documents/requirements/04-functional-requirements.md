@@ -6,10 +6,32 @@ ECUBE must:
 
 - Detect drive insertion/removal
 - Determine drive state
+- Detect filesystem type (ext4, exFAT, NTFS, FAT32, or unformatted/unknown)
+- Format unformatted or incorrectly formatted drives on demand
 - Initialize drive for a job
 - Assign drive to a job
 - Prepare drive for eject (flush + unmount)
 - Track drive usage history
+
+### 4.1.1 Filesystem Detection
+
+On drive insertion or discovery refresh, ECUBE must:
+
+- Probe the drive's filesystem type using OS tools (e.g., `blkid`, `lsblk`)
+- Store the detected filesystem type in the `usb_drives` record
+- Report unformatted (no recognizable filesystem) drives as `unformatted`
+- Update the filesystem type whenever a drive is reformatted or re-detected
+
+### 4.1.2 Drive Formatting
+
+ECUBE must provide an API to format a drive with a specified filesystem:
+
+- Supported filesystem types: `ext4`, `exfat`
+- Formatting must only be allowed on drives in `AVAILABLE` state
+- The drive must not be mounted before formatting begins
+- After successful formatting, the `filesystem_type` field must be updated
+- All format operations must be audit-logged with actor, drive, and filesystem type
+- Format failures must be audit-logged with error details
 
 ## 4.2 Project Isolation (Critical Requirement)
 
