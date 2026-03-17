@@ -373,6 +373,8 @@ def _reinitialize_engine(
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
+    from app.config import settings
+
     old_engine = db_module.engine
     try:
         old_engine.dispose()
@@ -383,7 +385,7 @@ def _reinitialize_engine(
         database_url,
         pool_size=pool_size,
         max_overflow=pool_max_overflow,
-        pool_recycle=db_module.engine.pool._recycle,
+        pool_recycle=settings.db_pool_recycle_seconds,
     )
     db_module.engine = new_engine
     db_module.SessionLocal = sessionmaker(
