@@ -403,7 +403,7 @@ All endpoints require `admin` role and are only available when `role_resolver = 
 
 ### `POST /admin/os-users`
 
-Create an OS user, set password, and optionally add to groups and assign DB roles.
+Create an OS user, set password, and add to groups and optionally assign DB roles. At least one `ecube-*` group is required so the account remains manageable through the API.
 
 **Roles:** `admin`
 
@@ -423,7 +423,7 @@ Create an OS user, set password, and optionally add to groups and assign DB role
 **Error responses:**
 
 - `409 Conflict` — User already exists
-- `422 Unprocessable Entity` — Invalid username, empty password, or reserved username
+- `422 Unprocessable Entity` — Invalid username, empty password, reserved username, or no `ecube-*` group provided
 
 **Audit events:** `OS_USER_CREATED`
 
