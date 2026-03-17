@@ -74,7 +74,7 @@ async def lifespan(application: FastAPI):
     # ------------------------------------------------------------------
     # Startup: initialise session backend (Redis ping if configured)
     # ------------------------------------------------------------------
-    init_session_backend(application)
+    await init_session_backend(application)
 
     # ------------------------------------------------------------------
     # Startup: purge expired audit logs
@@ -132,7 +132,7 @@ async def lifespan(application: FastAPI):
         except asyncio.CancelledError:
             pass
 
-    close_session_backend(application)
+    await close_session_backend(application)
 
     logger.info("ECUBE application shutting down")
 
