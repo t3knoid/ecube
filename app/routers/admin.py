@@ -58,16 +58,24 @@ def _raise_os_error(exc: os_user_service.OSUserError, *, context: str = "OS oper
     """Map an :class:`OSUserError` to an appropriate HTTP error and raise it.
 
     * ``"already exists"`` → 409 Conflict
-    * ``"does not exist"`` → 404 Not Found
+    * ``"Group ... does not exist"`` → 422 Unprocessable Entity
+    * other ``"does not exist"`` → 404 Not Found
     * ``"timed out"``      → 504 Gateway Timeout
     * everything else      → 500 Internal Server Error
     """
     msg = exc.message or str(exc) or f"{context} failed"
     lowered = msg.lower()
+    stripped = msg.lstrip()
 
     if "already exists" in lowered:
         raise HTTPException(status_code=409, detail=msg)
     if "does not exist" in lowered:
+        # Distinguish between missing groups (input validation) and other entities.
+        # Messages for group validation errors are expected to start with "Group ".
+        if stripped.lower().startswith("group "):
+            # Request body referenced a non-existent group: the endpoint exists,
+            # but the provided value is invalid.
+            raise HTTPException(status_code=422, detail=msg)
         raise HTTPException(status_code=404, detail=msg)
     if "timed out" in lowered:
         raise HTTPException(status_code=504, detail=msg)
