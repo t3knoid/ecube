@@ -14,7 +14,7 @@
 5. [Create QA Test Users and Groups](#5-create-qa-test-users-and-groups)
 6. [Configure the Environment (Optional)](#6-configure-the-environment-optional)
 7. [Generate TLS Certificates](#7-generate-tls-certificates)
-8. [Run Database Migrations](#8-run-database-migrations)
+8. [Initialize the Database](#8-initialize-the-database)
 9. [Start the Service](#9-start-the-service)
 10. [Authenticate and Obtain Tokens](#10-authenticate-and-obtain-tokens)
 11. [API Test Scenarios](#11-api-test-scenarios)
@@ -226,12 +226,38 @@ sudo chmod 644 /opt/ecube/certs/cert.pem
 
 ---
 
-## 8. Run Database Migrations
+## 8. Initialize the Database
+
+There are two ways to create the application database and run migrations.
+Choose **one**:
+
+### Option A — CLI (Alembic directly)
+
+Run migrations from the command line. This requires that the database, user,
+and `.env` `DATABASE_URL` have already been configured manually (see step 6).
 
 ```bash
 cd /opt/ecube
 sudo -u ecube /opt/ecube/venv/bin/alembic upgrade head
 ```
+
+Proceed to **step 9** to start the service.
+
+### Option B — API-based provisioning
+
+Use the `/setup/database/provision` endpoint to create the database user,
+database, and run migrations in one step. This path requires the service to
+be running first, so **skip ahead to step 9**, start the service, then return
+here.
+
+Once the service is listening, follow the curl examples in
+[section 11.10 — Database Provisioning API](#1110-database-provisioning-api)
+to test connectivity and provision the database. The endpoint is
+unauthenticated during initial setup (before any admin user exists), so no
+token is needed for the first provision.
+
+> **Note:** After provisioning writes `DATABASE_URL` to `.env`, it
+> reconfigures the running engine in-place — no service restart is required.
 
 ---
 
@@ -596,9 +622,70 @@ curl -sk -X POST https://localhost:8443/setup/initialize \
 # Expected: 409 Conflict
 ```
 
+### 11.10 Database Provisioning API
+
+> **Prerequisite:** The service must be running (step 9). If you chose
+> step 8 Option B (API-based provisioning), you should already be here.
+
+These endpoints support API-based PostgreSQL database setup.  During initial setup (before any admin exists), `test-connection` and `provision` are unauthenticated.  After setup, they require the `admin` role.
+
+```bash
+# Test PostgreSQL connectivity (unauthenticated during initial setup)
+curl -sk -X POST https://localhost:8443/setup/database/test-connection \
+  -H "Content-Type: application/json" \
+  -d '{"host": "localhost", "port": 5432, "admin_username": "postgres", "admin_password": "YourPostgresPass"}' | jq
+# Expected: 200, {"status": "ok", "server_version": "16.x"}
+
+# Provision database (creates user, database, runs migrations)
+curl -sk -X POST https://localhost:8443/setup/database/provision \
+  -H "Content-Type: application/json" \
+  -d '{"host": "localhost", "port": 5432, "admin_username": "postgres", "admin_password": "YourPostgresPass", "app_database": "ecube", "app_username": "ecube", "app_password": "ecube123"}' | jq
+# Expected: 200, {"status": "provisioned", "database": "ecube", "user": "ecube", "migrations_applied": 4}
+
+# Re-provision attempt (blocked if already provisioned)
+curl -sk -X POST https://localhost:8443/setup/database/provision \
+  -H "Content-Type: application/json" \
+  -d '{"host": "localhost", "port": 5432, "admin_username": "postgres", "admin_password": "YourPostgresPass", "app_database": "ecube", "app_username": "ecube", "app_password": "ecube123"}' | jq
+# Expected: 409, {"message": "Database is already provisioned. Set 'force' to true to re-provision."}
+
+# Force re-provision (admin only, use with caution)
+curl -sk -X POST https://localhost:8443/setup/database/provision \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"host": "localhost", "port": 5432, "admin_username": "postgres", "admin_password": "YourPostgresPass", "app_database": "ecube", "app_username": "ecube", "app_password": "ecube123", "force": true}' | jq
+# Expected: 200, {"status": "provisioned", ...}
+
+# Check database status (requires admin token)
+curl -sk https://localhost:8443/setup/database/status \
+  -H "Authorization: Bearer $TOKEN" | jq
+# Expected: 200, {"connected": true, "database": "ecube", ...}
+
+# Update database settings (requires admin token, partial update)
+curl -sk -X PUT https://localhost:8443/setup/database/settings \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"pool_size": 10, "pool_max_overflow": 20}' | jq
+# Expected: 200, {"status": "updated", "host": "localhost", ...}
+
+# Test connection after setup — requires admin token
+curl -sk -X POST https://localhost:8443/setup/database/test-connection \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"host": "localhost", "port": 5432, "admin_username": "postgres", "admin_password": "YourPostgresPass"}' | jq
+# Expected: 200, {"status": "ok", ...}
+
+# SSRF-safe host validation
+curl -sk -X POST https://localhost:8443/setup/database/test-connection \
+  -H "Content-Type: application/json" \
+  -d '{"host": "http://evil.com", "port": 5432, "admin_username": "postgres", "admin_password": "x"}' | jq
+# Expected: 422, host must be a hostname or IP address
+```
+
 ---
 
 ## 12. QA Test Cases
+
+> **Tracking spreadsheet:** A trackable version of these test cases with columns for Status, Tester, Date, and Notes is available in [`ecube-qa-test-cases.xlsx`](ecube-qa-test-cases.xlsx) in this directory.
 
 ### 12.1 Login Endpoint (`POST /auth/token`)
 
@@ -812,6 +899,50 @@ Setup endpoints are unauthenticated and can only succeed once.
 | 7 | Unsafe password chars | `POST /setup/initialize` with password containing newline or colon | 422, unsafe characters |
 | 8 | Login as initialized admin | `POST /auth/token` with the admin credentials from step 2 | 200, JWT contains `admin` role |
 | 9 | SYSTEM_INITIALIZED audit log | `GET /audit?action=SYSTEM_INITIALIZED` | Audit entry with actor |
+
+### 12.11 Database Provisioning API
+
+Database provisioning endpoints use a dual-auth model with fail-closed semantics: unauthenticated during initial setup, admin-only after, and 503 when the database server is unreachable without a valid admin JWT.  The following conditions are treated as "not provisioned" (allowing initial provisioning to proceed without `force`):
+
+- The target database does not exist yet (PostgreSQL SQLSTATE `3D000`).
+- The application role does not exist yet (PostgreSQL SQLSTATE `28000`).
+- The database is reachable but the schema has not been migrated (e.g. `user_roles` table missing).
+
+Only a truly unreachable server (connection refused, timeout, network failure) triggers the fail-closed 503.  Transient query errors (e.g. permission denied on the `user_roles` table) on a reachable database also fail closed — they are **not** treated as initial setup.
+
+| # | Test | How | Expected |
+|---|------|-----|----------|
+| 1 | Test connection — success | `POST /setup/database/test-connection` with valid PostgreSQL credentials | 200, `{"status": "ok", "server_version": "..."}` |
+| 2 | Test connection — bad host | `POST /setup/database/test-connection` with unreachable host | 400, connection error |
+| 3 | Test connection — SSRF host | `POST /setup/database/test-connection` with `"host": "http://evil.com"` | 422, invalid host |
+| 4 | Test connection — port out of range | `POST /setup/database/test-connection` with `"port": 99999` | 422 |
+| 5 | Provision — success | `POST /setup/database/provision` with valid credentials | 200, returns database, user, migrations_applied |
+| 6 | Provision — bad admin credentials | `POST /setup/database/provision` with wrong admin password | 400, connection error |
+| 7 | Provision — invalid database name | `POST /setup/database/provision` with `"app_database": "drop;--"` | 422, invalid identifier |
+| 8 | Status — connected | `GET /setup/database/status` with admin token | 200, `connected: true`, migration info |
+| 9 | Status — requires auth | `GET /setup/database/status` without token | 401 |
+| 10 | Status — requires admin | `GET /setup/database/status` with processor token | 403 |
+| 11 | Settings update — success | `PUT /setup/database/settings` with valid partial update | 200, `{"status": "updated", ...}` |
+| 12 | Settings update — bad connection | `PUT /setup/database/settings` with unreachable host | 400, connection test failed |
+| 13 | Settings update — empty body | `PUT /setup/database/settings` with `{}` | 422, at least one field required |
+| 14 | Settings update — requires admin | `PUT /setup/database/settings` with processor token | 403 |
+| 15 | Auth after setup — test-connection | `POST /setup/database/test-connection` without token (after admin exists) | 401 |
+| 16 | Auth after setup — provision | `POST /setup/database/provision` without token (after admin exists) | 401 |
+| 17 | Password redaction | `POST /setup/database/provision` and check response | No password in response body |
+| 18 | Re-provision blocked | `POST /setup/database/provision` after successful provisioning (no `force`) | 409, already provisioned |
+| 19 | Force re-provision (admin) | `POST /setup/database/provision` with `"force": true` and admin token after successful provisioning | 200, returns database, user, migrations_applied |
+| 20 | Force rejected unauthenticated | `POST /setup/database/provision` with `"force": true` during initial setup (no admin exists) | 403, force requires admin |
+| 21 | Fail-closed — DB unreachable, no JWT | Stop PostgreSQL, `POST /setup/database/test-connection` without token | 503, database unavailable message |
+| 22 | Fail-closed — DB unreachable, admin JWT | Stop PostgreSQL, `POST /setup/database/test-connection` with valid admin token | Request proceeds (not blocked by 503) |
+| 23 | Fail-closed — provision state unknown | Stop PostgreSQL, `POST /setup/database/provision` without `"force": true` | 503, cannot determine provisioning state |
+| 24 | Force bypasses state check | Stop PostgreSQL, `POST /setup/database/provision` with `"force": true` and admin token | Proceeds to provisioning (no 503 from state check) |
+| 25 | Unmigrated DB treated as initial setup | Drop `user_roles` table (or use a fresh empty database), `POST /setup/database/test-connection` without token | 200, request allowed (not 503) |
+| 26 | Fresh install — DB/role missing | With PostgreSQL running but the application database or role not yet created, `POST /setup/database/provision` without `force` | 200, provisioning proceeds (not 503) |
+| 27 | Fail-closed — OperationalError on reachable DB | Revoke SELECT on `user_roles` (or simulate permission denied), `POST /setup/database/test-connection` without token | 503, does NOT grant unauthenticated access |
+| 28 | Fail-closed — unexpected error | Trigger an unexpected exception from admin-check (e.g. coding bug), `POST /setup/database/test-connection` without token | 503, does NOT grant unauthenticated access |
+| 29 | Provision — migration failure | `POST /setup/database/provision` with valid credentials but a broken Alembic migration (e.g. conflicting schema) | 500, "migration failed" message; `.env` not updated, engine not swapped |
+| 30 | Provision — .env write failure | `POST /setup/database/provision` after making `.env` read-only (or disk full) | 500, "failed to persist" message; engine not swapped |
+| 31 | Provision — engine reinit failure | `POST /setup/database/provision` while another reinit is in progress (lock contention) | 500, "engine could not be switched" message; `.env` already written |
 
 ---
 
