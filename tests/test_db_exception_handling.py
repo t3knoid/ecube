@@ -9,6 +9,8 @@ Covers the high-risk multi-step sequences identified in issue #82:
 
 from unittest.mock import MagicMock, patch
 
+import os
+import tempfile
 import pytest
 
 from app.models.hardware import DriveState, UsbDrive
@@ -356,7 +358,6 @@ class TestCopyEngineDBFailures:
         db.commit()
         ef_id = ef.id
 
-        import tempfile, os
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write("hello")
             src_path = f.name
