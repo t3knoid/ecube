@@ -43,7 +43,11 @@ class UserRoleRepository:
         )
         for role in roles:
             self.db.add(UserRole(username=username, role=role))
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
         return roles
 
     def delete_roles(self, username: str) -> int:
@@ -53,7 +57,11 @@ class UserRoleRepository:
             .filter(UserRole.username == username)
             .delete(synchronize_session=False)
         )
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
         return count
 
     def list_users(self) -> List[dict]:

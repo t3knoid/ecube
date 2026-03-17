@@ -25,7 +25,14 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None)
         local_mount_point=mount_data.local_mount_point,
         status=MountStatus.UNMOUNTED,
     )
-    mount_repo.add(mount)
+    try:
+        mount_repo.add(mount)
+    except Exception:
+        logger.exception("DB commit failed while creating mount record")
+        raise HTTPException(
+            status_code=500,
+            detail="Database error while creating mount record",
+        )
 
     _mount_error = None
     try:
@@ -46,22 +53,47 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None)
         else:
             mount.status = MountStatus.ERROR
             _mount_error = (result.stderr or result.stdout or "").strip() or "mount failed"
-        mount_repo.save(mount)
+        try:
+            mount_repo.save(mount)
+        except Exception:
+            logger.exception(
+                "DB commit failed while updating mount status after OS mount for mount %s",
+                mount.id,
+            )
+            # At this point the OS mount may have succeeded but the database did not
+            # reflect the new status. Surface this as a server error rather than
+            # returning an inconsistent mount object to the caller.
+            raise HTTPException(
+                status_code=500,
+                detail="Database error while updating mount status after OS mount; mount may be active at OS level.",
+            )
     except Exception as exc:
+        if isinstance(exc, HTTPException):
+            # Re-raise HTTPExceptions so that intended HTTP error responses are not swallowed
+            raise
         mount.status = MountStatus.ERROR
-        mount_repo.save(mount)
+        try:
+            mount_repo.save(mount)
+        except Exception:
+            logger.exception(
+                "DB commit failed while recording mount error for mount %s",
+                mount.id,
+            )
         _mount_error = str(exc)
 
-    audit_repo.add(
-        action="MOUNT_ADDED",
-        user=actor,
-        details={
-            "mount_id": mount.id,
-            "remote_path": mount_data.remote_path,
-            "status": mount.status.value,
-            "error": _mount_error,
-        },
-    )
+    try:
+        audit_repo.add(
+            action="MOUNT_ADDED",
+            user=actor,
+            details={
+                "mount_id": mount.id,
+                "remote_path": mount_data.remote_path,
+                "status": mount.status.value,
+                "error": _mount_error,
+            },
+        )
+    except Exception:
+        logger.exception("Failed to write audit log for MOUNT_ADDED")
     return mount
 
 
@@ -85,12 +117,22 @@ def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None) -> Non
         # operator can manually clean up the mount point if needed.
         pass
 
-    audit_repo.add(
-        action="MOUNT_REMOVED",
-        user=actor,
-        details={"mount_id": mount_id, "local_mount_point": mount.local_mount_point},
-    )
-    mount_repo.delete(mount)
+    try:
+        audit_repo.add(
+            action="MOUNT_REMOVED",
+            user=actor,
+            details={"mount_id": mount_id, "local_mount_point": mount.local_mount_point},
+        )
+    except Exception:
+        logger.exception("Failed to write audit log for MOUNT_REMOVED")
+    try:
+        mount_repo.delete(mount)
+    except Exception:
+        logger.exception("DB commit failed while deleting mount record %s", mount_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Database error while removing mount record",
+        )
 
 
 def list_mounts(db: Session):
@@ -124,15 +166,25 @@ def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None) -> N
         mount.status = MountStatus.ERROR
 
     mount.last_checked_at = datetime.now(timezone.utc)
-    mount = mount_repo.save(mount)
+    try:
+        mount = mount_repo.save(mount)
+    except Exception:
+        logger.exception("DB commit failed while saving mount validation for mount %s", mount_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Database error while saving mount validation",
+        )
 
-    audit_repo.add(
-        action="MOUNT_VALIDATED",
-        user=actor,
-        details={
-            "mount_id": mount_id,
-            "local_mount_point": mount.local_mount_point,
-            "status": mount.status.value,
-        },
-    )
+    try:
+        audit_repo.add(
+            action="MOUNT_VALIDATED",
+            user=actor,
+            details={
+                "mount_id": mount_id,
+                "local_mount_point": mount.local_mount_point,
+                "status": mount.status.value,
+            },
+        )
+    except Exception:
+        logger.exception("Failed to write audit log for MOUNT_VALIDATED")
     return mount
