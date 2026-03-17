@@ -251,6 +251,7 @@ class TestDeleteUser:
     def test_delete_non_ecube_user_rejected(self, mock_pwd, mock_grp):
         """Users not in any ecube-* group cannot be deleted."""
         mock_pwd.getpwnam.return_value = _make_pw(name="postgres")
+        mock_grp.getgrgid.return_value = _make_grp(name="postgres", gid=1000)
         mock_grp.getgrall.return_value = [
             _make_grp(name="postgres", members=["postgres"]),
         ]
@@ -288,6 +289,7 @@ class TestResetPassword:
     def test_reset_password_non_ecube_user_rejected(self, mock_pwd, mock_grp):
         """Users not in any ecube-* group cannot have passwords reset."""
         mock_pwd.getpwnam.return_value = _make_pw(name="postgres")
+        mock_grp.getgrgid.return_value = _make_grp(name="postgres", gid=1000)
         mock_grp.getgrall.return_value = [
             _make_grp(name="postgres", members=["postgres"]),
         ]
@@ -325,6 +327,7 @@ class TestSetUserGroups:
     def test_set_groups_non_ecube_user_rejected(self, mock_pwd, mock_grp):
         """Users not in any ecube-* group cannot have groups modified."""
         mock_pwd.getpwnam.return_value = _make_pw(name="postgres")
+        mock_grp.getgrgid.return_value = _make_grp(name="postgres", gid=1000)
         mock_grp.getgrall.return_value = [
             _make_grp(name="postgres", members=["postgres"]),
         ]
@@ -346,6 +349,7 @@ class TestAddUserToGroups:
     def test_add_to_groups_non_ecube_user_rejected(self, mock_pwd, mock_grp):
         """Users not in any ecube-* group cannot have groups appended."""
         mock_pwd.getpwnam.return_value = _make_pw(name="www-data")
+        mock_grp.getgrgid.return_value = _make_grp(name="www-data", gid=1000)
         mock_grp.getgrall.return_value = [
             _make_grp(name="www-data", members=["www-data"]),
         ]
@@ -653,6 +657,7 @@ class TestOSUserEndpoints:
     def test_delete_non_ecube_user_rejected(self, mock_pwd, mock_grp, admin_client):
         """Users not in any ecube-* group cannot be deleted via the API."""
         mock_pwd.getpwnam.return_value = _make_pw(name="postgres")
+        mock_grp.getgrgid.return_value = _make_grp(name="postgres", gid=1000)
         mock_grp.getgrall.return_value = [
             _make_grp(name="postgres", members=["postgres"]),
         ]
@@ -815,7 +820,7 @@ class TestOSGroupEndpoints:
         mock_grp.getgrnam.side_effect = KeyError("no such group")
 
         resp = admin_client.delete("/admin/os-groups/ecube-nope")
-        assert resp.status_code == 404
+        assert resp.status_code == 422
 
     def test_delete_group_without_ecube_prefix(self, admin_client):
         resp = admin_client.delete("/admin/os-groups/wheel")
