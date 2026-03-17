@@ -194,9 +194,14 @@ def is_database_provisioned() -> bool:
     successfully and the ``alembic_version`` table contains a revision,
     indicating that provisioning has already been completed.
 
+    Returns ``False`` when the target database or application role does
+    not exist yet (common on a fresh install where the URL points to
+    resources that have not been created).
+
     Raises :class:`~app.exceptions.DatabaseStatusUnknownError` when the
-    database is unreachable, so callers can fail closed rather than
-    incorrectly assuming the database is unprovisioned.
+    database server is unreachable for other reasons (transient outage,
+    network failure), so callers can fail closed rather than incorrectly
+    assuming the database is unprovisioned.
     """
     from app.config import settings
 
@@ -242,18 +247,41 @@ def _run_migrations(database_url: str) -> int:
 def _get_current_revision(database_url: str) -> Optional[str]:
     """Read the current Alembic revision from the database, or ``None``.
 
-    Returns ``None`` when the ``alembic_version`` table does not exist or
-    contains no rows (i.e. the database has not been provisioned).
+    Returns ``None`` when:
+    - the ``alembic_version`` table does not exist or contains no rows
+      (database exists but has not been provisioned), **or**
+    - the target database does not exist (PostgreSQL ``3D000``), **or**
+    - the application role does not exist (PostgreSQL ``28000``).
+
+    The last two cases arise on a true first-run install where
+    ``settings.database_url`` points to a database/user that has not been
+    created yet.  Treating them as "not provisioned" allows the
+    ``/setup/database/provision`` endpoint to proceed without ``force``.
 
     Raises :class:`~app.exceptions.DatabaseStatusUnknownError` when a
-    connection-level error prevents the check (transient outage,
-    misconfigured URL, authentication failure, etc.).
+    connection-level error prevents the check (transient outage, server
+    unreachable, authentication failure with an *existing* role, etc.).
     """
     from app.exceptions import DatabaseStatusUnknownError
+
+    # PostgreSQL SQLSTATE codes that indicate the target DB/role has not
+    # been created yet — i.e. the system is genuinely unprovisioned.
+    _NOT_PROVISIONED_PGCODES = frozenset({
+        "3D000",  # invalid_catalog_name  – database does not exist
+        "28000",  # invalid_authorization_specification – role does not exist
+    })
 
     try:
         conn = psycopg2.connect(database_url, connect_timeout=5)
     except psycopg2.OperationalError as exc:
+        pgcode = getattr(exc, "pgcode", None)
+        if pgcode in _NOT_PROVISIONED_PGCODES:
+            logger.info(
+                "Target database/role does not exist (SQLSTATE %s); "
+                "treating as not provisioned.",
+                pgcode,
+            )
+            return None
         raise DatabaseStatusUnknownError(
             f"Cannot connect to database to verify provisioning state: {exc}"
         ) from exc
