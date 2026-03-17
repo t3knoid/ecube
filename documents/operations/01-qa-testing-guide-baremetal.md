@@ -14,7 +14,7 @@
 5. [Create QA Test Users and Groups](#5-create-qa-test-users-and-groups)
 6. [Configure the Environment (Optional)](#6-configure-the-environment-optional)
 7. [Generate TLS Certificates](#7-generate-tls-certificates)
-8. [Run Database Migrations](#8-run-database-migrations)
+8. [Initialize the Database](#8-initialize-the-database)
 9. [Start the Service](#9-start-the-service)
 10. [Authenticate and Obtain Tokens](#10-authenticate-and-obtain-tokens)
 11. [API Test Scenarios](#11-api-test-scenarios)
@@ -226,12 +226,38 @@ sudo chmod 644 /opt/ecube/certs/cert.pem
 
 ---
 
-## 8. Run Database Migrations
+## 8. Initialize the Database
+
+There are two ways to create the application database and run migrations.
+Choose **one**:
+
+### Option A — CLI (Alembic directly)
+
+Run migrations from the command line. This requires that the database, user,
+and `.env` `DATABASE_URL` have already been configured manually (see step 6).
 
 ```bash
 cd /opt/ecube
 sudo -u ecube /opt/ecube/venv/bin/alembic upgrade head
 ```
+
+Proceed to **step 9** to start the service.
+
+### Option B — API-based provisioning
+
+Use the `/setup/database/provision` endpoint to create the database user,
+database, and run migrations in one step. This path requires the service to
+be running first, so **skip ahead to step 9**, start the service, then return
+here.
+
+Once the service is listening, follow the curl examples in
+[section 11.10 — Database Provisioning API](#1110-database-provisioning-api)
+to test connectivity and provision the database. The endpoint is
+unauthenticated during initial setup (before any admin user exists), so no
+token is needed for the first provision.
+
+> **Note:** After provisioning writes `DATABASE_URL` to `.env`, it
+> reconfigures the running engine in-place — no service restart is required.
 
 ---
 
@@ -597,6 +623,9 @@ curl -sk -X POST https://localhost:8443/setup/initialize \
 ```
 
 ### 11.10 Database Provisioning API
+
+> **Prerequisite:** The service must be running (step 9). If you chose
+> step 8 Option B (API-based provisioning), you should already be here.
 
 These endpoints support API-based PostgreSQL database setup.  During initial setup (before any admin exists), `test-connection` and `provision` are unauthenticated.  After setup, they require the `admin` role.
 
