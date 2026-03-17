@@ -102,7 +102,7 @@ ECUBE consists of three components:
 
 - HTTPS network access to identity provider (LDAP, OIDC provider, or local authentication)
 - NFS/SMB mount access to evidence source shares
-- PostgreSQL database over network or localhost
+- PostgreSQL 14+ database over network or localhost
 
 ### Software Requirements
 
@@ -231,27 +231,68 @@ sudo systemctl daemon-reload
 
 #### 5. Initialize Database
 
+Database setup can be done manually or via the API-based provisioning endpoint.
+Choose **one** option:
+
+**Option A: API-Based Database Provisioning (Recommended)**
+
+This path requires the service to be running. Skip ahead to **step 7** to
+start the service, then return here.
+
+Once the service is listening, use the provisioning endpoints (unauthenticated
+during initial setup — no token needed):
+
+```bash
+# Test PostgreSQL connectivity
+curl -k -X POST https://localhost:8443/setup/database/test-connection \
+  -H "Content-Type: application/json" \
+  -d '{"host": "localhost", "port": 5432, "admin_username": "postgres", "admin_password": "secret"}'
+
+# Provision the application database, user, and run migrations
+curl -k -X POST https://localhost:8443/setup/database/provision \
+  -H "Content-Type: application/json" \
+  -d '{"host": "localhost", "port": 5432, "admin_username": "postgres", "admin_password": "secret", "app_database": "ecube", "app_username": "ecube", "app_password": "ecube123"}'
+```
+
+The provision endpoint creates the PostgreSQL user and database, runs Alembic
+migrations, and writes `DATABASE_URL` to `.env`. The running service
+reconfigures its connection pool in-place — no restart is required.
+
+**Option B: Manual Setup (CLI)**
+
+Configure the database, user, and `DATABASE_URL` in `.env` manually (see the
+[Configuration](#configuration) section), then run migrations from the
+command line:
+
 ```bash
 sudo -u ecube /opt/ecube/venv/bin/alembic upgrade head
 ```
 
+Proceed to **step 6** after either option.
+
 #### 6. Run First-Run Setup
 
-The setup creates OS groups, an initial admin user, and seeds the database with the admin role.
+The setup creates OS groups, an initial admin user, and seeds the database
+with the admin role. This step requires a provisioned database (step 5).
+
+**Option A: API-based** — requires the service to be running. If you haven't
+started it yet, complete **step 7** first, then return here:
 
 ```bash
-# Option A: API-based (after starting the service)
 curl -k -X POST https://localhost:8443/setup/initialize \
   -H "Content-Type: application/json" \
   -d '{"username": "ecube-admin", "password": "s3cret"}'
+```
 
-# Option B: CLI script
+**Option B: CLI script** — can be run before the service starts:
+
+```bash
 sudo /opt/ecube/venv/bin/ecube-setup
 ```
 
 See [First-Run Setup](#first-run-setup) below for full details.
 
-> **Important:** Setup must run **after** `alembic upgrade head`
+> **Important:** Setup must run **after** database initialization (step 5)
 > because it writes to the `user_roles` and `system_initialization` tables.
 
 #### 7. Enable and Start Service

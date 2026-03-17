@@ -15,6 +15,6 @@
 
 ## 8.3 Database Layer
 
-- PostgreSQL as authoritative state store.
+- PostgreSQL 14+ as authoritative state store.
 - Connection access restricted to system-layer runtime identity.
 - Transaction boundaries align with state transition operations.

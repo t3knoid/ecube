@@ -197,18 +197,9 @@ docker compose -f docker-compose.integration.yml up -d
 
 Set integration environment variables.
 
-Bash:
-
 ```bash
 export INTEGRATION_DATABASE_URL="postgresql://ecube_test:ecube_test@localhost:5433/ecube_integration"
 export DATABASE_URL="$INTEGRATION_DATABASE_URL"
-```
-
-Windows PowerShell:
-
-```powershell
-$env:INTEGRATION_DATABASE_URL = "postgresql://ecube_test:ecube_test@localhost:5433/ecube_integration"
-$env:DATABASE_URL = $env:INTEGRATION_DATABASE_URL
 ```
 
 Apply migrations:
