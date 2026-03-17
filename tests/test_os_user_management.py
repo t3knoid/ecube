@@ -334,6 +334,47 @@ class TestSetUserGroups:
         assert isinstance(result, OSUser)
         assert "ecube-admins" in result.groups
 
+    @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_set_groups_preserves_non_ecube_groups(self, mock_pwd, mock_grp, mock_subprocess):
+        """Non-ecube supplementary groups must be preserved when replacing."""
+        mock_pwd.getpwnam.return_value = _make_pw()
+        mock_grp.getgrnam.return_value = _make_grp(name="ecube-processors")
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="ecube-admins", members=["testuser"]),
+            _make_grp(name="docker", members=["testuser"]),
+        ]
+        mock_grp.getgrgid.return_value = _make_grp(name="testuser", gid=1000)
+        mock_subprocess.return_value = _ok_result()
+
+        set_user_groups("testuser", ["ecube-processors"])
+
+        # usermod -G should include ecube-processors (requested) + docker (preserved).
+        calls = [c.args[0] for c in mock_subprocess.call_args_list]
+        usermod_call = [c for c in calls if settings.usermod_binary_path in c][0]
+        groups_arg = usermod_call[usermod_call.index("-G") + 1]
+        assert "ecube-processors" in groups_arg
+        assert "docker" in groups_arg
+        assert "ecube-admins" not in groups_arg  # old ecube group removed
+
+    def test_set_groups_empty_rejected(self):
+        """Empty group list must be rejected."""
+        with pytest.raises(ValueError, match="ecube-"):
+            set_user_groups("testuser", [])
+
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_set_groups_non_ecube_group_rejected(self, mock_pwd, mock_grp):
+        """Non-ecube-* group names must be rejected."""
+        mock_pwd.getpwnam.return_value = _make_pw()
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="ecube-admins", members=["testuser"]),
+        ]
+        mock_grp.getgrgid.return_value = _make_grp(name="testuser", gid=1000)
+        with pytest.raises(ValueError, match="does not start with"):
+            set_user_groups("testuser", ["docker"])
+
     @patch("app.services.os_user_service.pwd")
     def test_set_groups_reserved_username(self, mock_pwd):
         mock_pwd.getpwnam.return_value = _make_pw(name="root")
@@ -760,6 +801,27 @@ class TestOSUserEndpoints:
         })
         assert resp.status_code == 200
         assert resp.json()["username"] == "testuser"
+
+    def test_set_user_groups_empty_returns_422(self, admin_client):
+        """PUT with empty groups list returns 422."""
+        resp = admin_client.put("/admin/os-users/testuser/groups", json={
+            "groups": [],
+        })
+        assert resp.status_code == 422
+
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_set_user_groups_non_ecube_returns_422(self, mock_pwd, mock_grp, admin_client):
+        """PUT with non-ecube-* group name returns 422."""
+        mock_pwd.getpwnam.return_value = _make_pw()
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="ecube-admins", members=["testuser"]),
+        ]
+        mock_grp.getgrgid.return_value = _make_grp(name="testuser", gid=1000)
+        resp = admin_client.put("/admin/os-users/testuser/groups", json={
+            "groups": ["docker"],
+        })
+        assert resp.status_code == 422
 
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
