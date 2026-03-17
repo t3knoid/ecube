@@ -21,7 +21,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.testclient import TestClient
 
-from app.session import RedisSessionMiddleware
+from app.session import RedisSessionMiddleware, _SessionProxy
 
 
 # ---------------------------------------------------------------------------
@@ -136,21 +136,16 @@ class TestBackendSelection:
 # ---------------------------------------------------------------------------
 
 class TestSessionMiddlewareMounted:
-    """Ensure the real ECUBE ``app`` has a session middleware."""
+    """Ensure the real ECUBE ``app`` has the session proxy middleware."""
 
-    def test_session_middleware_present(self):
+    def test_session_proxy_present(self):
         from app.main import app as ecube_app
 
         middleware_classes = [
             m.cls for m in getattr(ecube_app, "user_middleware", [])
         ]
-        has_session = (
-            SessionMiddleware in middleware_classes
-            or RedisSessionMiddleware in middleware_classes
-        )
-        assert has_session, (
-            "Neither SessionMiddleware nor RedisSessionMiddleware found "
-            "in middleware stack"
+        assert _SessionProxy in middleware_classes, (
+            "_SessionProxy not found in middleware stack"
         )
 
     def test_health_endpoint_works(self, unauthenticated_client):
@@ -205,9 +200,9 @@ class TestGracefulRedisFailover:
         assert result is None
         assert "unavailable" in caplog.text
 
-    def test_mount_session_middleware_redis_fallback(self, caplog):
-        """mount_session_middleware gracefully falls back and sets backend_name."""
-        from app.session import mount_session_middleware
+    def test_init_session_backend_redis_fallback(self, caplog):
+        """init_session_backend gracefully falls back and sets backend_name."""
+        from app.session import init_session_backend, mount_session_middleware
 
         test_app = FastAPI()
 
@@ -221,15 +216,16 @@ class TestGracefulRedisFailover:
             mock_settings.session_cookie_secure = False
             mock_settings.session_cookie_domain = None
 
+            mount_session_middleware(test_app)
             with caplog.at_level(logging.WARNING):
-                mount_session_middleware(test_app)
+                init_session_backend(test_app)
 
         assert test_app.state.session_backend_name == "cookie"
         assert test_app.state.session_redis_client is None
 
-    def test_fallback_mounts_cookie_middleware(self, caplog):
-        """After fallback the mounted middleware is SessionMiddleware, not Redis."""
-        from app.session import mount_session_middleware
+    def test_fallback_keeps_cookie_backend(self, caplog):
+        """After fallback the proxy still delegates to cookie-based sessions."""
+        from app.session import init_session_backend, mount_session_middleware
 
         test_app = FastAPI()
         with patch("app.session.settings") as mock_settings:
@@ -242,12 +238,31 @@ class TestGracefulRedisFailover:
             mock_settings.session_cookie_secure = False
             mock_settings.session_cookie_domain = None
 
+            mount_session_middleware(test_app)
             with caplog.at_level(logging.WARNING):
+                init_session_backend(test_app)
+
+        assert test_app.state.session_backend_name == "cookie"
+        assert test_app.state.session_redis_client is None
+
+    def test_mount_does_not_trigger_redis_io(self):
+        """mount_session_middleware never calls _try_redis_backend."""
+        from app.session import mount_session_middleware
+
+        test_app = FastAPI()
+        with patch("app.session.settings") as mock_settings:
+            mock_settings.session_backend = "redis"
+            mock_settings.secret_key = "test-secret"
+            mock_settings.session_cookie_name = "ecube_session"
+            mock_settings.session_cookie_expiration_seconds = 3600
+            mock_settings.session_cookie_samesite = "lax"
+            mock_settings.session_cookie_secure = False
+            mock_settings.session_cookie_domain = None
+
+            with patch("app.session._try_redis_backend") as mock_try:
                 mount_session_middleware(test_app)
 
-        middleware_classes = [m.cls for m in test_app.user_middleware]
-        assert SessionMiddleware in middleware_classes
-        assert RedisSessionMiddleware not in middleware_classes
+        mock_try.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -382,11 +397,11 @@ class TestRedisBackendStoresServerSide:
         assert resp.json() == {"user": None}
 
 
-class TestMountSessionMiddlewareRedis:
-    """mount_session_middleware mounts RedisSessionMiddleware when Redis works."""
+class TestInitSessionBackendRedis:
+    """init_session_backend upgrades the proxy to Redis when Redis works."""
 
-    def test_redis_backend_mounts_redis_middleware(self, caplog):
-        from app.session import mount_session_middleware
+    def test_redis_backend_upgrades_proxy(self, caplog):
+        from app.session import init_session_backend, mount_session_middleware
 
         mock_redis = MagicMock()
         mock_redis.ping.return_value = True
@@ -401,21 +416,19 @@ class TestMountSessionMiddlewareRedis:
                 mock_settings.redis_url = "redis://localhost:6379/0"
                 mock_settings.redis_connection_timeout = 5
                 mock_settings.redis_socket_keepalive = True
+                mock_settings.secret_key = "test-secret"
                 mock_settings.session_cookie_name = "ecube_session"
                 mock_settings.session_cookie_expiration_seconds = 3600
                 mock_settings.session_cookie_samesite = "lax"
                 mock_settings.session_cookie_secure = False
                 mock_settings.session_cookie_domain = None
 
+                mount_session_middleware(test_app)
                 with caplog.at_level(logging.INFO):
-                    mount_session_middleware(test_app)
+                    init_session_backend(test_app)
 
         assert test_app.state.session_backend_name == "redis"
         assert test_app.state.session_redis_client is mock_redis
-
-        middleware_classes = [m.cls for m in test_app.user_middleware]
-        assert RedisSessionMiddleware in middleware_classes
-        assert SessionMiddleware not in middleware_classes
         assert "Session backend: redis" in caplog.text
 
 
@@ -551,10 +564,10 @@ class TestRedisBackendCookieAttributes:
 # ---------------------------------------------------------------------------
 
 class TestSessionEventLogging:
-    """Session backend selection is logged on startup."""
+    """Session backend selection is logged during init_session_backend."""
 
     def test_logs_cookie_backend(self, caplog):
-        from app.session import mount_session_middleware
+        from app.session import init_session_backend, mount_session_middleware
 
         test_app = FastAPI()
         with patch("app.session.settings") as mock_settings:
@@ -566,13 +579,14 @@ class TestSessionEventLogging:
             mock_settings.session_cookie_secure = False
             mock_settings.session_cookie_domain = None
 
+            mount_session_middleware(test_app)
             with caplog.at_level(logging.INFO):
-                mount_session_middleware(test_app)
+                init_session_backend(test_app)
 
         assert "Session backend: cookie" in caplog.text
 
     def test_logs_redis_fallback(self, caplog):
-        from app.session import mount_session_middleware
+        from app.session import init_session_backend, mount_session_middleware
 
         test_app = FastAPI()
         with patch("app.session.settings") as mock_settings:
@@ -585,11 +599,54 @@ class TestSessionEventLogging:
             mock_settings.session_cookie_secure = False
             mock_settings.session_cookie_domain = None
 
+            mount_session_middleware(test_app)
             with caplog.at_level(logging.INFO):
-                mount_session_middleware(test_app)
+                init_session_backend(test_app)
 
         assert "Session backend: cookie" in caplog.text
         assert "REDIS_URL" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# close_session_backend
+# ---------------------------------------------------------------------------
+
+class TestCloseSessionBackend:
+    """Verify Redis client is closed on shutdown."""
+
+    def test_closes_redis_client(self):
+        from app.session import close_session_backend
+
+        test_app = FastAPI()
+        mock_client = MagicMock()
+        test_app.state.session_redis_client = mock_client
+
+        close_session_backend(test_app)
+
+        mock_client.close.assert_called_once()
+        assert test_app.state.session_redis_client is None
+
+    def test_noop_when_no_redis(self):
+        from app.session import close_session_backend
+
+        test_app = FastAPI()
+        test_app.state.session_redis_client = None
+
+        close_session_backend(test_app)  # should not raise
+
+    def test_handles_close_exception(self, caplog):
+        from app.session import close_session_backend
+
+        test_app = FastAPI()
+        mock_client = MagicMock()
+        mock_client.close.side_effect = RuntimeError("close failed")
+        test_app.state.session_redis_client = mock_client
+
+        with caplog.at_level(logging.WARNING):
+            close_session_backend(test_app)
+
+        assert test_app.state.session_redis_client is None
+        assert "Failed to close" in caplog.text
 
 
 # ---------------------------------------------------------------------------
