@@ -147,7 +147,15 @@ def run_discovery_sync(
                 current_state=DriveState.AVAILABLE,
             )
             db.add(drive)
-            db.commit()
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+                logger.exception(
+                    "DB commit failed inserting discovered drive %s",
+                    discovered_drive.device_identifier,
+                )
+                continue
             db.refresh(drive)
             drives_inserted.append(discovered_drive.device_identifier)
         else:
@@ -169,7 +177,15 @@ def run_discovery_sync(
                 changed = True
 
             if changed:
-                db.commit()
+                try:
+                    db.commit()
+                except Exception:
+                    db.rollback()
+                    logger.exception(
+                        "DB commit failed updating discovered drive %s",
+                        discovered_drive.device_identifier,
+                    )
+                    continue
                 db.refresh(existing)
                 drives_updated.append(discovered_drive.device_identifier)
 
@@ -180,7 +196,15 @@ def run_discovery_sync(
         if drive.device_identifier not in discovered_ids:
             if drive.current_state == DriveState.AVAILABLE:
                 drive.current_state = DriveState.EMPTY
-                db.commit()
+                try:
+                    db.commit()
+                except Exception:
+                    db.rollback()
+                    logger.exception(
+                        "DB commit failed marking drive %s as EMPTY",
+                        drive.device_identifier,
+                    )
+                    continue
                 db.refresh(drive)
                 drives_removed.append(drive.device_identifier)
 
@@ -192,10 +216,13 @@ def run_discovery_sync(
         "drives_removed": len(drives_removed),
     }
 
-    audit_repo.add(
-        action="USB_DISCOVERY_SYNC",
-        user=actor,
-        details=summary,
-    )
+    try:
+        audit_repo.add(
+            action="USB_DISCOVERY_SYNC",
+            user=actor,
+            details=summary,
+        )
+    except Exception:
+        logger.exception("Failed to write audit log for USB_DISCOVERY_SYNC")
 
     return summary

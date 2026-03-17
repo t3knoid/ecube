@@ -27,7 +27,11 @@ class AuditRepository:
             details=details or {},
         )
         self.db.add(entry)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
         self.db.refresh(entry)
         return entry
 
@@ -38,7 +42,11 @@ class AuditRepository:
             .filter(AuditLog.timestamp < cutoff)
             .delete(synchronize_session=False)
         )
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
         return count
 
     def query(
