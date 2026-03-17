@@ -56,10 +56,11 @@ def test_connection(
         )
         try:
             version = conn.server_version
-            # Convert integer version (e.g. 140009) to readable string (e.g. "14.9")
+            # PostgreSQL 10+ uses two-part versioning: server_version = major*10000 + patch
+            # e.g. 140009 → 14.9, 160002 → 16.2
             major = version // 10000
-            minor = (version % 10000) // 100
-            return f"{major}.{minor}"
+            patch = version % 10000
+            return f"{major}.{patch}"
         finally:
             conn.close()
     except psycopg2.OperationalError as exc:
