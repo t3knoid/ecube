@@ -222,6 +222,11 @@ async def _try_redis_backend() -> "object | None":
         logger.info("Redis session backend connected: %s", safe_url)
         return client
     except Exception:
+        # Close the client if it was created, to avoid leaking connections.
+        try:
+            await client.aclose()
+        except Exception:
+            pass
         logger.warning(
             "Redis session backend unavailable (url=%s); "
             "falling back to cookie-based sessions",
