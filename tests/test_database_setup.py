@@ -664,3 +664,41 @@ class TestDatabaseService:
         content = env_file.read_text()
         assert "EXISTING=value\n" in content
         assert "NEW_KEY=new_value\n" in content
+
+    @patch("app.services.database_service._write_env_setting")
+    @patch("app.services.database_service._reinitialize_engine")
+    @patch("app.services.database_service.psycopg2")
+    def test_update_settings_updates_in_memory_config(
+        self, mock_psycopg2, mock_reinit, mock_write
+    ):
+        """Verify settings object is updated so subsequent reads are consistent."""
+        from app.config import settings
+        from app.services.database_service import update_database_settings
+
+        mock_conn = MagicMock()
+        mock_psycopg2.connect.return_value = mock_conn
+        mock_psycopg2.OperationalError = Exception
+
+        original_url = settings.database_url
+        original_pool = settings.db_pool_size
+        original_overflow = settings.db_pool_max_overflow
+
+        try:
+            update_database_settings(
+                host="newhost.test",
+                port=5433,
+                app_database="newdb",
+                app_username="newuser",
+                app_password="newpass",
+                pool_size=20,
+                pool_max_overflow=40,
+            )
+
+            assert settings.database_url == "postgresql://newuser:newpass@newhost.test:5433/newdb"
+            assert settings.db_pool_size == 20
+            assert settings.db_pool_max_overflow == 40
+        finally:
+            # Restore original values to avoid polluting other tests
+            settings.database_url = original_url
+            settings.db_pool_size = original_pool
+            settings.db_pool_max_overflow = original_overflow
