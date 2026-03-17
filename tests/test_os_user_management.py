@@ -441,6 +441,42 @@ class TestOSUserEndpoints:
         assert "admin" in roles
         assert "manager" in roles
 
+    @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_create_user_role_db_error_cleans_up_os_user(
+        self, mock_pwd, mock_grp, mock_subprocess, admin_client, db,
+    ):
+        """If set_roles raises a DB error, the OS user should be deleted."""
+        pw = _make_pw(name="dbfail", uid=1060)
+        mock_pwd.getpwnam.side_effect = [
+            KeyError("no such user"),  # user_exists (create_user)
+            pw,                        # final lookup (create_user)
+            pw,                        # _get_user_groups (create_user)
+            pw,                        # user_exists (delete_user compensation)
+        ]
+        mock_grp.getgrall.return_value = []
+        mock_grp.getgrgid.return_value = _make_grp(name="dbfail", gid=1060)
+        mock_subprocess.return_value = _ok_result()
+
+        with patch.object(
+            UserRoleRepository, "set_roles", side_effect=RuntimeError("DB down"),
+        ):
+            resp = admin_client.post("/admin/os-users", json={
+                "username": "dbfail",
+                "password": "pass",
+                "roles": ["admin"],
+            })
+        assert resp.status_code == 500
+        assert "role assignment failed" in resp.json()["message"]
+
+        # Verify userdel was called (compensation).
+        del_calls = [
+            c for c in mock_subprocess.call_args_list
+            if "userdel" in str(c)
+        ]
+        assert len(del_calls) == 1
+
     @patch("app.services.os_user_service.pwd")
     def test_create_user_already_exists(self, mock_pwd, admin_client):
         mock_pwd.getpwnam.return_value = _make_pw()
