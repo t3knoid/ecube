@@ -156,6 +156,35 @@ def _is_reserved_username(username: str) -> bool:
     return username in RESERVED_USERNAMES
 
 
+def _is_ecube_managed(username: str) -> bool:
+    """Return True if *username* belongs to at least one ``ecube-*`` group."""
+    try:
+        for g in grp.getgrall():
+            if username in g.gr_mem and g.gr_name.startswith(ECUBE_GROUP_PREFIX):
+                return True
+    except KeyError:
+        pass
+    return False
+
+
+def _require_ecube_managed_user(username: str) -> None:
+    """Raise ``ValueError`` unless *username* is an ECUBE-managed account.
+
+    The user must not be in :data:`RESERVED_USERNAMES` **and** must belong to
+    at least one ``ecube-*`` group.  This prevents accidental mutation of
+    system/service accounts (e.g. ``postgres``, ``www-data``) that happen to
+    pass the POSIX username regex.
+    """
+    if _is_reserved_username(username):
+        raise ValueError(f"Cannot modify reserved system account: {username}")
+    if not _is_ecube_managed(username):
+        raise ValueError(
+            f"User '{username}' is not in any ecube-* group and cannot be "
+            "managed through this API. Only ECUBE-managed accounts can be "
+            "modified or deleted."
+        )
+
+
 def user_exists(username: str) -> bool:
     """Check if an OS user exists."""
     try:
@@ -288,16 +317,21 @@ def list_users(ecube_only: bool = True) -> List[OSUser]:
     return result
 
 
-def delete_user(username: str) -> None:
+def delete_user(username: str, *, _skip_managed_check: bool = False) -> None:
     """Delete an OS user.
 
-    Raises :class:`OSUserError` on failure, :class:`ValueError` for reserved names.
+    Raises :class:`OSUserError` on failure, :class:`ValueError` for reserved
+    or non-ECUBE-managed users.
+
+    The private *_skip_managed_check* flag is used internally for compensation
+    (e.g. cleaning up a just-created user whose group assignment failed before
+    any ``ecube-*`` membership was established).
     """
     validate_username(username)
-    if _is_reserved_username(username):
-        raise ValueError(f"Cannot delete reserved username: {username}")
     if not user_exists(username):
         raise OSUserError(f"User '{username}' does not exist")
+    if not _skip_managed_check:
+        _require_ecube_managed_user(username)
 
     _run_sudo([settings.userdel_binary_path, "-r", username])
 
@@ -305,14 +339,14 @@ def delete_user(username: str) -> None:
 def reset_password(username: str, password: str) -> None:
     """Reset an OS user's password.
 
-    Raises :class:`OSUserError` on failure, :class:`ValueError` for bad input.
+    Raises :class:`OSUserError` on failure, :class:`ValueError` for bad input
+    or non-ECUBE-managed users.
     """
     validate_username(username)
-    if _is_reserved_username(username):
-        raise ValueError(f"Cannot reset password for reserved username: {username}")
     validate_password(password)
     if not user_exists(username):
         raise OSUserError(f"User '{username}' does not exist")
+    _require_ecube_managed_user(username)
 
     _run_sudo([settings.chpasswd_binary_path], stdin_data=f"{username}:{password}")
 
@@ -323,10 +357,9 @@ def set_user_groups(username: str, groups: List[str]) -> OSUser:
     Returns the updated :class:`OSUser`.
     """
     validate_username(username)
-    if _is_reserved_username(username):
-        raise ValueError(f"Cannot modify groups for reserved username: {username}")
     if not user_exists(username):
         raise OSUserError(f"User '{username}' does not exist")
+    _require_ecube_managed_user(username)
 
     for g in groups:
         validate_group_name(g)
@@ -354,10 +387,9 @@ def add_user_to_groups(username: str, groups: List[str]) -> OSUser:
     Returns the updated :class:`OSUser`.
     """
     validate_username(username)
-    if _is_reserved_username(username):
-        raise ValueError(f"Cannot modify groups for reserved username: {username}")
     if not user_exists(username):
         raise OSUserError(f"User '{username}' does not exist")
+    _require_ecube_managed_user(username)
 
     for g in groups:
         validate_group_name(g)
