@@ -180,13 +180,22 @@ def custom_openapi():
     # Apply security requirement to all endpoints except unauthenticated routes
     _unauthenticated_paths = {
         "/health", "/auth/token", "/setup/status", "/setup/initialize",
+    }
+    # Endpoints that accept an optional bearer token (unauthenticated during
+    # initial setup, admin-required after the first admin user is created).
+    _conditional_auth_paths = {
         "/setup/database/test-connection", "/setup/database/provision",
     }
     for path, path_item in openapi_schema["paths"].items():
-        if path not in _unauthenticated_paths:
-            for operation in path_item.values():
-                if isinstance(operation, dict) and "responses" in operation:
-                    if "security" not in operation:
+        if path in _unauthenticated_paths:
+            continue
+        for operation in path_item.values():
+            if isinstance(operation, dict) and "responses" in operation:
+                if "security" not in operation:
+                    if path in _conditional_auth_paths:
+                        # Optional bearer: allow unauthenticated OR authenticated
+                        operation["security"] = [{"HTTPBearer": []}, {}]
+                    else:
                         operation["security"] = [{"HTTPBearer": []}]
 
     app.openapi_schema = openapi_schema
