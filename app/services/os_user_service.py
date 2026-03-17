@@ -211,19 +211,34 @@ def create_user(
         raise OSUserError(f"User '{username}' already exists")
     validate_password(password)
 
+    # Validate all requested groups BEFORE creating the user so that
+    # invalid input never leaves a partially-created account behind.
+    if groups:
+        for g in groups:
+            validate_group_name(g)
+            if not group_exists(g):
+                raise OSUserError(f"Group '{g}' does not exist")
+
     # Create user with home directory.
     _run_sudo([settings.useradd_binary_path, "-m", username])
 
     # Set password via stdin (never on command line).
     _run_sudo([settings.chpasswd_binary_path], stdin_data=f"{username}:{password}")
 
-    # Add to requested groups.
+    # Add to requested groups.  If usermod fails, delete the newly created
+    # user so the caller never sees a partial account.
     if groups:
-        for g in groups:
-            validate_group_name(g)
-            if not group_exists(g):
-                raise OSUserError(f"Group '{g}' does not exist")
-        _run_sudo([settings.usermod_binary_path, "-aG", ",".join(groups), username])
+        try:
+            _run_sudo([settings.usermod_binary_path, "-aG", ",".join(groups), username])
+        except OSUserError:
+            try:
+                _run_sudo([settings.userdel_binary_path, "-r", username])
+            except Exception:
+                logger.exception(
+                    "Failed to clean up OS user '%s' after usermod failure",
+                    username,
+                )
+            raise
 
     pw = pwd.getpwnam(username)
     return OSUser(
