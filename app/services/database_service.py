@@ -21,8 +21,17 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 logger = logging.getLogger(__name__)
 
-# Path to .env file (same directory as app/)
-_ENV_FILE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
+
+def _get_env_file_path() -> str:
+    """Return the resolved .env path used by Settings.
+
+    Pydantic-settings resolves ``env_file=".env"`` relative to CWD, so we
+    must write to the same location the app reads from.
+    """
+    from app.config import Settings
+
+    env_file = Settings.model_config.get("env_file", ".env")
+    return os.path.abspath(str(env_file))
 
 
 def test_connection(
@@ -328,7 +337,7 @@ def _write_env_setting(key: str, value: str) -> None:
 
     Uses a write-to-temp-then-rename strategy to avoid corruption.
     """
-    env_path = _ENV_FILE_PATH
+    env_path = _get_env_file_path()
     lines: list[str] = []
 
     if os.path.exists(env_path):

@@ -632,7 +632,7 @@ class TestDatabaseService:
         from app.services.database_service import _write_env_setting
 
         env_file = tmp_path / ".env"
-        with patch("app.services.database_service._ENV_FILE_PATH", str(env_file)):
+        with patch("app.services.database_service._get_env_file_path", return_value=str(env_file)):
             _write_env_setting("DATABASE_URL", "postgresql://localhost/ecube")
 
         content = env_file.read_text()
@@ -644,7 +644,7 @@ class TestDatabaseService:
         env_file = tmp_path / ".env"
         env_file.write_text("DATABASE_URL=old_value\nOTHER=keep\n")
 
-        with patch("app.services.database_service._ENV_FILE_PATH", str(env_file)):
+        with patch("app.services.database_service._get_env_file_path", return_value=str(env_file)):
             _write_env_setting("DATABASE_URL", "new_value")
 
         content = env_file.read_text()
@@ -658,7 +658,7 @@ class TestDatabaseService:
         env_file = tmp_path / ".env"
         env_file.write_text("EXISTING=value\n")
 
-        with patch("app.services.database_service._ENV_FILE_PATH", str(env_file)):
+        with patch("app.services.database_service._get_env_file_path", return_value=str(env_file)):
             _write_env_setting("NEW_KEY", "new_value")
 
         content = env_file.read_text()
