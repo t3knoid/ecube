@@ -7,13 +7,12 @@ Covers the high-risk multi-step sequences identified in issue #82:
 - Audit log writes never aborting primary operations
 """
 
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
-from app.models.jobs import DriveAssignment, ExportJob, JobStatus
+from app.models.jobs import ExportJob, JobStatus
 
 
 # ---------------------------------------------------------------------------
