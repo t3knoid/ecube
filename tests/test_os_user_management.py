@@ -29,6 +29,7 @@ from app.services.os_user_service import (
     reset_password,
     set_user_groups,
     validate_group_name,
+    validate_password,
     validate_username,
 )
 
@@ -91,6 +92,24 @@ class TestValidation:
         for name in ["Group", "1group", "a" * 33, "grp;cmd", ""]:
             with pytest.raises(ValueError):
                 validate_group_name(name)
+
+    def test_valid_passwords(self):
+        for pw in ["s3cret!", "p@ss w0rd", "helloWorld123", "a"]:
+            validate_password(pw)  # should not raise
+
+    @pytest.mark.parametrize("bad_pw,expected_label", [
+        ("pass\nword", "newline"),
+        ("pass\rword", "carriage-return"),
+        ("user:pass", "colon"),
+        ("a\nb\rc:", "carriage-return, colon, newline"),
+    ])
+    def test_invalid_passwords(self, bad_pw, expected_label):
+        with pytest.raises(ValueError, match=expected_label):
+            validate_password(bad_pw)
+
+    def test_empty_password(self):
+        with pytest.raises(ValueError, match="empty"):
+            validate_password("")
 
 
 class TestCreateUser:
@@ -491,6 +510,21 @@ class TestOSUserEndpoints:
         })
         assert resp.status_code == 200
         assert "reset" in resp.json()["message"].lower()
+
+    def test_create_user_unsafe_password_rejected(self, admin_client):
+        """Passwords with newlines or colons are rejected at the schema layer."""
+        for bad_pw in ["pass\nword", "pass\rword", "user:pass"]:
+            resp = admin_client.post("/admin/os-users", json={
+                "username": "newuser",
+                "password": bad_pw,
+            })
+            assert resp.status_code == 422
+
+    def test_reset_password_unsafe_password_rejected(self, admin_client):
+        resp = admin_client.put("/admin/os-users/testuser/password", json={
+            "password": "new\npass",
+        })
+        assert resp.status_code == 422
 
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
