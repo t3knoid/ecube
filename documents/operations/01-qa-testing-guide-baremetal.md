@@ -596,9 +596,54 @@ curl -sk -X POST https://localhost:8443/setup/initialize \
 # Expected: 409 Conflict
 ```
 
+### 11.10 Database Provisioning API
+
+These endpoints support API-based PostgreSQL database setup.  During initial setup (before any admin exists), `test-connection` and `provision` are unauthenticated.  After setup, they require the `admin` role.
+
+```bash
+# Test PostgreSQL connectivity (unauthenticated during initial setup)
+curl -sk -X POST https://localhost:8443/setup/database/test-connection \
+  -H "Content-Type: application/json" \
+  -d '{"host": "localhost", "port": 5432, "admin_username": "postgres", "admin_password": "YourPostgresPass"}' | jq
+# Expected: 200, {"status": "ok", "server_version": "16.x"}
+
+# Provision database (creates user, database, runs migrations)
+curl -sk -X POST https://localhost:8443/setup/database/provision \
+  -H "Content-Type: application/json" \
+  -d '{"host": "localhost", "port": 5432, "admin_username": "postgres", "admin_password": "YourPostgresPass", "app_database": "ecube", "app_username": "ecube", "app_password": "ecube123"}' | jq
+# Expected: 200, {"status": "provisioned", "database": "ecube", "user": "ecube", "migrations_applied": 4}
+
+# Check database status (requires admin token)
+curl -sk https://localhost:8443/setup/database/status \
+  -H "Authorization: Bearer $TOKEN" | jq
+# Expected: 200, {"connected": true, "database": "ecube", ...}
+
+# Update database settings (requires admin token, partial update)
+curl -sk -X PUT https://localhost:8443/setup/database/settings \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"pool_size": 10, "pool_max_overflow": 20}' | jq
+# Expected: 200, {"status": "updated", "host": "localhost", ...}
+
+# Test connection after setup — requires admin token
+curl -sk -X POST https://localhost:8443/setup/database/test-connection \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"host": "localhost", "port": 5432, "admin_username": "postgres", "admin_password": "YourPostgresPass"}' | jq
+# Expected: 200, {"status": "ok", ...}
+
+# SSRF-safe host validation
+curl -sk -X POST https://localhost:8443/setup/database/test-connection \
+  -H "Content-Type: application/json" \
+  -d '{"host": "http://evil.com", "port": 5432, "admin_username": "postgres", "admin_password": "x"}' | jq
+# Expected: 422, host must be a hostname or IP address
+```
+
 ---
 
 ## 12. QA Test Cases
+
+> **Tracking spreadsheet:** A trackable version of these test cases with columns for Status, Tester, Date, and Notes is available in [`ecube-qa-test-cases.xlsx`](ecube-qa-test-cases.xlsx) in this directory.
 
 ### 12.1 Login Endpoint (`POST /auth/token`)
 
@@ -812,6 +857,30 @@ Setup endpoints are unauthenticated and can only succeed once.
 | 7 | Unsafe password chars | `POST /setup/initialize` with password containing newline or colon | 422, unsafe characters |
 | 8 | Login as initialized admin | `POST /auth/token` with the admin credentials from step 2 | 200, JWT contains `admin` role |
 | 9 | SYSTEM_INITIALIZED audit log | `GET /audit?action=SYSTEM_INITIALIZED` | Audit entry with actor |
+
+### 12.11 Database Provisioning API
+
+Database provisioning endpoints use a dual-auth model: unauthenticated during initial setup, admin-only after.
+
+| # | Test | How | Expected |
+|---|------|-----|----------|
+| 1 | Test connection — success | `POST /setup/database/test-connection` with valid PostgreSQL credentials | 200, `{"status": "ok", "server_version": "..."}` |
+| 2 | Test connection — bad host | `POST /setup/database/test-connection` with unreachable host | 400, connection error |
+| 3 | Test connection — SSRF host | `POST /setup/database/test-connection` with `"host": "http://evil.com"` | 422, invalid host |
+| 4 | Test connection — port out of range | `POST /setup/database/test-connection` with `"port": 99999` | 422 |
+| 5 | Provision — success | `POST /setup/database/provision` with valid credentials | 200, returns database, user, migrations_applied |
+| 6 | Provision — bad admin credentials | `POST /setup/database/provision` with wrong admin password | 400, connection error |
+| 7 | Provision — invalid database name | `POST /setup/database/provision` with `"app_database": "drop;--"` | 422, invalid identifier |
+| 8 | Status — connected | `GET /setup/database/status` with admin token | 200, `connected: true`, migration info |
+| 9 | Status — requires auth | `GET /setup/database/status` without token | 401 |
+| 10 | Status — requires admin | `GET /setup/database/status` with processor token | 403 |
+| 11 | Settings update — success | `PUT /setup/database/settings` with valid partial update | 200, `{"status": "updated", ...}` |
+| 12 | Settings update — bad connection | `PUT /setup/database/settings` with unreachable host | 400, connection test failed |
+| 13 | Settings update — empty body | `PUT /setup/database/settings` with `{}` | 422, at least one field required |
+| 14 | Settings update — requires admin | `PUT /setup/database/settings` with processor token | 403 |
+| 15 | Auth after setup — test-connection | `POST /setup/database/test-connection` without token (after admin exists) | 401 |
+| 16 | Auth after setup — provision | `POST /setup/database/provision` without token (after admin exists) | 401 |
+| 17 | Password redaction | `POST /setup/database/provision` and check response | No password in response body |
 
 ---
 
