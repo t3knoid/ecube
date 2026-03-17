@@ -153,6 +153,23 @@ class RedisSessionMiddleware:
                         cookie = self._build_cookie(sid)
                         headers.append("set-cookie", cookie)
 
+                elif session and session_id is not None:
+                    # Session is unchanged but still active — refresh the
+                    # Redis TTL and re-issue the cookie so that an actively
+                    # used session doesn't expire based on last-write time.
+                    key = self._KEY_PREFIX + session_id
+                    try:
+                        await self.redis.expire(key, self.max_age)
+                    except Exception:
+                        logger.warning(
+                            "Failed to refresh TTL for session %s",
+                            session_id,
+                            exc_info=True,
+                        )
+                    headers = MutableHeaders(scope=message)
+                    cookie = self._build_cookie(session_id)
+                    headers.append("set-cookie", cookie)
+
             await send(message)
 
         await self.app(scope, receive, send_wrapper)
