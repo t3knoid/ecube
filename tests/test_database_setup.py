@@ -403,6 +403,50 @@ class TestProvisionEndpoint:
         assert "supersecret" not in text
         assert "mypassword" not in text
 
+    @patch("app.services.database_service.is_database_provisioned", return_value=True)
+    def test_provision_blocked_when_already_provisioned(
+        self, mock_provisioned, unauthenticated_client
+    ):
+        """Provisioning returns 409 when database is already provisioned."""
+        resp = unauthenticated_client.post(
+            "/setup/database/provision",
+            json={
+                "host": "localhost",
+                "port": 5432,
+                "admin_username": "postgres",
+                "admin_password": "secret",
+                "app_database": "ecube",
+                "app_username": "ecube",
+                "app_password": "ecube123",
+            },
+        )
+
+        assert resp.status_code == 409
+        assert "already provisioned" in resp.json()["message"]
+
+    @patch("app.services.database_service.provision_database", return_value=0)
+    @patch("app.services.database_service.is_database_provisioned", return_value=True)
+    def test_provision_force_overrides_guard(
+        self, mock_provisioned, mock_provision, unauthenticated_client
+    ):
+        """Setting force=true allows re-provisioning."""
+        resp = unauthenticated_client.post(
+            "/setup/database/provision",
+            json={
+                "host": "localhost",
+                "port": 5432,
+                "admin_username": "postgres",
+                "admin_password": "secret",
+                "app_database": "ecube",
+                "app_username": "ecube",
+                "app_password": "ecube123",
+                "force": True,
+            },
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "provisioned"
+
 
 # ---------------------------------------------------------------------------
 # Endpoint tests — status

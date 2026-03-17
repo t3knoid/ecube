@@ -613,6 +613,19 @@ curl -sk -X POST https://localhost:8443/setup/database/provision \
   -d '{"host": "localhost", "port": 5432, "admin_username": "postgres", "admin_password": "YourPostgresPass", "app_database": "ecube", "app_username": "ecube", "app_password": "ecube123"}' | jq
 # Expected: 200, {"status": "provisioned", "database": "ecube", "user": "ecube", "migrations_applied": 4}
 
+# Re-provision attempt (blocked if already provisioned)
+curl -sk -X POST https://localhost:8443/setup/database/provision \
+  -H "Content-Type: application/json" \
+  -d '{"host": "localhost", "port": 5432, "admin_username": "postgres", "admin_password": "YourPostgresPass", "app_database": "ecube", "app_username": "ecube", "app_password": "ecube123"}' | jq
+# Expected: 409, {"message": "Database is already provisioned. Set 'force' to true to re-provision."}
+
+# Force re-provision (admin only, use with caution)
+curl -sk -X POST https://localhost:8443/setup/database/provision \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"host": "localhost", "port": 5432, "admin_username": "postgres", "admin_password": "YourPostgresPass", "app_database": "ecube", "app_username": "ecube", "app_password": "ecube123", "force": true}' | jq
+# Expected: 200, {"status": "provisioned", ...}
+
 # Check database status (requires admin token)
 curl -sk https://localhost:8443/setup/database/status \
   -H "Authorization: Bearer $TOKEN" | jq
@@ -881,6 +894,8 @@ Database provisioning endpoints use a dual-auth model: unauthenticated during in
 | 15 | Auth after setup — test-connection | `POST /setup/database/test-connection` without token (after admin exists) | 401 |
 | 16 | Auth after setup — provision | `POST /setup/database/provision` without token (after admin exists) | 401 |
 | 17 | Password redaction | `POST /setup/database/provision` and check response | No password in response body |
+| 18 | Re-provision blocked | `POST /setup/database/provision` after successful provisioning (no `force`) | 409, already provisioned |
+| 19 | Force re-provision | `POST /setup/database/provision` with `"force": true` after successful provisioning | 200, returns database, user, migrations_applied |
 
 ---
 
