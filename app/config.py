@@ -1,7 +1,7 @@
 from typing import Dict, List, Literal, Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 
 class Settings(BaseSettings):
@@ -278,6 +278,16 @@ class Settings(BaseSettings):
     @classmethod
     def _normalise_samesite(cls, v: str) -> str:  # noqa: N805
         return v.lower() if isinstance(v, str) else v
+
+    @model_validator(mode="after")
+    def _samesite_none_requires_secure(self) -> "Settings":
+        if self.session_cookie_samesite == "none" and not self.session_cookie_secure:
+            raise ValueError(
+                "SESSION_COOKIE_SECURE must be true when "
+                "SESSION_COOKIE_SAMESITE is 'none' (browsers reject "
+                "SameSite=None cookies without the Secure flag)"
+            )
+        return self
 
 
 settings = Settings()
