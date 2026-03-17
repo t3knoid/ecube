@@ -15,6 +15,7 @@ import os
 import re
 import secrets
 import shutil
+from urllib.parse import quote
 import subprocess
 import sys
 from pathlib import Path
@@ -161,7 +162,10 @@ def _generate_env(install_dir: str) -> None:
             host = input(f"  DB host [{default_host}]: ").strip() or default_host
             dbname = input(f"  DB name [{default_db}]: ").strip() or default_db
             password = getpass.getpass("  DB password (will not echo): ")
-            db_url = f"postgresql://{username}:{password}@{host}/{dbname}"
+            db_url = (
+                f"postgresql://{quote(username, safe='')}:{quote(password, safe='')}"
+                f"@{host}/{quote(dbname, safe='')}"
+            )
 
     env_path.write_text(
         f"DATABASE_URL={db_url}\n"
