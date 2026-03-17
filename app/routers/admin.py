@@ -459,9 +459,7 @@ def create_os_group(
 
 @_os_router.get("/os-groups", response_model=OSGroupListResponse)
 def list_os_groups(
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(require_roles("admin")),
+    _current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSGroupListResponse:
     """List OS groups filtered to ECUBE-relevant names."""
     groups = os_user_service.list_groups(ecube_only=True)
