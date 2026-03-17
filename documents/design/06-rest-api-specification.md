@@ -474,6 +474,18 @@ Replace an OS user's supplementary group memberships.
 
 **Audit events:** `OS_USER_GROUPS_MODIFIED`
 
+### `POST /admin/os-users/{username}/groups`
+
+Add supplementary groups to an OS user without removing existing memberships.
+
+**Roles:** `admin`
+
+**Request body:** `{"groups": ["ecube-managers"]}`
+
+**Response (200 OK):** `OSUserResponse` with updated group list.
+
+**Audit events:** `OS_USER_GROUPS_APPENDED`
+
 ### `POST /admin/os-groups`
 
 Create an OS group.
@@ -608,5 +620,5 @@ Every security‑relevant event is logged:
 - Access denied events
 - Drive initialization attempts
 - File hash/compare operations
-- OS user/group management (`OS_USER_CREATED`, `OS_USER_DELETED`, `OS_PASSWORD_RESET`, `OS_USER_GROUPS_MODIFIED`, `OS_GROUP_CREATED`, `OS_GROUP_DELETED`)
+- OS user/group management (`OS_USER_CREATED`, `OS_USER_DELETED`, `OS_PASSWORD_RESET`, `OS_USER_GROUPS_MODIFIED`, `OS_USER_GROUPS_APPENDED`, `OS_GROUP_CREATED`, `OS_GROUP_DELETED`)
 - System initialization (`SYSTEM_INITIALIZED`)
