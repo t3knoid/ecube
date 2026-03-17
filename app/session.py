@@ -106,7 +106,18 @@ class RedisSessionMiddleware:
         async def send_wrapper(message: Message) -> None:
             if message["type"] == "http.response.start":
                 session: dict = scope["session"]
-                current_snapshot = json.dumps(dict(session), sort_keys=True)
+                try:
+                    current_snapshot = json.dumps(
+                        dict(session), sort_keys=True,
+                    )
+                except (TypeError, ValueError):
+                    logger.warning(
+                        "Session contains non-JSON-serializable value; "
+                        "skipping persistence",
+                        exc_info=True,
+                    )
+                    await send(message)
+                    return
 
                 if not session and session_id is not None:
                     # Session was cleared — delete from Redis and expire cookie
