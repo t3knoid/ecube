@@ -268,7 +268,7 @@ Set `SESSION_BACKEND` in your `.env` or environment to choose a backend.
 | `SESSION_COOKIE_NAME` | `ecube_session` | Name of the session cookie. |
 | `SESSION_COOKIE_EXPIRATION_SECONDS` | `3600` | Cookie lifetime in seconds. Use `86400` for 24 hours. |
 | `SESSION_COOKIE_DOMAIN` | *(unset)* | Domain scope. Leave empty for the browser's default rules. |
-| `SESSION_COOKIE_SECURE` | `true` | Send cookie only over HTTPS. Set `false` for local dev. |
+| `SESSION_COOKIE_SECURE` | `true` | Send cookie only over HTTPS. Set `false` for local dev. **Must be `true` when `SESSION_COOKIE_SAMESITE=none`.** |
 | `SESSION_COOKIE_SAMESITE` | `lax` | Values: `strict`, `lax`, `none`. |
 
 > **Note:** The `HttpOnly` flag is always enabled on session cookies and cannot be disabled.
