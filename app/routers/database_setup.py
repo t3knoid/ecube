@@ -128,9 +128,12 @@ def _require_admin_or_initial_setup(
     if credentials is not None:
         try:
             current_user = get_current_user(request, credentials, db)
+        except Exception:
+            pass  # Invalid token — fall through to 503
+        else:
             if any(r == "admin" for r in current_user.roles):
                 return current_user
-            # Authenticated but not admin — audit the denial
+            # Authenticated but not admin — definitive denial (403, not 503)
             _try_log_authorization_denied(
                 db=db,
                 actor=current_user.username,
@@ -139,8 +142,9 @@ def _require_admin_or_initial_setup(
                 required_roles=["admin"],
                 user_roles=current_user.roles,
             )
-        except Exception:
-            pass  # Invalid token — fall through to 503
+            raise AuthorizationError(
+                "This action requires the admin role"
+            )
 
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
