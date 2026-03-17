@@ -6,12 +6,12 @@ from typing import Optional
 from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy.orm import Session
 
+from app.exceptions import ECUBEException
 from app.models.hardware import DriveState
 from app.models.jobs import DriveAssignment, ExportJob, JobStatus, Manifest
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
 from app.repositories.job_repository import (
-    DriveAssignmentRepository,
     JobRepository,
     ManifestRepository,
 )
@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 def create_job(body: JobCreate, db: Session, actor: Optional[str] = None) -> ExportJob:
     job_repo = JobRepository(db)
     drive_repo = DriveRepository(db)
-    assignment_repo = DriveAssignmentRepository(db)
     audit_repo = AuditRepository(db)
 
     job = ExportJob(
@@ -37,72 +36,65 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None) -> Exp
         retry_delay_seconds=body.retry_delay_seconds,
         created_by=body.created_by,
     )
+
+    # Use a single transaction for the entire create-job-with-drive flow.
+    # flush() obtains IDs without committing, so a failure at any step
+    # rolls back everything — no orphaned job or assignment records.
     try:
-        job_repo.add(job)
+        db.add(job)
+        db.flush()  # obtain job.id for the assignment FK
+
+        if body.drive_id:
+            drive = drive_repo.get_for_update(body.drive_id)
+            if not drive:
+                db.rollback()
+                raise HTTPException(status_code=404, detail="Drive not found")
+
+            # Enforce project isolation
+            if getattr(drive, "current_project_id", None) not in (None, body.project_id):
+                db.rollback()
+                try:
+                    audit_repo.add(
+                        action="PROJECT_ISOLATION_VIOLATION",
+                        user=actor,
+                        job_id=job.id,
+                        details={
+                            "actor": actor,
+                            "drive_id": body.drive_id,
+                            "existing_project_id": drive.current_project_id,
+                            "requested_project_id": body.project_id,
+                        },
+                    )
+                except Exception:
+                    logger.exception("Failed to write audit log for PROJECT_ISOLATION_VIOLATION")
+                raise HTTPException(
+                    status_code=403,
+                    detail="Drive belongs to a different project",
+                )
+
+            if drive.current_state == DriveState.IN_USE:
+                db.rollback()
+                raise HTTPException(
+                    status_code=409,
+                    detail="Drive is already in use",
+                )
+
+            db.add(DriveAssignment(drive_id=body.drive_id, job_id=job.id))
+            drive.current_state = DriveState.IN_USE
+            db.flush()  # validate assignment + drive state change
+
+        db.commit()
+    except (HTTPException, ECUBEException):
+        raise
     except Exception:
+        db.rollback()
         logger.exception("DB commit failed while creating job")
         raise HTTPException(
             status_code=500,
             detail="Database error while creating job",
         )
 
-    if body.drive_id:
-        drive = drive_repo.get_for_update(body.drive_id)
-        if not drive:
-            raise HTTPException(status_code=404, detail="Drive not found")
-
-        # Enforce project isolation: the drive must belong to the same project, if set
-        if getattr(drive, "current_project_id", None) not in (None, body.project_id):
-            try:
-                audit_repo.add(
-                    action="PROJECT_ISOLATION_VIOLATION",
-                    user=actor,
-                    job_id=job.id,
-                    details={
-                        "actor": actor,
-                        "drive_id": body.drive_id,
-                        "existing_project_id": drive.current_project_id,
-                        "requested_project_id": body.project_id,
-                    },
-                )
-            except Exception:
-                logger.exception("Failed to write audit log for PROJECT_ISOLATION_VIOLATION")
-            raise HTTPException(
-                status_code=403,
-                detail="Drive belongs to a different project",
-            )
-
-        # Ensure the drive is in a valid state for assignment
-        if drive.current_state == DriveState.IN_USE:
-            raise HTTPException(
-                status_code=409,
-                detail="Drive is already in use",
-            )
-
-        try:
-            assignment_repo.add(DriveAssignment(drive_id=body.drive_id, job_id=job.id))
-        except Exception:
-            logger.exception(
-                "DB commit failed while creating drive assignment for job %s",
-                job.id,
-            )
-            raise HTTPException(
-                status_code=500,
-                detail="Database error while assigning drive to job",
-            )
-
-        drive.current_state = DriveState.IN_USE
-        try:
-            drive_repo.save(drive)
-        except Exception:
-            logger.exception(
-                "DB commit failed while updating drive state for job %s",
-                job.id,
-            )
-            raise HTTPException(
-                status_code=500,
-                detail="Database error while updating drive state",
-            )
+    db.refresh(job)
 
     try:
         audit_repo.add(
