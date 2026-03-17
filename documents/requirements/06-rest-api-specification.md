@@ -123,6 +123,26 @@ Enforces project isolation.
 
 **Roles:** `admin`, `manager`
 
+### `POST /drives/{id}/format`
+
+Format a drive with the specified filesystem type.
+
+**Precondition:** Drive must be in `AVAILABLE` state and not mounted.
+
+**Body:** `{ "filesystem_type": "ext4" }`
+
+- Supported types: `ext4`, `exfat`
+- Returns `200` with updated drive record on success
+- Returns `409` Conflict if drive is not in `AVAILABLE` state
+- Returns `400` if the filesystem type is unsupported
+- Returns `500` if the format operation fails
+
+**Audit events:**
+- `DRIVE_FORMATTED`: Success; includes `drive_id`, `filesystem_type`
+- `DRIVE_FORMAT_FAILED`: Failure; includes `drive_id`, `filesystem_type`, `error`
+
+**Roles:** `admin`, `manager`
+
 ### `POST /drives/{id}/prepare-eject`
 
 Prepare drive for safe eject: flush filesystem writes, unmount all partitions, and transition to AVAILABLE.

@@ -5,6 +5,35 @@
 - Implement a finite-state machine for drive states and legal transitions.
 - Gate all transitions through a single service module to ensure consistency.
 
+### 4.1.1 Filesystem Detection Design
+
+- On each discovery cycle (insertion or periodic refresh), probe the drive's filesystem type.
+- Use `blkid -o value -s TYPE <device>` as the primary detection tool; fall back to `lsblk --json` if `blkid` returns no result.
+- Map detection results to a canonical set of values:
+  - Recognized filesystems: `ext4`, `exfat`, `ntfs`, `fat32`, `xfs` (and others as reported by `blkid`).
+  - No filesystem signature found: `unformatted`.
+  - Detection command failed (I/O error, permission denied): `unknown`.
+- Store the result in `usb_drives.filesystem_type`.
+- Update the field whenever a drive is reformatted or re-detected.
+
+### 4.1.2 Drive Formatting Design
+
+- Provide an API endpoint (`POST /drives/{id}/format`) to format a drive.
+- **Supported filesystem types:** `ext4` (via `mkfs.ext4`), `exfat` (via `mkfs.exfat`).
+- **Preconditions (enforced before any OS operation):**
+  - Drive must be in `AVAILABLE` state (reject with `409` if not).
+  - Drive must not be currently mounted (verify via `/proc/mounts` check).
+  - Drive must have a valid `filesystem_path` (reject with `400` if missing).
+- **Formatting procedure:**
+  1. Validate preconditions (state, mount status, device path).
+  2. Shell out to `mkfs.<type>` with the device path. Use absolute binary paths from settings (e.g., `settings.mkfs_ext4_path`) to prevent PATH manipulation.
+  3. On success: update `usb_drives.filesystem_type` to the new value, audit-log `DRIVE_FORMATTED`.
+  4. On failure: do not change drive state, audit-log `DRIVE_FORMAT_FAILED` with error details.
+- **Security:**
+  - Device path must pass the same `_DEVICE_PATH_RE` validation used by `unmount_device`.
+  - Formatting commands run with bounded timeouts.
+  - Only `admin` and `manager` roles may format drives.
+
 ## 4.2 Drive Prepare-Eject Procedure
 
 - **Precondition:** Drive must be in `IN_USE` state; reject with 409 if not
