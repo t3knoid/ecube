@@ -193,13 +193,14 @@ def is_database_provisioned() -> bool:
     Returns ``True`` when the configured ``DATABASE_URL`` connects
     successfully and the ``alembic_version`` table contains a revision,
     indicating that provisioning has already been completed.
+
+    Raises :class:`~app.exceptions.DatabaseStatusUnknownError` when the
+    database is unreachable, so callers can fail closed rather than
+    incorrectly assuming the database is unprovisioned.
     """
     from app.config import settings
 
-    try:
-        return _get_current_revision(settings.database_url) is not None
-    except Exception:
-        return False
+    return _get_current_revision(settings.database_url) is not None
 
 
 def _run_migrations(database_url: str) -> int:
@@ -239,29 +240,42 @@ def _run_migrations(database_url: str) -> int:
 
 
 def _get_current_revision(database_url: str) -> Optional[str]:
-    """Read the current Alembic revision from the database, or None."""
+    """Read the current Alembic revision from the database, or ``None``.
+
+    Returns ``None`` when the ``alembic_version`` table does not exist or
+    contains no rows (i.e. the database has not been provisioned).
+
+    Raises :class:`~app.exceptions.DatabaseStatusUnknownError` when a
+    connection-level error prevents the check (transient outage,
+    misconfigured URL, authentication failure, etc.).
+    """
+    from app.exceptions import DatabaseStatusUnknownError
+
     try:
         conn = psycopg2.connect(database_url, connect_timeout=5)
+    except psycopg2.OperationalError as exc:
+        raise DatabaseStatusUnknownError(
+            f"Cannot connect to database to verify provisioning state: {exc}"
+        ) from exc
+
+    try:
+        cur = conn.cursor()
         try:
-            cur = conn.cursor()
-            try:
-                cur.execute(
-                    "SELECT EXISTS ("
-                    "  SELECT FROM information_schema.tables "
-                    "  WHERE table_name = 'alembic_version'"
-                    ")"
-                )
-                if not cur.fetchone()[0]:
-                    return None
-                cur.execute("SELECT version_num FROM alembic_version")
-                row = cur.fetchone()
-                return row[0] if row else None
-            finally:
-                cur.close()
+            cur.execute(
+                "SELECT EXISTS ("
+                "  SELECT FROM information_schema.tables "
+                "  WHERE table_name = 'alembic_version'"
+                ")"
+            )
+            if not cur.fetchone()[0]:
+                return None
+            cur.execute("SELECT version_num FROM alembic_version")
+            row = cur.fetchone()
+            return row[0] if row else None
         finally:
-            conn.close()
-    except Exception:
-        return None
+            cur.close()
+    finally:
+        conn.close()
 
 
 def get_database_status() -> Dict[str, Any]:
