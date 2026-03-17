@@ -15,5 +15,5 @@
 
 ## 8.3 Database
 
-- PostgreSQL
+- PostgreSQL 14+
 - Only accessible by ECUBE System Layer

@@ -41,3 +41,30 @@ class ConflictError(ECUBEException):
     status_code = 409
     default_code = "CONFLICT"
     default_message = "The request conflicts with the current state of the resource."
+
+
+class DatabaseStatusUnknownError(ECUBEException):
+    """Raised when provisioning state cannot be determined (HTTP 503).
+
+    This typically means the database is unreachable due to a transient
+    outage or misconfigured ``DATABASE_URL``.  The caller should fail
+    closed rather than assuming the database is unprovisioned.
+    """
+
+    status_code = 503
+    default_code = "SERVICE_UNAVAILABLE"
+    default_message = (
+        "Cannot determine database provisioning state. "
+        "The database may be temporarily unreachable."
+    )
+
+
+class EngineReinitializationError(ECUBEException):
+    """Raised when a database engine swap is already in progress (HTTP 503)."""
+
+    status_code = 503
+    default_code = "SERVICE_UNAVAILABLE"
+    default_message = (
+        "Database engine reinitialization is already in progress. "
+        "Please retry after the current operation completes."
+    )

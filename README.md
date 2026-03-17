@@ -7,7 +7,7 @@ ECUBE is a secure evidence export platform designed to copy eDiscovery data onto
 ## Application Stack
 
 - **System Layer API:** Python 3.11+, FastAPI
-- **Data Layer:** PostgreSQL with SQLAlchemy + Alembic
+- **Data Layer:** PostgreSQL 14+ with SQLAlchemy + Alembic
 - **Background Processing:** Celery or RQ workers for copy, verification, and manifest tasks
 - **UI Layer:** React, Vue, or server-rendered templates (HTTPS-only)
 - **Runtime Platform:** Linux-based copy machine with USB hub integration and NFS/SMB mount support
@@ -15,7 +15,7 @@ ECUBE is a secure evidence export platform designed to copy eDiscovery data onto
 
 ## PostgreSQL and Alembic Setup
 
-ECUBE uses PostgreSQL as the system-of-record database and Alembic for database schema versioning.
+ECUBE uses PostgreSQL (14+) as the system-of-record database and Alembic for database schema versioning.
 
 ### PostgreSQL (Data Layer)
 
@@ -32,17 +32,10 @@ It is the authoritative source for security and lifecycle state across drive, mo
 
 #### Install PostgreSQL
 
-Choose one install path:
-
-- **Windows:** Download and run the installer from [PostgreSQL Windows Downloads](https://www.postgresql.org/download/windows/)
-- **Ubuntu/Debian:**
-
-  ```bash
-  sudo apt update
-  sudo apt install -y postgresql postgresql-contrib
-  ```
-
-- **RHEL/CentOS/Fedora:** use your distro package manager for `postgresql` and `postgresql-server`.
+```bash
+sudo apt update
+sudo apt install -y postgresql postgresql-contrib
+```
 
 #### Create ECUBE database and user
 
@@ -113,7 +106,7 @@ alembic revision -m "describe change"
 #### Typical startup sequence
 
 1. Start PostgreSQL and ensure `DATABASE_URL` is correct.
-2. Run `alembic upgrade head`.
+2. Run `alembic upgrade head` (or use the API-based provisioning wizard at `/setup/database/provision` after starting the server — see the Operational Guide for details).
 3. Start the API server (`uvicorn app.main:app --reload`).
 
 ## API Documentation
@@ -318,6 +311,25 @@ When file-based logging is enabled, log files can be listed and downloaded via t
 - `GET /admin/logs/{filename}` — download a specific log file
 
 Path traversal protection is enforced: filenames containing `..` or `/` are rejected.  All log file access is recorded in the audit trail.
+
+## QA Test-Case Sync
+
+The QA test-case spreadsheet (`documents/operations/ecube-qa-test-cases.xlsx`) is generated from the markdown guide (`documents/operations/01-qa-testing-guide-baremetal.md`).  A sync script keeps them aligned:
+
+```bash
+# Check for drift (exits non-zero if out of sync)
+python scripts/sync_qa_test_cases.py --check
+
+# Regenerate the Excel from the markdown (preserves Status/Tester/Date/Notes)
+python scripts/sync_qa_test_cases.py --sync
+```
+
+After editing test cases in the markdown guide, run `--sync` and commit both files together.
+
+**Automated enforcement:**
+
+- **Pre-commit hook** — `.githooks/pre-commit` runs `--check` when either file is staged.  Enable with `git config core.hooksPath .githooks`.
+- **CI workflow** — `.github/workflows/qa-sync-check.yml` runs `--check` on every PR that touches the QA guide, spreadsheet, or sync script.
 
 ## Documentation
 
