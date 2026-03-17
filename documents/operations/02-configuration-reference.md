@@ -111,6 +111,8 @@ Required only when `SESSION_BACKEND=redis`. If Redis is unavailable, ECUBE autom
 | `REDIS_CONNECTION_TIMEOUT` | `5` | Timeout in seconds for establishing a Redis connection. |
 | `REDIS_SOCKET_KEEPALIVE` | `true` | Enable TCP keepalive on the Redis socket. |
 
+> **Redis session security:** The Redis backend protects against session fixation (stale or attacker-chosen session-id cookies are discarded when no matching Redis key exists), validates session-id cookie format before lookup, and only issues `Set-Cookie` headers when data has been successfully persisted to Redis. All Redis I/O is non-blocking (async).
+
 ---
 
 ## Operational Tuning

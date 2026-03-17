@@ -287,6 +287,24 @@ Required only when `SESSION_BACKEND=redis`:
 
 If `SESSION_BACKEND=redis` but Redis is unreachable (or the `redis` package is not installed), ECUBE logs a warning and automatically falls back to cookie-based sessions. The application continues to function normally.
 
+### Redis backend security properties
+
+- **Session fixation protection** — When a session-id cookie is presented but no
+  corresponding key exists in Redis (e.g., an attacker pre-set the cookie), the
+  middleware discards the cookie value and generates a fresh random session ID on
+  first write. Existing Redis data is never reused unless the key is present.
+- **Session-id format validation** — Cookie values are validated against the
+  expected `secrets.token_urlsafe` alphabet (`[A-Za-z0-9_-]{22,128}`) before
+  Redis lookup. Malformed values (path-traversal attempts, shell metacharacters,
+  etc.) are silently rejected.
+- **No orphan cookies** — The `Set-Cookie` header is only emitted when the
+  session payload has been successfully persisted to Redis. If `redis.setex()`
+  or serialisation fails, no cookie is issued, preventing clients from holding a
+  session-id with no server-side data.
+- **Async Redis I/O** — All Redis operations (`get`, `setex`, `delete`) use the
+  `redis.asyncio` client and are `await`ed, keeping the ASGI event loop
+  responsive under load.
+
 ### Example `.env` — cookie backend (default)
 
 ```env
