@@ -319,6 +319,25 @@ When file-based logging is enabled, log files can be listed and downloaded via t
 
 Path traversal protection is enforced: filenames containing `..` or `/` are rejected.  All log file access is recorded in the audit trail.
 
+## QA Test-Case Sync
+
+The QA test-case spreadsheet (`documents/operations/ecube-qa-test-cases.xlsx`) is generated from the markdown guide (`documents/operations/01-qa-testing-guide-baremetal.md`).  A sync script keeps them aligned:
+
+```bash
+# Check for drift (exits non-zero if out of sync)
+python scripts/sync_qa_test_cases.py --check
+
+# Regenerate the Excel from the markdown (preserves Status/Tester/Date/Notes)
+python scripts/sync_qa_test_cases.py --sync
+```
+
+After editing test cases in the markdown guide, run `--sync` and commit both files together.
+
+**Automated enforcement:**
+
+- **Pre-commit hook** — `.githooks/pre-commit` runs `--check` when either file is staged.  Enable with `git config core.hooksPath .githooks`.
+- **CI workflow** — `.github/workflows/qa-sync-check.yml` runs `--check` on every PR that touches the QA guide, spreadsheet, or sync script.
+
 ## Documentation
 
 - [Requirements Documents](documents/requirements)
