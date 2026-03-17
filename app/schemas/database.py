@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # Only allow valid hostnames or IPv4 addresses — no URLs, no schemes, no paths.
 _HOSTNAME_RE = re.compile(
@@ -143,6 +143,18 @@ class DatabaseSettingsUpdateRequest(BaseModel):
     app_password: Optional[str] = Field(default=None, min_length=1, description="Database user password")
     pool_size: Optional[int] = Field(default=None, ge=1, le=100, description="Connection pool size")
     pool_max_overflow: Optional[int] = Field(default=None, ge=0, le=200, description="Max overflow connections")
+
+    @model_validator(mode="after")
+    def check_at_least_one_field(self) -> "DatabaseSettingsUpdateRequest":
+        if all(
+            getattr(self, f) is None
+            for f in (
+                "host", "port", "app_database", "app_username",
+                "app_password", "pool_size", "pool_max_overflow",
+            )
+        ):
+            raise ValueError("At least one setting must be provided")
+        return self
 
     @field_validator("host")
     @classmethod
