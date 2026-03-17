@@ -150,6 +150,7 @@ groups are entirely unmapped receives an empty role list, which causes
 | Operation / API area                       | Admin | Manager | Processor | Auditor |
 |--------------------------------------------|:-----:|:-------:|:---------:|:-------:|
 | Manage user roles (`/users/*/roles`)       |  ✔    |    ✖    |     ✖     |    ✖    |
+| Manage OS users/groups (local only)        |  ✔    |    ✖    |     ✖     |    ✖    |
 | Add/remove mounts                          |  ✔    |    ✔    |     ✖     |    ✖    |
 | List mounts                                |  ✔    |    ✔    |     ✔     |    ✔    |
 | Initialize drives / assign to projects     |  ✔    |    ✔    |     ✖     |    ✖    |
@@ -205,6 +206,16 @@ def start_job(job_id: int, user: UserContext):
 def get_audit_logs(user: UserContext):
     ...
 ```
+
+## ECUBE Namespace Isolation
+
+OS user and group management endpoints are scoped to the `ecube-` namespace to prevent accidental damage to host system accounts:
+
+- **Group namespace:** `POST /admin/os-groups` and `DELETE /admin/os-groups/{name}` reject any group name that does not start with the `ecube-` prefix (`422 Unprocessable Entity`). `GET /admin/os-groups` lists only groups matching the prefix. The four default groups (`ecube-admins`, `ecube-managers`, `ecube-processors`, `ecube-auditors`) are bootstrapped during first-run setup.
+
+- **ECUBE-managed user guard:** Mutative user operations (`DELETE /admin/os-users/{username}`, `PUT .../password`, `PUT .../groups`, `POST .../groups`) verify that the target user belongs to at least one `ecube-*` OS group before proceeding. Users who are not members of any `ecube-*` group — such as `postgres`, `www-data`, or manually-created system accounts — are rejected with `422 Unprocessable Entity`. A hardcoded reserved-username list (`root`, `nobody`, `daemon`, etc.) provides an additional layer of protection. This check is bypassed only for internal compensation and first-run recovery paths where the user may not yet have been added to an `ecube-*` group.
+
+- **User listing:** `GET /admin/os-users` returns only users who belong to at least one `ecube-*` group.
 
 ## Recommended Controls
 
