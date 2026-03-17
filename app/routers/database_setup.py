@@ -91,10 +91,23 @@ def _require_admin_or_initial_setup(
             has_admin = repo.has_any_admin()
             db_checked = True
         except Exception:
-            logger.debug(
-                "Admin check failed (DB may not be provisioned yet)",
-                exc_info=True,
-            )
+            # The query failed — either the DB is truly unreachable, or it
+            # is reachable but the schema hasn't been migrated yet (e.g.
+            # user_roles table doesn't exist).  Distinguish the two cases
+            # so that a pre-migration database is treated as initial setup
+            # rather than triggering a 503 that blocks bootstrapping.
+            db.rollback()  # clear the failed transaction
+            try:
+                db.execute(__import__("sqlalchemy").text("SELECT 1"))
+                # DB is reachable but the admin-check query failed
+                # (missing table / unmigrated schema) → initial setup.
+                db_checked = True
+                has_admin = False
+            except Exception:
+                logger.debug(
+                    "Admin check failed (DB unreachable)",
+                    exc_info=True,
+                )
 
     if db_checked and not has_admin:
         # Positively confirmed: no admin exists → initial setup mode
