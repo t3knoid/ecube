@@ -895,9 +895,10 @@ Database provisioning endpoints use a dual-auth model with fail-closed semantics
 | 16 | Auth after setup — provision | `POST /setup/database/provision` without token (after admin exists) | 401 |
 | 17 | Password redaction | `POST /setup/database/provision` and check response | No password in response body |
 | 18 | Re-provision blocked | `POST /setup/database/provision` after successful provisioning (no `force`) | 409, already provisioned |
-| 19 | Force re-provision | `POST /setup/database/provision` with `"force": true` after successful provisioning | 200, returns database, user, migrations_applied |
-| 20 | Fail-closed — DB unreachable, no JWT | Stop PostgreSQL, `POST /setup/database/test-connection` without token | 503, database unavailable message |
-| 21 | Fail-closed — DB unreachable, admin JWT | Stop PostgreSQL, `POST /setup/database/test-connection` with valid admin token | Request proceeds (not blocked by 503) |
+| 19 | Force re-provision (admin) | `POST /setup/database/provision` with `"force": true` and admin token after successful provisioning | 200, returns database, user, migrations_applied |
+| 20 | Force rejected unauthenticated | `POST /setup/database/provision` with `"force": true` during initial setup (no admin exists) | 403, force requires admin |
+| 21 | Fail-closed — DB unreachable, no JWT | Stop PostgreSQL, `POST /setup/database/test-connection` without token | 503, database unavailable message |
+| 22 | Fail-closed — DB unreachable, admin JWT | Stop PostgreSQL, `POST /setup/database/test-connection` with valid admin token | Request proceeds (not blocked by 503) |
 
 ---
 
