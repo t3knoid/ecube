@@ -9,7 +9,7 @@ ECUBE (Evidence Copying & USB Based Export) is a secure evidence export platform
 - **Language:** Python 3.11+
 - **Web framework:** FastAPI (REST API + OpenAPI generation)
 - **ORM:** SQLAlchemy with Alembic migrations
-- **Database:** PostgreSQL (production), SQLite in-memory (tests)
+- **Database:** PostgreSQL 14+ (production), SQLite in-memory (tests)
 - **Background jobs:** Celery or RQ (copy/verify/manifest tasks)
 - **UI layer:** React/Vue or server-rendered templates (presentation only; communicates via HTTPS API)
 - **Testing:** pytest with SQLite `StaticPool` in-memory database

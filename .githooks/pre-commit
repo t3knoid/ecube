@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Git pre-commit hook: verify QA test-case Excel stays in sync with the markdown guide.
+#
+# Install:
+#   cp .githooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+#
+# Or configure the hooks directory once (applies to all hooks in .githooks/):
+#   git config core.hooksPath .githooks
+
+set -euo pipefail
+
+MD_FILE="documents/operations/01-qa-testing-guide-baremetal.md"
+XLSX_FILE="documents/operations/ecube-qa-test-cases.xlsx"
+
+# Only run when either file is staged
+if git diff --cached --name-only | grep -qE "(${MD_FILE}|${XLSX_FILE})"; then
+    echo "pre-commit: checking QA test-case sync..."
+    if ! python3 scripts/sync_qa_test_cases.py --check; then
+        echo ""
+        echo "ERROR: QA test-case Excel is out of sync with the markdown guide."
+        echo "Run:  python3 scripts/sync_qa_test_cases.py --sync"
+        echo "then stage the updated .xlsx and commit again."
+        exit 1
+    fi
+fi
