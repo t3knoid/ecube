@@ -77,17 +77,16 @@ class RedisSessionMiddleware:
 
         # --- Load existing session from Redis --------------------------------
         cookie_value = connection.cookies.get(self.session_cookie)
-        if cookie_value:
-            session_id = cookie_value
-            key = self._KEY_PREFIX + session_id
+        if cookie_value and self._is_valid_session_id(cookie_value):
+            key = self._KEY_PREFIX + cookie_value
             try:
                 raw = self.redis.get(key)
                 if raw is not None:
+                    session_id = cookie_value
                     initial_data = json.loads(raw)
             except Exception:
                 logger.warning(
-                    "Failed to load session %s from Redis; starting empty session",
-                    session_id,
+                    "Failed to load session from Redis; starting fresh session",
                     exc_info=True,
                 )
 
@@ -133,6 +132,18 @@ class RedisSessionMiddleware:
             await send(message)
 
         await self.app(scope, receive, send_wrapper)
+
+    @staticmethod
+    def _is_valid_session_id(value: str) -> bool:
+        """Reject obviously bogus session-id cookies.
+
+        ``secrets.token_urlsafe(32)`` produces a 43-character URL-safe
+        base64 string.  We accept anything between 22 and 128 characters
+        containing only URL-safe base64 characters to allow for future
+        changes while rejecting garbage / injection attempts.
+        """
+        import re
+        return bool(re.fullmatch(r"[A-Za-z0-9_-]{22,128}", value))
 
     def _build_cookie(self, session_id: str, *, delete: bool = False) -> str:
         parts = [f"{self.session_cookie}={session_id}"]
