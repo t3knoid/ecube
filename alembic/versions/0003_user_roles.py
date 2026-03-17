@@ -29,13 +29,7 @@ def upgrade() -> None:
         ),
         sa.UniqueConstraint("username", "role", name="uq_user_role"),
     )
-    op.create_index(
-        "ix_user_roles_username",
-        "user_roles",
-        ["username"],
-    )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_user_roles_username", table_name="user_roles")
     op.drop_table("user_roles")
