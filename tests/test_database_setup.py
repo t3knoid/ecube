@@ -427,10 +427,15 @@ class TestProvisionEndpoint:
     @patch("app.services.database_service.provision_database", return_value=0)
     @patch("app.services.database_service.is_database_provisioned", return_value=True)
     def test_provision_force_overrides_guard(
-        self, mock_provisioned, mock_provision, unauthenticated_client
+        self, mock_provisioned, mock_provision, admin_client, db
     ):
-        """Setting force=true allows re-provisioning."""
-        resp = unauthenticated_client.post(
+        """Setting force=true allows re-provisioning (admin-only)."""
+        from app.models.users import UserRole
+
+        db.add(UserRole(username="admin-user", role="admin"))
+        db.commit()
+
+        resp = admin_client.post(
             "/setup/database/provision",
             json={
                 "host": "localhost",
@@ -446,6 +451,28 @@ class TestProvisionEndpoint:
 
         assert resp.status_code == 200
         assert resp.json()["status"] == "provisioned"
+
+    @patch("app.services.database_service.is_database_provisioned", return_value=True)
+    def test_provision_force_rejected_when_unauthenticated(
+        self, mock_provisioned, unauthenticated_client
+    ):
+        """Unauthenticated callers cannot use force=true."""
+        resp = unauthenticated_client.post(
+            "/setup/database/provision",
+            json={
+                "host": "localhost",
+                "port": 5432,
+                "admin_username": "postgres",
+                "admin_password": "secret",
+                "app_database": "ecube",
+                "app_username": "ecube",
+                "app_password": "ecube123",
+                "force": True,
+            },
+        )
+
+        assert resp.status_code == 403
+        assert "force" in resp.json()["message"].lower()
 
 
 # ---------------------------------------------------------------------------
