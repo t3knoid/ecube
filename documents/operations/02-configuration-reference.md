@@ -93,8 +93,9 @@ Used when `ROLE_RESOLVER=oidc`.
 | `SESSION_COOKIE_EXPIRATION_SECONDS` | `3600` | Cookie lifetime in seconds. Use `86400` for 24 hours. |
 | `SESSION_COOKIE_DOMAIN` | *(empty)* | Domain scope for the cookie. Leave empty for the browser's default rules. |
 | `SESSION_COOKIE_SECURE` | `true` | Send cookie only over HTTPS. Set `false` for local dev without TLS. |
-| `SESSION_COOKIE_HTTPONLY` | `true` | Prevent JavaScript access to the cookie. |
 | `SESSION_COOKIE_SAMESITE` | `lax` | SameSite cookie attribute: `strict`, `lax`, or `none`. |
+
+> **Note:** The `HttpOnly` flag is always enabled on session cookies and cannot be disabled. Both Starlette's `SessionMiddleware` and ECUBE's `RedisSessionMiddleware` enforce this unconditionally.
 
 ---
 

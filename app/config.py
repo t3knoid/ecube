@@ -254,10 +254,10 @@ class Settings(BaseSettings):
     #: Send the cookie only over HTTPS.  Should be ``True`` in production.
     session_cookie_secure: bool = True
 
-    #: Prevent JavaScript access to the cookie.
-    session_cookie_httponly: bool = True
-
     #: SameSite attribute for the session cookie.
+    #: .. note:: The ``HttpOnly`` flag is always set on session cookies and
+    #:    cannot be disabled.  Both Starlette's ``SessionMiddleware`` and
+    #:    ECUBE's ``RedisSessionMiddleware`` enforce this unconditionally.
     session_cookie_samesite: Literal["strict", "lax", "none"] = "lax"
 
     # ---------------------------------------------------------------------------
