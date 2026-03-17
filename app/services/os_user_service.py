@@ -384,15 +384,16 @@ def add_user_to_groups(username: str, groups: List[str]) -> OSUser:
 def create_group(name: str) -> OSGroup:
     """Create an OS group.
 
+    Only groups with the ``ecube-`` prefix can be created through the API
+    to prevent accidental interference with host-OS groups.
+
     Raises :class:`OSUserError` on failure, :class:`ValueError` on bad input.
     """
     validate_group_name(name)
     if not name.startswith(ECUBE_GROUP_PREFIX):
-        logger.warning(
-            "Creating group '%s' without '%s' prefix; "
-            "it will not appear in default group listings",
-            name,
-            ECUBE_GROUP_PREFIX,
+        raise ValueError(
+            f"Group name must start with '{ECUBE_GROUP_PREFIX}'. "
+            "Only ECUBE-managed groups can be created through the API."
         )
     if group_exists(name):
         raise OSUserError(f"Group '{name}' already exists")
@@ -419,9 +420,17 @@ def list_groups(ecube_only: bool = True) -> List[OSGroup]:
 def delete_group(name: str) -> None:
     """Delete an OS group.
 
+    Only groups with the ``ecube-`` prefix can be deleted through the API
+    to prevent accidental interference with host-OS groups.
+
     Raises :class:`OSUserError` on failure, :class:`ValueError` for bad input.
     """
     validate_group_name(name)
+    if not name.startswith(ECUBE_GROUP_PREFIX):
+        raise ValueError(
+            f"Group name must start with '{ECUBE_GROUP_PREFIX}'. "
+            "Only ECUBE-managed groups can be deleted through the API."
+        )
     if not group_exists(name):
         raise OSUserError(f"Group '{name}' does not exist")
 
