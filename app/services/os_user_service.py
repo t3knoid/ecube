@@ -158,11 +158,28 @@ def _is_reserved_username(username: str) -> bool:
 
 def _is_ecube_managed(username: str) -> bool:
     """Return True if *username* belongs to at least one ``ecube-*`` group."""
+    # First, check the user's primary group.
+    try:
+        pw_entry = pwd.getpwnam(username)
+    except KeyError:
+        # User does not exist.
+        return False
+
+    try:
+        primary_group = grp.getgrgid(pw_entry.pw_gid)
+        if primary_group.gr_name.startswith(ECUBE_GROUP_PREFIX):
+            return True
+    except KeyError:
+        # Primary group not found; fall back to supplementary groups.
+        pass
+
+    # Then, check any supplementary groups the user belongs to.
     try:
         for g in grp.getgrall():
             if username in g.gr_mem and g.gr_name.startswith(ECUBE_GROUP_PREFIX):
                 return True
     except KeyError:
+        # Defensive: some platforms may raise KeyError for invalid group entries.
         pass
     return False
 
