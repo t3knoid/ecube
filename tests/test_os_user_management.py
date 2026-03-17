@@ -1040,6 +1040,41 @@ class TestSetupEndpoints:
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
+    def test_initialize_existing_user_not_in_ecube_group(
+        self, mock_pwd, mock_grp, mock_subprocess, unauthenticated_client, db
+    ):
+        """Recovery works even when the pre-existing user is not yet in any
+        ecube-* group (e.g. useradd succeeded but usermod -aG failed on a
+        previous attempt)."""
+        mock_grp.getgrnam.side_effect = [
+            KeyError("no such group"),  # ensure: ecube-admins
+            KeyError("no such group"),  # ensure: ecube-auditors
+            KeyError("no such group"),  # ensure: ecube-managers
+            KeyError("no such group"),  # ensure: ecube-processors
+            _make_grp(name="ecube-admins"),  # add_user_to_groups validation
+        ]
+        # User is NOT in any ecube-* group yet.
+        mock_grp.getgrall.return_value = []
+        mock_grp.getgrgid.return_value = _make_grp(name="admin1", gid=1000)
+        pw = _make_pw(name="admin1")
+        mock_pwd.getpwnam.side_effect = [
+            pw,                        # create_user → user_exists (True → raises)
+            pw,                        # add_user_to_groups → user_exists
+            pw,                        # add_user_to_groups → pwd.getpwnam (OSUser)
+            pw,                        # add_user_to_groups → _get_user_groups
+            pw,                        # reset_password → user_exists
+        ]
+        mock_subprocess.return_value = _ok_result()
+
+        resp = unauthenticated_client.post("/setup/initialize", json={
+            "username": "admin1",
+            "password": "s3cret",
+        })
+        assert resp.status_code == 200
+
+    @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
     def test_initialize_releases_lock_on_os_failure(
         self, mock_pwd, mock_grp, mock_subprocess, unauthenticated_client, db
     ):
