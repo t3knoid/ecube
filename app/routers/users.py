@@ -86,7 +86,20 @@ def set_user_roles(
 
     repo = UserRoleRepository(db)
     deduplicated = sorted(set(body.roles))
-    repo.set_roles(username, deduplicated)
+    try:
+        repo.set_roles(username, deduplicated)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        )
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to set roles for user '%s'", username)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update role assignments. Please retry.",
+        )
 
     _audit_log(
         db,
@@ -116,7 +129,15 @@ def delete_user_roles(
     """Remove all role assignments for a user."""
     _validate_username(username)
     repo = UserRoleRepository(db)
-    repo.delete_roles(username)
+    try:
+        repo.delete_roles(username)
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to delete roles for user '%s'", username)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to remove role assignments. Please retry.",
+        )
 
     _audit_log(
         db,
