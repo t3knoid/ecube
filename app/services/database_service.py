@@ -377,12 +377,13 @@ def update_database_settings(
             f"Could not connect to {new_host}:{new_port} with the supplied credentials"
         ) from exc
 
-    # Write settings atomically
-    _write_env_setting("DATABASE_URL", new_url)
+    # Write all changed settings in a single atomic pass
+    env_updates: Dict[str, str] = {"DATABASE_URL": new_url}
     if pool_size is not None:
-        _write_env_setting("DB_POOL_SIZE", str(new_pool_size))
+        env_updates["DB_POOL_SIZE"] = str(new_pool_size)
     if pool_max_overflow is not None:
-        _write_env_setting("DB_POOL_MAX_OVERFLOW", str(new_pool_max_overflow))
+        env_updates["DB_POOL_MAX_OVERFLOW"] = str(new_pool_max_overflow)
+    _write_env_settings(env_updates)
 
     # Update in-memory settings so subsequent reads are consistent
     settings.database_url = new_url
@@ -424,10 +425,24 @@ def _parse_database_url(url: str) -> Dict[str, Any]:
 
 
 def _write_env_setting(key: str, value: str) -> None:
-    """Atomically write or update a setting in the .env file.
+    """Atomically write or update a single setting in the .env file.
 
-    Uses a write-to-temp-then-rename strategy to avoid corruption.
+    Convenience wrapper around :func:`_write_env_settings` for callers
+    that only need to update one key.
     """
+    _write_env_settings({key: value})
+
+
+def _write_env_settings(updates: Dict[str, str]) -> None:
+    """Atomically write or update one or more settings in the .env file.
+
+    All *updates* are applied in a single read/modify/write pass so the
+    file is never left in a partially-updated state.  Uses a
+    write-to-temp-then-rename strategy (``os.replace``) for crash safety.
+    """
+    if not updates:
+        return
+
     env_path = _get_env_file_path()
     lines: list[str] = []
 
@@ -435,16 +450,16 @@ def _write_env_setting(key: str, value: str) -> None:
         with open(env_path, "r") as f:
             lines = f.readlines()
 
-    # Update existing key or append
-    key_pattern = re.compile(rf"^{re.escape(key)}\s*=")
-    found = False
-    for i, line in enumerate(lines):
-        if key_pattern.match(line):
-            lines[i] = f"{key}={value}\n"
-            found = True
-            break
+    remaining = dict(updates)  # keys still to place
 
-    if not found:
+    for i, line in enumerate(lines):
+        for key in list(remaining):
+            if re.match(rf"^{re.escape(key)}\s*=", line):
+                lines[i] = f"{key}={remaining.pop(key)}\n"
+                break  # one key per line; move to next line
+
+    # Append any keys that weren't already present
+    for key, value in remaining.items():
         lines.append(f"{key}={value}\n")
 
     # Atomic write via temp file + rename
