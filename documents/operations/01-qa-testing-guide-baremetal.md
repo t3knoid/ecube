@@ -513,6 +513,89 @@ curl -sk -X DELETE https://localhost:8443/users/qa-processor/roles \
 > the `/admin/os-users` and `/admin/os-groups` endpoints (requires `admin`
 > role). Alternatively, the admin can use OS/LDAP tools directly.
 
+### 11.8 OS User & Group Management (Admin Only, Local Mode)
+
+These endpoints manage OS-level user and group accounts. They require the `admin` role and are only available when `role_resolver = "local"` (returns `404` otherwise). Group names must start with the `ecube-` prefix. Mutative user operations require the target user to be a member of at least one `ecube-*` group.
+
+```bash
+# Create an OS group
+curl -sk -X POST https://localhost:8443/admin/os-groups \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "ecube-testers"}' | jq
+
+# List OS groups (filtered to ecube-* prefix)
+curl -sk https://localhost:8443/admin/os-groups \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# Create an OS user with password, groups, and DB roles
+curl -sk -X POST https://localhost:8443/admin/os-users \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "qa-testuser",
+    "password": "TestPass-123!",
+    "groups": ["ecube-testers"],
+    "roles": ["processor"]
+  }' | jq
+
+# List OS users (filtered to ecube-* group members)
+curl -sk https://localhost:8443/admin/os-users \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# Reset a user's password
+curl -sk -X PUT https://localhost:8443/admin/os-users/qa-testuser/password \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"password": "NewPass-456!"}' | jq
+
+# Replace a user's group memberships
+curl -sk -X PUT https://localhost:8443/admin/os-users/qa-testuser/groups \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"groups": ["ecube-processors", "ecube-auditors"]}' | jq
+
+# Append groups without removing existing ones
+curl -sk -X POST https://localhost:8443/admin/os-users/qa-testuser/groups \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"groups": ["ecube-managers"]}' | jq
+
+# Delete an OS user
+curl -sk -X DELETE https://localhost:8443/admin/os-users/qa-testuser \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# Delete an OS group
+curl -sk -X DELETE https://localhost:8443/admin/os-groups/ecube-testers \
+  -H "Authorization: Bearer $TOKEN" | jq
+```
+
+### 11.9 First-Run Setup
+
+These endpoints are **unauthenticated** and only succeed once (guarded by a cross-process lock).
+
+```bash
+# Check initialization status (no auth required)
+curl -sk https://localhost:8443/setup/status | jq
+# Expected: {"initialized": false} on a fresh database
+
+# Initialize the system — creates ecube-* groups, admin user, seeds DB role
+curl -sk -X POST https://localhost:8443/setup/initialize \
+  -H "Content-Type: application/json" \
+  -d '{"username": "ecube-admin", "password": "AdminPass-789!"}' | jq
+# Expected: 200 with message, username, groups_created
+
+# Verify status changed
+curl -sk https://localhost:8443/setup/status | jq
+# Expected: {"initialized": true}
+
+# Attempt re-initialization
+curl -sk -X POST https://localhost:8443/setup/initialize \
+  -H "Content-Type: application/json" \
+  -d '{"username": "another-admin", "password": "Pass-000!"}' | jq
+# Expected: 409 Conflict
+```
+
 ---
 
 ## 12. QA Test Cases
@@ -675,6 +758,57 @@ All user role management endpoints require the `admin` role.
 | 17 | ROLE_REMOVED audit log | `GET /audit?action=ROLE_REMOVED` after removing roles | Audit entry with actor and target user |
 | 18 | DB roles override groups | Assign `["manager"]` to `qa-processor` via `PUT`, then login as `qa-processor` | JWT `roles` is `["manager"]`, not `["processor"]` from OS groups |
 | 19 | Fallback to group roles | `DELETE /users/qa-processor/roles`, then login as `qa-processor` | JWT `roles` falls back to OS group mapping (`["processor"]`) |
+
+### 12.9 OS User & Group Management
+
+All OS user and group management endpoints require the `admin` role and are only available when `role_resolver = "local"`.
+
+| # | Test | How | Expected |
+|---|------|-----|----------|
+| 1 | Create group | `POST /admin/os-groups` with `{"name": "ecube-testers"}` | 201, returns name, gid, members |
+| 2 | Create group without prefix | `POST /admin/os-groups` with `{"name": "testers"}` | 422, group name must start with `ecube-` |
+| 3 | List groups | `GET /admin/os-groups` | 200, only `ecube-*` groups listed |
+| 4 | Delete group | `DELETE /admin/os-groups/ecube-testers` | 200 |
+| 5 | Delete group without prefix | `DELETE /admin/os-groups/somegroup` | 422, group name must start with `ecube-` |
+| 6 | Create user | `POST /admin/os-users` with username, password, groups, roles | 201, returns username, uid, gid, home, shell, groups |
+| 7 | Create user — duplicate | `POST /admin/os-users` with existing username | 409, Conflict |
+| 8 | Create user — reserved name | `POST /admin/os-users` with `{"username": "root", ...}` | 422, reserved username |
+| 9 | Create user — empty password | `POST /admin/os-users` with `{"password": "", ...}` | 422 |
+| 10 | Create user — password with newline | `POST /admin/os-users` with password containing `\n` | 422, unsafe characters |
+| 11 | Create user — password with colon | `POST /admin/os-users` with password containing `:` | 422, unsafe characters |
+| 12 | Create user — invalid group | `POST /admin/os-users` with non-existent group in groups list | 422, group does not exist |
+| 13 | List users | `GET /admin/os-users` | 200, only users in `ecube-*` groups listed |
+| 14 | Reset password | `PUT /admin/os-users/{username}/password` with `{"password": "NewPass!"}` | 200 |
+| 15 | Reset password — non-ECUBE user | `PUT /admin/os-users/postgres/password` | 422, user is not ECUBE-managed |
+| 16 | Replace groups | `PUT /admin/os-users/{username}/groups` with `{"groups": ["ecube-admins"]}` | 200, updated group list |
+| 17 | Append groups | `POST /admin/os-users/{username}/groups` with `{"groups": ["ecube-managers"]}` | 200, updated group list |
+| 18 | Modify groups — non-ECUBE user | `PUT /admin/os-users/www-data/groups` | 422, user is not ECUBE-managed |
+| 19 | Delete user | `DELETE /admin/os-users/{username}` | 200, user and DB roles removed |
+| 20 | Delete user — non-ECUBE user | `DELETE /admin/os-users/daemon` | 422, user is not ECUBE-managed |
+| 21 | Delete user — not found | `DELETE /admin/os-users/nonexistent` | 404 |
+| 22 | Processor cannot access OS endpoints | `GET /admin/os-users` with processor token | 403, FORBIDDEN |
+| 23 | Non-local mode returns 404 | All `/admin/os-*` endpoints when `role_resolver != "local"` | 404, Not Found |
+| 24 | OS_USER_CREATED audit log | `GET /audit?action=OS_USER_CREATED` after creating user | Audit entry with actor and username |
+| 25 | OS_USER_DELETED audit log | `GET /audit?action=OS_USER_DELETED` after deleting user | Audit entry with actor and username |
+| 26 | OS_PASSWORD_RESET audit log | `GET /audit?action=OS_PASSWORD_RESET` after resetting password | Audit entry (no password in details) |
+| 27 | OS_GROUP_CREATED audit log | `GET /audit?action=OS_GROUP_CREATED` after creating group | Audit entry with group name |
+| 28 | OS_GROUP_DELETED audit log | `GET /audit?action=OS_GROUP_DELETED` after deleting group | Audit entry with group name |
+
+### 12.10 First-Run Setup
+
+Setup endpoints are unauthenticated and can only succeed once.
+
+| # | Test | How | Expected |
+|---|------|-----|----------|
+| 1 | Status — not initialized | `GET /setup/status` on fresh database | 200, `{"initialized": false}` |
+| 2 | Initialize | `POST /setup/initialize` with valid username and password | 200, returns message, username, groups_created |
+| 3 | Status — initialized | `GET /setup/status` after initialization | 200, `{"initialized": true}` |
+| 4 | Re-initialize rejected | `POST /setup/initialize` again | 409, Conflict |
+| 5 | Invalid username | `POST /setup/initialize` with uppercase or special chars | 422 |
+| 6 | Empty password | `POST /setup/initialize` with `{"password": ""}` | 422 |
+| 7 | Unsafe password chars | `POST /setup/initialize` with password containing newline or colon | 422, unsafe characters |
+| 8 | Login as initialized admin | `POST /auth/token` with the admin credentials from step 2 | 200, JWT contains `admin` role |
+| 9 | SYSTEM_INITIALIZED audit log | `GET /audit?action=SYSTEM_INITIALIZED` | Audit entry with actor |
 
 ---
 
