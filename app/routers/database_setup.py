@@ -246,15 +246,9 @@ def provision_database(
             detail=str(exc),
         )
     except RuntimeError as exc:
-        error_msg = str(exc)
-        if "reinitialization is already in progress" in error_msg:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=error_msg,
-            )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=error_msg,
+            detail=str(exc),
         )
 
     # Best-effort audit
@@ -331,15 +325,9 @@ def update_database_settings(
             detail=str(exc),
         )
     except RuntimeError as exc:
-        error_msg = str(exc)
-        if "reinitialization is already in progress" in error_msg:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=error_msg,
-            )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=error_msg,
+            detail=str(exc),
         )
 
     # Audit (never log password)
