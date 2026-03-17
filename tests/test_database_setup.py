@@ -593,6 +593,69 @@ class TestDatabaseSettingsEndpoint:
 
 
 # ---------------------------------------------------------------------------
+# Endpoint tests — fail-closed when DB is unreachable
+# ---------------------------------------------------------------------------
+
+
+class TestFailClosedBehavior:
+    """Verify 503 when DB is unreachable and no admin JWT is provided."""
+
+    def test_unauthenticated_returns_503_when_db_unreachable(
+        self, unauthenticated_client
+    ):
+        """Without a JWT and without a reachable DB, fail closed with 503."""
+        from app.main import app
+        from app.routers.database_setup import _get_db_or_none
+
+        def _override():
+            yield None
+
+        app.dependency_overrides[_get_db_or_none] = _override
+        try:
+            resp = unauthenticated_client.post(
+                "/setup/database/test-connection",
+                json={
+                    "host": "localhost",
+                    "port": 5432,
+                    "admin_username": "postgres",
+                    "admin_password": "secret",
+                },
+            )
+
+            assert resp.status_code == 503
+            assert "Database is unavailable" in resp.json()["message"]
+        finally:
+            app.dependency_overrides.pop(_get_db_or_none, None)
+
+    @patch("app.services.database_service.test_connection", return_value="16.2")
+    def test_admin_jwt_accepted_when_db_unreachable(
+        self, mock_test_conn, admin_client
+    ):
+        """An admin JWT should be accepted even when DB is unreachable."""
+        from app.main import app
+        from app.routers.database_setup import _get_db_or_none
+
+        def _override():
+            yield None
+
+        app.dependency_overrides[_get_db_or_none] = _override
+        try:
+            resp = admin_client.post(
+                "/setup/database/test-connection",
+                json={
+                    "host": "localhost",
+                    "port": 5432,
+                    "admin_username": "postgres",
+                    "admin_password": "secret",
+                },
+            )
+
+            assert resp.status_code == 200
+        finally:
+            app.dependency_overrides.pop(_get_db_or_none, None)
+
+
+# ---------------------------------------------------------------------------
 # Service-level tests
 # ---------------------------------------------------------------------------
 

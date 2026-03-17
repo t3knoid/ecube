@@ -75,35 +75,64 @@ def _require_admin_or_initial_setup(
     Returns ``None`` during initial setup, or a ``CurrentUser`` with admin
     role after setup.
 
-    If the database is unreachable (e.g. not yet provisioned), the system is
-    treated as being in initial-setup mode.
+    **Fail-closed policy:** If the database is unreachable and no valid admin
+    JWT is provided, the endpoint returns ``503 Service Unavailable`` rather
+    than granting unauthenticated access.  This prevents an attacker from
+    exploiting a transient DB outage to bypass authentication.  When a valid
+    admin JWT is presented, the request proceeds even without DB connectivity
+    (the JWT is self-contained).
     """
-    if db is None:
-        # DB unreachable — treat as initial setup
+    # --- Try to determine initialization state from the database ---
+    db_checked = False
+    has_admin = False
+    if db is not None:
+        try:
+            repo = UserRoleRepository(db)
+            has_admin = repo.has_any_admin()
+            db_checked = True
+        except Exception:
+            logger.debug(
+                "Admin check failed (DB may not be provisioned yet)",
+                exc_info=True,
+            )
+
+    if db_checked and not has_admin:
+        # Positively confirmed: no admin exists → initial setup mode
         return None
 
-    try:
-        repo = UserRoleRepository(db)
-        if not repo.has_any_admin():
-            return None
-    except Exception:
-        # DB query failed — treat as initial setup
-        logger.debug("Admin check failed (DB may not be provisioned yet)", exc_info=True)
-        return None
+    # --- DB unreachable or admin exists: require authentication ---
+    if db_checked and has_admin:
+        # System is initialized — must have a valid admin JWT
+        if credentials is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Missing authentication token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        current_user = get_current_user(request, credentials, db)
+        if not any(r == "admin" for r in current_user.roles):
+            raise AuthorizationError(
+                "This action requires the admin role"
+            )
+        return current_user
 
-    # System is initialized — require admin authentication
-    if credentials is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authentication token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    current_user = get_current_user(request, credentials, db)
-    if not any(r == "admin" for r in current_user.roles):
-        raise AuthorizationError(
-            "This action requires the admin role"
-        )
-    return current_user
+    # DB is unreachable — fail closed unless a valid admin JWT is provided
+    if credentials is not None:
+        try:
+            current_user = get_current_user(request, credentials, db)
+            if any(r == "admin" for r in current_user.roles):
+                return current_user
+        except Exception:
+            pass  # Invalid token — fall through to 503
+
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=(
+            "Database is unavailable and initialization state cannot be "
+            "verified. Provide a valid admin token or ensure the database "
+            "is reachable."
+        ),
+    )
 
 
 @router.post(

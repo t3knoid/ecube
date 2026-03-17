@@ -873,7 +873,7 @@ Setup endpoints are unauthenticated and can only succeed once.
 
 ### 12.11 Database Provisioning API
 
-Database provisioning endpoints use a dual-auth model: unauthenticated during initial setup, admin-only after.
+Database provisioning endpoints use a dual-auth model with fail-closed semantics: unauthenticated during initial setup, admin-only after, and 503 when the database is unreachable without a valid admin JWT.
 
 | # | Test | How | Expected |
 |---|------|-----|----------|
@@ -896,6 +896,8 @@ Database provisioning endpoints use a dual-auth model: unauthenticated during in
 | 17 | Password redaction | `POST /setup/database/provision` and check response | No password in response body |
 | 18 | Re-provision blocked | `POST /setup/database/provision` after successful provisioning (no `force`) | 409, already provisioned |
 | 19 | Force re-provision | `POST /setup/database/provision` with `"force": true` after successful provisioning | 200, returns database, user, migrations_applied |
+| 20 | Fail-closed — DB unreachable, no JWT | Stop PostgreSQL, `POST /setup/database/test-connection` without token | 503, database unavailable message |
+| 21 | Fail-closed — DB unreachable, admin JWT | Stop PostgreSQL, `POST /setup/database/test-connection` with valid admin token | Request proceeds (not blocked by 503) |
 
 ---
 
