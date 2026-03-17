@@ -12,6 +12,7 @@ import logging
 import os
 import re
 import tempfile
+import threading
 from typing import Any, Dict, Optional
 from urllib.parse import quote, urlparse
 
@@ -20,6 +21,11 @@ from psycopg2 import sql
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 logger = logging.getLogger(__name__)
+
+# Guards engine/session-factory replacement so concurrent requests cannot
+# observe a half-swapped state.  Also exposes "reinitialization in progress"
+# to the router layer so it can return 503.
+_engine_lock = threading.Lock()
 
 
 def _get_env_file_path() -> str:
@@ -462,26 +468,49 @@ def _reinitialize_engine(
     pool_size: int,
     pool_max_overflow: int,
 ) -> None:
-    """Re-initialise the SQLAlchemy engine and session factory in-place."""
+    """Re-initialise the SQLAlchemy engine and session factory in-place.
+
+    Acquires ``_engine_lock`` so that the swap is atomic with respect to
+    other threads.  The old engine is disposed **after** the new engine and
+    session factory are installed, so in-flight requests that still hold a
+    reference to the old session can finish gracefully.
+
+    Raises ``RuntimeError`` immediately if another reinitialization is
+    already in progress (non-blocking).
+    """
     import app.database as db_module
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
     from app.config import settings
 
-    old_engine = db_module.engine
+    acquired = _engine_lock.acquire(blocking=False)
+    if not acquired:
+        raise RuntimeError(
+            "Database engine reinitialization is already in progress. "
+            "Please retry after the current operation completes."
+        )
+    try:
+        old_engine = db_module.engine
+
+        new_engine = create_engine(
+            database_url,
+            pool_size=pool_size,
+            max_overflow=pool_max_overflow,
+            pool_recycle=settings.db_pool_recycle_seconds,
+        )
+
+        # Swap atomically: install new engine and session factory first
+        db_module.engine = new_engine
+        db_module.SessionLocal = sessionmaker(
+            autocommit=False, autoflush=False, bind=new_engine
+        )
+    finally:
+        _engine_lock.release()
+
+    # Dispose old engine outside the lock — existing connections drain
+    # naturally and the pool is released.
     try:
         old_engine.dispose()
     except Exception:
         logger.debug("Failed to dispose old engine", exc_info=True)
-
-    new_engine = create_engine(
-        database_url,
-        pool_size=pool_size,
-        max_overflow=pool_max_overflow,
-        pool_recycle=settings.db_pool_recycle_seconds,
-    )
-    db_module.engine = new_engine
-    db_module.SessionLocal = sessionmaker(
-        autocommit=False, autoflush=False, bind=new_engine
-    )
