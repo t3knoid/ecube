@@ -33,7 +33,7 @@ README.md
 >   models/       # SQLAlchemy ORM models
 >   services/     # Domain service modules (business logic, state machines)
 >   schemas/      # Pydantic request/response schemas
->   infrastructure/  # Hardware adapters, udev/sysfs integration
+>   infrastructure/  # Platform abstraction interfaces + concrete implementations (Linux reference)
 >   migrations/   # Alembic migration scripts
 > tests/
 >   conftest.py   # Shared fixtures; uses SQLite StaticPool
@@ -91,6 +91,13 @@ Use the `require_roles(*roles)` decorator pattern (see `documents/design/10-secu
 - A drive's `current_project_id` is bound on initialization and **must** be enforced on every write.
 - Mismatched project writes must be rejected **before** any copy begins.
 - Every denial must be recorded in `audit_logs` with actor, drive, requested project, and reason.
+
+### Platform Abstraction
+
+- All OS-specific operations (drive discovery, filesystem detection, formatting, mount/unmount, eject, user management) are defined as `typing.Protocol` or `abc.ABC` interfaces in `app/infrastructure/`.
+- Concrete implementations satisfy those interfaces for a specific platform. Linux is the reference implementation.
+- Services depend on the interface, not the implementation. Tests inject fakes/mocks via `dependency_overrides` or constructor arguments.
+- When adding new OS-level functionality, define the interface first, then implement the Linux concrete class.
 
 ## Domain Model Overview
 
