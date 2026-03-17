@@ -95,6 +95,17 @@ class TestCookieConfigurationOverrides:
         s = Settings(session_cookie_samesite="Lax")
         assert s.session_cookie_samesite == "lax"
 
+    def test_samesite_none_requires_secure(self):
+        from app.config import Settings
+        with pytest.raises(Exception, match="SESSION_COOKIE_SECURE must be true"):
+            Settings(session_cookie_samesite="none", session_cookie_secure=False)
+
+    def test_samesite_none_with_secure_allowed(self):
+        from app.config import Settings
+        s = Settings(session_cookie_samesite="none", session_cookie_secure=True)
+        assert s.session_cookie_samesite == "none"
+        assert s.session_cookie_secure is True
+
 
 # ---------------------------------------------------------------------------
 # AC2 / AC3 — Backend selection & Redis configuration
