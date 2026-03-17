@@ -32,17 +32,10 @@ It is the authoritative source for security and lifecycle state across drive, mo
 
 #### Install PostgreSQL
 
-Choose one install path:
-
-- **Windows:** Download and run the installer from [PostgreSQL Windows Downloads](https://www.postgresql.org/download/windows/)
-- **Ubuntu/Debian:**
-
-  ```bash
-  sudo apt update
-  sudo apt install -y postgresql postgresql-contrib
-  ```
-
-- **RHEL/CentOS/Fedora:** use your distro package manager for `postgresql` and `postgresql-server`.
+```bash
+sudo apt update
+sudo apt install -y postgresql postgresql-contrib
+```
 
 #### Create ECUBE database and user
 
