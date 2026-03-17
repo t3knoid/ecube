@@ -7,10 +7,25 @@
 
 ### 4.1.1 Filesystem Detection Design
 
-- On each discovery cycle (insertion or periodic refresh), probe the drive's filesystem type.
-- Use `blkid -o value -s TYPE <device>` as the primary detection tool; fall back to `lsblk --json` if `blkid` returns no result.
-- Map detection results to a canonical set of values:
-  - Recognized filesystems: `ext4`, `exfat`, `ntfs`, `fat32`, `xfs` (and others as reported by `blkid`).
+- On each discovery cycle (insertion or periodic refresh), probe the drive's filesystem type through the `FilesystemDetector` interface.
+- The interface contract:
+
+  ```python
+  class FilesystemDetector(Protocol):
+      def detect(self, device_path: str) -> str:
+          """Return the canonical filesystem label for the given block device.
+
+          Returns one of:
+          - A recognized filesystem name (e.g. 'ext4', 'exfat', 'ntfs', 'fat32', 'xfs').
+          - 'unformatted' when no filesystem signature is found.
+          - 'unknown' when the detection command fails.
+          """
+          ...
+  ```
+
+- **Linux reference implementation:** Use `blkid -o value -s TYPE <device>` as the primary detection tool; fall back to `lsblk --json` if `blkid` returns no result.
+- Map detection results to canonical values:
+  - Recognized filesystems: `ext4`, `exfat`, `ntfs`, `fat32`, `xfs` (and others as reported by the OS tool).
   - No filesystem signature found: `unformatted`.
   - Detection command failed (I/O error, permission denied): `unknown`.
 - Store the result in `usb_drives.filesystem_type`.
@@ -19,18 +34,38 @@
 ### 4.1.2 Drive Formatting Design
 
 - Provide an API endpoint (`POST /drives/{id}/format`) to format a drive.
-- **Supported filesystem types:** `ext4` (via `mkfs.ext4`), `exfat` (via `mkfs.exfat`).
-- **Preconditions (enforced before any OS operation):**
+- **Supported filesystem types:** `ext4`, `exfat`.
+- The formatting operation is executed through the `DriveFormatter` interface.
+- The interface contract:
+
+  ```python
+  class DriveFormatter(Protocol):
+      def format(self, device_path: str, filesystem_type: str) -> None:
+          """Format the block device with the specified filesystem.
+
+          Raises RuntimeError with a descriptive message on failure.
+          Implementations must validate the device path before executing
+          any destructive operation.
+          """
+          ...
+
+      def is_mounted(self, device_path: str) -> bool:
+          """Return True if the device (or any of its partitions) is currently mounted."""
+          ...
+  ```
+
+- **Linux reference implementation:** `mkfs.ext4`, `mkfs.exfat`; mount check via `/proc/mounts`.
+- **Preconditions (enforced by the service layer before calling the interface):**
   - Drive must be in `AVAILABLE` state (reject with `409` if not).
-  - Drive must not be currently mounted (verify via `/proc/mounts` check).
+  - Drive must not be currently mounted — checked via `DriveFormatter.is_mounted()` (reject with `409` if mounted).
   - Drive must have a valid `filesystem_path` (reject with `400` if missing).
 - **Formatting procedure:**
   1. Validate preconditions (state, mount status, device path).
-  2. Shell out to `mkfs.<type>` with the device path. Use absolute binary paths from settings (e.g., `settings.mkfs_ext4_path`) to prevent PATH manipulation.
+  2. Call `DriveFormatter.format(device_path, filesystem_type)`. Implementations use absolute binary paths from settings to prevent PATH manipulation.
   3. On success: update `usb_drives.filesystem_type` to the new value, audit-log `DRIVE_FORMATTED`.
   4. On failure: do not change drive state, audit-log `DRIVE_FORMAT_FAILED` with error details.
 - **Security:**
-  - Device path must pass the same `_DEVICE_PATH_RE` validation used by `unmount_device`.
+  - Device path must pass validation (e.g. `_DEVICE_PATH_RE`) before any destructive operation — enforced within each concrete implementation.
   - Formatting commands run with bounded timeouts.
   - Only `admin` and `manager` roles may format drives.
 

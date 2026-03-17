@@ -2,9 +2,9 @@
 
 ## 2.1 Copy Machine Design
 
-- Linux host runs ECUBE API service and background worker processes.
+- Primary target platform is Linux; all OS-specific operations are accessed through abstract interfaces (see §3 Platform Abstraction Layer) so alternative platform implementations can be added without modifying the service layer.
 - Local storage is used for manifests, temporary metadata, and queues.
-- USB subsystem events are consumed via udev/sysfs polling or event hooks.
+- USB subsystem events are consumed through the `DriveDiscoveryBackend` interface (Linux reference: udev/sysfs polling).
 
 ## 2.2 USB Hub & Port Mapping Design
 
@@ -26,8 +26,9 @@
 
 ### Filesystem Detection
 
-- Probe inserted drives for filesystem type using `blkid` or `lsblk --json`.
+- Probe inserted drives for filesystem type through the `FilesystemDetector` interface (Linux reference: `blkid`, `lsblk --json`).
 - Recognized types: `ext4`, `exfat`, `ntfs`, `fat32`, `xfs`, and others reported by the OS.
 - Drives with no recognizable filesystem are labelled `unformatted`.
 - Detection failures (permission errors, I/O errors) are labelled `unknown`.
 - Store the result in `usb_drives.filesystem_type` on each discovery cycle.
+- The interface returns a canonical string; mapping OS-specific tool output to canonical values is the responsibility of each concrete implementation.
