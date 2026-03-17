@@ -174,11 +174,18 @@ class TestGracefulRedisFailover:
     def test_fallback_when_redis_package_missing(self, caplog):
         from app.session import _try_redis_backend
 
-        with patch.dict("sys.modules", {"redis": None}):
+        _real_import = __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
+
+        def _block_redis(name, *args, **kwargs):
+            if name == "redis":
+                raise ImportError("No module named 'redis'")
+            return _real_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", side_effect=_block_redis):
             with caplog.at_level(logging.WARNING):
                 result = _try_redis_backend()
         assert result is None
-        assert "not installed" in caplog.text or "falling back" in caplog.text
+        assert "not installed" in caplog.text
 
     def test_fallback_when_redis_url_not_set(self, caplog):
         from app.session import _try_redis_backend
