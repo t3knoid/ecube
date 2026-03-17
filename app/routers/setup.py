@@ -24,13 +24,11 @@ import threading
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.routing import APIRoute
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from starlette.requests import Request as StarletteRequest
-from starlette.responses import JSONResponse
 
 from app.config import settings
+from app.routing import LocalOnlyRoute
 from app.database import get_db
 from app.models.system import SystemInitialization
 from app.models.users import UserRole
@@ -49,38 +47,7 @@ logger = logging.getLogger(__name__)
 _init_lock = threading.Lock()
 
 
-def _ensure_local_mode() -> None:
-    """Block setup endpoints when the role resolver is not ``local``.
-
-    In LDAP/OIDC deployments, OS user/group management is handled by the
-    directory service and the setup wizard must not create local accounts.
-    """
-    if getattr(settings, "role_resolver", "local") != "local":
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Not found",
-        )
-
-
-class _LocalOnlyRoute(APIRoute):
-    """Custom route class that short-circuits with 404 *before* dependency
-    resolution when the role resolver is not ``"local"``."""
-
-    def get_route_handler(self):  # type: ignore[override]
-        original = super().get_route_handler()
-
-        async def _guarded(request: StarletteRequest):
-            if getattr(settings, "role_resolver", "local") != "local":
-                return JSONResponse(
-                    status_code=404,
-                    content={"detail": "Not found"},
-                )
-            return await original(request)
-
-        return _guarded
-
-
-router = APIRouter(prefix="/setup", tags=["setup"], route_class=_LocalOnlyRoute)
+router = APIRouter(prefix="/setup", tags=["setup"], route_class=LocalOnlyRoute)
 
 
 @router.get("/status", response_model=SetupStatusResponse)
@@ -173,7 +140,11 @@ def _do_initialize(
         raise
     except Exception:
         _release_init_lock(db)
-        raise
+        logger.exception("Unexpected error during OS setup")
+        raise HTTPException(
+            status_code=500,
+            detail="Unexpected error during system initialization.",
+        )
 
     # Step 4: Seed admin role now that OS setup succeeded.
     try:
@@ -184,7 +155,11 @@ def _do_initialize(
         # initialization lock so that setup can be retried safely.
         db.rollback()
         _release_init_lock(db)
-        raise
+        logger.exception("Failed to seed admin role for %s", body.username)
+        raise HTTPException(
+            status_code=500,
+            detail="OS setup succeeded but failed to seed admin role in the database.",
+        )
 
     # Step 5: Audit log.
     try:
