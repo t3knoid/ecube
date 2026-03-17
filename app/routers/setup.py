@@ -24,8 +24,11 @@ import threading
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.routing import APIRoute
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from starlette.requests import Request as StarletteRequest
+from starlette.responses import JSONResponse
 
 from app.config import settings
 from app.database import get_db
@@ -41,8 +44,6 @@ from app.schemas.admin import (
 from app.services import os_user_service
 
 logger = logging.getLogger(__name__)
-
-router = APIRouter(prefix="/setup", tags=["setup"])
 
 # Serialize concurrent initialization attempts so only one runs at a time.
 _init_lock = threading.Lock()
@@ -61,6 +62,27 @@ def _ensure_local_mode() -> None:
         )
 
 
+class _LocalOnlyRoute(APIRoute):
+    """Custom route class that short-circuits with 404 *before* dependency
+    resolution when the role resolver is not ``"local"``."""
+
+    def get_route_handler(self):  # type: ignore[override]
+        original = super().get_route_handler()
+
+        async def _guarded(request: StarletteRequest):
+            if getattr(settings, "role_resolver", "local") != "local":
+                return JSONResponse(
+                    status_code=404,
+                    content={"detail": "Not found"},
+                )
+            return await original(request)
+
+        return _guarded
+
+
+router = APIRouter(prefix="/setup", tags=["setup"], route_class=_LocalOnlyRoute)
+
+
 @router.get("/status", response_model=SetupStatusResponse)
 def get_setup_status(
     db: Session = Depends(get_db),
@@ -73,7 +95,6 @@ def get_setup_status(
     This endpoint is **unauthenticated** — it is safe to call before any
     users exist.
     """
-    _ensure_local_mode()
     repo = UserRoleRepository(db)
     return SetupStatusResponse(initialized=repo.has_any_admin())
 
@@ -98,7 +119,6 @@ def initialize_system(
     This endpoint is **unauthenticated** — it can only succeed once, before
     any admin exists.
     """
-    _ensure_local_mode()
     repo = UserRoleRepository(db)
     if repo.has_any_admin():
         raise HTTPException(
