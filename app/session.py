@@ -67,7 +67,7 @@ class RedisSessionMiddleware:
         self.domain = domain
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] not in ("http", "websocket"):
+        if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
