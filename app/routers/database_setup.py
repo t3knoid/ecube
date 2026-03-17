@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
-from app.auth import CurrentUser, get_current_user, require_roles
+from app.auth import CurrentUser, get_current_user, require_roles, _try_log_authorization_denied
 from app.database import get_db
 from app.exceptions import AuthorizationError
 from app.routing import LocalOnlyRoute
@@ -111,6 +111,14 @@ def _require_admin_or_initial_setup(
             )
         current_user = get_current_user(request, credentials, db)
         if not any(r == "admin" for r in current_user.roles):
+            _try_log_authorization_denied(
+                db=db,
+                actor=current_user.username,
+                path=str(request.url.path),
+                method=request.method,
+                required_roles=["admin"],
+                user_roles=current_user.roles,
+            )
             raise AuthorizationError(
                 "This action requires the admin role"
             )
@@ -122,6 +130,15 @@ def _require_admin_or_initial_setup(
             current_user = get_current_user(request, credentials, db)
             if any(r == "admin" for r in current_user.roles):
                 return current_user
+            # Authenticated but not admin — audit the denial
+            _try_log_authorization_denied(
+                db=db,
+                actor=current_user.username,
+                path=str(request.url.path),
+                method=request.method,
+                required_roles=["admin"],
+                user_roles=current_user.roles,
+            )
         except Exception:
             pass  # Invalid token — fall through to 503
 
