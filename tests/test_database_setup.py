@@ -149,11 +149,9 @@ class TestDatabaseSchemaValidation:
         assert req.app_database == "ecube_prod"
         assert req.app_username == "ecube_user"
 
-    def test_settings_all_optional(self):
-        req = DatabaseSettingsUpdateRequest()
-        assert req.host is None
-        assert req.port is None
-        assert req.app_database is None
+    def test_settings_rejects_empty(self):
+        with pytest.raises(Exception):
+            DatabaseSettingsUpdateRequest()
 
     def test_settings_partial_update(self):
         req = DatabaseSettingsUpdateRequest(host="newhost", pool_size=20)
@@ -585,21 +583,13 @@ class TestDatabaseSettingsEndpoint:
 
     @patch("app.services.database_service.update_database_settings")
     def test_settings_empty_body(self, mock_update, admin_client):
-        """An empty body should be accepted (no-op update)."""
-        mock_update.return_value = {
-            "status": "updated",
-            "host": "localhost",
-            "port": 5432,
-            "database": "ecube",
-            "connected": True,
-        }
-
+        """An empty body must be rejected — at least one field required."""
         resp = admin_client.put(
             "/setup/database/settings",
             json={},
         )
 
-        assert resp.status_code == 200
+        assert resp.status_code == 422
 
 
 # ---------------------------------------------------------------------------
