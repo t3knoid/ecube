@@ -306,11 +306,11 @@ def set_user_groups(username: str, groups: List[str]) -> OSUser:
     )
 
 
-def add_user_to_groups(username: str, groups: List[str]) -> List[str]:
+def add_user_to_groups(username: str, groups: List[str]) -> OSUser:
     """Add a user to supplementary groups without removing existing memberships.
 
     Uses ``usermod -aG`` (append) instead of ``-G`` (replace).
-    Returns the resulting group list.
+    Returns the updated :class:`OSUser`.
     """
     validate_username(username)
     if _is_reserved_username(username):
@@ -324,7 +324,16 @@ def add_user_to_groups(username: str, groups: List[str]) -> List[str]:
             raise OSUserError(f"Group '{g}' does not exist")
 
     _run_sudo([settings.usermod_binary_path, "-aG", ",".join(groups), username])
-    return _get_user_groups(username)
+
+    pw = pwd.getpwnam(username)
+    return OSUser(
+        username=pw.pw_name,
+        uid=pw.pw_uid,
+        gid=pw.pw_gid,
+        home=pw.pw_dir,
+        shell=pw.pw_shell,
+        groups=_get_user_groups(username),
+    )
 
 
 # ---------------------------------------------------------------------------

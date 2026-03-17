@@ -503,6 +503,41 @@ class TestOSUserEndpoints:
         assert resp.status_code == 200
         assert resp.json()["username"] == "testuser"
 
+    @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_add_user_to_groups(self, mock_pwd, mock_grp, mock_subprocess, admin_client):
+        pw = _make_pw()
+        mock_pwd.getpwnam.return_value = pw
+        mock_grp.getgrnam.return_value = _make_grp(name="ecube-managers")
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="ecube-admins", members=["testuser"]),
+            _make_grp(name="ecube-managers", members=["testuser"]),
+        ]
+        mock_grp.getgrgid.return_value = _make_grp(name="testuser", gid=1000)
+        mock_subprocess.return_value = _ok_result()
+
+        resp = admin_client.post("/admin/os-users/testuser/groups", json={
+            "groups": ["ecube-managers"],
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["username"] == "testuser"
+        assert "ecube-managers" in data["groups"]
+
+        # Verify usermod -aG was used (append, not replace).
+        calls = [c.args[0] for c in mock_subprocess.call_args_list]
+        aG_calls = [c for c in calls if "-aG" in c]
+        assert len(aG_calls) == 1
+
+    @patch("app.services.os_user_service.pwd")
+    def test_add_user_to_groups_reserved_username(self, mock_pwd, admin_client):
+        mock_pwd.getpwnam.return_value = _make_pw(name="root")
+        resp = admin_client.post("/admin/os-users/root/groups", json={
+            "groups": ["ecube-admins"],
+        })
+        assert resp.status_code == 422
+
     def test_os_user_endpoints_require_auth(self, unauthenticated_client):
         """Unauthenticated requests should get 401."""
         resp = unauthenticated_client.get("/admin/os-users")
@@ -713,6 +748,7 @@ class TestSetupEndpoints:
         mock_pwd.getpwnam.side_effect = [
             pw,                        # create_user → user_exists (True → raises)
             pw,                        # add_user_to_groups → user_exists
+            pw,                        # add_user_to_groups → pwd.getpwnam (OSUser)
             pw,                        # add_user_to_groups → _get_user_groups
             pw,                        # reset_password → user_exists
         ]
