@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import secrets
-from typing import TYPE_CHECKING, Any, MutableMapping
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse, urlunparse
 
 from starlette.datastructures import MutableHeaders
