@@ -28,7 +28,10 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
+from fastapi.routing import APIRoute
 from sqlalchemy.orm import Session
+from starlette.requests import Request as StarletteRequest
+from starlette.responses import JSONResponse
 
 from app.auth import CurrentUser, get_current_user, require_roles
 from app.config import settings
@@ -243,12 +246,48 @@ def _ensure_local_role_resolver(request: Request) -> None:
         raise HTTPException(status_code=404, detail="Not found")
 
 
+class _LocalOnlyRoute(APIRoute):
+    """Custom route class that short-circuits with 404 *before* dependency
+    resolution when the role resolver is not ``"local"``.
+
+    This guarantees that non-local deployments never leak 401/403 responses
+    for endpoints that should appear non-existent.
+    """
+
+    def get_route_handler(self):  # type: ignore[override]
+        original = super().get_route_handler()
+
+        async def _guarded(request: StarletteRequest):
+            if getattr(settings, "role_resolver", "local") != "local":
+                logger.warning(
+                    "OS user/group endpoint called while role_resolver=%s; path=%s",
+                    getattr(settings, "role_resolver", None),
+                    request.url.path,
+                )
+                return JSONResponse(
+                    status_code=404,
+                    content={"detail": "Not found"},
+                )
+            return await original(request)
+
+        return _guarded
+
+
+# Sub-router for OS user/group endpoints.  The custom route class
+# ensures that non-local deployments get a clean 404 *before* any auth
+# dependency resolution, so callers never see 401/403 for endpoints
+# that conceptually don't exist in that deployment mode.
+_os_router = APIRouter(
+    route_class=_LocalOnlyRoute,
+)
+
+
 # ---------------------------------------------------------------------------
 # OS user management endpoints — all require admin role
 # ---------------------------------------------------------------------------
 
 
-@router.post("/os-users", response_model=OSUserResponse, status_code=201)
+@_os_router.post("/os-users", response_model=OSUserResponse, status_code=201)
 def create_os_user(
     body: CreateOSUserRequest,
     request: Request,
@@ -256,7 +295,6 @@ def create_os_user(
     current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSUserResponse:
     """Create an OS user, set password, and optionally add to groups."""
-    _ensure_local_role_resolver(request)
     try:
         os_user = os_user_service.create_user(
             username=body.username,
@@ -291,13 +329,12 @@ def create_os_user(
     )
 
 
-@router.get("/os-users", response_model=OSUserListResponse)
+@_os_router.get("/os-users", response_model=OSUserListResponse)
 def list_os_users(
     request: Request,
     current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSUserListResponse:
     """List OS users filtered to ECUBE-relevant groups."""
-    _ensure_local_role_resolver(request)
     users = os_user_service.list_users(ecube_only=True)
     return OSUserListResponse(
         users=[
@@ -314,7 +351,7 @@ def list_os_users(
     )
 
 
-@router.delete("/os-users/{username}", status_code=200)
+@_os_router.delete("/os-users/{username}", status_code=200)
 def delete_os_user(
     username: str,
     request: Request,
@@ -322,7 +359,6 @@ def delete_os_user(
     current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> dict:
     """Delete an OS user and remove their DB role assignments."""
-    _ensure_local_role_resolver(request)
     _validate_path_username(username)
 
     try:
@@ -343,7 +379,7 @@ def delete_os_user(
     return {"message": f"User '{username}' deleted"}
 
 
-@router.put("/os-users/{username}/password", status_code=200)
+@_os_router.put("/os-users/{username}/password", status_code=200)
 def reset_os_user_password(
     username: str,
     body: ResetPasswordRequest,
@@ -352,7 +388,6 @@ def reset_os_user_password(
     current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> dict:
     """Reset an OS user's password via ``chpasswd``."""
-    _ensure_local_role_resolver(request)
     _validate_path_username(username)
 
     try:
@@ -370,7 +405,7 @@ def reset_os_user_password(
     return {"message": f"Password reset for user '{username}'"}
 
 
-@router.put("/os-users/{username}/groups", response_model=OSUserResponse)
+@_os_router.put("/os-users/{username}/groups", response_model=OSUserResponse)
 def set_os_user_groups(
     username: str,
     body: SetOSGroupsRequest,
@@ -379,7 +414,6 @@ def set_os_user_groups(
     current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSUserResponse:
     """Modify an OS user's group memberships."""
-    _ensure_local_role_resolver(request)
     _validate_path_username(username)
 
     try:
@@ -405,7 +439,7 @@ def set_os_user_groups(
     )
 
 
-@router.post("/os-users/{username}/groups", response_model=OSUserResponse)
+@_os_router.post("/os-users/{username}/groups", response_model=OSUserResponse)
 def add_os_user_groups(
     username: str,
     body: AddOSGroupsRequest,
@@ -414,7 +448,6 @@ def add_os_user_groups(
     current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSUserResponse:
     """Add an OS user to additional groups without removing existing memberships."""
-    _ensure_local_role_resolver(request)
     _validate_path_username(username)
 
     try:
@@ -446,7 +479,7 @@ def add_os_user_groups(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/os-groups", response_model=OSGroupResponse, status_code=201)
+@_os_router.post("/os-groups", response_model=OSGroupResponse, status_code=201)
 def create_os_group(
     body: CreateOSGroupRequest,
     request: Request,
@@ -454,7 +487,6 @@ def create_os_group(
     current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSGroupResponse:
     """Create a new OS group on the host system."""
-    _ensure_local_role_resolver(request)
     try:
         os_group = os_user_service.create_group(body.name)
     except ValueError as exc:
@@ -474,14 +506,13 @@ def create_os_group(
     )
 
 
-@router.get("/os-groups", response_model=OSGroupListResponse)
+@_os_router.get("/os-groups", response_model=OSGroupListResponse)
 def list_os_groups(
     request: Request,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSGroupListResponse:
     """List OS groups filtered to ECUBE-relevant names."""
-    _ensure_local_role_resolver(request)
     groups = os_user_service.list_groups(ecube_only=True)
     return OSGroupListResponse(
         groups=[
@@ -491,7 +522,7 @@ def list_os_groups(
     )
 
 
-@router.delete("/os-groups/{name}", status_code=200)
+@_os_router.delete("/os-groups/{name}", status_code=200)
 def delete_os_group(
     name: str,
     request: Request,
@@ -499,7 +530,6 @@ def delete_os_group(
     current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> dict:
     """Delete an OS group from the host system."""
-    _ensure_local_role_resolver(request)
     try:
         os_user_service.validate_group_name(name)
     except ValueError as exc:
@@ -518,3 +548,7 @@ def delete_os_group(
     })
 
     return {"message": f"Group '{name}' deleted"}
+
+
+# Include the OS sub-router under the /admin prefix.
+router.include_router(_os_router)

@@ -608,6 +608,46 @@ class TestOSGroupEndpoints:
 
 
 # ===========================================================================
+# Non-local deployment: OS endpoints must return 404
+# ===========================================================================
+
+
+class TestOSEndpointsNonLocalMode:
+    """OS endpoints return 404 before auth when role_resolver is not 'local'.
+
+    Because _ensure_local_role_resolver runs as a FastAPI dependency
+    (before require_roles), even unauthenticated callers must get 404 —
+    never 401 or 403.
+    """
+
+    _OS_ROUTES = [
+        ("POST", "/admin/os-users", {"username": "x", "password": "p"}),
+        ("GET", "/admin/os-users", None),
+        ("DELETE", "/admin/os-users/testuser", None),
+        ("PUT", "/admin/os-users/testuser/password", {"password": "p"}),
+        ("PUT", "/admin/os-users/testuser/groups", {"groups": ["g"]}),
+        ("POST", "/admin/os-users/testuser/groups", {"groups": ["g"]}),
+        ("POST", "/admin/os-groups", {"name": "grp"}),
+        ("GET", "/admin/os-groups", None),
+        ("DELETE", "/admin/os-groups/grp", None),
+    ]
+
+    @pytest.mark.parametrize("method,path,body", _OS_ROUTES)
+    def test_unauthenticated_gets_404(self, unauthenticated_client, method, path, body):
+        """Unauthenticated caller must see 404, not 401."""
+        with patch.object(settings, "role_resolver", "oidc"):
+            resp = unauthenticated_client.request(method, path, json=body)
+        assert resp.status_code == 404
+
+    @pytest.mark.parametrize("method,path,body", _OS_ROUTES)
+    def test_non_admin_gets_404(self, client, method, path, body):
+        """Processor-role caller must see 404, not 403."""
+        with patch.object(settings, "role_resolver", "ldap"):
+            resp = client.request(method, path, json=body)
+        assert resp.status_code == 404
+
+
+# ===========================================================================
 # Setup wizard endpoint tests
 # ===========================================================================
 
