@@ -68,6 +68,9 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None)
                 detail="Database error while updating mount status after OS mount; mount may be active at OS level.",
             )
     except Exception as exc:
+        if isinstance(exc, HTTPException):
+            # Re-raise HTTPExceptions so that intended HTTP error responses are not swallowed
+            raise
         mount.status = MountStatus.ERROR
         try:
             mount_repo.save(mount)
