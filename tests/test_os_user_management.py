@@ -125,32 +125,50 @@ class TestCreateUser:
             pw,                         # final lookup after creation
             pw,                         # _get_user_groups lookup
         ]
-        mock_grp.getgrall.return_value = []
+        mock_grp.getgrnam.return_value = _make_grp(name="ecube-admins")
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="ecube-admins", members=["testuser"]),
+        ]
         mock_grp.getgrgid.return_value = _make_grp(name="testuser", gid=1000)
         mock_subprocess.return_value = _ok_result()
 
-        user = create_user("testuser", "s3cret")
+        user = create_user("testuser", "s3cret", groups=["ecube-admins"])
 
         assert user.username == "testuser"
         assert user.uid == 1000
-        # Should have called sudo useradd and sudo chpasswd.
+        # Should have called sudo useradd, sudo chpasswd, and sudo usermod.
         calls = [c.args[0] for c in mock_subprocess.call_args_list]
         assert ["sudo", "/usr/sbin/useradd", "-m", "testuser"] in calls
         assert ["sudo", "/usr/sbin/chpasswd"] in calls
+        assert ["sudo", "/usr/sbin/usermod", "-aG", "ecube-admins", "testuser"] in calls
 
     @patch("app.services.os_user_service.pwd")
     def test_create_user_already_exists(self, mock_pwd):
         mock_pwd.getpwnam.return_value = _make_pw()
         with pytest.raises(OSUserError, match="already exists"):
-            create_user("testuser", "password")
+            create_user("testuser", "password", groups=["ecube-admins"])
 
     def test_create_reserved_username(self):
         with pytest.raises(ValueError, match="reserved"):
-            create_user("root", "password")
+            create_user("root", "password", groups=["ecube-admins"])
 
     def test_create_empty_password(self):
         with pytest.raises(ValueError, match="empty"):
-            create_user("testuser", "")
+            create_user("testuser", "", groups=["ecube-admins"])
+
+    def test_create_user_no_ecube_group_rejected(self):
+        """create_user without any ecube-* group must raise ValueError."""
+        with pytest.raises(ValueError, match="ecube-"):
+            create_user("testuser", "s3cret")
+
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_create_user_only_non_ecube_groups_rejected(self, mock_pwd, mock_grp):
+        """Providing only non-ecube groups must raise ValueError."""
+        mock_pwd.getpwnam.side_effect = KeyError("no such user")
+        mock_grp.getgrnam.return_value = _make_grp(name="developers")
+        with pytest.raises(ValueError, match="ecube-"):
+            create_user("testuser", "s3cret", groups=["developers"])
 
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
@@ -476,14 +494,16 @@ class TestEnsureEcubeGroups:
 class TestSubprocessTimeout:
     """Subprocess timeout handling."""
 
+    @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
     @patch("app.services.os_user_service.subprocess.run")
-    def test_timeout_raises_os_user_error(self, mock_subprocess, mock_pwd):
+    def test_timeout_raises_os_user_error(self, mock_subprocess, mock_pwd, mock_grp):
         mock_pwd.getpwnam.side_effect = KeyError("no such user")
+        mock_grp.getgrnam.return_value = _make_grp(name="ecube-admins")
         mock_subprocess.side_effect = subprocess.TimeoutExpired(cmd="useradd", timeout=30)
 
         with pytest.raises(OSUserError, match="timed out"):
-            create_user("testuser", "password")
+            create_user("testuser", "password", groups=["ecube-admins"])
 
 
 # ===========================================================================
@@ -512,18 +532,31 @@ class TestOSUserEndpoints:
             pw,                        # final lookup
             pw,                        # _get_user_groups
         ]
-        mock_grp.getgrall.return_value = []
+        mock_grp.getgrnam.return_value = _make_grp(name="ecube-admins")
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="ecube-admins", members=["newuser"]),
+        ]
         mock_grp.getgrgid.return_value = _make_grp(name="newuser", gid=1050)
         mock_subprocess.return_value = _ok_result()
 
         resp = admin_client.post("/admin/os-users", json={
             "username": "newuser",
             "password": "s3cret",
+            "groups": ["ecube-admins"],
         })
         assert resp.status_code == 201
         data = resp.json()
         assert data["username"] == "newuser"
         assert data["uid"] == 1050
+
+    def test_create_user_no_ecube_group_returns_422(self, admin_client):
+        """POST without ecube-* group returns 422."""
+        resp = admin_client.post("/admin/os-users", json={
+            "username": "newuser",
+            "password": "s3cret",
+        })
+        assert resp.status_code == 422
+        assert "ecube-" in resp.json()["message"]
 
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
@@ -536,13 +569,17 @@ class TestOSUserEndpoints:
             pw,                        # final lookup
             pw,                        # _get_user_groups
         ]
-        mock_grp.getgrall.return_value = []
+        mock_grp.getgrnam.return_value = _make_grp(name="ecube-admins")
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="ecube-admins", members=["roleuser"]),
+        ]
         mock_grp.getgrgid.return_value = _make_grp(name="roleuser", gid=1051)
         mock_subprocess.return_value = _ok_result()
 
         resp = admin_client.post("/admin/os-users", json={
             "username": "roleuser",
             "password": "pass",
+            "groups": ["ecube-admins"],
             "roles": ["admin", "manager"],
         })
         assert resp.status_code == 201
@@ -574,12 +611,14 @@ class TestOSUserEndpoints:
         mock_grp.getgrgid.return_value = _make_grp(name="dbfail", gid=1060)
         mock_subprocess.return_value = _ok_result()
 
+        mock_grp.getgrnam.return_value = _make_grp(name="ecube-admins")
         with patch.object(
             UserRoleRepository, "set_roles", side_effect=RuntimeError("DB down"),
         ):
             resp = admin_client.post("/admin/os-users", json={
                 "username": "dbfail",
                 "password": "pass",
+                "groups": ["ecube-admins"],
                 "roles": ["admin"],
             })
         assert resp.status_code == 500
@@ -592,12 +631,15 @@ class TestOSUserEndpoints:
         ]
         assert len(del_calls) == 1
 
+    @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
-    def test_create_user_already_exists(self, mock_pwd, admin_client):
+    def test_create_user_already_exists(self, mock_pwd, mock_grp, admin_client):
         mock_pwd.getpwnam.return_value = _make_pw()
+        mock_grp.getgrnam.return_value = _make_grp(name="ecube-admins")
         resp = admin_client.post("/admin/os-users", json={
             "username": "testuser",
             "password": "pass",
+            "groups": ["ecube-admins"],
         })
         assert resp.status_code == 409
 
@@ -1140,13 +1182,17 @@ class TestOSUserAuditLogging:
             pw,                        # final lookup
             pw,                        # _get_user_groups
         ]
-        mock_grp.getgrall.return_value = []
+        mock_grp.getgrnam.return_value = _make_grp(name="ecube-admins")
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="ecube-admins", members=["audituser"]),
+        ]
         mock_grp.getgrgid.return_value = _make_grp(name="audituser", gid=1060)
         mock_subprocess.return_value = _ok_result()
 
         admin_client.post("/admin/os-users", json={
             "username": "audituser",
             "password": "secret",
+            "groups": ["ecube-admins"],
         })
 
         from app.repositories.audit_repository import AuditRepository
