@@ -231,14 +231,28 @@ def provision_database(
             detail="The 'force' option requires an authenticated admin user.",
         )
 
-    if not body.force and database_service.is_database_provisioned():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Database is already provisioned. "
-                "Set 'force' to true to re-provision."
-            ),
-        )
+    if not body.force:
+        try:
+            already_provisioned = database_service.is_database_provisioned()
+        except Exception:
+            # Connectivity failure — fail closed so a transient outage
+            # cannot be misinterpreted as "not provisioned".
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Cannot determine database provisioning state. "
+                    "The database may be temporarily unreachable."
+                ),
+            )
+
+        if already_provisioned:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Database is already provisioned. "
+                    "Set 'force' to true to re-provision."
+                ),
+            )
 
     try:
         migrations_applied = database_service.provision_database(
