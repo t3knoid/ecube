@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.config import settings
 from app.database import Base, get_db
-from app.main import app
+import app.database as _app_database
 
 SQLALCHEMY_DATABASE_URL = "sqlite://"
 
@@ -19,6 +19,13 @@ engine = create_engine(
     poolclass=StaticPool,
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# Reassign BEFORE importing app.main so that modules imported transitively
+# (e.g. copy_engine, which does ``from app.database import SessionLocal`` at
+# module level) bind to the test session factory instead of the production one.
+_app_database.SessionLocal = TestingSessionLocal
+
+from app.main import app  # noqa: E402  — must come after SessionLocal override
 
 
 def pytest_addoption(parser):
