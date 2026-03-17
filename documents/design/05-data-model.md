@@ -12,6 +12,7 @@
 
 - `usb_hubs` and `usb_ports` define stable topology references.
 - `usb_drives` captures runtime device identity and current assignment/state.
+- `usb_drives.filesystem_type` stores the detected filesystem label (e.g., `ext4`, `exfat`, `ntfs`, `fat32`, `unformatted`, `unknown`). Updated during discovery and after formatting operations. Nullable; `NULL` means detection has not yet been attempted.
 
 ### Mount Domain
 
