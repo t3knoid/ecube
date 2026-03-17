@@ -262,7 +262,40 @@ def create_os_user(
     if body.roles:
         repo = UserRoleRepository(db)
         deduplicated = sorted(set(body.roles))
-        repo.set_roles(body.username, deduplicated)
+        try:
+            repo.set_roles(body.username, deduplicated)
+        except ValueError as exc:
+            # Invalid role name — shouldn't reach here (schema validates), but
+            # guard defensively.  The OS user was already created; delete it to
+            # avoid leaving partial state.
+            try:
+                os_user_service.delete_user(body.username)
+            except Exception:
+                logger.exception(
+                    "Failed to clean up OS user '%s' after role validation error",
+                    body.username,
+                )
+            raise HTTPException(status_code=422, detail=str(exc))
+        except Exception:
+            # DB failure — OS user exists but role assignment failed.
+            db.rollback()
+            try:
+                os_user_service.delete_user(body.username)
+            except Exception:
+                logger.exception(
+                    "Failed to clean up OS user '%s' after DB error in set_roles",
+                    body.username,
+                )
+            logger.exception(
+                "Failed to assign roles to OS user '%s'", body.username
+            )
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    f"OS user '{body.username}' was created but role assignment "
+                    "failed. The user has been removed. Please retry."
+                ),
+            )
 
     _audit(db, "OS_USER_CREATED", current_user.username, {
         "target_user": body.username,
