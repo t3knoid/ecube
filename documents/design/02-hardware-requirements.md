@@ -21,5 +21,13 @@
 
 ### Event Handling
 
-- On insertion: detect, identify encryption status, validate mountability, update state.
+- On insertion: detect, identify encryption status, detect filesystem type, validate mountability, update state.
 - On removal: invalidate mount/device references, mark port `EMPTY`, emit audit record.
+
+### Filesystem Detection
+
+- Probe inserted drives for filesystem type using `blkid` or `lsblk --json`.
+- Recognized types: `ext4`, `exfat`, `ntfs`, `fat32`, `xfs`, and others reported by the OS.
+- Drives with no recognizable filesystem are labelled `unformatted`.
+- Detection failures (permission errors, I/O errors) are labelled `unknown`.
+- Store the result in `usb_drives.filesystem_type` on each discovery cycle.

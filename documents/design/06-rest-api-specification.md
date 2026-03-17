@@ -195,6 +195,46 @@ Enforces project isolation.
 
 **Roles:** `admin`, `manager`
 
+### `POST /drives/{id}/format`
+
+Format a drive with a specified filesystem type.
+
+**Precondition:** Drive must be in `AVAILABLE` state and not currently mounted.
+
+**Body:** `{ "filesystem_type": "ext4" }`
+
+**Supported types:** `ext4`, `exfat`
+
+Performs the following steps:
+
+1. Validates drive is in `AVAILABLE` state (rejects with `409` if not).
+2. Validates `filesystem_type` is a supported value (rejects with `400` if not).
+3. Verifies the drive is not mounted by checking `/proc/mounts` (rejects with `409` if mounted).
+4. Validates the drive has a valid `filesystem_path` (rejects with `400` if missing).
+5. Executes `mkfs.<type> <device_path>` to format the drive.
+6. On success: updates `usb_drives.filesystem_type`, logs `DRIVE_FORMATTED`.
+7. On failure: drive state unchanged, logs `DRIVE_FORMAT_FAILED` with error details.
+
+**Behavior:**
+
+- Returns `200` with the updated drive record on success.
+- Returns `400` if the filesystem type is unsupported or the device path is missing.
+- Returns `409` Conflict if the drive is not in `AVAILABLE` state or is currently mounted.
+- Returns `500` if the `mkfs` command fails.
+
+**Security:**
+
+- Device path is validated against the same allowlist pattern used by unmount operations.
+- Format commands use absolute binary paths from configuration to prevent PATH manipulation.
+- Commands execute with bounded subprocess timeouts.
+
+**Audit events:**
+
+- `DRIVE_FORMATTED`: Drive successfully formatted; includes `drive_id`, `filesystem_path`, `filesystem_type`.
+- `DRIVE_FORMAT_FAILED`: Format operation failed; includes `drive_id`, `filesystem_path`, `filesystem_type`, `error`.
+
+**Roles:** `admin`, `manager`
+
 ### `POST /drives/{id}/prepare-eject`
 
 Prepare drive for safe eject: flush filesystem writes, unmount all partitions and encrypted volumes, and transition to AVAILABLE.
