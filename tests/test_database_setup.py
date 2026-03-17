@@ -735,7 +735,7 @@ class TestDatabaseService:
         assert result["port"] == 5432
         assert result["database"] == "ecube"
 
-    @patch("app.services.database_service._write_env_setting")
+    @patch("app.services.database_service._write_env_settings")
     @patch("app.services.database_service._reinitialize_engine")
     @patch("app.services.database_service.psycopg2")
     def test_update_settings_connection_failure(
@@ -791,7 +791,7 @@ class TestDatabaseService:
         assert "EXISTING=value\n" in content
         assert "NEW_KEY=new_value\n" in content
 
-    @patch("app.services.database_service._write_env_setting")
+    @patch("app.services.database_service._write_env_settings")
     @patch("app.services.database_service._reinitialize_engine")
     @patch("app.services.database_service.psycopg2")
     def test_update_settings_updates_in_memory_config(
@@ -828,6 +828,28 @@ class TestDatabaseService:
             settings.database_url = original_url
             settings.db_pool_size = original_pool
             settings.db_pool_max_overflow = original_overflow
+
+    def test_write_env_settings_batch_atomic(self, tmp_path):
+        """All keys are written in a single pass - no partial updates."""
+        from app.services.database_service import _write_env_settings
+
+        env_file = tmp_path / ".env"
+        env_file.write_text("DATABASE_URL=old_url\nKEEP=yes\nDB_POOL_SIZE=5\n")
+
+        with patch("app.services.database_service._get_env_file_path", return_value=str(env_file)):
+            _write_env_settings({
+                "DATABASE_URL": "postgresql://new/db",
+                "DB_POOL_SIZE": "20",
+                "DB_POOL_MAX_OVERFLOW": "40",
+            })
+
+        content = env_file.read_text()
+        assert "DATABASE_URL=postgresql://new/db\n" in content
+        assert "KEEP=yes\n" in content
+        assert "DB_POOL_SIZE=20\n" in content
+        assert "DB_POOL_MAX_OVERFLOW=40\n" in content
+        assert "old_url" not in content
+        assert "DB_POOL_SIZE=5" not in content
 
     @patch("app.services.database_service._write_env_setting")
     @patch("app.services.database_service._reinitialize_engine")
