@@ -80,6 +80,16 @@ class TestCookieConfigurationOverrides:
         s = Settings(session_cookie_domain=".example.com")
         assert s.session_cookie_domain == ".example.com"
 
+    def test_empty_string_domain_normalised_to_none(self):
+        from app.config import Settings
+        s = Settings(session_cookie_domain="")
+        assert s.session_cookie_domain is None
+
+    def test_whitespace_only_domain_normalised_to_none(self):
+        from app.config import Settings
+        s = Settings(session_cookie_domain="  ")
+        assert s.session_cookie_domain is None
+
     def test_override_secure_false(self):
         from app.config import Settings
         s = Settings(session_cookie_secure=False)
