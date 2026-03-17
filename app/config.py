@@ -277,6 +277,15 @@ class Settings(BaseSettings):
     #: Enable TCP keepalive on the Redis socket to detect dead connections.
     redis_socket_keepalive: bool = True
 
+    @field_validator("session_cookie_domain", mode="before")
+    @classmethod
+    def _normalise_domain(cls, v: str | None) -> str | None:  # noqa: N805
+        """Treat blank strings as *unset* so ``SESSION_COOKIE_DOMAIN=``
+        in the environment behaves the same as omitting the variable."""
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        return v
+
     @field_validator("session_cookie_samesite", mode="before")
     @classmethod
     def _normalise_samesite(cls, v: str) -> str:  # noqa: N805
