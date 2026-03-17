@@ -475,21 +475,19 @@ def _reinitialize_engine(
     session factory are installed, so in-flight requests that still hold a
     reference to the old session can finish gracefully.
 
-    Raises ``RuntimeError`` immediately if another reinitialization is
-    already in progress (non-blocking).
+    Raises ``EngineReinitializationError`` immediately if another
+    reinitialization is already in progress (non-blocking).
     """
     import app.database as db_module
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
     from app.config import settings
+    from app.exceptions import EngineReinitializationError
 
     acquired = _engine_lock.acquire(blocking=False)
     if not acquired:
-        raise RuntimeError(
-            "Database engine reinitialization is already in progress. "
-            "Please retry after the current operation completes."
-        )
+        raise EngineReinitializationError()
     try:
         old_engine = db_module.engine
 
