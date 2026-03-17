@@ -27,16 +27,19 @@ def initialize_drive(
         raise HTTPException(status_code=404, detail="Drive not found")
 
     if drive.current_project_id and drive.current_project_id != project_id:
-        audit_repo.add(
-            action="PROJECT_ISOLATION_VIOLATION",
-            user=actor,
-            details={
-                "actor": actor,
-                "drive_id": drive_id,
-                "existing_project_id": drive.current_project_id,
-                "requested_project_id": project_id,
-            },
-        )
+        try:
+            audit_repo.add(
+                action="PROJECT_ISOLATION_VIOLATION",
+                user=actor,
+                details={
+                    "actor": actor,
+                    "drive_id": drive_id,
+                    "existing_project_id": drive.current_project_id,
+                    "requested_project_id": project_id,
+                },
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for PROJECT_ISOLATION_VIOLATION")
         raise HTTPException(
             status_code=403,
             detail=f"Drive is already assigned to project '{drive.current_project_id}'",
@@ -44,12 +47,22 @@ def initialize_drive(
 
     drive.current_project_id = project_id
     drive.current_state = DriveState.IN_USE
-    drive_repo.save(drive)
-    audit_repo.add(
-        action="DRIVE_INITIALIZED",
-        user=actor,
-        details={"drive_id": drive_id, "project_id": project_id},
-    )
+    try:
+        drive_repo.save(drive)
+    except Exception:
+        logger.exception("DB commit failed while initializing drive %s", drive_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Database error while initializing drive",
+        )
+    try:
+        audit_repo.add(
+            action="DRIVE_INITIALIZED",
+            user=actor,
+            details={"drive_id": drive_id, "project_id": project_id},
+        )
+    except Exception:
+        logger.exception("Failed to write audit log for DRIVE_INITIALIZED")
     return drive
 
 
@@ -106,30 +119,46 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None) -> Us
 
     if flush_ok and unmount_ok:
         drive.current_state = DriveState.AVAILABLE
-        drive_repo.save(drive)
-        audit_repo.add(
-            action="DRIVE_EJECT_PREPARED",
-            user=actor,
-            details={
-                "drive_id": drive_id,
-                "filesystem_path": initial_device_path,
-                "flush_ok": flush_ok,
-                "unmount_ok": unmount_ok,
-            },
-        )
+        try:
+            drive_repo.save(drive)
+        except Exception:
+            logger.exception(
+                "DB commit failed after successful OS eject for drive %s",
+                drive_id,
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="Drive ejected at OS level but database update failed; manual intervention may be required",
+            )
+        try:
+            audit_repo.add(
+                action="DRIVE_EJECT_PREPARED",
+                user=actor,
+                details={
+                    "drive_id": drive_id,
+                    "filesystem_path": initial_device_path,
+                    "flush_ok": flush_ok,
+                    "unmount_ok": unmount_ok,
+                },
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for DRIVE_EJECT_PREPARED")
     else:
-        audit_repo.add(
-            action="DRIVE_EJECT_FAILED",
-            user=actor,
-            details={
-                "drive_id": drive_id,
-                "filesystem_path": initial_device_path,
-                "flush_ok": flush_ok,
-                "flush_error": flush_err,
-                "unmount_ok": unmount_ok,
-                "unmount_error": unmount_err,
-            },
-        )
+        try:
+            audit_repo.add(
+                action="DRIVE_EJECT_FAILED",
+                user=actor,
+                details={
+                    "drive_id": drive_id,
+                    "filesystem_path": initial_device_path,
+                    "flush_ok": flush_ok,
+                    "flush_error": flush_err,
+                    "unmount_ok": unmount_ok,
+                    "unmount_error": unmount_err,
+                },
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for DRIVE_EJECT_FAILED")
         raise HTTPException(
             status_code=500,
             detail="Drive eject preparation failed",
