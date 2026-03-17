@@ -98,6 +98,28 @@ Run drive eject tests:
 python -m pytest tests/test_drive_eject.py -q
 ```
 
+### OS User & Group Management Tests
+
+The `tests/test_os_user_management.py` module validates the OS user and group management service layer and admin API endpoints.
+
+**Test Coverage:**
+
+- **Service layer:** `useradd`, `userdel`, `groupadd`, `groupdel`, `chpasswd`, and `usermod` subprocess calls are mocked and verified.
+- **Group namespace enforcement:** Group create/delete rejects names without the `ecube-` prefix.
+- **ECUBE-managed user guard:** Mutative user operations reject users who are not members of any `ecube-*` group.
+- **Atomicity and compensation:** User creation validates groups before `useradd`; `usermod` failures trigger compensating `userdel`. Failed DB role seeding triggers compensating OS user deletion.
+- **Password validation:** Rejects passwords containing newlines, carriage returns, and colons (chpasswd injection prevention).
+- **Admin router endpoints:** All nine OS management endpoints tested via `TestClient`, including auth/role gating.
+- **Non-local mode gating:** Verifies all OS endpoints return `404` when `role_resolver != "local"` (`LocalOnlyRoute`).
+- **First-run setup wizard:** Setup initialization, recovery for pre-existing users (including users not yet in `ecube-*` groups), and cross-process locking.
+- **Audit logging:** Verifies structured audit records for all OS operations.
+
+Run OS user and group management tests:
+
+```bash
+python -m pytest tests/test_os_user_management.py -v
+```
+
 ### Role Resolution and OIDC Tests
 
 The `tests/test_role_resolver.py` and `tests/test_oidc_service.py` modules validate identity provider integration.

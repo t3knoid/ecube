@@ -34,7 +34,13 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 # ---------------------------------------------------------------------------
 
 class TokenRequest(BaseModel):
-    username: str = Field(..., min_length=1, description="OS username")
+    username: str = Field(
+        ...,
+        min_length=1,
+        max_length=32,
+        pattern=r"^[a-z_][a-z0-9_-]{0,31}$",
+        description="OS username (POSIX format)",
+    )
     password: str = Field(..., min_length=1, description="OS password")
 
 
