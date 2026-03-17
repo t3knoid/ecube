@@ -515,7 +515,7 @@ curl -sk -X DELETE https://localhost:8443/users/qa-processor/roles \
 
 ### 11.8 OS User & Group Management (Admin Only, Local Mode)
 
-These endpoints manage OS-level user and group accounts. They require the `admin` role and are only available when `role_resolver = "local"` (returns `404` otherwise). Group names must start with the `ecube-` prefix. Mutative user operations require the target user to be a member of at least one `ecube-*` group.
+These endpoints manage OS-level user and group accounts. They require the `admin` role and are only available when `role_resolver = "local"` (returns `404` otherwise). Group names must start with the `ecube-` prefix. Creating a user requires at least one `ecube-*` group, and all other mutative user operations require the target user to be a member of at least one `ecube-*` group.
 
 ```bash
 # Create an OS group
@@ -777,22 +777,23 @@ All OS user and group management endpoints require the `admin` role and are only
 | 10 | Create user — password with newline | `POST /admin/os-users` with password containing `\n` | 422, unsafe characters |
 | 11 | Create user — password with colon | `POST /admin/os-users` with password containing `:` | 422, unsafe characters |
 | 12 | Create user — invalid group | `POST /admin/os-users` with non-existent group in groups list | 422, group does not exist |
-| 13 | List users | `GET /admin/os-users` | 200, only users in `ecube-*` groups listed |
-| 14 | Reset password | `PUT /admin/os-users/{username}/password` with `{"password": "NewPass!"}` | 200 |
-| 15 | Reset password — non-ECUBE user | `PUT /admin/os-users/postgres/password` | 422, user is not ECUBE-managed |
-| 16 | Replace groups | `PUT /admin/os-users/{username}/groups` with `{"groups": ["ecube-admins"]}` | 200, updated group list |
-| 17 | Append groups | `POST /admin/os-users/{username}/groups` with `{"groups": ["ecube-managers"]}` | 200, updated group list |
-| 18 | Modify groups — non-ECUBE user | `PUT /admin/os-users/www-data/groups` | 422, user is not ECUBE-managed |
-| 19 | Delete user | `DELETE /admin/os-users/{username}` | 200, user and DB roles removed |
-| 20 | Delete user — non-ECUBE user | `DELETE /admin/os-users/daemon` | 422, user is not ECUBE-managed |
-| 21 | Delete user — not found | `DELETE /admin/os-users/nonexistent` | 404 |
-| 22 | Processor cannot access OS endpoints | `GET /admin/os-users` with processor token | 403, FORBIDDEN |
-| 23 | Non-local mode returns 404 | All `/admin/os-*` endpoints when `role_resolver != "local"` | 404, Not Found |
-| 24 | OS_USER_CREATED audit log | `GET /audit?action=OS_USER_CREATED` after creating user | Audit entry with actor and username |
-| 25 | OS_USER_DELETED audit log | `GET /audit?action=OS_USER_DELETED` after deleting user | Audit entry with actor and username |
-| 26 | OS_PASSWORD_RESET audit log | `GET /audit?action=OS_PASSWORD_RESET` after resetting password | Audit entry (no password in details) |
-| 27 | OS_GROUP_CREATED audit log | `GET /audit?action=OS_GROUP_CREATED` after creating group | Audit entry with group name |
-| 28 | OS_GROUP_DELETED audit log | `GET /audit?action=OS_GROUP_DELETED` after deleting group | Audit entry with group name |
+| 13 | Create user — no ecube-* group | `POST /admin/os-users` with no groups or only non-`ecube-*` groups | 422, at least one `ecube-*` group required |
+| 14 | List users | `GET /admin/os-users` | 200, only users in `ecube-*` groups listed |
+| 15 | Reset password | `PUT /admin/os-users/{username}/password` with `{"password": "NewPass!"}` | 200 |
+| 16 | Reset password — non-ECUBE user | `PUT /admin/os-users/postgres/password` | 422, user is not ECUBE-managed |
+| 17 | Replace groups | `PUT /admin/os-users/{username}/groups` with `{"groups": ["ecube-admins"]}` | 200, updated group list |
+| 18 | Append groups | `POST /admin/os-users/{username}/groups` with `{"groups": ["ecube-managers"]}` | 200, updated group list |
+| 19 | Modify groups — non-ECUBE user | `PUT /admin/os-users/www-data/groups` | 422, user is not ECUBE-managed |
+| 20 | Delete user | `DELETE /admin/os-users/{username}` | 200, user and DB roles removed |
+| 21 | Delete user — non-ECUBE user | `DELETE /admin/os-users/daemon` | 422, user is not ECUBE-managed |
+| 22 | Delete user — not found | `DELETE /admin/os-users/nonexistent` | 404 |
+| 23 | Processor cannot access OS endpoints | `GET /admin/os-users` with processor token | 403, FORBIDDEN |
+| 24 | Non-local mode returns 404 | All `/admin/os-*` endpoints when `role_resolver != "local"` | 404, Not Found |
+| 25 | OS_USER_CREATED audit log | `GET /audit?action=OS_USER_CREATED` after creating user | Audit entry with actor and username |
+| 26 | OS_USER_DELETED audit log | `GET /audit?action=OS_USER_DELETED` after deleting user | Audit entry with actor and username |
+| 27 | OS_PASSWORD_RESET audit log | `GET /audit?action=OS_PASSWORD_RESET` after resetting password | Audit entry (no password in details) |
+| 28 | OS_GROUP_CREATED audit log | `GET /audit?action=OS_GROUP_CREATED` after creating group | Audit entry with group name |
+| 29 | OS_GROUP_DELETED audit log | `GET /audit?action=OS_GROUP_DELETED` after deleting group | Audit entry with group name |
 
 ### 12.10 First-Run Setup
 
