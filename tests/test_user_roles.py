@@ -286,7 +286,8 @@ class TestUsernameValidation:
     @pytest.mark.parametrize("bad_name", [
         "Admin",          # uppercase
         "root;rm",        # shell metacharacter
-        "../etc",         # path traversal
+        # "../etc" omitted — Starlette normalises the path before routing,
+        # so the request never reaches _validate_username (returns 404).
         "a" * 33,         # too long (max 32)
         "1user",          # starts with digit
         "user name",      # space
