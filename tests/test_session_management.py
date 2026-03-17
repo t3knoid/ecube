@@ -579,6 +579,42 @@ class TestRedisSessionNestedMutations:
         assert resp.json() == {}
 
 
+class TestRedisWebSocketPassthrough:
+    """WebSocket scopes must bypass RedisSessionMiddleware (no persistence)."""
+
+    def test_websocket_scope_passes_through(self):
+        """RedisSessionMiddleware only handles HTTP; websocket is passed through."""
+        fake = _FakeRedis()
+
+        async def inner_app(scope, receive, send):
+            if scope["type"] == "websocket":
+                # Consume the websocket.connect event first.
+                message = await receive()
+                assert message["type"] == "websocket.connect"
+                await send({"type": "websocket.accept"})
+                message = await receive()
+                await send({
+                    "type": "websocket.send",
+                    "text": f"echo: {message.get('text', '')}",
+                })
+                await send({"type": "websocket.close", "code": 1000})
+
+        app = RedisSessionMiddleware(
+            inner_app,
+            redis_client=fake,
+            session_cookie="sid",
+            max_age=3600,
+        )
+        client = TestClient(app)
+        with client.websocket_connect("/ws") as ws:
+            ws.send_text("hello")
+            reply = ws.receive_text()
+            assert reply == "echo: hello"
+
+        # No session keys should have been written to Redis.
+        assert len(fake) == 0
+
+
 class TestInitSessionBackendRedis:
     """init_session_backend upgrades the proxy to Redis when Redis works."""
 
