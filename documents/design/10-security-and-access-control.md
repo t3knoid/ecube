@@ -224,3 +224,9 @@ OS user and group management endpoints are scoped to the `ecube-` namespace to p
 - Add explicit `403` response schema for authorization failures.
 - Keep introspection and audit endpoints read-only and role-gated.
 - First-run setup is available via the unauthenticated `POST /setup/initialize` API endpoint or the CLI `python -m app.setup` script.  Both refuse to re-seed if an admin already exists.  The API endpoint uses a `system_initialization` single-row table with a uniqueness constraint as a cross-process guard, ensuring only one worker can complete initialization even in multi-worker deployments.
+- Database provisioning endpoints (`POST /setup/database/test-connection`, `POST /setup/database/provision`) use a **dual-auth model with fail-closed semantics**:
+  1. **DB reachable, no admin exists** → unauthenticated access allowed (positively confirmed initial setup).
+  2. **DB reachable, admin exists** → valid JWT with the `admin` role required.
+  3. **DB unreachable** → a valid admin JWT must be presented; if no valid JWT is provided the endpoint returns **503 Service Unavailable** rather than granting unauthenticated access. This prevents an attacker from exploiting a transient database outage to bypass authentication. Because the JWT is self-contained, an authenticated admin can still operate without DB connectivity.
+
+  Initialization state is determined by `UserRoleRepository.has_any_admin()`. The remaining database endpoints (`GET /setup/database/status`, `PUT /setup/database/settings`) always require the `admin` role.
