@@ -56,11 +56,6 @@ class TestCookieConfigurationDefaults:
         s = Settings()
         assert s.session_cookie_secure is True
 
-    def test_default_httponly(self):
-        from app.config import Settings
-        s = Settings()
-        assert s.session_cookie_httponly is True
-
     def test_default_samesite(self):
         from app.config import Settings
         s = Settings()
@@ -89,11 +84,6 @@ class TestCookieConfigurationOverrides:
         from app.config import Settings
         s = Settings(session_cookie_secure=False)
         assert s.session_cookie_secure is False
-
-    def test_override_httponly_false(self):
-        from app.config import Settings
-        s = Settings(session_cookie_httponly=False)
-        assert s.session_cookie_httponly is False
 
     def test_override_samesite_strict(self):
         from app.config import Settings
@@ -465,7 +455,8 @@ class TestCookieAttributes:
         cookie_header = resp.headers.get("set-cookie", "")
         assert "my_cookie=" in cookie_header
 
-    def test_cookie_httponly_flag(self):
+    def test_cookie_httponly_always_set(self):
+        """HttpOnly is always enabled — not configurable."""
         app = self._make_app()
         client = TestClient(app)
         resp = client.get("/set-session")
@@ -533,7 +524,8 @@ class TestRedisBackendCookieAttributes:
         resp = TestClient(app).get("/set-session")
         assert "my_redis_sid=" in resp.headers.get("set-cookie", "")
 
-    def test_cookie_httponly(self):
+    def test_cookie_httponly_always_set(self):
+        """HttpOnly is always enabled — not configurable."""
         app = self._make_app(_FakeRedis())
         resp = TestClient(app).get("/set-session")
         assert "httponly" in resp.headers.get("set-cookie", "").lower()
