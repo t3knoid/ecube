@@ -57,13 +57,21 @@ class JobRepository:
     def add(self, job: ExportJob) -> ExportJob:
         """Persist a new job and flush it to obtain its ID."""
         self.db.add(job)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
         self.db.refresh(job)
         return job
 
     def save(self, job: ExportJob) -> ExportJob:
         """Commit pending changes to an existing job and refresh it."""
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
         self.db.refresh(job)
         return job
 
@@ -128,16 +136,28 @@ class FileRepository:
     def add_bulk(self, export_files: List[ExportFile]) -> None:
         """Persist multiple export file records in a single transaction."""
         self.db.add_all(export_files)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
 
     def save(self, export_file: ExportFile) -> None:
         """Commit pending changes to an existing export file."""
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
 
     def delete_by_job(self, job_id: int) -> None:
         """Delete all export file records for *job_id*."""
         self.db.query(ExportFile).filter(ExportFile.job_id == job_id).delete()
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
 
     def count_errors(self, job_id: int) -> int:
         """Return the number of files in ERROR state for *job_id*."""
@@ -157,7 +177,11 @@ class FileRepository:
             .where(ExportJob.id == job_id)
             .values(copied_bytes=ExportJob.copied_bytes + size_bytes)
         )
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
 
 
 class DriveAssignmentRepository:
@@ -169,7 +193,11 @@ class DriveAssignmentRepository:
     def add(self, assignment: DriveAssignment) -> DriveAssignment:
         """Persist a new drive assignment and flush it."""
         self.db.add(assignment)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
         self.db.refresh(assignment)
         return assignment
 
@@ -183,6 +211,10 @@ class ManifestRepository:
     def add(self, manifest: Manifest) -> Manifest:
         """Persist a new manifest record and flush it."""
         self.db.add(manifest)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
         self.db.refresh(manifest)
         return manifest

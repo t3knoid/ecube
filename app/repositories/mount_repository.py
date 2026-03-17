@@ -22,17 +22,29 @@ class MountRepository:
     def add(self, mount: NetworkMount) -> NetworkMount:
         """Persist a new mount and flush it to obtain its ID."""
         self.db.add(mount)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
         self.db.refresh(mount)
         return mount
 
     def save(self, mount: NetworkMount) -> NetworkMount:
         """Commit pending changes to an existing mount and refresh it."""
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
         self.db.refresh(mount)
         return mount
 
     def delete(self, mount: NetworkMount) -> None:
         """Delete a mount and commit."""
         self.db.delete(mount)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
