@@ -134,16 +134,17 @@ def _do_initialize(
     # we must remove the lock row so that setup can be retried.
     try:
         groups_created = _run_os_setup(body)
-    except HTTPException:
-        _release_init_lock(db)
+    except HTTPException as exc:
+        if not _release_init_lock(db):
+            exc.detail += _LOCK_STUCK_SUFFIX
         raise
     except Exception:
-        _release_init_lock(db)
+        lock_released = _release_init_lock(db)
         logger.exception("Unexpected error during OS setup")
-        raise HTTPException(
-            status_code=500,
-            detail="Unexpected error during system initialization.",
-        )
+        detail = "Unexpected error during system initialization."
+        if not lock_released:
+            detail += _LOCK_STUCK_SUFFIX
+        raise HTTPException(status_code=500, detail=detail)
 
     # Step 4: Seed admin role now that OS setup succeeded.
     try:
@@ -153,12 +154,12 @@ def _do_initialize(
         # If seeding the admin role fails, roll back and release the
         # initialization lock so that setup can be retried safely.
         db.rollback()
-        _release_init_lock(db)
+        lock_released = _release_init_lock(db)
         logger.exception("Failed to seed admin role for %s", body.username)
-        raise HTTPException(
-            status_code=500,
-            detail="OS setup succeeded but failed to seed admin role in the database.",
-        )
+        detail = "OS setup succeeded but failed to seed admin role in the database."
+        if not lock_released:
+            detail += _LOCK_STUCK_SUFFIX
+        raise HTTPException(status_code=500, detail=detail)
 
     # Step 5: Audit log.
     try:
@@ -180,16 +181,35 @@ def _do_initialize(
     )
 
 
-def _release_init_lock(db: Session) -> None:
-    """Delete the system_initialization row so setup can be retried."""
+_LOCK_STUCK_SUFFIX = (
+    " Additionally, the initialization lock could not be released."
+    " Manual intervention required:"
+    " DELETE FROM system_initialization WHERE id = 1;"
+)
+
+
+def _release_init_lock(db: Session) -> bool:
+    """Delete the system_initialization row so setup can be retried.
+
+    Returns ``True`` if the lock was successfully released, ``False`` if the
+    delete failed (the row is stuck and manual cleanup is required).
+    """
     try:
         db.query(SystemInitialization).filter(
             SystemInitialization.id == 1,
         ).delete()
         db.commit()
+        return True
     except Exception:
         db.rollback()
-        logger.exception("Failed to release initialization lock")
+        logger.critical(
+            "Failed to release initialization lock row"
+            " (system_initialization.id=1). Future /setup/initialize calls"
+            " will return 409 until the row is manually deleted:"
+            " DELETE FROM system_initialization WHERE id = 1;",
+            exc_info=True,
+        )
+        return False
 
 
 def _run_os_setup(
