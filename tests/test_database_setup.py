@@ -742,6 +742,38 @@ class TestFailClosedBehavior:
         finally:
             app.dependency_overrides.pop(_get_db_or_none, None)
 
+    @patch("app.services.database_service.test_connection", return_value="16.2")
+    def test_unauthenticated_allowed_when_schema_not_migrated(
+        self, mock_test_conn, unauthenticated_client, db
+    ):
+        """A reachable DB with no user_roles table is treated as initial setup, not 503."""
+        from app.repositories.user_role_repository import UserRoleRepository
+        from sqlalchemy.exc import ProgrammingError
+
+        original_has_any_admin = UserRoleRepository.has_any_admin
+
+        def _raise_missing_table(self):
+            raise ProgrammingError(
+                "SELECT", {}, Exception('relation "user_roles" does not exist')
+            )
+
+        UserRoleRepository.has_any_admin = _raise_missing_table
+        try:
+            resp = unauthenticated_client.post(
+                "/setup/database/test-connection",
+                json={
+                    "host": "localhost",
+                    "port": 5432,
+                    "admin_username": "postgres",
+                    "admin_password": "secret",
+                },
+            )
+
+            # Should be treated as initial setup (200), not 503
+            assert resp.status_code == 200
+        finally:
+            UserRoleRepository.has_any_admin = original_has_any_admin
+
 
 # ---------------------------------------------------------------------------
 # Service-level tests
