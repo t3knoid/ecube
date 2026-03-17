@@ -402,7 +402,9 @@ class TestRedisBackendStoresServerSide:
         assert len(fake) == 0
 
     def test_redis_set_failure_does_not_crash(self):
-        """If Redis write fails, the request still succeeds."""
+        """If Redis write fails, the request still succeeds and no
+        session-id cookie is issued (avoids orphan cookie with no
+        server-side data)."""
         failing = MagicMock()
         failing.get.return_value = None
         failing.setex.side_effect = ConnectionError("write failed")
@@ -411,6 +413,8 @@ class TestRedisBackendStoresServerSide:
 
         resp = client.get("/set")
         assert resp.status_code == 200
+        # No Set-Cookie should be emitted when persistence failed
+        assert "set-cookie" not in resp.headers
 
     def test_redis_get_failure_starts_empty_session(self):
         """If Redis read fails, the session starts empty."""
