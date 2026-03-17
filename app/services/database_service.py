@@ -500,16 +500,20 @@ def _reinitialize_engine(
     """Re-initialise the SQLAlchemy engine and session factory in-place.
 
     Acquires ``_engine_lock`` so that the swap is atomic with respect to
-    other threads.  The old engine is disposed **after** the new engine and
-    session factory are installed, so in-flight requests that still hold a
-    reference to the old session can finish gracefully.
+    other threads.  The old engine is disposed **after** the new engine is
+    installed, so in-flight requests that still hold a reference to the old
+    session can finish gracefully.
+
+    The existing ``SessionLocal`` sessionmaker is reconfigured via
+    ``.configure(bind=new_engine)`` rather than replaced, so that modules
+    which captured a reference at import time (e.g.
+    ``from app.database import SessionLocal``) see the updated binding.
 
     Raises ``EngineReinitializationError`` immediately if another
     reinitialization is already in progress (non-blocking).
     """
     import app.database as db_module
     from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
 
     from app.config import settings
     from app.exceptions import EngineReinitializationError
@@ -527,11 +531,11 @@ def _reinitialize_engine(
             pool_recycle=settings.db_pool_recycle_seconds,
         )
 
-        # Swap atomically: install new engine and session factory first
+        # Install new engine and reconfigure the existing SessionLocal
+        # in-place so all references (including those captured via
+        # ``from app.database import SessionLocal``) use the new engine.
         db_module.engine = new_engine
-        db_module.SessionLocal = sessionmaker(
-            autocommit=False, autoflush=False, bind=new_engine
-        )
+        db_module.SessionLocal.configure(bind=new_engine)
     finally:
         _engine_lock.release()
 
