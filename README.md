@@ -314,7 +314,7 @@ Path traversal protection is enforced: filenames containing `..` or `/` are reje
 
 ## QA Test-Case Sync
 
-The QA test-case spreadsheet (`documents/operations/ecube-qa-test-cases.xlsx`) is generated from the markdown guide (`documents/operations/01-qa-testing-guide-baremetal.md`).  A sync script keeps them aligned:
+The QA test-case spreadsheet (`documents/testing/ecube-qa-test-cases.xlsx`) is generated from the markdown guide (`documents/testing/01-qa-testing-guide-baremetal.md`).  A sync script keeps them aligned:
 
 ```bash
 # Check for drift (exits non-zero if out of sync)
@@ -333,6 +333,9 @@ After editing test cases in the markdown guide, run `--sync` and commit both fil
 
 ## Documentation
 
+- [Operations Guide (Index)](documents/operations/00-operational-guide.md)
+- [Development Guide](documents/development/00-development-guide.md)
+- [QA Testing Guide (Bare-Metal)](documents/testing/01-qa-testing-guide-baremetal.md)
 - [Requirements Documents](documents/requirements)
 - [ECUBE Requirements Overview](documents/requirements/00-overview.md)
 - [Security & Access Control (Requirements)](documents/requirements/10-security-and-access-control.md)
