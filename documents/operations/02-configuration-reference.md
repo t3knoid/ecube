@@ -11,6 +11,8 @@
 
 ECUBE reads configuration from **environment variables** or a `.env` file placed in the application root (`/opt/ecube/.env`). Every setting has a built-in default; the `.env` file is **optional** — create one only when you need to override defaults.
 
+> **Path resolution:** Pydantic-settings resolves `.env` relative to the **process working directory**, not the application package. The reference systemd unit ([00-operational-guide.md §4](00-operational-guide.md)) sets `WorkingDirectory=/opt/ecube`, so `.env` resolves to `/opt/ecube/.env`. If you run the application from a different directory (e.g. during development), place the `.env` file in that directory or export the variables directly.
+
 See `.env.example` in the release package for a copy-paste starting point.
 
 ---
