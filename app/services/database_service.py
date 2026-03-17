@@ -103,6 +103,11 @@ def provision_database(
     Returns the number of migrations applied.
     Raises ``ConnectionError`` on connectivity failures.
     Raises ``RuntimeError`` on provisioning failures.
+
+    Steps are ordered so that side-effects (.env write, engine swap) only
+    occur after migrations succeed.  If migrations fail, the database and
+    user exist but the schema is incomplete — the operator can fix the
+    migration issue and retry without ``force``.
     """
     # Step 1: Connect as admin to create user and database
     try:
@@ -171,18 +176,44 @@ def provision_database(
     finally:
         conn.close()
 
-    # Step 2: Run Alembic migrations against the new database
+    # Step 2: Run Alembic migrations against the new database.
+    # If this fails the database/user have been created but the schema is
+    # incomplete — we intentionally do NOT write .env or swap the engine
+    # so the operator can retry without ``force``.
     new_url = _build_database_url(host, port, app_database, app_username, app_password)
-    migrations_applied = _run_migrations(new_url)
+    try:
+        migrations_applied = _run_migrations(new_url)
+    except Exception as exc:
+        logger.error("Alembic migration failed: %s", exc)
+        raise RuntimeError(
+            "Database and user were created, but schema migration failed. "
+            "Resolve the migration issue and retry provisioning."
+        ) from exc
 
-    # Step 3: Write DATABASE_URL to .env
-    _write_env_setting("DATABASE_URL", new_url)
+    # Step 3: Write DATABASE_URL to .env — only after migrations succeed.
+    try:
+        _write_env_setting("DATABASE_URL", new_url)
+    except Exception as exc:
+        logger.error("Failed to write DATABASE_URL to .env: %s", exc)
+        raise RuntimeError(
+            "Database provisioned and migrated, but failed to persist "
+            "DATABASE_URL to .env. Update .env manually or retry."
+        ) from exc
 
-    # Step 4: Switch the running process to the newly provisioned database
+    # Step 4: Switch the running process to the newly provisioned database.
     from app.config import settings
 
     settings.database_url = new_url
-    _reinitialize_engine(new_url, settings.db_pool_size, settings.db_pool_max_overflow)
+    try:
+        _reinitialize_engine(
+            new_url, settings.db_pool_size, settings.db_pool_max_overflow
+        )
+    except Exception as exc:
+        logger.error("Engine reinitialization failed: %s", exc)
+        raise RuntimeError(
+            "Database provisioned and .env updated, but the running "
+            "engine could not be switched. Restart the application."
+        ) from exc
 
     return migrations_applied
 

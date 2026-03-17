@@ -1160,3 +1160,81 @@ class TestDatabaseService:
 
             from app.services.database_service import is_database_provisioned
             assert is_database_provisioned() is False
+
+    @patch("app.services.database_service._write_env_setting")
+    @patch("app.services.database_service._reinitialize_engine")
+    @patch("app.services.database_service._run_migrations", side_effect=Exception("alembic boom"))
+    @patch("app.services.database_service.psycopg2")
+    def test_provision_migration_failure_skips_env_and_engine(
+        self, mock_psycopg2, mock_migrations, mock_reinit, mock_write
+    ):
+        """If _run_migrations fails, .env must NOT be written and engine must NOT be swapped."""
+        from app.services.database_service import provision_database
+
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        mock_cur.fetchone.return_value = None
+        mock_conn.cursor.return_value = mock_cur
+        mock_psycopg2.connect.return_value = mock_conn
+        mock_psycopg2.OperationalError = Exception
+        mock_psycopg2.sql = __import__("psycopg2").sql
+
+        with pytest.raises(RuntimeError, match="migration failed"):
+            provision_database(
+                host="h", port=5432, admin_username="pg", admin_password="pw",
+                app_database="db", app_username="u", app_password="p",
+            )
+
+        mock_write.assert_not_called()
+        mock_reinit.assert_not_called()
+
+    @patch("app.services.database_service._reinitialize_engine")
+    @patch("app.services.database_service._run_migrations", return_value=4)
+    @patch("app.services.database_service._write_env_setting", side_effect=OSError("disk full"))
+    @patch("app.services.database_service.psycopg2")
+    def test_provision_env_write_failure_skips_engine(
+        self, mock_psycopg2, mock_write, mock_migrations, mock_reinit
+    ):
+        """If .env write fails after migration, engine must NOT be swapped."""
+        from app.services.database_service import provision_database
+
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        mock_cur.fetchone.return_value = None
+        mock_conn.cursor.return_value = mock_cur
+        mock_psycopg2.connect.return_value = mock_conn
+        mock_psycopg2.OperationalError = Exception
+        mock_psycopg2.sql = __import__("psycopg2").sql
+
+        with pytest.raises(RuntimeError, match="failed to persist"):
+            provision_database(
+                host="h", port=5432, admin_username="pg", admin_password="pw",
+                app_database="db", app_username="u", app_password="p",
+            )
+
+        mock_reinit.assert_not_called()
+
+    @patch("app.services.database_service._write_env_setting")
+    @patch("app.services.database_service._run_migrations", return_value=4)
+    @patch("app.services.database_service._reinitialize_engine",
+           side_effect=RuntimeError("lock contention"))
+    @patch("app.services.database_service.psycopg2")
+    def test_provision_engine_reinit_failure_raises(
+        self, mock_psycopg2, mock_reinit, mock_migrations, mock_write
+    ):
+        """If engine reinitialization fails, a RuntimeError surfaces."""
+        from app.services.database_service import provision_database
+
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        mock_cur.fetchone.return_value = None
+        mock_conn.cursor.return_value = mock_cur
+        mock_psycopg2.connect.return_value = mock_conn
+        mock_psycopg2.OperationalError = Exception
+        mock_psycopg2.sql = __import__("psycopg2").sql
+
+        with pytest.raises(RuntimeError, match="engine could not be switched"):
+            provision_database(
+                host="h", port=5432, admin_username="pg", admin_password="pw",
+                app_database="db", app_username="u", app_password="p",
+            )
