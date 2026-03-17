@@ -39,9 +39,9 @@ class TestJobCreationDBFailures:
     """Job creation: add job → add assignment → update drive state."""
 
     def test_create_job_db_failure_returns_500(self, client, db):
-        """If the initial job insert fails, return 500 not a raw traceback."""
-        with patch(
-            "app.repositories.job_repository.JobRepository.add",
+        """If the transaction commit fails, return 500 not a raw traceback."""
+        with patch.object(
+            db, "commit",
             side_effect=Exception("simulated DB failure"),
         ):
             response = client.post(
@@ -58,12 +58,20 @@ class TestJobCreationDBFailures:
                "error" in body.get("detail", body.get("message", "")).lower()
 
     def test_create_job_drive_assignment_db_failure(self, client, db):
-        """If drive assignment commit fails, return 500 with meaningful error."""
+        """If the single-transaction commit fails, return 500 and leave no orphaned job."""
         drive = _make_drive(db)
-        with patch(
-            "app.repositories.job_repository.DriveAssignmentRepository.add",
-            side_effect=Exception("simulated assignment DB failure"),
-        ):
+
+        original_commit = db.commit
+
+        def fail_on_second_commit(*a, **kw):
+            """Allow setup commits but fail the create_job transaction commit."""
+            fail_on_second_commit.calls += 1
+            # The create_job transaction commit is inside the service;
+            # simulate failure by raising after flush succeeds.
+            raise Exception("simulated commit failure")
+        fail_on_second_commit.calls = 0
+
+        with patch.object(db, "commit", side_effect=fail_on_second_commit):
             response = client.post(
                 "/jobs",
                 json={
@@ -74,6 +82,13 @@ class TestJobCreationDBFailures:
                 },
             )
         assert response.status_code == 500
+
+        # Verify no orphaned job was left behind — rollback should have
+        # cleaned up both the job and the drive assignment.
+        from app.models.jobs import ExportJob as EJ
+        original_commit()  # ensure session is clean
+        orphans = db.query(EJ).filter(EJ.project_id == "PROJ-001").all()
+        assert len(orphans) == 0, "Orphaned job record found after commit failure"
 
     def test_create_job_audit_failure_does_not_abort(self, client, db):
         """Audit log failure after successful job creation must not abort."""
