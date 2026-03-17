@@ -162,10 +162,12 @@ def _process_file(
                 logger.exception("Failed to write audit log for FILE_COPY_FAILURE")
 
         ef.checksum = checksum
+        done_saved = False
         if success:
             ef.status = FileStatus.DONE
             try:
                 file_repo.save(ef)
+                done_saved = True
             except Exception:
                 logger.exception("DB commit failed saving DONE status for file %s", export_file_id)
             try:
@@ -184,8 +186,10 @@ def _process_file(
             except Exception:
                 logger.exception("DB commit failed saving ERROR status for file %s", export_file_id)
 
-        # Atomically increment copied_bytes to avoid lost-update races between threads.
-        if success and ef.size_bytes:
+        # Only increment copied_bytes when the DONE status was actually
+        # persisted.  If the save failed the file will be re-processed on
+        # resume, and incrementing here would cause double-counting.
+        if done_saved and ef.size_bytes:
             try:
                 file_repo.increment_job_bytes(ef.job_id, ef.size_bytes)
             except Exception:
