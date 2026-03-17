@@ -13,7 +13,7 @@ import os
 import re
 import tempfile
 from typing import Any, Dict, Optional, Tuple
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import psycopg2
 from psycopg2 import sql
@@ -161,7 +161,7 @@ def provision_database(
         conn.close()
 
     # Step 2: Run Alembic migrations against the new database
-    new_url = f"postgresql://{app_username}:{app_password}@{host}:{port}/{app_database}"
+    new_url = _build_database_url(host, port, app_database, app_username, app_password)
     migrations_applied = _run_migrations(new_url)
 
     # Step 3: Write DATABASE_URL to .env
@@ -342,10 +342,7 @@ def update_database_settings(
     new_pool_max_overflow = pool_max_overflow if pool_max_overflow is not None else settings.db_pool_max_overflow
 
     # Test the new connection before committing
-    new_url = (
-        f"postgresql://{new_username}:{new_password}"
-        f"@{new_host}:{new_port}/{new_database}"
-    )
+    new_url = _build_database_url(new_host, new_port, new_database, new_username, new_password)
     try:
         conn = psycopg2.connect(new_url, connect_timeout=10)
         conn.close()
@@ -376,6 +373,16 @@ def update_database_settings(
         "database": new_database,
         "connected": True,
     }
+
+
+def _build_database_url(
+    host: str, port: int, database: str, username: str, password: str
+) -> str:
+    """Build a PostgreSQL DSN with properly encoded credentials."""
+    return (
+        f"postgresql://{quote(username, safe='')}:{quote(password, safe='')}"
+        f"@{host}:{port}/{quote(database, safe='')}"
+    )
 
 
 def _parse_database_url(url: str) -> Dict[str, Any]:
