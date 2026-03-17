@@ -1301,6 +1301,89 @@ sudo udevadm trigger
 - Reload udev rules: `sudo udevadm control --reload && sudo udevadm trigger`
 - Check for kernel device errors: `dmesg | tail -20`
 
+### Setup Initialization Fails or Gets Stuck
+
+The `POST /setup/initialize` endpoint performs a multi-step process:
+
+1. Inserts a lock row into `system_initialization` (cross-process guard)
+2. Creates OS groups (`ecube-admins`, `ecube-auditors`, `ecube-managers`, `ecube-processors`)
+3. Creates the admin OS user and sets the password
+4. Seeds the admin role in the `user_roles` database table
+5. Writes an audit log entry
+
+If any step after the lock row insertion fails, the endpoint attempts to
+delete the lock row so that setup can be retried.  However, if the lock
+row cannot be deleted (e.g., database connectivity lost), subsequent calls will return `409 Conflict` indefinitely.
+
+#### Symptom: `409 Conflict` but system is not initialized
+
+**Cause:** A previous initialization attempt failed partway through and the
+lock row in `system_initialization` was not cleaned up.
+
+**Diagnosis:**
+
+```bash
+# Check if the lock row exists
+psql -U ecube -d ecube -c "SELECT * FROM system_initialization;"
+
+# Check if the admin role was actually seeded
+psql -U ecube -d ecube -c "SELECT * FROM user_roles WHERE role = 'admin';"
+
+# Check ECUBE service logs for CRITICAL-level messages about the lock
+sudo journalctl -u ecube --priority=crit --since="1 hour ago"
+```
+
+**Resolution:**
+
+```bash
+# Remove the stuck lock row
+psql -U ecube -d ecube -c "DELETE FROM system_initialization WHERE id = 1;"
+
+# If partial OS state exists, clean it up:
+# Check if groups were created
+getent group ecube-admins ecube-auditors ecube-managers ecube-processors
+
+# Check if the admin user was created
+id <admin-username>
+
+# Retry initialization
+curl -k -X POST https://localhost:8443/setup/initialize \
+  -H "Content-Type: application/json" \
+  -d '{"username": "ecube-admin", "password": "s3cret"}'
+```
+
+> **Note:** Retrying `POST /setup/initialize` is safe even if the OS user
+> already exists from a prior partial attempt.  The endpoint detects the
+> existing user, adds it to the `ecube-admins` group, and resets its
+> password to the value provided in the request.
+
+#### Symptom: `500 Internal Server Error` during initialization
+
+**Possible causes and states:**
+
+| Error message | What succeeded | What failed | Partial state |
+|---|---|---|---|
+| "Failed to create OS groups: ..." | Lock acquired | Group creation | Lock released; no OS changes |
+| "Failed to create admin user: ..." | Lock acquired, groups exist | User creation | Lock released; groups exist (harmless) |
+| "An unexpected error occurred..." | Lock acquired, possibly groups/user | Unknown step | Lock released if possible; check OS state |
+| "OS setup completed successfully... but writing the admin role..." | Lock acquired, groups, user | DB role seeding | Lock released; OS user exists without DB role |
+| Any message ending with "...the initialization lock could not be released..." | Varies | Lock cleanup also failed | Lock row is stuck; manual `DELETE` required |
+
+**Resolution for each case:**
+
+1. **Lock released:** Simply retry `POST /setup/initialize`.  The endpoint
+   handles pre-existing OS groups and users gracefully.
+
+2. **Lock stuck (message mentions manual intervention):**
+   ```bash
+   psql -U ecube -d ecube -c "DELETE FROM system_initialization WHERE id = 1;"
+   ```
+   Then retry `POST /setup/initialize`.
+
+3. **OS user exists without DB role (after "OS setup completed" error):**
+   The retry will detect the existing user, add it to `ecube-admins`, reset
+   its password, and re-attempt the DB role seeding.
+
 ---
 
 ## Backup and Recovery
