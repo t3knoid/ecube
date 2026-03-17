@@ -270,14 +270,18 @@ def _run_os_setup(
         # Recover: append to ecube-admins (preserving existing groups) and
         # reset the password so the caller's credentials are guaranteed valid.
         try:
-            os_user_service.add_user_to_groups(body.username, ["ecube-admins"])
+            os_user_service.add_user_to_groups(
+                body.username, ["ecube-admins"], _skip_managed_check=True,
+            )
         except os_user_service.OSUserError as grp_exc:
             raise HTTPException(
                 status_code=500,
                 detail=f"User exists but failed to add to ecube-admins: {grp_exc.message}",
             )
         try:
-            os_user_service.reset_password(body.username, body.password)
+            os_user_service.reset_password(
+                body.username, body.password, _skip_managed_check=True,
+            )
         except (os_user_service.OSUserError, ValueError) as pw_exc:
             raise HTTPException(
                 status_code=500,

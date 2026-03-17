@@ -336,17 +336,21 @@ def delete_user(username: str, *, _skip_managed_check: bool = False) -> None:
     _run_sudo([settings.userdel_binary_path, "-r", username])
 
 
-def reset_password(username: str, password: str) -> None:
+def reset_password(username: str, password: str, *, _skip_managed_check: bool = False) -> None:
     """Reset an OS user's password.
 
     Raises :class:`OSUserError` on failure, :class:`ValueError` for bad input
     or non-ECUBE-managed users.
+
+    The private *_skip_managed_check* flag is used by the setup wizard's
+    recovery path where the user may not yet be in an ``ecube-*`` group.
     """
     validate_username(username)
     validate_password(password)
     if not user_exists(username):
         raise OSUserError(f"User '{username}' does not exist")
-    _require_ecube_managed_user(username)
+    if not _skip_managed_check:
+        _require_ecube_managed_user(username)
 
     _run_sudo([settings.chpasswd_binary_path], stdin_data=f"{username}:{password}")
 
@@ -380,16 +384,20 @@ def set_user_groups(username: str, groups: List[str]) -> OSUser:
     )
 
 
-def add_user_to_groups(username: str, groups: List[str]) -> OSUser:
+def add_user_to_groups(username: str, groups: List[str], *, _skip_managed_check: bool = False) -> OSUser:
     """Add a user to supplementary groups without removing existing memberships.
 
     Uses ``usermod -aG`` (append) instead of ``-G`` (replace).
     Returns the updated :class:`OSUser`.
+
+    The private *_skip_managed_check* flag is used by the setup wizard's
+    recovery path where the user may not yet be in an ``ecube-*`` group.
     """
     validate_username(username)
     if not user_exists(username):
         raise OSUserError(f"User '{username}' does not exist")
-    _require_ecube_managed_user(username)
+    if not _skip_managed_check:
+        _require_ecube_managed_user(username)
 
     for g in groups:
         validate_group_name(g)
