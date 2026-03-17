@@ -247,3 +247,90 @@ docker compose -f docker-compose.ecube-host.yml down
 For USB hub/device passthrough guidance (physical host → VM → container), see:
 
 - `documents/design/12-linux-host-deployment-and-usb-passthrough.md`
+
+## 13.7 Session and Cookie Configuration
+
+ECUBE supports configurable session management with two storage backends.
+
+### Backend selection
+
+| Value | Description |
+|-------|-------------|
+| `cookie` (default) | Signed browser cookies via Starlette `SessionMiddleware`. No external dependencies. |
+| `redis` | Session data stored server-side in Redis; only a session-id cookie is sent to the browser. Requires the `redis` Python package. |
+
+Set `SESSION_BACKEND` in your `.env` or environment to choose a backend.
+
+### Cookie settings
+
+| Environment Variable | Default | Description |
+|----------------------|---------|-------------|
+| `SESSION_COOKIE_NAME` | `ecube_session` | Name of the session cookie. |
+| `SESSION_COOKIE_EXPIRATION_SECONDS` | `3600` | Cookie lifetime in seconds. Use `86400` for 24 hours. |
+| `SESSION_COOKIE_DOMAIN` | *(unset)* | Domain scope. Leave empty for the browser's default rules. |
+| `SESSION_COOKIE_SECURE` | `true` | Send cookie only over HTTPS. Set `false` for local dev. |
+| `SESSION_COOKIE_HTTPONLY` | `true` | Prevent JavaScript access. |
+| `SESSION_COOKIE_SAMESITE` | `lax` | Values: `strict`, `lax`, `none`. |
+
+### Redis configuration (optional)
+
+Required only when `SESSION_BACKEND=redis`:
+
+| Environment Variable | Default | Description |
+|----------------------|---------|-------------|
+| `REDIS_URL` | *(unset)* | Redis connection URL, e.g. `redis://localhost:6379/0`. |
+| `REDIS_CONNECTION_TIMEOUT` | `5` | Timeout in seconds for establishing a connection. |
+| `REDIS_SOCKET_KEEPALIVE` | `true` | TCP keepalive on the Redis socket. |
+
+### Graceful fallback
+
+If `SESSION_BACKEND=redis` but Redis is unreachable (or the `redis` package is not installed), ECUBE logs a warning and automatically falls back to cookie-based sessions. The application continues to function normally.
+
+### Example `.env` — cookie backend (default)
+
+```env
+SESSION_BACKEND=cookie
+SESSION_COOKIE_NAME=ecube_session
+SESSION_COOKIE_EXPIRATION_SECONDS=3600
+SESSION_COOKIE_SECURE=true
+SESSION_COOKIE_HTTPONLY=true
+SESSION_COOKIE_SAMESITE=lax
+```
+
+### Example `.env` — Redis backend
+
+```env
+SESSION_BACKEND=redis
+REDIS_URL=redis://localhost:6379/0
+REDIS_CONNECTION_TIMEOUT=5
+REDIS_SOCKET_KEEPALIVE=true
+SESSION_COOKIE_NAME=ecube_session
+SESSION_COOKIE_EXPIRATION_SECONDS=86400
+SESSION_COOKIE_SECURE=true
+```
+
+### Redis deployment
+
+**Docker Compose** — add a `redis` service alongside `ecube-host` and `postgres`:
+
+```yaml
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+volumes:
+  redis_data:
+```
+
+**Systemd (package deployment)** — install Redis from your distribution package manager:
+
+```bash
+sudo apt install -y redis-server
+sudo systemctl enable redis-server
+sudo systemctl start redis-server
+```
+
+Then set `REDIS_URL=redis://localhost:6379/0` in `/opt/ecube/.env`.
