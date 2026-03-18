@@ -440,10 +440,9 @@ curl -X POST https://localhost:8443/jobs \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "project_id": 42,
-    "source_path": "/mnt/evidence/case-001",
-    "drive_id": 1,
-    "file_filter": "*.txt,*.pdf"
+    "project_id": "PROJECT-42",
+    "evidence_number": "EV-2026-001",
+    "source_path": "/mnt/evidence/case-001"
   }'
 ```
 
