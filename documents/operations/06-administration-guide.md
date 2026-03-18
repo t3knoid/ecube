@@ -1,4 +1,4 @@
-# ECUBE User Manual
+# ECUBE Administration Guide
 
 **Version:** 1.0  
 **Last Updated:** March 2026  
