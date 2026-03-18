@@ -228,7 +228,8 @@ def _session_factory(db):
     # This allows each thread to get its own session, matching production behavior
     from sqlalchemy.orm import sessionmaker
     engine = db.get_bind()
-    Factory = sessionmaker(bind=engine)
+    # Match the app's SessionLocal/TestingSessionLocal config
+    Factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     return Factory
 
 
