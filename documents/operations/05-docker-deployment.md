@@ -39,21 +39,22 @@ cp .env.example .env
 nano .env
 
 # Start services
-docker compose up -d
+docker compose -f docker-compose.ecube-host.yml up -d
 
-# Initialize database
-docker compose exec app alembic upgrade head
+# Database migrations run automatically on startup via entrypoint.
+# If you need to run them manually:
+docker compose -f docker-compose.ecube-host.yml exec ecube-host alembic upgrade head
 
 # Run first-run setup (creates admin user, seeds DB role)
 # Option A: API-based (after service starts)
-curl -k -X POST https://localhost:8443/setup/initialize \
+curl -X POST http://localhost:8000/setup/initialize \
   -H "Content-Type: application/json" \
   -d '{"username": "ecube-admin", "password": "s3cret"}'
 # Option B: CLI
-docker compose exec app ecube-setup
+docker compose -f docker-compose.ecube-host.yml exec ecube-host ecube-setup
 
 # View logs
-docker compose logs -f app
+docker compose -f docker-compose.ecube-host.yml logs -f ecube-host
 ```
 
 ---
@@ -79,36 +80,41 @@ nano .env
 ### Start Services
 
 ```bash
-docker compose up -d
+docker compose -f docker-compose.ecube-host.yml up -d
 ```
 
 ### Check Status
 
 ```bash
-docker compose ps
-docker compose logs -f app
+docker compose -f docker-compose.ecube-host.yml ps
+docker compose -f docker-compose.ecube-host.yml logs -f ecube-host
 ```
 
 ### Stop Services
 
 ```bash
-docker compose down
+docker compose -f docker-compose.ecube-host.yml down
 ```
 
 ### Restart Application
 
 ```bash
-docker compose restart app
+docker compose -f docker-compose.ecube-host.yml restart ecube-host
 ```
 
 ### Verify API Endpoint
 
 ```bash
-curl -k https://localhost:8443/introspection/version
+curl http://localhost:8000/introspection/version
 
 # Expected response (JSON):
 # {"version": "0.1.0", "api_version": "1.0.0"}
 ```
+
+> **Note:** The Docker deployment exposes HTTP on port 8000 without TLS.
+> For production, place a reverse proxy (e.g., Nginx, Caddy) in front to
+> terminate TLS on port 8443. See [04-package-deployment.md](04-package-deployment.md)
+> for the bare-metal deployment with built-in TLS.
 
 ---
 
@@ -116,13 +122,13 @@ curl -k https://localhost:8443/introspection/version
 
 ```bash
 # View logs
-docker compose logs app
+docker compose -f docker-compose.ecube-host.yml logs ecube-host
 
 # Follow logs in real-time
-docker compose logs -f app
+docker compose -f docker-compose.ecube-host.yml logs -f ecube-host
 
 # View specific number of lines
-docker compose logs -n 100 app
+docker compose -f docker-compose.ecube-host.yml logs -n 100 ecube-host
 ```
 
 ---
