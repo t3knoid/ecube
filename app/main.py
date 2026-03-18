@@ -15,6 +15,7 @@ from app.exceptions import AuthenticationError, AuthorizationError, ConflictErro
 from app.logging_config import configure_logging
 from app.routers import admin, audit, auth, database_setup, drives, files, introspection, jobs, mounts, setup, users
 from app.schemas.errors import ErrorResponse
+from app.session import close_session_backend, init_session_backend, mount_session_middleware
 
 # Configure logging before anything else.
 configure_logging()
@@ -69,6 +70,11 @@ tags_metadata = [
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     logger.info("ECUBE application starting")
+
+    # ------------------------------------------------------------------
+    # Startup: initialise session backend (Redis ping if configured)
+    # ------------------------------------------------------------------
+    await init_session_backend(application)
 
     # ------------------------------------------------------------------
     # Startup: purge expired audit logs
@@ -126,6 +132,8 @@ async def lifespan(application: FastAPI):
         except asyncio.CancelledError:
             pass
 
+    await close_session_backend(application)
+
     logger.info("ECUBE application shutting down")
 
 
@@ -145,6 +153,9 @@ app = FastAPI(
     openapi_tags=tags_metadata,
     lifespan=lifespan,
 )
+
+# Mount session middleware (cookie or Redis backend).
+mount_session_middleware(app)
 
 
 @app.get("/health")

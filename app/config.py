@@ -1,13 +1,16 @@
 from typing import Dict, List, Literal, Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+from pydantic import Field, field_validator, model_validator
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env")
 
     database_url: str = "postgresql://ecube:ecube@localhost/ecube"
+    #: Shared signing key for JWT tokens **and** cookie-based sessions
+    #: (when ``SESSION_BACKEND=cookie``).  Rotating this key invalidates
+    #: all outstanding JWTs and active cookie sessions.
     secret_key: str = "change-me-in-production-please-rotate-32b"
     algorithm: str = "HS256"
 
@@ -232,6 +235,71 @@ class Settings(BaseSettings):
 
     #: Contact email shown in the OpenAPI spec.
     api_contact_email: str = "support@ecube.local"
+
+    # ---------------------------------------------------------------------------
+    # Session / cookie configuration
+    # ---------------------------------------------------------------------------
+
+    #: Session storage backend.  ``"cookie"`` uses signed browser cookies;
+    #: ``"redis"`` stores session data in Redis (requires ``redis`` package).
+    session_backend: Literal["cookie", "redis"] = "cookie"
+
+    #: Name of the session cookie sent to browsers.
+    session_cookie_name: str = "ecube_session"
+
+    #: Session cookie lifetime in seconds.  Default: 3600 (1 hour).
+    session_cookie_expiration_seconds: int = 3600
+
+    #: Domain scope for the session cookie.  ``None`` lets the browser apply
+    #: its default rules.
+    session_cookie_domain: Optional[str] = None
+
+    #: Send the cookie only over HTTPS.  Should be ``True`` in production.
+    session_cookie_secure: bool = True
+
+    #: SameSite attribute for the session cookie.
+    #: .. note:: The ``HttpOnly`` flag is always set on session cookies and
+    #:    cannot be disabled.  Both Starlette's ``SessionMiddleware`` and
+    #:    ECUBE's ``RedisSessionMiddleware`` enforce this unconditionally.
+    session_cookie_samesite: Literal["strict", "lax", "none"] = "lax"
+
+    # ---------------------------------------------------------------------------
+    # Redis configuration (used when session_backend = "redis")
+    # ---------------------------------------------------------------------------
+
+    #: Redis connection URL.  Only used when ``session_backend = "redis"``.
+    #: Example: ``redis://localhost:6379/0``
+    redis_url: Optional[str] = None
+
+    #: Timeout in seconds for establishing a Redis connection.
+    redis_connection_timeout: int = 5
+
+    #: Enable TCP keepalive on the Redis socket to detect dead connections.
+    redis_socket_keepalive: bool = True
+
+    @field_validator("session_cookie_domain", mode="before")
+    @classmethod
+    def _normalise_domain(cls, v: str | None) -> str | None:  # noqa: N805
+        """Treat blank strings as *unset* so ``SESSION_COOKIE_DOMAIN=``
+        in the environment behaves the same as omitting the variable."""
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        return v
+
+    @field_validator("session_cookie_samesite", mode="before")
+    @classmethod
+    def _normalise_samesite(cls, v: str) -> str:  # noqa: N805
+        return v.lower() if isinstance(v, str) else v
+
+    @model_validator(mode="after")
+    def _samesite_none_requires_secure(self) -> "Settings":
+        if self.session_cookie_samesite == "none" and not self.session_cookie_secure:
+            raise ValueError(
+                "SESSION_COOKIE_SECURE must be true when "
+                "SESSION_COOKIE_SAMESITE is 'none' (browsers reject "
+                "SameSite=None cookies without the Secure flag)"
+            )
+        return self
 
 
 settings = Settings()
