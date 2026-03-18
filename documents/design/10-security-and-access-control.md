@@ -196,6 +196,11 @@ def require_roles(*allowed_roles: str):
 def initialize_drive(drive_id: int, user: UserContext):
     ...
 
+@router.post("/drives/{drive_id}/format")
+@require_roles("admin", "manager")
+def format_drive(drive_id: int, user: UserContext):
+    ...
+
 @router.post("/jobs/{job_id}/start")
 @require_roles("admin", "manager", "processor")
 def start_job(job_id: int, user: UserContext):
