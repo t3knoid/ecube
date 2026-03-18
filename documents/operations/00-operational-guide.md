@@ -179,7 +179,7 @@ For architecture decisions, data model details, and full API specifications, see
 - **Repository:** <https://github.com/t3knoid/ecube>
 - **Service Logs:** `journalctl -u ecube -f`
 - **Database Logs:** PostgreSQL log file (check `postgresql.conf`)
-- **API Errors:** Check response JSON for `detail` field
+- **API Errors:** Check response JSON for `code`, `message`, and `trace_id` fields
 
 ---
 
