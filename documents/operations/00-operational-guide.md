@@ -132,6 +132,12 @@ Hardening guide covering network isolation, TLS certificate management, credenti
 
 Concise endpoint reference for the ECUBE REST API. Covers interactive API documentation (Swagger UI, ReDoc, OpenAPI schema), authentication requirements, and endpoint tables for drives, mounts, jobs, audit, and introspection — each with HTTP method, path, required role, and description. Includes filter parameters and curl examples.
 
+### [09 — User Manual](09-user-manual.md) *(placeholder)*
+
+**Audience:** Processors, Managers, Auditors, All End Users
+
+End-user guide for the ECUBE web interface. Will cover day-to-day workflows performed through the GUI: login, dashboard navigation, drive management, export job creation and monitoring, verification and manifests, audit log browsing, and user settings. Pending frontend integration.
+
 ---
 
 ## Getting Started
