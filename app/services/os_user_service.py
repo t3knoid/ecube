@@ -22,8 +22,7 @@ try:
     import pwd
 except ImportError:  # pragma: no cover – Linux-only stdlib modules
     pass
-from dataclasses import dataclass, field
-from typing import List, Optional, Protocol
+from typing import List, Optional
 
 from app.config import settings
 from app.constants import (
@@ -34,59 +33,19 @@ from app.constants import (
     USERNAME_RE,
 )
 
+# Re-export platform-neutral types so existing ``os_user_service.X`` access
+# (e.g. ``os_user_service.OSUserError``) keeps working.
+from app.infrastructure.os_user_protocol import (  # noqa: F401 – re-export
+    OSGroup,
+    OSUser,
+    OSUserError,
+    OsUserProvider,
+)
+
 logger = logging.getLogger(__name__)
 
 # Default subprocess timeout (seconds).
 _SUBPROCESS_TIMEOUT = settings.subprocess_timeout_seconds
-
-
-class OSUserError(Exception):
-    """Raised when an OS user/group operation fails."""
-
-    def __init__(self, message: str, returncode: int | None = None) -> None:
-        self.message = message
-        self.returncode = returncode
-        super().__init__(message)
-
-
-@dataclass
-class OSUser:
-    """Representation of an OS user."""
-    username: str
-    uid: int
-    gid: int
-    home: str
-    shell: str
-    groups: List[str] = field(default_factory=list)
-
-
-@dataclass
-class OSGroup:
-    """Representation of an OS group."""
-    name: str
-    gid: int
-    members: List[str] = field(default_factory=list)
-
-
-# ---------------------------------------------------------------------------
-# OsUserProvider Protocol
-# ---------------------------------------------------------------------------
-
-class OsUserProvider(Protocol):
-    """Platform-agnostic interface for OS user and group management."""
-
-    def user_exists(self, username: str) -> bool: ...
-    def group_exists(self, name: str) -> bool: ...
-    def create_user(self, username: str, password: str, groups: Optional[List[str]] = None) -> OSUser: ...
-    def list_users(self, ecube_only: bool = True) -> List[OSUser]: ...
-    def delete_user(self, username: str, *, _skip_managed_check: bool = False) -> None: ...
-    def reset_password(self, username: str, password: str, *, _skip_managed_check: bool = False) -> None: ...
-    def set_user_groups(self, username: str, groups: List[str]) -> OSUser: ...
-    def add_user_to_groups(self, username: str, groups: List[str], *, _skip_managed_check: bool = False) -> OSUser: ...
-    def create_group(self, name: str) -> OSGroup: ...
-    def list_groups(self, ecube_only: bool = True) -> List[OSGroup]: ...
-    def delete_group(self, name: str) -> None: ...
-    def ensure_ecube_groups(self) -> List[str]: ...
 
 
 class LinuxOsUserProvider:
