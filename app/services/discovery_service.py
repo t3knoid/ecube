@@ -43,7 +43,7 @@ from typing import Callable, List, Optional
 from sqlalchemy.orm import Session
 
 from app.infrastructure.usb_discovery import DiscoveredTopology, discover_usb_topology
-from app.infrastructure import FilesystemDetector, get_filesystem_detector
+from app.infrastructure import FilesystemDetector
 from app.models.hardware import DriveState, UsbDrive
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
@@ -57,7 +57,7 @@ def run_discovery_sync(
     actor: Optional[str] = None,
     *,
     topology_source: Callable[[], DiscoveredTopology] = discover_usb_topology,
-    filesystem_detector: Optional[FilesystemDetector] = None,
+    filesystem_detector: FilesystemDetector,
 ) -> dict:
     """Discover USB hardware state and synchronise the database.
 
@@ -72,6 +72,11 @@ def run_discovery_sync(
         Callable that returns a :class:`~app.infrastructure.usb_discovery.DiscoveredTopology`.
         Defaults to the real sysfs reader; override in tests to inject
         synthetic hardware snapshots.
+    filesystem_detector:
+        Implementation of the :class:`FilesystemDetector` protocol.  Callers
+        must supply an instance explicitly; production routers pass the result
+        of :func:`get_filesystem_detector`, while tests inject a lightweight
+        fake.
 
     Returns
     -------
@@ -79,8 +84,6 @@ def run_discovery_sync(
         Summary with counts of hubs, ports, drives inserted/updated/removed.
     """
     topology = topology_source()
-    if filesystem_detector is None:
-        filesystem_detector = get_filesystem_detector()
 
     hub_repo = HubRepository(db)
     port_repo = PortRepository(db)
