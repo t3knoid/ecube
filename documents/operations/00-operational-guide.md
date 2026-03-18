@@ -114,7 +114,7 @@ Full procedure for deploying ECUBE as a native systemd service. Covers service a
 
 Container-based deployment using Docker Compose. Covers quick start, `.env` configuration, starting and stopping containers, log viewing, and references to the USB passthrough design document for Docker-specific hardware access. Recommended for quick testing and evaluation environments.
 
-### [06 — User Manual](06-user-manual.md)
+### [06 — Administration Guide](06-administration-guide.md)
 
 **Audience:** Operators, All Users
 
@@ -142,11 +142,11 @@ Use this guide to find the right document for your task:
 |------|-----------|
 | First-time installation | [03 — Installation Guide](03-installation.md) → then [04 — Package Deployment](04-package-deployment.md) or [05 — Docker Deployment](05-docker-deployment.md) |
 | Configure environment variables | [02 — Configuration Reference](02-configuration-reference.md) |
-| Day-to-day operations (mounts, drives, jobs) | [06 — User Manual](06-user-manual.md) |
+| Day-to-day operations (mounts, drives, jobs) | [06 — Administration Guide](06-administration-guide.md) |
 | Harden a production deployment | [07 — Security Best Practices](07-security-best-practices.md) |
 | Explore the API | [08 — API Quick Reference](08-api-quick-reference.md) or Swagger UI at `/docs` |
-| Troubleshoot issues | [06 — User Manual](06-user-manual.md) § Troubleshooting |
-| Backup and recovery | [06 — User Manual](06-user-manual.md) § Backup and Recovery |
+| Troubleshoot issues | [06 — Administration Guide](06-administration-guide.md) § Troubleshooting |
+| Backup and recovery | [06 — Administration Guide](06-administration-guide.md) § Backup and Recovery |
 
 ---
 
