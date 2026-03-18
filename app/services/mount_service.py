@@ -170,12 +170,12 @@ def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None,
                  provider: Optional["MountProvider"] = None) -> None:
     mount_repo = MountRepository(db)
     audit_repo = AuditRepository(db)
-    provider = provider or _default_provider()
 
     mount = mount_repo.get(mount_id)
     if not mount:
         raise HTTPException(status_code=404, detail="Mount not found")
 
+    provider = provider or _default_provider()
     try:
         provider.os_unmount(mount.local_mount_point)
     except Exception:
@@ -215,12 +215,12 @@ def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None,
                    provider: Optional["MountProvider"] = None) -> NetworkMount:
     mount_repo = MountRepository(db)
     audit_repo = AuditRepository(db)
-    provider = provider or _default_provider()
 
     mount = mount_repo.get(mount_id)
     if not mount:
         raise HTTPException(status_code=404, detail="Mount not found")
 
+    provider = provider or _default_provider()
     result = provider.check_mounted(mount.local_mount_point)
     if result is True:
         mount.status = MountStatus.MOUNTED
