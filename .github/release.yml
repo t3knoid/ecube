@@ -1,0 +1,9 @@
+changelog:
+  exclude:
+    authors:
+      - "*"
+  categories:
+    - title: Changes
+      labels:
+        - "*"
+  change-template: "- $TITLE"
