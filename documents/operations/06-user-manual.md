@@ -584,7 +584,7 @@ cat /opt/ecube/.env
 sudo -u ecube /opt/ecube/venv/bin/python3 -c "import app.main" 2>&1
 
 # Test database connection
-sudo -u ecube /opt/ecube/venv/bin/python3 -c "from sqlalchemy import create_engine; engine = create_engine(os.getenv('DATABASE_URL')); print(engine.execute('SELECT 1'))"
+sudo -u ecube /opt/ecube/venv/bin/python3 -c "import os; from sqlalchemy import create_engine, text; engine = create_engine(os.getenv('DATABASE_URL')); conn = engine.connect(); print(conn.execute(text('SELECT 1')).scalar()); conn.close()"
 ```
 
 **Solutions:**
