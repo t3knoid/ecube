@@ -86,8 +86,8 @@ User=ecube
 Group=ecube
 WorkingDirectory=/opt/ecube
 
-# Environment configuration
-EnvironmentFile=/opt/ecube/.env
+# Environment configuration (dash prefix: service starts even if file is absent)
+EnvironmentFile=-/opt/ecube/.env
 
 # Start command
 ExecStart=/opt/ecube/venv/bin/uvicorn \
