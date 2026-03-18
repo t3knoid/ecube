@@ -424,13 +424,11 @@ curl -X POST https://localhost:8443/mounts \
 
 ```bash
 # Via API (requires manager role)
-curl -X POST https://localhost:8443/drives/initialize \
+curl -X POST https://localhost:8443/drives/1/initialize \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "drive_id": 1,
-    "project_id": 42,
-    "encryption_key": "16-character-key"
+    "project_id": "PROJECT-42"
   }'
 ```
 
