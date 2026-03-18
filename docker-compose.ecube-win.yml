@@ -3,7 +3,8 @@ services:
     build:
       context: .
       dockerfile: deploy/ecube-host/Dockerfile
-    container_name: ecube-app-dev
+    image: ecube-app
+    container_name: ecube-app
     restart: unless-stopped
     ports:
       - "8000:8000"

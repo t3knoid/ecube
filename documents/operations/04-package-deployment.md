@@ -9,16 +9,33 @@
 
 ## Table of Contents
 
-1. [Create Service Account](#create-service-account)
-2. [Download and Extract Release Package](#download-and-extract-release-package)
-3. [Set Up Python Virtual Environment](#set-up-python-virtual-environment)
-4. [Create Systemd Service File](#create-systemd-service-file)
-5. [Initialize Database](#initialize-database)
-6. [Run First-Run Setup](#run-first-run-setup)
-7. [Enable and Start Service](#enable-and-start-service)
-8. [Configuration](#configuration)
-9. [User Management](#user-management)
-10. [Starting and Stopping the Service](#starting-and-stopping-the-service)
+- [Table of Contents](#table-of-contents)
+- [Create Service Account](#create-service-account)
+- [Download and Extract Release Package](#download-and-extract-release-package)
+- [Set Up Python Virtual Environment](#set-up-python-virtual-environment)
+- [Create Systemd Service File](#create-systemd-service-file)
+- [Initialize Database](#initialize-database)
+  - [Option A: API-Based Database Provisioning (Recommended)](#option-a-api-based-database-provisioning-recommended)
+  - [Option B: Manual Setup (CLI)](#option-b-manual-setup-cli)
+- [Run First-Run Setup](#run-first-run-setup)
+  - [Option A: API-based](#option-a-api-based)
+  - [Option B: CLI Setup Script](#option-b-cli-setup-script)
+  - [What setup creates](#what-setup-creates)
+  - [Example session](#example-session)
+- [Enable and Start Service](#enable-and-start-service)
+- [Configuration](#configuration)
+  - [Quick Start](#quick-start)
+  - [Generating HTTPS Certificates](#generating-https-certificates)
+- [User Management](#user-management)
+  - [Adding Users After Initial Setup](#adding-users-after-initial-setup)
+  - [OS Group-to-Role Mapping](#os-group-to-role-mapping)
+  - [Token Configuration](#token-configuration)
+- [Starting and Stopping the Service](#starting-and-stopping-the-service)
+  - [Start Service](#start-service)
+  - [Check Service Status](#check-service-status)
+  - [Stop Service](#stop-service)
+  - [Restart Service](#restart-service)
+  - [Verify API Endpoint](#verify-api-endpoint)
 
 ---
 
@@ -154,13 +171,11 @@ sudo -u ecube /opt/ecube/venv/bin/alembic upgrade head
 
 ## Run First-Run Setup
 
-The setup creates OS groups, an initial admin user, and seeds the database
-with the admin role. This step requires a provisioned database.
+The setup creates OS groups, an initial admin user, and seeds the database with the admin role. This step requires a provisioned database.
 
 ### Option A: API-based
 
-Requires the service to be running. If you haven't started it yet, complete
-[Enable and Start Service](#enable-and-start-service) first, then return here:
+Requires the service to be running. If you haven't started it yet, complete [Enable and Start Service](#enable-and-start-service) first, then return here:
 
 ```bash
 # Check if initialization is needed
@@ -173,8 +188,7 @@ curl -k -X POST https://localhost:8443/setup/initialize \
   -d '{"username": "ecube-admin", "password": "s3cret"}'
 ```
 
-The API endpoint is **unauthenticated** but can only succeed once. A
-`system_initialization` single-row table provides a cross-process guard,
+The API endpoint is **unauthenticated** but can only succeed once. A`system_initialization` single-row table provides a cross-process guard,
 ensuring only one worker can complete initialization even in multi-worker
 deployments. Subsequent calls return `409 Conflict`.
 
