@@ -404,6 +404,36 @@ class TestFormatDriveEndpoint:
         db.refresh(drive)
         assert drive.filesystem_type is None
 
+    def test_format_db_save_failure_audit_log(self, admin_client, db):
+        """Format succeeds at OS level but DB save fails — audit entry records divergence."""
+        drive = _make_drive(db)
+        fake = FakeFormatter()
+        with (
+            patch("app.routers.drives.get_drive_formatter", return_value=fake),
+            patch(
+                "app.services.drive_service.DriveRepository.save",
+                side_effect=RuntimeError("DB commit failed"),
+            ),
+        ):
+            resp = admin_client.post(
+                f"/drives/{drive.id}/format",
+                json={"filesystem_type": "ext4"},
+            )
+        assert resp.status_code == 500
+        assert "database update failed" in resp.json()["message"].lower()
+
+        # Formatter was called — OS-level format happened
+        assert fake.format_calls == [("/dev/sdb", "ext4")]
+
+        log = (
+            db.query(AuditLog)
+            .filter(AuditLog.action == "DRIVE_FORMAT_DB_UPDATE_FAILED")
+            .first()
+        )
+        assert log is not None
+        assert log.details["drive_id"] == drive.id
+        assert log.details["filesystem_type"] == "ext4"
+
 
 # ===========================================================================
 # Part 4: Initialize guard — reject unformatted drives

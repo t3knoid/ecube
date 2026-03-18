@@ -261,6 +261,19 @@ def format_drive(
         drive_repo.save(drive)
     except Exception:
         logger.exception("DB commit failed after formatting drive %s", drive_id)
+        try:
+            audit_repo.add(
+                action="DRIVE_FORMAT_DB_UPDATE_FAILED",
+                user=actor,
+                details={
+                    "drive_id": drive_id,
+                    "filesystem_path": drive.filesystem_path,
+                    "filesystem_type": filesystem_type,
+                    "actor": actor,
+                },
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for DRIVE_FORMAT_DB_UPDATE_FAILED")
         raise HTTPException(
             status_code=500,
             detail="Drive formatted at OS level but database update failed",
