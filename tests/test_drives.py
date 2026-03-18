@@ -5,7 +5,7 @@ from app.models.hardware import UsbDrive, DriveState
 
 def _fake_eject(sync_rv=(True, None), unmount_rv=(True, None),
                 sync_side_effect=None):
-    """Return a MagicMock DriveEjectProvider and a patcher for get_drive_eject."""
+    """Return a MagicMock DriveEjectProvider with preconfigured return values."""
     provider = MagicMock()
     if sync_side_effect is not None:
         provider.sync_filesystem.side_effect = sync_side_effect
