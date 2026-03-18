@@ -17,29 +17,20 @@ from __future__ import annotations
 import grp
 import logging
 import pwd
-import re
 import subprocess
 from dataclasses import dataclass, field
 from typing import List, Optional
 
 from app.config import settings
+from app.constants import (
+    ECUBE_GROUP_PREFIX,
+    ECUBE_GROUPS,
+    GROUPNAME_RE,
+    RESERVED_USERNAMES,
+    USERNAME_RE,
+)
 
 logger = logging.getLogger(__name__)
-
-# Prefix used to identify ECUBE-managed groups for listing/filtering.
-ECUBE_GROUP_PREFIX = "ecube-"
-
-# Fixed set of role groups created during first-run setup.
-ECUBE_GROUPS = {"ecube-admins", "ecube-managers", "ecube-processors", "ecube-auditors"}
-
-# Reserved usernames that cannot be created/deleted through the API.
-RESERVED_USERNAMES = {"root", "ecube", "nobody", "daemon", "bin", "sys"}
-
-# Valid POSIX username pattern (matches the router-level check in users.py).
-USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
-
-# Valid group name pattern.
-GROUPNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
 
 # Default subprocess timeout (seconds).
 _SUBPROCESS_TIMEOUT = settings.subprocess_timeout_seconds
