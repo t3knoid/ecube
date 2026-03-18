@@ -231,12 +231,46 @@ def _seed_database(username: str, install_dir: str) -> bool:
     return success
 
 
+def _is_already_initialized(install_dir: str) -> bool:
+    """Return True if the system has already been initialized.
+
+    Checks the ``user_roles`` table for an existing admin.  Returns False
+    (allow setup to proceed) if the database is unreachable or the schema
+    has not been migrated yet.
+    """
+    env_path = Path(install_dir) / ".env"
+    if env_path.exists():
+        _load_env_file(env_path)
+
+    try:
+        from app.database import SessionLocal
+        from app.repositories.user_role_repository import UserRoleRepository
+        from sqlalchemy import exc as sa_exc
+
+        db = SessionLocal()
+        try:
+            repo = UserRoleRepository(db)
+            return repo.has_any_admin()
+        except (sa_exc.ProgrammingError, sa_exc.OperationalError):
+            # DB not reachable or schema not migrated — allow setup.
+            return False
+        finally:
+            db.close()
+    except Exception:
+        return False
+
+
 def main() -> None:
     if os.geteuid() != 0:
         print("Error: this script must be run as root (sudo ecube-setup)", file=sys.stderr)
         sys.exit(1)
 
     install_dir = os.environ.get("ECUBE_INSTALL_DIR", DEFAULT_INSTALL_DIR)
+
+    if _is_already_initialized(install_dir):
+        print("System is already initialized (an admin user exists in the database).")
+        print("No action taken. Use the API to manage users and roles.")
+        sys.exit(0)
 
     print("=" * 60)
     print("ECUBE First-Run Setup")
