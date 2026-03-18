@@ -163,6 +163,15 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/introspection/version")
+def introspection_version():
+    """Return application and API version information.
+
+    No authentication required. Useful for deployment verification.
+    """
+    return {"version": "0.1.0", "api_version": "1.0.0"}
+
+
 def custom_openapi():
     """Generate OpenAPI schema with security scheme definitions."""
     if app.openapi_schema:
