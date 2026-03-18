@@ -1,7 +1,7 @@
 import logging
 import subprocess
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Tuple
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -12,12 +12,68 @@ from app.repositories.mount_repository import MountRepository
 from app.schemas.network import MountCreate
 from app.config import settings
 
+# Re-export so existing ``mount_service.MountProvider`` access keeps working.
+from app.infrastructure.mount_protocol import MountProvider  # noqa: F401 – re-export
+
+
+def _default_provider() -> "MountProvider":
+    """Lazy import to avoid circular dependency at module level."""
+    from app.infrastructure import get_mount_provider
+    return get_mount_provider()
+
 logger = logging.getLogger(__name__)
 
 
-def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None) -> NetworkMount:
+class LinuxMountProvider:
+    """Linux implementation using ``mount(8)``, ``umount(8)``, and ``mountpoint(1)``."""
+
+    def os_mount(self, mount_type: MountType, remote_path: str, local_mount_point: str,
+                 *, credentials_file: Optional[str] = None, username: Optional[str] = None) -> Tuple[bool, Optional[str]]:
+        if mount_type == MountType.NFS:
+            cmd = [settings.mount_binary_path, "-t", "nfs", remote_path, local_mount_point]
+        else:
+            cmd = [settings.mount_binary_path, "-t", "cifs", remote_path, local_mount_point]
+            if credentials_file:
+                cmd += ["-o", f"credentials={credentials_file}"]
+            elif username:
+                cmd += ["-o", f"username={username}"]
+
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=settings.subprocess_timeout_seconds)
+        if result.returncode == 0:
+            return True, None
+        error = (result.stderr or result.stdout or "").strip() or "mount failed"
+        return False, error
+
+    def os_unmount(self, local_mount_point: str) -> Tuple[bool, Optional[str]]:
+        try:
+            result = subprocess.run(
+                [settings.umount_binary_path, local_mount_point],
+                capture_output=True, text=True,
+                timeout=settings.subprocess_timeout_seconds,
+            )
+            if result.returncode != 0:
+                error = (result.stderr or result.stdout or "").strip() or "umount failed"
+                return False, error
+            return True, None
+        except Exception as exc:
+            return False, str(exc)
+
+    def check_mounted(self, local_mount_point: str) -> Optional[bool]:
+        try:
+            result = subprocess.run(
+                [settings.mountpoint_binary_path, "-q", local_mount_point],
+                capture_output=True, timeout=10,
+            )
+            return result.returncode == 0
+        except Exception:
+            return None
+
+
+def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
+              provider: Optional["MountProvider"] = None) -> NetworkMount:
     mount_repo = MountRepository(db)
     audit_repo = AuditRepository(db)
+    provider = provider or _default_provider()
 
     mount = NetworkMount(
         type=mount_data.type,
@@ -36,23 +92,18 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None)
 
     _mount_error = None
     try:
-        if mount_data.type == MountType.NFS:
-            cmd = [settings.mount_binary_path, "-t", "nfs", mount_data.remote_path, mount_data.local_mount_point]
-        else:
-            cmd = [settings.mount_binary_path, "-t", "cifs", mount_data.remote_path, mount_data.local_mount_point]
-            if mount_data.credentials_file:
-                cmd += ["-o", f"credentials={mount_data.credentials_file}"]
-            elif mount_data.username:
-                # Pass only the username on the command line; password must be
-                # supplied via credentials_file to avoid exposure in process listings.
-                cmd += ["-o", f"username={mount_data.username}"]
-
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=settings.subprocess_timeout_seconds)
-        if result.returncode == 0:
+        success, error = provider.os_mount(
+            mount_data.type,
+            mount_data.remote_path,
+            mount_data.local_mount_point,
+            credentials_file=mount_data.credentials_file,
+            username=mount_data.username,
+        )
+        if success:
             mount.status = MountStatus.MOUNTED
         else:
             mount.status = MountStatus.ERROR
-            _mount_error = (result.stderr or result.stdout or "").strip() or "mount failed"
+            _mount_error = error
         try:
             mount_repo.save(mount)
         except Exception:
@@ -97,7 +148,8 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None)
     return mount
 
 
-def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None) -> None:
+def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None,
+                 provider: Optional["MountProvider"] = None) -> None:
     mount_repo = MountRepository(db)
     audit_repo = AuditRepository(db)
 
@@ -105,13 +157,9 @@ def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None) -> Non
     if not mount:
         raise HTTPException(status_code=404, detail="Mount not found")
 
+    provider = provider or _default_provider()
     try:
-        subprocess.run(
-            [settings.umount_binary_path, mount.local_mount_point],
-            capture_output=True,
-            text=True,
-            timeout=settings.subprocess_timeout_seconds,
-        )
+        provider.os_unmount(mount.local_mount_point)
     except Exception:
         # Unmount failures are non-fatal; the record is still deleted so the
         # operator can manually clean up the mount point if needed.
@@ -145,7 +193,8 @@ def validate_all_mounts(db: Session, actor: Optional[str] = None) -> list[Networ
     return [validate_mount(mount.id, db, actor=actor) for mount in mounts]
 
 
-def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None) -> NetworkMount:
+def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None,
+                   provider: Optional["MountProvider"] = None) -> NetworkMount:
     mount_repo = MountRepository(db)
     audit_repo = AuditRepository(db)
 
@@ -153,16 +202,13 @@ def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None) -> N
     if not mount:
         raise HTTPException(status_code=404, detail="Mount not found")
 
-    try:
-        result = subprocess.run(
-            ["mountpoint", "-q", mount.local_mount_point],
-            capture_output=True,
-            timeout=10,
-        )
-        mount.status = (
-            MountStatus.MOUNTED if result.returncode == 0 else MountStatus.UNMOUNTED
-        )
-    except Exception:
+    provider = provider or _default_provider()
+    result = provider.check_mounted(mount.local_mount_point)
+    if result is True:
+        mount.status = MountStatus.MOUNTED
+    elif result is False:
+        mount.status = MountStatus.UNMOUNTED
+    else:
         mount.status = MountStatus.ERROR
 
     mount.last_checked_at = datetime.now(timezone.utc)

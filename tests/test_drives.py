@@ -1,6 +1,22 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+from app.infrastructure.drive_eject import EjectResult
 from app.models.hardware import UsbDrive, DriveState
+
+
+def _fake_eject(flush_ok=True, unmount_ok=True,
+                flush_error=None, unmount_error=None,
+                prepare_eject_side_effect=None):
+    """Return a MagicMock DriveEjectProvider with preconfigured prepare_eject."""
+    provider = MagicMock()
+    if prepare_eject_side_effect is not None:
+        provider.prepare_eject.side_effect = prepare_eject_side_effect
+    else:
+        provider.prepare_eject.return_value = EjectResult(
+            flush_ok=flush_ok, unmount_ok=unmount_ok,
+            flush_error=flush_error, unmount_error=unmount_error,
+        )
+    return provider
 
 
 def test_list_drives(client, db):
@@ -75,7 +91,7 @@ def test_prepare_eject(manager_client, db):
     db.add(drive)
     db.commit()
 
-    with patch("app.services.drive_service.sync_filesystem", return_value=(True, None)):
+    with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject()):
         response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
     assert response.status_code == 200
     data = response.json()
@@ -95,16 +111,13 @@ def test_prepare_eject_with_filesystem_path(manager_client, db):
     db.add(drive)
     db.commit()
 
-    with (
-        patch("app.services.drive_service.sync_filesystem", return_value=(True, None)) as mock_sync,
-        patch("app.services.drive_service.unmount_device", return_value=(True, None)) as mock_umount,
-    ):
+    provider = _fake_eject()
+    with patch("app.routers.drives.get_drive_eject", return_value=provider):
         response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
 
     assert response.status_code == 200
     assert response.json()["current_state"] == "AVAILABLE"
-    mock_sync.assert_called_once()
-    mock_umount.assert_called_once_with("/dev/sdb")
+    provider.prepare_eject.assert_called_once_with("/dev/sdb")
 
     log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_EJECT_PREPARED").first()
     assert log is not None
@@ -115,7 +128,7 @@ def test_prepare_eject_with_filesystem_path(manager_client, db):
 
 
 def test_prepare_eject_not_found(manager_client, db):
-    with patch("app.services.drive_service.sync_filesystem", return_value=(True, None)):
+    with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject()):
         response = manager_client.post("/drives/999/prepare-eject")
     assert response.status_code == 404
 
@@ -130,7 +143,7 @@ def test_prepare_eject_flush_failure(manager_client, db):
     db.add(drive)
     db.commit()
 
-    with patch("app.services.drive_service.sync_filesystem", return_value=(False, "sync failed")):
+    with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject(flush_ok=False, flush_error="sync failed")):
         response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
 
     assert response.status_code == 500
@@ -160,10 +173,9 @@ def test_prepare_eject_unmount_failure(manager_client, db):
     db.add(drive)
     db.commit()
 
-    with (
-        patch("app.services.drive_service.sync_filesystem", return_value=(True, None)),
-        patch("app.services.drive_service.unmount_device", return_value=(False, "umount failed for /dev/sdc")),
-    ):
+    with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject(
+        unmount_ok=False, unmount_error="umount failed for /dev/sdc",
+    )):
         response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
 
     assert response.status_code == 500
@@ -183,7 +195,7 @@ def test_prepare_eject_unmount_failure(manager_client, db):
 
 
 def test_prepare_eject_no_unmount_when_no_path(manager_client, db):
-    """unmount_device is NOT called when the drive has no filesystem_path."""
+    """prepare_eject is called with None when the drive has no filesystem_path."""
     drive = UsbDrive(
         device_identifier="USB009",
         current_state=DriveState.IN_USE,
@@ -192,15 +204,12 @@ def test_prepare_eject_no_unmount_when_no_path(manager_client, db):
     db.add(drive)
     db.commit()
 
-    with (
-        patch("app.services.drive_service.sync_filesystem", return_value=(True, None)) as mock_sync,
-        patch("app.services.drive_service.unmount_device") as mock_umount,
-    ):
+    provider = _fake_eject()
+    with patch("app.routers.drives.get_drive_eject", return_value=provider):
         response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
 
     assert response.status_code == 200
-    mock_sync.assert_called_once()
-    mock_umount.assert_not_called()
+    provider.prepare_eject.assert_called_once_with(None)
 
 
 def test_prepare_eject_concurrent_state_change(manager_client, db):
@@ -226,7 +235,7 @@ def test_prepare_eject_concurrent_state_change(manager_client, db):
     concurrent_drive.id = drive_id
 
     with (
-        patch("app.services.drive_service.sync_filesystem", return_value=(True, None)),
+        patch("app.routers.drives.get_drive_eject", return_value=_fake_eject()),
         patch.object(DriveRepository, "get_for_update", return_value=concurrent_drive),
     ):
         response = manager_client.post(f"/drives/{drive_id}/prepare-eject")
@@ -245,7 +254,9 @@ def test_prepare_eject_invalid_device_path(manager_client, db):
     db.add(drive)
     db.commit()
 
-    with patch("app.services.drive_service.sync_filesystem", return_value=(True, None)):
+    with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject(
+        unmount_ok=False, unmount_error="invalid device path: /tmp/../../etc/passwd",
+    )):
         response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
 
     assert response.status_code == 500
@@ -265,7 +276,7 @@ def test_prepare_eject_invalid_device_path(manager_client, db):
 def test_prepare_eject_requires_in_use_state(manager_client, db):
     """Prepare-eject must reject drives not in IN_USE state (409 Conflict).
     
-    Verifies that sync_filesystem is NOT called (fast-fail optimization).
+    Verifies that prepare_eject is NOT called (fast-fail optimization).
     """
     drive = UsbDrive(
         device_identifier="USB011",
@@ -275,13 +286,14 @@ def test_prepare_eject_requires_in_use_state(manager_client, db):
     db.add(drive)
     db.commit()
 
-    with patch("app.services.drive_service.sync_filesystem") as mock_sync:
+    provider = _fake_eject()
+    with patch("app.routers.drives.get_drive_eject", return_value=provider):
         response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
 
     assert response.status_code == 409
     assert "not in IN_USE state" in response.json()["message"]
-    # Verify sync was NOT called (fast-fail before OS operations)
-    mock_sync.assert_not_called()
+    # Verify prepare_eject was NOT called (fast-fail before OS operations)
+    provider.prepare_eject.assert_not_called()
 
     # Drive state must remain EMPTY.
     db.expire(drive)
@@ -292,7 +304,7 @@ def test_prepare_eject_requires_in_use_state(manager_client, db):
 def test_prepare_eject_available_state_conflict(manager_client, db):
     """Prepare-eject on AVAILABLE drive returns 409 Conflict.
     
-    Verifies that sync_filesystem is NOT called (fast-fail optimization).
+    Verifies that prepare_eject is NOT called (fast-fail optimization).
     """
     drive = UsbDrive(
         device_identifier="USB012",
@@ -302,13 +314,14 @@ def test_prepare_eject_available_state_conflict(manager_client, db):
     db.add(drive)
     db.commit()
 
-    with patch("app.services.drive_service.sync_filesystem") as mock_sync:
+    provider = _fake_eject()
+    with patch("app.routers.drives.get_drive_eject", return_value=provider):
         response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
 
     assert response.status_code == 409
     assert "not in IN_USE state" in response.json()["message"]
-    # Verify sync was NOT called (fast-fail before OS operations)
-    mock_sync.assert_not_called()
+    # Verify prepare_eject was NOT called (fast-fail before OS operations)
+    provider.prepare_eject.assert_not_called()
 
 
 def test_prepare_eject_device_path_changed(manager_client, db):
@@ -327,18 +340,19 @@ def test_prepare_eject_device_path_changed(manager_client, db):
     db.commit()
     drive_id = drive.id
 
-    def sync_and_change_path(*args, **kwargs):
-        """Simulate sync succeeding, then discovery changing the device path."""
+    def sync_and_change_path(device_path):
+        """Simulate eject succeeding, then discovery changing the device path."""
         # Simulate discovery refresh changing the path
         drive_obj = db.query(UsbDrive).filter(UsbDrive.id == drive_id).first()
         if drive_obj:
             drive_obj.filesystem_path = "/dev/sdc"
             db.commit()
-        return True, None
+        return EjectResult()
 
-    with patch("app.services.drive_service.sync_filesystem", side_effect=sync_and_change_path):
-        with patch("app.services.drive_service.unmount_device", return_value=(True, None)):
-            response = manager_client.post(f"/drives/{drive_id}/prepare-eject")
+    with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject(
+        prepare_eject_side_effect=sync_and_change_path,
+    )):
+        response = manager_client.post(f"/drives/{drive_id}/prepare-eject")
 
     assert response.status_code == 409
     assert "Device path changed" in response.json()["message"]
@@ -366,18 +380,19 @@ def test_prepare_eject_device_path_cleared_during_operation(manager_client, db):
     db.commit()
     drive_id = drive.id
 
-    def sync_and_clear_path(*args, **kwargs):
-        """Simulate sync succeeding, then discovery clearing the device path."""
+    def sync_and_clear_path(device_path):
+        """Simulate eject succeeding, then discovery clearing the device path."""
         # Simulate USB disconnection clearing the path
         drive_obj = db.query(UsbDrive).filter(UsbDrive.id == drive_id).first()
         if drive_obj:
             drive_obj.filesystem_path = None
             db.commit()
-        return True, None
+        return EjectResult()
 
-    with patch("app.services.drive_service.sync_filesystem", side_effect=sync_and_clear_path):
-        with patch("app.services.drive_service.unmount_device", return_value=(True, None)):
-            response = manager_client.post(f"/drives/{drive_id}/prepare-eject")
+    with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject(
+        prepare_eject_side_effect=sync_and_clear_path,
+    )):
+        response = manager_client.post(f"/drives/{drive_id}/prepare-eject")
 
     assert response.status_code == 409
     assert "Device path changed" in response.json()["message"]
@@ -405,18 +420,19 @@ def test_prepare_eject_state_changed_during_operation(manager_client, db):
     db.commit()
     drive_id = drive.id
 
-    def sync_and_change_state(*args, **kwargs):
-        """Simulate sync succeeding, then another request changing the state."""
+    def sync_and_change_state(device_path):
+        """Simulate eject succeeding, then another request changing the state."""
         # Simulate another request re-initializing the drive
         drive_obj = db.query(UsbDrive).filter(UsbDrive.id == drive_id).first()
         if drive_obj:
             drive_obj.current_state = DriveState.AVAILABLE
             db.commit()
-        return True, None
+        return EjectResult()
 
-    with patch("app.services.drive_service.sync_filesystem", side_effect=sync_and_change_state):
-        with patch("app.services.drive_service.unmount_device", return_value=(True, None)):
-            response = manager_client.post(f"/drives/{drive_id}/prepare-eject")
+    with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject(
+        prepare_eject_side_effect=sync_and_change_state,
+    )):
+        response = manager_client.post(f"/drives/{drive_id}/prepare-eject")
 
     assert response.status_code == 409
     assert "state changed during prepare-eject" in response.json()["message"]
@@ -444,15 +460,15 @@ def test_prepare_eject_nvme_partitions(manager_client, db):
     db.add(drive)
     db.commit()
 
-    # Mock unmount_device to verify it was called with the base device
-    with patch("app.services.drive_service.sync_filesystem", return_value=(True, None)):
-        with patch("app.services.drive_service.unmount_device", return_value=(True, None)) as mock_unmount:
-            response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+    # Mock prepare_eject to verify it was called with the base device
+    provider = _fake_eject()
+    with patch("app.routers.drives.get_drive_eject", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
 
     assert response.status_code == 200
     assert response.json()["current_state"] == "AVAILABLE"
-    # Verify unmount was called with the NVMe device path
-    mock_unmount.assert_called_once_with("/dev/nvme0n1")
+    # Verify prepare_eject was called with the NVMe device path
+    provider.prepare_eject.assert_called_once_with("/dev/nvme0n1")
 
 
 def test_prepare_eject_mmc_partitions(manager_client, db):
@@ -470,15 +486,15 @@ def test_prepare_eject_mmc_partitions(manager_client, db):
     db.add(drive)
     db.commit()
 
-    # Mock unmount_device to verify it was called with the base device
-    with patch("app.services.drive_service.sync_filesystem", return_value=(True, None)):
-        with patch("app.services.drive_service.unmount_device", return_value=(True, None)) as mock_unmount:
-            response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+    # Mock prepare_eject to verify it was called with the base device
+    provider = _fake_eject()
+    with patch("app.routers.drives.get_drive_eject", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
 
     assert response.status_code == 200
     assert response.json()["current_state"] == "AVAILABLE"
-    # Verify unmount was called with the MMC device path
-    mock_unmount.assert_called_once_with("/dev/mmcblk0")
+    # Verify prepare_eject was called with the MMC device path
+    provider.prepare_eject.assert_called_once_with("/dev/mmcblk0")
 
 
 

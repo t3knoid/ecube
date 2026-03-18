@@ -14,7 +14,8 @@ from __future__ import annotations
 import os.path
 import re
 import subprocess
-from typing import List, Optional, Tuple
+from dataclasses import dataclass
+from typing import List, Optional, Protocol, Tuple
 
 from app.config import settings
 from app.infrastructure.device_path import validate_device_path
@@ -23,6 +24,77 @@ from app.infrastructure.device_path import validate_device_path
 # Actual values come from settings; these module-level names kept for readability.
 _SYNC_BIN = settings.sync_binary_path
 _UMOUNT_BIN = settings.umount_binary_path
+
+
+# ---------------------------------------------------------------------------
+# EjectError / EjectResult
+# ---------------------------------------------------------------------------
+
+class EjectError(RuntimeError):
+    """Raised when a drive eject operation fails."""
+
+
+@dataclass
+class EjectResult:
+    """Structured result of a :meth:`DriveEjectProvider.prepare_eject` call."""
+
+    flush_ok: bool = True
+    unmount_ok: bool = True
+    flush_error: Optional[str] = None
+    unmount_error: Optional[str] = None
+
+    @property
+    def success(self) -> bool:
+        return self.flush_ok and self.unmount_ok
+
+
+# ---------------------------------------------------------------------------
+# DriveEjectProvider Protocol
+# ---------------------------------------------------------------------------
+
+class DriveEjectProvider(Protocol):
+    """Platform-agnostic interface for drive flush and unmount operations.
+
+    Low-level methods (``sync_filesystem``, ``unmount_device``) raise
+    :class:`EjectError` on failure so callers don't need to unpack tuples.
+
+    ``prepare_eject`` is the high-level orchestrator: it flushes writes,
+    unmounts partitions when *device_path* is provided, and returns a
+    structured :class:`EjectResult` (never raises for OS-level failures).
+    """
+
+    def sync_filesystem(self) -> None: ...
+
+    def unmount_device(self, device_path: str) -> None: ...
+
+    def prepare_eject(self, device_path: Optional[str]) -> EjectResult: ...
+
+
+class LinuxDriveEject:
+    """Linux implementation using ``sync(1)`` and ``umount(8)``."""
+
+    def sync_filesystem(self) -> None:
+        ok, err = sync_filesystem()
+        if not ok:
+            raise EjectError(err or "sync failed")
+
+    def unmount_device(self, device_path: str) -> None:
+        ok, err = unmount_device(device_path)
+        if not ok:
+            raise EjectError(err or "unmount failed")
+
+    def prepare_eject(self, device_path: Optional[str]) -> EjectResult:
+        flush_ok, flush_err = sync_filesystem()
+        umount_ok: bool = True
+        umount_err: Optional[str] = None
+        if device_path:
+            umount_ok, umount_err = unmount_device(device_path)
+        return EjectResult(
+            flush_ok=flush_ok,
+            unmount_ok=umount_ok,
+            flush_error=flush_err,
+            unmount_error=umount_err,
+        )
 
 
 def _unescape_mountpoint(escaped_path: str) -> str:
