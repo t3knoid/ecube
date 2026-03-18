@@ -22,16 +22,22 @@ from app.infrastructure.drive_eject import (
     DriveEjectProvider,
     LinuxDriveEject,
 )
+from app.services.os_user_service import (
+    OsUserProvider,
+    LinuxOsUserProvider,
+)
 
 __all__ = [
     "FilesystemDetector",
     "DriveFormatter",
     "DriveDiscoveryProvider",
     "DriveEjectProvider",
+    "OsUserProvider",
     "get_filesystem_detector",
     "get_drive_formatter",
     "get_drive_discovery",
     "get_drive_eject",
+    "get_os_user_provider",
     "validate_device_path",
 ]
 
@@ -49,6 +55,10 @@ _DRIVE_DISCOVERY_REGISTRY: dict[str, type[DriveDiscoveryProvider]] = {
 
 _DRIVE_EJECT_REGISTRY: dict[str, type[DriveEjectProvider]] = {
     "linux": LinuxDriveEject,
+}
+
+_OS_USER_PROVIDER_REGISTRY: dict[str, type[OsUserProvider]] = {
+    "linux": LinuxOsUserProvider,
 }
 
 
@@ -79,6 +89,14 @@ def get_drive_discovery() -> DriveDiscoveryProvider:
 def get_drive_eject() -> DriveEjectProvider:
     """Return the platform-appropriate :class:`DriveEjectProvider`."""
     cls = _DRIVE_EJECT_REGISTRY.get(settings.platform)
+    if cls is None:
+        raise ValueError(f"Unsupported platform: {settings.platform!r}")
+    return cls()
+
+
+def get_os_user_provider() -> OsUserProvider:
+    """Return the platform-appropriate :class:`OsUserProvider`."""
+    cls = _OS_USER_PROVIDER_REGISTRY.get(settings.platform)
     if cls is None:
         raise ValueError(f"Unsupported platform: {settings.platform!r}")
     return cls()
