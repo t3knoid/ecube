@@ -208,7 +208,7 @@ docker build --pull --no-cache -f deploy/ecube-host/Dockerfile -t ecube-host:loc
 
 ## 13.5 Docker Compose Deployment (Linux Host)
 
-Compose file: `docker-compose.ecube-host.yml`
+Compose file: `docker-compose.ecube.yml`
 
 ### Services
 
@@ -218,7 +218,7 @@ Compose file: `docker-compose.ecube-host.yml`
 ### Start
 
 ```bash
-docker compose -f docker-compose.ecube-host.yml up -d --build
+docker compose -f docker-compose.ecube.yml up -d --build
 ```
 
 Migrations are applied automatically when `ecube-host` starts (entrypoint waits for DB then runs `alembic upgrade head`).
@@ -226,20 +226,20 @@ Migrations are applied automatically when `ecube-host` starts (entrypoint waits 
 Optional manual migration command (only if `ECUBE_RUN_MIGRATIONS_ON_START=false`):
 
 ```bash
-docker compose -f docker-compose.ecube-host.yml exec ecube-host alembic upgrade head
+docker compose -f docker-compose.ecube.yml exec ecube-host alembic upgrade head
 ```
 
 ### Validate
 
 ```bash
-docker compose -f docker-compose.ecube-host.yml ps
+docker compose -f docker-compose.ecube.yml ps
 curl http://localhost:8000/health
 ```
 
 ### Stop
 
 ```bash
-docker compose -f docker-compose.ecube-host.yml down
+docker compose -f docker-compose.ecube.yml down
 ```
 
 ## 13.6 USB Passthrough in VM-Based Deployments
