@@ -12,6 +12,11 @@
 
 - `usb_hubs` and `usb_ports` define stable topology references.
 - `usb_drives` captures runtime device identity and current assignment/state.
+  - `current_project_id` (nullable string) — set during initialization to
+    bind the drive to a project for isolation enforcement. Remains `NULL`
+    until the drive is initialized via `POST /drives/{id}/initialize`.
+  - `current_state` — FSM column (`EMPTY`, `AVAILABLE`, `IN_USE`);
+    transitions to `IN_USE` when `current_project_id` is bound.
 - `usb_drives.filesystem_type` stores the detected filesystem label (e.g., `ext4`, `exfat`, `ntfs`, `fat32`, `unformatted`, `unknown`). Updated during discovery and after formatting operations. Nullable; `NULL` means detection has not yet been attempted.
 
 ### Mount Domain
