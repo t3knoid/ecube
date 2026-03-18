@@ -111,7 +111,7 @@ def _run_sudo(
 
     Raises :class:`OSUserError` on non-zero exit when *check* is True.
     """
-    full_cmd = ["sudo"] + cmd
+    full_cmd = ["sudo"] + cmd if settings.use_sudo else cmd
     # Never log stdin_data (may contain passwords).
     logger.debug("Running: %s", " ".join(full_cmd))
     try:
