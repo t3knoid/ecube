@@ -1,9 +1,10 @@
 services:
-  ecube-host:
+  ecube-app:
     build:
       context: .
       dockerfile: deploy/ecube-host/Dockerfile
-    container_name: ecube-host
+    image: ecube-app
+    container_name: ecube-app
     restart: unless-stopped
     privileged: true
     cap_add:

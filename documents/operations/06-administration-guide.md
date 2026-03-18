@@ -10,12 +10,13 @@
 ## Table of Contents
 
 1. [System Overview](#system-overview)
-2. [User Management](#user-management)
-3. [Common Operational Tasks](#common-operational-tasks)
-4. [Monitoring and Logs](#monitoring-and-logs)
-5. [Troubleshooting](#troubleshooting)
-6. [Backup and Recovery](#backup-and-recovery)
-7. [Maintenance](#maintenance)
+2. [First-Time Setup](#first-time-setup)
+3. [User Management](#user-management)
+4. [Common Operational Tasks](#common-operational-tasks)
+5. [Monitoring and Logs](#monitoring-and-logs)
+6. [Troubleshooting](#troubleshooting)
+7. [Backup and Recovery](#backup-and-recovery)
+8. [Maintenance](#maintenance)
 
 ---
 
@@ -72,18 +73,131 @@ ECUBE consists of three components:
 
 ---
 
+## First-Time Setup
+
+Before ECUBE can be used, the system must be initialized. This is a one-time
+process that creates the required OS groups, the initial admin user (as a
+real Linux account on the host or container), and seeds the database with the
+admin role assignment.
+
+### Prerequisites
+
+- The ECUBE service must be running and the database must be provisioned with
+  migrations applied. See [04-package-deployment.md](04-package-deployment.md)or [05-docker-deployment.md](05-docker-deployment.md) for deployment steps.
+
+### Check Initialization Status
+
+```bash
+# Bare-metal (HTTPS on port 8443)
+curl -k https://localhost:8443/setup/status
+
+# Docker (HTTP on port 8000)
+curl http://localhost:8000/setup/status
+```
+
+Response when not yet initialized:
+
+```json
+{"initialized": false}
+```
+
+### Initialize the System
+
+#### Option A: API-based (recommended)
+
+The `username` and `password` you provide will be used to create a **real Linux operating system account** on the host machine (or inside the Docker container). The username must follow Linux naming rules (lowercase
+alphanumeric, hyphens, underscores — no spaces or uppercase). The password becomes the OS account password and is also used to authenticate via `POST /auth/token` after setup.
+
+```bash
+# Bare-metal
+curl -k -X POST https://localhost:8443/setup/initialize \
+  -H "Content-Type: application/json" \
+  -d '{"username": "ecube-admin", "password": "s3cret"}'
+```
+
+```bash
+# Docker
+curl -X POST http://localhost:8000/setup/initialize \
+  -H "Content-Type: application/json" \
+  -d '{"username": "ecube-admin", "password": "s3cret"}'
+```
+
+```powershell
+# Powershell
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/setup/initialize \
+  -ContentType "application/json" \
+  -Body '{"username": "ecube-admin", "password": "s3cret"}'
+```
+
+#### Option B: CLI setup script
+
+```bash
+# Bare-metal
+sudo /opt/ecube/venv/bin/ecube-setup
+
+# Docker
+docker exec -it <container-name> ecube-setup
+```
+
+### What Initialization Does
+
+The initialization endpoint performs the following steps in order:
+
+1. **Acquires a lock** — inserts a row into the `system_initialization` table
+   to prevent concurrent initialization attempts.
+2. **Creates OS groups** — `ecube-admins`, `ecube-managers`,
+   `ecube-processors`, `ecube-auditors`.
+3. **Creates the admin OS user** — the username you provide becomes an actual
+   Linux user account (via `useradd`) on the host system or inside the
+   container. The user is added to the `ecube-admins` group with the
+   specified password.
+4. **Seeds the database** — inserts a `user_roles` record assigning the
+   `admin` role to the new user.
+5. **Records an audit event** — logs `SYSTEM_INITIALIZED` with a timestamp
+   and the admin username.
+
+> **Important:** The username must be a valid Linux username (lowercase
+> alphanumeric, hyphens, underscores). It does not need to be a
+> pre-existing account — the endpoint creates it. If a user with that name
+> already exists, the endpoint adds it to `ecube-admins` and resets its
+> password to the value provided.
+
+### Security Notes
+
+- The endpoint is **unauthenticated** (no token needed) but **can only
+  succeed once**. Subsequent calls return `409 Conflict`.
+- Choose a strong password — this account has unrestricted admin access.
+- After initialization, authenticate with the new admin account to obtain
+  a JWT token, then use it to create additional users and assign roles.
+
+### After Initialization
+
+```bash
+# 1. Log in with the admin account
+curl -k -X POST https://localhost:8443/auth/token \
+  -H "Content-Type: application/json" \
+  -d '{"username": "ecube-admin", "password": "s3cret"}'
+
+# 2. Use the returned token for all subsequent operations
+export TOKEN="<access_token from response>"
+
+# 3. Verify access
+curl -k -H "Authorization: Bearer $TOKEN" \
+  https://localhost:8443/introspection/version
+```
+
+From here, proceed to [User Management](#user-management) to create additional users, or [Common Operational Tasks](#common-operational-tasks) to begin using ECUBE.
+
+---
+
 ## User Management
 
 ### Authentication Methods
 
 #### Local Identity (Default — PAM Authentication)
 
-ECUBE authenticates users via PAM on the host OS. Users log in by calling
-`POST /auth/token` with their OS username and password. The system validates
-credentials through PAM, then resolves roles using a **DB-first hybrid model**:
-explicit role assignments in the `user_roles` table take priority, with OS group
-memberships serving as a fallback. A signed JWT is returned containing the
-resolved roles. See [Assigning Roles](#assigning-roles) for the full resolution
+ECUBE authenticates users via PAM on the host OS. Users log in by calling `POST /auth/token` with their OS username and password. The system validates credentials through PAM, then resolves roles using a **DB-first hybrid model**:
+explicit role assignments in the `user_roles` table take priority, with OS group memberships serving as a fallback. A signed JWT is returned containing the resolved roles. See [Assigning Roles](#assigning-roles) for the full resolution
 flow.
 
 **Login example:**
@@ -496,13 +610,13 @@ sudo journalctl -u ecube --since "24 hours ago"
 
 ```bash
 # View logs
-docker compose -f docker-compose.ecube-host.yml logs ecube-host
+docker compose -f docker-compose.ecube.yml logs ecube-host
 
 # Follow logs
-docker compose -f docker-compose.ecube-host.yml logs -f ecube-host
+docker compose -f docker-compose.ecube.yml logs -f ecube-host
 
 # View specific number of lines
-docker compose -f docker-compose.ecube-host.yml logs -n 100 ecube-host
+docker compose -f docker-compose.ecube.yml logs -n 100 ecube-host
 ```
 
 ### Database Logs
