@@ -29,8 +29,8 @@ def initialize_drive(
         raise HTTPException(status_code=404, detail="Drive not found")
 
     # Reject drives without a recognized filesystem.
-    _recognized_fs = {"unformatted", "unknown", None}
-    if drive.filesystem_type in _recognized_fs:
+    _unrecognized_fs = {"unformatted", "unknown", None}
+    if drive.filesystem_type in _unrecognized_fs:
         current_val = drive.filesystem_type if drive.filesystem_type is not None else "NULL"
         raise HTTPException(
             status_code=409,
