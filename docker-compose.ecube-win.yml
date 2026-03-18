@@ -15,8 +15,12 @@ services:
       ECUBE_DB_WAIT_MAX_RETRIES: "30"
       ECUBE_DB_WAIT_SECONDS: "2"
       USE_SUDO: "false"
+    privileged: true
     volumes:
       - ecube_runtime_data:/var/lib/ecube
+      - /dev:/dev
+      - /sys:/sys:ro
+      - /run/udev:/run/udev:ro
     depends_on:
       postgres-dev:
         condition: service_healthy
