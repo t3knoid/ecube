@@ -176,7 +176,8 @@ def test_job_get_for_update_reraises_non_lock_operational_error():
 def test_initialize_drive_lock_conflict_returns_409(manager_client, db):
     """A lock conflict on drive initialization returns HTTP 409."""
     drive = UsbDrive(
-        device_identifier="USB-LOCK-01", current_state=DriveState.AVAILABLE
+        device_identifier="USB-LOCK-01", current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
     )
     db.add(drive)
     db.commit()

@@ -13,7 +13,7 @@ def test_list_drives_empty(integration_client):
 
 @pytest.mark.integration
 def test_initialize_drive_updates_state_and_writes_audit(integration_client, integration_db):
-    drive = UsbDrive(device_identifier="IT-DRV-001", current_state=DriveState.AVAILABLE)
+    drive = UsbDrive(device_identifier="IT-DRV-001", current_state=DriveState.AVAILABLE, filesystem_type="ext4")
     integration_db.add(drive)
     integration_db.commit()
 
@@ -42,6 +42,7 @@ def test_initialize_drive_conflict_logs_isolation_violation(integration_client, 
         device_identifier="IT-DRV-002",
         current_state=DriveState.IN_USE,
         current_project_id="PROJ-A",
+        filesystem_type="ext4",
     )
     integration_db.add(drive)
     integration_db.commit()
