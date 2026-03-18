@@ -32,6 +32,19 @@ def initialize_drive(
     _unrecognized_fs = {"unformatted", "unknown", None}
     if drive.filesystem_type in _unrecognized_fs:
         current_val = drive.filesystem_type if drive.filesystem_type is not None else "NULL"
+        try:
+            audit_repo.add(
+                action="INIT_REJECTED_FILESYSTEM",
+                user=actor,
+                details={
+                    "actor": actor,
+                    "drive_id": drive_id,
+                    "project_id": project_id,
+                    "filesystem_type": drive.filesystem_type,
+                },
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for INIT_REJECTED_FILESYSTEM")
         raise HTTPException(
             status_code=409,
             detail=(
