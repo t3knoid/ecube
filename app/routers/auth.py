@@ -34,7 +34,16 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 # ---------------------------------------------------------------------------
 
 def _get_pam() -> PamAuthenticator:
-    """Provide a :class:`PamAuthenticator` via the infrastructure factory."""
+    """Provide a :class:`PamAuthenticator` via the infrastructure factory.
+
+    Raises 404 early when OIDC is the active resolver so that PAM modules
+    are never imported on platforms/configurations that don't need them.
+    """
+    if settings.role_resolver == "oidc":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Local login is not available when OIDC authentication is enabled",
+        )
     from app.infrastructure import get_authenticator
     return get_authenticator()
 
@@ -76,14 +85,8 @@ def login(
 
     This endpoint is available when ``role_resolver`` is ``local`` or ``ldap``.
     When OIDC mode is active, users authenticate externally via the identity
-    provider and this endpoint returns 404.
+    provider and this endpoint returns 404 (enforced in ``_get_pam``).
     """
-    if settings.role_resolver == "oidc":
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Local login is not available when OIDC authentication is enabled",
-        )
-
     if not pam.authenticate(body.username, body.password):
         best_effort_audit(
             db,
