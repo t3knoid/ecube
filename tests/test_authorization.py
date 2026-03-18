@@ -9,6 +9,7 @@ Verifies that:
 """
 
 import time
+from unittest.mock import MagicMock, patch
 
 import jwt
 import pytest
@@ -17,6 +18,19 @@ from fastapi.testclient import TestClient
 from app.config import settings
 from app.database import get_db
 from app.main import app
+
+
+from app.infrastructure.drive_eject import EjectResult
+
+
+def _fake_eject(flush_ok=True, unmount_ok=True,
+                flush_error=None, unmount_error=None):
+    provider = MagicMock()
+    provider.prepare_eject.return_value = EjectResult(
+        flush_ok=flush_ok, unmount_ok=unmount_ok,
+        flush_error=flush_error, unmount_error=unmount_error,
+    )
+    return provider
 
 
 # ---------------------------------------------------------------------------
@@ -155,7 +169,7 @@ class TestDriveAuthorization:
         db.add(drive)
         db.commit()
         c = _client_for_role(db, ["admin"])
-        with patch("app.services.drive_service.sync_filesystem", return_value=(True, None)):
+        with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject()):
             assert c.post(f"/drives/{drive.id}/prepare-eject").status_code == 200
 
     def test_prepare_eject_manager_allowed(self, db):
@@ -170,7 +184,7 @@ class TestDriveAuthorization:
         db.add(drive)
         db.commit()
         c = _client_for_role(db, ["manager"])
-        with patch("app.services.drive_service.sync_filesystem", return_value=(True, None)):
+        with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject()):
             assert c.post(f"/drives/{drive.id}/prepare-eject").status_code == 200
 
     def test_prepare_eject_processor_denied(self, db):

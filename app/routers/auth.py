@@ -22,11 +22,30 @@ from app.config import settings
 from app.database import get_db
 from app.repositories.audit_repository import best_effort_audit
 from app.repositories.user_role_repository import UserRoleRepository
-from app.services.pam_service import LinuxPamAuthenticator, get_user_groups
+from app.infrastructure.pam_protocol import PamAuthenticator
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+# ---------------------------------------------------------------------------
+# Dependency — platform-selected authenticator
+# ---------------------------------------------------------------------------
+
+def _get_pam() -> PamAuthenticator:
+    """Provide a :class:`PamAuthenticator` via the infrastructure factory.
+
+    Raises 404 early when OIDC is the active resolver so that PAM modules
+    are never imported on platforms/configurations that don't need them.
+    """
+    if settings.role_resolver == "oidc":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Local login is not available when OIDC authentication is enabled",
+        )
+    from app.infrastructure import get_authenticator
+    return get_authenticator()
 
 
 # ---------------------------------------------------------------------------
@@ -58,6 +77,7 @@ def login(
     body: TokenRequest,
     request: Request,
     db: Session = Depends(get_db),
+    pam: PamAuthenticator = Depends(_get_pam),
 ) -> TokenResponse:
     """Authenticate with OS credentials and receive a signed JWT.
 
@@ -65,15 +85,8 @@ def login(
 
     This endpoint is available when ``role_resolver`` is ``local`` or ``ldap``.
     When OIDC mode is active, users authenticate externally via the identity
-    provider and this endpoint returns 404.
+    provider and this endpoint returns 404 (enforced in ``_get_pam``).
     """
-    if settings.role_resolver == "oidc":
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Local login is not available when OIDC authentication is enabled",
-        )
-
-    pam = LinuxPamAuthenticator()
     if not pam.authenticate(body.username, body.password):
         best_effort_audit(
             db,
@@ -89,7 +102,7 @@ def login(
     # Resolve ECUBE roles for the user.
     # Priority: 1) Explicit roles from DB ``user_roles`` table,
     #            2) Roles derived from OS groups via the configured resolver.
-    groups = get_user_groups(body.username)
+    groups = pam.get_user_groups(body.username)
     db_roles = UserRoleRepository(db).get_roles(body.username)
     roles = db_roles if db_roles else get_role_resolver().resolve(groups)
 

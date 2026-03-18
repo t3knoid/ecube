@@ -9,19 +9,31 @@ is enabled (for example, when ``role_resolver`` is set to ``"local"`` or
 
 from __future__ import annotations
 
-import grp
 import logging
 import os
-import pwd
-from typing import List, Protocol
+
+try:
+    import grp
+    import pwd
+except ImportError:  # pragma: no cover – Linux-only stdlib modules
+    grp = None  # type: ignore[assignment]
+    pwd = None  # type: ignore[assignment]
+from typing import List
+
+# Re-export so existing ``from app.services.pam_service import PamAuthenticator``
+# keeps working.
+from app.infrastructure.pam_protocol import PamAuthenticator  # noqa: F401 – re-export
 
 logger = logging.getLogger(__name__)
 
 
-class PamAuthenticator(Protocol):
-    """Protocol for PAM authentication backends (allows test mocking)."""
-
-    def authenticate(self, username: str, password: str) -> bool: ...
+def _require_posix() -> None:
+    """Raise a clear error when POSIX modules are unavailable."""
+    if pwd is None or grp is None:
+        raise RuntimeError(
+            "This function requires the 'pwd' and 'grp' modules "
+            "which are only available on POSIX/Linux systems."
+        )
 
 
 class LinuxPamAuthenticator:
@@ -30,6 +42,9 @@ class LinuxPamAuthenticator:
     Requires the ``python-pam`` package (``pam.authenticate``).
     """
 
+    def __init__(self) -> None:
+        _require_posix()
+
     def authenticate(self, username: str, password: str) -> bool:
         import pam as _pam  # type: ignore[import-untyped]
                             # lazy import avoids import-time failure on non-Linux platforms
@@ -37,12 +52,16 @@ class LinuxPamAuthenticator:
         p = _pam.pam()
         return bool(p.authenticate(username, password))
 
+    def get_user_groups(self, username: str) -> List[str]:
+        return get_user_groups(username)
+
 
 def get_user_groups(username: str) -> List[str]:
     """Return the list of OS group names *username* belongs to.
 
     Includes the user's primary group and all supplementary groups.
     """
+    _require_posix()
     groups: set[str] = set()
 
     try:

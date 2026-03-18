@@ -52,11 +52,17 @@ from app.repositories.hardware_repository import HubRepository, PortRepository
 logger = logging.getLogger(__name__)
 
 
+def _default_topology_source() -> DiscoveredTopology:
+    """Lazy import to route through the platform-selected provider."""
+    from app.infrastructure import get_drive_discovery
+    return get_drive_discovery().discover_topology()
+
+
 def run_discovery_sync(
     db: Session,
     actor: Optional[str] = None,
     *,
-    topology_source: Callable[[], DiscoveredTopology] = discover_usb_topology,
+    topology_source: Callable[[], DiscoveredTopology] = _default_topology_source,
     filesystem_detector: FilesystemDetector,
 ) -> dict:
     """Discover USB hardware state and synchronise the database.
@@ -70,8 +76,9 @@ def run_discovery_sync(
         Stored in the audit log.
     topology_source:
         Callable that returns a :class:`~app.infrastructure.usb_discovery.DiscoveredTopology`.
-        Defaults to the real sysfs reader; override in tests to inject
-        synthetic hardware snapshots.
+        Defaults to the platform-selected provider via
+        :func:`~app.infrastructure.get_drive_discovery`; override in tests to
+        inject synthetic hardware snapshots.
     filesystem_detector:
         Implementation of the :class:`FilesystemDetector` protocol.  Callers
         must supply an instance explicitly; production routers pass the result
