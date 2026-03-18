@@ -360,6 +360,21 @@ def run_copy_job(job_id: int) -> None:
                     job_repo.save(job)
                 except Exception:
                     logger.exception("DB commit failed setting final status for job %s", job_id)
+
+                audit_action = "JOB_COMPLETED" if job.status == JobStatus.COMPLETED else "JOB_FAILED"
+                try:
+                    AuditRepository(db).add(
+                        action=audit_action,
+                        job_id=job_id,
+                        details={
+                            "status": job.status.value,
+                            "file_count": job.file_count,
+                            "error_count": error_count,
+                            "elapsed_seconds": round(time.monotonic() - job_start, 2),
+                        },
+                    )
+                except Exception:
+                    logger.exception("Failed to write audit log for %s", audit_action)
     finally:
         db.close()
 
@@ -417,5 +432,19 @@ def run_verify_job(job_id: int) -> None:
                 job_repo.save(job)
             except Exception:
                 logger.exception("DB commit failed setting verification result for job %s", job_id)
+
+            audit_action = "JOB_VERIFICATION_COMPLETED" if not any_mismatch else "JOB_VERIFICATION_FAILED"
+            try:
+                AuditRepository(db).add(
+                    action=audit_action,
+                    job_id=job_id,
+                    details={
+                        "status": job.status.value,
+                        "files_verified": len(files),
+                        "mismatches": any_mismatch,
+                    },
+                )
+            except Exception:
+                logger.exception("Failed to write audit log for %s", audit_action)
     finally:
         db.close()

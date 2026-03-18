@@ -514,3 +514,128 @@ def test_list_incomplete_by_job(db):
     assert len(incomplete) == 4  # all except DONE
     result_statuses = {f.status for f in incomplete}
     assert FileStatus.DONE not in result_statuses
+
+
+# ---------------------------------------------------------------------------
+# Audit trail tests for job completion events
+# ---------------------------------------------------------------------------
+
+
+def test_run_copy_job_emits_job_completed_audit(db, tmp_path):
+    """A successful copy job emits a JOB_COMPLETED audit entry."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "file.txt").write_bytes(b"data")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        copy_engine.run_copy_job(job.id)
+
+    log = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_COMPLETED", AuditLog.job_id == job.id)
+        .first()
+    )
+    assert log is not None
+    assert log.details["status"] == "COMPLETED"
+    assert log.details["error_count"] == 0
+
+
+def test_run_copy_job_emits_job_failed_audit(db, tmp_path):
+    """A failed copy job emits a JOB_FAILED audit entry."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "bad.txt").write_bytes(b"data")
+
+    job = _make_job(db, str(source_dir), max_file_retries=0)
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch(
+            "app.services.copy_engine.copy_file",
+            return_value=(False, None, "disk full"),
+        ):
+            with patch(
+                "app.services.copy_engine._checksum_only",
+                return_value=(False, None, "disk full"),
+            ):
+                copy_engine.run_copy_job(job.id)
+
+    log = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_FAILED", AuditLog.job_id == job.id)
+        .first()
+    )
+    assert log is not None
+    assert log.details["status"] == "FAILED"
+    assert log.details["error_count"] > 0
+
+
+def test_run_verify_job_emits_verification_completed_audit(db, tmp_path):
+    """A successful verification emits a JOB_VERIFICATION_COMPLETED audit entry."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    src_file = source_dir / "file.txt"
+    src_file.write_bytes(b"data")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+
+    # Run the copy first to get files in DONE state with checksums
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+
+    # Now run verification
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        copy_engine.run_verify_job(job.id)
+
+    log = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_VERIFICATION_COMPLETED", AuditLog.job_id == job.id)
+        .first()
+    )
+    assert log is not None
+    assert log.details["status"] == "COMPLETED"
+    assert log.details["mismatches"] is False
+
+
+def test_run_verify_job_emits_verification_failed_audit(db, tmp_path):
+    """A failed verification emits a JOB_VERIFICATION_FAILED audit entry."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "file.txt").write_bytes(b"data")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+
+    # Run copy first
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+
+    # Corrupt a checksum to trigger mismatch
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch(
+            "app.services.copy_engine._checksum_only",
+            return_value=(True, "badhash", None),
+        ):
+            copy_engine.run_verify_job(job.id)
+
+    log = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_VERIFICATION_FAILED", AuditLog.job_id == job.id)
+        .first()
+    )
+    assert log is not None
+    assert log.details["status"] == "FAILED"
+    assert log.details["mismatches"] is True
