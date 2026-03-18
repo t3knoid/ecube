@@ -503,13 +503,13 @@ sudo journalctl -u ecube --since "24 hours ago"
 
 ```bash
 # View logs
-docker compose logs app
+docker compose -f docker-compose.ecube-host.yml logs ecube-host
 
 # Follow logs
-docker compose logs -f app
+docker compose -f docker-compose.ecube-host.yml logs -f ecube-host
 
 # View specific number of lines
-docker compose logs -n 100 app
+docker compose -f docker-compose.ecube-host.yml logs -n 100 ecube-host
 ```
 
 ### Database Logs
