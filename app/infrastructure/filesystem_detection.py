@@ -68,8 +68,20 @@ class LinuxFilesystemDetector:
                 capture_output=True,
                 timeout=settings.subprocess_timeout_seconds,
             )
-            # blkid returns exit code 2 when no fs signature is found
-            if proc.returncode == 2 or (proc.returncode == 0 and not proc.stdout.strip()):
+            # blkid returns exit code 2 when no fs signature is found, but
+            # also for other errors (missing device, permission denied) which
+            # typically produce stderr output.  Only treat rc==2 as
+            # "unformatted" when stderr is empty.
+            if proc.returncode == 2:
+                if proc.stderr.strip():
+                    logger.debug(
+                        "blkid returned 2 with stderr for %s: %s",
+                        device_path,
+                        proc.stderr.decode(errors="replace").strip(),
+                    )
+                    return None
+                return "unformatted"
+            if proc.returncode == 0 and not proc.stdout.strip():
                 return "unformatted"
             if proc.returncode == 0:
                 return proc.stdout.decode(errors="replace").strip().lower()

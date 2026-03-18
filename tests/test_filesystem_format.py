@@ -168,6 +168,55 @@ class TestFirstFstype:
 
 
 # ===========================================================================
+# Part 0b: LinuxFilesystemDetector._try_blkid — returncode 2 disambiguation
+# ===========================================================================
+
+
+class TestTryBlkid:
+    """Verify _try_blkid interprets returncode 2 correctly."""
+
+    def test_rc2_no_stderr_is_unformatted(self):
+        """rc==2 with empty stderr means no filesystem signature → unformatted."""
+        from unittest.mock import patch, MagicMock
+        from app.infrastructure.filesystem_detection import LinuxFilesystemDetector
+
+        proc = MagicMock(returncode=2, stdout=b"", stderr=b"")
+        detector = LinuxFilesystemDetector()
+        with patch("app.infrastructure.filesystem_detection.subprocess.run", return_value=proc):
+            assert detector._try_blkid("/dev/sdb") == "unformatted"
+
+    def test_rc2_with_stderr_returns_none(self):
+        """rc==2 with stderr (e.g. missing device) → None (fall through to lsblk)."""
+        from unittest.mock import patch, MagicMock
+        from app.infrastructure.filesystem_detection import LinuxFilesystemDetector
+
+        proc = MagicMock(returncode=2, stdout=b"", stderr=b"/dev/sdz: No such file or directory\n")
+        detector = LinuxFilesystemDetector()
+        with patch("app.infrastructure.filesystem_detection.subprocess.run", return_value=proc):
+            assert detector._try_blkid("/dev/sdz") is None
+
+    def test_rc0_empty_stdout_is_unformatted(self):
+        """rc==0 with no output means no TYPE field → unformatted."""
+        from unittest.mock import patch, MagicMock
+        from app.infrastructure.filesystem_detection import LinuxFilesystemDetector
+
+        proc = MagicMock(returncode=0, stdout=b"", stderr=b"")
+        detector = LinuxFilesystemDetector()
+        with patch("app.infrastructure.filesystem_detection.subprocess.run", return_value=proc):
+            assert detector._try_blkid("/dev/sdb") == "unformatted"
+
+    def test_rc0_with_type_returns_fstype(self):
+        """rc==0 with TYPE output → canonical lowercase label."""
+        from unittest.mock import patch, MagicMock
+        from app.infrastructure.filesystem_detection import LinuxFilesystemDetector
+
+        proc = MagicMock(returncode=0, stdout=b"ext4\n", stderr=b"")
+        detector = LinuxFilesystemDetector()
+        with patch("app.infrastructure.filesystem_detection.subprocess.run", return_value=proc):
+            assert detector._try_blkid("/dev/sdb") == "ext4"
+
+
+# ===========================================================================
 # Part 1: Filesystem detection mapping
 # ===========================================================================
 
