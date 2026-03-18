@@ -6,6 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, require_roles
+from app.config import settings
 from app.database import get_db
 from app.models.hardware import UsbDrive
 from app.models.jobs import ExportJob, JobStatus
@@ -59,7 +60,7 @@ def usb_topology(_: CurrentUser = Depends(_ALL_ROLES)):
     **Restricted:** Outputs are scrubbed and do not expose sensitive paths.
     """
     devices = []
-    usb_path = "/sys/bus/usb/devices"
+    usb_path = settings.sysfs_usb_devices_path
     try:
         if os.path.exists(usb_path):
             for dev in os.listdir(usb_path):
@@ -91,7 +92,7 @@ def block_devices(_: CurrentUser = Depends(_ALL_ROLES)):
     """
     stats = []
     try:
-        with open("/proc/diskstats") as f:
+        with open(settings.procfs_diskstats_path) as f:
             for line in f:
                 parts = line.split()
                 if len(parts) >= 3:
@@ -123,7 +124,7 @@ def system_mounts(_: CurrentUser = Depends(_ALL_ROLES)):
 
     mounts = []
     try:
-        with open("/proc/mounts") as f:
+        with open(settings.procfs_mounts_path) as f:
             for line in f:
                 parts = line.split()
                 if len(parts) >= 4:

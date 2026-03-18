@@ -19,7 +19,7 @@ import logging
 import pwd
 import subprocess
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Protocol
 
 from app.config import settings
 from app.constants import (
@@ -62,6 +62,67 @@ class OSGroup:
     name: str
     gid: int
     members: List[str] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# OsUserProvider Protocol
+# ---------------------------------------------------------------------------
+
+class OsUserProvider(Protocol):
+    """Platform-agnostic interface for OS user and group management."""
+
+    def user_exists(self, username: str) -> bool: ...
+    def group_exists(self, name: str) -> bool: ...
+    def create_user(self, username: str, password: str, groups: Optional[List[str]] = None) -> OSUser: ...
+    def list_users(self, ecube_only: bool = True) -> List[OSUser]: ...
+    def delete_user(self, username: str, *, _skip_managed_check: bool = False) -> None: ...
+    def reset_password(self, username: str, password: str, *, _skip_managed_check: bool = False) -> None: ...
+    def set_user_groups(self, username: str, groups: List[str]) -> OSUser: ...
+    def add_user_to_groups(self, username: str, groups: List[str], *, _skip_managed_check: bool = False) -> OSUser: ...
+    def create_group(self, name: str) -> OSGroup: ...
+    def list_groups(self, ecube_only: bool = True) -> List[OSGroup]: ...
+    def delete_group(self, name: str) -> None: ...
+    def ensure_ecube_groups(self) -> List[str]: ...
+
+
+class LinuxOsUserProvider:
+    """Linux implementation using ``useradd``, ``userdel``, ``chpasswd``, etc."""
+
+    def user_exists(self, username: str) -> bool:
+        return user_exists(username)
+
+    def group_exists(self, name: str) -> bool:
+        return group_exists(name)
+
+    def create_user(self, username: str, password: str, groups: Optional[List[str]] = None) -> OSUser:
+        return create_user(username, password, groups)
+
+    def list_users(self, ecube_only: bool = True) -> List[OSUser]:
+        return list_users(ecube_only)
+
+    def delete_user(self, username: str, *, _skip_managed_check: bool = False) -> None:
+        return delete_user(username, _skip_managed_check=_skip_managed_check)
+
+    def reset_password(self, username: str, password: str, *, _skip_managed_check: bool = False) -> None:
+        return reset_password(username, password, _skip_managed_check=_skip_managed_check)
+
+    def set_user_groups(self, username: str, groups: List[str]) -> OSUser:
+        return set_user_groups(username, groups)
+
+    def add_user_to_groups(self, username: str, groups: List[str], *, _skip_managed_check: bool = False) -> OSUser:
+        return add_user_to_groups(username, groups, _skip_managed_check=_skip_managed_check)
+
+    def create_group(self, name: str) -> OSGroup:
+        return create_group(name)
+
+    def list_groups(self, ecube_only: bool = True) -> List[OSGroup]:
+        return list_groups(ecube_only)
+
+    def delete_group(self, name: str) -> None:
+        return delete_group(name)
+
+    def ensure_ecube_groups(self) -> List[str]:
+        return ensure_ecube_groups()
 
 
 def _run_sudo(
