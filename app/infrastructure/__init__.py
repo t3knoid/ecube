@@ -23,8 +23,8 @@ from app.infrastructure.drive_eject import (
     EjectResult,
 )
 from app.services.mount_service import MountProvider
-from app.services.os_user_service import OsUserProvider
-from app.services.pam_service import PamAuthenticator
+from app.infrastructure.os_user_protocol import OsUserProvider
+from app.infrastructure.pam_protocol import PamAuthenticator
 
 __all__ = [
     "FilesystemDetector",

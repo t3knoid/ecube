@@ -17,17 +17,13 @@ try:
     import pwd
 except ImportError:  # pragma: no cover – Linux-only stdlib modules
     pass
-from typing import List, Protocol
+from typing import List
+
+# Re-export so existing ``from app.services.pam_service import PamAuthenticator``
+# keeps working.
+from app.infrastructure.pam_protocol import PamAuthenticator  # noqa: F401 – re-export
 
 logger = logging.getLogger(__name__)
-
-
-class PamAuthenticator(Protocol):
-    """Protocol for PAM authentication backends (allows test mocking)."""
-
-    def authenticate(self, username: str, password: str) -> bool: ...
-
-    def get_user_groups(self, username: str) -> List[str]: ...
 
 
 class LinuxPamAuthenticator:
