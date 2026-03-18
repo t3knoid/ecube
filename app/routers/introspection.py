@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
+from app.models.hardware import UsbDrive
 from app.models.jobs import ExportJob, JobStatus
 
 logger = logging.getLogger(__name__)
@@ -15,6 +16,36 @@ router = APIRouter(prefix="/introspection", tags=["introspection"])
 
 _ALL_ROLES = require_roles("admin", "manager", "processor", "auditor")
 _ADMIN_AUDITOR = require_roles("admin", "auditor")
+
+
+@router.get("/drives")
+def drives_inventory(
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(_ALL_ROLES),
+):
+    """List all registered USB drives and their current state.
+
+    Returns drive identifiers, capacity, state, and project bindings
+    for diagnostic and inventory purposes.
+
+    **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
+    **Restricted:** Sensitive filesystem paths are not exposed.
+    """
+    drives = db.query(UsbDrive).all()
+    return {
+        "drives": [
+            {
+                "id": d.id,
+                "device_identifier": d.device_identifier,
+                "capacity_bytes": d.capacity_bytes,
+                "current_state": d.current_state.value if d.current_state else None,
+                "current_project_id": d.current_project_id,
+                "encryption_status": d.encryption_status,
+                "last_seen_at": d.last_seen_at.isoformat() if d.last_seen_at else None,
+            }
+            for d in drives
+        ]
+    }
 
 
 @router.get("/usb/topology")
