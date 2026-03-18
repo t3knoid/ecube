@@ -6,16 +6,13 @@ implementation that shells out to ``mkfs.*`` utilities.
 from __future__ import annotations
 
 import logging
-import re
 import subprocess
 from typing import Protocol
 
 from app.config import settings
+from app.infrastructure.device_path import validate_device_path
 
 logger = logging.getLogger(__name__)
-
-# Allowed block-device path pattern: /dev/<name>, e.g. /dev/sdb, /dev/sdc1.
-_DEVICE_PATH_RE = re.compile(r"^/dev/[a-zA-Z][a-zA-Z0-9]*$")
 
 # Mapping from canonical filesystem type to settings attribute for binary path.
 _MKFS_SETTINGS_MAP = {
@@ -44,7 +41,7 @@ class LinuxDriveFormatter:
     """Linux implementation using ``mkfs.*`` and ``/proc/mounts``."""
 
     def format(self, device_path: str, filesystem_type: str) -> None:
-        if not _DEVICE_PATH_RE.match(device_path):
+        if not validate_device_path(device_path):
             raise RuntimeError(f"Invalid device path: {device_path!r}")
 
         settings_attr = _MKFS_SETTINGS_MAP.get(filesystem_type)
@@ -71,7 +68,7 @@ class LinuxDriveFormatter:
             raise RuntimeError(f"mkfs error: {exc}")
 
     def is_mounted(self, device_path: str) -> bool:
-        if not _DEVICE_PATH_RE.match(device_path):
+        if not validate_device_path(device_path):
             return False
 
         device_base = device_path.split("/")[-1]  # e.g. "sdb"
