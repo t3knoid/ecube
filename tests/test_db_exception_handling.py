@@ -19,10 +19,16 @@ from app.models.hardware import DriveState, UsbDrive
 from app.models.jobs import ExportJob, JobStatus
 
 
-def _fake_eject(sync_rv=(True, None), unmount_rv=(True, None)):
+from app.infrastructure.drive_eject import EjectResult
+
+
+def _fake_eject(flush_ok=True, unmount_ok=True,
+                flush_error=None, unmount_error=None):
     provider = MagicMock()
-    provider.sync_filesystem.return_value = sync_rv
-    provider.unmount_device.return_value = unmount_rv
+    provider.prepare_eject.return_value = EjectResult(
+        flush_ok=flush_ok, unmount_ok=unmount_ok,
+        flush_error=flush_error, unmount_error=unmount_error,
+    )
     return provider
 
 
