@@ -414,13 +414,9 @@ curl -X POST https://localhost:8443/mounts \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "evidence-share",
-    "mount_type": "nfs",
-    "server": "nfs.example.com",
-    "export_path": "/evidence",
-    "local_mount_point": "/mnt/evidence",
-    "username": "optional-if-auth-required",
-    "password": "optional-if-auth-required"
+    "type": "NFS",
+    "remote_path": "nfs.example.com:/evidence",
+    "local_mount_point": "/mnt/evidence"
   }'
 ```
 
