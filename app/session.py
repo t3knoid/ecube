@@ -166,9 +166,10 @@ class RedisSessionMiddleware:
                             session_id,
                             exc_info=True,
                         )
-                    headers = MutableHeaders(scope=message)
-                    cookie = self._build_cookie(session_id)
-                    headers.append("set-cookie", cookie)
+                    else:
+                        headers = MutableHeaders(scope=message)
+                        cookie = self._build_cookie(session_id)
+                        headers.append("set-cookie", cookie)
 
             await send(message)
 
