@@ -186,6 +186,7 @@ def _is_reserved_username(username: str) -> bool:
 
 def _is_ecube_managed(username: str) -> bool:
     """Return True if *username* belongs to at least one ``ecube-*`` group."""
+    _require_posix()
     # First, check the user's primary group.
     try:
         pw_entry = pwd.getpwnam(username)
@@ -232,6 +233,7 @@ def _require_ecube_managed_user(username: str) -> None:
 
 def user_exists(username: str) -> bool:
     """Check if an OS user exists."""
+    _require_posix()
     try:
         pwd.getpwnam(username)
         return True
@@ -241,6 +243,7 @@ def user_exists(username: str) -> bool:
 
 def group_exists(name: str) -> bool:
     """Check if an OS group exists."""
+    _require_posix()
     try:
         grp.getgrnam(name)
         return True
@@ -250,6 +253,7 @@ def group_exists(name: str) -> bool:
 
 def _get_user_groups(username: str) -> List[str]:
     """Return group names the user belongs to."""
+    _require_posix()
     groups = []
     try:
         for g in grp.getgrall():
@@ -337,6 +341,7 @@ def create_user(
 
 def list_users(ecube_only: bool = True) -> List[OSUser]:
     """List OS users, optionally filtered to ECUBE-relevant groups."""
+    _require_posix()
     # Build a username→groups mapping in one pass over grp.getgrall()
     # to avoid O(users×groups) repeated scans.
     all_groups = grp.getgrall()
@@ -524,6 +529,7 @@ def create_group(name: str) -> OSGroup:
 
 def list_groups(ecube_only: bool = True) -> List[OSGroup]:
     """List OS groups, optionally filtered to ECUBE-relevant names."""
+    _require_posix()
     result: List[OSGroup] = []
     for g in grp.getgrall():
         if ecube_only and not g.gr_name.startswith(ECUBE_GROUP_PREFIX):
