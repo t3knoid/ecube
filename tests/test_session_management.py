@@ -265,10 +265,20 @@ class TestGracefulRedisFailover:
         assert test_app.state.session_redis_client is None
 
     def test_fallback_keeps_cookie_backend(self, caplog):
-        """After fallback the proxy still delegates to cookie-based sessions."""
+        """After fallback, requests still get working cookie-based sessions."""
         from app.session import init_session_backend, mount_session_middleware
 
         test_app = FastAPI()
+
+        @test_app.get("/set")
+        async def _set(request: Request):
+            request.session["user"] = "alice"
+            return JSONResponse({"status": "ok"})
+
+        @test_app.get("/get")
+        async def _get(request: Request):
+            return JSONResponse({"user": request.session.get("user")})
+
         import asyncio
         with patch("app.session.settings") as mock_settings:
             mock_settings.session_backend = "redis"
@@ -284,8 +294,14 @@ class TestGracefulRedisFailover:
             with caplog.at_level(logging.WARNING):
                 asyncio.run(init_session_backend(test_app))
 
-        assert test_app.state.session_backend_name == "cookie"
-        assert test_app.state.session_redis_client is None
+        client = TestClient(test_app)
+        # Store a value in the session via the cookie backend
+        resp = client.get("/set")
+        assert resp.status_code == 200
+        # Read it back — proves cookie sessions work after Redis fallback
+        resp = client.get("/get")
+        assert resp.status_code == 200
+        assert resp.json()["user"] == "alice"
 
     def test_mount_does_not_trigger_redis_io(self):
         """mount_session_middleware never calls _try_redis_backend."""
