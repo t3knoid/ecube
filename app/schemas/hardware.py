@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Literal, Optional
 from app.models.hardware import DriveState
 
 
@@ -38,6 +38,7 @@ class UsbDriveSchema(BaseModel):
     )
     capacity_bytes: Optional[int] = Field(default=None, description="Total storage capacity in bytes")
     encryption_status: Optional[str] = Field(default=None, description="Encryption status (e.g., 'encrypted', 'none')")
+    filesystem_type: Optional[str] = Field(default=None, description="Detected filesystem label (e.g. ext4, exfat, unformatted, unknown, or null if not yet detected)")
     current_state: DriveState = Field(..., description="Current drive state (EMPTY, AVAILABLE, IN_USE)")
     current_project_id: Optional[str] = Field(default=None, description="Bound project ID if IN_USE, enforces isolation")
 
@@ -46,3 +47,7 @@ class UsbDriveSchema(BaseModel):
 
 class DriveInitialize(BaseModel):
     project_id: str = Field(..., description="Project ID to bind the drive to for isolation enforcement")
+
+
+class DriveFormatRequest(BaseModel):
+    filesystem_type: Literal["ext4", "exfat"] = Field(..., description="Target filesystem type for formatting")

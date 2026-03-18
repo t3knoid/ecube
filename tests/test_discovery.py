@@ -29,6 +29,16 @@ def _empty_topology() -> DiscoveredTopology:
     return DiscoveredTopology()
 
 
+class _NullDetector:
+    """Lightweight no-op filesystem detector for hermetic tests."""
+
+    def detect(self, device_path: str) -> str:
+        return "unformatted"
+
+
+_NULL_DETECTOR = _NullDetector()
+
+
 def _simple_topology(
     hub_id: str = "usb1",
     port_path: str = "1-1",
@@ -56,7 +66,7 @@ def _simple_topology(
 
 def test_initial_sync_inserts_hub_port_drive(db):
     topology = _simple_topology()
-    summary = run_discovery_sync(db, topology_source=lambda: topology)
+    summary = run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
 
     assert summary["hubs_upserted"] == 1
     assert summary["ports_upserted"] == 1
@@ -81,7 +91,7 @@ def test_initial_sync_inserts_hub_port_drive(db):
 
 
 def test_initial_sync_no_hardware(db):
-    summary = run_discovery_sync(db, topology_source=_empty_topology)
+    summary = run_discovery_sync(db, topology_source=_empty_topology, filesystem_detector=_NULL_DETECTOR)
 
     assert summary["hubs_upserted"] == 0
     assert summary["drives_inserted"] == 0
@@ -91,7 +101,7 @@ def test_initial_sync_no_hardware(db):
 
 
 def test_initial_sync_emits_audit_log(db):
-    summary = run_discovery_sync(db, actor="admin-user", topology_source=_empty_topology)
+    summary = run_discovery_sync(db, actor="admin-user", topology_source=_empty_topology, filesystem_detector=_NULL_DETECTOR)
 
     logs = db.query(AuditLog).filter(AuditLog.action == "USB_DISCOVERY_SYNC").all()
     assert len(logs) == 1
@@ -106,8 +116,8 @@ def test_initial_sync_emits_audit_log(db):
 
 def test_sync_is_idempotent(db):
     topology = _simple_topology()
-    run_discovery_sync(db, topology_source=lambda: topology)
-    summary2 = run_discovery_sync(db, topology_source=lambda: topology)
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    summary2 = run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
 
     assert summary2["drives_inserted"] == 0
     assert summary2["drives_updated"] == 0
@@ -125,12 +135,12 @@ def test_sync_is_idempotent(db):
 
 def test_sync_updates_drive_filesystem_path(db):
     first = _simple_topology()
-    run_discovery_sync(db, topology_source=lambda: first)
+    run_discovery_sync(db, topology_source=lambda: first, filesystem_detector=_NULL_DETECTOR)
 
     # Device re-enumerated to a different block node
     second = _simple_topology()
     second.drives[0].filesystem_path = "/dev/sdc"
-    summary = run_discovery_sync(db, topology_source=lambda: second)
+    summary = run_discovery_sync(db, topology_source=lambda: second, filesystem_detector=_NULL_DETECTOR)
 
     assert summary["drives_updated"] == 1
     drive = db.query(UsbDrive).one()
@@ -139,11 +149,11 @@ def test_sync_updates_drive_filesystem_path(db):
 
 def test_sync_updates_drive_capacity(db):
     first = _simple_topology()
-    run_discovery_sync(db, topology_source=lambda: first)
+    run_discovery_sync(db, topology_source=lambda: first, filesystem_detector=_NULL_DETECTOR)
 
     second = _simple_topology()
     second.drives[0].capacity_bytes = 128_000_000_000
-    summary = run_discovery_sync(db, topology_source=lambda: second)
+    summary = run_discovery_sync(db, topology_source=lambda: second, filesystem_detector=_NULL_DETECTOR)
 
     assert summary["drives_updated"] == 1
     drive = db.query(UsbDrive).one()
@@ -152,11 +162,11 @@ def test_sync_updates_drive_capacity(db):
 
 def test_sync_updates_hub_name(db):
     first = _simple_topology()
-    run_discovery_sync(db, topology_source=lambda: first)
+    run_discovery_sync(db, topology_source=lambda: first, filesystem_detector=_NULL_DETECTOR)
 
     second = _simple_topology()
     second.hubs[0].name = "Updated Hub Name"
-    run_discovery_sync(db, topology_source=lambda: second)
+    run_discovery_sync(db, topology_source=lambda: second, filesystem_detector=_NULL_DETECTOR)
 
     hub = db.query(UsbHub).one()
     assert hub.name == "Updated Hub Name"
@@ -169,19 +179,37 @@ def test_sync_updates_hub_name(db):
 
 def test_available_drive_removed_becomes_empty(db):
     topology = _simple_topology()
-    run_discovery_sync(db, topology_source=lambda: topology)
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
 
     # Remove the drive from the hardware snapshot
-    summary = run_discovery_sync(db, topology_source=_empty_topology)
+    summary = run_discovery_sync(db, topology_source=_empty_topology, filesystem_detector=_NULL_DETECTOR)
 
     assert summary["drives_removed"] == 1
     drive = db.query(UsbDrive).one()
     assert drive.current_state == DriveState.EMPTY
 
 
+def test_available_drive_removed_emits_audit(db):
+    """DRIVE_REMOVED audit entry is created when an AVAILABLE drive disappears."""
+    topology = _simple_topology()
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    drive = db.query(UsbDrive).one()
+
+    run_discovery_sync(db, topology_source=_empty_topology, filesystem_detector=_NULL_DETECTOR)
+
+    log = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "DRIVE_REMOVED")
+        .first()
+    )
+    assert log is not None
+    assert log.details["drive_id"] == drive.id
+    assert log.details["device_identifier"] == drive.device_identifier
+
+
 def test_in_use_drive_removal_preserves_project(db):
     topology = _simple_topology()
-    run_discovery_sync(db, topology_source=lambda: topology)
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
 
     # Manually set drive to IN_USE (simulating initialized state)
     drive = db.query(UsbDrive).one()
@@ -190,7 +218,7 @@ def test_in_use_drive_removal_preserves_project(db):
     db.commit()
 
     # Drive disappears from hardware
-    summary = run_discovery_sync(db, topology_source=_empty_topology)
+    summary = run_discovery_sync(db, topology_source=_empty_topology, filesystem_detector=_NULL_DETECTOR)
 
     assert summary["drives_removed"] == 0  # IN_USE drives are NOT removed
     drive = db.query(UsbDrive).one()
@@ -205,7 +233,7 @@ def test_empty_drive_removal_stays_empty(db):
     db.add(drive)
     db.commit()
 
-    summary = run_discovery_sync(db, topology_source=_empty_topology)
+    summary = run_discovery_sync(db, topology_source=_empty_topology, filesystem_detector=_NULL_DETECTOR)
 
     assert summary["drives_removed"] == 0
     db.refresh(drive)
@@ -219,15 +247,15 @@ def test_empty_drive_removal_stays_empty(db):
 
 def test_empty_drive_reconnects_becomes_available(db):
     topology = _simple_topology()
-    run_discovery_sync(db, topology_source=lambda: topology)
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
 
     # Remove the drive
-    run_discovery_sync(db, topology_source=_empty_topology)
+    run_discovery_sync(db, topology_source=_empty_topology, filesystem_detector=_NULL_DETECTOR)
     drive = db.query(UsbDrive).one()
     assert drive.current_state == DriveState.EMPTY
 
     # Reconnect
-    summary = run_discovery_sync(db, topology_source=lambda: topology)
+    summary = run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
     assert summary["drives_updated"] == 1
     db.refresh(drive)
     assert drive.current_state == DriveState.AVAILABLE
@@ -246,14 +274,14 @@ def test_sync_handles_multiple_drives(db):
     drive2 = DiscoveredDrive(device_identifier="SN-002", port_system_path="1-2", filesystem_path="/dev/sdc")
     topology = DiscoveredTopology(hubs=[hub], ports=[port1, port2], drives=[drive1, drive2])
 
-    summary = run_discovery_sync(db, topology_source=lambda: topology)
+    summary = run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
 
     assert summary["drives_inserted"] == 2
     assert db.query(UsbDrive).count() == 2
 
     # Remove one drive
     topology2 = DiscoveredTopology(hubs=[hub], ports=[port1], drives=[drive1])
-    summary2 = run_discovery_sync(db, topology_source=lambda: topology2)
+    summary2 = run_discovery_sync(db, topology_source=lambda: topology2, filesystem_detector=_NULL_DETECTOR)
 
     assert summary2["drives_removed"] == 1
     remaining = (
@@ -274,7 +302,7 @@ def test_port_without_hub_in_topology_auto_creates_hub(db):
     port = DiscoveredPort(hub_system_identifier="usb2", port_number=3, system_path="2-3")
     topology = DiscoveredTopology(ports=[port])
 
-    run_discovery_sync(db, topology_source=lambda: topology)
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
 
     hubs = db.query(UsbHub).all()
     assert len(hubs) == 1
@@ -302,6 +330,10 @@ def test_refresh_endpoint_manager_succeeds(manager_client, db, monkeypatch):
         "app.services.discovery_service.discover_usb_topology",
         _empty_topology,
     )
+    monkeypatch.setattr(
+        "app.routers.drives.get_filesystem_detector",
+        lambda: _NULL_DETECTOR,
+    )
     response = manager_client.post("/drives/refresh")
     assert response.status_code == 200
     data = response.json()
@@ -312,6 +344,10 @@ def test_refresh_endpoint_admin_succeeds(admin_client, db, monkeypatch):
     monkeypatch.setattr(
         "app.services.discovery_service.discover_usb_topology",
         _empty_topology,
+    )
+    monkeypatch.setattr(
+        "app.routers.drives.get_filesystem_detector",
+        lambda: _NULL_DETECTOR,
     )
     response = admin_client.post("/drives/refresh")
     assert response.status_code == 200

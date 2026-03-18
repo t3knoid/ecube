@@ -5,6 +5,8 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.infrastructure.drive_eject import sync_filesystem, unmount_device
+from app.infrastructure.drive_format import DriveFormatter
+from app.infrastructure import validate_device_path
 from app.models.hardware import DriveState, UsbDrive
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
@@ -26,6 +28,9 @@ def initialize_drive(
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
 
+    # Project isolation must be checked first so that IN_USE drives assigned
+    # to a different project always receive a 403 (with audit), regardless of
+    # their filesystem_type.
     if drive.current_project_id and drive.current_project_id != project_id:
         try:
             audit_repo.add(
@@ -43,6 +48,31 @@ def initialize_drive(
         raise HTTPException(
             status_code=403,
             detail=f"Drive is already assigned to project '{drive.current_project_id}'",
+        )
+
+    # Reject drives without a recognized filesystem.
+    _unrecognized_fs = {"unformatted", "unknown", None}
+    if drive.filesystem_type in _unrecognized_fs:
+        current_val = drive.filesystem_type if drive.filesystem_type is not None else "NULL"
+        try:
+            audit_repo.add(
+                action="INIT_REJECTED_FILESYSTEM",
+                user=actor,
+                details={
+                    "actor": actor,
+                    "drive_id": drive_id,
+                    "project_id": project_id,
+                    "filesystem_type": drive.filesystem_type,
+                },
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for INIT_REJECTED_FILESYSTEM")
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Drive must have a recognized filesystem before initialization. "
+                f"Current filesystem_type: {current_val}"
+            ),
         )
 
     drive.current_project_id = project_id
@@ -163,5 +193,107 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None) -> Us
             status_code=500,
             detail="Drive eject preparation failed",
         )
+
+    return drive
+
+
+def format_drive(
+    drive_id: int,
+    filesystem_type: str,
+    db: Session,
+    *,
+    formatter: DriveFormatter,
+    actor: Optional[str] = None,
+) -> UsbDrive:
+    """Format a drive with the specified filesystem type."""
+    drive_repo = DriveRepository(db)
+    audit_repo = AuditRepository(db)
+
+    drive = drive_repo.get_for_update(drive_id)
+    if not drive:
+        raise HTTPException(status_code=404, detail="Drive not found")
+
+    if drive.current_state != DriveState.AVAILABLE:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Drive must be in AVAILABLE state to format (current: {drive.current_state.value})",
+        )
+
+    if not drive.filesystem_path:
+        raise HTTPException(
+            status_code=400,
+            detail="Drive has no filesystem_path; cannot format",
+        )
+
+    if not validate_device_path(drive.filesystem_path):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid device path: {drive.filesystem_path!r}",
+        )
+
+    if formatter.is_mounted(drive.filesystem_path):
+        raise HTTPException(
+            status_code=409,
+            detail="Drive is currently mounted; unmount before formatting",
+        )
+
+    try:
+        formatter.format(drive.filesystem_path, filesystem_type)
+    except RuntimeError as exc:
+        try:
+            audit_repo.add(
+                action="DRIVE_FORMAT_FAILED",
+                user=actor,
+                details={
+                    "drive_id": drive_id,
+                    "filesystem_path": drive.filesystem_path,
+                    "filesystem_type": filesystem_type,
+                    "error": str(exc),
+                    "actor": actor,
+                },
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for DRIVE_FORMAT_FAILED")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Drive format failed: {exc}",
+        )
+
+    drive.filesystem_type = filesystem_type
+    try:
+        drive_repo.save(drive)
+    except Exception:
+        logger.exception("DB commit failed after formatting drive %s", drive_id)
+        try:
+            audit_repo.add(
+                action="DRIVE_FORMAT_DB_UPDATE_FAILED",
+                user=actor,
+                details={
+                    "drive_id": drive_id,
+                    "filesystem_path": drive.filesystem_path,
+                    "filesystem_type": filesystem_type,
+                    "actor": actor,
+                },
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for DRIVE_FORMAT_DB_UPDATE_FAILED")
+        raise HTTPException(
+            status_code=500,
+            detail="Drive formatted at OS level but database update failed",
+        )
+
+    try:
+        audit_repo.add(
+            action="DRIVE_FORMATTED",
+            user=actor,
+            details={
+                "drive_id": drive_id,
+                "filesystem_path": drive.filesystem_path,
+                "filesystem_type": filesystem_type,
+                "actor": actor,
+            },
+        )
+    except Exception:
+        logger.exception("Failed to write audit log for DRIVE_FORMATTED")
 
     return drive

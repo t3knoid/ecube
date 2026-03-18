@@ -17,9 +17,7 @@ import subprocess
 from typing import List, Optional, Tuple
 
 from app.config import settings
-
-# Allowed block-device path pattern: /dev/<name>, e.g. /dev/sdb, /dev/sdc1.
-_DEVICE_PATH_RE = re.compile(r"^/dev/[a-zA-Z][a-zA-Z0-9]*$")
+from app.infrastructure.device_path import validate_device_path
 
 # Absolute paths to system utilities so PATH manipulation cannot redirect them.
 # Actual values come from settings; these module-level names kept for readability.
@@ -228,7 +226,7 @@ def unmount_device(device_path: str) -> Tuple[bool, Optional[str]]:
     Returns ``(True, None)`` on success or ``(False, error_message)`` on
     failure.
     """
-    if not _DEVICE_PATH_RE.match(device_path):
+    if not validate_device_path(device_path):
         return False, f"invalid device path: {device_path!r}"
 
     # Extract base device name (e.g., "sdb" from "/dev/sdb")

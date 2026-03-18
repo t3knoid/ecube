@@ -7,14 +7,14 @@ All endpoints require the ``admin`` role.  These manage authorization
 from __future__ import annotations
 
 import logging
-import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, require_roles
+from app.constants import USERNAME_RE
 from app.database import get_db
-from app.repositories.audit_repository import AuditRepository
+from app.repositories.audit_repository import best_effort_audit
 from app.repositories.user_role_repository import UserRoleRepository
 from app.schemas.users import (
     SetRolesRequest,
@@ -26,12 +26,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
-_USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
-
 
 def _validate_username(username: str) -> str:
     """Reject usernames with shell metacharacters or invalid format."""
-    if not _USERNAME_RE.match(username):
+    if not USERNAME_RE.match(username):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Invalid username. Must start with a lowercase letter or "
@@ -39,14 +37,6 @@ def _validate_username(username: str) -> str:
             "or underscores, and be 1–32 characters.",
         )
     return username
-
-
-def _audit_log(db: Session, action: str, actor: str, details: dict) -> None:
-    """Best-effort audit log.  Never raises."""
-    try:
-        AuditRepository(db).add(action=action, user=actor, details=details)
-    except Exception:
-        logger.exception("Failed to write audit log for %s", action)
 
 
 @router.get("", response_model=UserListResponse)
@@ -101,7 +91,7 @@ def set_user_roles(
             detail="Failed to update role assignments. Please retry.",
         )
 
-    _audit_log(
+    best_effort_audit(
         db,
         "ROLE_ASSIGNED",
         current_user.username,
@@ -139,7 +129,7 @@ def delete_user_roles(
             detail="Failed to remove role assignments. Please retry.",
         )
 
-    _audit_log(
+    best_effort_audit(
         db,
         "ROLE_REMOVED",
         current_user.username,
