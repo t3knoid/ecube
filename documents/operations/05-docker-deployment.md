@@ -137,4 +137,4 @@ docker compose -f docker-compose.ecube-host.yml logs -n 100 ecube-host
 
 - **Design document:** [12-linux-host-deployment-and-usb-passthrough.md](../design/12-linux-host-deployment-and-usb-passthrough.md)
 - **Configuration reference:** [02-configuration-reference.md](02-configuration-reference.md)
-- **User manual:** [06-user-manual.md](06-user-manual.md)
+- **Administration guide:** [06-administration-guide.md](06-administration-guide.md)
