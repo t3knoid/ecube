@@ -180,6 +180,9 @@ class Settings(BaseSettings):
     #: Path to the ``umount`` binary.
     umount_binary_path: str = "/bin/umount"
 
+    #: Path to the ``mountpoint`` binary.
+    mountpoint_binary_path: str = "/bin/mountpoint"
+
     #: Path to the ``blkid`` binary (filesystem detection).
     blkid_binary_path: str = "/sbin/blkid"
 
