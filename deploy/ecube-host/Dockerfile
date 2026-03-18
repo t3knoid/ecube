@@ -9,6 +9,7 @@ RUN apt-get update && apt-get -y upgrade && apt-get install -y --no-install-reco
     bash \
     ca-certificates \
     curl \
+    exfatprogs \
     iproute2 \
     mount \
     nfs-common \
