@@ -58,11 +58,14 @@ class LinuxMountProvider:
 
     def os_unmount(self, local_mount_point: str) -> Tuple[bool, Optional[str]]:
         try:
-            subprocess.run(
+            result = subprocess.run(
                 [settings.umount_binary_path, local_mount_point],
                 capture_output=True, text=True,
                 timeout=settings.subprocess_timeout_seconds,
             )
+            if result.returncode != 0:
+                error = (result.stderr or result.stdout or "").strip() or "umount failed"
+                return False, error
             return True, None
         except Exception as exc:
             return False, str(exc)
