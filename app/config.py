@@ -8,6 +8,12 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env")
 
     database_url: str = "postgresql://ecube:ecube@localhost/ecube"
+    
+    #: Target platform for infrastructure implementations.  ``"linux"`` is
+    #: the only supported value; factory functions in ``app.infrastructure``
+    #: use this to select concrete Protocol implementations.
+    platform: Literal["linux"] = "linux"
+
     #: Shared signing key for JWT tokens **and** cookie-based sessions
     #: (when ``SESSION_BACKEND=cookie``).  Rotating this key invalidates
     #: all outstanding JWTs and active cookie sessions.
@@ -171,6 +177,18 @@ class Settings(BaseSettings):
 
     #: Path to the ``umount`` binary.
     umount_binary_path: str = "/bin/umount"
+
+    #: Path to the ``blkid`` binary (filesystem detection).
+    blkid_binary_path: str = "/sbin/blkid"
+
+    #: Path to the ``lsblk`` binary (filesystem detection fallback).
+    lsblk_binary_path: str = "/bin/lsblk"
+
+    #: Path to the ``mkfs.ext4`` binary.
+    mkfs_ext4_path: str = "/sbin/mkfs.ext4"
+
+    #: Path to the ``mkfs.exfat`` binary.
+    mkfs_exfat_path: str = "/sbin/mkfs.exfat"
 
     # ---------------------------------------------------------------------------
     # OS user/group management binary paths
