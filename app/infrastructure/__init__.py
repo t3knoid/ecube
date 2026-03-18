@@ -5,6 +5,7 @@ current platform.  Services and routers should depend on the Protocol types,
 never import concrete classes directly.
 """
 from app.config import settings
+from app.infrastructure.device_path import validate_device_path
 from app.infrastructure.filesystem_detection import (
     FilesystemDetector,
     LinuxFilesystemDetector,
@@ -45,6 +46,3 @@ def get_drive_formatter() -> DriveFormatter:
     if cls is None:
         raise ValueError(f"Unsupported platform: {settings.platform!r}")
     return cls()
-
-
-from app.infrastructure.device_path import validate_device_path
