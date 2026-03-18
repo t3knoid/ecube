@@ -97,9 +97,55 @@
 
 ## 4.3 Project Isolation Design (Critical)
 
-- Bind `current_project_id` on initialization and enforce at write time.
-- Reject mismatched project writes before copy begins.
-- Record denial in `audit_logs` with actor, drive, requested project, and reason.
+Project isolation prevents evidence contamination by binding each USB drive
+to a single project and rejecting any write from a different project.
+
+### Storage
+
+The binding is stored in the `usb_drives` database table in the
+`current_project_id` column (a nullable string). When a drive has no
+project binding the column is `NULL`.
+
+### Binding Lifecycle
+
+1. **Format** — The drive must have a recognized filesystem (`ext4`,
+   `exfat`, etc.) before it can be bound. Drives with `filesystem_type`
+   of `unformatted`, `unknown`, or `NULL` are rejected at initialization
+   with HTTP 409.
+2. **Initialize** — `POST /drives/{id}/initialize` accepts a `project_id`
+   in the request body. The service:
+   - Acquires a row-level lock on the drive (`SELECT … FOR UPDATE NOWAIT`)
+     to prevent concurrent mutations.
+   - Checks `current_project_id`: if already set **and** different from
+     the requested project, the request is denied with HTTP 403 and a
+     `PROJECT_ISOLATION_VIOLATION` audit event is recorded (including
+     actor, drive ID, existing project, and requested project).
+   - Sets `current_project_id = project_id` and transitions
+     `current_state` from `AVAILABLE` to `IN_USE`.
+   - Commits the change and emits a `DRIVE_INITIALIZED` audit event.
+3. **Copy enforcement** — When a copy job targets a drive, the job's
+   `project_id` is compared against the drive's `current_project_id`.
+   Mismatched writes are rejected **before** any data is copied.
+4. **Release** — The project binding persists until the drive is explicitly
+   re-initialized for a different project or reset. Removing a drive
+   physically does not clear its `current_project_id` in the database.
+
+### Concurrency
+
+Row-level locking (`FOR UPDATE NOWAIT`) ensures that two concurrent
+initialize or format requests for the same drive are serialized. If a
+lock cannot be acquired immediately, the request fails with HTTP 409
+rather than waiting.
+
+### Audit Trail
+
+Every project-isolation decision is recorded:
+
+| Event | When |
+|-------|------|
+| `DRIVE_INITIALIZED` | Drive successfully bound to a project |
+| `PROJECT_ISOLATION_VIOLATION` | Request attempted to bind a drive already assigned to a different project |
+| `INIT_REJECTED_FILESYSTEM` | Initialization rejected because drive has no recognized filesystem |
 
 ## 4.4 Job Management Design
 
