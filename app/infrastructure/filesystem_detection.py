@@ -7,16 +7,13 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import subprocess
 from typing import Protocol
 
 from app.config import settings
+from app.infrastructure.device_path import validate_device_path
 
 logger = logging.getLogger(__name__)
-
-# Allowed block-device path pattern: /dev/<name>, e.g. /dev/sdb, /dev/sdc1.
-_DEVICE_PATH_RE = re.compile(r"^/dev/[a-zA-Z][a-zA-Z0-9]*$")
 
 # Absolute paths to system utilities so PATH manipulation cannot redirect them.
 _BLKID_BIN = settings.blkid_binary_path
@@ -43,7 +40,7 @@ class LinuxFilesystemDetector:
     """Linux implementation using ``blkid`` and ``lsblk``."""
 
     def detect(self, device_path: str) -> str:
-        if not _DEVICE_PATH_RE.match(device_path):
+        if not validate_device_path(device_path):
             logger.warning("Invalid device path for filesystem detection: %r", device_path)
             return "unknown"
 

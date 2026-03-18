@@ -47,11 +47,4 @@ def get_drive_formatter() -> DriveFormatter:
     return cls()
 
 
-import re
-
-_DEVICE_PATH_RE = re.compile(r"^/dev/[a-zA-Z][a-zA-Z0-9]*$")
-
-
-def validate_device_path(path: str) -> bool:
-    """Return ``True`` if *path* matches the expected block-device pattern."""
-    return bool(_DEVICE_PATH_RE.match(path))
+from app.infrastructure.device_path import validate_device_path
