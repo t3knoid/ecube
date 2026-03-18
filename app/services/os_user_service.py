@@ -14,13 +14,17 @@ Security notes:
 
 from __future__ import annotations
 
-import grp
 import logging
-import pwd
 import subprocess
-from dataclasses import dataclass, field
-from typing import List, Optional
 
+try:
+    import grp
+    import pwd
+except ImportError:  # pragma: no cover – Linux-only stdlib modules
+    grp = None  # type: ignore[assignment]
+    pwd = None  # type: ignore[assignment]
+
+from typing import List, Optional
 from app.config import settings
 from app.constants import (
     ECUBE_GROUP_PREFIX,
@@ -30,38 +34,71 @@ from app.constants import (
     USERNAME_RE,
 )
 
+# Re-export platform-neutral types so existing ``os_user_service.X`` access
+# (e.g. ``os_user_service.OSUserError``) keeps working.
+from app.infrastructure.os_user_protocol import (  # noqa: F401 – re-export
+    OSGroup,
+    OSUser,
+    OSUserError,
+    OsUserProvider,
+)
+
 logger = logging.getLogger(__name__)
 
 # Default subprocess timeout (seconds).
 _SUBPROCESS_TIMEOUT = settings.subprocess_timeout_seconds
 
 
-class OSUserError(Exception):
-    """Raised when an OS user/group operation fails."""
-
-    def __init__(self, message: str, returncode: int | None = None) -> None:
-        self.message = message
-        self.returncode = returncode
-        super().__init__(message)
-
-
-@dataclass
-class OSUser:
-    """Representation of an OS user."""
-    username: str
-    uid: int
-    gid: int
-    home: str
-    shell: str
-    groups: List[str] = field(default_factory=list)
+def _require_posix() -> None:
+    """Raise a clear error when POSIX modules are unavailable."""
+    if pwd is None or grp is None:
+        raise RuntimeError(
+            "This function requires the 'pwd' and 'grp' modules "
+            "which are only available on POSIX/Linux systems."
+        )
 
 
-@dataclass
-class OSGroup:
-    """Representation of an OS group."""
-    name: str
-    gid: int
-    members: List[str] = field(default_factory=list)
+class LinuxOsUserProvider:
+    """Linux implementation using ``useradd``, ``userdel``, ``chpasswd``, etc."""
+
+    def __init__(self) -> None:
+        _require_posix()
+
+    def user_exists(self, username: str) -> bool:
+        return user_exists(username)
+
+    def group_exists(self, name: str) -> bool:
+        return group_exists(name)
+
+    def create_user(self, username: str, password: str, groups: Optional[List[str]] = None) -> OSUser:
+        return create_user(username, password, groups)
+
+    def list_users(self, ecube_only: bool = True) -> List[OSUser]:
+        return list_users(ecube_only)
+
+    def delete_user(self, username: str, *, _skip_managed_check: bool = False) -> None:
+        return delete_user(username, _skip_managed_check=_skip_managed_check)
+
+    def reset_password(self, username: str, password: str, *, _skip_managed_check: bool = False) -> None:
+        return reset_password(username, password, _skip_managed_check=_skip_managed_check)
+
+    def set_user_groups(self, username: str, groups: List[str]) -> OSUser:
+        return set_user_groups(username, groups)
+
+    def add_user_to_groups(self, username: str, groups: List[str], *, _skip_managed_check: bool = False) -> OSUser:
+        return add_user_to_groups(username, groups, _skip_managed_check=_skip_managed_check)
+
+    def create_group(self, name: str) -> OSGroup:
+        return create_group(name)
+
+    def list_groups(self, ecube_only: bool = True) -> List[OSGroup]:
+        return list_groups(ecube_only)
+
+    def delete_group(self, name: str) -> None:
+        return delete_group(name)
+
+    def ensure_ecube_groups(self) -> List[str]:
+        return ensure_ecube_groups()
 
 
 def _run_sudo(
@@ -149,6 +186,7 @@ def _is_reserved_username(username: str) -> bool:
 
 def _is_ecube_managed(username: str) -> bool:
     """Return True if *username* belongs to at least one ``ecube-*`` group."""
+    _require_posix()
     # First, check the user's primary group.
     try:
         pw_entry = pwd.getpwnam(username)
@@ -195,6 +233,7 @@ def _require_ecube_managed_user(username: str) -> None:
 
 def user_exists(username: str) -> bool:
     """Check if an OS user exists."""
+    _require_posix()
     try:
         pwd.getpwnam(username)
         return True
@@ -204,6 +243,7 @@ def user_exists(username: str) -> bool:
 
 def group_exists(name: str) -> bool:
     """Check if an OS group exists."""
+    _require_posix()
     try:
         grp.getgrnam(name)
         return True
@@ -213,6 +253,7 @@ def group_exists(name: str) -> bool:
 
 def _get_user_groups(username: str) -> List[str]:
     """Return group names the user belongs to."""
+    _require_posix()
     groups = []
     try:
         for g in grp.getgrall():
@@ -300,6 +341,7 @@ def create_user(
 
 def list_users(ecube_only: bool = True) -> List[OSUser]:
     """List OS users, optionally filtered to ECUBE-relevant groups."""
+    _require_posix()
     # Build a username→groups mapping in one pass over grp.getgrall()
     # to avoid O(users×groups) repeated scans.
     all_groups = grp.getgrall()
@@ -487,6 +529,7 @@ def create_group(name: str) -> OSGroup:
 
 def list_groups(ecube_only: bool = True) -> List[OSGroup]:
     """List OS groups, optionally filtered to ECUBE-relevant names."""
+    _require_posix()
     result: List[OSGroup] = []
     for g in grp.getgrall():
         if ecube_only and not g.gr_name.startswith(ECUBE_GROUP_PREFIX):
