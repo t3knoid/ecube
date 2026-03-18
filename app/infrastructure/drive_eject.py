@@ -14,7 +14,7 @@ from __future__ import annotations
 import os.path
 import re
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional, Protocol, Tuple
 
 from app.config import settings
