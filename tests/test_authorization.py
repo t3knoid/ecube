@@ -9,6 +9,7 @@ Verifies that:
 """
 
 import time
+from unittest.mock import MagicMock, patch
 
 import jwt
 import pytest
@@ -17,6 +18,13 @@ from fastapi.testclient import TestClient
 from app.config import settings
 from app.database import get_db
 from app.main import app
+
+
+def _fake_eject(sync_rv=(True, None), unmount_rv=(True, None)):
+    provider = MagicMock()
+    provider.sync_filesystem.return_value = sync_rv
+    provider.unmount_device.return_value = unmount_rv
+    return provider
 
 
 # ---------------------------------------------------------------------------
@@ -155,7 +163,7 @@ class TestDriveAuthorization:
         db.add(drive)
         db.commit()
         c = _client_for_role(db, ["admin"])
-        with patch("app.services.drive_service.sync_filesystem", return_value=(True, None)):
+        with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject()):
             assert c.post(f"/drives/{drive.id}/prepare-eject").status_code == 200
 
     def test_prepare_eject_manager_allowed(self, db):
@@ -170,7 +178,7 @@ class TestDriveAuthorization:
         db.add(drive)
         db.commit()
         c = _client_for_role(db, ["manager"])
-        with patch("app.services.drive_service.sync_filesystem", return_value=(True, None)):
+        with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject()):
             assert c.post(f"/drives/{drive.id}/prepare-eject").status_code == 200
 
     def test_prepare_eject_processor_denied(self, db):
