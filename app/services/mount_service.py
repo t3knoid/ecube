@@ -61,7 +61,7 @@ class LinuxMountProvider:
     def check_mounted(self, local_mount_point: str) -> Optional[bool]:
         try:
             result = subprocess.run(
-                ["mountpoint", "-q", local_mount_point],
+                [settings.mountpoint_binary_path, "-q", local_mount_point],
                 capture_output=True, timeout=10,
             )
             return result.returncode == 0
