@@ -199,6 +199,12 @@ class Settings(BaseSettings):
     # OS user/group management binary paths
     # ---------------------------------------------------------------------------
 
+    #: Whether to prepend ``sudo`` to OS management commands.  Set to
+    #: ``false`` when the process already runs as root (e.g. inside a
+    #: Docker container).  Defaults to ``true`` for bare-metal deployments
+    #: where the service runs as a non-root ``ecube`` account.
+    use_sudo: bool = True
+
     #: Path to the ``useradd`` binary (must match sudoers whitelist).
     useradd_binary_path: str = "/usr/sbin/useradd"
 
