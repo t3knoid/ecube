@@ -10,6 +10,7 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
 from app.auth import get_current_user
+from app import API_VERSION, __version__
 from app.config import settings
 from app.exceptions import AuthenticationError, AuthorizationError, ConflictError, ECUBEException
 from app.logging_config import configure_logging
@@ -140,7 +141,7 @@ async def lifespan(application: FastAPI):
 app = FastAPI(
     title="ECUBE",
     description="Evidence Copying & USB Based Export Platform — Secure evidence export solution for encrypted USB drives.",
-    version="0.1.0",
+    version=__version__,
     contact={
         "name": settings.api_contact_name,
         "email": settings.api_contact_email,
@@ -169,7 +170,7 @@ def introspection_version():
 
     No authentication required. Useful for deployment verification.
     """
-    return {"version": "0.1.0", "api_version": "1.0.0"}
+    return {"version": __version__, "api_version": API_VERSION}
 
 
 def custom_openapi():
