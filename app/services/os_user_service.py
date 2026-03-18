@@ -21,9 +21,10 @@ try:
     import grp
     import pwd
 except ImportError:  # pragma: no cover – Linux-only stdlib modules
-    pass
-from typing import List, Optional
+    grp = None  # type: ignore[assignment]
+    pwd = None  # type: ignore[assignment]
 
+from typing import List, Optional
 from app.config import settings
 from app.constants import (
     ECUBE_GROUP_PREFIX,
@@ -48,8 +49,20 @@ logger = logging.getLogger(__name__)
 _SUBPROCESS_TIMEOUT = settings.subprocess_timeout_seconds
 
 
+def _require_posix() -> None:
+    """Raise a clear error when POSIX modules are unavailable."""
+    if pwd is None or grp is None:
+        raise RuntimeError(
+            "This function requires the 'pwd' and 'grp' modules "
+            "which are only available on POSIX/Linux systems."
+        )
+
+
 class LinuxOsUserProvider:
     """Linux implementation using ``useradd``, ``userdel``, ``chpasswd``, etc."""
+
+    def __init__(self) -> None:
+        _require_posix()
 
     def user_exists(self, username: str) -> bool:
         return user_exists(username)

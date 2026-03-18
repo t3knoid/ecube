@@ -16,7 +16,8 @@ try:
     import grp
     import pwd
 except ImportError:  # pragma: no cover – Linux-only stdlib modules
-    pass
+    grp = None  # type: ignore[assignment]
+    pwd = None  # type: ignore[assignment]
 from typing import List
 
 # Re-export so existing ``from app.services.pam_service import PamAuthenticator``
@@ -26,11 +27,23 @@ from app.infrastructure.pam_protocol import PamAuthenticator  # noqa: F401 – r
 logger = logging.getLogger(__name__)
 
 
+def _require_posix() -> None:
+    """Raise a clear error when POSIX modules are unavailable."""
+    if pwd is None or grp is None:
+        raise RuntimeError(
+            "This function requires the 'pwd' and 'grp' modules "
+            "which are only available on POSIX/Linux systems."
+        )
+
+
 class LinuxPamAuthenticator:
     """Authenticate credentials against Linux PAM.
 
     Requires the ``python-pam`` package (``pam.authenticate``).
     """
+
+    def __init__(self) -> None:
+        _require_posix()
 
     def authenticate(self, username: str, password: str) -> bool:
         import pam as _pam  # type: ignore[import-untyped]
@@ -48,6 +61,7 @@ def get_user_groups(username: str) -> List[str]:
 
     Includes the user's primary group and all supplementary groups.
     """
+    _require_posix()
     groups: set[str] = set()
 
     try:
