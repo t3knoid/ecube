@@ -49,9 +49,15 @@ from app.schemas.admin import (
     ResetPasswordRequest,
     SetOSGroupsRequest,
 )
+from app.infrastructure import get_os_user_provider
 from app.services import os_user_service
+from app.services.os_user_service import OsUserProvider
 
 logger = logging.getLogger(__name__)
+
+
+def _get_provider() -> OsUserProvider:
+    return get_os_user_provider()
 
 
 def _raise_os_error(exc: os_user_service.OSUserError, *, context: str = "OS operation") -> None:
@@ -247,8 +253,9 @@ def create_os_user(
     current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSUserResponse:
     """Create an OS user, set password, and optionally add to groups."""
+    provider = _get_provider()
     try:
-        os_user = os_user_service.create_user(
+        os_user = provider.create_user(
             username=body.username,
             password=body.password,
             groups=body.groups,
@@ -269,7 +276,7 @@ def create_os_user(
             # guard defensively.  The OS user was already created; delete it to
             # avoid leaving partial state.
             try:
-                os_user_service.delete_user(body.username, _skip_managed_check=True)
+                provider.delete_user(body.username, _skip_managed_check=True)
             except Exception:
                 logger.exception(
                     "Failed to clean up OS user '%s' after role validation error",
@@ -280,7 +287,7 @@ def create_os_user(
             # DB failure — OS user exists but role assignment failed.
             db.rollback()
             try:
-                os_user_service.delete_user(body.username, _skip_managed_check=True)
+                provider.delete_user(body.username, _skip_managed_check=True)
             except Exception:
                 logger.exception(
                     "Failed to clean up OS user '%s' after DB error in set_roles",
@@ -319,7 +326,7 @@ def list_os_users(
     _current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSUserListResponse:
     """List OS users filtered to ECUBE-relevant groups."""
-    users = os_user_service.list_users(ecube_only=True)
+    users = _get_provider().list_users(ecube_only=True)
     return OSUserListResponse(
         users=[
             OSUserResponse(
@@ -346,7 +353,7 @@ def delete_os_user(
     _validate_path_username(username)
 
     try:
-        os_user_service.delete_user(username)
+        _get_provider().delete_user(username)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except os_user_service.OSUserError as exc:
@@ -383,7 +390,7 @@ def reset_os_user_password(
     _validate_path_username(username)
 
     try:
-        os_user_service.reset_password(username, body.password)
+        _get_provider().reset_password(username, body.password)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except os_user_service.OSUserError as exc:
@@ -409,7 +416,7 @@ def set_os_user_groups(
     _validate_path_username(username)
 
     try:
-        os_user = os_user_service.set_user_groups(username, body.groups)
+        os_user = _get_provider().set_user_groups(username, body.groups)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except os_user_service.OSUserError as exc:
@@ -443,7 +450,7 @@ def add_os_user_groups(
     _validate_path_username(username)
 
     try:
-        os_user = os_user_service.add_user_to_groups(username, body.groups)
+        os_user = _get_provider().add_user_to_groups(username, body.groups)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except os_user_service.OSUserError as exc:
@@ -480,7 +487,7 @@ def create_os_group(
 ) -> OSGroupResponse:
     """Create a new OS group on the host system."""
     try:
-        os_group = os_user_service.create_group(body.name)
+        os_group = _get_provider().create_group(body.name)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except os_user_service.OSUserError as exc:
@@ -503,7 +510,7 @@ def list_os_groups(
     _current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSGroupListResponse:
     """List OS groups filtered to ECUBE-relevant names."""
-    groups = os_user_service.list_groups(ecube_only=True)
+    groups = _get_provider().list_groups(ecube_only=True)
     return OSGroupListResponse(
         groups=[
             OSGroupResponse(name=g.name, gid=g.gid, members=g.members)
@@ -526,7 +533,7 @@ def delete_os_group(
         raise HTTPException(status_code=422, detail=str(exc))
 
     try:
-        os_user_service.delete_group(name)
+        _get_provider().delete_group(name)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except os_user_service.OSUserError as exc:
