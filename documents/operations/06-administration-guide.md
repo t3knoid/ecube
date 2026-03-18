@@ -520,7 +520,15 @@ curl -k -X DELETE -H "Authorization: Bearer $TOKEN" \
 
 ## Common Operational Tasks
 
-### Task 1: Add Network Mount
+### Task 1: List USB Drives
+
+```bash
+# Via API (requires any authenticated role)
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  https://localhost:8443/drives
+```
+
+### Task 2: Add Network Mount
 
 ```bash
 # Via API (requires manager role)
@@ -534,7 +542,32 @@ curl -X POST https://localhost:8443/mounts \
   }'
 ```
 
-### Task 2: Initialize USB Drive
+### Task 3: Format USB Drive
+
+```bash
+# Via API (requires admin or manager role)
+# Format with ext4 (Linux-native, recommended for large evidence sets)
+curl -k -X POST https://localhost:8443/drives/1/format \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filesystem_type": "ext4"
+  }'
+
+# Format with exFAT (cross-platform, readable on Windows/macOS)
+curl -k -X POST https://localhost:8443/drives/1/format \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filesystem_type": "exfat"
+  }'
+```
+
+> **Note:** The drive must be in `AVAILABLE` state and not currently mounted.
+> Formatting erases all data on the drive. Replace `1` with the actual drive
+> ID from `GET /drives`.
+
+### Task 4: Initialize USB Drive
 
 ```bash
 # Via API (requires manager role)
@@ -546,7 +579,7 @@ curl -X POST https://localhost:8443/drives/1/initialize \
   }'
 ```
 
-### Task 3: Create Export Job
+### Task 5: Create Export Job
 
 ```bash
 # Via API (requires processor role)
@@ -560,7 +593,7 @@ curl -X POST https://localhost:8443/jobs \
   }'
 ```
 
-### Task 4: Start Copy Job
+### Task 6: Start Copy Job
 
 ```bash
 # Via API (requires processor role)
@@ -568,7 +601,7 @@ curl -X POST https://localhost:8443/jobs/1/start \
   -H "Authorization: Bearer $JWT_TOKEN"
 ```
 
-### Task 5: View Job Status
+### Task 7: View Job Status
 
 ```bash
 # Via API (all authenticated roles)
@@ -576,7 +609,7 @@ curl -X GET https://localhost:8443/jobs/1 \
   -H "Authorization: Bearer $JWT_TOKEN"
 ```
 
-### Task 6: Query Audit Logs
+### Task 8: Query Audit Logs
 
 ```bash
 # Via API (requires admin, manager, or auditor role)
