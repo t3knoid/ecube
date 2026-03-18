@@ -126,6 +126,8 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 | Method | Endpoint | Role | Description |
 | ------ | ----------------------- | ------ | ----------------------- |
+| GET | `/introspection/version` | public | Application and API version |
+| GET | `/introspection/drives` | all | Registered USB drive inventory |
 | GET | `/introspection/usb/topology` | all | USB hub and device topology |
 | GET | `/introspection/block-devices` | all | Kernel block device inventory |
 | GET | `/introspection/mounts` | all | Mount inventory and status |
