@@ -9,10 +9,12 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql://ecube:ecube@localhost/ecube"
     
-    #: Target platform for infrastructure implementations.  ``"linux"`` is
-    #: the only supported value; factory functions in ``app.infrastructure``
-    #: use this to select concrete Protocol implementations.
-    platform: Literal["linux"] = "linux"
+    #: Target platform for infrastructure implementations.  Factory functions
+    #: in ``app.infrastructure`` use this to select concrete Protocol
+    #: implementations.  Currently only ``"linux"`` adapters are provided;
+    #: ``"windows"`` is accepted by the schema but reserved for future use
+    #: and will raise ``ValueError`` at runtime until adapters are registered.
+    platform: Literal["linux", "windows"] = "linux"
 
     #: Shared signing key for JWT tokens **and** cookie-based sessions
     #: (when ``SESSION_BACKEND=cookie``).  Rotating this key invalidates
@@ -178,6 +180,9 @@ class Settings(BaseSettings):
     #: Path to the ``umount`` binary.
     umount_binary_path: str = "/bin/umount"
 
+    #: Path to the ``mountpoint`` binary.
+    mountpoint_binary_path: str = "/bin/mountpoint"
+
     #: Path to the ``blkid`` binary (filesystem detection).
     blkid_binary_path: str = "/sbin/blkid"
 
@@ -214,6 +219,9 @@ class Settings(BaseSettings):
 
     #: Path to ``/proc/mounts`` for reading active mount information.
     procfs_mounts_path: str = "/proc/mounts"
+
+    #: Path to ``/proc/diskstats`` for reading block-device statistics.
+    procfs_diskstats_path: str = "/proc/diskstats"
 
     #: Path to the sysfs USB devices directory.
     sysfs_usb_devices_path: str = "/sys/bus/usb/devices"
