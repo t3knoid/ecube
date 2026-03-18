@@ -9,8 +9,8 @@
 
 set -euo pipefail
 
-MD_FILE="documents/operations/01-qa-testing-guide-baremetal.md"
-XLSX_FILE="documents/operations/ecube-qa-test-cases.xlsx"
+MD_FILE="documents/testing/01-qa-testing-guide-baremetal.md"
+XLSX_FILE="documents/testing/ecube-qa-test-cases.xlsx"
 
 # Only run when either file is staged
 if git diff --cached --name-only | grep -qE "(${MD_FILE}|${XLSX_FILE})"; then
