@@ -327,7 +327,7 @@ LOCAL_GROUP_ROLE_MAP='{"ecube-admins": ["admin"], "ecube-managers": ["manager"],
 TOKEN_EXPIRE_MINUTES=60
 ```
 
-For full user management details, see [06-user-manual.md](06-user-manual.md#user-management).
+For full user management details, see [06-administration-guide.md](06-administration-guide.md#user-management).
 
 ---
 
