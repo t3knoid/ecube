@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.infrastructure.drive_eject import DriveEjectProvider, sync_filesystem, unmount_device
+from app.infrastructure.drive_eject import DriveEjectProvider
 from app.infrastructure.drive_format import DriveFormatter
 from app.infrastructure import validate_device_path
 from app.models.hardware import DriveState, UsbDrive
