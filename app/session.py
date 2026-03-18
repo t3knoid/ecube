@@ -306,7 +306,6 @@ class _SessionProxy:
             https_only=https_only,
             domain=domain,
         )
-        self._secret_key = secret_key
         # Start with cookie-based sessions (no network I/O required).
         self._cookie_backend: ASGIApp = SessionMiddleware(
             app,
