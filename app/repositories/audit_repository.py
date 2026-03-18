@@ -1,9 +1,12 @@
 from datetime import datetime
+import logging
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
 from app.models.audit import AuditLog
+
+_logger = logging.getLogger(__name__)
 
 
 class AuditRepository:
@@ -72,3 +75,19 @@ class AuditRepository:
         if until is not None:
             q = q.filter(AuditLog.timestamp <= until)
         return q.order_by(AuditLog.timestamp.desc(), AuditLog.id.desc()).offset(offset).limit(limit).all()
+
+
+def best_effort_audit(
+    db: Session,
+    action: str,
+    user: Optional[str] = None,
+    details: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Write an audit log entry, silently logging on failure.
+
+    Use this instead of duplicating try/except wrappers in every router.
+    """
+    try:
+        AuditRepository(db).add(action=action, user=user, details=details)
+    except Exception:
+        _logger.exception("Failed to write audit log for %s", action)

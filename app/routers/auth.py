@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app.auth_providers import get_role_resolver
 from app.config import settings
 from app.database import get_db
-from app.repositories.audit_repository import AuditRepository
+from app.repositories.audit_repository import best_effort_audit
 from app.repositories.user_role_repository import UserRoleRepository
 from app.services.pam_service import LinuxPamAuthenticator, get_user_groups
 
@@ -50,18 +50,6 @@ class TokenResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _audit_log(db: Session, action: str, username: Optional[str], details: dict) -> None:
-    """Best-effort audit log.  Never raises."""
-    try:
-        AuditRepository(db).add(action=action, user=username, details=details)
-    except Exception:
-        logger.exception("Failed to write audit log for %s", action)
-
-
-# ---------------------------------------------------------------------------
 # Endpoint
 # ---------------------------------------------------------------------------
 
@@ -87,7 +75,7 @@ def login(
 
     pam = LinuxPamAuthenticator()
     if not pam.authenticate(body.username, body.password):
-        _audit_log(
+        best_effort_audit(
             db,
             "AUTH_FAILURE",
             body.username,
@@ -117,7 +105,7 @@ def login(
     }
     token = jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
-    _audit_log(
+    best_effort_audit(
         db,
         "AUTH_SUCCESS",
         body.username,

@@ -341,18 +341,31 @@ def run_copy_job(job_id: int) -> None:
                     job_repo.save(job)
                 except Exception:
                     logger.exception("DB commit failed setting job %s to FAILED (timeout)", job_id)
-
-                try:
-                    AuditRepository(db).add(
-                        action="JOB_TIMEOUT",
-                        job_id=job_id,
-                        details={
-                            "timeout_seconds": timeout,
-                            "elapsed_seconds": round(time.monotonic() - job_start, 2),
-                        },
-                    )
-                except Exception:
-                    logger.exception("Failed to write audit log for JOB_TIMEOUT")
+                    try:
+                        AuditRepository(db).add(
+                            action="JOB_STATUS_PERSIST_FAILED",
+                            job_id=job_id,
+                            details={
+                                "intended_status": "FAILED",
+                                "reason": "timeout",
+                                "timeout_seconds": timeout,
+                                "elapsed_seconds": round(time.monotonic() - job_start, 2),
+                            },
+                        )
+                    except Exception:
+                        logger.exception("Failed to write audit log for JOB_STATUS_PERSIST_FAILED")
+                else:
+                    try:
+                        AuditRepository(db).add(
+                            action="JOB_TIMEOUT",
+                            job_id=job_id,
+                            details={
+                                "timeout_seconds": timeout,
+                                "elapsed_seconds": round(time.monotonic() - job_start, 2),
+                            },
+                        )
+                    except Exception:
+                        logger.exception("Failed to write audit log for JOB_TIMEOUT")
             else:
                 job.status = JobStatus.FAILED if error_count > 0 else JobStatus.COMPLETED
                 job.completed_at = datetime.now(timezone.utc)
@@ -360,6 +373,34 @@ def run_copy_job(job_id: int) -> None:
                     job_repo.save(job)
                 except Exception:
                     logger.exception("DB commit failed setting final status for job %s", job_id)
+                    try:
+                        AuditRepository(db).add(
+                            action="JOB_STATUS_PERSIST_FAILED",
+                            job_id=job_id,
+                            details={
+                                "intended_status": job.status.value,
+                                "file_count": job.file_count,
+                                "error_count": error_count,
+                                "elapsed_seconds": round(time.monotonic() - job_start, 2),
+                            },
+                        )
+                    except Exception:
+                        logger.exception("Failed to write audit log for JOB_STATUS_PERSIST_FAILED")
+                else:
+                    audit_action = "JOB_COMPLETED" if job.status == JobStatus.COMPLETED else "JOB_FAILED"
+                    try:
+                        AuditRepository(db).add(
+                            action=audit_action,
+                            job_id=job_id,
+                            details={
+                                "status": job.status.value,
+                                "file_count": job.file_count,
+                                "error_count": error_count,
+                                "elapsed_seconds": round(time.monotonic() - job_start, 2),
+                            },
+                        )
+                    except Exception:
+                        logger.exception("Failed to write audit log for %s", audit_action)
     finally:
         db.close()
 
@@ -417,5 +458,32 @@ def run_verify_job(job_id: int) -> None:
                 job_repo.save(job)
             except Exception:
                 logger.exception("DB commit failed setting verification result for job %s", job_id)
+                try:
+                    AuditRepository(db).add(
+                        action="JOB_STATUS_PERSIST_FAILED",
+                        job_id=job_id,
+                        details={
+                            "intended_status": job.status.value,
+                            "phase": "verification",
+                            "files_verified": len(files),
+                            "mismatches": any_mismatch,
+                        },
+                    )
+                except Exception:
+                    logger.exception("Failed to write audit log for JOB_STATUS_PERSIST_FAILED")
+            else:
+                audit_action = "JOB_VERIFICATION_COMPLETED" if not any_mismatch else "JOB_VERIFICATION_FAILED"
+                try:
+                    AuditRepository(db).add(
+                        action=audit_action,
+                        job_id=job_id,
+                        details={
+                            "status": job.status.value,
+                            "files_verified": len(files),
+                            "mismatches": any_mismatch,
+                        },
+                    )
+                except Exception:
+                    logger.exception("Failed to write audit log for %s", audit_action)
     finally:
         db.close()

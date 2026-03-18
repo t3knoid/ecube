@@ -51,7 +51,7 @@ def _audit_by_action(db, action):
 
 class TestDriveAuditLogging:
     def test_initialize_drive_logs_actor(self, manager_client, db):
-        drive = UsbDrive(device_identifier="AUDIT-INIT", current_state=DriveState.AVAILABLE)
+        drive = UsbDrive(device_identifier="AUDIT-INIT", current_state=DriveState.AVAILABLE, filesystem_type="ext4")
         db.add(drive)
         db.commit()
 
@@ -71,6 +71,7 @@ class TestDriveAuditLogging:
             device_identifier="AUDIT-ISO",
             current_state=DriveState.IN_USE,
             current_project_id="PROJ-A",
+            filesystem_type="ext4",
         )
         db.add(drive)
         db.commit()
