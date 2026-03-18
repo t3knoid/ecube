@@ -212,11 +212,11 @@ def _redact_url(url: str) -> str:
     try:
         parsed = urlparse(url)
         if parsed.username or parsed.password:
-            # Rebuild netloc as ***@host:port
-            host_port = parsed.hostname or ""
-            if parsed.port:
-                host_port += f":{parsed.port}"
-            redacted_netloc = f"***@{host_port}"
+            # Replace userinfo (everything before @) while keeping the
+            # host:port portion of netloc unchanged — this preserves
+            # IPv6 brackets and any other original formatting.
+            _, host_part = parsed.netloc.rsplit("@", 1)
+            redacted_netloc = f"***@{host_part}"
             return urlunparse(parsed._replace(netloc=redacted_netloc))
         return url
     except Exception:
