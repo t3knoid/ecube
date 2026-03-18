@@ -9,10 +9,14 @@ is enabled (for example, when ``role_resolver`` is set to ``"local"`` or
 
 from __future__ import annotations
 
-import grp
 import logging
 import os
-import pwd
+
+try:
+    import grp
+    import pwd
+except ImportError:  # pragma: no cover – Linux-only stdlib modules
+    pass
 from typing import List, Protocol
 
 logger = logging.getLogger(__name__)

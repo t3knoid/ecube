@@ -14,10 +14,14 @@ Security notes:
 
 from __future__ import annotations
 
-import grp
 import logging
-import pwd
 import subprocess
+
+try:
+    import grp
+    import pwd
+except ImportError:  # pragma: no cover – Linux-only stdlib modules
+    pass
 from dataclasses import dataclass, field
 from typing import List, Optional, Protocol
 
