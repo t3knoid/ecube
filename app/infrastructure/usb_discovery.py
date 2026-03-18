@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Protocol
 
 from app.config import settings
 
@@ -61,6 +61,28 @@ class DiscoveredTopology:
     hubs: List[DiscoveredHub] = field(default_factory=list)
     ports: List[DiscoveredPort] = field(default_factory=list)
     drives: List[DiscoveredDrive] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# DriveDiscoveryProvider Protocol
+# ---------------------------------------------------------------------------
+
+class DriveDiscoveryProvider(Protocol):
+    """Platform-agnostic interface for USB topology discovery."""
+
+    def discover_topology(self) -> DiscoveredTopology: ...
+
+
+class LinuxDriveDiscovery:
+    """Linux implementation that reads USB topology from sysfs."""
+
+    def discover_topology(self) -> DiscoveredTopology:
+        return discover_usb_topology()
+
+
+# ---------------------------------------------------------------------------
+# Helper functions
+# ---------------------------------------------------------------------------
 
 
 def _read_sysfs_attr(dev_path: str, attr: str) -> Optional[str]:

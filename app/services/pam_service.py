@@ -23,6 +23,8 @@ class PamAuthenticator(Protocol):
 
     def authenticate(self, username: str, password: str) -> bool: ...
 
+    def get_user_groups(self, username: str) -> List[str]: ...
+
 
 class LinuxPamAuthenticator:
     """Authenticate credentials against Linux PAM.
@@ -36,6 +38,9 @@ class LinuxPamAuthenticator:
 
         p = _pam.pam()
         return bool(p.authenticate(username, password))
+
+    def get_user_groups(self, username: str) -> List[str]:
+        return get_user_groups(username)
 
 
 def get_user_groups(username: str) -> List[str]:
