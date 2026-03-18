@@ -18,15 +18,6 @@ _ALL_ROLES = require_roles("admin", "manager", "processor", "auditor")
 _ADMIN_AUDITOR = require_roles("admin", "auditor")
 
 
-@router.get("/version")
-def version():
-    """Return application and API version information.
-
-    No authentication required. Useful for deployment verification.
-    """
-    return {"version": "0.1.0", "api_version": "1.0.0"}
-
-
 @router.get("/drives")
 def drives_inventory(
     db: Session = Depends(get_db),
