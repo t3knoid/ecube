@@ -11,7 +11,9 @@ class Settings(BaseSettings):
     
     #: Target platform for infrastructure implementations.  Factory functions
     #: in ``app.infrastructure`` use this to select concrete Protocol
-    #: implementations.
+    #: implementations.  Currently only ``"linux"`` adapters are provided;
+    #: ``"windows"`` is accepted by the schema but reserved for future use
+    #: and will raise ``ValueError`` at runtime until adapters are registered.
     platform: Literal["linux", "windows"] = "linux"
 
     #: Shared signing key for JWT tokens **and** cookie-based sessions
