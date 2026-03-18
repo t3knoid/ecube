@@ -20,6 +20,8 @@ from app.infrastructure.usb_discovery import (
 )
 from app.infrastructure.drive_eject import (
     DriveEjectProvider,
+    EjectError,
+    EjectResult,
     LinuxDriveEject,
 )
 from app.services.mount_service import (
@@ -40,6 +42,8 @@ __all__ = [
     "DriveFormatter",
     "DriveDiscoveryProvider",
     "DriveEjectProvider",
+    "EjectError",
+    "EjectResult",
     "MountProvider",
     "OsUserProvider",
     "PamAuthenticator",

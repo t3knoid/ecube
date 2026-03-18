@@ -126,11 +126,8 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
         )
 
     # Perform potentially slow OS operations without holding a database lock.
-    flush_ok, flush_err = provider.sync_filesystem()
-    unmount_ok: bool = True
-    unmount_err: Optional[str] = None
-    if initial_device_path:
-        unmount_ok, unmount_err = provider.unmount_device(initial_device_path)
+    # prepare_eject handles sync + unmount internally and returns a structured result.
+    result = provider.prepare_eject(initial_device_path)
 
     # Re-lock only for the validation and state transition; the audit write happens
     # in a separate transaction after this state change is committed.
@@ -155,7 +152,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
             detail=f"Device path changed during prepare-eject (was: {initial_device_path!r}, now: {drive.filesystem_path!r}); operation aborted",
         )
 
-    if flush_ok and unmount_ok:
+    if result.success:
         drive.current_state = DriveState.AVAILABLE
         try:
             drive_repo.save(drive)
@@ -175,8 +172,8 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                 details={
                     "drive_id": drive_id,
                     "filesystem_path": initial_device_path,
-                    "flush_ok": flush_ok,
-                    "unmount_ok": unmount_ok,
+                    "flush_ok": result.flush_ok,
+                    "unmount_ok": result.unmount_ok,
                 },
             )
         except Exception:
@@ -189,10 +186,10 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                 details={
                     "drive_id": drive_id,
                     "filesystem_path": initial_device_path,
-                    "flush_ok": flush_ok,
-                    "flush_error": flush_err,
-                    "unmount_ok": unmount_ok,
-                    "unmount_error": unmount_err,
+                    "flush_ok": result.flush_ok,
+                    "flush_error": result.flush_error,
+                    "unmount_ok": result.unmount_ok,
+                    "unmount_error": result.unmount_error,
                 },
             )
         except Exception:
