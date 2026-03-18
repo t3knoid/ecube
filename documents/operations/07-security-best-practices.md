@@ -57,7 +57,7 @@ sudo certbot certonly --standalone -d ecube.example.com
 - Restrict API access to trusted networks (firewall rules)
 - Use VPN or SSH tunnel for remote access
 - Enable audit logging for all operations (enabled by default)
-- Review audit logs weekly: `curl https://localhost:8443/audit?limit=1000`
+- Review audit logs weekly: `curl -k -H "Authorization: Bearer $TOKEN" https://localhost:8443/audit?limit=1000`
 
 ## 5. File Permissions
 
