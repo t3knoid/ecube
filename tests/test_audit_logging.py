@@ -22,6 +22,19 @@ from app.models.jobs import ExportFile, ExportJob, FileStatus, JobStatus
 from app.models.network import MountStatus, MountType, NetworkMount
 
 
+from app.infrastructure.drive_eject import EjectResult
+
+
+def _fake_eject(flush_ok=True, unmount_ok=True,
+                flush_error=None, unmount_error=None):
+    provider = MagicMock()
+    provider.prepare_eject.return_value = EjectResult(
+        flush_ok=flush_ok, unmount_ok=unmount_ok,
+        flush_error=flush_error, unmount_error=unmount_error,
+    )
+    return provider
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -100,7 +113,7 @@ class TestDriveAuditLogging:
         db.add(drive)
         db.commit()
 
-        with patch("app.services.drive_service.sync_filesystem", return_value=(True, None)):
+        with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject()):
             response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
         assert response.status_code == 200
 

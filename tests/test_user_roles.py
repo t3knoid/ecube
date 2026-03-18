@@ -13,8 +13,10 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
+from app.main import app as fastapi_app
 from app.models.users import UserRole
 from app.repositories.user_role_repository import UserRoleRepository
+from app.routers.auth import _get_pam
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -207,12 +209,12 @@ class TestDbRoleResolution:
         repo = UserRoleRepository(db)
         repo.set_roles("testpam", ["manager"])
 
-        # Mock PAM and group lookup on the auth router module (where they're imported)
-        monkeypatch.setattr(
-            "app.routers.auth.LinuxPamAuthenticator",
-            type("FakePam", (), {"authenticate": lambda self, u, p: True}),
-        )
-        monkeypatch.setattr("app.routers.auth.get_user_groups", lambda u: ["some-group"])
+        # Mock PAM authenticator via the _get_pam dependency
+        fake_pam = type("FakePam", (), {
+            "authenticate": lambda self, u, p: True,
+            "get_user_groups": lambda self, u: ["some-group"],
+        })()
+        fastapi_app.dependency_overrides[_get_pam] = lambda: fake_pam
 
         resp = unauthenticated_client.post(
             "/auth/token",
@@ -227,11 +229,11 @@ class TestDbRoleResolution:
         """When user_roles is empty for this user, fall back to group resolver."""
         from app.auth_providers import get_role_resolver
 
-        monkeypatch.setattr(
-            "app.routers.auth.LinuxPamAuthenticator",
-            type("FakePam", (), {"authenticate": lambda self, u, p: True}),
-        )
-        monkeypatch.setattr("app.routers.auth.get_user_groups", lambda u: ["test-admins"])
+        fake_pam = type("FakePam", (), {
+            "authenticate": lambda self, u, p: True,
+            "get_user_groups": lambda self, u: ["test-admins"],
+        })()
+        fastapi_app.dependency_overrides[_get_pam] = lambda: fake_pam
 
         # Temporarily set a group map that maps test-admins → admin
         original_map = settings.local_group_role_map

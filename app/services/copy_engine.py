@@ -4,7 +4,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Protocol, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,37 @@ from app.repositories.audit_repository import AuditRepository
 from app.repositories.job_repository import FileRepository, JobRepository
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# CopyEngine Protocol
+# ---------------------------------------------------------------------------
+
+class CopyEngine(Protocol):
+    """Platform-agnostic interface for low-level file copy operations."""
+
+    def scan_source_files(self, source_path: str) -> List[Path]: ...
+
+    def copy_file(
+        self, src: Path, dst: Path, checksum_algorithm: str = "sha256"
+    ) -> Tuple[bool, Optional[str], Optional[str]]: ...
+
+    def checksum_only(self, src: Path) -> Tuple[bool, Optional[str], Optional[str]]: ...
+
+
+class NativeCopyEngine:
+    """Reference implementation using Python standard library I/O."""
+
+    def scan_source_files(self, source_path: str) -> List[Path]:
+        return scan_source_files(source_path)
+
+    def copy_file(
+        self, src: Path, dst: Path, checksum_algorithm: str = "sha256"
+    ) -> Tuple[bool, Optional[str], Optional[str]]:
+        return copy_file(src, dst, checksum_algorithm)
+
+    def checksum_only(self, src: Path) -> Tuple[bool, Optional[str], Optional[str]]:
+        return _checksum_only(src)
 
 
 def scan_source_files(source_path: str) -> List[Path]:

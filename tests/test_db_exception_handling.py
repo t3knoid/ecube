@@ -19,6 +19,19 @@ from app.models.hardware import DriveState, UsbDrive
 from app.models.jobs import ExportJob, JobStatus
 
 
+from app.infrastructure.drive_eject import EjectResult
+
+
+def _fake_eject(flush_ok=True, unmount_ok=True,
+                flush_error=None, unmount_error=None):
+    provider = MagicMock()
+    provider.prepare_eject.return_value = EjectResult(
+        flush_ok=flush_ok, unmount_ok=unmount_ok,
+        flush_error=flush_error, unmount_error=unmount_error,
+    )
+    return provider
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -123,7 +136,7 @@ class TestDriveEjectDBFailures:
         """If DB commit fails after OS eject, return 500 with actionable detail."""
         drive = _make_drive(db, state=DriveState.IN_USE, project_id="PROJ-001")
 
-        with patch("app.services.drive_service.sync_filesystem", return_value=(True, None)), \
+        with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject()), \
              patch("app.repositories.drive_repository.DriveRepository.save",
                    side_effect=Exception("simulated DB failure")):
             response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
@@ -136,7 +149,7 @@ class TestDriveEjectDBFailures:
         """Audit log failure after successful eject must not abort the operation."""
         drive = _make_drive(db, state=DriveState.IN_USE, project_id="PROJ-001")
 
-        with patch("app.services.drive_service.sync_filesystem", return_value=(True, None)), \
+        with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject()), \
              patch("app.repositories.audit_repository.AuditRepository.add",
                    side_effect=Exception("simulated audit DB failure")):
             response = manager_client.post(f"/drives/{drive.id}/prepare-eject")

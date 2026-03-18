@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.infrastructure.drive_eject import sync_filesystem, unmount_device
+from app.infrastructure.drive_eject import DriveEjectProvider
 from app.infrastructure.drive_format import DriveFormatter
 from app.infrastructure import validate_device_path
 from app.models.hardware import DriveState, UsbDrive
@@ -12,6 +12,12 @@ from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
 
 logger = logging.getLogger(__name__)
+
+
+def _default_eject_provider() -> DriveEjectProvider:
+    """Lazy import to avoid circular dependency at module level."""
+    from app.infrastructure import get_drive_eject
+    return get_drive_eject()
 
 
 def get_all_drives(db: Session):
@@ -96,9 +102,11 @@ def initialize_drive(
     return drive
 
 
-def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None) -> UsbDrive:
+def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
+                  eject_provider: Optional[DriveEjectProvider] = None) -> UsbDrive:
     drive_repo = DriveRepository(db)
     audit_repo = AuditRepository(db)
+    provider = eject_provider or _default_eject_provider()
 
     # Read the drive WITHOUT row lock so OS operations don't hold the lock.
     drive = drive_repo.get(drive_id)
@@ -118,11 +126,8 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None) -> Us
         )
 
     # Perform potentially slow OS operations without holding a database lock.
-    flush_ok, flush_err = sync_filesystem()
-    unmount_ok: bool = True
-    unmount_err: Optional[str] = None
-    if initial_device_path:
-        unmount_ok, unmount_err = unmount_device(initial_device_path)
+    # prepare_eject handles sync + unmount internally and returns a structured result.
+    result = provider.prepare_eject(initial_device_path)
 
     # Re-lock only for the validation and state transition; the audit write happens
     # in a separate transaction after this state change is committed.
@@ -147,7 +152,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None) -> Us
             detail=f"Device path changed during prepare-eject (was: {initial_device_path!r}, now: {drive.filesystem_path!r}); operation aborted",
         )
 
-    if flush_ok and unmount_ok:
+    if result.success:
         drive.current_state = DriveState.AVAILABLE
         try:
             drive_repo.save(drive)
@@ -167,8 +172,8 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None) -> Us
                 details={
                     "drive_id": drive_id,
                     "filesystem_path": initial_device_path,
-                    "flush_ok": flush_ok,
-                    "unmount_ok": unmount_ok,
+                    "flush_ok": result.flush_ok,
+                    "unmount_ok": result.unmount_ok,
                 },
             )
         except Exception:
@@ -181,10 +186,10 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None) -> Us
                 details={
                     "drive_id": drive_id,
                     "filesystem_path": initial_device_path,
-                    "flush_ok": flush_ok,
-                    "flush_error": flush_err,
-                    "unmount_ok": unmount_ok,
-                    "unmount_error": unmount_err,
+                    "flush_ok": result.flush_ok,
+                    "flush_error": result.flush_error,
+                    "unmount_ok": result.unmount_ok,
+                    "unmount_error": result.unmount_error,
                 },
             )
         except Exception:
