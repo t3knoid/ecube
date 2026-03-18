@@ -201,6 +201,7 @@ def custom_openapi():
     # Apply security requirement to all endpoints except unauthenticated routes
     _unauthenticated_paths = {
         "/health", "/auth/token", "/setup/status", "/setup/initialize",
+        "/introspection/version",
     }
     # Endpoints that accept an optional bearer token (unauthenticated during
     # initial setup, admin-required after the first admin user is created).

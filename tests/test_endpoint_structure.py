@@ -218,7 +218,7 @@ class TestOpenAPISchema:
         from app.main import app
 
         openapi_schema = app.openapi()
-        unauthenticated_paths = {"/health", "/auth/token", "/setup/status", "/setup/initialize"}
+        unauthenticated_paths = {"/health", "/auth/token", "/setup/status", "/setup/initialize", "/introspection/version"}
         violations = []
         for path, path_item in openapi_schema.get("paths", {}).items():
             if path in unauthenticated_paths:
