@@ -422,6 +422,12 @@ class TestInitializeFilesystemGuard:
         assert "recognized filesystem" in resp.json()["message"].lower()
         assert "NULL" in resp.json()["message"]
 
+        log = db.query(AuditLog).filter(AuditLog.action == "INIT_REJECTED_FILESYSTEM").first()
+        assert log is not None
+        assert log.details["drive_id"] == drive.id
+        assert log.details["project_id"] == "PROJ-001"
+        assert log.details["filesystem_type"] is None
+
     def test_initialize_rejects_unformatted(self, manager_client, db):
         drive = _make_drive(db, filesystem_type="unformatted")
         resp = manager_client.post(
@@ -431,6 +437,12 @@ class TestInitializeFilesystemGuard:
         assert resp.status_code == 409
         assert "unformatted" in resp.json()["message"]
 
+        log = db.query(AuditLog).filter(AuditLog.action == "INIT_REJECTED_FILESYSTEM").first()
+        assert log is not None
+        assert log.details["drive_id"] == drive.id
+        assert log.details["project_id"] == "PROJ-001"
+        assert log.details["filesystem_type"] == "unformatted"
+
     def test_initialize_rejects_unknown(self, manager_client, db):
         drive = _make_drive(db, filesystem_type="unknown")
         resp = manager_client.post(
@@ -439,6 +451,12 @@ class TestInitializeFilesystemGuard:
         )
         assert resp.status_code == 409
         assert "unknown" in resp.json()["message"]
+
+        log = db.query(AuditLog).filter(AuditLog.action == "INIT_REJECTED_FILESYSTEM").first()
+        assert log is not None
+        assert log.details["drive_id"] == drive.id
+        assert log.details["project_id"] == "PROJ-001"
+        assert log.details["filesystem_type"] == "unknown"
 
     def test_initialize_accepts_ext4(self, manager_client, db):
         drive = _make_drive(db, filesystem_type="ext4")
