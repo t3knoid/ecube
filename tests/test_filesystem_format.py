@@ -95,6 +95,79 @@ def _make_drive(db, **kwargs) -> UsbDrive:
 
 
 # ===========================================================================
+# Part 0: LinuxFilesystemDetector._first_fstype helper
+# ===========================================================================
+
+
+class TestFirstFstype:
+    """Unit tests for recursive child-node traversal in lsblk JSON parsing."""
+
+    def test_fstype_on_root_device(self):
+        """A whole-disk device with fstype set directly."""
+        from app.infrastructure.filesystem_detection import LinuxFilesystemDetector
+
+        nodes = [{"fstype": "ext4"}]
+        assert LinuxFilesystemDetector._first_fstype(nodes) == "ext4"
+
+    def test_fstype_on_child_partition(self):
+        """Partitioned drive: root fstype is null, child has the filesystem."""
+        from app.infrastructure.filesystem_detection import LinuxFilesystemDetector
+
+        nodes = [
+            {
+                "fstype": None,
+                "children": [{"fstype": "ext4"}],
+            }
+        ]
+        assert LinuxFilesystemDetector._first_fstype(nodes) == "ext4"
+
+    def test_fstype_on_nested_children(self):
+        """Deeply nested children (e.g. LVM on partition)."""
+        from app.infrastructure.filesystem_detection import LinuxFilesystemDetector
+
+        nodes = [
+            {
+                "fstype": None,
+                "children": [
+                    {
+                        "fstype": None,
+                        "children": [{"fstype": "xfs"}],
+                    }
+                ],
+            }
+        ]
+        assert LinuxFilesystemDetector._first_fstype(nodes) == "xfs"
+
+    def test_multiple_partitions_returns_first(self):
+        """Multiple children — returns the first non-empty fstype."""
+        from app.infrastructure.filesystem_detection import LinuxFilesystemDetector
+
+        nodes = [
+            {
+                "fstype": None,
+                "children": [
+                    {"fstype": None},
+                    {"fstype": "ntfs"},
+                    {"fstype": "ext4"},
+                ],
+            }
+        ]
+        assert LinuxFilesystemDetector._first_fstype(nodes) == "ntfs"
+
+    def test_no_fstype_anywhere(self):
+        """All nodes have null fstype — returns None."""
+        from app.infrastructure.filesystem_detection import LinuxFilesystemDetector
+
+        nodes = [{"fstype": None, "children": [{"fstype": None}]}]
+        assert LinuxFilesystemDetector._first_fstype(nodes) is None
+
+    def test_empty_nodes_list(self):
+        from app.infrastructure.filesystem_detection import LinuxFilesystemDetector
+
+        assert LinuxFilesystemDetector._first_fstype([]) is None
+
+
+# ===========================================================================
 # Part 1: Filesystem detection mapping
 # ===========================================================================
 
