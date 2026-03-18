@@ -43,6 +43,7 @@ from typing import Callable, List, Optional
 from sqlalchemy.orm import Session
 
 from app.infrastructure.usb_discovery import DiscoveredTopology, discover_usb_topology
+from app.infrastructure import FilesystemDetector
 from app.models.hardware import DriveState, UsbDrive
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
@@ -56,6 +57,7 @@ def run_discovery_sync(
     actor: Optional[str] = None,
     *,
     topology_source: Callable[[], DiscoveredTopology] = discover_usb_topology,
+    filesystem_detector: FilesystemDetector,
 ) -> dict:
     """Discover USB hardware state and synchronise the database.
 
@@ -70,6 +72,11 @@ def run_discovery_sync(
         Callable that returns a :class:`~app.infrastructure.usb_discovery.DiscoveredTopology`.
         Defaults to the real sysfs reader; override in tests to inject
         synthetic hardware snapshots.
+    filesystem_detector:
+        Implementation of the :class:`FilesystemDetector` protocol.  Callers
+        must supply an instance explicitly; production routers pass the result
+        of :func:`get_filesystem_detector`, while tests inject a lightweight
+        fake.
 
     Returns
     -------
@@ -146,6 +153,18 @@ def run_discovery_sync(
                 capacity_bytes=discovered_drive.capacity_bytes,
                 current_state=DriveState.AVAILABLE,
             )
+            # Detect filesystem type for newly discovered drives.
+            if discovered_drive.filesystem_path:
+                try:
+                    drive.filesystem_type = filesystem_detector.detect(
+                        discovered_drive.filesystem_path
+                    )
+                except Exception:
+                    logger.exception(
+                        "Filesystem detection failed for new drive %s",
+                        discovered_drive.device_identifier,
+                    )
+                    drive.filesystem_type = "unknown"
             db.add(drive)
             try:
                 db.commit()
@@ -170,6 +189,22 @@ def run_discovery_sync(
             if discovered_drive.capacity_bytes is not None and existing.capacity_bytes != discovered_drive.capacity_bytes:
                 existing.capacity_bytes = discovered_drive.capacity_bytes
                 changed = True
+
+            # Detect filesystem type on every refresh cycle.
+            if discovered_drive.filesystem_path:
+                try:
+                    detected_fs = filesystem_detector.detect(
+                        discovered_drive.filesystem_path
+                    )
+                except Exception:
+                    logger.exception(
+                        "Filesystem detection failed for drive %s",
+                        discovered_drive.device_identifier,
+                    )
+                    detected_fs = "unknown"
+                if existing.filesystem_type != detected_fs:
+                    existing.filesystem_type = detected_fs
+                    changed = True
 
             # Re-activate a previously-emptied drive.
             if existing.current_state == DriveState.EMPTY:
@@ -207,6 +242,20 @@ def run_discovery_sync(
                     continue
                 db.refresh(drive)
                 drives_removed.append(drive.device_identifier)
+                try:
+                    audit_repo.add(
+                        action="DRIVE_REMOVED",
+                        user=actor,
+                        details={
+                            "drive_id": drive.id,
+                            "device_identifier": drive.device_identifier,
+                        },
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to write audit log for DRIVE_REMOVED: %s",
+                        drive.device_identifier,
+                    )
 
     summary = {
         "hubs_upserted": len(hubs_upserted),

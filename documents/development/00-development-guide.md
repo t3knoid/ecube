@@ -95,7 +95,10 @@ app/
   session.py           # Session backend (cookie/Redis)
   setup.py             # First-run setup CLI entry point
   infrastructure/      # Platform abstraction (OS-specific operations)
+    __init__.py        # Factory functions (get_filesystem_detector, get_drive_formatter)
     drive_eject.py     # Drive unmount/eject
+    drive_format.py    # DriveFormatter Protocol + Linux implementation
+    filesystem_detection.py  # FilesystemDetector Protocol + Linux implementation
     usb_discovery.py   # USB device enumeration
   models/              # SQLAlchemy ORM models
     hardware.py        # usb_hubs, usb_ports, usb_drives

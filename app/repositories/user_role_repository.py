@@ -4,9 +4,8 @@ from typing import List
 
 from sqlalchemy.orm import Session
 
+from app.constants import VALID_ROLES
 from app.models.users import UserRole
-
-VALID_ROLES = {"admin", "manager", "processor", "auditor"}
 
 
 class UserRoleRepository:

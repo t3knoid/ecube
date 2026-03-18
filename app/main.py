@@ -103,6 +103,7 @@ async def lifespan(application: FastAPI):
         async def _usb_discovery_loop() -> None:
             from app.database import SessionLocal
             from app.services.discovery_service import run_discovery_sync
+            from app.infrastructure import get_filesystem_detector
 
             interval = settings.usb_discovery_interval
             while True:
@@ -110,7 +111,11 @@ async def lifespan(application: FastAPI):
                 try:
                     db = SessionLocal()
                     try:
-                        run_discovery_sync(db, actor="system")
+                        run_discovery_sync(
+                            db,
+                            actor="system",
+                            filesystem_detector=get_filesystem_detector(),
+                        )
                     finally:
                         db.close()
                 except asyncio.CancelledError:

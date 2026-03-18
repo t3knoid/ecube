@@ -22,7 +22,7 @@ def test_list_drives_with_data(client, db):
 
 
 def test_initialize_drive(manager_client, db):
-    drive = UsbDrive(device_identifier="USB002", current_state=DriveState.AVAILABLE)
+    drive = UsbDrive(device_identifier="USB002", current_state=DriveState.AVAILABLE, filesystem_type="ext4")
     db.add(drive)
     db.commit()
 
@@ -43,6 +43,7 @@ def test_project_isolation_violation(manager_client, db):
         device_identifier="USB003",
         current_state=DriveState.IN_USE,
         current_project_id="PROJ-001",
+        filesystem_type="ext4",
     )
     db.add(drive)
     db.commit()
@@ -56,6 +57,7 @@ def test_reinitialize_same_project(manager_client, db):
         device_identifier="USB004",
         current_state=DriveState.IN_USE,
         current_project_id="PROJ-001",
+        filesystem_type="ext4",
     )
     db.add(drive)
     db.commit()
