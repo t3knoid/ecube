@@ -46,6 +46,8 @@ SECTION_SHORT_NAMES: dict[str, str] = {
     "Authorization": "Authorization",
     "Project Isolation": "Project Isolation",
     "Drive State Machine": "Drive State Machine",
+    "Filesystem Detection": "Filesystem Detection",
+    "Drive Formatting": "Drive Formatting",
     "USB Hardware (Bare-Metal Specific)": "USB Hardware",
     "End-to-End Copy Workflow": "End-to-End Copy",
     "Error Handling": "Error Handling",
@@ -86,9 +88,23 @@ class Section(NamedTuple):
 # ---------------------------------------------------------------------------
 # Markdown parser
 # ---------------------------------------------------------------------------
-_SECTION_RE = re.compile(r"^###\s+(12\.(\d+))\s+(.+)$")
+_SECTION_RE = re.compile(r"^###\s+(12\.(\d+(?:\.\d+)?))\s+(.+)$")
 _TABLE_ROW_RE = re.compile(r"^\|\s*(\d+)\s*\|(.+)\|$")
 _SEPARATOR_RE = re.compile(r"^\|\s*-+")
+
+
+def _section_key(section_num: str) -> int:
+    """Convert a section number like '12.4.1' to a sortable TC-ID prefix.
+
+    - ``12.4``  → 400
+    - ``12.4.1`` → 410
+    - ``12.4.2`` → 420
+    - ``12.10`` → 1000
+    """
+    parts = section_num.split(".")
+    minor = int(parts[1])          # e.g. 4
+    sub = int(parts[2]) if len(parts) > 2 else 0  # e.g. 1
+    return minor * 100 + sub * 10
 
 
 def _short_label(section_num: str, raw_name: str) -> str:
@@ -97,8 +113,8 @@ def _short_label(section_num: str, raw_name: str) -> str:
     return f"{section_num} {short}"
 
 
-def _tc_id(section_minor: int, row_num: int) -> str:
-    return f"TC-{section_minor * 100 + row_num}"
+def _tc_id(key: int, row_num: int) -> str:
+    return f"TC-{key + row_num}"
 
 
 def _strip_md(text: str) -> str:
@@ -120,9 +136,9 @@ def parse_markdown(path: Path) -> list[Section]:
             i += 1
             continue
 
-        section_num = m.group(1)         # "12.3"
-        section_minor = int(m.group(2))  # 3
+        section_num = m.group(1)         # "12.3" or "12.4.1"
         raw_name = m.group(3).strip()    # "Project Isolation"
+        key = _section_key(section_num)
         label = _short_label(section_num, raw_name)
         header_label = f"§{label}"
 
@@ -170,7 +186,7 @@ def parse_markdown(path: Path) -> list[Section]:
                         section_num=section_num,
                         section_label=label,
                         row_num=row_num,
-                        tc_id=_tc_id(section_minor, row_num),
+                        tc_id=_tc_id(key, row_num),
                         test_name=test_name,
                         steps=steps,
                         expected=expected,
@@ -187,7 +203,7 @@ def parse_markdown(path: Path) -> list[Section]:
                     section_num=section_num,
                     section_label=label,
                     row_num=1,
-                    tc_id=_tc_id(section_minor, 1),
+                    tc_id=_tc_id(key, 1),
                     test_name="Full E2E workflow",
                     steps=(
                         "Setup test files → add mount → discover drive → "

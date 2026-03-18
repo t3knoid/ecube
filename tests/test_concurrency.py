@@ -366,6 +366,7 @@ def test_double_initialize_different_projects_prevented(manager_client, db):
         device_identifier="USB-GUARD-02",
         current_state=DriveState.IN_USE,
         current_project_id="PROJ-A",
+        filesystem_type="ext4",
     )
     db.add(drive)
     db.commit()
