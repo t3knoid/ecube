@@ -179,6 +179,24 @@ def test_available_drive_removed_becomes_empty(db):
     assert drive.current_state == DriveState.EMPTY
 
 
+def test_available_drive_removed_emits_audit(db):
+    """DRIVE_REMOVED audit entry is created when an AVAILABLE drive disappears."""
+    topology = _simple_topology()
+    run_discovery_sync(db, topology_source=lambda: topology)
+    drive = db.query(UsbDrive).one()
+
+    run_discovery_sync(db, topology_source=_empty_topology)
+
+    log = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "DRIVE_REMOVED")
+        .first()
+    )
+    assert log is not None
+    assert log.details["drive_id"] == drive.id
+    assert log.details["device_identifier"] == drive.device_identifier
+
+
 def test_in_use_drive_removal_preserves_project(db):
     topology = _simple_topology()
     run_discovery_sync(db, topology_source=lambda: topology)

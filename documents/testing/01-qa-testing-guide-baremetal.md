@@ -438,6 +438,16 @@ Plug a USB drive into the machine and wait ~30 seconds for automatic discovery.
 curl -sk https://localhost:8443/drives \
   -H "Authorization: Bearer $TOKEN" | jq
 
+# Check the filesystem_type field — unformatted drives need formatting first
+curl -sk https://localhost:8443/drives \
+  -H "Authorization: Bearer $TOKEN" | jq '.[].filesystem_type'
+
+# Format a drive (replace {id}) — required before initialization if unformatted
+curl -sk -X POST https://localhost:8443/drives/{id}/format \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"filesystem_type": "ext4"}' | jq
+
 # Initialize a drive for a project (replace {id})
 curl -sk -X POST https://localhost:8443/drives/{id}/initialize \
   -H "Authorization: Bearer $TOKEN" \
@@ -713,10 +723,11 @@ curl -sk -X POST https://localhost:8443/setup/database/test-connection \
 | 3 | Expired token | Generate token with `'exp': int(time.time()) - 60` | 401, `UNAUTHORIZED` |
 | 4 | Processor adds mount | `POST /mounts` with processor token | 403, `FORBIDDEN` |
 | 5 | Processor initializes drive | `POST /drives/{id}/initialize` with processor token | 403, `FORBIDDEN` |
-| 6 | Processor reads audit | `GET /audit` with processor token | 403, `FORBIDDEN` |
-| 7 | Auditor reads audit | `GET /audit` with auditor token | 200 |
-| 8 | Processor creates job | `POST /jobs` with processor token | 200 |
-| 9 | All error responses have `trace_id` | Inspect any 4xx/5xx JSON body | `trace_id` field present |
+| 6 | Processor formats drive | `POST /drives/{id}/format` with processor token | 403, `FORBIDDEN` |
+| 7 | Processor reads audit | `GET /audit` with processor token | 403, `FORBIDDEN` |
+| 8 | Auditor reads audit | `GET /audit` with auditor token | 200 |
+| 9 | Processor creates job | `POST /jobs` with processor token | 200 |
+| 10 | All error responses have `trace_id` | Inspect any 4xx/5xx JSON body | `trace_id` field present |
 
 ### 12.3 Project Isolation
 
@@ -730,10 +741,42 @@ curl -sk -X POST https://localhost:8443/setup/database/test-connection \
 
 | # | Test | Expected |
 |---|------|----------|
-| 1 | Initialize an `AVAILABLE` drive | 200, state → `IN_USE` |
-| 2 | Initialize an `EMPTY` drive | 200, state → `IN_USE` |
-| 3 | Prepare-eject an `IN_USE` drive | 200, state → `AVAILABLE` |
-| 4 | Prepare-eject an `AVAILABLE` drive | 409, `CONFLICT` |
+| 1 | Initialize an `AVAILABLE` drive with recognized filesystem | 200, state → `IN_USE` |
+| 2 | Initialize a drive with `filesystem_type=NULL` | 409, `CONFLICT` — must have recognized filesystem |
+| 3 | Initialize a drive with `filesystem_type=unformatted` | 409, `CONFLICT` — must have recognized filesystem |
+| 4 | Initialize a drive with `filesystem_type=unknown` | 409, `CONFLICT` — must have recognized filesystem |
+| 5 | Prepare-eject an `IN_USE` drive | 200, state → `AVAILABLE` |
+| 6 | Prepare-eject an `AVAILABLE` drive | 409, `CONFLICT` |
+| 7 | Format-then-initialize workflow: discover unformatted → format ext4 → initialize | Each step succeeds; final state `IN_USE` |
+| 8 | Attempt to format an `IN_USE` drive | 409, `CONFLICT` — must be `AVAILABLE` |
+
+### 12.4.1 Filesystem Detection
+
+| # | Test | Expected |
+|---|------|----------|
+| 1 | Hot-plug a formatted drive, wait for discovery | `GET /drives` shows drive with `filesystem_type` set (e.g. `ext4`) |
+| 2 | Hot-plug an unformatted drive | `GET /drives` shows `filesystem_type: "unformatted"` |
+| 3 | Trigger manual refresh | `POST /drives/refresh`, then `GET /drives` — `filesystem_type` updated |
+| 4 | Reformat drive externally (`mkfs.exfat /dev/sdX`), then `POST /drives/refresh` | `filesystem_type` updates to `exfat` on next refresh |
+| 5 | Drive discovered without block device path (hub-only) | `filesystem_type` is `null` in `GET /drives` |
+
+### 12.4.2 Drive Formatting
+
+| # | Test | Expected |
+|---|------|----------|
+| 1 | Format `AVAILABLE` drive as `ext4` | 200, `filesystem_type` → `ext4`, `DRIVE_FORMATTED` audit log |
+| 2 | Format `AVAILABLE` drive as `exfat` | 200, `filesystem_type` → `exfat` |
+| 3 | Format with unsupported type (`ntfs`) | 422, validation error |
+| 4 | Format a drive in `IN_USE` state | 409, `CONFLICT` |
+| 5 | Format a mounted drive | 409, `CONFLICT` — must unmount first |
+| 6 | Processor attempts format | 403, `FORBIDDEN` |
+| 7 | Auditor attempts format | 403, `FORBIDDEN` |
+| 8 | Admin formats drive | 200, success |
+| 9 | Manager formats drive | 200, success |
+| 10 | Format drive with no device path (`filesystem_path` is null) | 400, `BAD_REQUEST` — no filesystem_path |
+| 11 | Format, then verify via `blkid /dev/sdX` on host | Host `blkid` output matches `filesystem_type` in API response |
+| 12 | Re-format: format ext4, then format exfat on same `AVAILABLE` drive | 200 both times; final `filesystem_type` is `exfat` |
+| 13 | `DRIVE_FORMAT_FAILED` audit log when hardware error occurs | `GET /audit?action=DRIVE_FORMAT_FAILED` shows entry with `drive_id` and `error` |
 
 ### 12.5 USB Hardware (Bare-Metal Specific)
 
@@ -785,7 +828,11 @@ Walk through the complete data export lifecycle:
 
 3. **Plug in a USB drive** and wait for auto-discovery.
 
-4. **List drives** — `GET /drives` — and note the drive ID.
+4. **List drives** — `GET /drives` — and note the drive ID and `filesystem_type`.
+
+4b. **Format the drive (if needed)** — If `filesystem_type` is `unformatted`, `unknown`, or `null`:
+    `POST /drives/{id}/format` with `{"filesystem_type": "ext4"}`.
+    Confirm `filesystem_type` → `ext4` in the response.
 
 5. **Initialize the drive** — `POST /drives/{id}/initialize` with `project_id: "PROJ-E2E"`.
 
@@ -809,7 +856,7 @@ Walk through the complete data export lifecycle:
     ```
 
 13. **Check audit trail** — `GET /audit` — confirm the complete chain:
-    `MOUNT_ADDED → DRIVE_INITIALIZED → JOB_CREATED → JOB_STARTED → JOB_COMPLETED → DRIVE_EJECT_PREPARED`
+    `MOUNT_ADDED → DRIVE_FORMATTED → DRIVE_INITIALIZED → JOB_CREATED → JOB_STARTED → JOB_COMPLETED → DRIVE_EJECT_PREPARED`
 
 ### 12.7 Error Handling
 
@@ -819,6 +866,9 @@ Walk through the complete data export lifecycle:
 | 2 | `DELETE /mounts/99999` | 404, `NOT_FOUND` |
 | 3 | Start an already-running job | 409, `CONFLICT` |
 | 4 | All error responses | JSON body includes `code`, `message`, and `trace_id` |
+| 5 | `POST /drives/999/format` with `{"filesystem_type": "ext4"}` | 404, `NOT_FOUND` |
+| 6 | `POST /drives/{id}/format` with `{"filesystem_type": "ntfs"}` | 422, validation error |
+| 7 | `POST /drives/{id}/format` with empty body | 422 |
 
 ### 12.8 User Role Management
 
