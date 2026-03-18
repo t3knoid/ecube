@@ -34,7 +34,7 @@ from app.auth import CurrentUser, get_current_user, require_roles
 from app.config import settings
 from app.routing import LocalOnlyRoute
 from app.database import get_db
-from app.repositories.audit_repository import AuditRepository
+from app.repositories.audit_repository import AuditRepository, best_effort_audit
 from app.repositories.user_role_repository import UserRoleRepository
 from app.schemas.admin import (
     AddOSGroupsRequest,
@@ -225,14 +225,6 @@ def _validate_path_username(username: str) -> str:
     return username
 
 
-def _audit(db: Session, action: str, actor: str, details: dict) -> None:
-    """Best-effort audit log.  Never raises."""
-    try:
-        AuditRepository(db).add(action=action, user=actor, details=details)
-    except Exception:
-        logger.exception("Failed to write audit log for %s", action)
-
-
 # Sub-router for OS user/group endpoints.  The custom route class
 # ensures that non-local deployments get a clean 404 *before* any auth
 # dependency resolution, so callers never see 401/403 for endpoints
@@ -305,7 +297,7 @@ def create_os_user(
                 ),
             )
 
-    _audit(db, "OS_USER_CREATED", current_user.username, {
+    best_effort_audit(db, "OS_USER_CREATED", current_user.username, {
         "target_user": body.username,
         "groups": body.groups or [],
         "roles": list(body.roles) if body.roles else [],
@@ -371,7 +363,7 @@ def delete_os_user(
             username,
         )
 
-    _audit(db, "OS_USER_DELETED", current_user.username, {
+    best_effort_audit(db, "OS_USER_DELETED", current_user.username, {
         "target_user": username,
         "path": str(request.url.path),
     })
@@ -397,7 +389,7 @@ def reset_os_user_password(
     except os_user_service.OSUserError as exc:
         _raise_os_error(exc, context="Reset OS password")
 
-    _audit(db, "OS_PASSWORD_RESET", current_user.username, {
+    best_effort_audit(db, "OS_PASSWORD_RESET", current_user.username, {
         "target_user": username,
         "path": str(request.url.path),
     })
@@ -423,7 +415,7 @@ def set_os_user_groups(
     except os_user_service.OSUserError as exc:
         _raise_os_error(exc, context="Set OS user groups")
 
-    _audit(db, "OS_USER_GROUPS_MODIFIED", current_user.username, {
+    best_effort_audit(db, "OS_USER_GROUPS_MODIFIED", current_user.username, {
         "target_user": username,
         "groups": body.groups,
         "path": str(request.url.path),
@@ -457,7 +449,7 @@ def add_os_user_groups(
     except os_user_service.OSUserError as exc:
         _raise_os_error(exc, context="Add OS user to groups")
 
-    _audit(db, "OS_USER_GROUPS_APPENDED", current_user.username, {
+    best_effort_audit(db, "OS_USER_GROUPS_APPENDED", current_user.username, {
         "target_user": username,
         "groups_added": body.groups,
         "resulting_groups": os_user.groups,
@@ -494,7 +486,7 @@ def create_os_group(
     except os_user_service.OSUserError as exc:
         _raise_os_error(exc, context="Create OS group")
 
-    _audit(db, "OS_GROUP_CREATED", current_user.username, {
+    best_effort_audit(db, "OS_GROUP_CREATED", current_user.username, {
         "group_name": body.name,
         "path": str(request.url.path),
     })
@@ -540,7 +532,7 @@ def delete_os_group(
     except os_user_service.OSUserError as exc:
         _raise_os_error(exc, context="Delete OS group")
 
-    _audit(db, "OS_GROUP_DELETED", current_user.username, {
+    best_effort_audit(db, "OS_GROUP_DELETED", current_user.username, {
         "group_name": name,
         "path": str(request.url.path),
     })
