@@ -50,8 +50,8 @@ from app.schemas.admin import (
     SetOSGroupsRequest,
 )
 from app.infrastructure import get_os_user_provider
+from app.infrastructure.os_user_protocol import OsUserProvider
 from app.services import os_user_service
-from app.services.os_user_service import OsUserProvider
 
 logger = logging.getLogger(__name__)
 

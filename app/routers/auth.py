@@ -22,7 +22,7 @@ from app.config import settings
 from app.database import get_db
 from app.repositories.audit_repository import best_effort_audit
 from app.repositories.user_role_repository import UserRoleRepository
-from app.services.pam_service import PamAuthenticator
+from app.infrastructure.pam_protocol import PamAuthenticator
 
 logger = logging.getLogger(__name__)
 
