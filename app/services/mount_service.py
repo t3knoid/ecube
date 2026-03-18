@@ -1,7 +1,7 @@
 import logging
 import subprocess
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Protocol, Tuple
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -13,6 +13,69 @@ from app.schemas.network import MountCreate
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# MountProvider Protocol
+# ---------------------------------------------------------------------------
+
+class MountProvider(Protocol):
+    """Platform-agnostic interface for OS-level mount/unmount operations."""
+
+    def os_mount(self, mount_type: MountType, remote_path: str, local_mount_point: str,
+                 *, credentials_file: Optional[str] = None, username: Optional[str] = None) -> Tuple[bool, Optional[str]]:
+        """Mount a remote filesystem. Returns (success, error_message)."""
+        ...
+
+    def os_unmount(self, local_mount_point: str) -> Tuple[bool, Optional[str]]:
+        """Unmount a filesystem. Returns (success, error_message)."""
+        ...
+
+    def check_mounted(self, local_mount_point: str) -> Optional[bool]:
+        """Check if a path is an active mountpoint. Returns True/False/None on error."""
+        ...
+
+
+class LinuxMountProvider:
+    """Linux implementation using ``mount(8)``, ``umount(8)``, and ``mountpoint(1)``."""
+
+    def os_mount(self, mount_type: MountType, remote_path: str, local_mount_point: str,
+                 *, credentials_file: Optional[str] = None, username: Optional[str] = None) -> Tuple[bool, Optional[str]]:
+        if mount_type == MountType.NFS:
+            cmd = [settings.mount_binary_path, "-t", "nfs", remote_path, local_mount_point]
+        else:
+            cmd = [settings.mount_binary_path, "-t", "cifs", remote_path, local_mount_point]
+            if credentials_file:
+                cmd += ["-o", f"credentials={credentials_file}"]
+            elif username:
+                cmd += ["-o", f"username={username}"]
+
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=settings.subprocess_timeout_seconds)
+        if result.returncode == 0:
+            return True, None
+        error = (result.stderr or result.stdout or "").strip() or "mount failed"
+        return False, error
+
+    def os_unmount(self, local_mount_point: str) -> Tuple[bool, Optional[str]]:
+        try:
+            subprocess.run(
+                [settings.umount_binary_path, local_mount_point],
+                capture_output=True, text=True,
+                timeout=settings.subprocess_timeout_seconds,
+            )
+            return True, None
+        except Exception as exc:
+            return False, str(exc)
+
+    def check_mounted(self, local_mount_point: str) -> Optional[bool]:
+        try:
+            result = subprocess.run(
+                ["mountpoint", "-q", local_mount_point],
+                capture_output=True, timeout=10,
+            )
+            return result.returncode == 0
+        except Exception:
+            return None
 
 
 def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None) -> NetworkMount:

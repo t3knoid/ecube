@@ -14,7 +14,7 @@ from __future__ import annotations
 import os.path
 import re
 import subprocess
-from typing import List, Optional, Tuple
+from typing import List, Optional, Protocol, Tuple
 
 from app.config import settings
 from app.infrastructure.device_path import validate_device_path
@@ -23,6 +23,28 @@ from app.infrastructure.device_path import validate_device_path
 # Actual values come from settings; these module-level names kept for readability.
 _SYNC_BIN = settings.sync_binary_path
 _UMOUNT_BIN = settings.umount_binary_path
+
+
+# ---------------------------------------------------------------------------
+# DriveEjectProvider Protocol
+# ---------------------------------------------------------------------------
+
+class DriveEjectProvider(Protocol):
+    """Platform-agnostic interface for drive flush and unmount operations."""
+
+    def sync_filesystem(self) -> Tuple[bool, Optional[str]]: ...
+
+    def unmount_device(self, device_path: str) -> Tuple[bool, Optional[str]]: ...
+
+
+class LinuxDriveEject:
+    """Linux implementation using ``sync(1)`` and ``umount(8)``."""
+
+    def sync_filesystem(self) -> Tuple[bool, Optional[str]]:
+        return sync_filesystem()
+
+    def unmount_device(self, device_path: str) -> Tuple[bool, Optional[str]]:
+        return unmount_device(device_path)
 
 
 def _unescape_mountpoint(escaped_path: str) -> str:
