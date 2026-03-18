@@ -40,8 +40,8 @@ sudo certbot certonly --standalone -d ecube.example.com
 ## 3. Credential Management
 
 ```bash
-# Never commit .env to version control
-echo "/opt/ecube/.env" >> .gitignore
+# .env is already listed in .gitignore — never override this or commit secrets.
+# Verify: grep '\.env' .gitignore
 
 # Rotate SECRET_KEY annually
 # Generate new key: openssl rand -hex 32
