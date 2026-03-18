@@ -6,6 +6,8 @@ import jwt
 
 
 from app.config import settings
+from app.main import app as fastapi_app
+from app.routers.auth import _get_pam
 
 
 # ---------------------------------------------------------------------------
@@ -23,12 +25,11 @@ def _decode_token(token: str) -> dict:
 
 def test_login_success_returns_token(unauthenticated_client):
     """Valid credentials yield a JWT with expected claims."""
-    with (
-        patch("app.routers.auth.LinuxPamAuthenticator") as mock_pam_cls,
-        patch("app.routers.auth.get_user_groups", return_value=["evidence-team", "users"]),
-        patch("app.routers.auth.get_role_resolver") as mock_resolver_fn,
-    ):
-        mock_pam_cls.return_value.authenticate.return_value = True
+    mock_pam = MagicMock()
+    mock_pam.authenticate.return_value = True
+    mock_pam.get_user_groups.return_value = ["evidence-team", "users"]
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
+    with patch("app.routers.auth.get_role_resolver") as mock_resolver_fn:
         mock_resolver_fn.return_value.resolve.return_value = ["processor"]
 
         resp = unauthenticated_client.post(
@@ -52,12 +53,11 @@ def test_login_success_returns_token(unauthenticated_client):
 
 def test_login_success_token_is_usable(unauthenticated_client):
     """A token obtained from /auth/token can authenticate subsequent requests."""
-    with (
-        patch("app.routers.auth.LinuxPamAuthenticator") as mock_pam_cls,
-        patch("app.routers.auth.get_user_groups", return_value=["admins"]),
-        patch("app.routers.auth.get_role_resolver") as mock_resolver_fn,
-    ):
-        mock_pam_cls.return_value.authenticate.return_value = True
+    mock_pam = MagicMock()
+    mock_pam.authenticate.return_value = True
+    mock_pam.get_user_groups.return_value = ["admins"]
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
+    with patch("app.routers.auth.get_role_resolver") as mock_resolver_fn:
         mock_resolver_fn.return_value.resolve.return_value = ["admin"]
 
         resp = unauthenticated_client.post(
@@ -78,13 +78,14 @@ def test_login_success_token_is_usable(unauthenticated_client):
 
 
 def test_login_invalid_credentials_returns_401(unauthenticated_client):
-    with patch("app.routers.auth.LinuxPamAuthenticator") as mock_pam_cls:
-        mock_pam_cls.return_value.authenticate.return_value = False
+    mock_pam = MagicMock()
+    mock_pam.authenticate.return_value = False
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
 
-        resp = unauthenticated_client.post(
-            "/auth/token",
-            json={"username": "baduser", "password": "wrong"},
-        )
+    resp = unauthenticated_client.post(
+        "/auth/token",
+        json={"username": "baduser", "password": "wrong"},
+    )
 
     assert resp.status_code == 401
     assert "invalid" in resp.json()["message"].lower()
@@ -131,12 +132,11 @@ def test_token_expiration_uses_config(unauthenticated_client, monkeypatch):
     """Token exp claim reflects TOKEN_EXPIRE_MINUTES setting."""
     monkeypatch.setattr(settings, "token_expire_minutes", 30)
 
-    with (
-        patch("app.routers.auth.LinuxPamAuthenticator") as mock_pam_cls,
-        patch("app.routers.auth.get_user_groups", return_value=[]),
-        patch("app.routers.auth.get_role_resolver") as mock_resolver_fn,
-    ):
-        mock_pam_cls.return_value.authenticate.return_value = True
+    mock_pam = MagicMock()
+    mock_pam.authenticate.return_value = True
+    mock_pam.get_user_groups.return_value = []
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
+    with patch("app.routers.auth.get_role_resolver") as mock_resolver_fn:
         mock_resolver_fn.return_value.resolve.return_value = []
 
         resp = unauthenticated_client.post(
@@ -159,12 +159,11 @@ def test_login_success_creates_audit_log(unauthenticated_client, db):
     """Successful login writes AUTH_SUCCESS to audit_logs."""
     from app.models.audit import AuditLog
 
-    with (
-        patch("app.routers.auth.LinuxPamAuthenticator") as mock_pam_cls,
-        patch("app.routers.auth.get_user_groups", return_value=["evidence-team"]),
-        patch("app.routers.auth.get_role_resolver") as mock_resolver_fn,
-    ):
-        mock_pam_cls.return_value.authenticate.return_value = True
+    mock_pam = MagicMock()
+    mock_pam.authenticate.return_value = True
+    mock_pam.get_user_groups.return_value = ["evidence-team"]
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
+    with patch("app.routers.auth.get_role_resolver") as mock_resolver_fn:
         mock_resolver_fn.return_value.resolve.return_value = ["processor"]
 
         unauthenticated_client.post(
@@ -182,13 +181,14 @@ def test_login_failure_creates_audit_log(unauthenticated_client, db):
     """Failed login writes AUTH_FAILURE to audit_logs."""
     from app.models.audit import AuditLog
 
-    with patch("app.routers.auth.LinuxPamAuthenticator") as mock_pam_cls:
-        mock_pam_cls.return_value.authenticate.return_value = False
+    mock_pam = MagicMock()
+    mock_pam.authenticate.return_value = False
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
 
-        unauthenticated_client.post(
-            "/auth/token",
-            json={"username": "baduser", "password": "wrong"},
-        )
+    unauthenticated_client.post(
+        "/auth/token",
+        json={"username": "baduser", "password": "wrong"},
+    )
 
     logs = db.query(AuditLog).filter(AuditLog.action == "AUTH_FAILURE").all()
     # At least one AUTH_FAILURE log from the router; the exception handler may add another
@@ -205,12 +205,11 @@ def test_login_failure_creates_audit_log(unauthenticated_client, db):
 
 def test_auth_token_endpoint_requires_no_auth(unauthenticated_client):
     """The /auth/token endpoint must be accessible without a bearer token."""
-    with (
-        patch("app.routers.auth.LinuxPamAuthenticator") as mock_pam_cls,
-        patch("app.routers.auth.get_user_groups", return_value=[]),
-        patch("app.routers.auth.get_role_resolver") as mock_resolver_fn,
-    ):
-        mock_pam_cls.return_value.authenticate.return_value = True
+    mock_pam = MagicMock()
+    mock_pam.authenticate.return_value = True
+    mock_pam.get_user_groups.return_value = []
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
+    with patch("app.routers.auth.get_role_resolver") as mock_resolver_fn:
         mock_resolver_fn.return_value.resolve.return_value = []
 
         resp = unauthenticated_client.post(
