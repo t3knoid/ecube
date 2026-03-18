@@ -1,0 +1,992 @@
+"""Tests for configurable session storage (issue #57).
+
+Covers:
+- Cookie configuration settings (AC1)
+- Backend selection and graceful fallback (AC2, AC5)
+- Redis configuration validation (AC3)
+- SessionMiddleware integration (AC4)
+- Cookie attributes in responses (AC7)
+- Logging of session events (AC8)
+- Redis backend stores data server-side (AC2)
+"""
+
+import json
+import logging
+from unittest.mock import AsyncMock, patch
+
+import pytest
+from fastapi import FastAPI
+from starlette.middleware.sessions import SessionMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.testclient import TestClient
+
+from app.session import RedisSessionMiddleware, _SessionProxy
+
+
+# ---------------------------------------------------------------------------
+# AC1 — Cookie configuration settings
+# ---------------------------------------------------------------------------
+
+class TestCookieConfigurationDefaults:
+    """Verify default values for all session-related settings."""
+
+    def test_default_backend(self, monkeypatch):
+        from app.config import Settings
+        monkeypatch.delenv("SESSION_BACKEND", raising=False)
+        s = Settings(_env_file=None)
+        assert s.session_backend == "cookie"
+
+    def test_default_cookie_name(self, monkeypatch):
+        from app.config import Settings
+        monkeypatch.delenv("SESSION_COOKIE_NAME", raising=False)
+        s = Settings(_env_file=None)
+        assert s.session_cookie_name == "ecube_session"
+
+    def test_default_expiration(self, monkeypatch):
+        from app.config import Settings
+        monkeypatch.delenv("SESSION_COOKIE_EXPIRATION_SECONDS", raising=False)
+        s = Settings(_env_file=None)
+        assert s.session_cookie_expiration_seconds == 3600
+
+    def test_default_domain_is_none(self, monkeypatch):
+        from app.config import Settings
+        monkeypatch.delenv("SESSION_COOKIE_DOMAIN", raising=False)
+        s = Settings(_env_file=None)
+        assert s.session_cookie_domain is None
+
+    def test_default_secure(self, monkeypatch):
+        from app.config import Settings
+        monkeypatch.delenv("SESSION_COOKIE_SECURE", raising=False)
+        s = Settings(_env_file=None)
+        assert s.session_cookie_secure is True
+
+    def test_default_samesite(self, monkeypatch):
+        from app.config import Settings
+        monkeypatch.delenv("SESSION_COOKIE_SAMESITE", raising=False)
+        s = Settings(_env_file=None)
+        assert s.session_cookie_samesite == "lax"
+
+
+class TestCookieConfigurationOverrides:
+    """Settings can be overridden via constructor (equivalent to env vars)."""
+
+    def test_override_cookie_name(self):
+        from app.config import Settings
+        s = Settings(session_cookie_name="my_session", _env_file=None)
+        assert s.session_cookie_name == "my_session"
+
+    def test_override_expiration(self):
+        from app.config import Settings
+        s = Settings(session_cookie_expiration_seconds=86400, _env_file=None)
+        assert s.session_cookie_expiration_seconds == 86400
+
+    def test_override_domain(self):
+        from app.config import Settings
+        s = Settings(session_cookie_domain=".example.com", _env_file=None)
+        assert s.session_cookie_domain == ".example.com"
+
+    def test_empty_string_domain_normalised_to_none(self):
+        from app.config import Settings
+        s = Settings(session_cookie_domain="", _env_file=None)
+        assert s.session_cookie_domain is None
+
+    def test_whitespace_only_domain_normalised_to_none(self):
+        from app.config import Settings
+        s = Settings(session_cookie_domain="  ", _env_file=None)
+        assert s.session_cookie_domain is None
+
+    def test_override_secure_false(self):
+        from app.config import Settings
+        s = Settings(session_cookie_secure=False, _env_file=None)
+        assert s.session_cookie_secure is False
+
+    def test_override_samesite_strict(self):
+        from app.config import Settings
+        s = Settings(session_cookie_samesite="strict", _env_file=None)
+        assert s.session_cookie_samesite == "strict"
+
+    def test_samesite_normalised_to_lowercase(self):
+        from app.config import Settings
+        s = Settings(session_cookie_samesite="Lax", _env_file=None)
+        assert s.session_cookie_samesite == "lax"
+
+    def test_samesite_none_requires_secure(self):
+        from app.config import Settings
+        with pytest.raises(Exception, match="SESSION_COOKIE_SECURE must be true"):
+            Settings(session_cookie_samesite="none", session_cookie_secure=False, _env_file=None)
+
+    def test_samesite_none_with_secure_allowed(self):
+        from app.config import Settings
+        s = Settings(session_cookie_samesite="none", session_cookie_secure=True, _env_file=None)
+        assert s.session_cookie_samesite == "none"
+        assert s.session_cookie_secure is True
+
+
+# ---------------------------------------------------------------------------
+# AC2 / AC3 — Backend selection & Redis configuration
+# ---------------------------------------------------------------------------
+
+class TestBackendSelection:
+    """Validate session_backend values and Redis config fields."""
+
+    def test_backend_cookie(self):
+        from app.config import Settings
+        s = Settings(session_backend="cookie", _env_file=None)
+        assert s.session_backend == "cookie"
+
+    def test_backend_redis(self):
+        from app.config import Settings
+        s = Settings(session_backend="redis", _env_file=None)
+        assert s.session_backend == "redis"
+
+    def test_backend_invalid_rejected(self):
+        from app.config import Settings
+        with pytest.raises(Exception):
+            Settings(session_backend="memcached", _env_file=None)
+
+    def test_redis_defaults(self, monkeypatch):
+        from app.config import Settings
+        monkeypatch.delenv("REDIS_URL", raising=False)
+        monkeypatch.delenv("REDIS_CONNECTION_TIMEOUT", raising=False)
+        monkeypatch.delenv("REDIS_SOCKET_KEEPALIVE", raising=False)
+        s = Settings(_env_file=None)
+        assert s.redis_url is None
+        assert s.redis_connection_timeout == 5
+        assert s.redis_socket_keepalive is True
+
+    def test_redis_url_override(self):
+        from app.config import Settings
+        s = Settings(redis_url="redis://localhost:6379/1", _env_file=None)
+        assert s.redis_url == "redis://localhost:6379/1"
+
+
+# ---------------------------------------------------------------------------
+# AC4 — Session middleware is mounted on the app
+# ---------------------------------------------------------------------------
+
+class TestSessionMiddlewareMounted:
+    """Ensure the real ECUBE ``app`` has the session proxy middleware."""
+
+    def test_session_proxy_present(self):
+        from app.main import app as ecube_app
+
+        middleware_classes = [
+            m.cls for m in getattr(ecube_app, "user_middleware", [])
+        ]
+        assert _SessionProxy in middleware_classes, (
+            "_SessionProxy not found in middleware stack"
+        )
+
+    def test_health_endpoint_works(self, unauthenticated_client):
+        resp = unauthenticated_client.get("/health")
+        assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# AC5 — Graceful degradation from Redis to cookie
+# ---------------------------------------------------------------------------
+
+class TestGracefulRedisFailover:
+    """When Redis backend is requested but unavailable, fall back to cookie."""
+
+    def test_fallback_when_redis_package_missing(self, caplog):
+        from app.session import _try_redis_backend
+
+        _real_import = __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
+
+        def _block_redis(name, *args, **kwargs):
+            if name == "redis" or name.startswith("redis."):
+                raise ImportError("No module named 'redis'")
+            return _real_import(name, *args, **kwargs)
+
+        import asyncio
+        with patch("builtins.__import__", side_effect=_block_redis):
+            with caplog.at_level(logging.WARNING):
+                result = asyncio.run(_try_redis_backend())
+        assert result is None
+        assert "not installed" in caplog.text
+
+    def test_fallback_when_redis_url_not_set(self, caplog):
+        from app.session import _try_redis_backend
+
+        import asyncio
+        with patch("app.session.settings") as mock_settings:
+            mock_settings.session_backend = "redis"
+            mock_settings.redis_url = None
+            with caplog.at_level(logging.WARNING):
+                result = asyncio.run(_try_redis_backend())
+        assert result is None
+        assert "REDIS_URL" in caplog.text
+
+    def test_fallback_when_redis_connection_fails(self, caplog):
+        from app.session import _try_redis_backend
+
+        mock_client = AsyncMock()
+        mock_client.ping.side_effect = ConnectionError("Connection refused")
+
+        import asyncio
+        with patch("redis.asyncio.Redis") as MockRedisClass:
+            MockRedisClass.from_url.return_value = mock_client
+            with patch("app.session.settings") as mock_settings:
+                mock_settings.session_backend = "redis"
+                mock_settings.redis_url = "redis://localhost:6379/0"
+                mock_settings.redis_connection_timeout = 5
+                mock_settings.redis_socket_keepalive = True
+                with caplog.at_level(logging.WARNING):
+                    result = asyncio.run(_try_redis_backend())
+
+        assert result is None
+        assert "unavailable" in caplog.text
+        mock_client.aclose.assert_awaited_once()
+
+    def test_init_session_backend_redis_fallback(self, caplog):
+        """init_session_backend gracefully falls back and sets backend_name."""
+        from app.session import init_session_backend, mount_session_middleware
+
+        test_app = FastAPI()
+
+        import asyncio
+        with patch("app.session.settings") as mock_settings:
+            mock_settings.session_backend = "redis"
+            mock_settings.redis_url = None
+            mock_settings.secret_key = "test-secret"
+            mock_settings.session_cookie_name = "ecube_session"
+            mock_settings.session_cookie_expiration_seconds = 3600
+            mock_settings.session_cookie_samesite = "lax"
+            mock_settings.session_cookie_secure = False
+            mock_settings.session_cookie_domain = None
+
+            mount_session_middleware(test_app)
+            with caplog.at_level(logging.WARNING):
+                asyncio.run(init_session_backend(test_app))
+
+        assert test_app.state.session_backend_name == "cookie"
+        assert test_app.state.session_redis_client is None
+
+    def test_fallback_keeps_cookie_backend(self, caplog):
+        """After fallback, requests still get working cookie-based sessions."""
+        from app.session import init_session_backend, mount_session_middleware
+
+        test_app = FastAPI()
+
+        @test_app.get("/set")
+        async def _set(request: Request):
+            request.session["user"] = "alice"
+            return JSONResponse({"status": "ok"})
+
+        @test_app.get("/get")
+        async def _get(request: Request):
+            return JSONResponse({"user": request.session.get("user")})
+
+        import asyncio
+        with patch("app.session.settings") as mock_settings:
+            mock_settings.session_backend = "redis"
+            mock_settings.redis_url = None
+            mock_settings.secret_key = "test-secret"
+            mock_settings.session_cookie_name = "ecube_session"
+            mock_settings.session_cookie_expiration_seconds = 3600
+            mock_settings.session_cookie_samesite = "lax"
+            mock_settings.session_cookie_secure = False
+            mock_settings.session_cookie_domain = None
+
+            mount_session_middleware(test_app)
+            with caplog.at_level(logging.WARNING):
+                asyncio.run(init_session_backend(test_app))
+
+        client = TestClient(test_app)
+        # Store a value in the session via the cookie backend
+        resp = client.get("/set")
+        assert resp.status_code == 200
+        # Read it back — proves cookie sessions work after Redis fallback
+        resp = client.get("/get")
+        assert resp.status_code == 200
+        assert resp.json()["user"] == "alice"
+
+    def test_mount_does_not_trigger_redis_io(self):
+        """mount_session_middleware never calls _try_redis_backend."""
+        from app.session import mount_session_middleware
+
+        test_app = FastAPI()
+        with patch("app.session.settings") as mock_settings:
+            mock_settings.session_backend = "redis"
+            mock_settings.secret_key = "test-secret"
+            mock_settings.session_cookie_name = "ecube_session"
+            mock_settings.session_cookie_expiration_seconds = 3600
+            mock_settings.session_cookie_samesite = "lax"
+            mock_settings.session_cookie_secure = False
+            mock_settings.session_cookie_domain = None
+
+            with patch("app.session._try_redis_backend") as mock_try:
+                mount_session_middleware(test_app)
+
+        mock_try.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# AC2 — Redis backend actually stores data server-side
+# ---------------------------------------------------------------------------
+
+class _FakeRedis(dict):
+    """Minimal in-memory async Redis stand-in for testing."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.expire_calls: list[tuple[str, int]] = []
+
+    async def get(self, key):
+        return super().get(key)
+
+    async def setex(self, key, ttl, value):
+        self[key] = value
+
+    async def expire(self, key, ttl):
+        self.expire_calls.append((key, ttl))
+        return key in self
+
+    async def delete(self, key):
+        self.pop(key, None)
+
+    async def ping(self):
+        return True
+
+    async def aclose(self):
+        pass
+
+
+class TestRedisBackendStoresServerSide:
+    """Verify RedisSessionMiddleware stores payloads in Redis, not cookies."""
+
+    @staticmethod
+    def _make_app(fake_redis):
+        inner = FastAPI()
+
+        @inner.get("/set")
+        async def set_session(request: Request):
+            request.session["user"] = "alice"
+            return JSONResponse({"ok": True})
+
+        @inner.get("/get")
+        async def get_session(request: Request):
+            return JSONResponse({"user": request.session.get("user")})
+
+        @inner.get("/clear")
+        async def clear_session(request: Request):
+            request.session.clear()
+            return JSONResponse({"cleared": True})
+
+        inner.add_middleware(
+            RedisSessionMiddleware,
+            redis_client=fake_redis,
+            session_cookie="sid",
+            max_age=3600,
+            same_site="lax",
+            https_only=False,
+        )
+        return inner
+
+    def test_session_data_stored_in_redis(self):
+        fake = _FakeRedis()
+        app = self._make_app(fake)
+        client = TestClient(app)
+
+        resp = client.get("/set")
+        assert resp.status_code == 200
+
+        # Session data should be in our fake Redis store
+        assert len(fake) == 1
+        key = next(iter(fake))
+        assert key.startswith("ecube:session:")
+        stored = json.loads(fake[key])
+        assert stored == {"user": "alice"}
+
+    def test_cookie_contains_only_session_id(self):
+        fake = _FakeRedis()
+        app = self._make_app(fake)
+        client = TestClient(app)
+
+        resp = client.get("/set")
+        cookie_header = resp.headers.get("set-cookie", "")
+        assert "sid=" in cookie_header
+        # The cookie value must NOT contain the session payload
+        assert "alice" not in cookie_header
+
+    def test_session_round_trip(self):
+        fake = _FakeRedis()
+        app = self._make_app(fake)
+        client = TestClient(app)
+
+        # Write session
+        client.get("/set")
+        # Read it back (cookie is forwarded automatically by TestClient)
+        resp = client.get("/get")
+        assert resp.json() == {"user": "alice"}
+
+    def test_read_only_request_refreshes_ttl(self):
+        """A request that reads but doesn't modify the session should
+        refresh the Redis TTL and re-issue the cookie."""
+        fake = _FakeRedis()
+        app = self._make_app(fake)
+        client = TestClient(app)
+
+        # Write session — creates the key
+        client.get("/set")
+        assert len(fake) == 1
+        key = next(iter(fake))
+        fake.expire_calls.clear()
+
+        # Read-only request — should trigger TTL refresh
+        resp = client.get("/get")
+        assert resp.status_code == 200
+        assert resp.json() == {"user": "alice"}
+
+        # expire() must have been called with the correct key and TTL
+        assert len(fake.expire_calls) == 1
+        assert fake.expire_calls[0] == (key, 3600)
+        # Cookie should be re-issued to refresh browser-side max-age
+        assert "set-cookie" in resp.headers
+
+    def test_ttl_refresh_failure_skips_cookie(self):
+        """When redis.expire() fails, the cookie must NOT be re-issued."""
+        failing = AsyncMock()
+        valid_id = "B" * 43
+        # Simulate an existing session that loads fine but expire fails
+        failing.get.return_value = json.dumps({"user": "alice"})
+        failing.expire.side_effect = ConnectionError("expire failed")
+        app = self._make_app(failing)
+        client = TestClient(app, cookies={"sid": valid_id})
+
+        resp = client.get("/get")
+        assert resp.status_code == 200
+        # No Set-Cookie should be issued when TTL refresh failed
+        assert "set-cookie" not in resp.headers
+
+    def test_session_clear_deletes_from_redis(self):
+        fake = _FakeRedis()
+        app = self._make_app(fake)
+        client = TestClient(app)
+
+        client.get("/set")
+        assert len(fake) == 1
+
+        client.get("/clear")
+        assert len(fake) == 0
+
+    def test_empty_session_not_stored(self):
+        """A request that never writes to the session produces no Redis key."""
+        fake = _FakeRedis()
+        app = self._make_app(fake)
+        client = TestClient(app)
+
+        client.get("/get")
+        assert len(fake) == 0
+
+    def test_redis_set_failure_does_not_crash(self):
+        """If Redis write fails, the request still succeeds and no
+        session-id cookie is issued (avoids orphan cookie with no
+        server-side data)."""
+        failing = AsyncMock()
+        failing.get.return_value = None
+        failing.setex.side_effect = ConnectionError("write failed")
+        app = self._make_app(failing)
+        client = TestClient(app)
+
+        resp = client.get("/set")
+        assert resp.status_code == 200
+        # No Set-Cookie should be emitted when persistence failed
+        assert "set-cookie" not in resp.headers
+
+    def test_redis_get_failure_starts_empty_session(self):
+        """If Redis read fails, the session starts empty."""
+        failing = AsyncMock()
+        failing.get.side_effect = ConnectionError("read failed")
+        failing.setex = AsyncMock()
+        app = self._make_app(failing)
+        valid_id = "A" * 43  # valid format
+        client = TestClient(app, cookies={"sid": valid_id})
+
+        resp = client.get("/get")
+        assert resp.status_code == 200
+        assert resp.json() == {"user": None}
+
+    def test_missing_redis_key_generates_new_session_id(self):
+        """Cookie present but Redis key absent must not reuse the cookie ID
+        (prevents session fixation)."""
+        fake = _FakeRedis()  # empty — no keys at all
+        app = self._make_app(fake)
+        attacker_id = "attacker-chosen-id-that-is-long-enough1"
+        client = TestClient(app, cookies={"sid": attacker_id})
+
+        resp = client.get("/set")
+        assert resp.status_code == 200
+
+        # The stored key must NOT use the attacker-chosen ID
+        assert f"ecube:session:{attacker_id}" not in fake
+        assert len(fake) == 1
+        stored_key = next(iter(fake))
+        assert stored_key.startswith("ecube:session:")
+        actual_id = stored_key.removeprefix("ecube:session:")
+        assert actual_id != attacker_id
+
+    def test_malformed_cookie_ignored(self):
+        """A session cookie with invalid characters is silently ignored."""
+        fake = _FakeRedis()
+        app = self._make_app(fake)
+        client = TestClient(app, cookies={"sid": "../../../etc/passwd"})
+
+        resp = client.get("/set")
+        assert resp.status_code == 200
+        assert len(fake) == 1
+        key = next(iter(fake))
+        assert "etc/passwd" not in key
+
+    def test_too_short_cookie_ignored(self):
+        """A cookie value shorter than 22 chars is rejected."""
+        fake = _FakeRedis()
+        app = self._make_app(fake)
+        client = TestClient(app, cookies={"sid": "short"})
+
+        resp = client.get("/set")
+        assert resp.status_code == 200
+        assert len(fake) == 1
+        key = next(iter(fake))
+        assert "short" not in key
+
+    def test_corrupted_redis_data_starts_fresh_session(self):
+        """Non-dict JSON in Redis is treated as an empty session."""
+        valid_id = "A" * 43
+        fake = _FakeRedis()
+        # Store a JSON list instead of a dict
+        fake["ecube:session:" + valid_id] = json.dumps(["not", "a", "dict"])
+        app = self._make_app(fake)
+        client = TestClient(app, cookies={"sid": valid_id})
+
+        resp = client.get("/get")
+        assert resp.status_code == 200
+        assert resp.json() == {"user": None}
+
+
+class TestRedisSessionNestedMutations:
+    """Snapshot/compare detects mutations that simple flag-tracking would miss."""
+
+    @staticmethod
+    def _make_app(fake_redis):
+        inner = FastAPI()
+
+        @inner.get("/set-list")
+        async def set_list(request: Request):
+            request.session["items"] = ["a"]
+            return JSONResponse({"ok": True})
+
+        @inner.get("/append")
+        async def append_item(request: Request):
+            request.session["items"].append("b")
+            return JSONResponse({"ok": True})
+
+        @inner.get("/setdefault-append")
+        async def setdefault_append(request: Request):
+            request.session.setdefault("roles", []).append("admin")
+            return JSONResponse({"ok": True})
+
+        @inner.get("/nested-dict")
+        async def nested_dict(request: Request):
+            request.session.setdefault("prefs", {})["theme"] = "dark"
+            return JSONResponse({"ok": True})
+
+        @inner.get("/popitem")
+        async def popitem_route(request: Request):
+            request.session.popitem()
+            return JSONResponse({"ok": True})
+
+        @inner.get("/get")
+        async def get_session(request: Request):
+            return JSONResponse(dict(request.session))
+
+        inner.add_middleware(
+            RedisSessionMiddleware,
+            redis_client=fake_redis,
+            session_cookie="sid",
+            max_age=3600,
+            same_site="lax",
+            https_only=False,
+        )
+        return inner
+
+    def test_nested_list_append_persisted(self):
+        fake = _FakeRedis()
+        app = self._make_app(fake)
+        client = TestClient(app)
+
+        client.get("/set-list")
+        client.get("/append")
+        resp = client.get("/get")
+        assert resp.json()["items"] == ["a", "b"]
+
+    def test_setdefault_append_persisted(self):
+        fake = _FakeRedis()
+        app = self._make_app(fake)
+        client = TestClient(app)
+
+        client.get("/setdefault-append")
+        resp = client.get("/get")
+        assert resp.json()["roles"] == ["admin"]
+
+    def test_nested_dict_mutation_persisted(self):
+        fake = _FakeRedis()
+        app = self._make_app(fake)
+        client = TestClient(app)
+
+        client.get("/nested-dict")
+        resp = client.get("/get")
+        assert resp.json()["prefs"] == {"theme": "dark"}
+
+    def test_popitem_persisted(self):
+        fake = _FakeRedis()
+        app = self._make_app(fake)
+        client = TestClient(app)
+
+        client.get("/set-list")
+        client.get("/popitem")
+        resp = client.get("/get")
+        assert resp.json() == {}
+
+
+class TestRedisWebSocketPassthrough:
+    """WebSocket scopes must bypass RedisSessionMiddleware (no persistence)."""
+
+    def test_websocket_scope_passes_through(self):
+        """RedisSessionMiddleware only handles HTTP; websocket is passed through."""
+        fake = _FakeRedis()
+
+        async def inner_app(scope, receive, send):
+            if scope["type"] == "websocket":
+                # Consume the websocket.connect event first.
+                message = await receive()
+                assert message["type"] == "websocket.connect"
+                await send({"type": "websocket.accept"})
+                message = await receive()
+                await send({
+                    "type": "websocket.send",
+                    "text": f"echo: {message.get('text', '')}",
+                })
+                await send({"type": "websocket.close", "code": 1000})
+
+        app = RedisSessionMiddleware(
+            inner_app,
+            redis_client=fake,
+            session_cookie="sid",
+            max_age=3600,
+        )
+        client = TestClient(app)
+        with client.websocket_connect("/ws") as ws:
+            ws.send_text("hello")
+            reply = ws.receive_text()
+            assert reply == "echo: hello"
+
+        # No session keys should have been written to Redis.
+        assert len(fake) == 0
+
+
+class TestInitSessionBackendRedis:
+    """init_session_backend upgrades the proxy to Redis when Redis works."""
+
+    def test_redis_backend_upgrades_proxy(self, caplog):
+        from app.session import init_session_backend, mount_session_middleware
+
+        mock_redis = AsyncMock()
+        mock_redis.ping.return_value = True
+
+        test_app = FastAPI()
+        import asyncio
+        with patch("redis.asyncio.Redis") as MockRedisClass:
+            MockRedisClass.from_url.return_value = mock_redis
+            with patch("app.session.settings") as mock_settings:
+                mock_settings.session_backend = "redis"
+                mock_settings.redis_url = "redis://localhost:6379/0"
+                mock_settings.redis_connection_timeout = 5
+                mock_settings.redis_socket_keepalive = True
+                mock_settings.secret_key = "test-secret"
+                mock_settings.session_cookie_name = "ecube_session"
+                mock_settings.session_cookie_expiration_seconds = 3600
+                mock_settings.session_cookie_samesite = "lax"
+                mock_settings.session_cookie_secure = False
+                mock_settings.session_cookie_domain = None
+
+                mount_session_middleware(test_app)
+                with caplog.at_level(logging.INFO):
+                    asyncio.run(init_session_backend(test_app))
+
+        assert test_app.state.session_backend_name == "redis"
+        assert test_app.state.session_redis_client is mock_redis
+        assert "Session backend: redis" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# AC7 — Cookie attribute validation (cookie backend)
+# ---------------------------------------------------------------------------
+
+class TestCookieAttributes:
+    """Verify cookie flags are applied correctly by the cookie middleware."""
+
+    def _make_app(self, **session_overrides):
+        """Build a minimal FastAPI app with SessionMiddleware."""
+        inner_app = FastAPI()
+
+        @inner_app.get("/set-session")
+        async def set_session(request: Request):
+            request.session["user"] = "alice"
+            return JSONResponse({"ok": True})
+
+        defaults = dict(
+            secret_key="test-secret-key-for-signing",
+            session_cookie="ecube_session",
+            max_age=3600,
+            same_site="lax",
+            https_only=False,
+            domain=None,
+        )
+        defaults.update(session_overrides)
+        inner_app.add_middleware(SessionMiddleware, **defaults)
+        return inner_app
+
+    def test_cookie_name_in_response(self):
+        app = self._make_app(session_cookie="my_cookie")
+        client = TestClient(app)
+        resp = client.get("/set-session")
+        assert resp.status_code == 200
+        cookie_header = resp.headers.get("set-cookie", "")
+        assert "my_cookie=" in cookie_header
+
+    def test_cookie_httponly_always_set(self):
+        """HttpOnly is always enabled — not configurable."""
+        app = self._make_app()
+        client = TestClient(app)
+        resp = client.get("/set-session")
+        cookie_header = resp.headers.get("set-cookie", "")
+        assert "httponly" in cookie_header.lower()
+
+    def test_cookie_samesite_strict(self):
+        app = self._make_app(same_site="strict")
+        client = TestClient(app)
+        resp = client.get("/set-session")
+        cookie_header = resp.headers.get("set-cookie", "")
+        assert "samesite=strict" in cookie_header.lower()
+
+    def test_cookie_samesite_lax(self):
+        app = self._make_app(same_site="lax")
+        client = TestClient(app)
+        resp = client.get("/set-session")
+        cookie_header = resp.headers.get("set-cookie", "")
+        assert "samesite=lax" in cookie_header.lower()
+
+    def test_cookie_max_age(self):
+        app = self._make_app(max_age=86400)
+        client = TestClient(app)
+        resp = client.get("/set-session")
+        cookie_header = resp.headers.get("set-cookie", "")
+        assert "max-age=86400" in cookie_header.lower()
+
+    def test_cookie_path(self):
+        app = self._make_app()
+        client = TestClient(app)
+        resp = client.get("/set-session")
+        cookie_header = resp.headers.get("set-cookie", "")
+        assert "path=/" in cookie_header.lower()
+
+
+# ---------------------------------------------------------------------------
+# AC7 — Cookie attributes for Redis backend
+# ---------------------------------------------------------------------------
+
+class TestRedisBackendCookieAttributes:
+    """Verify cookie flags from RedisSessionMiddleware."""
+
+    @staticmethod
+    def _make_app(fake_redis, **overrides):
+        inner = FastAPI()
+
+        @inner.get("/set-session")
+        async def set_session(request: Request):
+            request.session["user"] = "alice"
+            return JSONResponse({"ok": True})
+
+        defaults = dict(
+            redis_client=fake_redis,
+            session_cookie="ecube_session",
+            max_age=3600,
+            same_site="lax",
+            https_only=False,
+        )
+        defaults.update(overrides)
+        inner.add_middleware(RedisSessionMiddleware, **defaults)
+        return inner
+
+    def test_cookie_name(self):
+        app = self._make_app(_FakeRedis(), session_cookie="my_redis_sid")
+        resp = TestClient(app).get("/set-session")
+        assert "my_redis_sid=" in resp.headers.get("set-cookie", "")
+
+    def test_cookie_httponly_always_set(self):
+        """HttpOnly is always enabled — not configurable."""
+        app = self._make_app(_FakeRedis())
+        resp = TestClient(app).get("/set-session")
+        assert "httponly" in resp.headers.get("set-cookie", "").lower()
+
+    def test_cookie_samesite(self):
+        app = self._make_app(_FakeRedis(), same_site="strict")
+        resp = TestClient(app).get("/set-session")
+        assert "samesite=strict" in resp.headers.get("set-cookie", "").lower()
+
+    def test_cookie_max_age(self):
+        app = self._make_app(_FakeRedis(), max_age=86400)
+        resp = TestClient(app).get("/set-session")
+        assert "max-age=86400" in resp.headers.get("set-cookie", "").lower()
+
+    def test_cookie_path(self):
+        app = self._make_app(_FakeRedis())
+        resp = TestClient(app).get("/set-session")
+        assert "path=/" in resp.headers.get("set-cookie", "").lower()
+
+
+# ---------------------------------------------------------------------------
+# AC8 — Logging of session events
+# ---------------------------------------------------------------------------
+
+class TestSessionEventLogging:
+    """Session backend selection is logged during init_session_backend."""
+
+    def test_logs_cookie_backend(self, caplog):
+        from app.session import init_session_backend, mount_session_middleware
+
+        test_app = FastAPI()
+        import asyncio
+        with patch("app.session.settings") as mock_settings:
+            mock_settings.session_backend = "cookie"
+            mock_settings.secret_key = "test-secret"
+            mock_settings.session_cookie_name = "ecube_session"
+            mock_settings.session_cookie_expiration_seconds = 3600
+            mock_settings.session_cookie_samesite = "lax"
+            mock_settings.session_cookie_secure = False
+            mock_settings.session_cookie_domain = None
+
+            mount_session_middleware(test_app)
+            with caplog.at_level(logging.INFO):
+                asyncio.run(init_session_backend(test_app))
+
+        assert "Session backend: cookie" in caplog.text
+
+    def test_logs_redis_fallback(self, caplog):
+        from app.session import init_session_backend, mount_session_middleware
+
+        test_app = FastAPI()
+        import asyncio
+        with patch("app.session.settings") as mock_settings:
+            mock_settings.session_backend = "redis"
+            mock_settings.redis_url = None
+            mock_settings.secret_key = "test-secret"
+            mock_settings.session_cookie_name = "ecube_session"
+            mock_settings.session_cookie_expiration_seconds = 3600
+            mock_settings.session_cookie_samesite = "lax"
+            mock_settings.session_cookie_secure = False
+            mock_settings.session_cookie_domain = None
+
+            mount_session_middleware(test_app)
+            with caplog.at_level(logging.INFO):
+                asyncio.run(init_session_backend(test_app))
+
+        assert "Session backend: cookie" in caplog.text
+        assert "REDIS_URL" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# close_session_backend
+# ---------------------------------------------------------------------------
+
+class TestCloseSessionBackend:
+    """Verify Redis client is closed on shutdown."""
+
+    def test_closes_redis_client(self):
+        from app.session import close_session_backend
+
+        test_app = FastAPI()
+        mock_client = AsyncMock()
+        test_app.state.session_redis_client = mock_client
+
+        import asyncio
+        asyncio.run(close_session_backend(test_app))
+
+        mock_client.aclose.assert_awaited_once()
+        assert test_app.state.session_redis_client is None
+
+    def test_noop_when_no_redis(self):
+        from app.session import close_session_backend
+
+        test_app = FastAPI()
+        test_app.state.session_redis_client = None
+
+        import asyncio
+        asyncio.run(close_session_backend(test_app))  # should not raise
+
+    def test_handles_close_exception(self, caplog):
+        from app.session import close_session_backend
+
+        test_app = FastAPI()
+        mock_client = AsyncMock()
+        mock_client.aclose.side_effect = RuntimeError("close failed")
+        test_app.state.session_redis_client = mock_client
+
+        import asyncio
+        with caplog.at_level(logging.WARNING):
+            asyncio.run(close_session_backend(test_app))
+
+        assert test_app.state.session_redis_client is None
+        assert "Failed to close" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# 11. URL credential redaction
+# ---------------------------------------------------------------------------
+class TestRedactUrl:
+    """Verify _redact_url strips credentials from Redis URLs."""
+
+    def test_redacts_user_and_password(self):
+        from app.session import _redact_url
+
+        assert _redact_url("redis://alice:s3cret@db.host:6379/0") == "redis://***@db.host:6379/0"
+
+    def test_redacts_password_only(self):
+        from app.session import _redact_url
+
+        assert _redact_url("redis://:s3cret@db.host:6379/0") == "redis://***@db.host:6379/0"
+
+    def test_redacts_user_only(self):
+        from app.session import _redact_url
+
+        assert _redact_url("redis://alice@db.host:6379/0") == "redis://***@db.host:6379/0"
+
+    def test_no_credentials_unchanged(self):
+        from app.session import _redact_url
+
+        assert _redact_url("redis://db.host:6379/0") == "redis://db.host:6379/0"
+
+    def test_no_port_with_credentials(self):
+        from app.session import _redact_url
+
+        assert _redact_url("redis://alice:pass@db.host/2") == "redis://***@db.host/2"
+
+    def test_ipv6_host_with_credentials(self):
+        from app.session import _redact_url
+
+        assert _redact_url("redis://user:pass@[::1]:6379/0") == "redis://***@[::1]:6379/0"
+
+    def test_ipv6_host_no_credentials(self):
+        from app.session import _redact_url
+
+        assert _redact_url("redis://[::1]:6379/0") == "redis://[::1]:6379/0"
+
+    def test_unparseable_returns_placeholder(self):
+        from app.session import _redact_url
+
+        # Force an exception inside _redact_url
+        with patch("app.session.urlparse", side_effect=ValueError("bad")):
+            assert _redact_url("redis://host:6379") == "<unparseable>"
