@@ -84,6 +84,10 @@ class LinuxFilesystemDetector:
 
         Returns the canonical fs label, ``'unformatted'`` for empty/null, or
         ``None`` on failure.
+
+        For partitioned drives the whole-disk node typically has a null
+        ``fstype`` while the actual filesystem lives on a child partition.
+        We walk children recursively and return the first non-empty value.
         """
         try:
             proc = subprocess.run(
@@ -95,12 +99,26 @@ class LinuxFilesystemDetector:
                 return None
             data = json.loads(proc.stdout)
             devices = data.get("blockdevices", [])
-            if devices:
-                fstype = devices[0].get("fstype")
-                if fstype:
-                    return fstype.strip().lower()
+            if not devices:
                 return "unformatted"
+            fstype = self._first_fstype(devices)
+            if fstype:
+                return fstype.strip().lower()
             return "unformatted"
         except (subprocess.TimeoutExpired, OSError, json.JSONDecodeError, KeyError) as exc:
             logger.debug("lsblk failed for %s: %s", device_path, exc)
             return None
+
+    @staticmethod
+    def _first_fstype(nodes: list[dict]) -> str | None:
+        """Return the first non-empty ``fstype`` from *nodes* or their children."""
+        for node in nodes:
+            fstype = node.get("fstype")
+            if fstype:
+                return fstype
+            children = node.get("children")
+            if children:
+                result = LinuxFilesystemDetector._first_fstype(children)
+                if result:
+                    return result
+        return None
