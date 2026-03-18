@@ -28,6 +28,28 @@ def initialize_drive(
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
 
+    # Project isolation must be checked first so that IN_USE drives assigned
+    # to a different project always receive a 403 (with audit), regardless of
+    # their filesystem_type.
+    if drive.current_project_id and drive.current_project_id != project_id:
+        try:
+            audit_repo.add(
+                action="PROJECT_ISOLATION_VIOLATION",
+                user=actor,
+                details={
+                    "actor": actor,
+                    "drive_id": drive_id,
+                    "existing_project_id": drive.current_project_id,
+                    "requested_project_id": project_id,
+                },
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for PROJECT_ISOLATION_VIOLATION")
+        raise HTTPException(
+            status_code=403,
+            detail=f"Drive is already assigned to project '{drive.current_project_id}'",
+        )
+
     # Reject drives without a recognized filesystem.
     _unrecognized_fs = {"unformatted", "unknown", None}
     if drive.filesystem_type in _unrecognized_fs:
@@ -51,25 +73,6 @@ def initialize_drive(
                 "Drive must have a recognized filesystem before initialization. "
                 f"Current filesystem_type: {current_val}"
             ),
-        )
-
-    if drive.current_project_id and drive.current_project_id != project_id:
-        try:
-            audit_repo.add(
-                action="PROJECT_ISOLATION_VIOLATION",
-                user=actor,
-                details={
-                    "actor": actor,
-                    "drive_id": drive_id,
-                    "existing_project_id": drive.current_project_id,
-                    "requested_project_id": project_id,
-                },
-            )
-        except Exception:
-            logger.exception("Failed to write audit log for PROJECT_ISOLATION_VIOLATION")
-        raise HTTPException(
-            status_code=403,
-            detail=f"Drive is already assigned to project '{drive.current_project_id}'",
         )
 
     drive.current_project_id = project_id
