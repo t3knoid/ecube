@@ -30,6 +30,10 @@ from app.services.os_user_service import (
     OsUserProvider,
     LinuxOsUserProvider,
 )
+from app.services.pam_service import (
+    PamAuthenticator,
+    LinuxPamAuthenticator,
+)
 
 __all__ = [
     "FilesystemDetector",
@@ -38,12 +42,14 @@ __all__ = [
     "DriveEjectProvider",
     "MountProvider",
     "OsUserProvider",
+    "PamAuthenticator",
     "get_filesystem_detector",
     "get_drive_formatter",
     "get_drive_discovery",
     "get_drive_eject",
     "get_mount_provider",
     "get_os_user_provider",
+    "get_authenticator",
     "validate_device_path",
 ]
 
@@ -69,6 +75,10 @@ _MOUNT_PROVIDER_REGISTRY: dict[str, type[MountProvider]] = {
 
 _OS_USER_PROVIDER_REGISTRY: dict[str, type[OsUserProvider]] = {
     "linux": LinuxOsUserProvider,
+}
+
+_PAM_AUTHENTICATOR_REGISTRY: dict[str, type[PamAuthenticator]] = {
+    "linux": LinuxPamAuthenticator,
 }
 
 
@@ -115,6 +125,14 @@ def get_mount_provider() -> MountProvider:
 def get_os_user_provider() -> OsUserProvider:
     """Return the platform-appropriate :class:`OsUserProvider`."""
     cls = _OS_USER_PROVIDER_REGISTRY.get(settings.platform)
+    if cls is None:
+        raise ValueError(f"Unsupported platform: {settings.platform!r}")
+    return cls()
+
+
+def get_authenticator() -> PamAuthenticator:
+    """Return the platform-appropriate :class:`PamAuthenticator`."""
+    cls = _PAM_AUTHENTICATOR_REGISTRY.get(settings.platform)
     if cls is None:
         raise ValueError(f"Unsupported platform: {settings.platform!r}")
     return cls()
