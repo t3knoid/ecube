@@ -23,11 +23,12 @@ from app.models.jobs import ExportJob, JobStatus
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_drive(db, *, state=DriveState.AVAILABLE, project_id=None, device_id="USB-TEST"):
+def _make_drive(db, *, state=DriveState.AVAILABLE, project_id=None, device_id="USB-TEST", filesystem_type="ext4"):
     drive = UsbDrive(
         device_identifier=device_id,
         current_state=state,
         current_project_id=project_id,
+        filesystem_type=filesystem_type,
     )
     db.add(drive)
     db.commit()

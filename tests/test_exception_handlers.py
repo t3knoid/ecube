@@ -178,6 +178,7 @@ def test_existing_isolation_violation_schema(manager_client, db):
         device_identifier="USB-EH01",
         current_state=DriveState.IN_USE,
         current_project_id="PROJ-A",
+        filesystem_type="ext4",
     )
     db.add(drive)
     db.commit()

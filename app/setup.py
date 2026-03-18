@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import getpass
 import os
-import re
 import secrets
 import shutil
 from urllib.parse import quote
@@ -20,17 +19,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+from app.constants import ECUBE_GROUP_ROLE_MAP, USERNAME_RE
 
-ECUBE_GROUPS = {
-    "ecube-admins": "admin",
-    "ecube-managers": "manager",
-    "ecube-processors": "processor",
-    "ecube-auditors": "auditor",
-}
+# Alias kept so existing references (e.g. ``for group in ECUBE_GROUPS:``) work
+# unchanged.  The canonical mapping now lives in ``app.constants``.
+ECUBE_GROUPS = ECUBE_GROUP_ROLE_MAP
 
 DEFAULT_INSTALL_DIR = "/opt/ecube"
-
-_USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
 _UNSAFE_PASSWORD_CHARS = frozenset("\n\r:")
 
 
@@ -74,7 +69,7 @@ def _create_admin_user() -> str:
     """Prompt for admin credentials, create the OS user, return username."""
     username = input("Enter admin username [ecube-admin]: ").strip() or "ecube-admin"
 
-    if not _USERNAME_RE.match(username):
+    if not USERNAME_RE.match(username):
         print(
             "Error: invalid username. Must start with a lowercase letter or "
             "underscore, contain only lowercase letters, digits, hyphens, or "

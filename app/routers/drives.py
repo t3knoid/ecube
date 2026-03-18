@@ -5,8 +5,9 @@ from typing import List
 
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
-from app.schemas.hardware import DriveInitialize, UsbDriveSchema
+from app.schemas.hardware import DriveFormatRequest, DriveInitialize, UsbDriveSchema
 from app.services import drive_service, discovery_service
+from app.infrastructure import get_drive_formatter, get_filesystem_detector
 
 logger = logging.getLogger(__name__)
 
@@ -74,4 +75,28 @@ def refresh_drives(
 
     **Roles:** ``admin``, ``manager``
     """
-    return discovery_service.run_discovery_sync(db, actor=current_user.username)
+    return discovery_service.run_discovery_sync(
+        db,
+        actor=current_user.username,
+        filesystem_detector=get_filesystem_detector(),
+    )
+
+
+@router.post("/{drive_id}/format", response_model=UsbDriveSchema)
+def format_drive(
+    drive_id: int,
+    body: DriveFormatRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER),
+):
+    """Format a drive with the specified filesystem type.
+
+    Supported filesystem types: ``ext4``, ``exfat``.  The drive must be in
+    ``AVAILABLE`` state, not currently mounted, and have a valid device path.
+
+    **Roles:** ``admin``, ``manager``
+    """
+    formatter = get_drive_formatter()
+    return drive_service.format_drive(
+        drive_id, body.filesystem_type, db, formatter=formatter, actor=current_user.username
+    )
