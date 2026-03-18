@@ -1,7 +1,7 @@
 import logging
 import subprocess
 from datetime import datetime, timezone
-from typing import Optional, Protocol, Tuple
+from typing import Optional, Tuple
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -12,6 +12,9 @@ from app.repositories.mount_repository import MountRepository
 from app.schemas.network import MountCreate
 from app.config import settings
 
+# Re-export so existing ``mount_service.MountProvider`` access keeps working.
+from app.infrastructure.mount_protocol import MountProvider  # noqa: F401 – re-export
+
 
 def _default_provider() -> "MountProvider":
     """Lazy import to avoid circular dependency at module level."""
@@ -19,27 +22,6 @@ def _default_provider() -> "MountProvider":
     return get_mount_provider()
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# MountProvider Protocol
-# ---------------------------------------------------------------------------
-
-class MountProvider(Protocol):
-    """Platform-agnostic interface for OS-level mount/unmount operations."""
-
-    def os_mount(self, mount_type: MountType, remote_path: str, local_mount_point: str,
-                 *, credentials_file: Optional[str] = None, username: Optional[str] = None) -> Tuple[bool, Optional[str]]:
-        """Mount a remote filesystem. Returns (success, error_message)."""
-        ...
-
-    def os_unmount(self, local_mount_point: str) -> Tuple[bool, Optional[str]]:
-        """Unmount a filesystem. Returns (success, error_message)."""
-        ...
-
-    def check_mounted(self, local_mount_point: str) -> Optional[bool]:
-        """Check if a path is an active mountpoint. Returns True/False/None on error."""
-        ...
 
 
 class LinuxMountProvider:
