@@ -55,8 +55,9 @@ curl -fsSL -O \
 # Verify checksum
 sha256sum -c "ecube-package-${LATEST_TAG}.sha256"
 
-# Extract
+# Extract and fix ownership so the ecube user can access all files
 tar -xzf "ecube-package-${LATEST_TAG}.tar.gz" -C /opt/ecube/
+chown -R ecube:ecube /opt/ecube
 ```
 
 ## Set Up Python Virtual Environment
