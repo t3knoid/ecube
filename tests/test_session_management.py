@@ -330,11 +330,19 @@ class TestGracefulRedisFailover:
 class _FakeRedis(dict):
     """Minimal in-memory async Redis stand-in for testing."""
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.expire_calls: list[tuple[str, int]] = []
+
     async def get(self, key):
         return super().get(key)
 
     async def setex(self, key, ttl, value):
         self[key] = value
+
+    async def expire(self, key, ttl):
+        self.expire_calls.append((key, ttl))
+        return key in self
 
     async def delete(self, key):
         self.pop(key, None)
@@ -413,6 +421,45 @@ class TestRedisBackendStoresServerSide:
         # Read it back (cookie is forwarded automatically by TestClient)
         resp = client.get("/get")
         assert resp.json() == {"user": "alice"}
+
+    def test_read_only_request_refreshes_ttl(self):
+        """A request that reads but doesn't modify the session should
+        refresh the Redis TTL and re-issue the cookie."""
+        fake = _FakeRedis()
+        app = self._make_app(fake)
+        client = TestClient(app)
+
+        # Write session — creates the key
+        client.get("/set")
+        assert len(fake) == 1
+        key = next(iter(fake))
+        fake.expire_calls.clear()
+
+        # Read-only request — should trigger TTL refresh
+        resp = client.get("/get")
+        assert resp.status_code == 200
+        assert resp.json() == {"user": "alice"}
+
+        # expire() must have been called with the correct key and TTL
+        assert len(fake.expire_calls) == 1
+        assert fake.expire_calls[0] == (key, 3600)
+        # Cookie should be re-issued to refresh browser-side max-age
+        assert "set-cookie" in resp.headers
+
+    def test_ttl_refresh_failure_skips_cookie(self):
+        """When redis.expire() fails, the cookie must NOT be re-issued."""
+        failing = AsyncMock()
+        valid_id = "B" * 43
+        # Simulate an existing session that loads fine but expire fails
+        failing.get.return_value = json.dumps({"user": "alice"})
+        failing.expire.side_effect = ConnectionError("expire failed")
+        app = self._make_app(failing)
+        client = TestClient(app, cookies={"sid": valid_id})
+
+        resp = client.get("/get")
+        assert resp.status_code == 200
+        # No Set-Cookie should be issued when TTL refresh failed
+        assert "set-cookie" not in resp.headers
 
     def test_session_clear_deletes_from_redis(self):
         fake = _FakeRedis()
