@@ -927,6 +927,16 @@ class TestRedactUrl:
 
         assert _redact_url("redis://alice:pass@db.host/2") == "redis://***@db.host/2"
 
+    def test_ipv6_host_with_credentials(self):
+        from app.session import _redact_url
+
+        assert _redact_url("redis://user:pass@[::1]:6379/0") == "redis://***@[::1]:6379/0"
+
+    def test_ipv6_host_no_credentials(self):
+        from app.session import _redact_url
+
+        assert _redact_url("redis://[::1]:6379/0") == "redis://[::1]:6379/0"
+
     def test_unparseable_returns_placeholder(self):
         from app.session import _redact_url
 
