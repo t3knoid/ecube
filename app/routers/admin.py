@@ -50,8 +50,8 @@ from app.schemas.admin import (
     SetOSGroupsRequest,
 )
 from app.infrastructure import get_os_user_provider
-from app.infrastructure.os_user_protocol import OsUserProvider
-from app.services import os_user_service
+from app.infrastructure.os_user_protocol import OSUserError, OsUserProvider
+from app.services.os_user_service import validate_group_name, validate_username
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ def _get_provider() -> OsUserProvider:
     return get_os_user_provider()
 
 
-def _raise_os_error(exc: os_user_service.OSUserError, *, context: str = "OS operation") -> None:
+def _raise_os_error(exc: OSUserError, *, context: str = "OS operation") -> None:
     """Map an :class:`OSUserError` to an appropriate HTTP error and raise it.
 
     * ``"already exists"`` → 409 Conflict
@@ -225,7 +225,7 @@ def download_log_file(
 def _validate_path_username(username: str) -> str:
     """Validate a username path parameter."""
     try:
-        os_user_service.validate_username(username)
+        validate_username(username)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     return username
@@ -262,7 +262,7 @@ def create_os_user(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    except os_user_service.OSUserError as exc:
+    except OSUserError as exc:
         _raise_os_error(exc, context="Create OS user")
 
     # Assign ECUBE DB roles if requested.
@@ -356,7 +356,7 @@ def delete_os_user(
         _get_provider().delete_user(username)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    except os_user_service.OSUserError as exc:
+    except OSUserError as exc:
         _raise_os_error(exc, context="Delete OS user")
 
     # Clean up DB role assignments (best-effort: OS user is already gone).
@@ -393,7 +393,7 @@ def reset_os_user_password(
         _get_provider().reset_password(username, body.password)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    except os_user_service.OSUserError as exc:
+    except OSUserError as exc:
         _raise_os_error(exc, context="Reset OS password")
 
     best_effort_audit(db, "OS_PASSWORD_RESET", current_user.username, {
@@ -419,7 +419,7 @@ def set_os_user_groups(
         os_user = _get_provider().set_user_groups(username, body.groups)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    except os_user_service.OSUserError as exc:
+    except OSUserError as exc:
         _raise_os_error(exc, context="Set OS user groups")
 
     best_effort_audit(db, "OS_USER_GROUPS_MODIFIED", current_user.username, {
@@ -453,7 +453,7 @@ def add_os_user_groups(
         os_user = _get_provider().add_user_to_groups(username, body.groups)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    except os_user_service.OSUserError as exc:
+    except OSUserError as exc:
         _raise_os_error(exc, context="Add OS user to groups")
 
     best_effort_audit(db, "OS_USER_GROUPS_APPENDED", current_user.username, {
@@ -490,7 +490,7 @@ def create_os_group(
         os_group = _get_provider().create_group(body.name)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    except os_user_service.OSUserError as exc:
+    except OSUserError as exc:
         _raise_os_error(exc, context="Create OS group")
 
     best_effort_audit(db, "OS_GROUP_CREATED", current_user.username, {
@@ -528,7 +528,7 @@ def delete_os_group(
 ) -> dict:
     """Delete an OS group from the host system."""
     try:
-        os_user_service.validate_group_name(name)
+        validate_group_name(name)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
@@ -536,7 +536,7 @@ def delete_os_group(
         _get_provider().delete_group(name)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    except os_user_service.OSUserError as exc:
+    except OSUserError as exc:
         _raise_os_error(exc, context="Delete OS group")
 
     best_effort_audit(db, "OS_GROUP_DELETED", current_user.username, {

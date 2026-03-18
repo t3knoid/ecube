@@ -39,7 +39,7 @@ from app.schemas.admin import (
     SetupStatusResponse,
 )
 from app.infrastructure import get_os_user_provider
-from app.services import os_user_service
+from app.infrastructure.os_user_protocol import OSUserError
 
 logger = logging.getLogger(__name__)
 
@@ -248,7 +248,7 @@ def _run_os_setup(
     # Step 2: Create ECUBE OS groups.
     try:
         groups_created = provider.ensure_ecube_groups()
-    except os_user_service.OSUserError as exc:
+    except OSUserError as exc:
         raise HTTPException(
             status_code=500,
             detail=f"Failed to create OS groups: {exc.message}",
@@ -263,7 +263,7 @@ def _run_os_setup(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    except os_user_service.OSUserError as exc:
+    except OSUserError as exc:
         # User may already exist (e.g. re-running setup after partial failure).
         if "already exists" not in exc.message:
             raise HTTPException(
@@ -276,7 +276,7 @@ def _run_os_setup(
             provider.add_user_to_groups(
                 body.username, ["ecube-admins"], _skip_managed_check=True,
             )
-        except os_user_service.OSUserError as grp_exc:
+        except OSUserError as grp_exc:
             raise HTTPException(
                 status_code=500,
                 detail=f"User exists but failed to add to ecube-admins: {grp_exc.message}",
@@ -285,7 +285,7 @@ def _run_os_setup(
             provider.reset_password(
                 body.username, body.password, _skip_managed_check=True,
             )
-        except (os_user_service.OSUserError, ValueError) as pw_exc:
+        except (OSUserError, ValueError) as pw_exc:
             raise HTTPException(
                 status_code=500,
                 detail=f"User exists but failed to reset password: {pw_exc}",
