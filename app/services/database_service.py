@@ -22,6 +22,10 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 logger = logging.getLogger(__name__)
 
+# Default timeouts (seconds) for psycopg2 connections.
+_ADMIN_CONNECT_TIMEOUT = 10   # For admin/provisioning operations
+_STATUS_CONNECT_TIMEOUT = 5   # For lightweight status-check queries
+
 # Guards engine/session-factory replacement so concurrent requests cannot
 # observe a half-swapped state.  Also exposes "reinitialization in progress"
 # to the router layer so it can return 503.
@@ -74,7 +78,7 @@ def test_connection(
             user=username,
             password=password,
             dbname="postgres",
-            connect_timeout=10,
+            connect_timeout=_ADMIN_CONNECT_TIMEOUT,
         )
         try:
             version = conn.server_version
@@ -117,7 +121,7 @@ def provision_database(
             user=admin_username,
             password=admin_password,
             dbname="postgres",
-            connect_timeout=10,
+            connect_timeout=_ADMIN_CONNECT_TIMEOUT,
         )
     except psycopg2.OperationalError as exc:
         raise ConnectionError(
@@ -303,7 +307,7 @@ def _get_current_revision(database_url: str) -> Optional[str]:
     })
 
     try:
-        conn = psycopg2.connect(database_url, connect_timeout=5)
+        conn = psycopg2.connect(database_url, connect_timeout=_STATUS_CONNECT_TIMEOUT)
     except psycopg2.OperationalError as exc:
         pgcode = getattr(exc, "pgcode", None)
         if pgcode in _NOT_PROVISIONED_PGCODES:
@@ -355,7 +359,7 @@ def get_database_status() -> Dict[str, Any]:
     try:
         conn = psycopg2.connect(
             settings.database_url,
-            connect_timeout=5,
+            connect_timeout=_STATUS_CONNECT_TIMEOUT,
         )
         try:
             result["connected"] = True
@@ -443,7 +447,7 @@ def update_database_settings(
     # Test the new connection before committing
     new_url = _build_database_url(new_host, new_port, new_database, new_username, new_password)
     try:
-        conn = psycopg2.connect(new_url, connect_timeout=10)
+        conn = psycopg2.connect(new_url, connect_timeout=_ADMIN_CONNECT_TIMEOUT)
         conn.close()
     except psycopg2.OperationalError as exc:
         raise ConnectionError(

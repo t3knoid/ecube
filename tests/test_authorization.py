@@ -119,7 +119,7 @@ class TestDriveAuthorization:
     def test_initialize_drive_admin_allowed(self, db):
         from app.models.hardware import DriveState, UsbDrive
 
-        drive = UsbDrive(device_identifier="AUTHZ-INIT-ADMIN", current_state=DriveState.AVAILABLE)
+        drive = UsbDrive(device_identifier="AUTHZ-INIT-ADMIN", current_state=DriveState.AVAILABLE, filesystem_type="ext4")
         db.add(drive)
         db.commit()
         c = _client_for_role(db, ["admin"])
@@ -128,7 +128,7 @@ class TestDriveAuthorization:
     def test_initialize_drive_manager_allowed(self, db):
         from app.models.hardware import DriveState, UsbDrive
 
-        drive = UsbDrive(device_identifier="AUTHZ-INIT-MGR", current_state=DriveState.AVAILABLE)
+        drive = UsbDrive(device_identifier="AUTHZ-INIT-MGR", current_state=DriveState.AVAILABLE, filesystem_type="ext4")
         db.add(drive)
         db.commit()
         c = _client_for_role(db, ["manager"])
