@@ -20,6 +20,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "PyJWT[crypto]>=2.7.0",
     "python-pam>=2.0.0",
+    "six>=1.16.0",
     "itsdangerous>=2.1.0",
 ]
 
