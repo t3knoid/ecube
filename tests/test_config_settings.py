@@ -224,14 +224,12 @@ def _make_job(db, source_path, **kwargs):
 
 
 def _session_factory(db):
-    class _NonClosing:
-        def __getattr__(self, name):
-            return getattr(db, name)
-
-        def close(self):
-            pass
-
-    return lambda: _NonClosing()
+    # Return a sessionmaker factory bound to the same engine as db
+    # This allows each thread to get its own session, matching production behavior
+    from sqlalchemy.orm import sessionmaker
+    engine = db.get_bind()
+    Factory = sessionmaker(bind=engine)
+    return Factory
 
 
 class TestCopyJobTimeout:
