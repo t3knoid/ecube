@@ -7,7 +7,7 @@ from app.auth import CurrentUser, require_roles
 from app.database import get_db
 from app.schemas.hardware import DriveFormatRequest, DriveInitialize, UsbDriveSchema
 from app.services import drive_service, discovery_service
-from app.infrastructure import get_drive_formatter, get_filesystem_detector
+from app.infrastructure import get_drive_eject, get_drive_formatter, get_filesystem_detector
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,10 @@ def prepare_eject(
 
     **Roles:** ``admin``, ``manager``
     """
-    return drive_service.prepare_eject(drive_id, db, actor=current_user.username)
+    return drive_service.prepare_eject(
+        drive_id, db, actor=current_user.username,
+        eject_provider=get_drive_eject(),
+    )
 
 
 @router.post("/refresh")
