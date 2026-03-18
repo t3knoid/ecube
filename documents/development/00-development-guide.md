@@ -11,13 +11,14 @@
 
 1. [Introduction](#introduction)
 2. [Development Environment Setup](#development-environment-setup)
-3. [Repository Layout](#repository-layout)
-4. [Running the Application](#running-the-application)
-5. [Database and Migrations](#database-and-migrations)
-6. [Testing](#testing)
-7. [Architecture Overview](#architecture-overview)
-8. [Coding Conventions](#coding-conventions)
-9. [Related Documentation](#related-documentation)
+3. [Windows Development Setup](#windows-development-setup)
+4. [Repository Layout](#repository-layout)
+5. [Running the Application](#running-the-application)
+6. [Database and Migrations](#database-and-migrations)
+7. [Testing](#testing)
+8. [Architecture Overview](#architecture-overview)
+9. [Coding Conventions](#coding-conventions)
+10. [Related Documentation](#related-documentation)
 
 ---
 
@@ -79,10 +80,161 @@ git config core.hooksPath .githooks
 
 ---
 
+## Windows Development Setup
+
+ECUBE targets Linux for production, but day-to-day development can be done on Windows using Docker Desktop and WSL2. The `docker-compose.ecube-win.yml` file provides a Windows-friendly stack (app + PostgreSQL) without the Linux-specific USB device mounts. To test USB passthrough from Windows, use the **usbipd-win** tool to forward USB devices into the Docker (WSL2) environment.
+
+### Prerequisites
+
+- Windows 10 (build 19041+) or Windows 11
+- [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) with a Linux distribution installed (e.g., Ubuntu)
+- [Docker Desktop for Windows](https://docs.docker.com/desktop/install/windows-install/) with the WSL2 backend enabled
+- Python 3.11+ (Windows install or via WSL2)
+- [usbipd-win](https://github.com/dorssel/usbipd-win) — USB/IP device sharing for Windows
+
+### Install usbipd-win
+
+`usbipd-win` allows you to share locally connected USB devices with WSL2 (and therefore Docker containers running on the WSL2 backend).
+
+1. **Install via winget (recommended):**
+
+   ```powershell
+   winget install usbipd
+   ```
+
+   Alternatively, download the latest `.msi` installer from the [usbipd-win releases page](https://github.com/dorssel/usbipd-win/releases).
+
+2. **Install the USBIP tools inside your WSL2 distribution:**
+
+   ```bash
+   # From a WSL2 terminal (e.g., Ubuntu)
+   sudo apt update
+   sudo apt install linux-tools-generic hwdata
+   sudo update-alternatives --install /usr/local/bin/usbip usbip \
+     $(find /usr/lib/linux-tools/*/usbip | head -1) 20
+   ```
+
+3. **Verify the install** by listing USB devices from an elevated PowerShell prompt:
+
+   ```powershell
+   usbipd list
+   ```
+
+   You should see all USB devices connected to your Windows host with their bus IDs and descriptions.
+
+### Sharing a USB Device with Docker
+
+USB devices must be attached to WSL2 before the Docker container can see them. Run the following commands from an **elevated (Administrator) PowerShell** prompt:
+
+1. **List available USB devices:**
+
+   ```powershell
+   usbipd list
+   ```
+
+   Example output:
+
+   ```powershell
+   Connected:
+   BUSID  VID:PID    DEVICE                          STATE
+   1-2    0781:5581  SanDisk Ultra USB 3.0           Not shared
+   1-7    8087:0029  Intel Bluetooth                 Not shared
+   ```
+
+2. **Bind the device** (one-time step — makes the device shareable):
+
+Open and run as administrator a command prompt.
+
+   ```powershell
+   usbipd bind --busid <BUSID>
+   ```
+
+   For example: `usbipd bind --busid 1-2`
+
+3. **Attach the device to WSL2:**
+
+   ```powershell
+   usbipd attach --wsl --busid <BUSID>
+   ```
+
+   The device now appears inside WSL2 (and any Docker container with the appropriate volume mounts). You can verify from a WSL2 terminal:
+
+   ```bash
+   lsusb
+   ```
+
+   You may have to install the `usbutils` package with `sudo apt install usbutils`.
+
+4. **Detach when done:**
+
+   ```powershell
+   usbipd detach --busid <BUSID>
+   ```
+
+> **Tip:** You must re-attach the device after every unplug/replug cycle or WSL2 restart. Consider scripting the `bind` + `attach` commands for convenience.
+
+### Running the Windows Dev Stack
+
+The `docker-compose.ecube-win.yml` file provides the ECUBE application and PostgreSQL without the Linux-specific privileged mode and host device mounts found in `docker-compose.ecube.yml`.
+
+```powershell
+# Start the development stack
+docker compose -f docker-compose.ecube-win.yml up -d
+
+# Follow application logs
+docker compose -f docker-compose.ecube-win.yml logs -f ecube-app-dev
+
+# Stop everything
+docker compose -f docker-compose.ecube-win.yml down
+
+# Stop and remove volumes (clean slate)
+docker compose -f docker-compose.ecube-win.yml down -v
+```
+
+The API is available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
+
+### Running Tests on Windows
+
+Tests use an in-memory SQLite database and do not require Docker or USB hardware:
+
+```powershell
+# Activate the virtual environment
+.venv\Scripts\Activate.ps1
+
+# Run all unit tests
+python -m pytest tests/ -v
+```
+
+For integration tests against a real PostgreSQL database:
+
+```powershell
+# Start the integration database
+docker compose -f docker-compose.integration.yml up -d
+
+# Run integration tests
+$env:DATABASE_URL="postgresql://ecube_test:ecube_test@localhost:5433/ecube_integration"
+python -m pytest tests/ -v --run-integration
+
+# Stop the integration database
+docker compose -f docker-compose.integration.yml down -v
+```
+
+### Troubleshooting (Windows)
+
+| Symptom | Fix |
+|---------|-----|
+| `usbipd list` shows no devices | Run PowerShell as Administrator |
+| `usbipd attach` fails with "not shared" | Run `usbipd bind --busid <BUSID>` first |
+| Device not visible inside Docker container | Ensure Docker Desktop is using the WSL2 backend and the device is attached to WSL2 |
+| WSL2 `lsusb` shows the device but Docker does not | Restart Docker Desktop; ensure the container uses appropriate volume mounts for `/dev/bus/usb` |
+| Permission errors accessing USB in WSL2 | Install `linux-tools-generic` and `hwdata` in your WSL2 distro |
+
+---
+
 ## Repository Layout
 
 ```text
-docker-compose.ecube-host.yml  # Full-stack dev: app + PostgreSQL + USB passthrough
+docker-compose.ecube.yml  # Full-stack dev: app + PostgreSQL + USB passthrough
 docker-compose.integration.yml # Isolated PostgreSQL for integration tests (port 5433)
 app/
   main.py              # FastAPI application entry point and lifespan
@@ -137,20 +289,20 @@ Two approaches are available: Docker Compose (recommended) or a manual local set
 
 ### Option A: Docker Compose — Full Stack (Recommended)
 
-The `docker-compose.ecube-host.yml` file starts the ECUBE application and PostgreSQL together. It builds the app from the local `Dockerfile`, connects to a containerized Postgres, and automatically runs migrations on startup. USB passthrough is enabled via privileged mode and host device mounts.
+The `docker-compose.ecube.yml` file starts the ECUBE application and PostgreSQL together. It builds the app from the local `Dockerfile`, connects to a containerized Postgres, and automatically runs migrations on startup. USB passthrough is enabled via privileged mode and host device mounts.
 
 ```bash
 # Start the full stack (builds the image on first run)
-docker compose -f docker-compose.ecube-host.yml up -d
+docker compose -f docker-compose.ecube.yml up -d --build
 
 # Follow application logs
-docker compose -f docker-compose.ecube-host.yml logs -f ecube-host
+docker compose -f docker-compose.ecube.yml logs -f ecube-host
 
 # Stop everything
-docker compose -f docker-compose.ecube-host.yml down
+docker compose -f docker-compose.ecube.yml down
 
 # Stop and remove volumes (clean slate)
-docker compose -f docker-compose.ecube-host.yml down -v
+docker compose -f docker-compose.ecube.yml down -v
 ```
 
 The API is available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
@@ -163,7 +315,7 @@ For faster iteration (with `--reload`), run the application locally but use Dock
 
 ```bash
 # Start just PostgreSQL
-docker compose -f docker-compose.ecube-host.yml up -d postgres
+docker compose -f docker-compose.ecube.yml up -d postgres
 
 # Apply migrations (from your local venv)
 alembic upgrade head

@@ -4,7 +4,7 @@ This document explains how to deploy ECUBE into a Linux container host using Doc
 
 ## 12.1 Deployment Artifacts
 
-- Compose file: `docker-compose.ecube-host.yml`
+- Compose file: `docker-compose.ecube.yml`
 - Runtime image: `deploy/ecube-host/Dockerfile`
 
 The compose stack includes:
@@ -24,13 +24,13 @@ The compose stack includes:
 From repository root:
 
 ```bash
-docker compose -f docker-compose.ecube-host.yml up -d --build
+docker compose -f docker-compose.ecube.yml up -d --build
 ```
 
 Verify services:
 
 ```bash
-docker compose -f docker-compose.ecube-host.yml ps
+docker compose -f docker-compose.ecube.yml ps
 ```
 
 Migrations are applied automatically when `ecube-host` starts (entrypoint runs `alembic upgrade head` after DB is reachable).
@@ -38,7 +38,7 @@ Migrations are applied automatically when `ecube-host` starts (entrypoint runs `
 Optional manual migration command (only if auto-migration is disabled):
 
 ```bash
-docker compose -f docker-compose.ecube-host.yml exec ecube-host alembic upgrade head
+docker compose -f docker-compose.ecube.yml exec ecube-host alembic upgrade head
 ```
 
 Check health endpoint:
@@ -50,7 +50,7 @@ curl http://localhost:8000/health
 Stop stack:
 
 ```bash
-docker compose -f docker-compose.ecube-host.yml down
+docker compose -f docker-compose.ecube.yml down
 ```
 
 ## 12.4 USB passthrough model
@@ -97,8 +97,8 @@ The compose file already mounts USB/udev/sysfs nodes into `ecube-host` and enabl
 Run checks in container:
 
 ```bash
-docker compose -f docker-compose.ecube-host.yml exec ecube-host lsusb
-docker compose -f docker-compose.ecube-host.yml exec ecube-host ls /dev/bus/usb
+docker compose -f docker-compose.ecube.yml exec ecube-host lsusb
+docker compose -f docker-compose.ecube.yml exec ecube-host ls /dev/bus/usb
 ```
 
 Then validate through API introspection:
@@ -138,15 +138,15 @@ The runtime image is built from a concrete Debian-based Python tag and applies O
 ### Rebuild with fresh base layers and packages
 
 ```bash
-docker compose -f docker-compose.ecube-host.yml build --pull --no-cache ecube-host
-docker compose -f docker-compose.ecube-host.yml up -d
+docker compose -f docker-compose.ecube.yml build --pull --no-cache ecube-host
+docker compose -f docker-compose.ecube.yml up -d
 ```
 
 ### Verify running image
 
 ```bash
-docker compose -f docker-compose.ecube-host.yml images
-docker compose -f docker-compose.ecube-host.yml ps
+docker compose -f docker-compose.ecube.yml images
+docker compose -f docker-compose.ecube.yml ps
 ```
 
 ### Vulnerability scanning (recommended)

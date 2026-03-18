@@ -9,12 +9,18 @@
 
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [Quick Start](#quick-start)
-3. [Configuration](#configuration)
-4. [Starting and Stopping](#starting-and-stopping)
-5. [Logs](#logs)
-6. [Reference](#reference)
+- [Table of Contents](#table-of-contents)
+- [Overview](#overview)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+- [Starting and Stopping](#starting-and-stopping)
+  - [Start Services](#start-services)
+  - [Check Status](#check-status)
+  - [Stop Services](#stop-services)
+  - [Restart Application](#restart-application)
+  - [Verify API Endpoint](#verify-api-endpoint)
+- [Logs](#logs)
+- [Reference](#reference)
 
 ---
 
@@ -39,11 +45,11 @@ cp .env.example .env
 nano .env
 
 # Start services
-docker compose -f docker-compose.ecube-host.yml up -d
+docker compose -f docker-compose.ecube.yml up -d --build
 
 # Database migrations run automatically on startup via entrypoint.
 # If you need to run them manually:
-docker compose -f docker-compose.ecube-host.yml exec ecube-host alembic upgrade head
+docker compose -f docker-compose.ecube.yml exec ecube-host alembic upgrade head
 
 # Run first-run setup (creates admin user, seeds DB role)
 # Option A: API-based (after service starts)
@@ -51,10 +57,10 @@ curl -X POST http://localhost:8000/setup/initialize \
   -H "Content-Type: application/json" \
   -d '{"username": "ecube-admin", "password": "s3cret"}'
 # Option B: CLI
-docker compose -f docker-compose.ecube-host.yml exec ecube-host ecube-setup
+docker compose -f docker-compose.ecube.yml exec ecube-host ecube-setup
 
 # View logs
-docker compose -f docker-compose.ecube-host.yml logs -f ecube-host
+docker compose -f docker-compose.ecube.yml logs -f ecube-host
 ```
 
 ---
@@ -80,26 +86,26 @@ nano .env
 ### Start Services
 
 ```bash
-docker compose -f docker-compose.ecube-host.yml up -d
+docker compose -f docker-compose.ecube.yml up -d --build
 ```
 
 ### Check Status
 
 ```bash
-docker compose -f docker-compose.ecube-host.yml ps
-docker compose -f docker-compose.ecube-host.yml logs -f ecube-host
+docker compose -f docker-compose.ecube.yml ps
+docker compose -f docker-compose.ecube.yml logs -f ecube-host
 ```
 
 ### Stop Services
 
 ```bash
-docker compose -f docker-compose.ecube-host.yml down
+docker compose -f docker-compose.ecube.yml down
 ```
 
 ### Restart Application
 
 ```bash
-docker compose -f docker-compose.ecube-host.yml restart ecube-host
+docker compose -f docker-compose.ecube.yml restart ecube-host
 ```
 
 ### Verify API Endpoint
@@ -122,13 +128,13 @@ curl http://localhost:8000/introspection/version
 
 ```bash
 # View logs
-docker compose -f docker-compose.ecube-host.yml logs ecube-host
+docker compose -f docker-compose.ecube.yml logs ecube-host
 
 # Follow logs in real-time
-docker compose -f docker-compose.ecube-host.yml logs -f ecube-host
+docker compose -f docker-compose.ecube.yml logs -f ecube-host
 
 # View specific number of lines
-docker compose -f docker-compose.ecube-host.yml logs -n 100 ecube-host
+docker compose -f docker-compose.ecube.yml logs -n 100 ecube-host
 ```
 
 ---
