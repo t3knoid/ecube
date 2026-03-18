@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.auth import CurrentUser, require_roles
 from app.constants import USERNAME_RE
 from app.database import get_db
-from app.repositories.audit_repository import AuditRepository, best_effort_audit
+from app.repositories.audit_repository import best_effort_audit
 from app.repositories.user_role_repository import UserRoleRepository
 from app.schemas.users import (
     SetRolesRequest,
