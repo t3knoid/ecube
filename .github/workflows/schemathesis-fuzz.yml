@@ -74,8 +74,12 @@ jobs:
       - name: Start API server
         run: |
           uvicorn app.main:app --host 0.0.0.0 --port 8000 &
-          sleep 5
-          curl -sf http://localhost:8000/health || (echo "Server failed to start" && exit 1)
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/health && break
+            echo "Waiting for server… attempt $i/30"
+            sleep 1
+          done
+          curl -sf http://localhost:8000/health || (echo "::error::Server failed to start within 30s" && exit 1)
 
       - name: Run Schemathesis
         run: |
