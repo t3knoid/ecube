@@ -57,7 +57,8 @@ def _file_to_item(ef: ExportFile, db: Session) -> FileCompareItem:
 
 
 def get_file_hashes(
-    file_id: int, db: Session, actor: Optional[str] = None
+    file_id: int, db: Session, actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
 ) -> FileHashesResponse:
     """Return MD5/SHA-256 hashes for the file identified by *file_id*.
 
@@ -89,6 +90,7 @@ def get_file_hashes(
             "relative_path": ef.relative_path,
             "live_computed": file_path is not None and file_path.exists(),
         },
+        client_ip=client_ip,
     )
 
     return FileHashesResponse(
@@ -101,7 +103,8 @@ def get_file_hashes(
 
 
 def compare_files(
-    body: FileCompareRequest, db: Session, actor: Optional[str] = None
+    body: FileCompareRequest, db: Session, actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
 ) -> FileCompareResponse:
     """Compare two files by hash, size, and relative path.
 
@@ -154,6 +157,7 @@ def compare_files(
             "size_match": size_match,
             "path_match": path_match,
         },
+        client_ip=client_ip,
     )
 
     return FileCompareResponse(

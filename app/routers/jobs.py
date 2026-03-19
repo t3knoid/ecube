@@ -1,11 +1,12 @@
 import logging
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
 from app.schemas.jobs import ExportJobSchema, JobCreate, JobStart
 from app.services import job_service
+from app.utils.client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ _ADMIN_MANAGER_PROCESSOR = require_roles("admin", "manager", "processor")
 @router.post("", response_model=ExportJobSchema)
 def create_job(
     body: JobCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
 ):
@@ -28,7 +30,7 @@ def create_job(
 
     **Roles:** ``admin``, ``manager``, ``processor``
     """
-    return job_service.create_job(body, db, actor=current_user.username)
+    return job_service.create_job(body, db, actor=current_user.username, client_ip=get_client_ip(request))
 
 
 @router.get("/{job_id}", response_model=ExportJobSchema)
@@ -51,6 +53,7 @@ def start_job(
     job_id: int,
     body: JobStart,
     background_tasks: BackgroundTasks,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
 ):
@@ -61,13 +64,14 @@ def start_job(
 
     **Roles:** ``admin``, ``manager``, ``processor``
     """
-    return job_service.start_job(job_id, body, background_tasks, db, actor=current_user.username)
+    return job_service.start_job(job_id, body, background_tasks, db, actor=current_user.username, client_ip=get_client_ip(request))
 
 
 @router.post("/{job_id}/verify", response_model=ExportJobSchema)
 def verify_job(
     job_id: int,
     background_tasks: BackgroundTasks,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
 ):
@@ -78,12 +82,13 @@ def verify_job(
 
     **Roles:** ``admin``, ``manager``, ``processor``
     """
-    return job_service.verify_job(job_id, background_tasks, db, actor=current_user.username)
+    return job_service.verify_job(job_id, background_tasks, db, actor=current_user.username, client_ip=get_client_ip(request))
 
 
 @router.post("/{job_id}/manifest", response_model=ExportJobSchema)
 def create_manifest(
     job_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
 ):
@@ -94,4 +99,4 @@ def create_manifest(
 
     **Roles:** ``admin``, ``manager``, ``processor``
     """
-    return job_service.create_manifest(job_id, db, actor=current_user.username)
+    return job_service.create_manifest(job_id, db, actor=current_user.username, client_ip=get_client_ip(request))

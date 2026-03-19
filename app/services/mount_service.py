@@ -70,7 +70,8 @@ class LinuxMountProvider:
 
 
 def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
-              provider: Optional["MountProvider"] = None) -> NetworkMount:
+              provider: Optional["MountProvider"] = None,
+              client_ip: Optional[str] = None) -> NetworkMount:
     mount_repo = MountRepository(db)
     audit_repo = AuditRepository(db)
     provider = provider or _default_provider()
@@ -142,6 +143,7 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
                 "status": mount.status.value,
                 "error": _mount_error,
             },
+            client_ip=client_ip,
         )
     except Exception:
         logger.exception("Failed to write audit log for MOUNT_ADDED")
@@ -149,7 +151,8 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
 
 
 def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None,
-                 provider: Optional["MountProvider"] = None) -> None:
+                 provider: Optional["MountProvider"] = None,
+                 client_ip: Optional[str] = None) -> None:
     mount_repo = MountRepository(db)
     audit_repo = AuditRepository(db)
 
@@ -170,6 +173,7 @@ def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None,
             action="MOUNT_REMOVED",
             user=actor,
             details={"mount_id": mount_id, "local_mount_point": mount.local_mount_point},
+            client_ip=client_ip,
         )
     except Exception:
         logger.exception("Failed to write audit log for MOUNT_REMOVED")
@@ -187,14 +191,16 @@ def list_mounts(db: Session):
     return MountRepository(db).list_all()
 
 
-def validate_all_mounts(db: Session, actor: Optional[str] = None) -> list[NetworkMount]:
+def validate_all_mounts(db: Session, actor: Optional[str] = None,
+                        client_ip: Optional[str] = None) -> list[NetworkMount]:
     mount_repo = MountRepository(db)
     mounts = mount_repo.list_all()
-    return [validate_mount(mount.id, db, actor=actor) for mount in mounts]
+    return [validate_mount(mount.id, db, actor=actor, client_ip=client_ip) for mount in mounts]
 
 
 def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None,
-                   provider: Optional["MountProvider"] = None) -> NetworkMount:
+                   provider: Optional["MountProvider"] = None,
+                   client_ip: Optional[str] = None) -> NetworkMount:
     mount_repo = MountRepository(db)
     audit_repo = AuditRepository(db)
 
@@ -230,6 +236,7 @@ def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None,
                 "local_mount_point": mount.local_mount_point,
                 "status": mount.status.value,
             },
+            client_ip=client_ip,
         )
     except Exception:
         logger.exception("Failed to write audit log for MOUNT_VALIDATED")

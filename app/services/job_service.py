@@ -21,7 +21,7 @@ from app.services import copy_engine
 logger = logging.getLogger(__name__)
 
 
-def create_job(body: JobCreate, db: Session, actor: Optional[str] = None) -> ExportJob:
+def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client_ip: Optional[str] = None) -> ExportJob:
     job_repo = JobRepository(db)
     drive_repo = DriveRepository(db)
     audit_repo = AuditRepository(db)
@@ -35,6 +35,7 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None) -> Exp
         max_file_retries=body.max_file_retries,
         retry_delay_seconds=body.retry_delay_seconds,
         created_by=body.created_by,
+        client_ip=client_ip,
     )
 
     # Use a single transaction for the entire create-job-with-drive flow.
@@ -64,6 +65,7 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None) -> Exp
                             "existing_project_id": drive.current_project_id,
                             "requested_project_id": body.project_id,
                         },
+                        client_ip=client_ip,
                     )
                 except Exception:
                     logger.exception("Failed to write audit log for PROJECT_ISOLATION_VIOLATION")
@@ -102,6 +104,7 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None) -> Exp
             user=actor,
             job_id=job.id,
             details={"project_id": body.project_id},
+            client_ip=client_ip,
         )
     except Exception:
         logger.exception("Failed to write audit log for JOB_CREATED")
@@ -121,6 +124,7 @@ def start_job(
     background_tasks: BackgroundTasks,
     db: Session,
     actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
 ) -> ExportJob:
     job_repo = JobRepository(db)
     audit_repo = AuditRepository(db)
@@ -149,7 +153,7 @@ def start_job(
         )
 
     try:
-        audit_repo.add(action="JOB_STARTED", user=actor, job_id=job_id, details={})
+        audit_repo.add(action="JOB_STARTED", user=actor, job_id=job_id, details={}, client_ip=client_ip)
     except Exception:
         logger.exception("Failed to write audit log for JOB_STARTED")
     background_tasks.add_task(copy_engine.run_copy_job, job_id)
@@ -162,6 +166,7 @@ def verify_job(
     background_tasks: BackgroundTasks,
     db: Session,
     actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
 ) -> ExportJob:
     job_repo = JobRepository(db)
     audit_repo = AuditRepository(db)
@@ -180,7 +185,7 @@ def verify_job(
             detail="Database error while starting job verification",
         )
     try:
-        audit_repo.add(action="JOB_VERIFY_STARTED", user=actor, job_id=job_id, details={})
+        audit_repo.add(action="JOB_VERIFY_STARTED", user=actor, job_id=job_id, details={}, client_ip=client_ip)
     except Exception:
         logger.exception("Failed to write audit log for JOB_VERIFY_STARTED")
     background_tasks.add_task(copy_engine.run_verify_job, job_id)
@@ -188,7 +193,7 @@ def verify_job(
     return job
 
 
-def create_manifest(job_id: int, db: Session, actor: Optional[str] = None) -> ExportJob:
+def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, client_ip: Optional[str] = None) -> ExportJob:
     job_repo = JobRepository(db)
     manifest_repo = ManifestRepository(db)
     audit_repo = AuditRepository(db)
@@ -241,6 +246,7 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None) -> Ex
             user=actor,
             job_id=job_id,
             details={"manifest_path": manifest_path, "error": manifest_error},
+            client_ip=client_ip,
         )
     except Exception:
         logger.exception("Failed to write audit log for MANIFEST_CREATED")

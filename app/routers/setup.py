@@ -22,8 +22,9 @@ from __future__ import annotations
 import logging
 import threading
 from datetime import datetime, timezone
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -40,6 +41,7 @@ from app.schemas.admin import (
 )
 from app.infrastructure import get_os_user_provider
 from app.infrastructure.os_user_protocol import OSUserError
+from app.utils.client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +75,7 @@ def get_setup_status(
 )
 def initialize_system(
     body: SetupInitializeRequest,
+    request: Request,
     db: Session = Depends(get_db),
 ) -> SetupInitializeResponse:
     """Perform first-run system initialization.
@@ -105,7 +108,7 @@ def initialize_system(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="System is already initialized. An admin user exists.",
             )
-        return _do_initialize(body, db)
+        return _do_initialize(body, db, client_ip=get_client_ip(request))
     finally:
         _init_lock.release()
 
@@ -113,6 +116,7 @@ def initialize_system(
 def _do_initialize(
     body: SetupInitializeRequest,
     db: Session,
+    client_ip: Optional[str] = None,
 ) -> SetupInitializeResponse:
 
     # Step 1: Acquire the cross-process guard BEFORE any OS side-effects.
@@ -193,6 +197,7 @@ def _do_initialize(
                 "groups_created": groups_created,
                 "admin_user": body.username,
             },
+            client_ip=client_ip,
         )
     except Exception:
         logger.exception("Failed to write audit log for SYSTEM_INITIALIZED")

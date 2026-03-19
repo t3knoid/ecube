@@ -1307,6 +1307,7 @@ Every audit entry contains:
 | `action` | Machine-readable action code |
 | `job_id` | Related export job ID (if applicable) |
 | `details` | Structured JSON metadata specific to the action |
+| `client_ip` | Client IP address of the request originator (null for background/system events) |
 
 ### Audit Actions Reference
 
