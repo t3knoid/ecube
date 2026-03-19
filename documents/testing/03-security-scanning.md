@@ -177,7 +177,7 @@ newman run postman/ecube-postman-collection.json \
 | Target | `http://localhost:8000/openapi.json` |
 | Auth | Admin JWT via `--header` |
 | Max examples per endpoint | 50 |
-| Report | JSON (`schemathesis-report.json`) |
+| Report | NDJSON (`schemathesis-report.ndjson`) |
 | Failure threshold | Warns on issues (non-blocking) |
 | Artifact retention | 30 days |
 
