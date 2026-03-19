@@ -88,7 +88,7 @@ jobs:
           target: http://localhost:8000/openapi.json
           format: openapi
           cmd_options: >-
-            -T 60
+            -T 5
             -z "-config replacer.full_list(0).description=auth
                  -config replacer.full_list(0).enabled=true
                  -config replacer.full_list(0).matchtype=REQ_HEADER
