@@ -21,6 +21,7 @@ from app.schemas.users import (
     UserListResponse,
     UserRolesResponse,
 )
+from app.utils.client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +101,7 @@ def set_user_roles(
             "roles": deduplicated,
             "path": str(request.url.path),
         },
+        client_ip=get_client_ip(request),
     )
 
     return UserRolesResponse(username=username, roles=deduplicated)
@@ -137,6 +139,7 @@ def delete_user_roles(
             "target_user": username,
             "path": str(request.url.path),
         },
+        client_ip=get_client_ip(request),
     )
 
     return UserRolesResponse(username=username, roles=[])

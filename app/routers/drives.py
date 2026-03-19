@@ -1,7 +1,7 @@
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, require_roles
@@ -9,6 +9,7 @@ from app.database import get_db
 from app.schemas.hardware import DriveFormatRequest, DriveInitialize, UsbDriveSchema
 from app.services import drive_service, discovery_service
 from app.infrastructure import get_drive_eject, get_drive_formatter, get_filesystem_detector
+from app.utils.client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ def list_drives(
 def initialize_drive(
     drive_id: int,
     body: DriveInitialize,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
 ):
@@ -52,12 +54,13 @@ def initialize_drive(
 
     **Roles:** ``admin``, ``manager``
     """
-    return drive_service.initialize_drive(drive_id, body.project_id, db, actor=current_user.username)
+    return drive_service.initialize_drive(drive_id, body.project_id, db, actor=current_user.username, client_ip=get_client_ip(request))
 
 
 @router.post("/{drive_id}/prepare-eject", response_model=UsbDriveSchema)
 def prepare_eject(
     drive_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
 ):
@@ -71,11 +74,13 @@ def prepare_eject(
     return drive_service.prepare_eject(
         drive_id, db, actor=current_user.username,
         eject_provider=get_drive_eject(),
+        client_ip=get_client_ip(request),
     )
 
 
 @router.post("/refresh")
 def refresh_drives(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
 ):
@@ -91,6 +96,7 @@ def refresh_drives(
         db,
         actor=current_user.username,
         filesystem_detector=get_filesystem_detector(),
+        client_ip=get_client_ip(request),
     )
 
 
@@ -98,6 +104,7 @@ def refresh_drives(
 def format_drive(
     drive_id: int,
     body: DriveFormatRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
 ):
@@ -110,5 +117,6 @@ def format_drive(
     """
     formatter = get_drive_formatter()
     return drive_service.format_drive(
-        drive_id, body.filesystem_type, db, formatter=formatter, actor=current_user.username
+        drive_id, body.filesystem_type, db, formatter=formatter, actor=current_user.username,
+        client_ip=get_client_ip(request),
     )
