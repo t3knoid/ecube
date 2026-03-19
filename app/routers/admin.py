@@ -581,6 +581,7 @@ def toggle_port_enabled(
         "port_id": port.id,
         "system_path": port.system_path,
         "hub_id": port.hub_id,
+        "enabled": body.enabled,
     })
 
     return UsbPortSchema.model_validate(port)
