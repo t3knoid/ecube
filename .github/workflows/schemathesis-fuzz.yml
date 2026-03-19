@@ -88,7 +88,8 @@ jobs:
             --header "Authorization: Bearer ${{ steps.auth.outputs.token }}" \
             --checks all \
             --max-examples 50 \
-            --report schemathesis-report.json \
+            --report ndjson \
+            > schemathesis-report.ndjson 2>&1 \
             || true
 
       - name: Upload Schemathesis report
@@ -96,22 +97,32 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: schemathesis-report
-          path: schemathesis-report.json
+          path: schemathesis-report.ndjson
           retention-days: 30
 
       - name: Schemathesis pass/fail check
         run: |
-          if [ ! -f schemathesis-report.json ]; then
+          if [ ! -f schemathesis-report.ndjson ]; then
             echo "::error::Schemathesis report not found — Schemathesis may have crashed before writing output"
             exit 1
           fi
           ERRORS=$(python - <<'PY' 2>/dev/null || echo "0"
           import json, pathlib
-          r = json.loads(pathlib.Path('schemathesis-report.json').read_text())
-          total = r.get('total', {}).get('errors', 0) if isinstance(r.get('total'), dict) else 0
-          # Also check for server errors in results
-          failures = sum(1 for e in r.get('results', []) if e.get('errors'))
-          print(total + failures)
+          errors = 0
+          for line in pathlib.Path('schemathesis-report.ndjson').read_text().splitlines():
+              if not line.strip():
+                  continue
+              try:
+                  event = json.loads(line)
+              except json.JSONDecodeError:
+                  continue
+              if event.get('event') == 'InternalError':
+                  errors += 1
+              if event.get('event') == 'AfterExecution':
+                  status = event.get('status', '')
+                  if status in ('error', 'failure'):
+                      errors += 1
+          print(errors)
           PY
           )
           echo "Errors/failures: $ERRORS"
