@@ -2,8 +2,6 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.utils.client_ip import get_client_ip
 from app.models.audit import AuditLog
 from app.models.jobs import ExportJob
