@@ -25,6 +25,10 @@ class DiscoveredHub:
     """Human-readable product string (falls back to *system_identifier*)."""
     location_hint: Optional[str] = None
     """Optional physical-location annotation, e.g. ``"front-panel"``."""
+    vendor_id: Optional[str] = None
+    """USB vendor ID from sysfs ``idVendor`` (e.g. ``"8086"``)."""
+    product_id: Optional[str] = None
+    """USB product ID from sysfs ``idProduct`` (e.g. ``"a36d"``)."""
 
 
 @dataclass
@@ -37,6 +41,12 @@ class DiscoveredPort:
     """1-based port index as reported by sysfs."""
     system_path: str
     """Sysfs path used as a stable identifier, e.g. ``"1-1"``."""
+    vendor_id: Optional[str] = None
+    """Vendor ID of the device currently at this port."""
+    product_id: Optional[str] = None
+    """Product ID of the device currently at this port."""
+    speed: Optional[str] = None
+    """Port speed in Mbps from sysfs ``speed`` attribute (e.g. ``"480"``, ``"5000"``)."""
 
 
 @dataclass
@@ -153,8 +163,15 @@ def discover_usb_topology() -> DiscoveredTopology:
                 or _read_sysfs_attr(dev_path, "manufacturer")
                 or dev
             )
+            vendor_id = _read_sysfs_attr(dev_path, "idVendor")
+            product_id = _read_sysfs_attr(dev_path, "idProduct")
             topology.hubs.append(
-                DiscoveredHub(system_identifier=dev, name=product)
+                DiscoveredHub(
+                    system_identifier=dev,
+                    name=product,
+                    vendor_id=vendor_id,
+                    product_id=product_id,
+                )
             )
             continue
 
@@ -163,11 +180,17 @@ def discover_usb_topology() -> DiscoveredTopology:
             parts = dev.split("-")
             if len(parts) == 2 and parts[1].isdigit():
                 hub_id = f"usb{parts[0]}"
+                port_vendor_id = _read_sysfs_attr(dev_path, "idVendor")
+                port_product_id = _read_sysfs_attr(dev_path, "idProduct")
+                port_speed = _read_sysfs_attr(dev_path, "speed")
                 topology.ports.append(
                     DiscoveredPort(
                         hub_system_identifier=hub_id,
                         port_number=int(parts[1]),
                         system_path=dev,
+                        vendor_id=port_vendor_id,
+                        product_id=port_product_id,
+                        speed=port_speed,
                     )
                 )
 

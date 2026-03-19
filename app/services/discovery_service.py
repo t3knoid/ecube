@@ -106,6 +106,8 @@ def run_discovery_sync(
             system_identifier=discovered_hub.system_identifier,
             name=discovered_hub.name,
             location_hint=discovered_hub.location_hint,
+            vendor_id=discovered_hub.vendor_id,
+            product_id=discovered_hub.product_id,
         )
         hub_id_by_system_id[discovered_hub.system_identifier] = hub.id
         hubs_upserted.append(discovered_hub.system_identifier)
@@ -129,6 +131,9 @@ def run_discovery_sync(
             hub_id=hub_id,
             port_number=discovered_port.port_number,
             system_path=discovered_port.system_path,
+            vendor_id=discovered_port.vendor_id,
+            product_id=discovered_port.product_id,
+            speed=discovered_port.speed,
         )
         port_id_by_system_path[discovered_port.system_path] = port.id
         ports_upserted.append(discovered_port.system_path)
