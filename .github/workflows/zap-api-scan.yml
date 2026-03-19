@@ -98,5 +98,5 @@ jobs:
             zap-report.html
             zap-report.json
             zap-report.md
-          if-no-files-found: ignore
+          if-no-files-found: warn
           retention-days: 30
