@@ -598,7 +598,7 @@ Every USB drive passes through three states:
 
 Key behaviors:
 
-- **Discovery sync** detects newly inserted drives and transitions `EMPTY → AVAILABLE` — but only if the drive's USB port is **enabled**. Drives on disabled ports remain in `EMPTY` state until the port is enabled and a subsequent discovery sync runs.
+- **Discovery sync** detects newly inserted drives and transitions `EMPTY → AVAILABLE` — but only if the drive's USB port is **enabled**. Drives on disabled ports remain in `EMPTY` state until the port is enabled and a subsequent discovery sync runs. If a port is disabled while a drive is already `AVAILABLE`, the next sync demotes the drive to `EMPTY`. Drives with no associated port (`port_id = NULL`) are treated as disabled and remain `EMPTY`. Drives in `IN_USE` state are never affected by port enablement — project isolation takes priority.
 - **Format** writes a filesystem to the drive (stays `AVAILABLE`). Required before initialize — a drive with no recognized filesystem cannot be initialized.
 - **Initialize** binds a drive to a project (`AVAILABLE → IN_USE`).
 - **Eject** flushes writes, unmounts, and returns the drive to `AVAILABLE` (`IN_USE → AVAILABLE`). The project binding is preserved.

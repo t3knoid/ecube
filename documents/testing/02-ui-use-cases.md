@@ -90,7 +90,7 @@
 | UC-4.9 | Enable a USB port for ECUBE use | Admin, Manager | admin, manager |
 | UC-4.10 | Disable a USB port | Admin, Manager | admin, manager |
 
-**UI Implication:** Drive inventory dashboard with state-based color indicators and a finite-state-machine visual. Action buttons (Format, Initialize, Eject) contextually enabled based on current drive state. Project binding shown prominently on IN_USE drives. Port management panel (accessible to admin/manager) showing all USB ports with enable/disable toggles — disabled ports prevent drives from becoming AVAILABLE during discovery.
+**UI Implication:** Drive inventory dashboard with state-based color indicators and a finite-state-machine visual. Action buttons (Format, Initialize, Eject) contextually enabled based on current drive state. Project binding shown prominently on IN_USE drives. Port management panel (accessible to admin/manager) showing all USB ports with enable/disable toggles — disabled ports prevent drives from becoming AVAILABLE during discovery, and AVAILABLE drives on a subsequently disabled port are demoted to EMPTY on the next sync. IN_USE drives are never affected by port enablement.
 
 ---
 
