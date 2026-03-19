@@ -36,6 +36,7 @@ jobs:
       ROLE_RESOLVER: local
       LOCAL_GROUP_ROLE_MAP: '{"evidence-admins": ["admin"], "evidence-team": ["processor", "auditor"]}'
       SESSION_BACKEND: cookie
+      USB_DISCOVERY_INTERVAL: 0
 
     steps:
       - name: Checkout repository
