@@ -141,6 +141,7 @@ def test_enable_port_creates_audit_log(admin_client, db):
     assert log.details["system_path"] == port.system_path
     assert log.details["hub_id"] == port.hub_id
     assert log.details["enabled"] is True
+    assert log.details["path"] == f"/admin/ports/{port.id}"
 
 
 def test_disable_port_creates_audit_log(admin_client, db):
@@ -159,3 +160,4 @@ def test_disable_port_creates_audit_log(admin_client, db):
     assert log.user == "admin-user"
     assert log.details["port_id"] == port.id
     assert log.details["enabled"] is False
+    assert log.details["path"] == f"/admin/ports/{port.id}"
