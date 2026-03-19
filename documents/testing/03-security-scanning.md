@@ -208,7 +208,7 @@ st run http://localhost:8000/openapi.json \
 
 | Setting | Value |
 |---------|-------|
-| Target | OpenAPI spec saved from `/openapi.json` |
+| Target | `http://localhost:8000/openapi.json` (live URL so ZAP derives the base host) |
 | Scan type | API scan (passive + active rules) |
 | Reports | HTML, JSON, Markdown |
 | Failure threshold | ZAP default (warns on alerts) |
@@ -222,11 +222,10 @@ docker pull ghcr.io/zaproxy/zaproxy:stable
 
 # Start your API server
 uvicorn app.main:app &
-curl -o openapi.json http://localhost:8000/openapi.json
 
-# Run ZAP API scan
-docker run --network host -v $(pwd):/zap/wrk ghcr.io/zaproxy/zaproxy:stable \
-  zap-api-scan.py -t openapi.json -f openapi
+# Run ZAP API scan (pass the live URL so ZAP knows the target host)
+docker run --network host ghcr.io/zaproxy/zaproxy:stable \
+  zap-api-scan.py -t http://localhost:8000/openapi.json -f openapi
 ```
 
 ---
