@@ -106,15 +106,21 @@ jobs:
             echo "::error::Schemathesis report not found — Schemathesis may have crashed before writing output"
             exit 1
           fi
-          ERRORS=$(python - <<'PY' 2>/dev/null || echo "0"
-          import json, pathlib
+          python - <<'PY'
+          import json, pathlib, sys
+          text = pathlib.Path('schemathesis-report.ndjson').read_text()
+          if not text.strip():
+              print('::error::Schemathesis report is empty — scan may have failed silently')
+              sys.exit(1)
           errors = 0
-          for line in pathlib.Path('schemathesis-report.ndjson').read_text().splitlines():
+          parse_failures = 0
+          for lineno, line in enumerate(text.splitlines(), 1):
               if not line.strip():
                   continue
               try:
                   event = json.loads(line)
               except json.JSONDecodeError:
+                  parse_failures += 1
                   continue
               if event.get('event') == 'InternalError':
                   errors += 1
@@ -122,10 +128,9 @@ jobs:
                   status = event.get('status', '')
                   if status in ('error', 'failure'):
                       errors += 1
-          print(errors)
+          if parse_failures:
+              print(f'::warning::Could not parse {parse_failures} line(s) in Schemathesis report')
+          print(f'Errors/failures: {errors}')
+          if errors > 0:
+              print(f'::warning::Schemathesis found {errors} issue(s) — review the report artifact')
           PY
-          )
-          echo "Errors/failures: $ERRORS"
-          if [ "$ERRORS" -gt 0 ]; then
-            echo "::warning::Schemathesis found $ERRORS issue(s) — review the report artifact"
-          fi
