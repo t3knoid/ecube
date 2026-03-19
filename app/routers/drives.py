@@ -20,7 +20,11 @@ _ADMIN_MANAGER = require_roles("admin", "manager")
 
 @router.get("", response_model=List[UsbDriveSchema])
 def list_drives(
-    project_id: Optional[str] = Query(default=None),
+    project_id: Optional[str] = Query(
+        default=None,
+        min_length=1,
+        description="Filter drives by project. When provided, only drives bound to this project are returned.",
+    ),
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_ALL_ROLES),
 ):
