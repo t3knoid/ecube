@@ -71,6 +71,13 @@ jobs:
           )
           echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
 
+      - name: Create ECUBE OS groups
+        run: |
+          sudo groupadd -f ecube-admins
+          sudo groupadd -f ecube-managers
+          sudo groupadd -f ecube-processors
+          sudo groupadd -f ecube-auditors
+
       - name: Start API server
         run: |
           uvicorn app.main:app --host 0.0.0.0 --port 8000 &
