@@ -38,7 +38,7 @@ class ExportJob(Base):
     started_at = Column(DateTime(timezone=True))
     completed_at = Column(DateTime(timezone=True))
     created_by = Column(String)
-    client_ip = Column(String, nullable=True)
+    client_ip = Column(String(45), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     files = relationship("ExportFile", back_populates="job")
     manifests = relationship("Manifest", back_populates="job")
