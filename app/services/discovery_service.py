@@ -228,6 +228,12 @@ def run_discovery_sync(
                 existing.current_state = DriveState.AVAILABLE
                 changed = True
 
+            # Demote AVAILABLE → EMPTY when the port has been disabled.
+            # IN_USE drives are left untouched to preserve project isolation.
+            if existing.current_state == DriveState.AVAILABLE and not _port_is_enabled(port_id or existing.port_id):
+                existing.current_state = DriveState.EMPTY
+                changed = True
+
             if changed:
                 try:
                     db.commit()
