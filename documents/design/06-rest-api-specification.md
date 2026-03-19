@@ -139,6 +139,7 @@ Every authenticated request resolves to:
 | List mounts | ✔ | ✔ | ✔ | ✔ |
 | Initialize drives | ✔ | ✔ | ✖ | ✖ |
 | Prepare drives for eject | ✔ | ✔ | ✖ | ✖ |
+| Manage USB port enablement | ✔ | ✔ | ✖ | ✖ |
 | List drives | ✔ | ✔ | ✔ | ✔ |
 | Create jobs | ✔ | ✔ | ✔ | ✖ |
 | Start copy jobs | ✔ | ✔ | ✔ | ✖ |
@@ -280,6 +281,75 @@ The endpoint captures the drive state and device path at the start, performs pot
 - `DRIVE_EJECT_FAILED`: Sync or unmount failed; includes `drive_id`, `filesystem_path`, `flush_ok`, `flush_error`, `unmount_ok`, `unmount_error`
 
 **Roles:** `admin`, `manager`
+
+---
+
+## 3.2a Port Management
+
+### `GET /admin/ports`
+
+List all USB ports with their current enablement state.
+
+**Roles:** `admin`, `manager`
+
+**Response (200 OK):**
+
+```json
+[
+    {
+        "id": 1,
+        "hub_id": 1,
+        "port_number": 1,
+        "system_path": "/sys/bus/usb/devices/1-1",
+        "friendly_label": null,
+        "enabled": false
+    }
+]
+```
+
+### `PATCH /admin/ports/{port_id}`
+
+Enable or disable a USB port for ECUBE use. Disabled ports cause newly discovered or reconnecting drives to remain in `EMPTY` state instead of transitioning to `AVAILABLE`.
+
+**Roles:** `admin`, `manager`
+
+**Request body (JSON):**
+
+```json
+{
+    "enabled": true
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+    "id": 1,
+    "hub_id": 1,
+    "port_number": 1,
+    "system_path": "/sys/bus/usb/devices/1-1",
+    "friendly_label": null,
+    "enabled": true
+}
+```
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role (processor, auditor)
+- `404 Not Found` — Port ID does not exist
+
+**Behavior:**
+
+- The enablement change takes effect on the next discovery sync.
+- Drives already in `IN_USE` state on a disabled port are **not** affected — project isolation takes priority.
+- Drives with no associated port (`port_id = NULL`) are unaffected by the enablement filter.
+
+**Audit events:**
+
+- `PORT_ENABLED` — Port enabled; includes `port_id`, `system_path`, `hub_id`.
+- `PORT_DISABLED` — Port disabled; includes `port_id`, `system_path`, `hub_id`.
 
 ---
 
@@ -854,4 +924,5 @@ Every security‑relevant event is logged:
 - Drive initialization attempts
 - File hash/compare operations
 - OS user/group management (`OS_USER_CREATED`, `OS_USER_DELETED`, `OS_PASSWORD_RESET`, `OS_USER_GROUPS_MODIFIED`, `OS_USER_GROUPS_APPENDED`, `OS_GROUP_CREATED`, `OS_GROUP_DELETED`)
+- Port enablement changes (`PORT_ENABLED`, `PORT_DISABLED`)
 - System initialization (`SYSTEM_INITIALIZED`)

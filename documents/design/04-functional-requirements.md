@@ -172,12 +172,21 @@ Every project-isolation decision is recorded:
 
 - Emit structured JSON payloads for all critical operations.
 - Use append-only semantics and immutable timestamps.
+- Port enablement changes emit dedicated audit events:
+  - `PORT_ENABLED` — Port enabled for ECUBE use; includes `port_id`, `system_path`, `hub_id`.
+  - `PORT_DISABLED` — Port disabled; includes `port_id`, `system_path`, `hub_id`.
 
 ## 4.9 USB Discovery and State Refresh Design
 
 - Service reads sysfs topology (`/sys/bus/usb/devices`) and returns dataclass-based snapshot.
 - Hub and Port records are upserted (identified by stable `system_identifier` and `system_path` keys).
 - Drive state transitions follow FSM rules: `EMPTY → AVAILABLE` on reconnection, `AVAILABLE → EMPTY` on removal (unless `IN_USE` — project isolation preserved).
+- **Port enablement filtering:** Each USB port has an `enabled` flag (default `false`). Discovery uses this flag to gate drive availability:
+  - A newly discovered drive on a **disabled** port is inserted in `EMPTY` state (not `AVAILABLE`).
+  - A reconnecting drive (previously `EMPTY`) on a **disabled** port remains `EMPTY`.
+  - Drives with no associated port (`port_id = NULL`) are **unaffected** by the enablement filter.
+  - Drives already in `IN_USE` state are **never** changed by the enablement filter — project isolation takes priority.
+  - Admins and managers toggle port enablement via `PATCH /admin/ports/{port_id}`. The change takes effect on the next discovery sync.
 - Refresh operation is fully idempotent: running multiple times without hardware changes produces no mutations.
 - **Operational note:** When a port is discovered but its parent hub is not present in the topology snapshot, a placeholder hub is automatically created with a default name. This prevents foreign-key violations in case of sysfs race conditions or partial enumeration. The placeholder hub name can be manually updated via hub management API when the hub is fully enumerated.
 - Every sync emits a `USB_DISCOVERY_SYNC` audit log with actor and summary counts (hubs_upserted, ports_upserted, drives_inserted, drives_updated, drives_removed).

@@ -155,6 +155,7 @@ groups are entirely unmapped receives an empty role list, which causes
 | List mounts                                |  ✔    |    ✔    |     ✔     |    ✔    |
 | Initialize drives / assign to projects     |  ✔    |    ✔    |     ✖     |    ✖    |
 | Prepare drives for eject                   |  ✔    |    ✔    |     ✖     |    ✖    |
+| Manage USB port enablement                  |  ✔    |    ✔    |     ✖     |    ✖    |
 | List drives / drive states                 |  ✔    |    ✔    |     ✔     |    ✔    |
 | Create jobs                                |  ✔    |    ✔    |     ✔     |    ✖    |
 | Start copy jobs                            |  ✔    |    ✔    |     ✔     |    ✖    |
