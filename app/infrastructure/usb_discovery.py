@@ -96,11 +96,16 @@ class LinuxDriveDiscovery:
 
 
 def _read_sysfs_attr(dev_path: str, attr: str) -> Optional[str]:
-    """Return the stripped content of a sysfs attribute file, or ``None``."""
+    """Return the stripped content of a sysfs attribute file, or ``None``.
+
+    Returns ``None`` when the file does not exist **or** is empty so that
+    empty-string values never overwrite previously stored data downstream.
+    """
     attr_file = os.path.join(dev_path, attr)
     try:
         with open(attr_file) as fh:
-            return fh.read().strip()
+            value = fh.read().strip()
+            return value or None
     except OSError:
         return None
 
