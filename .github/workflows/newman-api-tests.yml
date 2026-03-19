@@ -104,15 +104,20 @@ jobs:
             echo "::error::Newman report not found — Newman may have crashed before writing output"
             exit 1
           fi
-          FAILURES=$(python - <<'PY'
-          import json, pathlib
+          python - <<'PY'
+          import json, pathlib, sys
           r = json.loads(pathlib.Path('newman-report.json').read_text())
-          stats = r.get('run', {}).get('stats', {}).get('assertions', {})
-          print(stats.get('failed', 0))
+          stats = r.get('run', {}).get('stats', {})
+          assertion_failures = stats.get('assertions', {}).get('failed', 0)
+          request_failures = stats.get('requests', {}).get('failed', 0)
+          print(f"Assertion failures: {assertion_failures}")
+          print(f"Request failures:   {request_failures}")
+          errors = []
+          if assertion_failures > 0:
+              errors.append(f"::error::Newman found {assertion_failures} failed assertion(s)")
+          if request_failures > 0:
+              errors.append(f"::error::Newman found {request_failures} failed request(s)")
+          for e in errors:
+              print(e)
+          sys.exit(1 if errors else 0)
           PY
-          )
-          echo "Failed assertions: $FAILURES"
-          if [ "$FAILURES" -gt 0 ]; then
-            echo "::error::Newman found $FAILURES failed assertion(s)"
-            exit 1
-          fi
