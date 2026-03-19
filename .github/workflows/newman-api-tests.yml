@@ -100,6 +100,10 @@ jobs:
 
       - name: Newman pass/fail check
         run: |
+          if [ ! -f newman-report.json ]; then
+            echo "::error::Newman report not found — Newman may have crashed before writing output"
+            exit 1
+          fi
           FAILURES=$(python - <<'PY'
           import json, pathlib
           r = json.loads(pathlib.Path('newman-report.json').read_text())
