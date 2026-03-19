@@ -90,8 +90,7 @@ jobs:
             --header "Authorization: Bearer ${{ steps.auth.outputs.token }}" \
             --checks all \
             --max-examples 50 \
-            --request-timeout 10000 \
-            --generation-deadline 300000 \
+            --request-timeout 10 \
             2>&1 | tee schemathesis-output.txt \
             || true
 
