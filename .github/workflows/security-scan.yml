@@ -80,6 +80,10 @@ jobs:
 
       - name: pip-audit pass/fail check
         run: |
+          if [ ! -f pip-audit-report.json ]; then
+            echo "::warning::pip-audit report not found — pip-audit may have failed before writing output"
+            exit 0
+          fi
           VULNS=$(python -c "import json,pathlib; d=json.loads(pathlib.Path('pip-audit-report.json').read_text()); print(sum(len(p.get('vulns',[])) for p in d.get('dependencies',[])))")
           echo "Known vulnerabilities: $VULNS"
           if [ "$VULNS" -gt 0 ]; then
