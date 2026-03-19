@@ -54,6 +54,7 @@ from app.schemas.hardware import HubUpdateRequest, PortEnableRequest, PortUpdate
 from app.infrastructure import get_os_user_provider
 from app.infrastructure.os_user_protocol import OSUserError, OsUserProvider
 from app.services.os_user_service import validate_group_name, validate_username
+from app.utils.client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +121,7 @@ def _safe_filename(filename: str) -> str:
 
 @router.get("/logs", response_model=LogFilesResponse)
 def list_log_files(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
@@ -166,6 +168,7 @@ def list_log_files(
             action="LOG_FILES_LISTED",
             user=current_user.username,
             details={"file_count": len(files), "total_size": total_size},
+            client_ip=get_client_ip(request),
         )
     except Exception:
         logger.debug("Failed to record log file list access in audit trail", exc_info=True)
@@ -180,6 +183,7 @@ def list_log_files(
 @router.get("/logs/{filename}")
 def download_log_file(
     filename: str,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
@@ -208,6 +212,7 @@ def download_log_file(
             action="LOG_FILE_DOWNLOADED",
             user=current_user.username,
             details={"filename": safe},
+            client_ip=get_client_ip(request),
         )
     except Exception:
         logger.debug("Failed to record log file download in audit trail", exc_info=True)
@@ -311,7 +316,7 @@ def create_os_user(
         "groups": body.groups or [],
         "roles": list(body.roles) if body.roles else [],
         "path": str(request.url.path),
-    })
+    }, client_ip=get_client_ip(request))
 
     return OSUserResponse(
         username=os_user.username,
@@ -375,7 +380,7 @@ def delete_os_user(
     best_effort_audit(db, "OS_USER_DELETED", current_user.username, {
         "target_user": username,
         "path": str(request.url.path),
-    })
+    }, client_ip=get_client_ip(request))
 
     return {"message": f"User '{username}' deleted"}
 
@@ -401,7 +406,7 @@ def reset_os_user_password(
     best_effort_audit(db, "OS_PASSWORD_RESET", current_user.username, {
         "target_user": username,
         "path": str(request.url.path),
-    })
+    }, client_ip=get_client_ip(request))
 
     return {"message": f"Password reset for user '{username}'"}
 
@@ -428,7 +433,7 @@ def set_os_user_groups(
         "target_user": username,
         "groups": body.groups,
         "path": str(request.url.path),
-    })
+    }, client_ip=get_client_ip(request))
 
     return OSUserResponse(
         username=os_user.username,
@@ -463,7 +468,7 @@ def add_os_user_groups(
         "groups_added": body.groups,
         "resulting_groups": os_user.groups,
         "path": str(request.url.path),
-    })
+    }, client_ip=get_client_ip(request))
 
     return OSUserResponse(
         username=os_user.username,
@@ -498,7 +503,7 @@ def create_os_group(
     best_effort_audit(db, "OS_GROUP_CREATED", current_user.username, {
         "group_name": body.name,
         "path": str(request.url.path),
-    })
+    }, client_ip=get_client_ip(request))
 
     return OSGroupResponse(
         name=os_group.name,
@@ -544,7 +549,7 @@ def delete_os_group(
     best_effort_audit(db, "OS_GROUP_DELETED", current_user.username, {
         "group_name": name,
         "path": str(request.url.path),
-    })
+    }, client_ip=get_client_ip(request))
 
     return {"message": f"Group '{name}' deleted"}
 
@@ -584,7 +589,7 @@ def toggle_port_enabled(
         "hub_id": port.hub_id,
         "enabled": body.enabled,
         "path": str(request.url.path),
-    })
+    }, client_ip=get_client_ip(request))
 
     return UsbPortSchema.model_validate(port)
 
@@ -630,7 +635,7 @@ def update_hub_label(
         "old_value": old_value,
         "new_value": body.location_hint,
         "path": str(request.url.path),
-    })
+    }, client_ip=get_client_ip(request))
 
     return UsbHubSchema.model_validate(hub)
 
@@ -661,7 +666,7 @@ def update_port_label(
         "old_value": old_value,
         "new_value": body.friendly_label,
         "path": str(request.url.path),
-    })
+    }, client_ip=get_client_ip(request))
 
     return UsbPortSchema.model_validate(port)
 
