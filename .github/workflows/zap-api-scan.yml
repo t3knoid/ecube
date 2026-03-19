@@ -58,6 +58,23 @@ jobs:
           sleep 5
           curl -sf http://localhost:8000/health || (echo "Server failed to start" && exit 1)
 
+      - name: Generate admin JWT for ZAP
+        id: auth
+        run: |
+          TOKEN=$(python - <<'PY'
+          import jwt, time
+          payload = {
+              'sub': 'ci-admin',
+              'username': 'ci-admin',
+              'groups': ['evidence-admins'],
+              'roles': ['admin'],
+              'exp': int(time.time()) + 3600,
+          }
+          print(jwt.encode(payload, 'ci-test-secret-key-do-not-use-in-production', algorithm='HS256'))
+          PY
+          )
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+
       - name: Save OpenAPI spec for ZAP
         run: curl -sf http://localhost:8000/openapi.json -o openapi.json
 
@@ -72,7 +89,7 @@ jobs:
                  -config replacer.full_list(0).matchtype=REQ_HEADER
                  -config replacer.full_list(0).matchstr=Authorization
                  -config replacer.full_list(0).regex=false
-                 -config replacer.full_list(0).replacement=Bearer\\ placeholder"
+                 -config replacer.full_list(0).replacement=Bearer\\ ${{ steps.auth.outputs.token }}"
           allow_issue_writing: false
 
       - name: Upload ZAP reports
