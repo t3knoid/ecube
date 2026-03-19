@@ -48,6 +48,7 @@ SECTION_SHORT_NAMES: dict[str, str] = {
     "Drive State Machine": "Drive State Machine",
     "Filesystem Detection": "Filesystem Detection",
     "Drive Formatting": "Drive Formatting",
+    "Port Enablement": "Port Enablement",
     "USB Hardware (Bare-Metal Specific)": "USB Hardware",
     "End-to-End Copy Workflow": "End-to-End Copy",
     "Error Handling": "Error Handling",

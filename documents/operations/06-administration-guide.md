@@ -598,7 +598,7 @@ Every USB drive passes through three states:
 
 Key behaviors:
 
-- **Discovery sync** detects newly inserted drives and transitions `EMPTY → AVAILABLE`.
+- **Discovery sync** detects newly inserted drives and transitions `EMPTY → AVAILABLE` — but only if the drive's USB port is **enabled**. Drives on disabled ports remain in `EMPTY` state until the port is enabled and a subsequent discovery sync runs.
 - **Format** writes a filesystem to the drive (stays `AVAILABLE`). Required before initialize — a drive with no recognized filesystem cannot be initialized.
 - **Initialize** binds a drive to a project (`AVAILABLE → IN_USE`).
 - **Eject** flushes writes, unmounts, and returns the drive to `AVAILABLE` (`IN_USE → AVAILABLE`). The project binding is preserved.
@@ -677,6 +677,74 @@ curl -k -X POST https://localhost:8443/drives/refresh \
 > **Note:** Discovery also runs automatically when the service starts.
 > Use this endpoint to pick up drives that were inserted after startup
 > without restarting the service.
+
+### Port Management
+
+USB ports default to **disabled** when first discovered. Drives on disabled
+ports remain in `EMPTY` state and cannot transition to `AVAILABLE` until the
+port is explicitly enabled by an admin or manager. This allows operators to
+control which physical ports are active for evidence export.
+
+#### List Ports
+
+Returns all known USB ports with their current enablement state.
+
+```bash
+# Requires admin or manager role
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  https://localhost:8443/admin/ports
+```
+
+Example response:
+
+```json
+[
+  {
+    "id": 1,
+    "hub_id": 1,
+    "port_number": 1,
+    "system_path": "/sys/bus/usb/devices/1-1",
+    "friendly_label": null,
+    "enabled": false
+  },
+  {
+    "id": 2,
+    "hub_id": 1,
+    "port_number": 2,
+    "system_path": "/sys/bus/usb/devices/1-2",
+    "friendly_label": null,
+    "enabled": true
+  }
+]
+```
+
+#### Enable or Disable a Port
+
+Toggles the enablement state of a USB port. The change takes effect on the
+next discovery sync.
+
+```bash
+# Requires admin or manager role
+
+# Enable a port
+curl -k -X PATCH https://localhost:8443/admin/ports/1 \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true}'
+
+# Disable a port
+curl -k -X PATCH https://localhost:8443/admin/ports/1 \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": false}'
+```
+
+Response: returns the updated port object.
+
+> **Note:** Disabling a port does **not** affect drives already in `IN_USE`
+> state — project isolation takes priority. To make drives on a newly
+> enabled port available, run a discovery refresh (`POST /drives/refresh`)
+> after enabling the port.
 
 ### Format Drive
 
@@ -999,7 +1067,8 @@ Example response:
 A complete evidence export follows this sequence:
 
 1. **Mount source** — add a network mount pointing to the evidence share
-2. **Prepare drive** — format and initialize a USB drive for the project
+2. **Enable ports** — enable the USB ports you want to use (`PATCH /admin/ports/{id}`)
+3. **Prepare drive** — discover, format, and initialize a USB drive for the project
 3. **Create job** — `POST /jobs` with project ID, evidence number, source path, and drive ID
 4. **Start copy** — `POST /jobs/{id}/start`
 5. **Monitor progress** — poll `GET /jobs/{id}` until `status` is `COMPLETED` or `FAILED`
@@ -1186,6 +1255,8 @@ Every audit entry contains:
 | `INIT_REJECTED_FILESYSTEM` | Drive init rejected due to unsupported filesystem |
 | `PROJECT_ISOLATION_VIOLATION` | Attempt to use drive bound to a different project |
 | `USB_DISCOVERY_SYNC` | USB discovery scan completed |
+| `PORT_ENABLED` | USB port enabled for ECUBE use |
+| `PORT_DISABLED` | USB port disabled |
 
 #### Job Lifecycle
 
