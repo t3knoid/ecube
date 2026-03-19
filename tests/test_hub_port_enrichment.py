@@ -61,7 +61,7 @@ def _seed_hub(db) -> UsbHub:
     return hub
 
 
-def _seed_port(db,  hub: UsbHub) -> UsbPort:
+def _seed_port(db, hub: UsbHub) -> UsbPort:
     port = UsbPort(hub_id=hub.id, port_number=1, system_path="1-1")
     db.add(port)
     db.commit()
