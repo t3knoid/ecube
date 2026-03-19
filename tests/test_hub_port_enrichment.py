@@ -440,3 +440,91 @@ def test_list_ports_returns_enriched_fields(admin_client, db):
     assert enriched["vendor_id"] == "0781"
     assert enriched["product_id"] == "5583"
     assert enriched["speed"] == "5000"
+
+
+# ---------------------------------------------------------------------------
+# Empty sysfs attributes must not overwrite stored values
+# ---------------------------------------------------------------------------
+
+
+def test_empty_sysfs_attrs_do_not_overwrite_stored_values(db):
+    """When sysfs returns empty strings for vendor/product/speed, previously
+    stored non-empty values must be preserved (empty → None normalisation)."""
+    # First sync — store real enrichment data.
+    run_discovery_sync(
+        db,
+        topology_source=_enriched_topology,
+        filesystem_detector=_NULL_DETECTOR,
+    )
+    hub = db.query(UsbHub).one()
+    assert hub.vendor_id == "8086"
+    port = db.query(UsbPort).one()
+    assert port.vendor_id == "0781"
+    assert port.speed == "5000"
+
+    # Second sync — sysfs attributes are now None (simulating empty files).
+    def _empty_attrs_topology():
+        h = DiscoveredHub(
+            system_identifier="usb1",
+            name="xHCI Host Controller",
+            vendor_id=None,
+            product_id=None,
+        )
+        p = DiscoveredPort(
+            hub_system_identifier="usb1",
+            port_number=1,
+            system_path="1-1",
+            vendor_id=None,
+            product_id=None,
+            speed=None,
+        )
+        return DiscoveredTopology(hubs=[h], ports=[p])
+
+    run_discovery_sync(
+        db,
+        topology_source=_empty_attrs_topology,
+        filesystem_detector=_NULL_DETECTOR,
+    )
+
+    db.refresh(hub)
+    db.refresh(port)
+    # Values must survive — None from discovery should not clobber them.
+    assert hub.vendor_id == "8086"
+    assert hub.product_id == "a36d"
+    assert port.vendor_id == "0781"
+    assert port.product_id == "5583"
+    assert port.speed == "5000"
+
+
+def test_read_sysfs_attr_empty_file_returns_none(tmp_path):
+    """_read_sysfs_attr must return None for an empty attribute file."""
+    from app.infrastructure.usb_discovery import _read_sysfs_attr
+
+    # Create an empty file.
+    attr_file = tmp_path / "idVendor"
+    attr_file.write_text("")
+
+    result = _read_sysfs_attr(str(tmp_path), "idVendor")
+    assert result is None
+
+
+def test_read_sysfs_attr_whitespace_only_returns_none(tmp_path):
+    """_read_sysfs_attr must return None for a whitespace-only file."""
+    from app.infrastructure.usb_discovery import _read_sysfs_attr
+
+    attr_file = tmp_path / "idVendor"
+    attr_file.write_text("   \n")
+
+    result = _read_sysfs_attr(str(tmp_path), "idVendor")
+    assert result is None
+
+
+def test_read_sysfs_attr_nonempty_returns_stripped(tmp_path):
+    """_read_sysfs_attr returns stripped content for normal files."""
+    from app.infrastructure.usb_discovery import _read_sysfs_attr
+
+    attr_file = tmp_path / "idVendor"
+    attr_file.write_text("0781\n")
+
+    result = _read_sysfs_attr(str(tmp_path), "idVendor")
+    assert result == "0781"
