@@ -414,6 +414,7 @@ Accessible from the Drive Management screen via a "Manage Ports" button. Visible
 │              │                                                               │
 │              │  ⚠ Changes take effect on the next discovery refresh.         │
 │              │    Drives on disabled ports remain in EMPTY state.            │
+│              │    AVAILABLE drives are demoted to EMPTY when port disabled.  │
 │              │    Drives already IN_USE are not affected.                    │
 │              │                                                               │
 │              │  [ Refresh Drives ] — run discovery after enabling ports      │

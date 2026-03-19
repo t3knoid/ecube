@@ -309,7 +309,7 @@ List all USB ports with their current enablement state.
 
 ### `PATCH /admin/ports/{port_id}`
 
-Enable or disable a USB port for ECUBE use. Disabled ports cause newly discovered or reconnecting drives to remain in `EMPTY` state instead of transitioning to `AVAILABLE`.
+Enable or disable a USB port for ECUBE use. Disabled ports cause newly discovered or reconnecting drives to remain in `EMPTY` state instead of transitioning to `AVAILABLE`. Drives already in `AVAILABLE` state on a disabled port are demoted to `EMPTY` on the next discovery sync.
 
 **Roles:** `admin`, `manager`
 
@@ -344,12 +344,12 @@ Enable or disable a USB port for ECUBE use. Disabled ports cause newly discovere
 
 - The enablement change takes effect on the next discovery sync.
 - Drives already in `IN_USE` state on a disabled port are **not** affected — project isolation takes priority.
-- Drives with no associated port (`port_id = NULL`) are unaffected by the enablement filter.
+- Drives with no associated port (`port_id = NULL`) are treated as disabled — they remain in `EMPTY` state.
 
 **Audit events:**
 
-- `PORT_ENABLED` — Port enabled; includes `port_id`, `system_path`, `hub_id`.
-- `PORT_DISABLED` — Port disabled; includes `port_id`, `system_path`, `hub_id`.
+- `PORT_ENABLED` — Port enabled; includes `port_id`, `system_path`, `hub_id`, `enabled`, `path`.
+- `PORT_DISABLED` — Port disabled; includes `port_id`, `system_path`, `hub_id`, `enabled`, `path`.
 
 ---
 
