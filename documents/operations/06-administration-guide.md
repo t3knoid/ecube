@@ -15,11 +15,10 @@
 4. [Drive Management](#drive-management)
 5. [Job Management](#job-management)
 6. [Mount Management](#mount-management)
-7. [Common Operational Tasks](#common-operational-tasks)
-8. [Monitoring and Logs](#monitoring-and-logs)
-9. [Troubleshooting](#troubleshooting)
-10. [Backup and Recovery](#backup-and-recovery)
-11. [Maintenance](#maintenance)
+7. [Monitoring and Logs](#monitoring-and-logs)
+8. [Troubleshooting](#troubleshooting)
+9. [Backup and Recovery](#backup-and-recovery)
+10. [Maintenance](#maintenance)
 
 ---
 
@@ -1134,18 +1133,6 @@ Response: returns an array of all mount objects with updated statuses.
 
 ---
 
-## Common Operational Tasks
-
-### Query Audit Logs
-
-```bash
-# Via API (requires admin, manager, or auditor role)
-curl -X GET "https://localhost:8443/audit?user=alice&action=JOB_STARTED&limit=50" \
-  -H "Authorization: Bearer $JWT_TOKEN"
-```
-
----
-
 ## Monitoring and Logs
 
 ### Service Logs
@@ -1266,6 +1253,29 @@ curl -k -H "Authorization: Bearer $TOKEN" \
 
 > **Note:** Path traversal is blocked server-side — only files within the
 > configured log directory can be accessed.
+
+### Audit Logs API
+
+Query the append-only audit log for compliance and investigation.
+
+```bash
+# Requires admin, manager, or auditor role
+# All audit entries (default limit)
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  https://localhost:8443/audit
+
+# Filter by user, action, and limit
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  "https://localhost:8443/audit?user=alice&action=JOB_STARTED&limit=50"
+```
+
+Supported query parameters:
+
+| Parameter | Description |
+|-----------|-------------|
+| `user` | Filter by username |
+| `action` | Filter by action type (e.g., `JOB_STARTED`, `DRIVE_INITIALIZED`, `SYSTEM_INITIALIZED`) |
+| `limit` | Maximum number of entries to return |
 
 ---
 
@@ -1615,6 +1625,41 @@ sudo cp -r /opt/ecube/certs /mnt/backup/ecube/certs.backup
 # Backup application code (optional)
 sudo cp -r /opt/ecube /mnt/backup/ecube/app.backup_$(date +%Y%m%d)
 ```
+
+### OS Users and Groups Backup
+
+ECUBE manages OS-level users and groups for authentication. These should be
+backed up alongside the database and configuration.
+
+#### Via the API (ECUBE-Managed Only)
+
+Export the ECUBE-managed users and their group memberships as JSON. This is
+sufficient to recreate them through the API on a fresh system.
+
+```bash
+# Back up ECUBE OS users
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  https://localhost:8443/admin/os-users > ecube_os_users.json
+
+# Back up ECUBE OS groups
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  https://localhost:8443/admin/os-groups > ecube_os_groups.json
+```
+
+#### Via OS-Level Files (All System Users)
+
+Back up the underlying system files directly. This captures all OS users
+(not just ECUBE-managed ones) and preserves password hashes.
+
+```bash
+sudo cp /etc/passwd /mnt/backup/ecube/passwd.backup
+sudo cp /etc/group  /mnt/backup/ecube/group.backup
+sudo cp /etc/shadow /mnt/backup/ecube/shadow.backup
+sudo chmod 600 /mnt/backup/ecube/shadow.backup
+```
+
+> **Tip:** Include OS user/group backup in the automated daily backup script
+> to ensure user accounts are recoverable alongside the database.
 
 ---
 
