@@ -18,7 +18,7 @@ class UsbPortSchema(BaseModel):
     id: int = Field(..., description="Unique identifier for the USB port")
     hub_id: int = Field(..., description="ID of the parent hub")
     port_number: int = Field(..., description="Port number on the hub (1-based)")
-    system_path: str = Field(..., description="Kernel sysfs path to the port")
+    system_path: str = Field(..., description="USB device identifier from sysfs, e.g. '1-1'")
     friendly_label: Optional[str] = Field(default=None, description="User-assigned label for the port")
     enabled: bool = Field(default=False, description="Whether this port is enabled for ECUBE use")
     vendor_id: Optional[str] = Field(default=None, description="Vendor ID of device at this port")
