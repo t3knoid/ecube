@@ -406,10 +406,10 @@ Accessible from the Drive Management screen via a "Manage Ports" button. Visible
 │              │  ┌────┬────────┬──────────────────────────┬──────┬──────┬───────┬─────────────────┬────────┐│
 │              │  │ ID │ Hub    │ System Path              │Vendor│Prod. │ Speed │ Label           │ Enable ││
 │              │  ├────┼────────┼──────────────────────────┼──────┼──────┼───────┼─────────────────┼────────┤│
-│              │  │ 1  │ Hub 1  │ /sys/bus/usb/devices/1-1 │ 0781 │ 5583 │ 480   │ [Bay 1 Top   ✏] │ [✓]    ││
-│              │  │ 2  │ Hub 1  │ /sys/bus/usb/devices/1-2 │ 0951 │ 1666 │ 5000  │ [Bay 1 Bot   ✏] │ [ ]    ││
-│              │  │ 3  │ Hub 1  │ /sys/bus/usb/devices/1-3 │ —    │ —    │ —     │ [—           ✏] │ [✓]    ││
-│              │  │ 4  │ Hub 2  │ /sys/bus/usb/devices/2-1 │ 04e8 │ 6860 │ 480   │ [—           ✏] │ [ ]    ││
+│              │  │ 1  │ Hub 1  │ 1-1                      │ 0781 │ 5583 │ 480   │ [Bay 1 Top   ✏] │ [✓]    ││
+│              │  │ 2  │ Hub 1  │ 1-2                      │ 0951 │ 1666 │ 5000  │ [Bay 1 Bot   ✏] │ [ ]    ││
+│              │  │ 3  │ Hub 1  │ 1-3                      │ —    │ —    │ —     │ [—           ✏] │ [✓]    ││
+│              │  │ 4  │ Hub 2  │ 2-1                      │ 04e8 │ 6860 │ 480   │ [—           ✏] │ [ ]    ││
 │              │  └────┴────────┴──────────────────────────┴──────┴──────┴───────┴─────────────────┴────────┘│
 │              │                                                                          │
 │              │  ⚠ Changes take effect on the next discovery refresh.                     │
