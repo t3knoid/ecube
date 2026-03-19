@@ -17,6 +17,8 @@ class UsbHub(Base):
     name = Column(String, nullable=False)
     system_identifier = Column(String, unique=True, nullable=False)
     location_hint = Column(String)
+    vendor_id = Column(String, nullable=True)
+    product_id = Column(String, nullable=True)
     ports = relationship("UsbPort", back_populates="hub")
 
 
@@ -28,6 +30,9 @@ class UsbPort(Base):
     system_path = Column(String, nullable=False)
     friendly_label = Column(String)
     enabled = Column(Boolean, nullable=False, default=False, server_default="0")
+    vendor_id = Column(String, nullable=True)
+    product_id = Column(String, nullable=True)
+    speed = Column(String, nullable=True)
     hub = relationship("UsbHub", back_populates="ports")
     drives = relationship("UsbDrive", back_populates="port")
 

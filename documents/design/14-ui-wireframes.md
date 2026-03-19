@@ -320,7 +320,7 @@ The default landing page after login. Provides an at-a-glance overview of system
 │              │                                                               │
 │              │  Click a row to view drive details and available actions.      │
 │              │                                                               │
-│              │  [ Manage Ports ]  (admin/manager only — opens Screen 4c)     │
+│              │  [ Manage Ports ]  [ Manage Hubs ]  (admin/manager — 4c/4d)   │
 │              │                                                               │
 │              │  ┌─ Lifecycle Reference ─────────────────────────────────────┐ │
 │              │  │   EMPTY ──▶ AVAILABLE ──▶ IN_USE                         │ │
@@ -389,44 +389,79 @@ Shown when a drive row is selected (slide-out panel or detail page).
 | AVAILABLE   | enabled | enabled (if FS present) | disabled |
 | IN_USE      | disabled | disabled | enabled |
 
-**Use Cases Covered:** UC-4.1, UC-4.2, UC-4.3, UC-4.4, UC-4.5, UC-4.6, UC-4.7, UC-4.8, UC-4.9, UC-4.10
+**Use Cases Covered:** UC-4.1 – UC-4.13
 
-### 4c — Port Management Panel (UC-4.8, UC-4.9, UC-4.10)
+### 4c — Port Management Panel (UC-4.8, UC-4.9, UC-4.10, UC-4.13)
 
 Accessible from the Drive Management screen via a "Manage Ports" button. Visible to admin and manager roles only.
 
 ```
-┌──────────────┬───────────────────────────────────────────────────────────────┐
-│              │  USB Port Management                         [ ← Back to     │
-│  ◎ Dashboard │                                                 Drives ]     │
-│  ◉ Drives    │                                                               │
-│  ◎ Mounts    │  Ports default to disabled. Enable ports to allow drives to   │
-│  ◎ Jobs      │  become AVAILABLE during discovery.                           │
-│  ◎ Audit     │                                                               │
-│              │  ┌────┬────────┬──────────────────────────┬─────────┬────────┐│
-│              │  │ ID │ Hub    │ System Path              │ Label   │ Enable ││
-│              │  ├────┼────────┼──────────────────────────┼─────────┼────────┤│
-│              │  │ 1  │ Hub 1  │ /sys/bus/usb/devices/1-1 │ —       │ [✓]    ││
-│              │  │ 2  │ Hub 1  │ /sys/bus/usb/devices/1-2 │ —       │ [ ]    ││
-│              │  │ 3  │ Hub 1  │ /sys/bus/usb/devices/1-3 │ —       │ [✓]    ││
-│              │  │ 4  │ Hub 2  │ /sys/bus/usb/devices/2-1 │ —       │ [ ]    ││
-│              │  └────┴────────┴──────────────────────────┴─────────┴────────┘│
-│              │                                                               │
-│              │  ⚠ Changes take effect on the next discovery refresh.         │
-│              │    Drives on disabled ports remain in EMPTY state.            │
-│              │    AVAILABLE drives are demoted to EMPTY when port disabled.  │
-│              │    Drives already IN_USE are not affected.                    │
-│              │                                                               │
-│              │  [ Refresh Drives ] — run discovery after enabling ports      │
-│              │                                                               │
-└──────────────┴───────────────────────────────────────────────────────────────┘
+┌──────────────┬──────────────────────────────────────────────────────────────────────────┐
+│              │  USB Port Management                                   [ ← Back to      │
+│  ◎ Dashboard │                                                           Drives ]      │
+│  ◉ Drives    │                                                                          │
+│  ◎ Mounts    │  Ports default to disabled. Enable ports to allow drives to               │
+│  ◎ Jobs      │  become AVAILABLE during discovery.                                       │
+│  ◎ Audit     │                                                                          │
+│              │  ┌────┬────────┬──────────────────────────┬──────┬──────┬───────┬─────────────────┬────────┐│
+│              │  │ ID │ Hub    │ System Path              │Vendor│Prod. │ Speed │ Label           │ Enable ││
+│              │  ├────┼────────┼──────────────────────────┼──────┼──────┼───────┼─────────────────┼────────┤│
+│              │  │ 1  │ Hub 1  │ /sys/bus/usb/devices/1-1 │ 0781 │ 5583 │ 480   │ [Bay 1 Top   ✏] │ [✓]    ││
+│              │  │ 2  │ Hub 1  │ /sys/bus/usb/devices/1-2 │ 0951 │ 1666 │ 5000  │ [Bay 1 Bot   ✏] │ [ ]    ││
+│              │  │ 3  │ Hub 1  │ /sys/bus/usb/devices/1-3 │ —    │ —    │ —     │ [—           ✏] │ [✓]    ││
+│              │  │ 4  │ Hub 2  │ /sys/bus/usb/devices/2-1 │ 04e8 │ 6860 │ 480   │ [—           ✏] │ [ ]    ││
+│              │  └────┴────────┴──────────────────────────┴──────┴──────┴───────┴─────────────────┴────────┘│
+│              │                                                                          │
+│              │  ⚠ Changes take effect on the next discovery refresh.                     │
+│              │    Drives on disabled ports remain in EMPTY state.                        │
+│              │    AVAILABLE drives are demoted to EMPTY when port disabled.              │
+│              │    Drives already IN_USE are not affected.                                │
+│              │                                                                          │
+│              │  [ Refresh Drives ] — run discovery after enabling ports                  │
+│              │                                                                          │
+└──────────────┴──────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Behavior:**
-- Each toggle calls `PATCH /admin/ports/{id}` with `{"enabled": true/false}`
+- **Vendor**, **Prod.**, **Speed** columns are read-only, auto-populated from sysfs during discovery
+- **Label** column is inline-editable; clicking the ✏ icon opens a text field. Saving calls `PATCH /admin/ports/{id}/label` with `{"friendly_label": "..."}`
+- Each **Enable** toggle calls `PATCH /admin/ports/{id}` with `{"enabled": true/false}`
 - Toggle state reflects the current `enabled` value from `GET /admin/ports`
-- Success shows a brief toast notification ("Port 1 enabled" / "Port 2 disabled")
+- Success shows a brief toast notification ("Port 1 enabled" / "Port 2 disabled" / "Port 1 label updated")
 - The "Refresh Drives" button calls `POST /drives/refresh` to immediately apply enablement changes
+- Hidden for processor and auditor roles (API returns 403)
+
+### 4d — Hub Management Panel (UC-4.11, UC-4.12)
+
+Accessible from the Drive Management screen via a "Manage Hubs" button. Visible to admin and manager roles only.
+
+```
+┌──────────────┬──────────────────────────────────────────────────────────────────────────┐
+│              │  USB Hub Management                                    [ ← Back to      │
+│  ◎ Dashboard │                                                           Drives ]      │
+│  ◉ Drives    │                                                                          │
+│  ◎ Mounts    │  Hubs are discovered automatically. Assign location hints for             │
+│  ◎ Jobs      │  easier physical identification.                                         │
+│  ◎ Audit     │                                                                          │
+│              │  ┌────┬────────────┬──────┬──────┬──────────────────────────────────┐     │
+│              │  │ ID │ Name       │Vendor│Prod. │ Location Hint                    │     │
+│              │  ├────┼────────────┼──────┼──────┼──────────────────────────────────┤     │
+│              │  │ 1  │ usb1       │ 1d6b │ 0002 │ [Back-left rack              ✏]  │     │
+│              │  │ 2  │ usb2       │ 1d6b │ 0003 │ [Front panel                 ✏]  │     │
+│              │  │ 3  │ usb3       │ 05e3 │ 0610 │ [—                           ✏]  │     │
+│              │  └────┴────────────┴──────┴──────┴──────────────────────────────────┘     │
+│              │                                                                          │
+│              │  Vendor and Product IDs are read from sysfs during discovery.             │
+│              │  Location hints are preserved across discovery resyncs.                   │
+│              │                                                                          │
+└──────────────┴──────────────────────────────────────────────────────────────────────────┘
+```
+
+**Behavior:**
+- **Vendor** and **Prod.** columns are read-only, auto-populated from sysfs `idVendor`/`idProduct`
+- **Location Hint** is inline-editable; clicking the ✏ icon opens a text field. Saving calls `PATCH /admin/hubs/{id}` with `{"location_hint": "..."}`
+- Hub data is fetched from `GET /admin/hubs`
+- Success shows a toast notification ("Hub 1 location updated")
 - Hidden for processor and auditor roles (API returns 403)
 
 ---
@@ -1013,7 +1048,8 @@ Used for: Format Drive (UC-4.4), Delete User (UC-3.8), Remove Mount (UC-5.4), Re
 | UC-4.3 | Screen 4a: Refresh button |
 | UC-4.4 – UC-4.6 | Screen 4b: Drive Detail (action panels) |
 | UC-4.7 | Screen 4b: Drive Detail (properties) |
-| UC-4.8 – UC-4.10 | Screen 4c: Port Management Panel |
+| UC-4.8 – UC-4.10, UC-4.13 | Screen 4c: Port Management Panel |
+| UC-4.11 – UC-4.12 | Screen 4d: Hub Management Panel |
 | UC-5.1 | Screen 5a: Mount List |
 | UC-5.2 – UC-5.3 | Screen 5b: Add Mount Dialog |
 | UC-5.4 – UC-5.6 | Screen 5a: Mount List (inline actions) |

@@ -8,6 +8,8 @@ class UsbHubSchema(BaseModel):
     name: str = Field(..., description="Human-readable name of the USB hub")
     system_identifier: str = Field(..., description="System-level identifier from udev/sysfs")
     location_hint: Optional[str] = Field(default=None, description="Physical location hint (e.g., 'back-left')")
+    vendor_id: Optional[str] = Field(default=None, description="USB vendor ID (e.g. '8086' for Intel)")
+    product_id: Optional[str] = Field(default=None, description="USB product ID")
 
     model_config = {"from_attributes": True}
 
@@ -19,6 +21,9 @@ class UsbPortSchema(BaseModel):
     system_path: str = Field(..., description="Kernel sysfs path to the port")
     friendly_label: Optional[str] = Field(default=None, description="User-assigned label for the port")
     enabled: bool = Field(default=False, description="Whether this port is enabled for ECUBE use")
+    vendor_id: Optional[str] = Field(default=None, description="Vendor ID of device at this port")
+    product_id: Optional[str] = Field(default=None, description="Product ID of device at this port")
+    speed: Optional[str] = Field(default=None, description="Port speed in Mbps (e.g. '480', '5000')")
 
     model_config = {"from_attributes": True}
 
@@ -56,3 +61,11 @@ class DriveFormatRequest(BaseModel):
 
 class PortEnableRequest(BaseModel):
     enabled: bool = Field(..., description="Set port enabled state")
+
+
+class HubUpdateRequest(BaseModel):
+    location_hint: str = Field(..., description="Physical location label for the hub")
+
+
+class PortUpdateRequest(BaseModel):
+    friendly_label: str = Field(..., description="Human-readable label for the port")
