@@ -37,6 +37,46 @@ def test_list_drives_with_data(client, db):
     assert data[0]["device_identifier"] == "USB001"
 
 
+def test_list_drives_filter_by_project(client, db):
+    """GET /drives?project_id= returns only matching drives."""
+    d1 = UsbDrive(device_identifier="USB-A", current_state=DriveState.IN_USE, current_project_id="PROJ-001")
+    d2 = UsbDrive(device_identifier="USB-B", current_state=DriveState.IN_USE, current_project_id="PROJ-002")
+    d3 = UsbDrive(device_identifier="USB-C", current_state=DriveState.AVAILABLE)
+    db.add_all([d1, d2, d3])
+    db.commit()
+
+    response = client.get("/drives?project_id=PROJ-001")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["device_identifier"] == "USB-A"
+    assert data[0]["current_project_id"] == "PROJ-001"
+
+
+def test_list_drives_filter_by_project_no_match(client, db):
+    """GET /drives?project_id= returns empty list when no drives match."""
+    drive = UsbDrive(device_identifier="USB-X", current_state=DriveState.IN_USE, current_project_id="PROJ-001")
+    db.add(drive)
+    db.commit()
+
+    response = client.get("/drives?project_id=PROJ-999")
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_drives_no_filter_returns_all(client, db):
+    """GET /drives without project_id returns all drives (no regression)."""
+    d1 = UsbDrive(device_identifier="USB-1", current_state=DriveState.IN_USE, current_project_id="PROJ-001")
+    d2 = UsbDrive(device_identifier="USB-2", current_state=DriveState.AVAILABLE)
+    db.add_all([d1, d2])
+    db.commit()
+
+    response = client.get("/drives")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+
+
 def test_initialize_drive(manager_client, db):
     drive = UsbDrive(device_identifier="USB002", current_state=DriveState.AVAILABLE, filesystem_type="ext4")
     db.add(drive)
