@@ -45,7 +45,7 @@ def test_list_drives_filter_by_project(client, db):
     db.add_all([d1, d2, d3])
     db.commit()
 
-    response = client.get("/drives?project_id=PROJ-001")
+    response = client.get("/drives", params={"project_id": "PROJ-001"})
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 1
@@ -59,14 +59,14 @@ def test_list_drives_filter_by_project_no_match(client, db):
     db.add(drive)
     db.commit()
 
-    response = client.get("/drives?project_id=PROJ-999")
+    response = client.get("/drives", params={"project_id": "PROJ-999"})
     assert response.status_code == 200
     assert response.json() == []
 
 
 def test_list_drives_empty_project_id_rejected(client, db):
     """GET /drives?project_id= (empty string) returns 422."""
-    response = client.get("/drives?project_id=")
+    response = client.get("/drives", params={"project_id": ""})
     assert response.status_code == 422
 
 
