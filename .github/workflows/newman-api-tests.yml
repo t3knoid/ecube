@@ -55,7 +55,7 @@ jobs:
       - name: Generate admin JWT for Newman
         id: auth
         run: |
-          TOKEN=$(python -c "
+          TOKEN=$(python - <<'PY'
           import jwt, time
           payload = {
               'sub': 'ci-admin',
@@ -65,7 +65,8 @@ jobs:
               'exp': int(time.time()) + 3600,
           }
           print(jwt.encode(payload, 'ci-test-secret-key-do-not-use-in-production', algorithm='HS256'))
-          ")
+          PY
+          )
           echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
 
       - name: Start API server
@@ -99,12 +100,13 @@ jobs:
 
       - name: Newman pass/fail check
         run: |
-          FAILURES=$(python -c "
+          FAILURES=$(python - <<'PY'
           import json, pathlib
           r = json.loads(pathlib.Path('newman-report.json').read_text())
           stats = r.get('run', {}).get('stats', {}).get('assertions', {})
           print(stats.get('failed', 0))
-          ")
+          PY
+          )
           echo "Failed assertions: $FAILURES"
           if [ "$FAILURES" -gt 0 ]; then
             echo "::error::Newman found $FAILURES failed assertion(s)"
