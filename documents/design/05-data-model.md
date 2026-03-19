@@ -11,6 +11,22 @@
 ### Hardware Domain
 
 - `usb_hubs` and `usb_ports` define stable topology references.
+  - `usb_hubs.vendor_id` (String, nullable) — USB vendor ID read from sysfs
+    `idVendor` attribute during discovery (e.g. `"8086"` for Intel).
+  - `usb_hubs.product_id` (String, nullable) — USB product ID read from sysfs
+    `idProduct` attribute during discovery.
+  - `usb_hubs.location_hint` (String, nullable) — Admin-assigned physical
+    location label (e.g. `"back-left rack"`) managed via
+    `PATCH /admin/hubs/{hub_id}`.
+  - `usb_ports.vendor_id` (String, nullable) — USB vendor ID of the device
+    currently plugged into this port, read from sysfs during discovery.
+  - `usb_ports.product_id` (String, nullable) — USB product ID of the device
+    currently plugged into this port, read from sysfs during discovery.
+  - `usb_ports.speed` (String, nullable) — Negotiated link speed in Mbps
+    (e.g. `"480"`, `"5000"`) read from the sysfs `speed` attribute during
+    discovery.
+  - `usb_ports.friendly_label` (String, nullable) — Admin-assigned label for
+    the port, managed via `PATCH /admin/ports/{port_id}/label`.
   - `usb_ports.enabled` (Boolean, default `false`) — controls whether drives
     on this port are eligible to transition to `AVAILABLE` during discovery.
     Ports default to disabled; an admin or manager must explicitly enable a
@@ -46,5 +62,6 @@
 ## Integrity & Constraints
 
 - Foreign keys enforce hub→port→drive and job→file relationships.
+- `usb_hubs.system_identifier` and `usb_ports.system_path` carry **unique constraints**, ensuring each hub and port maps to exactly one row. The discovery upsert logic relies on these keys for stable identity across sync cycles.
 - Enumerated statuses should be constrained by check/enum types.
 - Index by `project_id`, `status`, and recent timestamps for UI queries.

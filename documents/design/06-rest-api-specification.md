@@ -288,7 +288,7 @@ The endpoint captures the drive state and device path at the start, performs pot
 
 ### `GET /admin/ports`
 
-List all USB ports with their current enablement state.
+List all USB ports with their current enablement state and hardware metadata.
 
 **Roles:** `admin`, `manager`
 
@@ -300,9 +300,12 @@ List all USB ports with their current enablement state.
         "id": 1,
         "hub_id": 1,
         "port_number": 1,
-        "system_path": "/sys/bus/usb/devices/1-1",
+        "system_path": "1-1",
         "friendly_label": null,
-        "enabled": false
+        "enabled": false,
+        "vendor_id": "0781",
+        "product_id": "5583",
+        "speed": "480"
     }
 ]
 ```
@@ -328,9 +331,12 @@ Enable or disable a USB port for ECUBE use. Disabled ports cause newly discovere
     "id": 1,
     "hub_id": 1,
     "port_number": 1,
-    "system_path": "/sys/bus/usb/devices/1-1",
+    "system_path": "1-1",
     "friendly_label": null,
-    "enabled": true
+    "enabled": true,
+    "vendor_id": "0781",
+    "product_id": "5583",
+    "speed": "480"
 }
 ```
 
@@ -350,6 +356,87 @@ Enable or disable a USB port for ECUBE use. Disabled ports cause newly discovere
 
 - `PORT_ENABLED` — Port enabled; includes `port_id`, `system_path`, `hub_id`, `enabled`, `path`.
 - `PORT_DISABLED` — Port disabled; includes `port_id`, `system_path`, `hub_id`, `enabled`, `path`.
+
+### `PATCH /admin/ports/{port_id}/label`
+
+Set or update the human-readable `friendly_label` on a USB port.
+
+**Roles:** `admin`, `manager`
+
+**Request body (JSON):**
+
+```json
+{
+    "friendly_label": "Bay 3 – Top Left"
+}
+```
+
+**Response (200 OK):**
+
+Returns the updated port object (same schema as `GET /admin/ports` elements).
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+- `404 Not Found` — Port ID does not exist
+
+**Audit events:**
+
+- `PORT_LABEL_UPDATED` — Includes `port_id`, `system_path`, `field`, `old_value`, `new_value`, `path`.
+
+---
+
+## 3.2b Hub Management
+
+### `GET /admin/hubs`
+
+List all USB hubs with enriched hardware metadata and admin-assigned labels.
+
+**Roles:** `admin`, `manager`
+
+**Response (200 OK):**
+
+```json
+[
+    {
+        "id": 1,
+        "name": "usb1",
+        "system_identifier": "usb1",
+        "location_hint": "back-left rack",
+        "vendor_id": "1d6b",
+        "product_id": "0002"
+    }
+]
+```
+
+### `PATCH /admin/hubs/{hub_id}`
+
+Set or update the `location_hint` label on a USB hub.
+
+**Roles:** `admin`, `manager`
+
+**Request body (JSON):**
+
+```json
+{
+    "location_hint": "back-left rack"
+}
+```
+
+**Response (200 OK):**
+
+Returns the updated hub object (same schema as `GET /admin/hubs` elements).
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+- `404 Not Found` — Hub ID does not exist
+
+**Audit events:**
+
+- `HUB_LABEL_UPDATED` — Includes `hub_id`, `system_identifier`, `field`, `old_value`, `new_value`, `path`.
 
 ---
 
