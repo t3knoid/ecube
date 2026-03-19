@@ -82,7 +82,7 @@ jobs:
           st run http://localhost:8000/openapi.json \
             --header "Authorization: Bearer ${{ steps.auth.outputs.token }}" \
             --checks all \
-            --hypothesis-max-examples 50 \
+            --max-examples 50 \
             --report schemathesis-report.json \
             || true
 
