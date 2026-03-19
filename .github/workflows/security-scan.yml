@@ -84,7 +84,17 @@ jobs:
             echo "::warning::pip-audit report not found — pip-audit may have failed before writing output"
             exit 0
           fi
-          VULNS=$(python -c "import json,pathlib; d=json.loads(pathlib.Path('pip-audit-report.json').read_text()); print(sum(len(p.get('vulns',[])) for p in d.get('dependencies',[])))")
+          VULNS=$(python - <<'PY'
+          import json, pathlib
+          d = json.loads(pathlib.Path('pip-audit-report.json').read_text())
+          # pip-audit outputs either a top-level array or an object with a "dependencies" key
+          if isinstance(d, list):
+              deps = d
+          else:
+              deps = d.get('dependencies', [])
+          print(sum(len(p.get('vulns', [])) for p in deps))
+          PY
+          )
           echo "Known vulnerabilities: $VULNS"
           if [ "$VULNS" -gt 0 ]; then
             echo "::warning::pip-audit found $VULNS known vulnerability(ies)"
