@@ -145,4 +145,4 @@ class PortRepository:
 
     def list_enabled(self) -> List[UsbPort]:
         """Return all ports where ``enabled`` is ``True``."""
-        return self.db.query(UsbPort).filter(UsbPort.enabled == True).all()  # noqa: E712
+        return self.db.query(UsbPort).filter(UsbPort.enabled.is_(True)).all()
