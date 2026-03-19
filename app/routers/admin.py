@@ -35,7 +35,7 @@ from app.config import settings
 from app.routing import LocalOnlyRoute
 from app.database import get_db
 from app.repositories.audit_repository import AuditRepository, best_effort_audit
-from app.repositories.hardware_repository import PortRepository
+from app.repositories.hardware_repository import HubRepository, PortRepository
 from app.repositories.user_role_repository import UserRoleRepository
 from app.schemas.admin import (
     AddOSGroupsRequest,
@@ -50,7 +50,7 @@ from app.schemas.admin import (
     ResetPasswordRequest,
     SetOSGroupsRequest,
 )
-from app.schemas.hardware import PortEnableRequest, UsbPortSchema
+from app.schemas.hardware import HubUpdateRequest, PortEnableRequest, PortUpdateRequest, UsbHubSchema, UsbPortSchema
 from app.infrastructure import get_os_user_provider
 from app.infrastructure.os_user_protocol import OSUserError, OsUserProvider
 from app.services.os_user_service import validate_group_name, validate_username
@@ -583,6 +583,79 @@ def toggle_port_enabled(
         "system_path": port.system_path,
         "hub_id": port.hub_id,
         "enabled": body.enabled,
+        "path": str(request.url.path),
+    })
+
+    return UsbPortSchema.model_validate(port)
+
+
+# ---------------------------------------------------------------------------
+# Hub Management
+# ---------------------------------------------------------------------------
+
+
+@router.get("/hubs", response_model=List[UsbHubSchema])
+def list_hubs(
+    db: Session = Depends(get_db),
+    _current_user: CurrentUser = Depends(require_roles("admin", "manager")),
+) -> List[UsbHubSchema]:
+    """List all USB hubs with enriched hardware metadata."""
+    hubs = HubRepository(db).list_all()
+    return [UsbHubSchema.model_validate(h) for h in hubs]
+
+
+@router.patch("/hubs/{hub_id}", response_model=UsbHubSchema)
+def update_hub_label(
+    hub_id: int,
+    body: HubUpdateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_roles("admin", "manager")),
+) -> UsbHubSchema:
+    """Set or update the location_hint label on a USB hub."""
+    hub_repo = HubRepository(db)
+    existing = hub_repo.get(hub_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Hub not found")
+
+    old_value = existing.location_hint
+    hub = hub_repo.update_location_hint(hub_id, body.location_hint)
+
+    best_effort_audit(db, "HUB_LABEL_UPDATED", current_user.username, {
+        "hub_id": hub.id,
+        "system_identifier": hub.system_identifier,
+        "field": "location_hint",
+        "old_value": old_value,
+        "new_value": body.location_hint,
+        "path": str(request.url.path),
+    })
+
+    return UsbHubSchema.model_validate(hub)
+
+
+@router.patch("/ports/{port_id}/label", response_model=UsbPortSchema)
+def update_port_label(
+    port_id: int,
+    body: PortUpdateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_roles("admin", "manager")),
+) -> UsbPortSchema:
+    """Set or update the friendly_label on a USB port."""
+    port_repo = PortRepository(db)
+    existing = port_repo.get(port_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Port not found")
+
+    old_value = existing.friendly_label
+    port = port_repo.update_friendly_label(port_id, body.friendly_label)
+
+    best_effort_audit(db, "PORT_LABEL_UPDATED", current_user.username, {
+        "port_id": port.id,
+        "system_path": port.system_path,
+        "field": "friendly_label",
+        "old_value": old_value,
+        "new_value": body.friendly_label,
         "path": str(request.url.path),
     })
 
