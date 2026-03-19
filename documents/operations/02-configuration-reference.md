@@ -177,6 +177,14 @@ Required only when `SESSION_BACKEND=redis`. If Redis is unavailable, ECUBE autom
 
 ---
 
+## Reverse Proxy / Client IP
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TRUST_PROXY_HEADERS` | `false` | When `true`, extract client IP from `X-Forwarded-For` / `X-Real-IP` headers for audit logging. Only enable when ECUBE runs behind a trusted reverse proxy that sets these headers. When `false`, the direct TCP connection address is used. |
+
+---
+
 ## Database Connection Pool
 
 | Variable | Default | Description |

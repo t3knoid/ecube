@@ -1,11 +1,12 @@
 import logging
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
 from app.schemas.jobs import FileCompareRequest, FileCompareResponse, FileHashesResponse
 from app.services import file_service
+from app.utils.client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,7 @@ _ADMIN_AUDITOR = require_roles("admin", "auditor")
 @router.get("/{file_id}/hashes", response_model=FileHashesResponse)
 def get_file_hashes(
     file_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_AUDITOR),
 ):
@@ -24,12 +26,13 @@ def get_file_hashes(
 
     **Roles:** ``admin``, ``auditor``
     """
-    return file_service.get_file_hashes(file_id, db, actor=current_user.username)
+    return file_service.get_file_hashes(file_id, db, actor=current_user.username, client_ip=get_client_ip(request))
 
 
 @router.post("/compare", response_model=FileCompareResponse)
 def compare_files(
     body: FileCompareRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_AUDITOR),
 ):
@@ -37,4 +40,4 @@ def compare_files(
 
     **Roles:** ``admin``, ``auditor``
     """
-    return file_service.compare_files(body, db, actor=current_user.username)
+    return file_service.compare_files(body, db, actor=current_user.username, client_ip=get_client_ip(request))

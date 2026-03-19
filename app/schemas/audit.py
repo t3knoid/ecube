@@ -11,5 +11,6 @@ class AuditLogSchema(BaseModel):
     action: str = Field(..., description="Action code (e.g., FILE_HASHES_RETRIEVED, FILE_COMPARE, DRIVE_INITIALIZED)")
     job_id: Optional[int] = Field(default=None, description="ID of the related export job (if applicable)")
     details: Optional[Dict[str, Any]] = Field(default=None, description="Structured metadata about the action (JSON object)")
+    client_ip: Optional[str] = Field(default=None, description="IP address of the requesting client (null for background tasks)")
 
     model_config = {"from_attributes": True}
