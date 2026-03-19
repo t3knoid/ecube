@@ -14,3 +14,4 @@ class AuditLog(Base):
         Integer, ForeignKey("export_jobs.id", ondelete="SET NULL"), nullable=True
     )
     details = Column(JSON().with_variant(JSONB(), "postgresql"))
+    client_ip = Column(String(45), nullable=True)
