@@ -189,7 +189,7 @@ uvicorn app.main:app &
 st run http://localhost:8000/openapi.json \
   --header "Authorization: Bearer <your-jwt>" \
   --checks all \
-  --hypothesis-max-examples 50
+  --max-examples 50
 ```
 
 ---
