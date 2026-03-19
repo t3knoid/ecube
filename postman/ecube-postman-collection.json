@@ -1,0 +1,1020 @@
+{
+	"info": {
+		"_postman_id": "ecube-api-collection",
+		"name": "ECUBE API",
+		"description": "Evidence Copying & USB Based Export — Full API Collection.\n\nSet the `base_url` variable (default: http://localhost:8000) and authenticate via the Auth > Login request to populate the `token` variable automatically.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{token}}",
+				"type": "string"
+			}
+		]
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "string"
+		},
+		{
+			"key": "admin_username",
+			"value": "ecube-admin",
+			"type": "string"
+		},
+		{
+			"key": "admin_password",
+			"value": "s3cret",
+			"type": "string"
+		},
+		{
+			"key": "token",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Health & Version",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						},
+						"description": "Returns 200 OK for readiness/liveness probes."
+					}
+				},
+				{
+					"name": "Version Info",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/version",
+							"host": ["{{base_url}}"],
+							"path": ["version"]
+						},
+						"description": "Returns application and API version. No auth required."
+					}
+				}
+			]
+		},
+		{
+			"name": "Auth",
+			"item": [
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    pm.collectionVariables.set('token', jsonData.access_token);",
+									"    console.log('Token saved to collection variable.');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"{{admin_username}}\",\n  \"password\": \"{{admin_password}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/token",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "token"]
+						},
+						"description": "Authenticate with OS credentials. Returns a signed JWT Bearer token.\nThe token is automatically saved to the collection `token` variable."
+					}
+				}
+			]
+		},
+		{
+			"name": "Setup",
+			"item": [
+				{
+					"name": "Get Setup Status",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/setup/status",
+							"host": ["{{base_url}}"],
+							"path": ["setup", "status"]
+						},
+						"description": "Check if system has been initialized with an admin user."
+					}
+				},
+				{
+					"name": "Initialize System",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"{{admin_username}}\",\n  \"password\": \"{{admin_password}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/setup/initialize",
+							"host": ["{{base_url}}"],
+							"path": ["setup", "initialize"]
+						},
+						"description": "Create OS groups, admin user, and seed DB with admin role. Returns 409 if already initialized."
+					}
+				}
+			]
+		},
+		{
+			"name": "Database Setup",
+			"item": [
+				{
+					"name": "Test DB Connection",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"host\": \"localhost\",\n  \"port\": 5432,\n  \"admin_username\": \"postgres\",\n  \"admin_password\": \"postgres\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/setup/database/test-connection",
+							"host": ["{{base_url}}"],
+							"path": ["setup", "database", "test-connection"]
+						},
+						"description": "Test PostgreSQL connectivity. Unauthenticated during initial setup; admin-required after initialization."
+					}
+				},
+				{
+					"name": "Provision Database",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"host\": \"localhost\",\n  \"port\": 5432,\n  \"admin_username\": \"postgres\",\n  \"admin_password\": \"postgres\",\n  \"app_database\": \"ecube\",\n  \"app_username\": \"ecube_app\",\n  \"app_password\": \"ecube_app_password\",\n  \"force\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/setup/database/provision",
+							"host": ["{{base_url}}"],
+							"path": ["setup", "database", "provision"]
+						},
+						"description": "Create app user/database and run Alembic migrations. Returns 409 if already provisioned."
+					}
+				},
+				{
+					"name": "Get DB Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/setup/database/status",
+							"host": ["{{base_url}}"],
+							"path": ["setup", "database", "status"]
+						},
+						"description": "Verify current database state and connectivity. Requires admin role."
+					}
+				},
+				{
+					"name": "Get DB Settings",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/setup/database/settings",
+							"host": ["{{base_url}}"],
+							"path": ["setup", "database", "settings"]
+						},
+						"description": "Query database configuration. Requires admin role."
+					}
+				},
+				{
+					"name": "Update DB Settings",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"host\": \"localhost\",\n  \"port\": 5432\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/setup/database/settings",
+							"host": ["{{base_url}}"],
+							"path": ["setup", "database", "settings"]
+						},
+						"description": "Update database configuration. Requires admin role."
+					}
+				}
+			]
+		},
+		{
+			"name": "Drives",
+			"item": [
+				{
+					"name": "List Drives",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/drives",
+							"host": ["{{base_url}}"],
+							"path": ["drives"]
+						},
+						"description": "List all USB drives with state and project bindings. Roles: admin, manager, processor, auditor."
+					}
+				},
+				{
+					"name": "Refresh Drives",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/drives/refresh",
+							"host": ["{{base_url}}"],
+							"path": ["drives", "refresh"]
+						},
+						"description": "Trigger USB discovery sync, update topology, and recompute drive states. Roles: admin, manager."
+					}
+				},
+				{
+					"name": "Initialize Drive",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"project_id\": \"PROJECT-001\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/drives/:drive_id/initialize",
+							"host": ["{{base_url}}"],
+							"path": ["drives", ":drive_id", "initialize"],
+							"variable": [
+								{
+									"key": "drive_id",
+									"value": "1",
+									"description": "ID of the drive to initialize"
+								}
+							]
+						},
+						"description": "Bind drive to a project and transition from AVAILABLE to IN_USE. Roles: admin, manager."
+					}
+				},
+				{
+					"name": "Format Drive",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"filesystem_type\": \"exfat\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/drives/:drive_id/format",
+							"host": ["{{base_url}}"],
+							"path": ["drives", ":drive_id", "format"],
+							"variable": [
+								{
+									"key": "drive_id",
+									"value": "1",
+									"description": "ID of the drive to format"
+								}
+							]
+						},
+						"description": "Format drive with specified filesystem (ext4 or exfat). Drive must be AVAILABLE and unmounted. Roles: admin, manager."
+					}
+				},
+				{
+					"name": "Prepare Eject",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/drives/:drive_id/prepare-eject",
+							"host": ["{{base_url}}"],
+							"path": ["drives", ":drive_id", "prepare-eject"],
+							"variable": [
+								{
+									"key": "drive_id",
+									"value": "1",
+									"description": "ID of the drive to prepare for ejection"
+								}
+							]
+						},
+						"description": "Complete copy/verify and transition drive back to AVAILABLE for safe removal. Roles: admin, manager."
+					}
+				}
+			]
+		},
+		{
+			"name": "Mounts",
+			"item": [
+				{
+					"name": "List Mounts",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/mounts",
+							"host": ["{{base_url}}"],
+							"path": ["mounts"]
+						},
+						"description": "List all registered network mounts and connectivity status. Roles: admin, manager, processor, auditor."
+					}
+				},
+				{
+					"name": "Add Mount",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"mount_type\": \"smb\",\n  \"path\": \"//server/share\",\n  \"username\": \"user\",\n  \"password\": \"password\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/mounts",
+							"host": ["{{base_url}}"],
+							"path": ["mounts"]
+						},
+						"description": "Register a new network mount (SMB/NFS). Roles: admin, manager."
+					}
+				},
+				{
+					"name": "Remove Mount",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/mounts/:mount_id",
+							"host": ["{{base_url}}"],
+							"path": ["mounts", ":mount_id"],
+							"variable": [
+								{
+									"key": "mount_id",
+									"value": "1",
+									"description": "ID of the mount to remove"
+								}
+							]
+						},
+						"description": "Delete mount configuration and credentials. Returns 204. Roles: admin, manager."
+					}
+				},
+				{
+					"name": "Validate All Mounts",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/mounts/validate",
+							"host": ["{{base_url}}"],
+							"path": ["mounts", "validate"]
+						},
+						"description": "Test connectivity for all mounts and update status. Roles: admin, manager."
+					}
+				},
+				{
+					"name": "Validate Single Mount",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/mounts/:mount_id/validate",
+							"host": ["{{base_url}}"],
+							"path": ["mounts", ":mount_id", "validate"],
+							"variable": [
+								{
+									"key": "mount_id",
+									"value": "1",
+									"description": "ID of the mount to validate"
+								}
+							]
+						},
+						"description": "Test connectivity for a specific mount. Roles: admin, manager."
+					}
+				}
+			]
+		},
+		{
+			"name": "Jobs",
+			"item": [
+				{
+					"name": "Create Job",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"project_id\": \"PROJECT-001\",\n  \"evidence_number\": \"EV-001\",\n  \"source_path\": \"/mnt/source/evidence\",\n  \"drive_id\": 1,\n  \"thread_count\": 4,\n  \"max_file_retries\": 3,\n  \"retry_delay_seconds\": 1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/jobs",
+							"host": ["{{base_url}}"],
+							"path": ["jobs"]
+						},
+						"description": "Create an export job to copy data to an assigned drive. Starts in PENDING state. Roles: admin, manager, processor."
+					}
+				},
+				{
+					"name": "Get Job",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/:job_id",
+							"host": ["{{base_url}}"],
+							"path": ["jobs", ":job_id"],
+							"variable": [
+								{
+									"key": "job_id",
+									"value": "1",
+									"description": "ID of the export job"
+								}
+							]
+						},
+						"description": "Retrieve job state, progress, and verification results. Roles: admin, manager, processor, auditor."
+					}
+				},
+				{
+					"name": "Start Job",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"thread_count\": 4\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/jobs/:job_id/start",
+							"host": ["{{base_url}}"],
+							"path": ["jobs", ":job_id", "start"],
+							"variable": [
+								{
+									"key": "job_id",
+									"value": "1",
+									"description": "ID of the job to start"
+								}
+							]
+						},
+						"description": "Launch copy process in background. State transitions to IN_PROGRESS. Roles: admin, manager, processor."
+					}
+				},
+				{
+					"name": "Verify Job",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/:job_id/verify",
+							"host": ["{{base_url}}"],
+							"path": ["jobs", ":job_id", "verify"],
+							"variable": [
+								{
+									"key": "job_id",
+									"value": "1",
+									"description": "ID of the job to verify"
+								}
+							]
+						},
+						"description": "Verify copied data integrity (hash comparison). State: VERIFYING → COMPLETED or FAILED. Roles: admin, manager, processor."
+					}
+				},
+				{
+					"name": "Create Manifest",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/:job_id/manifest",
+							"host": ["{{base_url}}"],
+							"path": ["jobs", ":job_id", "manifest"],
+							"variable": [
+								{
+									"key": "job_id",
+									"value": "1",
+									"description": "ID of the job to generate manifest for"
+								}
+							]
+						},
+						"description": "Generate JSON manifest on USB drive with file hashes and copy metadata. Roles: admin, manager, processor."
+					}
+				}
+			]
+		},
+		{
+			"name": "Files",
+			"item": [
+				{
+					"name": "Get File Hashes",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/files/:file_id/hashes",
+							"host": ["{{base_url}}"],
+							"path": ["files", ":file_id", "hashes"],
+							"variable": [
+								{
+									"key": "file_id",
+									"value": "1",
+									"description": "ID of the export file"
+								}
+							]
+						},
+						"description": "Return MD5 and SHA-256 hashes for a single export file. Roles: admin, auditor."
+					}
+				},
+				{
+					"name": "Compare Files",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"file_id_a\": 1,\n  \"file_id_b\": 2\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/files/compare",
+							"host": ["{{base_url}}"],
+							"path": ["files", "compare"]
+						},
+						"description": "Compare two files by hash, size, and relative path. Roles: admin, auditor."
+					}
+				}
+			]
+		},
+		{
+			"name": "Introspection",
+			"item": [
+				{
+					"name": "List Drives (Introspection)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/introspection/drives",
+							"host": ["{{base_url}}"],
+							"path": ["introspection", "drives"]
+						},
+						"description": "Inventory of USB drives: IDs, capacity, state, project bindings. Roles: all authenticated."
+					}
+				},
+				{
+					"name": "USB Topology",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/introspection/usb/topology",
+							"host": ["{{base_url}}"],
+							"path": ["introspection", "usb", "topology"]
+						},
+						"description": "Introspect USB hubs/ports from sysfs. Roles: all authenticated."
+					}
+				},
+				{
+					"name": "Block Devices",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/introspection/block-devices",
+							"host": ["{{base_url}}"],
+							"path": ["introspection", "block-devices"]
+						},
+						"description": "List kernel block devices (disks, partitions). Roles: all authenticated."
+					}
+				},
+				{
+					"name": "System Mounts",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/introspection/mounts",
+							"host": ["{{base_url}}"],
+							"path": ["introspection", "mounts"]
+						},
+						"description": "List mounted filesystems with types and options (sensitive keys redacted). Roles: all authenticated."
+					}
+				},
+				{
+					"name": "System Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/introspection/system-health",
+							"host": ["{{base_url}}"],
+							"path": ["introspection", "system-health"]
+						},
+						"description": "Check database and job engine health. Roles: all authenticated."
+					}
+				},
+				{
+					"name": "Job Debug",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/introspection/jobs/:job_id/debug",
+							"host": ["{{base_url}}"],
+							"path": ["introspection", "jobs", ":job_id", "debug"],
+							"variable": [
+								{
+									"key": "job_id",
+									"value": "1",
+									"description": "ID of the job to debug"
+								}
+							]
+						},
+						"description": "Detailed debug info for job troubleshooting. Roles: admin, auditor."
+					}
+				}
+			]
+		},
+		{
+			"name": "Audit",
+			"item": [
+				{
+					"name": "List Audit Logs",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/audit",
+							"host": ["{{base_url}}"],
+							"path": ["audit"],
+							"query": [
+								{ "key": "user", "value": "", "disabled": true, "description": "Filter by username" },
+								{ "key": "action", "value": "", "disabled": true, "description": "Filter by action type" },
+								{ "key": "job_id", "value": "", "disabled": true, "description": "Filter by job ID" },
+								{ "key": "since", "value": "", "disabled": true, "description": "ISO 8601 datetime (e.g. 2026-01-01T00:00:00Z)" },
+								{ "key": "until", "value": "", "disabled": true, "description": "ISO 8601 datetime" },
+								{ "key": "limit", "value": "50", "disabled": true, "description": "Max records to return" },
+								{ "key": "offset", "value": "0", "disabled": true, "description": "Pagination offset" }
+							]
+						},
+						"description": "Return audit logs with optional filters. Immutable, append-only records. Roles: admin, manager, auditor."
+					}
+				}
+			]
+		},
+		{
+			"name": "Admin — Logs",
+			"item": [
+				{
+					"name": "List Log Files",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/logs",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "logs"]
+						},
+						"description": "List available log files with metadata (size, timestamps). Any authenticated user."
+					}
+				},
+				{
+					"name": "Download Log File",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/logs/:filename",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "logs", ":filename"],
+							"variable": [
+								{
+									"key": "filename",
+									"value": "ecube.log",
+									"description": "Log filename (basename only; path traversal is rejected)"
+								}
+							]
+						},
+						"description": "Download a specific log file. Protected against path traversal. Any authenticated user."
+					}
+				}
+			]
+		},
+		{
+			"name": "Admin — OS Users",
+			"item": [
+				{
+					"name": "List OS Users",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/os-users",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "os-users"]
+						},
+						"description": "List OS users (ECUBE-relevant groups only). Role: admin."
+					}
+				},
+				{
+					"name": "Create OS User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"newuser\",\n  \"password\": \"securePassword123\",\n  \"groups\": [\"ecube-processors\"],\n  \"roles\": [\"processor\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/os-users",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "os-users"]
+						},
+						"description": "Create OS user, set password, add to groups, and optionally assign ECUBE roles. Role: admin."
+					}
+				},
+				{
+					"name": "Delete OS User",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/os-users/:username",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "os-users", ":username"],
+							"variable": [
+								{
+									"key": "username",
+									"value": "newuser",
+									"description": "Username to delete"
+								}
+							]
+						},
+						"description": "Delete OS user and remove DB role assignments. Role: admin."
+					}
+				},
+				{
+					"name": "Reset OS User Password",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"password\": \"newSecurePassword456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/os-users/:username/password",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "os-users", ":username", "password"],
+							"variable": [
+								{
+									"key": "username",
+									"value": "newuser",
+									"description": "Username whose password to reset"
+								}
+							]
+						},
+						"description": "Reset user's OS password. Role: admin."
+					}
+				},
+				{
+					"name": "Set OS User Groups",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"groups\": [\"ecube-managers\", \"ecube-processor\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/os-users/:username/groups",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "os-users", ":username", "groups"],
+							"variable": [
+								{
+									"key": "username",
+									"value": "newuser",
+									"description": "Username whose groups to set"
+								}
+							]
+						},
+						"description": "Replace user's ECUBE groups (non-ECUBE groups preserved). Role: admin."
+					}
+				},
+				{
+					"name": "Add OS User to Groups",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"groups\": [\"ecube-auditors\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/os-users/:username/groups",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "os-users", ":username", "groups"],
+							"variable": [
+								{
+									"key": "username",
+									"value": "newuser",
+									"description": "Username to add groups to"
+								}
+							]
+						},
+						"description": "Append user to groups without removing existing memberships. Role: admin."
+					}
+				}
+			]
+		},
+		{
+			"name": "Admin — OS Groups",
+			"item": [
+				{
+					"name": "List OS Groups",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/os-groups",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "os-groups"]
+						},
+						"description": "List OS groups (ECUBE-relevant names only). Role: admin."
+					}
+				},
+				{
+					"name": "Create OS Group",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"ecube-custom\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/os-groups",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "os-groups"]
+						},
+						"description": "Create OS group on host system. Role: admin."
+					}
+				},
+				{
+					"name": "Delete OS Group",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/os-groups/:name",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "os-groups", ":name"],
+							"variable": [
+								{
+									"key": "name",
+									"value": "ecube-custom",
+									"description": "Group name to delete"
+								}
+							]
+						},
+						"description": "Delete OS group. Role: admin."
+					}
+				}
+			]
+		},
+		{
+			"name": "Users (Role Management)",
+			"item": [
+				{
+					"name": "List Users",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/users",
+							"host": ["{{base_url}}"],
+							"path": ["users"]
+						},
+						"description": "List all users with ECUBE role assignments. Role: admin."
+					}
+				},
+				{
+					"name": "Get User Roles",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/users/:username/roles",
+							"host": ["{{base_url}}"],
+							"path": ["users", ":username", "roles"],
+							"variable": [
+								{
+									"key": "username",
+									"value": "admin",
+									"description": "Username to get roles for"
+								}
+							]
+						},
+						"description": "Get role assignments for a specific user. Role: admin."
+					}
+				},
+				{
+					"name": "Set User Roles",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"roles\": [\"manager\", \"processor\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/users/:username/roles",
+							"host": ["{{base_url}}"],
+							"path": ["users", ":username", "roles"],
+							"variable": [
+								{
+									"key": "username",
+									"value": "newuser",
+									"description": "Username to set roles for"
+								}
+							]
+						},
+						"description": "Replace all role assignments for a user. Role: admin."
+					}
+				},
+				{
+					"name": "Delete User Roles",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/users/:username/roles",
+							"host": ["{{base_url}}"],
+							"path": ["users", ":username", "roles"],
+							"variable": [
+								{
+									"key": "username",
+									"value": "newuser",
+									"description": "Username to remove all roles from"
+								}
+							]
+						},
+						"description": "Remove all role assignments for a user. Role: admin."
+					}
+				}
+			]
+		}
+	]
+}
