@@ -113,6 +113,7 @@ class PortRepository:
                 port_number=port_number,
                 system_path=system_path,
                 friendly_label=friendly_label,
+                enabled=False,
             )
             self.db.add(port)
         else:
@@ -127,3 +128,21 @@ class PortRepository:
             raise
         self.db.refresh(port)
         return port
+
+    def set_enabled(self, port_id: int, enabled: bool) -> Optional[UsbPort]:
+        """Set the *enabled* flag on a port.  Returns ``None`` if not found."""
+        port = self.get(port_id)
+        if port is None:
+            return None
+        port.enabled = enabled
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+        self.db.refresh(port)
+        return port
+
+    def list_enabled(self) -> List[UsbPort]:
+        """Return all ports where ``enabled`` is ``True``."""
+        return self.db.query(UsbPort).filter(UsbPort.enabled.is_(True)).all()
