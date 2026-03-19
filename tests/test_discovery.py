@@ -79,6 +79,12 @@ def test_initial_sync_inserts_hub_port_drive(db):
     # Re-sync to transition drives to AVAILABLE on enabled ports.
     summary = run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
 
+    # Summary contract: second pass updates the existing drive, no new inserts.
+    assert summary["hubs_upserted"] == 1
+    assert summary["drives_inserted"] == 0
+    assert summary["drives_updated"] == 1
+    assert summary["drives_removed"] == 0
+
     hubs = db.query(UsbHub).all()
     assert len(hubs) == 1
     assert hubs[0].system_identifier == "usb1"
