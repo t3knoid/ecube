@@ -568,6 +568,7 @@ def list_ports(
 def toggle_port_enabled(
     port_id: int,
     body: PortEnableRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin", "manager")),
 ) -> UsbPortSchema:
@@ -582,6 +583,7 @@ def toggle_port_enabled(
         "system_path": port.system_path,
         "hub_id": port.hub_id,
         "enabled": body.enabled,
+        "path": str(request.url.path),
     })
 
     return UsbPortSchema.model_validate(port)
