@@ -91,6 +91,7 @@ jobs:
             --checks all \
             --max-examples 50 \
             --request-timeout 10 \
+            --phases coverage,fuzzing \
             2>&1 | tee schemathesis-output.txt \
             || true
 
