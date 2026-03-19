@@ -1,7 +1,8 @@
 import logging
-from fastapi import APIRouter, Depends
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from typing import List
 
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
@@ -19,14 +20,22 @@ _ADMIN_MANAGER = require_roles("admin", "manager")
 
 @router.get("", response_model=List[UsbDriveSchema])
 def list_drives(
+    project_id: Optional[str] = Query(
+        default=None,
+        min_length=1,
+        description="Filter drives by project. When provided, only drives bound to this project are returned.",
+    ),
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_ALL_ROLES),
 ):
     """List all USB drives with their current state and project assignments.
 
+    When *project_id* is provided, only drives bound to that project are
+    returned.  When omitted, all drives are returned.
+
     **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
     """
-    return drive_service.get_all_drives(db)
+    return drive_service.get_all_drives(db, project_id=project_id)
 
 
 @router.post("/{drive_id}/initialize", response_model=UsbDriveSchema)
