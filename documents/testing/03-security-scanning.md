@@ -23,7 +23,7 @@ ECUBE runs automated security scans as a set of GitHub Actions workflows on ever
 | **pip-audit** | Dependency scan (SCA) | Known CVEs in installed Python packages (via OSV/PyPI advisory database) |
 | **Newman** | API integration tests | Status-code assertions, request failures, server errors (5xx) across Postman collection endpoints |
 | **Schemathesis** | OpenAPI fuzz testing | Schema violations, unexpected 5xx responses, crash-inducing inputs, spec-conformance issues |
-| **OWASP ZAP** | Dynamic analysis (DAST) | Injection flaws (SQL, XSS, command), insecure headers, information disclosure, authentication issues, OWASP Top 10 vulnerabilities |
+| **OWASP ZAP** | Dynamic analysis (DAST) | Insecure headers, information disclosure, cookie misconfiguration, CORS issues, server version leaks (passive-only in CI; active scanning for scheduled/manual runs) |
 
 ---
 
@@ -157,9 +157,12 @@ Runs the existing Postman collection (`postman/ecube-postman-collection.json`) a
 |---------|-------|
 | Collection | `postman/ecube-postman-collection.json` |
 | Auth | Admin JWT generated at CI time |
+| OS group provisioning | `ecube-admins`, `ecube-managers`, `ecube-processors`, `ecube-auditors` created via `groupadd` before server start |
 | Reports | JSON (`newman-report.json`) + HTML (`newman-report.html`) |
 | Failure threshold | Any failed assertion fails the job |
 | Artifact retention | 30 days |
+
+> **OS admin endpoints:** The collection-level test automatically skips 5xx failures on `/admin/os-users` and `/admin/os-groups` endpoints when ECUBE OS groups are not provisioned. In CI, the groups are pre-created. For local runs without groups, those requests are gracefully skipped rather than failing the suite.
 
 #### Running locally
 
@@ -189,6 +192,7 @@ newman run postman/ecube-postman-collection.json \
 | Target | `http://localhost:8000/openapi.json` |
 | Auth | Admin JWT via `--header` |
 | Max examples per endpoint | 50 |
+| Request timeout | 10 seconds |
 | Report | CLI output (`schemathesis-output.txt`) |
 | Failure threshold | Warns on issues (non-blocking) |
 | Artifact retention | 30 days |
@@ -221,10 +225,13 @@ st run http://localhost:8000/openapi.json \
 | Setting | Value |
 |---------|-------|
 | Target | `http://localhost:8000/openapi.json` (live URL so ZAP derives the base host) |
-| Scan type | API scan (passive + active rules) |
+| Scan type | **Passive-only** in CI (active scanner disabled) |
+| Connection timeout | 5 seconds per request |
 | Reports | HTML, JSON, Markdown |
 | Failure threshold | ZAP default (warns on alerts) |
 | Artifact retention | 30 days |
+
+> **Why passive-only?** ZAP's active scanner sends hundreds of attack payloads per endpoint. With 62+ authenticated endpoints, active scanning takes 30+ minutes and routinely times out in CI. Passive scanning still catches real issues — missing security headers (X-Content-Type-Options, X-Frame-Options, CSP, HSTS), cookie misconfigurations, information disclosure, and CORS problems — without sending attack payloads. Active scanning is appropriate for scheduled nightly security audits or manual `workflow_dispatch` runs against a dedicated environment.
 
 #### Running locally
 
