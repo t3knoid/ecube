@@ -62,5 +62,6 @@
 ## Integrity & Constraints
 
 - Foreign keys enforce hub→port→drive and job→file relationships.
+- `usb_hubs.system_identifier` and `usb_ports.system_path` carry **unique constraints**, ensuring each hub and port maps to exactly one row. The discovery upsert logic relies on these keys for stable identity across sync cycles.
 - Enumerated statuses should be constrained by check/enum types.
 - Index by `project_id`, `status`, and recent timestamps for UI queries.
