@@ -17,8 +17,8 @@ import sqlalchemy as sa
 
 
 def upgrade() -> None:
-    op.add_column("audit_logs", sa.Column("client_ip", sa.String(), nullable=True))
-    op.add_column("export_jobs", sa.Column("client_ip", sa.String(), nullable=True))
+    op.add_column("audit_logs", sa.Column("client_ip", sa.String(45), nullable=True))
+    op.add_column("export_jobs", sa.Column("client_ip", sa.String(45), nullable=True))
 
 
 def downgrade() -> None:
