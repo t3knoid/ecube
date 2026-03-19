@@ -180,6 +180,19 @@ Every project-isolation decision is recorded:
 
 - Service reads sysfs topology (`/sys/bus/usb/devices`) and returns dataclass-based snapshot.
 - Hub and Port records are upserted (identified by stable `system_identifier` and `system_path` keys).
+- **Hardware enrichment:** During discovery, the service reads additional sysfs
+  attributes for each hub and port device:
+  - `idVendor` → `vendor_id` (hubs and ports)
+  - `idProduct` → `product_id` (hubs and ports)
+  - `speed` → `speed` (ports only, in Mbps)
+  These fields are updated on every sync cycle when present in sysfs; `NULL`
+  values in sysfs do not overwrite previously stored values. Empty sysfs
+  attribute files (zero-length or whitespace-only) are normalized to `None`
+  by the discovery adapter and therefore also do not overwrite stored values.
+- **Label preservation:** Admin-assigned labels (`location_hint` on hubs,
+  `friendly_label` on ports) are never overwritten by the discovery sync.
+  Labels can only be changed through the admin API
+  (`PATCH /admin/hubs/{hub_id}`, `PATCH /admin/ports/{port_id}/label`).
 - Drive state transitions follow FSM rules: `EMPTY → AVAILABLE` on reconnection, `AVAILABLE → EMPTY` on removal (unless `IN_USE` — project isolation preserved).
 - **Port enablement filtering:** Each USB port has an `enabled` flag (default `false`). Discovery uses this flag to gate drive availability:
   - A newly discovered drive on a **disabled** port is inserted in `EMPTY` state (not `AVAILABLE`).
@@ -189,5 +202,11 @@ Every project-isolation decision is recorded:
   - Drives already in `IN_USE` state are **never** changed by the enablement filter — project isolation takes priority.
   - Admins and managers toggle port enablement via `PATCH /admin/ports/{port_id}`. The change takes effect on the next discovery sync.
 - Refresh operation is fully idempotent: running multiple times without hardware changes produces no mutations.
+- **Concurrency safety:** `usb_ports.system_path` carries a database-level
+  unique constraint. If two concurrent discovery syncs both attempt to insert
+  the same port, the second insert raises an `IntegrityError` which is caught,
+  rolled back, and retried as an update against the already-committed row.
+  The same mechanism applies to `usb_hubs.system_identifier`. This ensures
+  discovery remains idempotent under multi-worker deployments.
 - **Operational note:** When a port is discovered but its parent hub is not present in the topology snapshot, a placeholder hub is automatically created with a default name. This prevents foreign-key violations in case of sysfs race conditions or partial enumeration. The placeholder hub name can be manually updated via hub management API when the hub is fully enumerated.
 - Every sync emits a `USB_DISCOVERY_SYNC` audit log with actor and summary counts (hubs_upserted, ports_upserted, drives_inserted, drives_updated, drives_removed).

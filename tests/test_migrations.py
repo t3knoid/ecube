@@ -135,3 +135,77 @@ def test_audit_log_details_accepts_json_on_sqlite(migrated_engine):
 
     assert row is not None, "No row found after insert"
     assert row[0] is not None, "details column returned NULL"
+
+
+def test_migration_0008_deduplicates_ports(sqlite_db_path):
+    """Migration 0008 must coalesce duplicate system_path rows and keep best values."""
+    db_url = f"sqlite:///{sqlite_db_path}"
+    env = {**os.environ, "DATABASE_URL": db_url}
+    repo_root = os.path.dirname(os.path.dirname(__file__))
+
+    # Migrate to 0007 (before unique constraint).
+    result = subprocess.run(
+        ["alembic", "upgrade", "0007"],
+        capture_output=True, text=True, cwd=repo_root, env=env,
+    )
+    assert result.returncode == 0, f"upgrade to 0007 failed:\n{result.stderr}"
+
+    # Manually insert duplicate port rows.
+    engine = create_engine(db_url)
+    with engine.begin() as conn:
+        # Create a hub first.
+        conn.execute(text(
+            "INSERT INTO usb_hubs (id, name, system_identifier) "
+            "VALUES (1, 'Hub', 'usb1')"
+        ))
+        # Survivor (lowest id) — has stale/null values.
+        conn.execute(text(
+            "INSERT INTO usb_ports (id, hub_id, port_number, system_path, "
+            "friendly_label, enabled, vendor_id, product_id, speed) "
+            "VALUES (1, 1, 1, 'dup-path', NULL, 0, NULL, NULL, NULL)"
+        ))
+        # Duplicate — has the good data.
+        conn.execute(text(
+            "INSERT INTO usb_ports (id, hub_id, port_number, system_path, "
+            "friendly_label, enabled, vendor_id, product_id, speed) "
+            "VALUES (2, 1, 1, 'dup-path', 'Bay 1', 1, '0781', '5583', '5000')"
+        ))
+        # Create a drive pointing to the duplicate.
+        conn.execute(text(
+            "INSERT INTO usb_drives (id, port_id, device_identifier, current_state) "
+            "VALUES (1, 2, 'serial-1', 'AVAILABLE')"
+        ))
+    engine.dispose()
+
+    # Now upgrade to 0008 — should dedup and coalesce.
+    result = subprocess.run(
+        ["alembic", "upgrade", "0008"],
+        capture_output=True, text=True, cwd=repo_root, env=env,
+    )
+    assert result.returncode == 0, f"upgrade to 0008 failed:\n{result.stderr}"
+
+    engine = create_engine(db_url)
+    try:
+        with engine.begin() as conn:
+            # Only one port row should remain.
+            ports = conn.execute(text(
+                "SELECT id, friendly_label, enabled, vendor_id, product_id, speed "
+                "FROM usb_ports WHERE system_path = 'dup-path'"
+            )).fetchall()
+            assert len(ports) == 1, f"Expected 1 port after dedup, got {len(ports)}"
+
+            survivor = ports[0]
+            assert survivor[0] == 1, "Survivor should be the lowest-id row"
+            assert survivor[1] == "Bay 1", "friendly_label should be coalesced from duplicate"
+            assert survivor[2] == 1, "enabled should be True (coalesced from duplicate)"
+            assert survivor[3] == "0781", "vendor_id should be coalesced"
+            assert survivor[4] == "5583", "product_id should be coalesced"
+            assert survivor[5] == "5000", "speed should be coalesced"
+
+            # Drive should be re-pointed to the survivor.
+            drive = conn.execute(text(
+                "SELECT port_id FROM usb_drives WHERE id = 1"
+            )).fetchone()
+            assert drive[0] == 1, "Drive should be re-pointed to survivor port"
+    finally:
+        engine.dispose()

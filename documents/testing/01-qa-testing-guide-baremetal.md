@@ -486,6 +486,48 @@ curl -sk -X POST https://localhost:8443/drives/refresh \
   -H "Authorization: Bearer $TOKEN" | jq
 ```
 
+### 11.3b Hub & Port Identification Enrichment
+
+USB hubs and ports are enriched with hardware metadata (`vendor_id`,
+`product_id`, `speed`) during discovery. Admins and managers can also assign
+human-readable labels (`location_hint` on hubs, `friendly_label` on ports).
+
+```bash
+# List all USB hubs with hardware metadata (admin or manager)
+curl -sk https://localhost:8443/admin/hubs \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# Set a location hint on a hub (replace {hub_id})
+curl -sk -X PATCH https://localhost:8443/admin/hubs/{hub_id} \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"location_hint": "back-left rack"}' | jq
+
+# Set a friendly label on a port (replace {port_id})
+curl -sk -X PATCH https://localhost:8443/admin/ports/{port_id}/label \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"friendly_label": "Bay 3 - Top Left"}' | jq
+
+# Verify enriched fields appear in port listing
+curl -sk https://localhost:8443/admin/ports \
+  -H "Authorization: Bearer $TOKEN" | jq '.[0] | {vendor_id, product_id, speed, friendly_label}'
+
+# Verify labels survive a discovery refresh
+curl -sk -X POST https://localhost:8443/drives/refresh \
+  -H "Authorization: Bearer $TOKEN" | jq
+curl -sk https://localhost:8443/admin/hubs \
+  -H "Authorization: Bearer $TOKEN" | jq '.[0].location_hint'
+```
+
+**Key Testing Points:**
+- `vendor_id`, `product_id` are populated from sysfs during discovery
+- `speed` on ports shows the negotiated link speed in Mbps
+- Admin-assigned labels (`location_hint`, `friendly_label`) survive discovery resync
+- Processor and auditor roles receive `403` for hub/port management endpoints
+- Non-existent hub/port IDs return `404`
+- Audit logs record `HUB_LABEL_UPDATED` and `PORT_LABEL_UPDATED` events
+
 ### 11.4 Job Management
 
 ```bash
@@ -826,6 +868,28 @@ curl -sk -X POST https://localhost:8443/setup/database/test-connection \
 | 15 | Orphan drive stays EMPTY | Discover a drive with no matching port (`port_id = NULL`), run `POST /drives/refresh` | Drive remains in `EMPTY` state (unknown port treated as disabled) |
 | 16 | PORT_ENABLED audit log | `GET /audit?action=PORT_ENABLED` after enabling a port | Audit entry with `port_id`, `system_path`, `hub_id`, `enabled`, `path` |
 | 17 | PORT_DISABLED audit log | `GET /audit?action=PORT_DISABLED` after disabling a port | Audit entry with `port_id`, `system_path`, `hub_id`, `enabled`, `path` |
+
+### 12.4.4 Hub & Port Identification Enrichment
+
+| # | Test | How | Expected |
+|---|------|-----|----------|
+| 1 | List hubs — admin | `GET /admin/hubs` with admin token | 200, array of hub objects with `vendor_id`, `product_id`, `location_hint` |
+| 2 | List hubs — manager | `GET /admin/hubs` with manager token | 200 |
+| 3 | List hubs — processor denied | `GET /admin/hubs` with processor token | 403, `FORBIDDEN` |
+| 4 | List hubs — unauthenticated | `GET /admin/hubs` without token | 401, `UNAUTHORIZED` |
+| 5 | Set hub location hint | `PATCH /admin/hubs/{id}` with `{"location_hint": "back-left rack"}` | 200, hub returned with `location_hint: "back-left rack"` |
+| 6 | Set hub location hint — manager | `PATCH /admin/hubs/{id}` with manager token | 200 |
+| 7 | Set hub location hint — processor denied | `PATCH /admin/hubs/{id}` with processor token | 403, `FORBIDDEN` |
+| 8 | Set hub location hint — not found | `PATCH /admin/hubs/99999` | 404, `NOT_FOUND` |
+| 9 | HUB_LABEL_UPDATED audit log | `GET /audit?action=HUB_LABEL_UPDATED` after setting a hub label | Audit entry with `hub_id`, `system_identifier`, `field`, `old_value`, `new_value`, `path` |
+| 10 | Set port friendly label | `PATCH /admin/ports/{id}/label` with `{"friendly_label": "Bay 3"}` | 200, port returned with `friendly_label: "Bay 3"` |
+| 11 | Set port friendly label — manager | `PATCH /admin/ports/{id}/label` with manager token | 200 |
+| 12 | Set port friendly label — processor denied | `PATCH /admin/ports/{id}/label` with processor token | 403, `FORBIDDEN` |
+| 13 | Set port friendly label — not found | `PATCH /admin/ports/{id}/label` for non-existent port | 404, `NOT_FOUND` |
+| 14 | PORT_LABEL_UPDATED audit log | `GET /audit?action=PORT_LABEL_UPDATED` after setting a port label | Audit entry with `port_id`, `system_path`, `field`, `old_value`, `new_value`, `path` |
+| 15 | Port listing includes enriched fields | `GET /admin/ports` after discovery | Port objects include `vendor_id`, `product_id`, `speed` fields |
+| 16 | Labels survive discovery resync | Set hub `location_hint` and port `friendly_label`, then `POST /drives/refresh` | Labels remain unchanged after resync |
+| 17 | Discovery populates vendor/product IDs | Run `POST /drives/refresh` with USB hardware connected | Hub and port records show `vendor_id` and `product_id` from sysfs |
 
 ### 12.5 USB Hardware (Bare-Metal Specific)
 
