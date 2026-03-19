@@ -86,8 +86,11 @@
 | UC-4.5 | Initialize a drive for a project (bind project ID) | Admin, Manager | admin, manager |
 | UC-4.6 | Prepare a drive for safe eject | Admin, Manager | admin, manager |
 | UC-4.7 | View drive detail (serial, port, device path, mount history) | Any authenticated user | any |
+| UC-4.8 | List USB ports with enablement state | Admin, Manager | admin, manager |
+| UC-4.9 | Enable a USB port for ECUBE use | Admin, Manager | admin, manager |
+| UC-4.10 | Disable a USB port | Admin, Manager | admin, manager |
 
-**UI Implication:** Drive inventory dashboard with state-based color indicators and a finite-state-machine visual. Action buttons (Format, Initialize, Eject) contextually enabled based on current drive state. Project binding shown prominently on IN_USE drives.
+**UI Implication:** Drive inventory dashboard with state-based color indicators and a finite-state-machine visual. Action buttons (Format, Initialize, Eject) contextually enabled based on current drive state. Project binding shown prominently on IN_USE drives. Port management panel (accessible to admin/manager) showing all USB ports with enable/disable toggles — disabled ports prevent drives from becoming AVAILABLE during discovery, and AVAILABLE drives on a subsequently disabled port are demoted to EMPTY on the next sync. IN_USE drives are never affected by port enablement.
 
 ---
 
@@ -174,7 +177,7 @@
 The primary operational workflow combines use cases across groups:
 
 1. **Setup** (one-time): UC-1.1 → UC-1.2 → UC-1.3 → UC-1.6 → UC-2.1
-2. **Prepare infrastructure**: UC-5.2/5.3 (add mounts) → UC-4.3 (discover drives) → UC-4.4 (format) → UC-4.5 (initialize for project)
+2. **Prepare infrastructure**: UC-5.2/5.3 (add mounts) → UC-4.3 (discover drives) → UC-4.8/4.9 (enable ports) → UC-4.4 (format) → UC-4.5 (initialize for project)
 3. **Execute export**: UC-6.1 (create job) → UC-6.2 (start) → UC-6.3 (monitor) → UC-6.5 (verify) → UC-6.6 (manifest)
 4. **Eject & hand off**: UC-4.6 (eject drive)
 5. **Audit trail**: UC-7.1–7.7 (review compliance)
@@ -183,7 +186,7 @@ The primary operational workflow combines use cases across groups:
 
 ## Summary
 
-- **47 use cases** across **8 functional groups**
+- **50 use cases** across **8 functional groups**
 - Organized by functional domain (matching the administration guide structure), which maps naturally to UI screens/pages
 - Each use case maps to one or more existing API endpoints
 - The setup wizard (Group 1) is a distinct UX flow from the main application
