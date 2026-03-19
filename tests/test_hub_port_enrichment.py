@@ -11,6 +11,8 @@ Covers:
 
 from __future__ import annotations
 
+import pytest
+
 from app.infrastructure.usb_discovery import (
     DiscoveredHub,
     DiscoveredPort,
@@ -528,3 +530,113 @@ def test_read_sysfs_attr_nonempty_returns_stripped(tmp_path):
 
     result = _read_sysfs_attr(str(tmp_path), "idVendor")
     assert result == "0781"
+
+
+# ---------------------------------------------------------------------------
+# Unique constraint on usb_ports.system_path
+# ---------------------------------------------------------------------------
+
+
+def test_duplicate_system_path_raises_integrity_error(db):
+    """Inserting two ports with the same system_path must raise IntegrityError."""
+    from sqlalchemy.exc import IntegrityError
+
+    hub = _seed_hub(db)
+    p1 = UsbPort(hub_id=hub.id, port_number=1, system_path="dup-path")
+    db.add(p1)
+    db.commit()
+
+    p2 = UsbPort(hub_id=hub.id, port_number=2, system_path="dup-path")
+    db.add(p2)
+    with pytest.raises(IntegrityError):
+        db.commit()
+    db.rollback()
+
+
+# ---------------------------------------------------------------------------
+# IntegrityError retry in upsert (concurrent insert simulation)
+# ---------------------------------------------------------------------------
+
+
+def test_hub_upsert_retries_on_integrity_error(db):
+    """HubRepository.upsert() retries as update when a concurrent insert wins."""
+    from unittest.mock import patch
+    from sqlalchemy.exc import IntegrityError as _IE
+
+    repo = HubRepository(db)
+
+    # Pre-insert a hub to simulate a concurrent insert that won the race.
+    existing = UsbHub(
+        system_identifier="race-hub",
+        name="Original Name",
+        vendor_id="aaaa",
+    )
+    db.add(existing)
+    db.commit()
+    db.refresh(existing)
+
+    # Patch get_by_system_identifier to return None on the first call only,
+    # simulating the window where neither session has committed yet.
+    _real_get = repo.get_by_system_identifier
+    _first_call = [True]
+
+    def _mock_get(sid):
+        if _first_call[0]:
+            _first_call[0] = False
+            return None  # simulate "not found" on first lookup
+        return _real_get(sid)
+
+    with patch.object(repo, "get_by_system_identifier", side_effect=_mock_get):
+        result = repo.upsert(
+            system_identifier="race-hub",
+            name="Updated Name",
+            vendor_id="bbbb",
+        )
+
+    # The retry path should have updated the existing row.
+    assert result.id == existing.id
+    assert result.name == "Updated Name"
+    assert result.vendor_id == "bbbb"
+
+
+def test_port_upsert_retries_on_integrity_error(db):
+    """PortRepository.upsert() retries as update when a concurrent insert wins."""
+    from unittest.mock import patch
+
+    hub = _seed_hub(db)
+    repo = PortRepository(db)
+
+    # Pre-insert a port to simulate a concurrent insert that won the race.
+    existing = UsbPort(
+        hub_id=hub.id,
+        port_number=1,
+        system_path="race-port",
+        vendor_id="cccc",
+        speed="480",
+    )
+    db.add(existing)
+    db.commit()
+    db.refresh(existing)
+
+    _real_get = repo.get_by_system_path
+    _first_call = [True]
+
+    def _mock_get(sp):
+        if _first_call[0]:
+            _first_call[0] = False
+            return None
+        return _real_get(sp)
+
+    with patch.object(repo, "get_by_system_path", side_effect=_mock_get):
+        result = repo.upsert(
+            hub_id=hub.id,
+            port_number=2,
+            system_path="race-port",
+            vendor_id="dddd",
+            speed="5000",
+        )
+
+    assert result.id == existing.id
+    assert result.port_number == 2
+    assert result.vendor_id == "dddd"
+    assert result.speed == "5000"

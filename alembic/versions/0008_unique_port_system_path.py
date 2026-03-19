@@ -8,9 +8,9 @@ system_path as a stable unique key.  Enforce this at the database level
 to prevent duplicate rows and MultipleResultsFound errors.
 
 Before creating the constraint, any pre-existing duplicate rows are
-consolidated: for each duplicated system_path the row with the lowest id
-is kept, drives referencing the duplicate rows are re-pointed to the
-survivor, and the duplicate rows are deleted.
+consolidated: for each duplicated system_path the best attribute values
+are coalesced into the lowest-id survivor row, drives referencing
+duplicate rows are re-pointed, and the duplicates are deleted.
 """
 
 revision = "0008"
@@ -35,17 +35,57 @@ def upgrade() -> None:
     ).fetchall()
 
     for (system_path,) in dupes:
-        # Keep the row with the lowest id.
+        # Fetch all duplicate rows ordered by id (survivor = lowest).
         rows = conn.execute(
             sa.text(
-                "SELECT id FROM usb_ports "
-                "WHERE system_path = :sp ORDER BY id"
+                "SELECT id, friendly_label, enabled, vendor_id, product_id, speed "
+                "FROM usb_ports WHERE system_path = :sp ORDER BY id"
             ),
             {"sp": system_path},
         ).fetchall()
 
-        survivor_id = rows[0][0]
+        survivor = rows[0]
+        survivor_id = survivor[0]
         duplicate_ids = [r[0] for r in rows[1:]]
+
+        # Coalesce best values from all rows into the survivor.
+        # For friendly_label/vendor_id/product_id/speed: first non-null wins.
+        # For enabled: True wins (any row enabled means the port is enabled).
+        best_friendly_label = survivor[1]
+        best_enabled = bool(survivor[2])
+        best_vendor_id = survivor[3]
+        best_product_id = survivor[4]
+        best_speed = survivor[5]
+
+        for dup in rows[1:]:
+            if best_friendly_label is None and dup[1] is not None:
+                best_friendly_label = dup[1]
+            if not best_enabled and dup[2]:
+                best_enabled = True
+            if best_vendor_id is None and dup[3] is not None:
+                best_vendor_id = dup[3]
+            if best_product_id is None and dup[4] is not None:
+                best_product_id = dup[4]
+            if best_speed is None and dup[5] is not None:
+                best_speed = dup[5]
+
+        # Apply coalesced values to the survivor row.
+        conn.execute(
+            sa.text(
+                "UPDATE usb_ports SET "
+                "friendly_label = :fl, enabled = :en, "
+                "vendor_id = :vi, product_id = :pi, speed = :sp "
+                "WHERE id = :sid"
+            ),
+            {
+                "fl": best_friendly_label,
+                "en": best_enabled,
+                "vi": best_vendor_id,
+                "pi": best_product_id,
+                "sp": best_speed,
+                "sid": survivor_id,
+            },
+        )
 
         # Re-point drives from duplicate ports to the survivor.
         conn.execute(
