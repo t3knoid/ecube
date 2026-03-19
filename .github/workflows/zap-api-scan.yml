@@ -82,11 +82,13 @@ jobs:
           echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
 
       - name: Run OWASP ZAP API scan
+        timeout-minutes: 15
         uses: zaproxy/action-api-scan@v0.9.0
         with:
           target: http://localhost:8000/openapi.json
           format: openapi
           cmd_options: >-
+            -T 60
             -z "-config replacer.full_list(0).description=auth
                  -config replacer.full_list(0).enabled=true
                  -config replacer.full_list(0).matchtype=REQ_HEADER
