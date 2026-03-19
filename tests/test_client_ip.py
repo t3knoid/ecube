@@ -215,3 +215,69 @@ class TestExportJobSchema:
 
         fields = ExportJobSchema.model_fields
         assert "client_ip" in fields
+
+
+# ---------------------------------------------------------------------------
+# Role-based redaction — client_ip hidden from non-admin/auditor roles
+# ---------------------------------------------------------------------------
+
+
+class TestJobClientIpRedaction:
+    """Verify that client_ip is only visible to admin and auditor roles."""
+
+    def _create_job(self, http_client):
+        return http_client.post(
+            "/jobs",
+            json={
+                "project_id": "PROJ-IP",
+                "evidence_number": "EV-IP",
+                "source_path": "/data/evidence",
+            },
+        )
+
+    def test_admin_sees_client_ip(self, admin_client, db):
+        resp = self._create_job(admin_client)
+        assert resp.status_code == 200
+        job_id = resp.json()["id"]
+
+        get_resp = admin_client.get(f"/jobs/{job_id}")
+        assert get_resp.status_code == 200
+        assert get_resp.json()["client_ip"] is not None
+
+    def test_processor_client_ip_redacted(self, client, db):
+        resp = self._create_job(client)
+        assert resp.status_code == 200
+        # Processor should not see the IP, even on the create response
+        assert resp.json()["client_ip"] is None
+
+    def test_processor_get_job_client_ip_redacted(self, admin_client, client, db):
+        # Admin creates job (IP stored), processor reads it back
+        resp = self._create_job(admin_client)
+        job_id = resp.json()["id"]
+
+        get_resp = client.get(f"/jobs/{job_id}")
+        assert get_resp.status_code == 200
+        assert get_resp.json()["client_ip"] is None
+
+    def test_auditor_sees_client_ip(self, auditor_client, db):
+        # Auditor can't create jobs, but can read them.
+        # Use a direct DB insert so auditor can GET.
+        job = ExportJob(
+            source_path="/data/src",
+            evidence_number="EV-AUD",
+            project_id="PROJ-AUD",
+            created_by="someone",
+            client_ip="10.99.99.99",
+        )
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+
+        get_resp = auditor_client.get(f"/jobs/{job.id}")
+        assert get_resp.status_code == 200
+        assert get_resp.json()["client_ip"] == "10.99.99.99"
+
+    def test_manager_client_ip_redacted(self, manager_client, db):
+        resp = self._create_job(manager_client)
+        assert resp.status_code == 200
+        assert resp.json()["client_ip"] is None
