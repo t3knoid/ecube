@@ -81,7 +81,11 @@ class HubRepository:
                     hub.vendor_id = vendor_id
                 if product_id is not None:
                     hub.product_id = product_id
-                self.db.commit()
+                try:
+                    self.db.commit()
+                except Exception:
+                    self.db.rollback()
+                    raise
             except Exception:
                 self.db.rollback()
                 raise
@@ -190,7 +194,11 @@ class PortRepository:
                     port.product_id = product_id
                 if speed is not None:
                     port.speed = speed
-                self.db.commit()
+                try:
+                    self.db.commit()
+                except Exception:
+                    self.db.rollback()
+                    raise
             except Exception:
                 self.db.rollback()
                 raise
