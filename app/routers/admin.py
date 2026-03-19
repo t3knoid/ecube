@@ -620,6 +620,8 @@ def update_hub_label(
 
     old_value = existing.location_hint
     hub = hub_repo.update_location_hint(hub_id, body.location_hint)
+    if hub is None:
+        raise HTTPException(status_code=404, detail="Hub not found")
 
     best_effort_audit(db, "HUB_LABEL_UPDATED", current_user.username, {
         "hub_id": hub.id,
@@ -649,6 +651,8 @@ def update_port_label(
 
     old_value = existing.friendly_label
     port = port_repo.update_friendly_label(port_id, body.friendly_label)
+    if port is None:
+        raise HTTPException(status_code=404, detail="Port not found")
 
     best_effort_audit(db, "PORT_LABEL_UPDATED", current_user.username, {
         "port_id": port.id,
