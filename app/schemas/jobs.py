@@ -86,6 +86,6 @@ class ExportJobSchema(BaseModel):
     max_file_retries: int = Field(default=3, ge=0, description="Maximum number of retries for failed files (0+)")
     retry_delay_seconds: int = Field(default=1, ge=0, description="Delay between retries in seconds (0+)")
     created_by: Optional[str] = Field(default=None, description="Username of the job creator")
-    client_ip: Optional[str] = Field(default=None, description="IP address of the client that created the job")
+    client_ip: Optional[str] = Field(default=None, description="IP address of the client that created the job (null for background tasks or when redacted; 'unknown' when the client address could not be resolved)")
 
     model_config = {"from_attributes": True}
