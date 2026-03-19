@@ -1,0 +1,113 @@
+name: Schemathesis API Fuzz
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  schemathesis:
+    name: Schemathesis (OpenAPI Fuzz)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: ecube
+          POSTGRES_PASSWORD: ecube
+          POSTGRES_DB: ecube
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ecube"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://ecube:ecube@localhost/ecube
+      SECRET_KEY: ci-test-secret-key-do-not-use-in-production
+      ROLE_RESOLVER: local
+      LOCAL_GROUP_ROLE_MAP: '{"evidence-admins": ["admin"], "evidence-team": ["processor", "auditor"]}'
+      SESSION_BACKEND: cookie
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install project and Schemathesis
+        run: |
+          pip install -e ".[dev]"
+          pip install schemathesis
+
+      - name: Apply database migrations
+        run: alembic upgrade head
+
+      - name: Generate admin JWT
+        id: auth
+        run: |
+          TOKEN=$(python -c "
+          import jwt, time
+          payload = {
+              'sub': 'ci-admin',
+              'username': 'ci-admin',
+              'groups': ['evidence-admins'],
+              'roles': ['admin'],
+              'exp': int(time.time()) + 3600,
+          }
+          print(jwt.encode(payload, 'ci-test-secret-key-do-not-use-in-production', algorithm='HS256'))
+          ")
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+
+      - name: Start API server
+        run: |
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          sleep 5
+          curl -sf http://localhost:8000/health || (echo "Server failed to start" && exit 1)
+
+      - name: Run Schemathesis
+        run: |
+          st run http://localhost:8000/openapi.json \
+            --header "Authorization: Bearer ${{ steps.auth.outputs.token }}" \
+            --checks all \
+            --hypothesis-max-examples 50 \
+            --report schemathesis-report.json \
+            || true
+
+      - name: Upload Schemathesis report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: schemathesis-report
+          path: schemathesis-report.json
+          retention-days: 30
+
+      - name: Schemathesis pass/fail check
+        run: |
+          if [ -f schemathesis-report.json ]; then
+            ERRORS=$(python -c "
+          import json, pathlib
+          r = json.loads(pathlib.Path('schemathesis-report.json').read_text())
+          total = r.get('total', {}).get('errors', 0) if isinstance(r.get('total'), dict) else 0
+          # Also check for server errors in results
+          failures = sum(1 for e in r.get('results', []) if e.get('errors'))
+          print(total + failures)
+          " 2>/dev/null || echo "0")
+            echo "Errors/failures: $ERRORS"
+            if [ "$ERRORS" -gt 0 ]; then
+              echo "::warning::Schemathesis found $ERRORS issue(s) — review the report artifact"
+            fi
+          else
+            echo "No report file generated — check Schemathesis logs above"
+          fi

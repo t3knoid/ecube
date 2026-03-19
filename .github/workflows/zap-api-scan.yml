@@ -1,0 +1,88 @@
+name: OWASP ZAP API Scan
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  zap:
+    name: OWASP ZAP (DAST)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: ecube
+          POSTGRES_PASSWORD: ecube
+          POSTGRES_DB: ecube
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ecube"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://ecube:ecube@localhost/ecube
+      SECRET_KEY: ci-test-secret-key-do-not-use-in-production
+      ROLE_RESOLVER: local
+      LOCAL_GROUP_ROLE_MAP: '{"evidence-admins": ["admin"], "evidence-team": ["processor", "auditor"]}'
+      SESSION_BACKEND: cookie
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install project
+        run: pip install -e ".[dev]"
+
+      - name: Apply database migrations
+        run: alembic upgrade head
+
+      - name: Start API server
+        run: |
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          sleep 5
+          curl -sf http://localhost:8000/health || (echo "Server failed to start" && exit 1)
+
+      - name: Save OpenAPI spec for ZAP
+        run: curl -sf http://localhost:8000/openapi.json -o openapi.json
+
+      - name: Run OWASP ZAP API scan
+        uses: zaproxy/action-api-scan@v0.9.0
+        with:
+          target: openapi.json
+          format: openapi
+          cmd_options: >-
+            -z "-config replacer.full_list(0).description=auth
+                 -config replacer.full_list(0).enabled=true
+                 -config replacer.full_list(0).matchtype=REQ_HEADER
+                 -config replacer.full_list(0).matchstr=Authorization
+                 -config replacer.full_list(0).regex=false
+                 -config replacer.full_list(0).replacement=Bearer\\ placeholder"
+          allow_issue_writing: false
+
+      - name: Upload ZAP reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-report
+          path: |
+            zap-report.html
+            zap-report.json
+            zap-report.md
+          if-no-files-found: ignore
+          retention-days: 30
