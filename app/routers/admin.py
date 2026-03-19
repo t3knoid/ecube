@@ -35,6 +35,7 @@ from app.config import settings
 from app.routing import LocalOnlyRoute
 from app.database import get_db
 from app.repositories.audit_repository import AuditRepository, best_effort_audit
+from app.repositories.hardware_repository import PortRepository
 from app.repositories.user_role_repository import UserRoleRepository
 from app.schemas.admin import (
     AddOSGroupsRequest,
@@ -49,6 +50,7 @@ from app.schemas.admin import (
     ResetPasswordRequest,
     SetOSGroupsRequest,
 )
+from app.schemas.hardware import PortEnableRequest, UsbPortSchema
 from app.infrastructure import get_os_user_provider
 from app.infrastructure.os_user_protocol import OSUserError, OsUserProvider
 from app.services.os_user_service import validate_group_name, validate_username
@@ -545,6 +547,43 @@ def delete_os_group(
     })
 
     return {"message": f"Group '{name}' deleted"}
+
+
+# ---------------------------------------------------------------------------
+# Port enablement endpoints — admin or manager role
+# ---------------------------------------------------------------------------
+
+
+@router.get("/ports", response_model=List[UsbPortSchema])
+def list_ports(
+    db: Session = Depends(get_db),
+    _current_user: CurrentUser = Depends(require_roles("admin", "manager")),
+) -> List[UsbPortSchema]:
+    """List all USB ports with their enabled state."""
+    ports = PortRepository(db).list_all()
+    return [UsbPortSchema.model_validate(p) for p in ports]
+
+
+@router.patch("/ports/{port_id}", response_model=UsbPortSchema)
+def toggle_port_enabled(
+    port_id: int,
+    body: PortEnableRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_roles("admin", "manager")),
+) -> UsbPortSchema:
+    """Enable or disable a USB port for ECUBE use."""
+    port = PortRepository(db).set_enabled(port_id, body.enabled)
+    if port is None:
+        raise HTTPException(status_code=404, detail="Port not found")
+
+    action = "PORT_ENABLED" if body.enabled else "PORT_DISABLED"
+    best_effort_audit(db, action, current_user.username, {
+        "port_id": port.id,
+        "system_path": port.system_path,
+        "hub_id": port.hub_id,
+    })
+
+    return UsbPortSchema.model_validate(port)
 
 
 # Include the OS sub-router under the /admin prefix.
