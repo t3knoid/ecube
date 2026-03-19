@@ -11,6 +11,10 @@
 ### Hardware Domain
 
 - `usb_hubs` and `usb_ports` define stable topology references.
+  - `usb_ports.enabled` (Boolean, default `false`) — controls whether drives
+    on this port are eligible to transition to `AVAILABLE` during discovery.
+    Ports default to disabled; an admin or manager must explicitly enable a
+    port via `PATCH /admin/ports/{port_id}` before its drives become available.
 - `usb_drives` captures runtime device identity and current assignment/state.
   - `current_project_id` (nullable string) — set during initialization to
     bind the drive to a project for isolation enforcement. Remains `NULL`
