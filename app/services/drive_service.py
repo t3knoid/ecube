@@ -20,8 +20,11 @@ def _default_eject_provider() -> DriveEjectProvider:
     return get_drive_eject()
 
 
-def get_all_drives(db: Session):
-    return DriveRepository(db).list_all()
+def get_all_drives(db: Session, project_id: Optional[str] = None):
+    repo = DriveRepository(db)
+    if project_id is not None:
+        return repo.list_by_project(project_id)
+    return repo.list_all()
 
 
 def initialize_drive(
