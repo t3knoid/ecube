@@ -1,0 +1,87 @@
+name: Security Scan
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  bandit:
+    name: Bandit (Static Analysis)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Bandit
+        run: pip install bandit[toml]
+
+      - name: Run Bandit scan
+        run: |
+          bandit -r app/ -f json -o bandit-report.json --exit-zero
+          bandit -r app/ -f screen || true
+
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit-report.json
+          retention-days: 30
+
+      - name: Bandit pass/fail check
+        run: |
+          HIGH=$(python -c "import json; r=json.load(open('bandit-report.json')); print(sum(1 for i in r.get('results',[]) if i['issue_severity']=='HIGH'))")
+          echo "High-severity findings: $HIGH"
+          if [ "$HIGH" -gt 0 ]; then
+            echo "::error::Bandit found $HIGH high-severity issue(s)"
+            exit 1
+          fi
+
+  pip-audit:
+    name: pip-audit (Dependency Scan)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install project and pip-audit
+        run: |
+          pip install -e ".[dev]"
+          pip install pip-audit
+
+      - name: Run pip-audit
+        run: |
+          pip-audit --format json --output pip-audit-report.json || true
+          pip-audit --desc || true
+
+      - name: Upload pip-audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pip-audit-report
+          path: pip-audit-report.json
+          retention-days: 30
+
+      - name: pip-audit pass/fail check
+        run: |
+          VULNS=$(python -c "import json,pathlib; d=json.loads(pathlib.Path('pip-audit-report.json').read_text()); print(sum(len(p.get('vulns',[])) for p in d.get('dependencies',[])))")
+          echo "Known vulnerabilities: $VULNS"
+          if [ "$VULNS" -gt 0 ]; then
+            echo "::warning::pip-audit found $VULNS known vulnerability(ies)"
+          fi
