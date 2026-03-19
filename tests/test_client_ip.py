@@ -281,3 +281,43 @@ class TestJobClientIpRedaction:
         resp = self._create_job(manager_client)
         assert resp.status_code == 200
         assert resp.json()["client_ip"] is None
+
+
+# ---------------------------------------------------------------------------
+# Role-based redaction — audit log client_ip hidden from manager
+# ---------------------------------------------------------------------------
+
+
+class TestAuditLogClientIpRedaction:
+    """Verify that client_ip in /audit responses is only visible to admin and auditor."""
+
+    def _insert_audit_entry(self, db):
+        entry = AuditLog(action="TEST_REDACT", user="tester", client_ip="10.88.88.88")
+        db.add(entry)
+        db.commit()
+        db.refresh(entry)
+        return entry
+
+    def test_admin_sees_audit_client_ip(self, admin_client, db):
+        self._insert_audit_entry(db)
+        resp = admin_client.get("/audit", params={"action": "TEST_REDACT"})
+        assert resp.status_code == 200
+        entries = resp.json()
+        assert len(entries) >= 1
+        assert entries[0]["client_ip"] == "10.88.88.88"
+
+    def test_auditor_sees_audit_client_ip(self, auditor_client, db):
+        self._insert_audit_entry(db)
+        resp = auditor_client.get("/audit", params={"action": "TEST_REDACT"})
+        assert resp.status_code == 200
+        entries = resp.json()
+        assert len(entries) >= 1
+        assert entries[0]["client_ip"] == "10.88.88.88"
+
+    def test_manager_audit_client_ip_redacted(self, manager_client, db):
+        self._insert_audit_entry(db)
+        resp = manager_client.get("/audit", params={"action": "TEST_REDACT"})
+        assert resp.status_code == 200
+        entries = resp.json()
+        assert len(entries) >= 1
+        assert entries[0]["client_ip"] is None
