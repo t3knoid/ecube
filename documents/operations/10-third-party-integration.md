@@ -74,6 +74,12 @@ GET /drives
 
 Find a drive where `current_state` is `AVAILABLE`. Note its `id`.
 
+To list only drives bound to a specific project:
+
+```
+GET /drives?project_id=CASE-2026-001
+```
+
 ### Step 2 — Initialize the Drive for the Project
 
 ```

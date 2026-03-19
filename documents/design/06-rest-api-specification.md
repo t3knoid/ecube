@@ -186,6 +186,12 @@ List all mounts.
 
 List all drives with state and project assignment.
 
+**Query parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `project_id` | string | No | When provided, return only drives bound to this project. When omitted, return all drives. |
+
 **Roles:** `admin`, `manager`, `processor`, `auditor`
 
 ### `POST /drives/{id}/initialize`
