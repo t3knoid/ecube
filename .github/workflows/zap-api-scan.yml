@@ -75,13 +75,10 @@ jobs:
           )
           echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
 
-      - name: Save OpenAPI spec for ZAP
-        run: curl -sf http://localhost:8000/openapi.json -o openapi.json
-
       - name: Run OWASP ZAP API scan
         uses: zaproxy/action-api-scan@v0.9.0
         with:
-          target: openapi.json
+          target: http://localhost:8000/openapi.json
           format: openapi
           cmd_options: >-
             -z "-config replacer.full_list(0).description=auth
