@@ -141,7 +141,7 @@ def run_discovery_sync(
 
     # Build set of enabled port IDs for port-enablement filtering.
     enabled_port_ids: set[int] = {
-        p.id for p in db.query(UsbPort).filter(UsbPort.enabled == True).all()  # noqa: E712
+        row[0] for row in db.query(UsbPort.id).filter(UsbPort.enabled.is_(True)).all()
     }
 
     def _port_is_enabled(pid: Optional[int]) -> bool:
