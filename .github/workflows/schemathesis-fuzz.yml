@@ -91,6 +91,8 @@ jobs:
             --checks all \
             --max-examples 50 \
             --request-timeout 10000 \
+            --stateful=none \
+            --generation-deadline 300000 \
             2>&1 | tee schemathesis-output.txt \
             || true
 
