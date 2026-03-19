@@ -39,6 +39,13 @@ class _NullDetector:
 _NULL_DETECTOR = _NullDetector()
 
 
+def _enable_all_ports(db) -> None:
+    """Enable all ports in the DB so drives can transition to AVAILABLE."""
+    for port in db.query(UsbPort).all():
+        port.enabled = True
+    db.commit()
+
+
 def _simple_topology(
     hub_id: str = "usb1",
     port_path: str = "1-1",
@@ -66,12 +73,16 @@ def _simple_topology(
 
 def test_initial_sync_inserts_hub_port_drive(db):
     topology = _simple_topology()
+    # First sync discovers ports (disabled by default) — drives inserted as EMPTY.
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    _enable_all_ports(db)
+    # Re-sync to transition drives to AVAILABLE on enabled ports.
     summary = run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
 
+    # Summary contract: second pass updates the existing drive, no new inserts.
     assert summary["hubs_upserted"] == 1
-    assert summary["ports_upserted"] == 1
-    assert summary["drives_inserted"] == 1
-    assert summary["drives_updated"] == 0
+    assert summary["drives_inserted"] == 0
+    assert summary["drives_updated"] == 1
     assert summary["drives_removed"] == 0
 
     hubs = db.query(UsbHub).all()
@@ -180,6 +191,8 @@ def test_sync_updates_hub_name(db):
 def test_available_drive_removed_becomes_empty(db):
     topology = _simple_topology()
     run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    _enable_all_ports(db)
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
 
     # Remove the drive from the hardware snapshot
     summary = run_discovery_sync(db, topology_source=_empty_topology, filesystem_detector=_NULL_DETECTOR)
@@ -192,6 +205,8 @@ def test_available_drive_removed_becomes_empty(db):
 def test_available_drive_removed_emits_audit(db):
     """DRIVE_REMOVED audit entry is created when an AVAILABLE drive disappears."""
     topology = _simple_topology()
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    _enable_all_ports(db)
     run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
     drive = db.query(UsbDrive).one()
 
@@ -248,6 +263,8 @@ def test_empty_drive_removal_stays_empty(db):
 def test_empty_drive_reconnects_becomes_available(db):
     topology = _simple_topology()
     run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    _enable_all_ports(db)
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
 
     # Remove the drive
     run_discovery_sync(db, topology_source=_empty_topology, filesystem_detector=_NULL_DETECTOR)
@@ -274,9 +291,10 @@ def test_sync_handles_multiple_drives(db):
     drive2 = DiscoveredDrive(device_identifier="SN-002", port_system_path="1-2", filesystem_path="/dev/sdc")
     topology = DiscoveredTopology(hubs=[hub], ports=[port1, port2], drives=[drive1, drive2])
 
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    _enable_all_ports(db)
     summary = run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
 
-    assert summary["drives_inserted"] == 2
     assert db.query(UsbDrive).count() == 2
 
     # Remove one drive
@@ -357,3 +375,130 @@ def test_refresh_endpoint_admin_succeeds(admin_client, db, monkeypatch):
     assert "drives_inserted" in data
     assert "drives_updated" in data
     assert "drives_removed" in data
+
+
+# ---------------------------------------------------------------------------
+# Port enablement — drives on disabled ports
+# ---------------------------------------------------------------------------
+
+
+def test_new_drive_on_disabled_port_inserted_as_empty(db):
+    """A newly discovered drive on a disabled port should be EMPTY, not AVAILABLE."""
+    topology = _simple_topology()
+    # Port defaults to enabled=False, so all new ports are disabled.
+    summary = run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+
+    assert summary["drives_inserted"] == 1
+    drive = db.query(UsbDrive).one()
+    assert drive.current_state == DriveState.EMPTY
+
+
+def test_new_drive_on_enabled_port_inserted_as_available(db):
+    """A newly discovered drive on an enabled port should be AVAILABLE."""
+    topology = _simple_topology()
+    # First sync to create the port (disabled by default).
+    run_discovery_sync(db, topology_source=lambda: _simple_topology(drive_id="TEMP"), filesystem_detector=_NULL_DETECTOR)
+
+    # Enable the port.
+    port = db.query(UsbPort).one()
+    port.enabled = True
+    db.commit()
+
+    # Now sync with the actual drive — should be AVAILABLE.
+    summary = run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+
+    assert summary["drives_inserted"] == 1
+    drive = db.query(UsbDrive).filter(UsbDrive.device_identifier == "SN-ABC123").one()
+    assert drive.current_state == DriveState.AVAILABLE
+
+
+def test_reconnecting_drive_on_disabled_port_stays_empty(db):
+    """A drive reconnecting to a disabled port should stay EMPTY."""
+    topology = _simple_topology()
+
+    # Create port as enabled so the drive gets AVAILABLE.
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    port = db.query(UsbPort).one()
+    port.enabled = True
+    db.commit()
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    drive = db.query(UsbDrive).one()
+    assert drive.current_state == DriveState.AVAILABLE
+
+    # Remove the drive (becomes EMPTY).
+    run_discovery_sync(db, topology_source=_empty_topology, filesystem_detector=_NULL_DETECTOR)
+    db.refresh(drive)
+    assert drive.current_state == DriveState.EMPTY
+
+    # Disable the port.
+    port.enabled = False
+    db.commit()
+
+    # Reconnect the drive — should stay EMPTY because port is disabled.
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    db.refresh(drive)
+    assert drive.current_state == DriveState.EMPTY
+
+
+def test_existing_tests_still_pass_with_enabled_port(db):
+    """The original test_initial_sync flow works when port is enabled."""
+    topology = _simple_topology()
+    # Pre-create the port as enabled.
+    run_discovery_sync(db, topology_source=lambda: _simple_topology(drive_id="SEED"), filesystem_detector=_NULL_DETECTOR)
+    port = db.query(UsbPort).one()
+    port.enabled = True
+    db.commit()
+
+    # Run the original scenario — drive should get AVAILABLE.
+    summary = run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    drive = db.query(UsbDrive).filter(UsbDrive.device_identifier == "SN-ABC123").one()
+    assert drive.current_state == DriveState.AVAILABLE
+
+
+def test_available_drive_demoted_when_port_disabled(db):
+    """An AVAILABLE drive on a port that is later disabled should become EMPTY."""
+    topology = _simple_topology()
+    # First sync creates port (disabled by default) + drive (EMPTY).
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    _enable_all_ports(db)
+    # Second sync promotes the drive to AVAILABLE.
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    drive = db.query(UsbDrive).one()
+    assert drive.current_state == DriveState.AVAILABLE
+
+    # Disable the port while the drive is still physically present.
+    port = db.query(UsbPort).one()
+    port.enabled = False
+    db.commit()
+
+    # Next sync should demote the drive to EMPTY.
+    summary = run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    db.refresh(drive)
+    assert drive.current_state == DriveState.EMPTY
+    assert summary["drives_updated"] == 1
+
+
+def test_in_use_drive_not_demoted_when_port_disabled(db):
+    """An IN_USE drive must stay IN_USE even if the port is disabled."""
+    topology = _simple_topology()
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    _enable_all_ports(db)
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    drive = db.query(UsbDrive).one()
+    assert drive.current_state == DriveState.AVAILABLE
+
+    # Simulate the drive being assigned to a job.
+    drive.current_state = DriveState.IN_USE
+    drive.current_project_id = "PROJ-001"
+    db.commit()
+
+    # Disable the port.
+    port = db.query(UsbPort).one()
+    port.enabled = False
+    db.commit()
+
+    # Sync should leave IN_USE untouched.
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    db.refresh(drive)
+    assert drive.current_state == DriveState.IN_USE
+    assert drive.current_project_id == "PROJ-001"

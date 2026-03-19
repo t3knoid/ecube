@@ -44,7 +44,7 @@ from sqlalchemy.orm import Session
 
 from app.infrastructure.usb_discovery import DiscoveredTopology, discover_usb_topology
 from app.infrastructure import FilesystemDetector
-from app.models.hardware import DriveState, UsbDrive
+from app.models.hardware import DriveState, UsbDrive, UsbPort
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
 from app.repositories.hardware_repository import HubRepository, PortRepository
@@ -139,6 +139,15 @@ def run_discovery_sync(
     drives_updated: List[str] = []
     drives_removed: List[str] = []
 
+    # Build set of enabled port IDs for port-enablement filtering.
+    enabled_port_ids: set[int] = {
+        row[0] for row in db.query(UsbPort.id).filter(UsbPort.enabled.is_(True)).all()
+    }
+
+    def _port_is_enabled(pid: Optional[int]) -> bool:
+        """Return True only when the port is known and enabled."""
+        return pid is not None and pid in enabled_port_ids
+
     # Upsert each discovered drive.
     for discovered_drive in topology.drives:
         existing: Optional[UsbDrive] = (
@@ -152,13 +161,14 @@ def run_discovery_sync(
             port_id = port_id_by_system_path.get(discovered_drive.port_system_path)
 
         if existing is None:
-            # New drive — insert as AVAILABLE.
+            # New drive — insert as AVAILABLE only if port is enabled.
+            initial_state = DriveState.AVAILABLE if _port_is_enabled(port_id) else DriveState.EMPTY
             drive = UsbDrive(
                 device_identifier=discovered_drive.device_identifier,
                 port_id=port_id,
                 filesystem_path=discovered_drive.filesystem_path,
                 capacity_bytes=discovered_drive.capacity_bytes,
-                current_state=DriveState.AVAILABLE,
+                current_state=initial_state,
             )
             # Detect filesystem type for newly discovered drives.
             if discovered_drive.filesystem_path:
@@ -213,9 +223,15 @@ def run_discovery_sync(
                     existing.filesystem_type = detected_fs
                     changed = True
 
-            # Re-activate a previously-emptied drive.
-            if existing.current_state == DriveState.EMPTY:
+            # Re-activate a previously-emptied drive only if port is enabled.
+            if existing.current_state == DriveState.EMPTY and _port_is_enabled(port_id or existing.port_id):
                 existing.current_state = DriveState.AVAILABLE
+                changed = True
+
+            # Demote AVAILABLE → EMPTY when the port has been disabled.
+            # IN_USE drives are left untouched to preserve project isolation.
+            if existing.current_state == DriveState.AVAILABLE and not _port_is_enabled(port_id or existing.port_id):
+                existing.current_state = DriveState.EMPTY
                 changed = True
 
             if changed:
