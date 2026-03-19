@@ -15,10 +15,11 @@
 4. [Drive Management](#drive-management)
 5. [Job Management](#job-management)
 6. [Mount Management](#mount-management)
-7. [Monitoring and Logs](#monitoring-and-logs)
-8. [Troubleshooting](#troubleshooting)
-9. [Backup and Recovery](#backup-and-recovery)
-10. [Maintenance](#maintenance)
+7. [Auditing](#auditing)
+8. [Monitoring and Logs](#monitoring-and-logs)
+9. [Troubleshooting](#troubleshooting)
+10. [Backup and Recovery](#backup-and-recovery)
+11. [Maintenance](#maintenance)
 
 ---
 
@@ -1133,6 +1134,218 @@ Response: returns an array of all mount objects with updated statuses.
 
 ---
 
+## Auditing
+
+ECUBE maintains an append-only audit log that records every security-relevant
+event in the system. Audit entries are structured JSON records stored in the
+`audit_logs` database table. They cannot be modified or deleted through the
+API — only queried and (optionally) purged by retention policy.
+
+### What Gets Audited
+
+Every audit entry contains:
+
+| Field | Description |
+|-------|-------------|
+| `id` | Unique entry ID |
+| `timestamp` | ISO 8601 timestamp (server time, UTC) |
+| `user` | Username of the actor (null for system events) |
+| `action` | Machine-readable action code |
+| `job_id` | Related export job ID (if applicable) |
+| `details` | Structured JSON metadata specific to the action |
+
+### Audit Actions Reference
+
+#### Authentication & Authorization
+
+| Action | Trigger |
+|--------|---------|
+| `AUTH_FAILURE` | Failed login attempt |
+| `AUTHORIZATION_DENIED` | User lacks required role for endpoint |
+
+#### System Setup
+
+| Action | Trigger |
+|--------|---------|
+| `SYSTEM_INITIALIZED` | First-time system initialization completed |
+| `DATABASE_CONNECTION_TEST` | Database connectivity test executed |
+| `DATABASE_PROVISIONED` | Database schema provisioned |
+| `DATABASE_SETTINGS_UPDATED` | Application settings changed via API |
+
+#### Drive Management
+
+| Action | Trigger |
+|--------|---------|
+| `DRIVE_INITIALIZED` | Drive bound to a project |
+| `DRIVE_FORMATTED` | Drive filesystem formatted |
+| `DRIVE_FORMAT_FAILED` | Drive format operation failed |
+| `DRIVE_FORMAT_DB_UPDATE_FAILED` | Format succeeded but DB update failed |
+| `DRIVE_EJECT_PREPARED` | Drive flushed and unmounted for removal |
+| `DRIVE_EJECT_FAILED` | Eject operation failed |
+| `DRIVE_REMOVED` | Drive no longer detected during discovery sync |
+| `INIT_REJECTED_FILESYSTEM` | Drive init rejected due to unsupported filesystem |
+| `PROJECT_ISOLATION_VIOLATION` | Attempt to use drive bound to a different project |
+| `USB_DISCOVERY_SYNC` | USB discovery scan completed |
+
+#### Job Lifecycle
+
+| Action | Trigger |
+|--------|---------|
+| `JOB_CREATED` | New export job registered |
+| `JOB_STARTED` | Copy process launched |
+| `JOB_VERIFY_STARTED` | Hash verification started |
+| `JOB_TIMEOUT` | Copy job exceeded time limit |
+| `JOB_STATUS_PERSIST_FAILED` | Failed to save job status to database |
+| `MANIFEST_CREATED` | Manifest file generated on drive |
+
+#### File Operations
+
+| Action | Trigger |
+|--------|---------|
+| `FILE_COPY_START` | Individual file copy began |
+| `FILE_COPY_SUCCESS` | File copied and checksummed successfully |
+| `FILE_COPY_FAILURE` | File copy failed after all retries |
+| `FILE_COPY_RETRY` | File copy retried after transient failure |
+| `FILE_HASHES_RETRIEVED` | File hash lookup performed |
+| `FILE_COMPARE` | Two files compared by hash |
+
+#### Mount Management
+
+| Action | Trigger |
+|--------|---------|
+| `MOUNT_ADDED` | Network mount registered and attempted |
+| `MOUNT_REMOVED` | Network mount deleted |
+| `MOUNT_VALIDATED` | Mount connectivity re-tested |
+
+#### Administrative
+
+| Action | Trigger |
+|--------|---------|
+| `LOG_FILES_LISTED` | Log file listing accessed |
+| `LOG_FILE_DOWNLOADED` | Log file downloaded |
+
+### Querying Audit Logs
+
+The audit API supports filtering by user, action, job, time range, and
+pagination.
+
+```bash
+# Requires admin, manager, or auditor role
+
+# All recent entries (default limit: 100)
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  https://localhost:8443/audit
+
+# Filter by user and action
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  "https://localhost:8443/audit?user=alice&action=JOB_STARTED&limit=50"
+
+# Filter by job ID
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  "https://localhost:8443/audit?job_id=42"
+
+# Filter by time range (ISO 8601)
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  "https://localhost:8443/audit?since=2026-03-01T00:00:00Z&until=2026-03-18T23:59:59Z"
+
+# Pagination
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  "https://localhost:8443/audit?limit=50&offset=100"
+```
+
+Supported query parameters:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `user` | string | — | Filter by username |
+| `action` | string | — | Filter by action code |
+| `job_id` | int | — | Filter by related job ID |
+| `since` | datetime | — | Entries at or after this timestamp |
+| `until` | datetime | — | Entries at or before this timestamp |
+| `limit` | int | 100 | Maximum results (1–1000) |
+| `offset` | int | 0 | Number of results to skip |
+
+Example response:
+
+```json
+[
+  {
+    "id": 847,
+    "timestamp": "2026-03-18T14:30:00Z",
+    "user": "alice",
+    "action": "JOB_STARTED",
+    "job_id": 42,
+    "details": {
+      "thread_count": 4
+    }
+  },
+  {
+    "id": 846,
+    "timestamp": "2026-03-18T14:29:55Z",
+    "user": "alice",
+    "action": "JOB_CREATED",
+    "job_id": 42,
+    "details": {
+      "project_id": "PROJ-001",
+      "evidence_number": "EV-2026-0042",
+      "source_path": "/mnt/evidence/case42",
+      "drive_id": 3
+    }
+  }
+]
+```
+
+### Common Audit Queries
+
+```bash
+# Failed login attempts
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  "https://localhost:8443/audit?action=AUTH_FAILURE&limit=100"
+
+# All project isolation violations
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  "https://localhost:8443/audit?action=PROJECT_ISOLATION_VIOLATION"
+
+# Activity for a specific user
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  "https://localhost:8443/audit?user=bob"
+
+# Full timeline for a specific job
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  "https://localhost:8443/audit?job_id=42"
+
+# All drive events in a date range
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  "https://localhost:8443/audit?action=DRIVE_INITIALIZED&since=2026-03-01T00:00:00Z"
+```
+
+### Retention and Cleanup
+
+Audit logs are retained for a configurable period (default: **365 days**).
+Expired logs are automatically purged at application startup.
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `AUDIT_LOG_RETENTION_DAYS` | `365` | Days to retain audit entries (0 = no auto-purge) |
+| `AUDIT_LOG_DEFAULT_LIMIT` | `100` | Default page size for queries |
+| `AUDIT_LOG_MAX_LIMIT` | `1000` | Maximum allowed page size |
+
+To manually purge old entries via PostgreSQL:
+
+```bash
+psql -U ecube -d ecube << 'EOF'
+DELETE FROM audit_logs
+WHERE timestamp < NOW() - INTERVAL '1 year';
+VACUUM ANALYZE audit_logs;
+EOF
+```
+
+> **Note:** The audit log is append-only by design. There is no API endpoint
+> to delete or modify audit entries. Manual purge should only be performed
+> by a database administrator in accordance with your retention policy.
+
+---
+
 ## Monitoring and Logs
 
 ### Service Logs
@@ -1253,29 +1466,6 @@ curl -k -H "Authorization: Bearer $TOKEN" \
 
 > **Note:** Path traversal is blocked server-side — only files within the
 > configured log directory can be accessed.
-
-### Audit Logs API
-
-Query the append-only audit log for compliance and investigation.
-
-```bash
-# Requires admin, manager, or auditor role
-# All audit entries (default limit)
-curl -k -H "Authorization: Bearer $JWT_TOKEN" \
-  https://localhost:8443/audit
-
-# Filter by user, action, and limit
-curl -k -H "Authorization: Bearer $JWT_TOKEN" \
-  "https://localhost:8443/audit?user=alice&action=JOB_STARTED&limit=50"
-```
-
-Supported query parameters:
-
-| Parameter | Description |
-|-----------|-------------|
-| `user` | Filter by username |
-| `action` | Filter by action type (e.g., `JOB_STARTED`, `DRIVE_INITIALIZED`, `SYSTEM_INITIALIZED`) |
-| `limit` | Maximum number of entries to return |
 
 ---
 
@@ -1685,21 +1875,6 @@ sudo tee /etc/logrotate.d/ecube > /dev/null << 'EOF'
     endscript
 }
 EOF
-```
-
-### Audit Log Cleanup
-
-Remove old audit logs to prevent database bloat:
-
-```bash
-# Via PostgreSQL (example: delete logs older than 1 year)
-psql -U ecube -d ecube << 'EOF'
-DELETE FROM audit_logs 
-WHERE timestamp < NOW() - INTERVAL '1 year';
-EOF
-
-# Vacuum database to reclaim space
-psql -U ecube -d ecube -c "VACUUM ANALYZE;"
 ```
 
 ### Certificate Renewal
