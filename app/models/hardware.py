@@ -27,7 +27,7 @@ class UsbPort(Base):
     id = Column(Integer, primary_key=True)
     hub_id = Column(Integer, ForeignKey("usb_hubs.id"), nullable=False)
     port_number = Column(Integer, nullable=False)
-    system_path = Column(String, nullable=False)
+    system_path = Column(String, unique=True, nullable=False)
     friendly_label = Column(String)
     enabled = Column(Boolean, nullable=False, default=False, server_default="0")
     vendor_id = Column(String, nullable=True)
