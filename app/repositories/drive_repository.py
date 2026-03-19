@@ -17,6 +17,14 @@ class DriveRepository:
         """Return all drives."""
         return self.db.query(UsbDrive).all()
 
+    def list_by_project(self, project_id: str) -> List[UsbDrive]:
+        """Return drives whose ``current_project_id`` matches *project_id*."""
+        return (
+            self.db.query(UsbDrive)
+            .filter(UsbDrive.current_project_id == project_id)
+            .all()
+        )
+
     def get(self, drive_id: int) -> Optional[UsbDrive]:
         """Return a single drive by primary key, or ``None``."""
         return self.db.get(UsbDrive, drive_id)
