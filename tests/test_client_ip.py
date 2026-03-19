@@ -108,6 +108,68 @@ class TestGetClientIpProxyHeaders:
         assert get_client_ip(request) == "203.0.113.50"
 
 
+class TestGetClientIpValidation:
+    """Malformed proxy header values must fall through to client.host."""
+
+    @patch("app.utils.client_ip.settings")
+    def test_malformed_forwarded_for_falls_back(self, mock_settings):
+        mock_settings.trust_proxy_headers = True
+        request = _make_request(
+            headers={"X-Forwarded-For": "not-an-ip, 70.41.3.18"},
+            client_host="10.0.0.1",
+        )
+        assert get_client_ip(request) == "10.0.0.1"
+
+    @patch("app.utils.client_ip.settings")
+    def test_malformed_real_ip_falls_back(self, mock_settings):
+        mock_settings.trust_proxy_headers = True
+        request = _make_request(
+            headers={"X-Real-IP": "garbage-value"},
+            client_host="10.0.0.1",
+        )
+        assert get_client_ip(request) == "10.0.0.1"
+
+    @patch("app.utils.client_ip.settings")
+    def test_malformed_forwarded_valid_real_ip(self, mock_settings):
+        """If X-Forwarded-For is invalid but X-Real-IP is valid, use X-Real-IP."""
+        mock_settings.trust_proxy_headers = True
+        request = _make_request(
+            headers={
+                "X-Forwarded-For": "bogus",
+                "X-Real-IP": "198.51.100.42",
+            },
+            client_host="10.0.0.1",
+        )
+        assert get_client_ip(request) == "198.51.100.42"
+
+    @patch("app.utils.client_ip.settings")
+    def test_oversized_value_falls_back(self, mock_settings):
+        mock_settings.trust_proxy_headers = True
+        request = _make_request(
+            headers={"X-Forwarded-For": "A" * 500},
+            client_host="10.0.0.1",
+        )
+        assert get_client_ip(request) == "10.0.0.1"
+
+    @patch("app.utils.client_ip.settings")
+    def test_empty_forwarded_for_falls_back(self, mock_settings):
+        mock_settings.trust_proxy_headers = True
+        request = _make_request(
+            headers={"X-Forwarded-For": ""},
+            client_host="10.0.0.1",
+        )
+        assert get_client_ip(request) == "10.0.0.1"
+
+    @patch("app.utils.client_ip.settings")
+    def test_ipv6_address_accepted(self, mock_settings):
+        mock_settings.trust_proxy_headers = True
+        request = _make_request(
+            headers={"X-Forwarded-For": "2001:db8::1"},
+            client_host="10.0.0.1",
+        )
+        assert get_client_ip(request) == "2001:db8::1"
+
+
 # ---------------------------------------------------------------------------
 # Model columns — verify client_ip is present
 # ---------------------------------------------------------------------------
