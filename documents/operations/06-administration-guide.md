@@ -12,11 +12,14 @@
 1. [System Overview](#system-overview)
 2. [First-Time Setup](#first-time-setup)
 3. [User Management](#user-management)
-4. [Common Operational Tasks](#common-operational-tasks)
-5. [Monitoring and Logs](#monitoring-and-logs)
-6. [Troubleshooting](#troubleshooting)
-7. [Backup and Recovery](#backup-and-recovery)
-8. [Maintenance](#maintenance)
+4. [Drive Management](#drive-management)
+5. [Job Management](#job-management)
+6. [Mount Management](#mount-management)
+7. [Common Operational Tasks](#common-operational-tasks)
+8. [Monitoring and Logs](#monitoring-and-logs)
+9. [Troubleshooting](#troubleshooting)
+10. [Backup and Recovery](#backup-and-recovery)
+11. [Maintenance](#maintenance)
 
 ---
 
@@ -84,6 +87,56 @@ admin role assignment.
 
 - The ECUBE service must be running and the database must be provisioned with
   migrations applied. See [04-package-deployment.md](04-package-deployment.md)or [05-docker-deployment.md](05-docker-deployment.md) for deployment steps.
+
+### Database Provisioning
+
+Before the system can be initialized, the PostgreSQL database must be
+reachable and properly provisioned. ECUBE provides API endpoints for testing
+connectivity, provisioning the database, and checking migration status.
+
+#### Test Database Connection
+
+```bash
+# Unauthenticated (before first admin exists) or requires admin role
+curl -k -X POST https://localhost:8443/setup/database/test-connection
+```
+
+Returns connection status. Use this to verify PostgreSQL is reachable before
+provisioning.
+
+#### Provision Database
+
+Creates the application user, database, and runs Alembic migrations:
+
+```bash
+# Unauthenticated (before first admin exists) or requires admin role
+curl -k -X POST https://localhost:8443/setup/database/provision
+```
+
+> **Note:** This is safe to re-run — Alembic migrations are idempotent.
+> After initial setup, this endpoint requires admin authentication.
+
+#### Check Database Status
+
+```bash
+# Requires admin role
+curl -k -H "Authorization: Bearer $TOKEN" \
+  https://localhost:8443/setup/database/status
+```
+
+Returns database connection health and current migration revision.
+
+#### Update Database Settings
+
+```bash
+# Requires admin role
+curl -k -X PUT https://localhost:8443/setup/database/settings \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"database_url": "postgresql://ecube:newpass@db-host:5432/ecube"}'
+```
+
+Updates the database connection string and reinitializes the connection pool.
 
 ### Check Initialization Status
 
@@ -518,21 +571,501 @@ curl -k -X DELETE -H "Authorization: Bearer $TOKEN" \
 
 ---
 
-## Common Operational Tasks
+## Drive Management
 
-### Task 1: List USB Drives
+USB drives follow a strict lifecycle managed through the API. This section
+covers every drive operation from discovery through ejection.
+
+### Drive Lifecycle
+
+Every USB drive passes through three states:
+
+```text
+  ┌───────────┐    discovery    ┌──────────────┐   initialize   ┌──────────┐
+  │   EMPTY   │ ──────────────► │  AVAILABLE   │ ─────────────► │  IN_USE  │
+  └───────────┘                 └──────────────┘                └──────────┘
+        ▲                           ╭─╮ ▲                            │
+        │        drive removed      │ │ │       prepare-eject        │
+        └───────────────────────────┘ │ └◄───────────────────────────┘
+                               format ╯
+```
+
+| State | Meaning |
+|-------|----------|
+| `EMPTY` | Drive known to the database but not physically present |
+| `AVAILABLE` | Drive is present and ready to be formatted (if needed) and assigned to a project |
+| `IN_USE` | Drive is bound to a project and actively receiving evidence |
+
+Key behaviors:
+
+- **Discovery sync** detects newly inserted drives and transitions `EMPTY → AVAILABLE`.
+- **Format** writes a filesystem to the drive (stays `AVAILABLE`). Required before initialize — a drive with no recognized filesystem cannot be initialized.
+- **Initialize** binds a drive to a project (`AVAILABLE → IN_USE`).
+- **Eject** flushes writes, unmounts, and returns the drive to `AVAILABLE` (`IN_USE → AVAILABLE`). The project binding is preserved.
+- **Physical removal** of an `AVAILABLE` drive transitions it back to `EMPTY`. An `IN_USE` drive retains its state and project binding across removal and reinsertion.
+
+### List Drives
+
+Returns all known USB drives with their current state, device path, serial
+number, and project assignment.
 
 ```bash
-# Via API (requires any authenticated role)
+# Requires any authenticated role
 curl -k -H "Authorization: Bearer $JWT_TOKEN" \
   https://localhost:8443/drives
 ```
 
-### Task 2: Add Network Mount
+Example response:
+
+```json
+[
+  {
+    "id": 1,
+    "port_id": 3,
+    "device_identifier": "4C530000220226223012",
+    "filesystem_path": "/dev/sdg",
+    "capacity_bytes": 15376000000,
+    "filesystem_type": "ext4",
+    "current_state": "IN_USE",
+    "current_project_id": "PROJECT-42"
+  },
+  {
+    "id": 2,
+    "port_id": 4,
+    "device_identifier": "A1B2C3D4E5F60001",
+    "filesystem_path": "/dev/sdh",
+    "capacity_bytes": 64023257088,
+    "filesystem_type": "exfat",
+    "current_state": "AVAILABLE",
+    "current_project_id": null
+  }
+]
+```
+
+To filter by state, use `jq` client-side:
 
 ```bash
-# Via API (requires manager role)
-curl -X POST https://localhost:8443/mounts \
+# List only drives that are IN_USE
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  https://localhost:8443/drives | jq '[.[] | select(.current_state == "IN_USE")]'
+
+# List only AVAILABLE drives
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  https://localhost:8443/drives | jq '[.[] | select(.current_state == "AVAILABLE")]'
+```
+
+```powershell
+# PowerShell: list only IN_USE drives
+(Invoke-RestMethod -Uri http://localhost:8000/drives `
+  -Headers @{ Authorization = "Bearer $TOKEN" }) |
+  Where-Object { $_.current_state -eq "IN_USE" }
+```
+
+### Refresh / Discovery Sync
+
+Triggers a manual scan of USB hubs, ports, and drives from system sources
+(`/sys/bus/usb/devices`). Upserts the hardware topology into the database
+and recomputes drive states according to the finite-state machine rules.
+The operation is idempotent.
+
+```bash
+# Requires admin or manager role
+curl -k -X POST https://localhost:8443/drives/refresh \
+  -H "Authorization: Bearer $JWT_TOKEN"
+```
+
+> **Note:** Discovery also runs automatically when the service starts.
+> Use this endpoint to pick up drives that were inserted after startup
+> without restarting the service.
+
+### Format Drive
+
+Formats a drive with the specified filesystem. Supported types: `ext4`
+(Linux-native, recommended for large evidence sets) and `exfat`
+(cross-platform, readable on Windows/macOS).
+
+```bash
+# Requires admin or manager role
+# Format with ext4
+curl -k -X POST https://localhost:8443/drives/1/format \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"filesystem_type": "ext4"}'
+
+# Format with exFAT
+curl -k -X POST https://localhost:8443/drives/1/format \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"filesystem_type": "exfat"}'
+```
+
+Response: returns the updated drive object with `filesystem_type` set to the
+new value and `current_state` unchanged (`AVAILABLE`).
+
+> **Note:** The drive must be in `AVAILABLE` state and not currently mounted.
+> Formatting erases all data on the drive. Replace `1` with the actual drive
+> ID from `GET /drives`.
+
+### Initialize Drive
+
+Binds a drive to a project for isolation enforcement. This transitions the
+drive from `AVAILABLE` to `IN_USE` and sets `current_project_id`. Once
+bound, the drive will only accept copy jobs for its designated project.
+
+```bash
+# Requires admin or manager role
+curl -k -X POST https://localhost:8443/drives/1/initialize \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"project_id": "PROJECT-42"}'
+```
+
+Response: returns the updated drive object with `current_state: "IN_USE"`
+and `current_project_id` set to the provided project ID.
+
+> **Note:** The drive must be in `AVAILABLE` state and have a recognized
+> filesystem. The project binding is enforced at copy time — any attempt
+> to write data from a different project will be rejected and audited.
+
+### Eject Drive
+
+Prepares a drive for safe physical removal. This flushes pending writes
+to disk, unmounts the device, and transitions the drive back to `AVAILABLE`.
+
+```bash
+# Requires admin or manager role
+curl -k -X POST https://localhost:8443/drives/1/prepare-eject \
+  -H "Authorization: Bearer $JWT_TOKEN"
+```
+
+Response: returns the updated drive object with `current_state: "AVAILABLE"`.
+The `current_project_id` field remains set.
+
+> **Note:** The drive must be in `IN_USE` state. After a successful response
+> the drive can be safely physically removed. The project binding
+> (`current_project_id`) is preserved — reinserting the same drive will
+> restore it as `IN_USE` for the same project on the next discovery sync.
+
+---
+
+## Job Management
+
+Export jobs copy evidence data from a network mount (or local path) to an
+assigned USB drive. This section covers the full job lifecycle from creation
+through verification and manifest generation.
+
+### Job Lifecycle
+
+Every export job passes through a defined set of states:
+
+```text
+  ┌──────────┐    start     ┌──────────┐                ┌─────────────┐
+  │ PENDING  │ ────────────►│ RUNNING  │──────────────► │  COMPLETED  │
+  └──────────┘              └──────────┘   success      └─────────────┘
+       │                         │                             ▲
+       │                         │ failure    ┌──────────┐     │ pass
+       │                         └──────────► │  FAILED  │     │
+       │                                      └──────────┘     │
+       │                                                       │
+       │                    ┌────────────┐    verify           │
+       │                    │ VERIFYING  │────────────────────►│
+       │                    └────────────┘         ▲           │
+       │                                           │           │
+       └───────────────────────────────────────────┘           │
+                         (after RUNNING completes)     fail ──►│
+                                                        FAILED
+```
+
+| State | Meaning |
+|-------|----------|
+| `PENDING` | Job created but not yet started |
+| `RUNNING` | Copy is actively in progress (background task) |
+| `VERIFYING` | Hash verification of copied files in progress |
+| `COMPLETED` | All files copied and (optionally) verified successfully |
+| `FAILED` | Copy or verification encountered an unrecoverable error |
+
+Key behaviors:
+
+- **Create** registers the job with source path, project ID, and evidence number. The job starts in `PENDING`.
+- **Start** launches the background copy process (`PENDING → RUNNING`). Progress is tracked via `copied_bytes` and per-file status.
+- **Verify** (optional) compares checksums of copied files against source (`RUNNING/completed → VERIFYING → COMPLETED` or `FAILED`).
+- **Manifest** generates a JSON document on the USB drive listing all copied files with their checksums, sizes, and metadata.
+- Failed files are automatically retried up to `max_file_retries` times with a configurable delay.
+
+### Create Export Job
+
+Registers a new export job. The job's `project_id` must match the target
+drive's `current_project_id` — project isolation is enforced at copy time.
+
+```bash
+# Requires admin, manager, or processor role
+curl -k -X POST https://localhost:8443/jobs \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "project_id": "PROJECT-42",
+    "evidence_number": "EV-2026-001",
+    "source_path": "/mnt/evidence/case-001",
+    "drive_id": 1,
+    "thread_count": 4
+  }'
+```
+
+Optional parameters:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `drive_id` | `null` | Pre-assign a specific USB drive |
+| `thread_count` | `4` | Parallel copy threads (1–8) |
+| `max_file_retries` | `3` | Maximum retry attempts per failed file |
+| `retry_delay_seconds` | `1` | Delay between retries in seconds |
+
+Response:
+
+```json
+{
+  "id": 1,
+  "project_id": "PROJECT-42",
+  "evidence_number": "EV-2026-001",
+  "source_path": "/mnt/evidence/case-001",
+  "target_mount_path": null,
+  "status": "PENDING",
+  "total_bytes": 0,
+  "copied_bytes": 0,
+  "file_count": 0,
+  "thread_count": 4,
+  "max_file_retries": 3,
+  "retry_delay_seconds": 1,
+  "created_by": "ecube-admin"
+}
+```
+
+> **Note:** The `source_path` must be accessible from the ECUBE service
+> (e.g., a mounted NFS/SMB share). Use the [Add Network Mount](#task-1-add-network-mount)
+> task to configure mounts before creating jobs.
+
+### View Job Status
+
+Returns the current state, progress counters, and metadata for an export job.
+
+```bash
+# Requires any authenticated role
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  https://localhost:8443/jobs/1
+```
+
+Key fields in the response:
+
+| Field | Description |
+|-------|-------------|
+| `status` | Current job state (`PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `VERIFYING`) |
+| `total_bytes` | Total bytes to copy |
+| `copied_bytes` | Bytes copied so far (use for progress calculation) |
+| `file_count` | Total number of files in the job |
+
+Example response (job in progress):
+
+```json
+{
+  "id": 1,
+  "project_id": "PROJECT-42",
+  "evidence_number": "EV-2026-001",
+  "source_path": "/mnt/evidence/case-001",
+  "status": "RUNNING",
+  "total_bytes": 5368709120,
+  "copied_bytes": 2147483648,
+  "file_count": 342,
+  "thread_count": 4
+}
+```
+
+### Start Copy Job
+
+Launches the background copy process. The job transitions from `PENDING` to
+`RUNNING` and files begin copying using the configured thread count.
+
+```bash
+# Requires admin, manager, or processor role
+curl -k -X POST https://localhost:8443/jobs/1/start \
+  -H "Authorization: Bearer $JWT_TOKEN"
+```
+
+To override the thread count at start time:
+
+```bash
+curl -k -X POST https://localhost:8443/jobs/1/start \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"thread_count": 2}'
+```
+
+Response: returns the job object with `status: "RUNNING"`.
+
+> **Note:** The copy runs as a background task. Poll `GET /jobs/{id}` to
+> monitor progress. Per-file status (`PENDING`, `COPYING`, `DONE`, `ERROR`,
+> `RETRYING`) is tracked in the `export_files` table.
+
+### Verify Copied Data
+
+After the copy completes, verify file integrity by comparing checksums
+between source and destination.
+
+```bash
+# Requires admin, manager, or processor role
+curl -k -X POST https://localhost:8443/jobs/1/verify \
+  -H "Authorization: Bearer $JWT_TOKEN"
+```
+
+> **Note:** Verification runs as a background task (`VERIFYING` state).
+> On success the job transitions to `COMPLETED`; on failure it transitions
+> to `FAILED`. Poll `GET /jobs/{id}` for the final result.
+
+### Generate Manifest
+
+Creates a JSON manifest file on the USB drive listing all copied files with
+their checksums, sizes, and job metadata. Used for chain-of-custody
+documentation and compliance audits.
+
+```bash
+# Requires admin, manager, or processor role
+curl -k -X POST https://localhost:8443/jobs/1/manifest \
+  -H "Authorization: Bearer $JWT_TOKEN"
+```
+
+> **Note:** The manifest is written to the target USB drive as a plain JSON
+> file. It can be generated at any point after the job has started.
+
+### Get File Hashes
+
+Retrieve the MD5 and SHA-256 hashes for a single export file. Useful for
+individual file auditing.
+
+```bash
+# Requires admin or auditor role
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  https://localhost:8443/files/42/hashes
+```
+
+Example response:
+
+```json
+{
+  "file_id": 42,
+  "relative_path": "docs/report.pdf",
+  "md5": "d41d8cd98f00b204e9800998ecf8427e",
+  "sha256": "e3b0c44298fc1c149afbf4c8996fb924...f0",
+  "size_bytes": 1048576
+}
+```
+
+### Compare File Hashes
+
+Compare the hashes of two individual files to verify they are identical.
+Useful for spot-checking specific files across source and destination.
+
+```bash
+# Requires any authenticated role
+curl -k -X POST https://localhost:8443/files/compare \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"file_id_a": 42, "file_id_b": 108}'
+```
+
+Example response:
+
+```json
+{
+  "match": true,
+  "hash_match": true,
+  "size_match": true,
+  "path_match": true,
+  "file_a": {
+    "file_id": 42,
+    "relative_path": "docs/report.pdf",
+    "sha256": "a1b2c3...f0",
+    "size_bytes": 1048576
+  },
+  "file_b": {
+    "file_id": 108,
+    "relative_path": "docs/report.pdf",
+    "sha256": "a1b2c3...f0",
+    "size_bytes": 1048576
+  }
+}
+```
+
+### Typical Job Workflow
+
+A complete evidence export follows this sequence:
+
+1. **Mount source** — add a network mount pointing to the evidence share
+2. **Prepare drive** — format and initialize a USB drive for the project
+3. **Create job** — `POST /jobs` with project ID, evidence number, source path, and drive ID
+4. **Start copy** — `POST /jobs/{id}/start`
+5. **Monitor progress** — poll `GET /jobs/{id}` until `status` is `COMPLETED` or `FAILED`
+6. **Verify** — `POST /jobs/{id}/verify` to confirm data integrity
+7. **Generate manifest** — `POST /jobs/{id}/manifest` for chain-of-custody records
+8. **Eject drive** — `POST /drives/{id}/prepare-eject` for safe removal
+
+---
+
+## Mount Management
+
+Network mounts provide access to evidence data stored on NFS or SMB shares.
+Mounts must be registered before they can be used as source paths in export
+jobs.
+
+### Mount States
+
+| State | Meaning |
+|-------|----------|
+| `MOUNTED` | Mount is active and accessible |
+| `UNMOUNTED` | Mount is registered but not currently active |
+| `ERROR` | Mount failed to connect — check credentials or network |
+
+### List Mounts
+
+Returns all registered network mounts and their current connectivity status.
+Credentials are not included in the response.
+
+```bash
+# Requires any authenticated role
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  https://localhost:8443/mounts
+```
+
+Example response:
+
+```json
+[
+  {
+    "id": 1,
+    "type": "NFS",
+    "remote_path": "nfs.example.com:/evidence",
+    "local_mount_point": "/mnt/evidence",
+    "status": "MOUNTED",
+    "last_checked_at": "2026-03-18T14:30:00Z"
+  },
+  {
+    "id": 2,
+    "type": "SMB",
+    "remote_path": "//fileserver/cases",
+    "local_mount_point": "/mnt/cases",
+    "status": "ERROR",
+    "last_checked_at": "2026-03-18T14:30:00Z"
+  }
+]
+```
+
+### Add Mount
+
+Registers a new network mount and attempts to connect immediately. The
+resulting status reflects whether the mount succeeded.
+
+```bash
+# Requires admin or manager role
+# NFS mount (no credentials needed)
+curl -k -X POST https://localhost:8443/mounts \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -540,76 +1073,70 @@ curl -X POST https://localhost:8443/mounts \
     "remote_path": "nfs.example.com:/evidence",
     "local_mount_point": "/mnt/evidence"
   }'
-```
 
-### Task 3: Format USB Drive
-
-```bash
-# Via API (requires admin or manager role)
-# Format with ext4 (Linux-native, recommended for large evidence sets)
-curl -k -X POST https://localhost:8443/drives/1/format \
+# SMB mount with credentials
+curl -k -X POST https://localhost:8443/mounts \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "filesystem_type": "ext4"
-  }'
-
-# Format with exFAT (cross-platform, readable on Windows/macOS)
-curl -k -X POST https://localhost:8443/drives/1/format \
-  -H "Authorization: Bearer $JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "filesystem_type": "exfat"
+    "type": "SMB",
+    "remote_path": "//fileserver/cases",
+    "local_mount_point": "/mnt/cases",
+    "username": "svc-ecube",
+    "password": "s3cret"
   }'
 ```
 
-> **Note:** The drive must be in `AVAILABLE` state and not currently mounted.
-> Formatting erases all data on the drive. Replace `1` with the actual drive
-> ID from `GET /drives`.
+Response: returns the mount object with `status` reflecting the connection
+result (`MOUNTED` or `ERROR`).
 
-### Task 4: Initialize USB Drive
+> **Note:** As an alternative to inline credentials, use `credentials_file`
+> to reference a file on the host containing credentials.
 
-```bash
-# Via API (requires manager role)
-curl -X POST https://localhost:8443/drives/1/initialize \
-  -H "Authorization: Bearer $JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "project_id": "PROJECT-42"
-  }'
-```
+### Remove Mount
 
-### Task 5: Create Export Job
+Deletes a mount configuration. Any in-progress jobs using this mount as a
+source path may fail.
 
 ```bash
-# Via API (requires processor role)
-curl -X POST https://localhost:8443/jobs \
-  -H "Authorization: Bearer $JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "project_id": "PROJECT-42",
-    "evidence_number": "EV-2026-001",
-    "source_path": "/mnt/evidence/case-001"
-  }'
-```
-
-### Task 6: Start Copy Job
-
-```bash
-# Via API (requires processor role)
-curl -X POST https://localhost:8443/jobs/1/start \
+# Requires admin or manager role
+curl -k -X DELETE https://localhost:8443/mounts/1 \
   -H "Authorization: Bearer $JWT_TOKEN"
 ```
 
-### Task 7: View Job Status
+Returns `204 No Content` on success.
+
+### Validate Mount
+
+Tests connectivity for a specific mount by attempting to reconnect with
+stored credentials. Updates the mount's `status` and `last_checked_at`.
 
 ```bash
-# Via API (all authenticated roles)
-curl -X GET https://localhost:8443/jobs/1 \
+# Requires admin or manager role
+curl -k -X POST https://localhost:8443/mounts/1/validate \
   -H "Authorization: Bearer $JWT_TOKEN"
 ```
 
-### Task 8: Query Audit Logs
+Response: returns the updated mount object.
+
+### Validate All Mounts
+
+Tests connectivity for every registered mount in one call. Useful as a
+pre-flight check before starting a batch of export jobs.
+
+```bash
+# Requires admin or manager role
+curl -k -X POST https://localhost:8443/mounts/validate \
+  -H "Authorization: Bearer $JWT_TOKEN"
+```
+
+Response: returns an array of all mount objects with updated statuses.
+
+---
+
+## Common Operational Tasks
+
+### Query Audit Logs
 
 ```bash
 # Via API (requires admin, manager, or auditor role)
@@ -691,8 +1218,16 @@ ps aux | grep uvicorn
 ### Health Checks
 
 ```bash
+# Basic health check (no auth required)
+curl -k https://localhost:8443/health
+# Response: {"status": "ok"}
+
 # API version endpoint (no auth required)
 curl -k https://localhost:8443/introspection/version
+
+# System health — DB connectivity and active job count (requires auth)
+curl -k -H "Authorization: Bearer $TOKEN" \
+  https://localhost:8443/introspection/system-health
 
 # Drive inventory (requires auth)
 curl -k -H "Authorization: Bearer $TOKEN" \
@@ -701,7 +1236,36 @@ curl -k -H "Authorization: Bearer $TOKEN" \
 # Mount status (requires auth)
 curl -k -H "Authorization: Bearer $TOKEN" \
   https://localhost:8443/introspection/mounts
+
+# USB topology — raw hub/port/device tree from sysfs (requires auth)
+curl -k -H "Authorization: Bearer $TOKEN" \
+  https://localhost:8443/introspection/usb/topology
+
+# Block devices — all devices detected by the kernel (requires auth)
+curl -k -H "Authorization: Bearer $TOKEN" \
+  https://localhost:8443/introspection/block-devices
+
+# Job debug info — detailed paths and file statuses (admin or auditor)
+curl -k -H "Authorization: Bearer $TOKEN" \
+  https://localhost:8443/introspection/jobs/1/debug
 ```
+
+### Application Logs API
+
+ECUBE exposes log files through the API for remote access without SSH.
+
+```bash
+# List available log files with size and timestamps (any authenticated user)
+curl -k -H "Authorization: Bearer $TOKEN" \
+  https://localhost:8443/admin/logs
+
+# Download a specific log file (any authenticated user)
+curl -k -H "Authorization: Bearer $TOKEN" \
+  https://localhost:8443/admin/logs/ecube.log -o ecube.log
+```
+
+> **Note:** Path traversal is blocked server-side — only files within the
+> configured log directory can be accessed.
 
 ---
 
