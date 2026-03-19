@@ -83,6 +83,19 @@ jobs:
           newman run postman/ecube-postman-collection.json \
             --env-var "base_url=http://localhost:8000" \
             --env-var "token=${{ steps.auth.outputs.token }}" \
+            --folder "Health & Version" \
+            --folder "Auth" \
+            --folder "Database Setup" \
+            --folder "Drives" \
+            --folder "Mounts" \
+            --folder "Jobs" \
+            --folder "Files" \
+            --folder "Introspection" \
+            --folder "Audit" \
+            --folder "Admin — Logs" \
+            --folder "Admin — OS Users" \
+            --folder "Admin — OS Groups" \
+            --folder "Users (Role Management)" \
             --reporters cli,json,htmlextra \
             --reporter-json-export newman-report.json \
             --reporter-htmlextra-export newman-report.html \
