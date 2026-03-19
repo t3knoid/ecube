@@ -91,8 +91,7 @@ jobs:
             --checks all \
             --max-examples 50 \
             --request-timeout 10000 \
-            --report ndjson \
-            > schemathesis-report.ndjson \
+            2>&1 | tee schemathesis-output.txt \
             || true
 
       - name: Upload Schemathesis report
@@ -100,40 +99,20 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: schemathesis-report
-          path: schemathesis-report.ndjson
+          path: schemathesis-output.txt
+          if-no-files-found: warn
           retention-days: 30
 
       - name: Schemathesis pass/fail check
         run: |
-          if [ ! -f schemathesis-report.ndjson ]; then
-            echo "::error::Schemathesis report not found — Schemathesis may have crashed before writing output"
+          if [ ! -f schemathesis-output.txt ]; then
+            echo "::error::Schemathesis output not found — Schemathesis may have crashed before writing output"
             exit 1
           fi
-          python - <<'PY'
-          import json, pathlib, sys
-          text = pathlib.Path('schemathesis-report.ndjson').read_text()
-          if not text.strip():
-              print('::error::Schemathesis report is empty — scan may have failed silently')
-              sys.exit(1)
-          errors = 0
-          parse_failures = 0
-          for lineno, line in enumerate(text.splitlines(), 1):
-              if not line.strip():
-                  continue
-              try:
-                  event = json.loads(line)
-              except json.JSONDecodeError:
-                  parse_failures += 1
-                  continue
-              if event.get('event') == 'InternalError':
-                  errors += 1
-              if event.get('event') == 'AfterExecution':
-                  status = event.get('status', '')
-                  if status in ('error', 'failure'):
-                      errors += 1
-          if parse_failures:
-              print(f'::warning::Could not parse {parse_failures} line(s) in Schemathesis report')
-          print(f'Errors/failures: {errors}')
-          if errors > 0:
-              print(f'::warning::Schemathesis found {errors} issue(s) — review the report artifact')
-          PY
+          if [ ! -s schemathesis-output.txt ]; then
+            echo "::error::Schemathesis output is empty — scan may have failed silently"
+            exit 1
+          fi
+          if grep -qiE '(FAILURES|ERRORS)\s*[1-9]' schemathesis-output.txt; then
+            echo "::warning::Schemathesis found issues — review the report artifact"
+          fi
