@@ -16,12 +16,14 @@ def create_audit_log(
     user: Optional[str] = None,
     job_id: Optional[int] = None,
     details: Optional[Dict[str, Any]] = None,
+    client_ip: Optional[str] = None,
 ) -> AuditLog:
     return AuditRepository(db).add(
         action=action,
         user=user,
         job_id=job_id,
         details=details,
+        client_ip=client_ip,
     )
 
 
@@ -35,6 +37,7 @@ def log_and_audit(
     project_id: Optional[str] = None,
     job_id: Optional[int] = None,
     metadata: Optional[Dict[str, Any]] = None,
+    client_ip: Optional[str] = None,
 ) -> AuditLog:
     """Write an event both to the Python logger **and** to the ``audit_logs`` table.
 
@@ -78,6 +81,7 @@ def log_and_audit(
         user=actor_id,
         job_id=job_id,
         details=details or None,
+        client_ip=client_ip,
     )
 
 
