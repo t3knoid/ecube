@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -7,6 +7,7 @@ from app.auth import CurrentUser, require_roles
 from app.database import get_db
 from app.schemas.network import MountCreate, NetworkMountSchema
 from app.services import mount_service
+from app.utils.client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,7 @@ _ADMIN_MANAGER = require_roles("admin", "manager")
 @router.post("", response_model=NetworkMountSchema)
 def add_mount(
     body: MountCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
 ):
@@ -30,12 +32,13 @@ def add_mount(
 
     **Roles:** ``admin``, ``manager``
     """
-    return mount_service.add_mount(body, db, actor=current_user.username)
+    return mount_service.add_mount(body, db, actor=current_user.username, client_ip=get_client_ip(request))
 
 
 @router.delete("/{mount_id}", status_code=204)
 def remove_mount(
     mount_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
 ):
@@ -45,7 +48,7 @@ def remove_mount(
 
     **Roles:** ``admin``, ``manager``
     """
-    mount_service.remove_mount(mount_id, db, actor=current_user.username)
+    mount_service.remove_mount(mount_id, db, actor=current_user.username, client_ip=get_client_ip(request))
 
 
 @router.get("", response_model=List[NetworkMountSchema])
@@ -64,6 +67,7 @@ def list_mounts(
 
 @router.post("/validate", response_model=List[NetworkMountSchema])
 def validate_all_mounts(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
 ):
@@ -74,12 +78,13 @@ def validate_all_mounts(
 
     **Roles:** ``admin``, ``manager``
     """
-    return mount_service.validate_all_mounts(db, actor=current_user.username)
+    return mount_service.validate_all_mounts(db, actor=current_user.username, client_ip=get_client_ip(request))
 
 
 @router.post("/{mount_id}/validate", response_model=NetworkMountSchema)
 def validate_mount(
     mount_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
 ):
@@ -89,4 +94,4 @@ def validate_mount(
 
     **Roles:** ``admin``, ``manager``
     """
-    return mount_service.validate_mount(mount_id, db, actor=current_user.username)
+    return mount_service.validate_mount(mount_id, db, actor=current_user.username, client_ip=get_client_ip(request))

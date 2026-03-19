@@ -23,6 +23,7 @@ from app.database import get_db
 from app.repositories.audit_repository import best_effort_audit
 from app.repositories.user_role_repository import UserRoleRepository
 from app.infrastructure.pam_protocol import PamAuthenticator
+from app.utils.client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,7 @@ def login(
             "AUTH_FAILURE",
             body.username,
             {"reason": "Invalid credentials", "path": str(request.url.path)},
+            client_ip=get_client_ip(request),
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -123,6 +125,7 @@ def login(
         "AUTH_SUCCESS",
         body.username,
         {"groups": groups, "roles": roles, "path": str(request.url.path)},
+        client_ip=get_client_ip(request),
     )
 
     return TokenResponse(access_token=token)

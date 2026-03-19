@@ -28,7 +28,8 @@ def get_all_drives(db: Session, project_id: Optional[str] = None) -> List[UsbDri
 
 
 def initialize_drive(
-    drive_id: int, project_id: str, db: Session, actor: Optional[str] = None
+    drive_id: int, project_id: str, db: Session, actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
 ) -> UsbDrive:
     drive_repo = DriveRepository(db)
     audit_repo = AuditRepository(db)
@@ -51,6 +52,7 @@ def initialize_drive(
                     "existing_project_id": drive.current_project_id,
                     "requested_project_id": project_id,
                 },
+                client_ip=client_ip,
             )
         except Exception:
             logger.exception("Failed to write audit log for PROJECT_ISOLATION_VIOLATION")
@@ -73,6 +75,7 @@ def initialize_drive(
                     "project_id": project_id,
                     "filesystem_type": drive.filesystem_type,
                 },
+                client_ip=client_ip,
             )
         except Exception:
             logger.exception("Failed to write audit log for INIT_REJECTED_FILESYSTEM")
@@ -99,6 +102,7 @@ def initialize_drive(
             action="DRIVE_INITIALIZED",
             user=actor,
             details={"drive_id": drive_id, "project_id": project_id},
+            client_ip=client_ip,
         )
     except Exception:
         logger.exception("Failed to write audit log for DRIVE_INITIALIZED")
@@ -106,7 +110,8 @@ def initialize_drive(
 
 
 def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
-                  eject_provider: Optional[DriveEjectProvider] = None) -> UsbDrive:
+                  eject_provider: Optional[DriveEjectProvider] = None,
+                  client_ip: Optional[str] = None) -> UsbDrive:
     drive_repo = DriveRepository(db)
     audit_repo = AuditRepository(db)
     provider = eject_provider or _default_eject_provider()
@@ -178,6 +183,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                     "flush_ok": result.flush_ok,
                     "unmount_ok": result.unmount_ok,
                 },
+                client_ip=client_ip,
             )
         except Exception:
             logger.exception("Failed to write audit log for DRIVE_EJECT_PREPARED")
@@ -194,6 +200,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                     "unmount_ok": result.unmount_ok,
                     "unmount_error": result.unmount_error,
                 },
+                client_ip=client_ip,
             )
         except Exception:
             logger.exception("Failed to write audit log for DRIVE_EJECT_FAILED")
@@ -212,6 +219,7 @@ def format_drive(
     *,
     formatter: DriveFormatter,
     actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
 ) -> UsbDrive:
     """Format a drive with the specified filesystem type."""
     drive_repo = DriveRepository(db)
@@ -259,6 +267,7 @@ def format_drive(
                     "error": str(exc),
                     "actor": actor,
                 },
+                client_ip=client_ip,
             )
         except Exception:
             logger.exception("Failed to write audit log for DRIVE_FORMAT_FAILED")
@@ -282,6 +291,7 @@ def format_drive(
                     "filesystem_type": filesystem_type,
                     "actor": actor,
                 },
+                client_ip=client_ip,
             )
         except Exception:
             logger.exception("Failed to write audit log for DRIVE_FORMAT_DB_UPDATE_FAILED")
@@ -300,6 +310,7 @@ def format_drive(
                 "filesystem_type": filesystem_type,
                 "actor": actor,
             },
+            client_ip=client_ip,
         )
     except Exception:
         logger.exception("Failed to write audit log for DRIVE_FORMATTED")
