@@ -120,8 +120,9 @@
 							"listen": "test",
 							"script": {
 								"exec": [
-									"// When a token is already injected (CI), skip login assertions",
-									"if (pm.collectionVariables.get('token')) {",
+									"// When a token is already injected (CI via --env-var), skip login assertions.",
+									"// pm.variables.get checks all scopes: environment, collection, and global.",
+									"if (pm.variables.get('token')) {",
 									"    pm.test('Login skipped — token already injected', function () {",
 									"        pm.expect(true).to.be.true;",
 									"    });",
