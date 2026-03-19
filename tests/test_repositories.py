@@ -10,11 +10,12 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base
-from app.models.hardware import DriveState, UsbDrive
+from app.models.hardware import DriveState, UsbDrive, UsbHub, UsbPort
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, Manifest
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
+from app.repositories.hardware_repository import PortRepository
 from app.repositories.job_repository import (
     DriveAssignmentRepository,
     FileRepository,
@@ -400,3 +401,66 @@ def test_audit_repo_add_multiple(db):
 
     count = db.query(AuditLog).count()
     assert count == 3
+
+
+# ---------------------------------------------------------------------------
+# PortRepository
+# ---------------------------------------------------------------------------
+
+
+def _make_hub(db) -> UsbHub:
+    hub = UsbHub(name="Test Hub", system_identifier="usb-test-1")
+    db.add(hub)
+    db.commit()
+    db.refresh(hub)
+    return hub
+
+
+def test_port_enabled_defaults_to_false(db):
+    hub = _make_hub(db)
+    port = UsbPort(hub_id=hub.id, port_number=1, system_path="1-1")
+    db.add(port)
+    db.commit()
+    db.refresh(port)
+
+    assert port.enabled is False
+
+
+def test_port_repo_set_enabled_toggles_state(db):
+    hub = _make_hub(db)
+    repo = PortRepository(db)
+    port = repo.upsert(hub_id=hub.id, port_number=1, system_path="1-1")
+
+    assert port.enabled is False
+
+    updated = repo.set_enabled(port.id, True)
+    assert updated is not None
+    assert updated.enabled is True
+
+    updated2 = repo.set_enabled(port.id, False)
+    assert updated2 is not None
+    assert updated2.enabled is False
+
+
+def test_port_repo_set_enabled_returns_none_for_missing(db):
+    repo = PortRepository(db)
+    assert repo.set_enabled(9999, True) is None
+
+
+def test_port_repo_list_enabled(db):
+    hub = _make_hub(db)
+    repo = PortRepository(db)
+    p1 = repo.upsert(hub_id=hub.id, port_number=1, system_path="1-1")
+    p2 = repo.upsert(hub_id=hub.id, port_number=2, system_path="1-2")
+    p3 = repo.upsert(hub_id=hub.id, port_number=3, system_path="1-3")
+
+    # None enabled initially
+    assert repo.list_enabled() == []
+
+    repo.set_enabled(p1.id, True)
+    repo.set_enabled(p3.id, True)
+
+    enabled = repo.list_enabled()
+    assert len(enabled) == 2
+    enabled_ids = {p.id for p in enabled}
+    assert enabled_ids == {p1.id, p3.id}
