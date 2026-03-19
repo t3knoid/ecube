@@ -18,6 +18,7 @@ class UsbPortSchema(BaseModel):
     port_number: int = Field(..., description="Port number on the hub (1-based)")
     system_path: str = Field(..., description="Kernel sysfs path to the port")
     friendly_label: Optional[str] = Field(default=None, description="User-assigned label for the port")
+    enabled: bool = Field(default=False, description="Whether this port is enabled for ECUBE use")
 
     model_config = {"from_attributes": True}
 
@@ -51,3 +52,7 @@ class DriveInitialize(BaseModel):
 
 class DriveFormatRequest(BaseModel):
     filesystem_type: Literal["ext4", "exfat"] = Field(..., description="Target filesystem type for formatting")
+
+
+class PortEnableRequest(BaseModel):
+    enabled: bool = Field(..., description="Set port enabled state")
