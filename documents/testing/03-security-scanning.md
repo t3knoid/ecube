@@ -1,7 +1,11 @@
 # ECUBE — Security Scanning
 
 **Audience:** Developers, DevOps, QA  
-**Location:** `.github/workflows/security-scan.yml`
+**Workflows:**
+- `.github/workflows/security-scan.yml` — Bandit static analysis + pip-audit dependency scan
+- `.github/workflows/newman-api-tests.yml` — Newman (Postman collection runner)
+- `.github/workflows/schemathesis-fuzz.yml` — Schemathesis (OpenAPI fuzz testing)
+- `.github/workflows/zap-api-scan.yml` — OWASP ZAP (dynamic application security testing)
 
 ---
 
