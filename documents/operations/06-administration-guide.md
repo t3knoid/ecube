@@ -115,6 +115,14 @@ curl -k -X POST https://localhost:8443/setup/database/provision
 
 > **Note:** This is safe to re-run — Alembic migrations are idempotent.
 > After initial setup, this endpoint requires admin authentication.
+>
+> **Migration 0008 — Unique port system_path:** This migration adds a unique
+> constraint to `usb_ports.system_path`. Before applying the constraint it
+> automatically de-duplicates any existing rows: the lowest-id row for each
+> `system_path` is kept, non-null attribute values (`friendly_label`,
+> `enabled`, `vendor_id`, `product_id`, `speed`) are coalesced from
+> duplicates into the survivor, drives are re-pointed, and duplicate rows
+> are deleted. No manual intervention is required.
 
 #### Check Database Status
 
@@ -666,7 +674,9 @@ curl -k -H "Authorization: Bearer $JWT_TOKEN" \
 Triggers a manual scan of USB hubs, ports, and drives from system sources
 (`/sys/bus/usb/devices`). Upserts the hardware topology into the database
 and recomputes drive states according to the finite-state machine rules.
-The operation is idempotent.
+The operation is idempotent. Each port is uniquely identified by its
+`system_path`; concurrent discovery requests are safe — duplicate inserts
+are caught and retried as updates.
 
 ```bash
 # Requires admin or manager role
