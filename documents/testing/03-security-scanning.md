@@ -15,6 +15,18 @@ ECUBE runs automated security scans as a set of GitHub Actions workflows on ever
 
 ---
 
+## Tool Summary
+
+| Tool | Type | What It Scans For |
+|------|------|-------------------|
+| **Bandit** | Static analysis (SAST) | Hardcoded secrets, insecure functions (`eval`, `exec`, `shell=True`), SQL injection patterns, weak crypto, overly permissive file permissions |
+| **pip-audit** | Dependency scan (SCA) | Known CVEs in installed Python packages (via OSV/PyPI advisory database) |
+| **Newman** | API integration tests | Status-code assertions, request failures, server errors (5xx) across Postman collection endpoints |
+| **Schemathesis** | OpenAPI fuzz testing | Schema violations, unexpected 5xx responses, crash-inducing inputs, spec-conformance issues |
+| **OWASP ZAP** | Dynamic analysis (DAST) | Injection flaws (SQL, XSS, command), insecure headers, information disclosure, authentication issues, OWASP Top 10 vulnerabilities |
+
+---
+
 ## Scans
 
 ### Bandit — Static Analysis
