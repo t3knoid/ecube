@@ -822,8 +822,10 @@ curl -sk -X POST https://localhost:8443/setup/database/test-connection \
 | 11 | Drive on disabled port stays EMPTY | Plug in drive on disabled port, run `POST /drives/refresh` | `GET /drives` shows drive in `EMPTY` state |
 | 12 | Drive on enabled port becomes AVAILABLE | Enable port, run `POST /drives/refresh` | `GET /drives` shows drive in `AVAILABLE` state |
 | 13 | Disable port — IN_USE drive unaffected | Disable a port with an `IN_USE` drive, run `POST /drives/refresh` | Drive remains `IN_USE` (project isolation priority) |
-| 14 | PORT_ENABLED audit log | `GET /audit?action=PORT_ENABLED` after enabling a port | Audit entry with `port_id`, `system_path`, `hub_id` |
-| 15 | PORT_DISABLED audit log | `GET /audit?action=PORT_DISABLED` after disabling a port | Audit entry with `port_id`, `system_path`, `hub_id` |
+| 14 | Disable port — AVAILABLE drive demoted | Enable port, confirm drive is `AVAILABLE`, disable port, run `POST /drives/refresh` | Drive transitions to `EMPTY` |
+| 15 | Orphan drive stays EMPTY | Discover a drive with no matching port (`port_id = NULL`), run `POST /drives/refresh` | Drive remains in `EMPTY` state (unknown port treated as disabled) |
+| 16 | PORT_ENABLED audit log | `GET /audit?action=PORT_ENABLED` after enabling a port | Audit entry with `port_id`, `system_path`, `hub_id`, `enabled`, `path` |
+| 17 | PORT_DISABLED audit log | `GET /audit?action=PORT_DISABLED` after disabling a port | Audit entry with `port_id`, `system_path`, `hub_id`, `enabled`, `path` |
 
 ### 12.5 USB Hardware (Bare-Metal Specific)
 
