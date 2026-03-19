@@ -101,9 +101,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/version",
+							"raw": "{{base_url}}/introspection/version",
 							"host": ["{{base_url}}"],
-							"path": ["version"]
+							"path": ["introspection", "version"]
 						},
 						"description": "Returns application and API version. No auth required."
 					}
