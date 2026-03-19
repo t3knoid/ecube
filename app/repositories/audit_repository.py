@@ -21,6 +21,7 @@ class AuditRepository:
         user: Optional[str] = None,
         job_id: Optional[int] = None,
         details: Optional[Dict[str, Any]] = None,
+        client_ip: Optional[str] = None,
     ) -> AuditLog:
         """Create and persist an immutable audit log entry."""
         entry = AuditLog(
@@ -28,6 +29,7 @@ class AuditRepository:
             action=action,
             job_id=job_id,
             details=details or {},
+            client_ip=client_ip,
         )
         self.db.add(entry)
         try:
@@ -82,12 +84,13 @@ def best_effort_audit(
     action: str,
     user: Optional[str] = None,
     details: Optional[Dict[str, Any]] = None,
+    client_ip: Optional[str] = None,
 ) -> None:
     """Write an audit log entry, silently logging on failure.
 
     Use this instead of duplicating try/except wrappers in every router.
     """
     try:
-        AuditRepository(db).add(action=action, user=user, details=details)
+        AuditRepository(db).add(action=action, user=user, details=details, client_ip=client_ip)
     except Exception:
         _logger.exception("Failed to write audit log for %s", action)

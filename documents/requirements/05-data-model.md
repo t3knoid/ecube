@@ -58,6 +58,7 @@
 - `started_at`
 - `completed_at`
 - `created_by`
+- `client_ip`
 
 ### `export_files`
 
@@ -93,6 +94,7 @@
 - `action`
 - `job_id`
 - `details` (JSONB)
+- `client_ip`
 
 ## 5.4 User & System Tables
 

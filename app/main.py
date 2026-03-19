@@ -17,6 +17,7 @@ from app.logging_config import configure_logging
 from app.routers import admin, audit, auth, database_setup, drives, files, introspection, jobs, mounts, setup, users
 from app.schemas.errors import ErrorResponse
 from app.session import close_session_backend, init_session_backend, mount_session_middleware
+from app.utils.client_ip import get_client_ip
 
 # Configure logging before anything else.
 configure_logging()
@@ -273,6 +274,7 @@ def _try_log_auth_failure(request: Request, reason: str, trace_id: str) -> None:
                 "reason": reason,
                 "trace_id": trace_id,
             },
+            client_ip=get_client_ip(request),
         )
     except Exception:
         pass

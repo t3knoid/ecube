@@ -246,6 +246,15 @@ class Settings(BaseSettings):
     audit_log_max_limit: int = 1000
 
     # ---------------------------------------------------------------------------
+    # Reverse proxy / client IP settings
+    # ---------------------------------------------------------------------------
+
+    #: When ``True``, use ``X-Forwarded-For`` / ``X-Real-IP`` headers to
+    #: determine the client IP address.  When ``False`` (default), always use
+    #: ``request.client.host`` to prevent header spoofing on direct connections.
+    trust_proxy_headers: bool = False
+
+    # ---------------------------------------------------------------------------
     # Database pool settings
     # ---------------------------------------------------------------------------
 
