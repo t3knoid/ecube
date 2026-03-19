@@ -145,8 +145,8 @@ def run_discovery_sync(
     }
 
     def _port_is_enabled(pid: Optional[int]) -> bool:
-        """Return True if the port is enabled, or if there is no port (orphan)."""
-        return pid is None or pid in enabled_port_ids
+        """Return True only when the port is known and enabled."""
+        return pid is not None and pid in enabled_port_ids
 
     # Upsert each discovered drive.
     for discovered_drive in topology.drives:
