@@ -173,8 +173,8 @@ Every project-isolation decision is recorded:
 - Emit structured JSON payloads for all critical operations.
 - Use append-only semantics and immutable timestamps.
 - Port enablement changes emit dedicated audit events:
-  - `PORT_ENABLED` — Port enabled for ECUBE use; includes `port_id`, `system_path`, `hub_id`.
-  - `PORT_DISABLED` — Port disabled; includes `port_id`, `system_path`, `hub_id`.
+  - `PORT_ENABLED` — Port enabled for ECUBE use; includes `port_id`, `system_path`, `hub_id`, `enabled`, `path`.
+  - `PORT_DISABLED` — Port disabled; includes `port_id`, `system_path`, `hub_id`, `enabled`, `path`.
 
 ## 4.9 USB Discovery and State Refresh Design
 
@@ -184,7 +184,8 @@ Every project-isolation decision is recorded:
 - **Port enablement filtering:** Each USB port has an `enabled` flag (default `false`). Discovery uses this flag to gate drive availability:
   - A newly discovered drive on a **disabled** port is inserted in `EMPTY` state (not `AVAILABLE`).
   - A reconnecting drive (previously `EMPTY`) on a **disabled** port remains `EMPTY`.
-  - Drives with no associated port (`port_id = NULL`) are **unaffected** by the enablement filter.
+  - An `AVAILABLE` drive whose port is subsequently **disabled** is demoted to `EMPTY` on the next discovery sync.
+  - Drives with no associated port (`port_id = NULL`) are treated as **disabled** — they remain in `EMPTY` state.
   - Drives already in `IN_USE` state are **never** changed by the enablement filter — project isolation takes priority.
   - Admins and managers toggle port enablement via `PATCH /admin/ports/{port_id}`. The change takes effect on the next discovery sync.
 - Refresh operation is fully idempotent: running multiple times without hardware changes produces no mutations.
