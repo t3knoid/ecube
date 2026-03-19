@@ -115,6 +115,14 @@ curl -k -X POST https://localhost:8443/setup/database/provision
 
 > **Note:** This is safe to re-run — Alembic migrations are idempotent.
 > After initial setup, this endpoint requires admin authentication.
+>
+> **Migration 0008 — Unique port system_path:** This migration adds a unique
+> constraint to `usb_ports.system_path`. Before applying the constraint it
+> automatically de-duplicates any existing rows: the lowest-id row for each
+> `system_path` is kept, non-null attribute values (`friendly_label`,
+> `enabled`, `vendor_id`, `product_id`, `speed`) are coalesced from
+> duplicates into the survivor, drives are re-pointed, and duplicate rows
+> are deleted. No manual intervention is required.
 
 #### Check Database Status
 
@@ -666,7 +674,9 @@ curl -k -H "Authorization: Bearer $JWT_TOKEN" \
 Triggers a manual scan of USB hubs, ports, and drives from system sources
 (`/sys/bus/usb/devices`). Upserts the hardware topology into the database
 and recomputes drive states according to the finite-state machine rules.
-The operation is idempotent.
+The operation is idempotent. Each port is uniquely identified by its
+`system_path`; concurrent discovery requests are safe — duplicate inserts
+are caught and retried as updates.
 
 ```bash
 # Requires admin or manager role
@@ -703,17 +713,23 @@ Example response:
     "id": 1,
     "hub_id": 1,
     "port_number": 1,
-    "system_path": "/sys/bus/usb/devices/1-1",
+    "system_path": "1-1",
     "friendly_label": null,
-    "enabled": false
+    "enabled": false,
+    "vendor_id": "0781",
+    "product_id": "5583",
+    "speed": "480"
   },
   {
     "id": 2,
     "hub_id": 1,
     "port_number": 2,
-    "system_path": "/sys/bus/usb/devices/1-2",
+    "system_path": "1-2",
     "friendly_label": null,
-    "enabled": true
+    "enabled": true,
+    "vendor_id": null,
+    "product_id": null,
+    "speed": null
   }
 ]
 ```
@@ -745,6 +761,75 @@ Response: returns the updated port object.
 > state — project isolation takes priority. To make drives on a newly
 > enabled port available, run a discovery refresh (`POST /drives/refresh`)
 > after enabling the port.
+
+### Hub Management
+
+USB hubs are automatically discovered during the discovery sync.  Each hub
+record includes hardware metadata (`vendor_id`, `product_id`) read from
+sysfs, and an optional admin-assigned `location_hint` label for physical
+identification.
+
+#### List Hubs
+
+Returns all known USB hubs with their hardware metadata and labels.
+
+```bash
+# Requires admin or manager role
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  https://localhost:8443/admin/hubs
+```
+
+Example response:
+
+```json
+[
+  {
+    "id": 1,
+    "name": "usb1",
+    "system_identifier": "usb1",
+    "location_hint": "back-left rack",
+    "vendor_id": "1d6b",
+    "product_id": "0002"
+  }
+]
+```
+
+#### Set Hub Location Hint
+
+Assigns or updates the `location_hint` label on a hub. This label is
+preserved across discovery resync cycles.
+
+```bash
+# Requires admin or manager role
+curl -k -X PATCH https://localhost:8443/admin/hubs/1 \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"location_hint": "back-left rack"}'
+```
+
+Response: returns the updated hub object.
+
+### Port Labeling
+
+Each port can be given a human-readable `friendly_label` for easier physical
+identification. Labels are preserved across discovery resync cycles.
+
+#### Set Port Label
+
+```bash
+# Requires admin or manager role
+curl -k -X PATCH https://localhost:8443/admin/ports/1/label \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"friendly_label": "Bay 3 - Top Left"}'
+```
+
+Response: returns the updated port object including `vendor_id`, `product_id`,
+and `speed` fields populated during discovery.
+
+> **Note:** The `vendor_id`, `product_id`, and `speed` fields on ports are
+> automatically populated from sysfs during USB discovery. They are visible in
+> port listing responses (`GET /admin/ports`) and cannot be set through the API.
 
 ### Format Drive
 
