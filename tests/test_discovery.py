@@ -453,3 +453,52 @@ def test_existing_tests_still_pass_with_enabled_port(db):
     summary = run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
     drive = db.query(UsbDrive).filter(UsbDrive.device_identifier == "SN-ABC123").one()
     assert drive.current_state == DriveState.AVAILABLE
+
+
+def test_available_drive_demoted_when_port_disabled(db):
+    """An AVAILABLE drive on a port that is later disabled should become EMPTY."""
+    topology = _simple_topology()
+    # First sync creates port (disabled by default) + drive (EMPTY).
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    _enable_all_ports(db)
+    # Second sync promotes the drive to AVAILABLE.
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    drive = db.query(UsbDrive).one()
+    assert drive.current_state == DriveState.AVAILABLE
+
+    # Disable the port while the drive is still physically present.
+    port = db.query(UsbPort).one()
+    port.enabled = False
+    db.commit()
+
+    # Next sync should demote the drive to EMPTY.
+    summary = run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    db.refresh(drive)
+    assert drive.current_state == DriveState.EMPTY
+    assert summary["drives_updated"] == 1
+
+
+def test_in_use_drive_not_demoted_when_port_disabled(db):
+    """An IN_USE drive must stay IN_USE even if the port is disabled."""
+    topology = _simple_topology()
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    _enable_all_ports(db)
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    drive = db.query(UsbDrive).one()
+    assert drive.current_state == DriveState.AVAILABLE
+
+    # Simulate the drive being assigned to a job.
+    drive.current_state = DriveState.IN_USE
+    drive.current_project_id = "PROJ-001"
+    db.commit()
+
+    # Disable the port.
+    port = db.query(UsbPort).one()
+    port.enabled = False
+    db.commit()
+
+    # Sync should leave IN_USE untouched.
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    db.refresh(drive)
+    assert drive.current_state == DriveState.IN_USE
+    assert drive.current_project_id == "PROJ-001"
