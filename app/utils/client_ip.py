@@ -37,4 +37,6 @@ def get_client_ip(request: Request) -> str:
             ip = _validated_ip(real_ip)
             if ip:
                 return ip
-    return request.client.host if request.client else "unknown"
+    if request.client:
+        return _validated_ip(request.client.host) or "unknown"
+    return "unknown"

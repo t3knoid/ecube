@@ -56,6 +56,12 @@ class TestGetClientIpDirectConnection:
         request.client = None
         assert get_client_ip(request) == "unknown"
 
+    @patch("app.utils.client_ip.settings")
+    def test_malformed_client_host_returns_unknown(self, mock_settings):
+        mock_settings.trust_proxy_headers = False
+        request = _make_request(client_host="not-a-valid-ip")
+        assert get_client_ip(request) == "unknown"
+
 
 class TestGetClientIpProxyHeaders:
     """When trust_proxy_headers is True, honour X-Forwarded-For / X-Real-IP."""
