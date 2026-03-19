@@ -84,13 +84,15 @@ jobs:
           curl -sf http://localhost:8000/health || (echo "::error::Server failed to start within 30s" && exit 1)
 
       - name: Run Schemathesis
+        timeout-minutes: 10
         run: |
           st run http://localhost:8000/openapi.json \
             --header "Authorization: Bearer ${{ steps.auth.outputs.token }}" \
             --checks all \
             --max-examples 50 \
+            --request-timeout 10000 \
             --report ndjson \
-            > schemathesis-report.ndjson 2>&1 \
+            > schemathesis-report.ndjson \
             || true
 
       - name: Upload Schemathesis report
