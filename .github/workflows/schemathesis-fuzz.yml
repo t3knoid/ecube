@@ -96,8 +96,11 @@ jobs:
 
       - name: Schemathesis pass/fail check
         run: |
-          if [ -f schemathesis-report.json ]; then
-            ERRORS=$(python - <<'PY' 2>/dev/null || echo "0"
+          if [ ! -f schemathesis-report.json ]; then
+            echo "::error::Schemathesis report not found — Schemathesis may have crashed before writing output"
+            exit 1
+          fi
+          ERRORS=$(python - <<'PY' 2>/dev/null || echo "0"
           import json, pathlib
           r = json.loads(pathlib.Path('schemathesis-report.json').read_text())
           total = r.get('total', {}).get('errors', 0) if isinstance(r.get('total'), dict) else 0
@@ -106,10 +109,7 @@ jobs:
           print(total + failures)
           PY
           )
-            echo "Errors/failures: $ERRORS"
-            if [ "$ERRORS" -gt 0 ]; then
-              echo "::warning::Schemathesis found $ERRORS issue(s) — review the report artifact"
-            fi
-          else
-            echo "No report file generated — check Schemathesis logs above"
+          echo "Errors/failures: $ERRORS"
+          if [ "$ERRORS" -gt 0 ]; then
+            echo "::warning::Schemathesis found $ERRORS issue(s) — review the report artifact"
           fi
