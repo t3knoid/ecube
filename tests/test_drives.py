@@ -64,6 +64,12 @@ def test_list_drives_filter_by_project_no_match(client, db):
     assert response.json() == []
 
 
+def test_list_drives_empty_project_id_rejected(client, db):
+    """GET /drives?project_id= (empty string) returns 422."""
+    response = client.get("/drives?project_id=")
+    assert response.status_code == 422
+
+
 def test_list_drives_no_filter_returns_all(client, db):
     """GET /drives without project_id returns all drives (no regression)."""
     d1 = UsbDrive(device_identifier="USB-1", current_state=DriveState.IN_USE, current_project_id="PROJ-001")
