@@ -91,7 +91,6 @@ jobs:
             --env-var "token=${{ steps.auth.outputs.token }}" \
             --folder "Health & Version" \
             --folder "Auth" \
-            --folder "Database Setup" \
             --folder "Drives" \
             --folder "Mounts" \
             --folder "Jobs" \
