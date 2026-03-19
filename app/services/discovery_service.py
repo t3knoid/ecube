@@ -64,6 +64,7 @@ def run_discovery_sync(
     *,
     topology_source: Callable[[], DiscoveredTopology] = _default_topology_source,
     filesystem_detector: FilesystemDetector,
+    client_ip: Optional[str] = None,
 ) -> dict:
     """Discover USB hardware state and synchronise the database.
 
@@ -278,6 +279,7 @@ def run_discovery_sync(
                             "drive_id": drive.id,
                             "device_identifier": drive.device_identifier,
                         },
+                        client_ip=client_ip,
                     )
                 except Exception:
                     logger.exception(
@@ -298,6 +300,7 @@ def run_discovery_sync(
             action="USB_DISCOVERY_SYNC",
             user=actor,
             details=summary,
+            client_ip=client_ip,
         )
     except Exception:
         logger.exception("Failed to write audit log for USB_DISCOVERY_SYNC")
