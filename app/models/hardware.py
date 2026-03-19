@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime
+from sqlalchemy import Boolean, Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -27,6 +27,7 @@ class UsbPort(Base):
     port_number = Column(Integer, nullable=False)
     system_path = Column(String, nullable=False)
     friendly_label = Column(String)
+    enabled = Column(Boolean, nullable=False, default=False, server_default="0")
     hub = relationship("UsbHub", back_populates="ports")
     drives = relationship("UsbDrive", back_populates="port")
 

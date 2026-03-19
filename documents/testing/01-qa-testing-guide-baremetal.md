@@ -459,6 +459,33 @@ curl -sk -X POST https://localhost:8443/drives/{id}/prepare-eject \
   -H "Authorization: Bearer $TOKEN" | jq
 ```
 
+### 11.3a Port Management
+
+USB ports default to disabled. Drives on disabled ports stay in `EMPTY` state
+until the port is enabled and a discovery refresh runs.
+
+```bash
+# List all USB ports with enablement state (admin or manager)
+curl -sk https://localhost:8443/admin/ports \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# Enable a port (replace {port_id})
+curl -sk -X PATCH https://localhost:8443/admin/ports/{port_id} \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true}' | jq
+
+# Disable a port
+curl -sk -X PATCH https://localhost:8443/admin/ports/{port_id} \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": false}' | jq
+
+# After enabling, run a discovery refresh so drives become AVAILABLE
+curl -sk -X POST https://localhost:8443/drives/refresh \
+  -H "Authorization: Bearer $TOKEN" | jq
+```
+
 ### 11.4 Job Management
 
 ```bash
@@ -778,18 +805,41 @@ curl -sk -X POST https://localhost:8443/setup/database/test-connection \
 | 12 | Re-format: format ext4, then format exfat on same `AVAILABLE` drive | 200 both times; final `filesystem_type` is `exfat` |
 | 13 | `DRIVE_FORMAT_FAILED` audit log when hardware error occurs | `GET /audit?action=DRIVE_FORMAT_FAILED` shows entry with `drive_id` and `error` |
 
+### 12.4.3 Port Enablement
+
+| # | Test | How | Expected |
+|---|------|-----|----------|
+| 1 | List ports — admin | `GET /admin/ports` with admin token | 200, array of port objects with `enabled` field |
+| 2 | List ports — manager | `GET /admin/ports` with manager token | 200 |
+| 3 | List ports — processor denied | `GET /admin/ports` with processor token | 403, `FORBIDDEN` |
+| 4 | List ports — unauthenticated | `GET /admin/ports` without token | 401, `UNAUTHORIZED` |
+| 5 | Enable a port | `PATCH /admin/ports/{id}` with `{"enabled": true}` | 200, port returned with `enabled: true` |
+| 6 | Disable a port | `PATCH /admin/ports/{id}` with `{"enabled": false}` | 200, port returned with `enabled: false` |
+| 7 | Enable port — manager | `PATCH /admin/ports/{id}` with manager token | 200 |
+| 8 | Enable port — processor denied | `PATCH /admin/ports/{id}` with processor token | 403, `FORBIDDEN` |
+| 9 | Enable non-existent port | `PATCH /admin/ports/99999` with `{"enabled": true}` | 404, `NOT_FOUND` |
+| 10 | Ports default to disabled | Discover a new port, then `GET /admin/ports` | New port has `enabled: false` |
+| 11 | Drive on disabled port stays EMPTY | Plug in drive on disabled port, run `POST /drives/refresh` | `GET /drives` shows drive in `EMPTY` state |
+| 12 | Drive on enabled port becomes AVAILABLE | Enable port, run `POST /drives/refresh` | `GET /drives` shows drive in `AVAILABLE` state |
+| 13 | Disable port — IN_USE drive unaffected | Disable a port with an `IN_USE` drive, run `POST /drives/refresh` | Drive remains `IN_USE` (project isolation priority) |
+| 14 | Disable port — AVAILABLE drive demoted | Enable port, confirm drive is `AVAILABLE`, disable port, run `POST /drives/refresh` | Drive transitions to `EMPTY` |
+| 15 | Orphan drive stays EMPTY | Discover a drive with no matching port (`port_id = NULL`), run `POST /drives/refresh` | Drive remains in `EMPTY` state (unknown port treated as disabled) |
+| 16 | PORT_ENABLED audit log | `GET /audit?action=PORT_ENABLED` after enabling a port | Audit entry with `port_id`, `system_path`, `hub_id`, `enabled`, `path` |
+| 17 | PORT_DISABLED audit log | `GET /audit?action=PORT_DISABLED` after disabling a port | Audit entry with `port_id`, `system_path`, `hub_id`, `enabled`, `path` |
+
 ### 12.5 USB Hardware (Bare-Metal Specific)
 
 These tests exercise real hardware paths and are the primary reason to use bare-metal.
 
 | # | Test | Steps | Expected |
 |---|------|-------|----------|
-| 1 | Hot-plug detection | Plug in a USB drive, wait 30 seconds | `GET /drives` shows the new drive in `AVAILABLE` state (discovery auto-transitions `EMPTY → AVAILABLE`) |
+| 1 | Hot-plug detection | Plug in a USB drive, wait 30 seconds | `GET /drives` shows the new drive (in `EMPTY` state if port is disabled, or `AVAILABLE` if port is enabled) |
 | 2 | USB topology | `GET /introspection/usb/topology` | Shows real hub serial numbers, port numbers, connected devices |
 | 3 | Physical eject | Initialize drive → prepare-eject → physically remove | After the next discovery cycle, `GET /drives` still lists the drive with `current_state=EMPTY`; audit shows `DRIVE_EJECT_PREPARED` |
 | 4 | Re-plug same drive | Remove and re-insert the same drive | Drive reappears as `AVAILABLE` with same `device_identifier` (after discovery cycle) |
 | 5 | Multiple drives | Plug in 2+ drives simultaneously | All drives appear in `/drives`; each can be initialized to different projects |
 | 6 | Sync + unmount | Initialize drive, create/start a job, then prepare-eject | Filesystem flushed and unmounted before eject (verify via `mount` command — no partitions from that drive should be listed) |
+| 7 | Disabled port blocks AVAILABLE | Disable a port, plug in a drive to that port, run discovery | Drive appears in `EMPTY` state; enable port + refresh → drive transitions to `AVAILABLE` |
 
 ### 12.6 End-to-End Copy Workflow
 
@@ -828,6 +878,10 @@ Walk through the complete data export lifecycle:
 
 3. **Plug in a USB drive** and wait for auto-discovery.
 
+3b. **Enable the port** — `GET /admin/ports` to find the port ID, then
+    `PATCH /admin/ports/{port_id}` with `{"enabled": true}`.
+    Run `POST /drives/refresh` so the drive transitions to `AVAILABLE`.
+
 4. **List drives** — `GET /drives` — and note the drive ID and `filesystem_type`.
 
 4b. **Format the drive (if needed)** — If `filesystem_type` is `unformatted`, `unknown`, or `null`:
@@ -856,7 +910,7 @@ Walk through the complete data export lifecycle:
     ```
 
 13. **Check audit trail** — `GET /audit` — confirm the complete chain:
-    `MOUNT_ADDED → DRIVE_FORMATTED → DRIVE_INITIALIZED → JOB_CREATED → JOB_STARTED → JOB_COMPLETED → DRIVE_EJECT_PREPARED`
+    `MOUNT_ADDED → PORT_ENABLED → DRIVE_FORMATTED → DRIVE_INITIALIZED → JOB_CREATED → JOB_STARTED → JOB_COMPLETED → DRIVE_EJECT_PREPARED`
 
 ### 12.7 Error Handling
 
