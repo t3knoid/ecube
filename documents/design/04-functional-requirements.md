@@ -180,6 +180,17 @@ Every project-isolation decision is recorded:
 
 - Service reads sysfs topology (`/sys/bus/usb/devices`) and returns dataclass-based snapshot.
 - Hub and Port records are upserted (identified by stable `system_identifier` and `system_path` keys).
+- **Hardware enrichment:** During discovery, the service reads additional sysfs
+  attributes for each hub and port device:
+  - `idVendor` → `vendor_id` (hubs and ports)
+  - `idProduct` → `product_id` (hubs and ports)
+  - `speed` → `speed` (ports only, in Mbps)
+  These fields are updated on every sync cycle when present in sysfs; `NULL`
+  values in sysfs do not overwrite previously stored values.
+- **Label preservation:** Admin-assigned labels (`location_hint` on hubs,
+  `friendly_label` on ports) are never overwritten by the discovery sync.
+  Labels can only be changed through the admin API
+  (`PATCH /admin/hubs/{hub_id}`, `PATCH /admin/ports/{port_id}/label`).
 - Drive state transitions follow FSM rules: `EMPTY → AVAILABLE` on reconnection, `AVAILABLE → EMPTY` on removal (unless `IN_USE` — project isolation preserved).
 - **Port enablement filtering:** Each USB port has an `enabled` flag (default `false`). Discovery uses this flag to gate drive availability:
   - A newly discovered drive on a **disabled** port is inserted in `EMPTY` state (not `AVAILABLE`).
