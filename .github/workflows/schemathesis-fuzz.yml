@@ -82,14 +82,22 @@ jobs:
       - name: Run Schemathesis
         timeout-minutes: 10
         run: |
+          set +e
           st run http://localhost:8000/openapi.json \
             --header "Authorization: Bearer ${{ steps.auth.outputs.token }}" \
             --checks all \
             --max-examples 50 \
             --request-timeout 10 \
             --phases coverage,fuzzing \
-            2>&1 | tee schemathesis-output.txt \
-            || true
+            2>&1 | tee schemathesis-output.txt
+          ST_EXIT=${PIPESTATUS[0]}
+          echo "st_exit=$ST_EXIT" >> "$GITHUB_ENV"
+          # Exit code 1 = test findings (treated as warnings below).
+          # Any other non-zero exit code = invocation/runtime error → fail now.
+          if [ "$ST_EXIT" -ne 0 ] && [ "$ST_EXIT" -ne 1 ]; then
+            echo "::error::Schemathesis exited with code $ST_EXIT (invocation or runtime error)"
+            exit 1
+          fi
 
       - name: Upload Schemathesis report
         if: always()
@@ -101,15 +109,12 @@ jobs:
           retention-days: 30
 
       - name: Schemathesis pass/fail check
+        if: success()
         run: |
-          if [ ! -f schemathesis-output.txt ]; then
-            echo "::error::Schemathesis output not found — Schemathesis may have crashed before writing output"
+          if ! grep -qE '(Completed|passed|Total)' schemathesis-output.txt; then
+            echo "::error::Schemathesis output does not indicate a completed scan — review the report artifact"
             exit 1
           fi
-          if [ ! -s schemathesis-output.txt ]; then
-            echo "::error::Schemathesis output is empty — scan may have failed silently"
-            exit 1
-          fi
-          if grep -qiE '(FAILURES|ERRORS)\s*[1-9]' schemathesis-output.txt; then
-            echo "::warning::Schemathesis found issues — review the report artifact"
+          if [ "$st_exit" = "1" ]; then
+            echo "::warning::Schemathesis found issues (exit code 1) — review the report artifact"
           fi
