@@ -23,7 +23,7 @@ ECUBE is a secure evidence export platform designed to copy eDiscovery data onto
 > or use the included Docker Compose file for a quick local database:
 >
 > ```bash
-> docker compose -f docker-compose.postgresql.yml up -d
+> docker compose -f docker-compose.ecube.yml up -d postgres
 > ```
 
 ```bash
