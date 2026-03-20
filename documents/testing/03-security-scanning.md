@@ -160,7 +160,7 @@ Runs the existing Postman collection (`postman/ecube-postman-collection.json`) a
 | Failure threshold | Any failed assertion fails the job |
 | Artifact retention | 30 days |
 
-> **OS admin endpoints:** The collection-level test automatically skips 422 (Unprocessable Entity) responses on `/admin/os-users` and `/admin/os-groups` endpoints when ECUBE OS groups are not provisioned. In CI, the groups are pre-created. For local runs without groups, those requests are gracefully skipped rather than failing the suite.
+> **OS admin endpoints:** The ECUBE OS groups (`ecube-admins`, `ecube-managers`, `ecube-processors`, `ecube-auditors`) must exist on the host for the Admin — OS Users / OS Groups requests to succeed. In CI, the groups are pre-created via `groupadd`. For local runs, either run `/setup/initialize` or create them manually (`sudo groupadd ecube-admins` etc.). If groups are missing, those requests will return **422 Unprocessable Entity** and the collection-level "no server errors" assertion will still pass (it only fails on 5xx).
 
 #### Running locally
 
