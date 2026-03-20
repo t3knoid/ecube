@@ -3,7 +3,6 @@
 [![Security Scan](https://github.com/t3knoid/ecube/actions/workflows/security-scan.yml/badge.svg)](https://github.com/t3knoid/ecube/actions/workflows/security-scan.yml)
 [![Newman API Tests](https://github.com/t3knoid/ecube/actions/workflows/newman-api-tests.yml/badge.svg)](https://github.com/t3knoid/ecube/actions/workflows/newman-api-tests.yml)
 [![Schemathesis API Fuzz](https://github.com/t3knoid/ecube/actions/workflows/schemathesis-fuzz.yml/badge.svg)](https://github.com/t3knoid/ecube/actions/workflows/schemathesis-fuzz.yml)
-[![OWASP ZAP API Scan](https://github.com/t3knoid/ecube/actions/workflows/zap-api-scan.yml/badge.svg)](https://github.com/t3knoid/ecube/actions/workflows/zap-api-scan.yml)
 
 Evidence Copying &amp; USB Based Export
 
