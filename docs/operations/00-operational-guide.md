@@ -166,7 +166,7 @@ Use this guide to find the right document for your task:
 
 ## Design Documents
 
-For architecture decisions, data model details, and full API specifications, see `documents/design/`:
+For architecture decisions, data model details, and full API specifications, see `docs/design/`:
 
 | Document | Description |
 |----------|-------------|
