@@ -213,14 +213,13 @@ Use a dedicated PostgreSQL database for integration tests.
 Start PostgreSQL integration service:
 
 ```bash
-docker compose -f docker-compose.integration.yml up -d
+docker compose -f docker-compose.postgresql.yml up -d
 ```
 
 Set integration environment variables.
 
 ```bash
-export INTEGRATION_DATABASE_URL="postgresql://ecube_test:ecube_test@localhost:5433/ecube_integration"
-export DATABASE_URL="$INTEGRATION_DATABASE_URL"
+export DATABASE_URL="postgresql://ecube:ecube@localhost/ecube"
 ```
 
 Apply migrations:
@@ -244,7 +243,7 @@ python -m pytest tests/integration -q -s --run-integration
 Shutdown when done:
 
 ```bash
-docker compose -f docker-compose.integration.yml down
+docker compose -f docker-compose.postgresql.yml down
 ```
 
 ## 11.5 PostgreSQL Concurrency Scaffold
@@ -278,7 +277,7 @@ Note: this scaffold requires PostgreSQL and auto-skips on non-PostgreSQL backend
 1. Start local PostgreSQL:
 
    ```bash
-   docker compose -f docker-compose.integration.yml up -d
+   docker compose -f docker-compose.postgresql.yml up -d
    ```
 
 2. Set integration environment variables.

@@ -209,14 +209,14 @@ For integration tests against a real PostgreSQL database:
 
 ```powershell
 # Start the integration database
-docker compose -f docker-compose.integration.yml up -d
+docker compose -f docker-compose.postgresql.yml up -d
 
 # Run integration tests
-$env:DATABASE_URL="postgresql://ecube_test:ecube_test@localhost:5433/ecube_integration"
+$env:DATABASE_URL="postgresql://ecube:ecube@localhost/ecube"
 python -m pytest tests/ -v --run-integration
 
 # Stop the integration database
-docker compose -f docker-compose.integration.yml down -v
+docker compose -f docker-compose.postgresql.yml down -v
 ```
 
 ### Troubleshooting (Windows)
@@ -235,7 +235,7 @@ docker compose -f docker-compose.integration.yml down -v
 
 ```text
 docker-compose.ecube.yml  # Full-stack dev: app + PostgreSQL + USB passthrough
-docker-compose.integration.yml # Isolated PostgreSQL for integration tests (port 5433)
+docker-compose.postgresql.yml # Standalone PostgreSQL for local development
 app/
   main.py              # FastAPI application entry point and lifespan
   config.py            # Pydantic Settings class (all env vars)
@@ -430,21 +430,21 @@ def test_unauthenticated_returns_401(unauthenticated_client):
 
 ### Integration Testing
 
-Integration tests run against a real PostgreSQL database. The `docker-compose.integration.yml` file provides an isolated Postgres instance specifically for this purpose — it uses a separate database (`ecube_integration`), user (`ecube_test`), and port (`5433`) so it never conflicts with your development database.
+Integration tests run against a real PostgreSQL database. The `docker-compose.postgresql.yml` file provides a standalone Postgres instance for this purpose.
 
 ```bash
 # Start the integration test database
-docker compose -f docker-compose.integration.yml up -d
+docker compose -f docker-compose.postgresql.yml up -d
 
 # Wait for it to be healthy (~5 seconds), then run integration tests
-DATABASE_URL=postgresql://ecube_test:ecube_test@localhost:5433/ecube_integration \
+DATABASE_URL=postgresql://ecube:ecube@localhost/ecube \
   python -m pytest tests/ -v --run-integration
 
 # Stop the integration database when done
-docker compose -f docker-compose.integration.yml down
+docker compose -f docker-compose.postgresql.yml down
 
 # Stop and remove data (clean slate for next run)
-docker compose -f docker-compose.integration.yml down -v
+docker compose -f docker-compose.postgresql.yml down -v
 ```
 
 The integration database container can be left running across test runs. Use `down -v` when you want a completely fresh database.
