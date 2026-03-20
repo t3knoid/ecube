@@ -258,19 +258,6 @@
 					}
 				},
 				{
-					"name": "Get DB Settings",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/setup/database/settings",
-							"host": ["{{base_url}}"],
-							"path": ["setup", "database", "settings"]
-						},
-						"description": "Query database configuration. Requires admin role."
-					}
-				},
-				{
 					"name": "Update DB Settings",
 					"request": {
 						"method": "PUT",
@@ -832,6 +819,120 @@
 							]
 						},
 						"description": "Download a specific log file. Protected against path traversal. Any authenticated user."
+					}
+				}
+			]
+		},
+		{
+			"name": "Admin — Ports",
+			"item": [
+				{
+					"name": "List Ports",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/ports",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "ports"]
+						},
+						"description": "List all USB ports with their enabled state. Requires admin or manager role."
+					}
+				},
+				{
+					"name": "Toggle Port Enabled",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"enabled\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/ports/:port_id",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "ports", ":port_id"],
+							"variable": [
+								{
+									"key": "port_id",
+									"value": "1",
+									"description": "USB port ID"
+								}
+							]
+						},
+						"description": "Enable or disable a USB port for ECUBE use. Requires admin or manager role."
+					}
+				},
+				{
+					"name": "Update Port Label",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"friendly_label\": \"Bay 1 - Top\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/ports/:port_id/label",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "ports", ":port_id", "label"],
+							"variable": [
+								{
+									"key": "port_id",
+									"value": "1",
+									"description": "USB port ID"
+								}
+							]
+						},
+						"description": "Set or update the friendly_label on a USB port. Requires admin or manager role."
+					}
+				}
+			]
+		},
+		{
+			"name": "Admin — Hubs",
+			"item": [
+				{
+					"name": "List Hubs",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/hubs",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "hubs"]
+						},
+						"description": "List all USB hubs with enriched hardware metadata. Requires admin or manager role."
+					}
+				},
+				{
+					"name": "Update Hub Label",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"location_hint\": \"Server Room - Rack A\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/hubs/:hub_id",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "hubs", ":hub_id"],
+							"variable": [
+								{
+									"key": "hub_id",
+									"value": "1",
+									"description": "USB hub ID"
+								}
+							]
+						},
+						"description": "Set or update the location_hint label on a USB hub. Requires admin or manager role."
 					}
 				}
 			]
