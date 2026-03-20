@@ -246,7 +246,7 @@ docker compose -f docker-compose.ecube.yml down
 
 For USB hub/device passthrough guidance (physical host → VM → container), see:
 
-- `documents/design/12-linux-host-deployment-and-usb-passthrough.md`
+- `docs/design/12-linux-host-deployment-and-usb-passthrough.md`
 
 ## 13.7 Session and Cookie Configuration
 
