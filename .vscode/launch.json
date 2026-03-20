@@ -2,6 +2,23 @@
   "version": "0.2.0",
   "configurations": [
     {
+        "name": "ECUBE: FastAPI Server",
+        "type": "python",
+        "request": "launch",
+        "module": "uvicorn",
+        "args": [
+            "app.main:app",
+            "--reload",
+            "--port", "8000"
+        ],
+        "cwd": "${workspaceFolder}",
+        "env": {
+            "DATABASE_URL": "postgresql://ecube:ecube@localhost/ecube"
+        },
+        "console": "integratedTerminal",
+        "justMyCode": false
+    },
+    {
       "name": "Pytest: Integration (all)",
       "type": "python",
       "request": "launch",

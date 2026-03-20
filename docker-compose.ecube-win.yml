@@ -9,7 +9,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql://ecube:ecube@postgres-dev:5432/ecube
+      DATABASE_URL: postgresql://ecube:ecube@postgres:5432/ecube
       PYTHONUNBUFFERED: "1"
       ECUBE_RUN_MIGRATIONS_ON_START: "true"
       ECUBE_DB_WAIT_MAX_RETRIES: "30"
@@ -22,12 +22,12 @@ services:
       - /sys:/sys:ro
       - /run/udev:/run/udev:ro
     depends_on:
-      postgres-dev:
+      postgres:
         condition: service_healthy
 
-  postgres-dev:
+  postgres:
     image: postgres:16
-    container_name: ecube-postgres-dev
+    container_name: ecube-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: ecube
@@ -36,7 +36,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ecube_postgres_dev_data:/var/lib/postgresql/data
+      - ecube_postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ecube -d ecube"]
       interval: 5s
@@ -45,4 +45,4 @@ services:
 
 volumes:
   ecube_runtime_data:
-  ecube_postgres_dev_data:
+  ecube_postgres_data:
