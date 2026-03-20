@@ -273,7 +273,7 @@ tests/
   hardware/            # Hardware-in-the-loop tests (requires --run-hardware)
 scripts/
   sync_qa_test_cases.py  # QA spreadsheet ↔ markdown sync tool
-documents/
+docs/
   design/              # Architecture and design specifications
   development/         # This folder — developer documentation
   operations/          # Production deployment and operations guides
@@ -451,7 +451,7 @@ The integration database container can be left running across test runs. Use `do
 
 ### QA Test-Case Sync
 
-The QA test-case spreadsheet in `documents/testing/` is generated from the markdown guide. After editing test cases:
+The QA test-case spreadsheet in `docs/testing/` is generated from the markdown guide. After editing test cases:
 
 ```bash
 python scripts/sync_qa_test_cases.py --sync

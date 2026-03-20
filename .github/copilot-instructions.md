@@ -19,7 +19,7 @@ ECUBE (Evidence Copying & USB Based Export) is a secure evidence export platform
 ```
 .github/
   copilot-instructions.md   # This file
-documents/
+docs/
   requirements/             # Requirements documents (00–10)
   design/                   # Design documents (00–10, mirrors requirements)
 README.md
@@ -84,7 +84,7 @@ python -m pytest tests/ -v
 | `processor` | Create/start jobs, view job/drive status |
 | `auditor`   | Read-only: audit logs, file hashes, job metadata |
 
-Use the `require_roles(*roles)` decorator pattern (see `documents/design/10-security-and-access-control.md`) to gate every endpoint.
+Use the `require_roles(*roles)` decorator pattern (see `docs/design/10-security-and-access-control.md`) to gate every endpoint.
 
 ### Project Isolation (Critical)
 
@@ -114,7 +114,7 @@ Use the `require_roles(*roles)` decorator pattern (see `documents/design/10-secu
 
 ## Key Design Documents
 
-All design details live under `documents/design/`:
+All design details live under `docs/design/`:
 
 - `03-system-architecture.md` — component view and interaction pattern
 - `04-functional-requirements.md` — drive FSM, project isolation, copy engine, audit
