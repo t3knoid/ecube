@@ -1,5 +1,6 @@
 # ecube
 
+[![Tests](https://github.com/t3knoid/ecube/actions/workflows/run-tests.yml/badge.svg)](https://github.com/t3knoid/ecube/actions/workflows/run-tests.yml)
 [![Security Scan](https://github.com/t3knoid/ecube/actions/workflows/security-scan.yml/badge.svg)](https://github.com/t3knoid/ecube/actions/workflows/security-scan.yml)
 [![Schemathesis API Fuzz](https://github.com/t3knoid/ecube/actions/workflows/schemathesis-fuzz.yml/badge.svg)](https://github.com/t3knoid/ecube/actions/workflows/schemathesis-fuzz.yml)
 
