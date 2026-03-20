@@ -347,17 +347,16 @@ def run_copy_job(job_id: int) -> None:
                 # Check timeout after each file completes.
                 if timeout > 0 and (time.monotonic() - job_start) > timeout:
                     timed_out = True
-                    # Cancel remaining pending futures and stop the executor without waiting.
+                    # Cancel remaining pending futures so they are not started.
                     for pending in futures:
                         if not pending.done():
                             pending.cancel()
-                    executor.shutdown(wait=False, cancel_futures=True)
                     break
         finally:
-            # On normal completion, wait for all tasks to finish; on timeout we already
-            # performed a non-blocking shutdown above.
-            if not timed_out:
-                executor.shutdown(wait=True)
+            # Always wait for running workers to finish so the DB session is
+            # idle before the main thread uses it.  cancel_futures=True
+            # prevents queued (not-yet-started) tasks from running.
+            executor.shutdown(wait=True, cancel_futures=True)
 
         # Determine final job status.
         db.expire_all()
