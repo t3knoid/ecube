@@ -129,8 +129,8 @@ The Swagger UI allows you to:
 
 All application/API endpoints (except `/health` and documentation endpoints such as `/docs`, `/redoc`, and `/openapi.json`) require authentication via JWT bearer tokens. Full API specification and security role details are documented in:
 
-- `documents/design/06-rest-api-specification.md`
-- `documents/design/10-security-and-access-control.md`
+- `docs/design/06-rest-api-specification.md`
+- `docs/design/10-security-and-access-control.md`
 
 ---
 
@@ -253,7 +253,7 @@ roles are `["admin", "processor"]`.
 
 ECUBE build and deployment guidance (release artifacts, package deployment without Docker runtime, Docker image builds, and compose deployment) is documented in:
 
-- `documents/design/13-build-and-deployment.md`
+- `docs/design/13-build-and-deployment.md`
 
 Choose one runtime path per environment: package deployment **or** Docker deployment.
 
@@ -317,7 +317,7 @@ Path traversal protection is enforced: filenames containing `..` or `/` are reje
 
 ## QA Test-Case Sync
 
-The QA test-case spreadsheet (`documents/testing/ecube-qa-test-cases.xlsx`) is generated from the markdown guide (`documents/testing/01-qa-testing-guide-baremetal.md`).  A sync script keeps them aligned:
+The QA test-case spreadsheet (`docs/testing/ecube-qa-test-cases.xlsx`) is generated from the markdown guide (`docs/testing/01-qa-testing-guide-baremetal.md`).  A sync script keeps them aligned:
 
 ```bash
 # Check for drift (exits non-zero if out of sync)
@@ -336,16 +336,16 @@ After editing test cases in the markdown guide, run `--sync` and commit both fil
 
 ## Documentation
 
-- [Operations Guide (Index)](documents/operations/00-operational-guide.md)
-- [Development Guide](documents/development/00-development-guide.md)
-- [QA Testing Guide (Bare-Metal)](documents/testing/01-qa-testing-guide-baremetal.md)
-- [Requirements Documents](documents/requirements)
-- [ECUBE Requirements Overview](documents/requirements/00-overview.md)
-- [Security & Access Control (Requirements)](documents/requirements/10-security-and-access-control.md)
-- [Design Documents](documents/design)
-- [ECUBE Design Overview](documents/design/00-overview.md)
-- [Security & Access Control (Design)](documents/design/10-security-and-access-control.md)
-- [Testing & Validation (Design)](documents/design/11-testing-and-validation.md)
-- [Hardware HIL Testing (USB Hub/Devices)](documents/design/11-testing-and-validation.md#1110-hardware-hil-testing-usb-hub-and-devices)
-- [Linux Host Deployment & USB Passthrough](documents/design/12-linux-host-deployment-and-usb-passthrough.md)
-- [Build & Deployment (Design)](documents/design/13-build-and-deployment.md)
+- [Operations Guide (Index)](docs/operations/00-operational-guide.md)
+- [Development Guide](docs/development/00-development-guide.md)
+- [QA Testing Guide (Bare-Metal)](docs/testing/01-qa-testing-guide-baremetal.md)
+- [Requirements Documents](docs/requirements)
+- [ECUBE Requirements Overview](docs/requirements/00-overview.md)
+- [Security & Access Control (Requirements)](docs/requirements/10-security-and-access-control.md)
+- [Design Documents](docs/design)
+- [ECUBE Design Overview](docs/design/00-overview.md)
+- [Security & Access Control (Design)](docs/design/10-security-and-access-control.md)
+- [Testing & Validation (Design)](docs/design/11-testing-and-validation.md)
+- [Hardware HIL Testing (USB Hub/Devices)](docs/design/11-testing-and-validation.md#1110-hardware-hil-testing-usb-hub-and-devices)
+- [Linux Host Deployment & USB Passthrough](docs/design/12-linux-host-deployment-and-usb-passthrough.md)
+- [Build & Deployment (Design)](docs/design/13-build-and-deployment.md)

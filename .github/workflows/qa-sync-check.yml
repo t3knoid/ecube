@@ -3,8 +3,8 @@ name: QA Test-Case Sync Check
 on:
   pull_request:
     paths:
-      - 'documents/testing/01-qa-testing-guide-baremetal.md'
-      - 'documents/testing/ecube-qa-test-cases.xlsx'
+      - 'docs/testing/01-qa-testing-guide-baremetal.md'
+      - 'docs/testing/ecube-qa-test-cases.xlsx'
       - 'scripts/sync_qa_test_cases.py'
 
 jobs:
