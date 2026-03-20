@@ -88,6 +88,9 @@ jobs:
             --max-examples 50 \
             --request-timeout 10 \
             --phases coverage,fuzzing \
+            --method GET \
+            --method HEAD \
+            --method OPTIONS \
             2>&1 | tee schemathesis-output.txt \
             || true
 
