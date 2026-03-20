@@ -160,7 +160,7 @@ Runs the existing Postman collection (`postman/ecube-postman-collection.json`) a
 | Failure threshold | Any failed assertion fails the job |
 | Artifact retention | 30 days |
 
-> **OS admin endpoints:** The collection-level test automatically skips 5xx failures on `/admin/os-users` and `/admin/os-groups` endpoints when ECUBE OS groups are not provisioned. In CI, the groups are pre-created. For local runs without groups, those requests are gracefully skipped rather than failing the suite.
+> **OS admin endpoints:** The collection-level test automatically skips 422 (Unprocessable Entity) responses on `/admin/os-users` and `/admin/os-groups` endpoints when ECUBE OS groups are not provisioned. In CI, the groups are pre-created. For local runs without groups, those requests are gracefully skipped rather than failing the suite.
 
 #### Running locally
 
