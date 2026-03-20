@@ -1,7 +1,6 @@
 # ecube
 
 [![Security Scan](https://github.com/t3knoid/ecube/actions/workflows/security-scan.yml/badge.svg)](https://github.com/t3knoid/ecube/actions/workflows/security-scan.yml)
-[![Newman API Tests](https://github.com/t3knoid/ecube/actions/workflows/newman-api-tests.yml/badge.svg)](https://github.com/t3knoid/ecube/actions/workflows/newman-api-tests.yml)
 [![Schemathesis API Fuzz](https://github.com/t3knoid/ecube/actions/workflows/schemathesis-fuzz.yml/badge.svg)](https://github.com/t3knoid/ecube/actions/workflows/schemathesis-fuzz.yml)
 
 Evidence Copying &amp; USB Based Export
