@@ -10,7 +10,7 @@
 
 ## Overview
 
-ECUBE runs automated security scans as a set of GitHub Actions workflows on every push and pull request to `main`. These workflows can also be triggered manually via `workflow_dispatch`. Results are available as downloadable artifacts in the Actions tab and the overall status is shown by badges in the repository README.
+ECUBE provides a set of security and API testing workflows as GitHub Actions. All workflows are **manually triggered** via `workflow_dispatch` from the Actions tab. Results are available as downloadable artifacts in the Actions tab and the overall status is shown by badges in the repository README.
 
 ---
 
@@ -61,8 +61,6 @@ ECUBE runs automated security scans as a set of GitHub Actions workflows on ever
 
 | Trigger | When |
 |---------|------|
-| `push` | Any push to `main` |
-| `pull_request` | Any PR targeting `main` |
 | `workflow_dispatch` | Manual trigger from the Actions tab |
 
 ---
