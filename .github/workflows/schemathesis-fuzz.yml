@@ -82,15 +82,21 @@ jobs:
       - name: Run Schemathesis
         timeout-minutes: 10
         run: |
-          set +e
           st run http://localhost:8000/openapi.json \
             --header "Authorization: Bearer ${{ steps.auth.outputs.token }}" \
             --checks all \
             --max-examples 50 \
             --request-timeout 10 \
             --phases coverage,fuzzing \
-            2>&1 | tee schemathesis-output.txt \
-            || true
+            2>&1 | tee schemathesis-output.txt
+          ST_EXIT=${PIPESTATUS[0]}
+          echo "st_exit=$ST_EXIT" >> "$GITHUB_ENV"
+          # Exit 0 = clean, exit 1 = test findings (warn only).
+          # Any other code = invocation/runtime error → fail immediately.
+          if [ "$ST_EXIT" -ne 0 ] && [ "$ST_EXIT" -ne 1 ]; then
+            echo "::error::Schemathesis exited with code $ST_EXIT (invocation or runtime error)"
+            exit 1
+          fi
 
       - name: Upload Schemathesis report
         if: always()
