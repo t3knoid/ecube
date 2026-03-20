@@ -86,3 +86,21 @@ python scripts/sync_qa_test_cases.py --sync
 - [Design Documents](docs/design)
 - [Linux Host Deployment & USB Passthrough](docs/design/12-linux-host-deployment-and-usb-passthrough.md)
 - [Build & Deployment (Design)](docs/design/13-build-and-deployment.md)
+
+## License
+
+ECUBE is licensed under the **Creative Commons Attribution-NonCommercial 4.0 International** license (CC BY-NC 4.0).
+
+In plain terms this means you are free to:
+
+- **Share** — copy and redistribute the material in any medium or format.
+- **Adapt** — remix, transform, and build upon the material.
+
+Under the following conditions:
+
+- **Attribution** — You must give appropriate credit to the original author (Frank Refol), provide a link to the license, and indicate if changes were made.
+- **NonCommercial** — You may not use the material for commercial purposes without separate written permission from the copyright holder.
+
+No additional restrictions — you may not apply legal terms or technological measures that legally restrict others from doing anything the license permits.
+
+See [LICENSE](LICENSE) for the full license text, [COPYRIGHT](COPYRIGHT) for the copyright notice, and [NOTICE](NOTICE) for third-party attributions. For commercial licensing inquiries, contact the copyright holder.

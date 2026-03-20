@@ -1,0 +1,51 @@
+ECUBE — Evidence Copying & USB Based Export
+Copyright (c) 2026 Frank Refol. All rights reserved.
+
+Licensed under the Creative Commons Attribution-NonCommercial 4.0
+International License (CC BY-NC 4.0).
+
+────────────────────────────────────────────────────────────────────
+
+Third-Party Software
+
+ECUBE includes or depends on the following open-source packages.
+Each package is distributed under its own license, listed below.
+
+Package                License
+───────────────────    ──────────────────
+FastAPI                MIT
+Uvicorn                BSD-3-Clause
+SQLAlchemy             MIT
+Alembic                MIT
+Pydantic               MIT
+pydantic-settings      MIT
+psycopg2               LGPL-3.0
+python-multipart       Apache-2.0
+PyJWT                  MIT
+python-pam             MIT
+six                    MIT
+itsdangerous           BSD-3-Clause
+
+Development / Test Dependencies
+
+Package                License
+───────────────────    ──────────────────
+pytest                 MIT
+pytest-asyncio         Apache-2.0
+pytest-mock            MIT
+httpx                  BSD-3-Clause
+openpyxl               MIT
+redis-py               MIT
+
+Optional Dependencies
+
+Package                License
+───────────────────    ──────────────────
+Redis (redis-py)       MIT
+
+────────────────────────────────────────────────────────────────────
+
+The full text of each third-party license can be found in the
+respective package's source distribution or repository. No
+third-party code is bundled directly in this repository; all
+dependencies are installed via pip at build time.
