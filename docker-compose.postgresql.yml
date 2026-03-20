@@ -3,18 +3,18 @@ version: "3.9"
 services:
   postgres-integration:
     image: postgres:16
-    container_name: ecube-postgres-integration
+    container_name: ecube-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ecube_integration
-      POSTGRES_USER: ecube_test
-      POSTGRES_PASSWORD: ecube_test
+      POSTGRES_DB: ecube
+      POSTGRES_USER: ecube
+      POSTGRES_PASSWORD: ecube
     ports:
-      - "5433:5432"
+      - "5432:5432"
     volumes:
       - ecube_postgres_integration_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ecube_test -d ecube_integration"]
+      test: ["CMD-SHELL", "pg_isready -U ecube -d ecube"]
       interval: 5s
       timeout: 5s
       retries: 10
