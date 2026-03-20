@@ -14,7 +14,7 @@ from app.schemas.jobs import FileCompareItem, FileCompareRequest, FileCompareRes
 def _compute_hashes(file_path: Path) -> tuple[Optional[str], Optional[str]]:
     """Return (md5_hex, sha256_hex) for *file_path*, or (None, None) on error."""
     try:
-        md5 = hashlib.md5()
+        md5 = hashlib.md5(usedforsecurity=False)
         sha256 = hashlib.sha256()
         with open(file_path, "rb") as fh:
             while chunk := fh.read(1024 * 1024):
