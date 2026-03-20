@@ -3,7 +3,6 @@
 **Audience:** Developers, DevOps, QA  
 **Workflows:**
 - `.github/workflows/security-scan.yml` — Bandit static analysis + pip-audit dependency scan
-- `.github/workflows/newman-api-tests.yml` — Newman (Postman collection runner)
 - `.github/workflows/schemathesis-fuzz.yml` — Schemathesis (OpenAPI fuzz testing)
 
 ---
@@ -20,7 +19,6 @@ ECUBE provides a set of security and API testing workflows as GitHub Actions. Al
 |------|------|-------------------|
 | **Bandit** | Static analysis (SAST) | Hardcoded secrets, insecure functions (`eval`, `exec`, `shell=True`), SQL injection patterns, weak crypto, overly permissive file permissions |
 | **pip-audit** | Dependency scan (SCA) | Known CVEs in installed Python packages (via OSV/PyPI advisory database) |
-| **Newman** | API integration tests | Status-code assertions, request failures, server errors (5xx) across Postman collection endpoints |
 | **Schemathesis** | OpenAPI fuzz testing | Schema violations, unexpected 5xx responses, crash-inducing inputs, spec-conformance issues |
 
 ---
@@ -141,36 +139,7 @@ If Bandit fails, the PR cannot merge until the finding is resolved or explicitly
 
 ## API Testing Workflows
 
-In addition to static analysis and dependency scanning, ECUBE runs three API testing workflows as GitHub Actions. Each starts a real API server backed by PostgreSQL and exercises endpoints in different ways.
-
-### Newman — Postman Collection Runner
-
-**Workflow:** `.github/workflows/newman-api-tests.yml`
-
-Runs the existing Postman collection (`postman/ecube-postman-collection.json`) against a live API server using [Newman](https://github.com/postmanlabs/newman).
-
-| Setting | Value |
-|---------|-------|
-| Collection | `postman/ecube-postman-collection.json` |
-| Auth | Admin JWT generated at CI time |
-| OS group provisioning | `ecube-admins`, `ecube-managers`, `ecube-processors`, `ecube-auditors` created via `groupadd` before server start |
-| Reports | JSON (`newman-report.json`) + HTML (`newman-report.html`) |
-| Failure threshold | Any failed assertion fails the job |
-| Artifact retention | 30 days |
-
-> **OS admin endpoints:** The ECUBE OS groups (`ecube-admins`, `ecube-managers`, `ecube-processors`, `ecube-auditors`) must exist on the host for the Admin — OS Users / OS Groups requests to succeed. In CI, the groups are pre-created via `groupadd`. For local runs, either run `/setup/initialize` or create them manually (`sudo groupadd ecube-admins` etc.). If groups are missing, those requests will return **422 Unprocessable Entity** and the collection-level "no server errors" assertion will still pass (it only fails on 5xx).
-
-#### Running locally
-
-```bash
-npm install -g newman newman-reporter-htmlextra
-uvicorn app.main:app &
-newman run postman/ecube-postman-collection.json \
-  --env-var "base_url=http://localhost:8000" \
-  --env-var "token=<your-jwt>"
-```
-
----
+In addition to static analysis and dependency scanning, ECUBE provides an API testing workflow as a GitHub Action. It starts a real API server backed by PostgreSQL and exercises endpoints.
 
 ### Schemathesis — OpenAPI Fuzz Testing
 
@@ -208,7 +177,7 @@ st run http://localhost:8000/openapi.json \
 
 ## CI Environment
 
-All three API testing workflows share the same CI environment:
+All API testing workflows share the same CI environment:
 
 | Component | Details |
 |-----------|---------|
@@ -229,7 +198,6 @@ The README displays live badges for all workflows:
 | Badge | Workflow |
 |-------|----------|
 | Security Scan | Bandit + pip-audit |
-| Newman API Tests | Postman collection runner |
 | Schemathesis API Fuzz | OpenAPI property-based fuzzing |
 
 ### Downloading Reports
