@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "ecube-api-collection",
 		"name": "ECUBE API",
-		"description": "Evidence Copying & USB Based Export — Full API Collection.\n\nSet the `base_url` variable (default: http://localhost:8000) and authenticate via the Auth > Login request to populate the `token` variable automatically.\n\n**Prerequisites:** The ECUBE OS groups (`ecube-admins`, `ecube-managers`, `ecube-processors`, `ecube-auditors`) must exist on the host before running the Admin — OS Users / OS Groups folders. Run `/setup/initialize` first, or create them manually (`sudo groupadd ecube-admins` etc.). If groups are missing, those requests return 422 (Unprocessable Entity) and are automatically skipped by the collection-level test.",
+		"description": "Evidence Copying & USB Based Export — Full API Collection.\n\nSet the `base_url` variable (default: http://localhost:8000) and authenticate via the Auth > Login request to populate the `token` variable automatically.\n\n**Prerequisites:** The ECUBE OS groups (`ecube-admins`, `ecube-managers`, `ecube-processors`, `ecube-auditors`) must exist on the host before running the Admin — OS Users / OS Groups folders. Run `/setup/initialize` first, or create them manually (`sudo groupadd ecube-admins` etc.). If groups are missing, those requests will return 422 (Unprocessable Entity).",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"event": [
@@ -11,17 +11,6 @@
 			"script": {
 				"exec": [
 					"(function () {",
-					"    var url = pm.request.url.toString();",
-					"    var isOsAdmin = url.indexOf('/admin/os-users') !== -1 || url.indexOf('/admin/os-groups') !== -1;",
-					"",
-					"    if (isOsAdmin && pm.response.code === 422) {",
-					"        pm.test('OS admin endpoint skipped (ECUBE groups not provisioned)', function () {",
-					"            // 422 is expected when ECUBE groups do not exist on the host.",
-					"            // Run /setup/initialize or create groups manually to enable these tests.",
-					"        });",
-					"        return;",
-					"    }",
-					"",
 					"    pm.test('No server errors (status < 500)', function () {",
 					"        pm.expect(pm.response.code).to.be.below(500);",
 					"    });",
