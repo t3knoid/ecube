@@ -5,7 +5,6 @@
 - `.github/workflows/security-scan.yml` — Bandit static analysis + pip-audit dependency scan
 - `.github/workflows/newman-api-tests.yml` — Newman (Postman collection runner)
 - `.github/workflows/schemathesis-fuzz.yml` — Schemathesis (OpenAPI fuzz testing)
-- `.github/workflows/zap-api-scan.yml` — OWASP ZAP (dynamic application security testing)
 
 ---
 
@@ -23,7 +22,6 @@ ECUBE runs automated security scans as a set of GitHub Actions workflows on ever
 | **pip-audit** | Dependency scan (SCA) | Known CVEs in installed Python packages (via OSV/PyPI advisory database) |
 | **Newman** | API integration tests | Status-code assertions, request failures, server errors (5xx) across Postman collection endpoints |
 | **Schemathesis** | OpenAPI fuzz testing | Schema violations, unexpected 5xx responses, crash-inducing inputs, spec-conformance issues |
-| **OWASP ZAP** | Dynamic analysis (DAST) | Insecure headers, information disclosure, cookie misconfiguration, CORS issues, server version leaks (passive-only in CI; active scanning for scheduled/manual runs) |
 
 ---
 
@@ -210,45 +208,6 @@ st run http://localhost:8000/openapi.json \
 
 ---
 
-### OWASP ZAP — Dynamic Application Security Testing
-
-**Workflow:** `.github/workflows/zap-api-scan.yml`
-
-[OWASP ZAP](https://www.zaproxy.org/) performs a DAST scan against the running API, probing for:
-
-- Injection vulnerabilities (SQL, command, header)
-- Cross-site scripting (XSS)
-- Security header issues
-- Authentication/session weaknesses
-- Information disclosure
-
-| Setting | Value |
-|---------|-------|
-| Target | `http://localhost:8000/openapi.json` (live URL so ZAP derives the base host) |
-| Scan type | **Passive-only** in CI (active scanner disabled) |
-| Connection timeout | 5 seconds per request |
-| Reports | HTML, JSON, Markdown |
-| Failure threshold | ZAP default (warns on alerts) |
-| Artifact retention | 30 days |
-
-> **Why passive-only?** ZAP's active scanner sends hundreds of attack payloads per endpoint. With 62+ authenticated endpoints, active scanning takes 30+ minutes and routinely times out in CI. Passive scanning still catches real issues — missing security headers (X-Content-Type-Options, X-Frame-Options, CSP, HSTS), cookie misconfigurations, information disclosure, and CORS problems — without sending attack payloads. Active scanning is appropriate for scheduled nightly security audits or manual `workflow_dispatch` runs against a dedicated environment.
-
-#### Running locally
-
-```bash
-# Pull the ZAP Docker image
-docker pull ghcr.io/zaproxy/zaproxy:stable
-
-# Start your API server
-uvicorn app.main:app &
-
-# Run ZAP API scan (pass the live URL so ZAP knows the target host)
-docker run --network host ghcr.io/zaproxy/zaproxy:stable \
-  zap-api-scan.py -t http://localhost:8000/openapi.json -f openapi
-```
-
----
-
 ## CI Environment
 
 All three API testing workflows share the same CI environment:
@@ -274,7 +233,6 @@ The README displays live badges for all workflows:
 | Security Scan | Bandit + pip-audit |
 | Newman API Tests | Postman collection runner |
 | Schemathesis API Fuzz | OpenAPI property-based fuzzing |
-| OWASP ZAP API Scan | Dynamic security testing |
 
 ### Downloading Reports
 
