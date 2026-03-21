@@ -1,7 +1,8 @@
 """Unicode string sanitization for database-safe input handling.
 
-Strips null bytes and unpaired surrogates that pass Pydantic validation
-but cause PostgreSQL to reject the value at insert time (issue #124).
+Strips null bytes and surrogate code points (U+D800\u2013U+DFFF) that pass
+Pydantic validation but cause PostgreSQL to reject the value at insert
+time (issue #124).
 """
 
 import re
@@ -9,7 +10,8 @@ from typing import Annotated
 
 from pydantic import BeforeValidator
 
-# Matches lone surrogates (U+D800–U+DFFF) which are invalid in UTF-8.
+# Matches any surrogate code point (U+D800–U+DFFF), all of which are
+# invalid in UTF-8 and rejected by PostgreSQL.
 _SURROGATE_RE = re.compile(r"[\ud800-\udfff]")
 
 # Substrings in DB exception messages that indicate encoding/character issues.
@@ -26,10 +28,13 @@ _ENCODING_ERROR_MARKERS = (
 
 
 def sanitize_string(value: object) -> object:
-    """Strip null bytes and unpaired surrogates from a string value.
+    """Strip null bytes and surrogate code points from a string value.
 
-    Non-string values are returned unchanged so this can be used safely
-    as a Pydantic ``BeforeValidator`` on ``Optional`` fields.
+    Removes all code points in U+D800\u2013U+DFFF (not just unpaired
+    surrogates) because they are invalid in UTF-8 and cannot be stored
+    in PostgreSQL.  Non-string values are returned unchanged so this can
+    be used safely as a Pydantic ``BeforeValidator`` on ``Optional``
+    fields.
     """
     if not isinstance(value, str):
         return value
