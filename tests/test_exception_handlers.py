@@ -159,6 +159,55 @@ def test_500_unhandled_exception_sanitized(exception_routes):
 
 
 # ---------------------------------------------------------------------------
+# 422 encoding-error tests (global handler)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture()
+def encoding_error_routes():
+    """Register a route that raises an encoding-like DB exception."""
+    from fastapi import APIRouter
+
+    router = APIRouter(prefix="/test-exceptions")
+
+    @router.get("/422-encoding-null")
+    def raise_encoding_null():
+        raise Exception("null character not allowed")
+
+    @router.get("/422-encoding-invalid-byte")
+    def raise_encoding_invalid_byte():
+        raise Exception("invalid byte sequence for encoding UTF8: 0xed")
+
+    app.include_router(router)
+    yield
+    app.router.routes = [
+        r for r in app.router.routes
+        if not getattr(r, "path", "").startswith("/test-exceptions")
+    ]
+
+
+def test_422_encoding_null_character(encoding_error_routes):
+    """Global handler returns 422 ENCODING_ERROR for null character exceptions."""
+    from fastapi.testclient import TestClient as _TestClient
+
+    with _TestClient(app, raise_server_exceptions=False) as safe_client:
+        response = safe_client.get("/test-exceptions/422-encoding-null")
+    assert response.status_code == 422
+    data = response.json()
+    _assert_error_schema(data, expected_code="ENCODING_ERROR")
+
+
+def test_422_encoding_invalid_byte_sequence(encoding_error_routes):
+    """Global handler returns 422 ENCODING_ERROR for invalid byte sequences."""
+    from fastapi.testclient import TestClient as _TestClient
+
+    with _TestClient(app, raise_server_exceptions=False) as safe_client:
+        response = safe_client.get("/test-exceptions/422-encoding-invalid-byte")
+    assert response.status_code == 422
+    data = response.json()
+    _assert_error_schema(data, expected_code="ENCODING_ERROR")
+
+
+# ---------------------------------------------------------------------------
 # Existing endpoint compatibility – errors still return consistent schema
 # ---------------------------------------------------------------------------
 
