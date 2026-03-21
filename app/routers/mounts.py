@@ -6,7 +6,7 @@ from typing import List
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
 from app.schemas.network import MountCreate, NetworkMountSchema
-from app.schemas.errors import R_401, R_403, R_404, R_500
+from app.schemas.errors import R_401, R_403, R_404, R_422, R_500
 from app.services import mount_service
 from app.utils.client_ip import get_client_ip
 
@@ -18,7 +18,7 @@ _ALL_ROLES = require_roles("admin", "manager", "processor", "auditor")
 _ADMIN_MANAGER = require_roles("admin", "manager")
 
 
-@router.post("", response_model=NetworkMountSchema, responses={**R_401, **R_403})
+@router.post("", response_model=NetworkMountSchema, responses={**R_401, **R_403, **R_422, **R_500})
 def add_mount(
     body: MountCreate,
     request: Request,
@@ -36,7 +36,7 @@ def add_mount(
     return mount_service.add_mount(body, db, actor=current_user.username, client_ip=get_client_ip(request))
 
 
-@router.delete("/{mount_id}", status_code=204, responses={**R_401, **R_403, **R_404})
+@router.delete("/{mount_id}", status_code=204, responses={**R_401, **R_403, **R_404, **R_500})
 def remove_mount(
     mount_id: int,
     request: Request,
@@ -66,7 +66,7 @@ def list_mounts(
     return mount_service.list_mounts(db)
 
 
-@router.post("/validate", response_model=List[NetworkMountSchema], responses={**R_401, **R_403})
+@router.post("/validate", response_model=List[NetworkMountSchema], responses={**R_401, **R_403, **R_500})
 def validate_all_mounts(
     request: Request,
     db: Session = Depends(get_db),
