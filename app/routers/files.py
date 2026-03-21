@@ -30,7 +30,7 @@ def get_file_hashes(
     return file_service.get_file_hashes(file_id, db, actor=current_user.username, client_ip=get_client_ip(request))
 
 
-@router.post("/compare", response_model=FileCompareResponse, responses={**R_401, **R_403})
+@router.post("/compare", response_model=FileCompareResponse, responses={**R_401, **R_403, **R_404})
 def compare_files(
     body: FileCompareRequest,
     request: Request,
