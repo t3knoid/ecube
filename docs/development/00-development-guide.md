@@ -327,7 +327,7 @@ When adding new OS-level functionality:
 - **Enum columns:** Always `native_enum=False`.
 - **Introspection endpoints:** Read-only; redact sensitive fields.
 - **HTTP status codes:** `401` for missing/invalid/expired tokens; `403` for role or project isolation violations.
-- **Error responses:** All error responses use the `ErrorResponse` schema (`app/schemas/errors.py`) with `code`, `message`, and `trace_id` fields. Declare error responses on every route decorator using the reusable dicts (`R_401`, `R_403`, `R_404`, `R_409`, `R_422`, `R_500`, `R_503`, `R_504`) from `app/schemas/errors.py`. Combine them via `responses={**R_401, **R_403}`.
+- **Error responses:** All error responses use the `ErrorResponse` schema (`app/schemas/errors.py`) with `code`, `message`, and `trace_id` fields. Declare error responses on every route decorator using the reusable dicts (`R_400`, `R_401`, `R_403`, `R_404`, `R_409`, `R_422`, `R_500`, `R_503`, `R_504`) from `app/schemas/errors.py`. Combine them via `responses={**R_401, **R_403}`.
 - **Input sanitization:** Path-like fields (e.g. `remote_path`, `source_path`) use `StrictSafeStr` which rejects malformed Unicode with `422`; non-path string fields use `SafeStr` which silently strips null bytes and surrogates. Both are defined in `app/utils/sanitize.py`.
 
 ---

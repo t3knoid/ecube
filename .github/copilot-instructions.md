@@ -127,7 +127,7 @@ All design details live under `docs/design/`:
 - Every security-relevant event (auth success/failure, role denials, drive init, file ops) must emit a structured JSON record to `audit_logs`.
 - Introspection endpoints (`/introspection/*`) are **read-only** and must redact sensitive path or credential-like fields.
 - API returns `401` for missing/invalid/expired tokens and `403` for role or project isolation violations.
-- All error responses use the `ErrorResponse` schema (`app/schemas/errors.py`). Declare error responses on every route decorator using reusable response dicts (`R_401`, `R_403`, `R_404`, `R_409`, `R_422`, `R_500`, `R_503`, `R_504`) combined via `responses={**R_401, **R_403}`.
+- All error responses use the `ErrorResponse` schema (`app/schemas/errors.py`). Declare error responses on every route decorator using reusable response dicts (`R_400`, `R_401`, `R_403`, `R_404`, `R_409`, `R_422`, `R_500`, `R_503`, `R_504`) combined via `responses={**R_401, **R_403}`.
 - Path-like fields use `StrictSafeStr` (rejects malformed Unicode with 422); non-path string fields use `SafeStr` (silently strips null bytes/surrogates). Both are defined in `app/utils/sanitize.py`.
 - Background copy workers use bounded thread pools; progress updates (`copied_bytes`, file status) must be atomic.
 
