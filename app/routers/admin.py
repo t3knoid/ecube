@@ -53,7 +53,7 @@ from app.schemas.admin import (
 from app.schemas.hardware import HubUpdateRequest, PortEnableRequest, PortUpdateRequest, UsbHubSchema, UsbPortSchema
 from app.infrastructure import get_os_user_provider
 from app.infrastructure.os_user_protocol import OSUserError, OsUserProvider
-from app.schemas.errors import R_401, R_403, R_404, R_409, R_422, R_500, R_504
+from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500, R_504
 from app.services.os_user_service import validate_group_name, validate_username
 from app.utils.client_ip import get_client_ip
 
@@ -181,7 +181,7 @@ def list_log_files(
     )
 
 
-@router.get("/logs/{filename}", responses={**R_401, **R_404})
+@router.get("/logs/{filename}", responses={**R_400, **R_401, **R_404})
 def download_log_file(
     filename: str,
     request: Request,
