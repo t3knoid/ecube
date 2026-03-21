@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Literal, Optional
 from app.models.hardware import DriveState
+from app.utils.sanitize import SafeStr
 
 
 class UsbHubSchema(BaseModel):
@@ -52,7 +53,7 @@ class UsbDriveSchema(BaseModel):
 
 
 class DriveInitialize(BaseModel):
-    project_id: str = Field(..., description="Project ID to bind the drive to for isolation enforcement")
+    project_id: SafeStr = Field(..., description="Project ID to bind the drive to for isolation enforcement")
 
 
 class DriveFormatRequest(BaseModel):
@@ -64,8 +65,8 @@ class PortEnableRequest(BaseModel):
 
 
 class HubUpdateRequest(BaseModel):
-    location_hint: str = Field(..., description="Physical location label for the hub")
+    location_hint: SafeStr = Field(..., description="Physical location label for the hub")
 
 
 class PortUpdateRequest(BaseModel):
-    friendly_label: str = Field(..., description="Human-readable label for the port")
+    friendly_label: SafeStr = Field(..., description="Human-readable label for the port")

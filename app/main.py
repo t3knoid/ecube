@@ -13,6 +13,7 @@ from app.auth import get_current_user
 from app import API_VERSION, __version__
 from app.config import settings
 from app.exceptions import AuthenticationError, AuthorizationError, ConflictError, ECUBEException
+from app.utils.sanitize import is_encoding_error
 from app.logging_config import configure_logging
 from app.routers import admin, audit, auth, database_setup, drives, files, introspection, jobs, mounts, setup, users
 from app.schemas.errors import ErrorResponse
@@ -341,6 +342,9 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     trace_id = str(uuid.uuid4())
+    if is_encoding_error(exc):
+        logger.warning("422 ENCODING_ERROR trace_id=%s path=%s", trace_id, request.url.path)
+        return _error_response(422, "ENCODING_ERROR", "Request contains invalid characters.", trace_id)
     logger.error(
         "Unhandled exception trace_id=%s path=%s\n%s",
         trace_id,
