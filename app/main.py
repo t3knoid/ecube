@@ -343,7 +343,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     trace_id = str(uuid.uuid4())
     if is_encoding_error(exc):
-        logger.warning("422 ENCODING_ERROR trace_id=%s path=%s", trace_id, request.url.path)
+        logger.warning("422 ENCODING_ERROR trace_id=%s path=%s", trace_id, request.url.path, exc_info=exc)
         return _error_response(422, "ENCODING_ERROR", "Request contains invalid characters.", trace_id)
     logger.error(
         "Unhandled exception trace_id=%s path=%s\n%s",
