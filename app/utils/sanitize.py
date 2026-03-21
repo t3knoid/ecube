@@ -18,7 +18,6 @@ _SURROGATE_RE = re.compile(r"[\ud800-\udfff]")
 _ENCODING_ERROR_MARKERS = (
     "invalid byte sequence",
     "character with byte sequence",
-    "unterminated string",
     "unsupported unicode",
     "invalid unicode",
     "null character",
