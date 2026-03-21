@@ -84,7 +84,7 @@ Authenticate with OS credentials and receive a signed JWT.
 
 ### 1.3 Authentication Mechanism
 
-- All endpoints except `/health` and `/auth/token` require a bearer token.
+- All endpoints except `/health`, `/auth/token`, `/setup/status`, `/setup/initialize`, and `/introspection/version` require a bearer token.
 - Token includes:
   - `sub` — user identifier (username)
   - `username` — display name
@@ -178,7 +178,7 @@ The Pydantic schema for this payload is `ErrorResponse` in `app/schemas/errors.p
 
 ### Common Error Codes
 
-All authenticated endpoints (except `/health`, `/auth/token`, and `/setup/status`) return these error codes when applicable:
+All authenticated endpoints (except `/health`, `/auth/token`, `/setup/status`, `/setup/initialize`, and `/introspection/version`) return these error codes when applicable:
 
 - `401 Unauthorized` — Missing, invalid, or expired authentication token
 - `403 Forbidden` — Authenticated user lacks the required role
