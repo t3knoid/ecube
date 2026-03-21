@@ -253,7 +253,7 @@ _os_router = APIRouter(
 # ---------------------------------------------------------------------------
 
 
-@_os_router.post("/os-users", response_model=OSUserResponse, status_code=201, responses={**R_401, **R_403, **R_409, **R_422, **R_500, **R_504})
+@_os_router.post("/os-users", response_model=OSUserResponse, status_code=201, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500, **R_504})
 def create_os_user(
     body: CreateOSUserRequest,
     request: Request,
@@ -329,7 +329,7 @@ def create_os_user(
     )
 
 
-@_os_router.get("/os-users", response_model=OSUserListResponse, responses={**R_401, **R_403})
+@_os_router.get("/os-users", response_model=OSUserListResponse, responses={**R_401, **R_403, **R_404})
 def list_os_users(
     _current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSUserListResponse:
@@ -486,7 +486,7 @@ def add_os_user_groups(
 # ---------------------------------------------------------------------------
 
 
-@_os_router.post("/os-groups", response_model=OSGroupResponse, status_code=201, responses={**R_401, **R_403, **R_409, **R_422, **R_500, **R_504})
+@_os_router.post("/os-groups", response_model=OSGroupResponse, status_code=201, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500, **R_504})
 def create_os_group(
     body: CreateOSGroupRequest,
     request: Request,
@@ -513,7 +513,7 @@ def create_os_group(
     )
 
 
-@_os_router.get("/os-groups", response_model=OSGroupListResponse, responses={**R_401, **R_403})
+@_os_router.get("/os-groups", response_model=OSGroupListResponse, responses={**R_401, **R_403, **R_404})
 def list_os_groups(
     _current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSGroupListResponse:
