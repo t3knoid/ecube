@@ -5,6 +5,7 @@ sequences are stripped by the SafeStr Pydantic type and the sanitize_string
 helper so they never reach the database layer.
 """
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -176,17 +177,22 @@ class TestMountsUnicodeSanitization:
 class TestJobsUnicodeSanitization:
 
     def test_post_job_surrogates_stripped(self, admin_client, db):
-        """Fuzzed surrogate payload in job fields does not produce 500."""
+        """Unpaired surrogates in job fields are sanitized before persistence."""
+        payload = json.dumps({
+            "project_id": "PROJ\ud800001",
+            "evidence_number": "EV\udc00123",
+            "source_path": "/mnt/source/\ud83ddata",
+        }).encode("utf-8", "surrogatepass")
         response = admin_client.post(
             "/jobs",
-            json={
-                "project_id": "PROJ\x00001",
-                "evidence_number": "EV-123",
-                "source_path": "/mnt/source/data",
-            },
+            content=payload,
+            headers={"Content-Type": "application/json"},
         )
-        # Should not be 500 — either 200 (success) or 4xx (business rule).
-        assert response.status_code != 500
+        assert response.status_code == 200
+        data = response.json()
+        assert data["project_id"] == "PROJ001"
+        assert data["evidence_number"] == "EV123"
+        assert data["source_path"] == "/mnt/source/data"
 
     def test_post_job_null_bytes_sanitized(self, admin_client, db):
         """Null bytes are stripped from job string fields."""
@@ -198,7 +204,9 @@ class TestJobsUnicodeSanitization:
                 "source_path": "/mnt/source",
             },
         )
-        assert response.status_code != 500
+        assert response.status_code == 200
+        data = response.json()
+        assert data["evidence_number"] == "EV123"
 
 
 # ---------------------------------------------------------------------------
