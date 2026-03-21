@@ -74,6 +74,25 @@ class TestJobCreationDBFailures:
         assert "database" in body.get("detail", body.get("message", "")).lower() or \
                "error" in body.get("detail", body.get("message", "")).lower()
 
+    def test_create_job_encoding_error_returns_422(self, client, db):
+        """Encoding-like DB exception during job creation returns 422 ENCODING_ERROR."""
+        with patch.object(
+            db, "commit",
+            side_effect=Exception("invalid byte sequence for encoding UTF8: 0xed"),
+        ):
+            response = client.post(
+                "/jobs",
+                json={
+                    "project_id": "PROJ-001",
+                    "evidence_number": "EV-001",
+                    "source_path": "/data/evidence",
+                },
+            )
+        assert response.status_code == 422
+        body = response.json()
+        assert body["code"] == "ENCODING_ERROR"
+        assert "invalid characters" in body["message"].lower()
+
     def test_create_job_drive_assignment_db_failure(self, client, db):
         """If the single-transaction commit fails, return 500 and leave no orphaned job."""
         drive = _make_drive(db)
@@ -234,6 +253,25 @@ class TestMountDBFailures:
                 },
             )
         assert response.status_code == 500
+
+    def test_add_mount_encoding_error_returns_422(self, manager_client, db):
+        """Encoding-like DB exception during mount creation returns 422 ENCODING_ERROR."""
+        with patch(
+            "app.repositories.mount_repository.MountRepository.add",
+            side_effect=Exception("null character not allowed"),
+        ):
+            response = manager_client.post(
+                "/mounts",
+                json={
+                    "type": "NFS",
+                    "remote_path": "server:/share",
+                    "local_mount_point": "/mnt/test",
+                },
+            )
+        assert response.status_code == 422
+        body = response.json()
+        assert body["code"] == "ENCODING_ERROR"
+        assert "invalid characters" in body["message"].lower()
 
     def test_add_mount_audit_failure_does_not_abort(self, manager_client, db):
         """Audit failure on mount add must not abort the operation."""
