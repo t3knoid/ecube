@@ -1,7 +1,7 @@
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, require_roles
@@ -39,6 +39,11 @@ def list_drives(
     """
     if project_id is not None:
         project_id = sanitize_string(project_id)
+        if not project_id or not project_id.strip():
+            raise HTTPException(
+                status_code=422,
+                detail="project_id is empty after removing invalid characters",
+            )
     return drive_service.get_all_drives(db, project_id=project_id)
 
 
