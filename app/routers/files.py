@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
 from app.schemas.jobs import FileCompareRequest, FileCompareResponse, FileHashesResponse
+from app.schemas.errors import R_401, R_403
 from app.services import file_service
 from app.utils.client_ip import get_client_ip
 
@@ -15,7 +16,7 @@ router = APIRouter(prefix="/files", tags=["files"])
 _ADMIN_AUDITOR = require_roles("admin", "auditor")
 
 
-@router.get("/{file_id}/hashes", response_model=FileHashesResponse)
+@router.get("/{file_id}/hashes", response_model=FileHashesResponse, responses={**R_401, **R_403})
 def get_file_hashes(
     file_id: int,
     request: Request,
@@ -29,7 +30,7 @@ def get_file_hashes(
     return file_service.get_file_hashes(file_id, db, actor=current_user.username, client_ip=get_client_ip(request))
 
 
-@router.post("/compare", response_model=FileCompareResponse)
+@router.post("/compare", response_model=FileCompareResponse, responses={**R_401, **R_403})
 def compare_files(
     body: FileCompareRequest,
     request: Request,

@@ -6,6 +6,7 @@ from typing import List
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
 from app.schemas.network import MountCreate, NetworkMountSchema
+from app.schemas.errors import R_401, R_403, R_404
 from app.services import mount_service
 from app.utils.client_ip import get_client_ip
 
@@ -17,7 +18,7 @@ _ALL_ROLES = require_roles("admin", "manager", "processor", "auditor")
 _ADMIN_MANAGER = require_roles("admin", "manager")
 
 
-@router.post("", response_model=NetworkMountSchema)
+@router.post("", response_model=NetworkMountSchema, responses={**R_401, **R_403})
 def add_mount(
     body: MountCreate,
     request: Request,
@@ -35,7 +36,7 @@ def add_mount(
     return mount_service.add_mount(body, db, actor=current_user.username, client_ip=get_client_ip(request))
 
 
-@router.delete("/{mount_id}", status_code=204)
+@router.delete("/{mount_id}", status_code=204, responses={**R_401, **R_403, **R_404})
 def remove_mount(
     mount_id: int,
     request: Request,
@@ -51,7 +52,7 @@ def remove_mount(
     mount_service.remove_mount(mount_id, db, actor=current_user.username, client_ip=get_client_ip(request))
 
 
-@router.get("", response_model=List[NetworkMountSchema])
+@router.get("", response_model=List[NetworkMountSchema], responses={**R_401, **R_403})
 def list_mounts(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_ALL_ROLES),
@@ -65,7 +66,7 @@ def list_mounts(
     return mount_service.list_mounts(db)
 
 
-@router.post("/validate", response_model=List[NetworkMountSchema])
+@router.post("/validate", response_model=List[NetworkMountSchema], responses={**R_401, **R_403})
 def validate_all_mounts(
     request: Request,
     db: Session = Depends(get_db),
@@ -81,7 +82,7 @@ def validate_all_mounts(
     return mount_service.validate_all_mounts(db, actor=current_user.username, client_ip=get_client_ip(request))
 
 
-@router.post("/{mount_id}/validate", response_model=NetworkMountSchema)
+@router.post("/{mount_id}/validate", response_model=NetworkMountSchema, responses={**R_401, **R_403, **R_404})
 def validate_mount(
     mount_id: int,
     request: Request,

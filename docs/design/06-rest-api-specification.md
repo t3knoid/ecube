@@ -154,7 +154,37 @@ Every authenticated request resolves to:
 
 ## 3. Updated REST API Endpoints with Security Requirements
 
-Each endpoint now includes **required roles**.
+Each endpoint now includes **required roles** and **error responses**.
+
+### Standardized Error Response Format
+
+All error responses use a uniform JSON payload:
+
+```json
+{
+    "code": "CONFLICT",
+    "message": "Drive is not in IN_USE state (current state: AVAILABLE)",
+    "trace_id": "abc123"
+}
+```
+
+| Field      | Type            | Description |
+|------------|-----------------|-------------|
+| `code`     | string          | Machine-readable error code (e.g. `CONFLICT`, `NOT_FOUND`, `UNAUTHORIZED`, `ENCODING_ERROR`) |
+| `message`  | string          | Human-readable description of the error |
+| `trace_id` | string or null  | Correlation ID for log tracing (omitted when not applicable) |
+
+The Pydantic schema for this payload is `ErrorResponse` in `app/schemas/errors.py`.
+
+### Common Error Codes
+
+All authenticated endpoints (except `/health`, `/auth/token`, and `/setup/status`) return these error codes when applicable:
+
+- `401 Unauthorized` — Missing, invalid, or expired authentication token
+- `403 Forbidden` — Authenticated user lacks the required role
+- `422 Unprocessable Entity` — Request body or query parameter validation error (Pydantic / FastAPI)
+
+Additional error codes are documented per endpoint where applicable (e.g. `404`, `409`, `500`).
 
 ---
 
@@ -166,17 +196,33 @@ Add NFS/SMB mount.
 
 **Roles:** `admin`, `manager`
 
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+
 ### `DELETE /mounts/{id}`
 
 Unmount and remove mount.
 
 **Roles:** `admin`, `manager`
 
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+- `404 Not Found` — Mount ID does not exist
+
 ### `GET /mounts`
 
 List all mounts.
 
 **Roles:** `admin`, `manager`, `processor`, `auditor`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
 
 ---
 
@@ -194,6 +240,12 @@ List all drives with state and project assignment.
 
 **Roles:** `admin`, `manager`, `processor`, `auditor`
 
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+- `422 Unprocessable Entity` — Invalid query parameter (e.g. malformed Unicode)
+
 ### `POST /drives/{id}/initialize`
 
 Initialize drive for a project.
@@ -201,6 +253,12 @@ Initialize drive for a project.
 Enforces project isolation.
 
 **Roles:** `admin`, `manager`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+- `422 Unprocessable Entity` — Invalid request body (e.g. malformed Unicode in project_id)
 
 ### `POST /drives/{id}/format`
 
@@ -241,6 +299,13 @@ Performs the following steps:
 - `DRIVE_FORMAT_FAILED`: Format operation failed; includes `drive_id`, `filesystem_path`, `filesystem_type`, `error`.
 
 **Roles:** `admin`, `manager`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+- `409 Conflict` — Drive not in `AVAILABLE` state or currently mounted
+- `500 Internal Server Error` — Format command (`mkfs`) failed
 
 ### `POST /drives/{id}/prepare-eject`
 
@@ -288,6 +353,13 @@ The endpoint captures the drive state and device path at the start, performs pot
 
 **Roles:** `admin`, `manager`
 
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+- `409 Conflict` — Drive not in `IN_USE` state, or state/device path changed during operation
+- `500 Internal Server Error` — Sync or unmount operations failed
+
 ---
 
 ## 3.2a Port Management
@@ -297,6 +369,11 @@ The endpoint captures the drive state and device path at the start, performs pot
 List all USB ports with their current enablement state and hardware metadata.
 
 **Roles:** `admin`, `manager`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
 
 **Response (200 OK):**
 
@@ -401,6 +478,11 @@ List all USB hubs with enriched hardware metadata and admin-assigned labels.
 
 **Roles:** `admin`, `manager`
 
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+
 **Response (200 OK):**
 
 ```json
@@ -454,11 +536,21 @@ Create a new job.
 
 **Roles:** `admin`, `manager`, `processor`
 
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+
 ### `POST /jobs/{id}/start`
 
 Start job with thread count.
 
 **Roles:** `admin`, `manager`, `processor`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
 
 ### `GET /jobs/{id}`
 
@@ -466,17 +558,32 @@ Return job status and progress.
 
 **Roles:** `admin`, `manager`, `processor`, `auditor`
 
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+
 ### `POST /jobs/{id}/verify`
 
 Re-verify checksums.
 
 **Roles:** `admin`, `manager`, `processor`
 
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+
 ### `POST /jobs/{id}/manifest`
 
 Regenerate manifest.
 
 **Roles:** `admin`, `manager`, `processor`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
 
 ---
 
@@ -488,6 +595,11 @@ Return audit logs with filters.
 
 **Roles:** `admin`, `manager`, `auditor`
 
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+
 ---
 
 ## 3.5 File Audit Operations
@@ -498,11 +610,21 @@ Compute MD5/SHA‑256 for a file.
 
 **Roles:** `admin`, `auditor`
 
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+
 ### `POST /files/compare`
 
 Compare two files by hash/size/path.
 
 **Roles:** `admin`, `auditor`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
 
 ---
 
@@ -515,6 +637,11 @@ All user role management endpoints require the `admin` role. These endpoints man
 List all users with their ECUBE role assignments.
 
 **Roles:** `admin`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role (non-admin)
 
 **Response (200 OK):**
 
@@ -532,6 +659,12 @@ List all users with their ECUBE role assignments.
 Get role assignments for a specific user.
 
 **Roles:** `admin`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role (non-admin)
+- `422 Unprocessable Entity` — Invalid username
 
 **Response (200 OK):**
 
@@ -569,7 +702,10 @@ Set roles for a user. Replaces all existing role assignments.
 
 **Error responses:**
 
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role (non-admin)
 - `422 Unprocessable Entity` — Invalid role name or empty list
+- `500 Internal Server Error` — Database error during role update
 
 **Valid roles:** `admin`, `manager`, `processor`, `auditor`
 
@@ -584,6 +720,13 @@ Duplicate roles in the request are deduplicated. Roles are returned sorted alpha
 Remove all role assignments for a user. The user will fall back to OS group-based role resolution on next login.
 
 **Roles:** `admin`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role (non-admin)
+- `422 Unprocessable Entity` — Invalid username
+- `500 Internal Server Error` — Database error during role removal
 
 **Response (200 OK):**
 
@@ -625,8 +768,12 @@ Create an OS user, set password, and add to groups and optionally assign DB role
 
 **Error responses:**
 
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role (non-admin)
 - `409 Conflict` — User already exists
 - `422 Unprocessable Entity` — Invalid username, empty password, reserved username, or no `ecube-*` group provided
+- `500 Internal Server Error` — OS command failed
+- `504 Gateway Timeout` — OS command timed out
 
 **Audit events:** `OS_USER_CREATED`
 
@@ -635,6 +782,11 @@ Create an OS user, set password, and add to groups and optionally assign DB role
 List OS users filtered to ECUBE-relevant groups.
 
 **Roles:** `admin`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role (non-admin)
 
 **Response (200 OK):** `OSUserListResponse` with array of `OSUserResponse`.
 
@@ -646,8 +798,11 @@ Delete an OS user and remove their DB role assignments.
 
 **Error responses:**
 
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role (non-admin)
 - `404 Not Found` — User does not exist
 - `422 Unprocessable Entity` — Invalid or reserved username, or user is not a member of any `ecube-*` group (see [ECUBE-managed user guard](#ecube-managed-user-guard))
+- `504 Gateway Timeout` — OS command timed out
 
 **Audit events:** `OS_USER_DELETED`
 
@@ -661,8 +816,12 @@ Reset an OS user's password via `chpasswd`.
 
 **Error responses:**
 
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role (non-admin)
 - `404 Not Found` — User does not exist
 - `422 Unprocessable Entity` — Invalid/reserved username, empty password, or user is not ECUBE-managed (see [ECUBE-managed user guard](#ecube-managed-user-guard))
+- `500 Internal Server Error` — Password change command failed
+- `504 Gateway Timeout` — OS command timed out
 
 **Audit events:** `OS_PASSWORD_RESET` (password never appears in audit details)
 
@@ -678,7 +837,11 @@ Replace an OS user's `ecube-*` supplementary group memberships. Only group names
 
 **Error responses:**
 
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role (non-admin)
+- `404 Not Found` — User does not exist
 - `422 Unprocessable Entity` — Empty group list, non-`ecube-*` group name, or user is not ECUBE-managed (see [ECUBE-managed user guard](#ecube-managed-user-guard))
+- `504 Gateway Timeout` — OS command timed out
 
 **Audit events:** `OS_USER_GROUPS_MODIFIED`
 
@@ -694,7 +857,11 @@ Add supplementary groups to an OS user without removing existing memberships.
 
 **Error responses:**
 
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role (non-admin)
+- `404 Not Found` — User does not exist
 - `422 Unprocessable Entity` — User is not ECUBE-managed (see [ECUBE-managed user guard](#ecube-managed-user-guard))
+- `504 Gateway Timeout` — OS command timed out
 
 **Audit events:** `OS_USER_GROUPS_APPENDED`
 
@@ -710,7 +877,12 @@ Create an OS group. The group name **must** start with the `ecube-` prefix.
 
 **Error responses:**
 
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role (non-admin)
+- `409 Conflict` — Group already exists
 - `422 Unprocessable Entity` — Group name does not start with `ecube-`
+- `500 Internal Server Error` — OS command failed
+- `504 Gateway Timeout` — OS command timed out
 
 **Audit events:** `OS_GROUP_CREATED`
 
@@ -720,6 +892,11 @@ List OS groups filtered to the `ecube-` prefix.
 
 **Roles:** `admin`
 
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role (non-admin)
+
 ### `DELETE /admin/os-groups/{name}`
 
 Delete an OS group. The group name **must** start with the `ecube-` prefix.
@@ -728,7 +905,12 @@ Delete an OS group. The group name **must** start with the `ecube-` prefix.
 
 **Error responses:**
 
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role (non-admin)
+- `404 Not Found` — Group does not exist
 - `422 Unprocessable Entity` — Group name does not start with `ecube-`
+- `500 Internal Server Error` — OS command failed
+- `504 Gateway Timeout` — OS command timed out
 
 **Audit events:** `OS_GROUP_DELETED`
 
@@ -956,11 +1138,29 @@ Partially update database connection settings.  All fields are optional — only
 
 ## 3.9 Introspection API (Read‑Only)
 
+All introspection endpoints are read-only and return `401`/`403` for authentication/authorization failures.
+
+### `GET /introspection/drives`
+
+Drive summary for UI display.
+
+**Roles:** `admin`, `manager`, `processor`, `auditor`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+
 ### `GET /introspection/usb/topology`
 
 USB hub/port/device mapping.
 
 **Roles:** `admin`, `manager`, `processor`, `auditor`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
 
 ### `GET /introspection/block-devices`
 
@@ -968,11 +1168,21 @@ Block device metadata.
 
 **Roles:** `admin`, `manager`, `processor`, `auditor`
 
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+
 ### `GET /introspection/mounts`
 
 Mounted filesystems.
 
 **Roles:** `admin`, `manager`, `processor`, `auditor`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
 
 ### `GET /introspection/system-health`
 
@@ -980,15 +1190,28 @@ CPU, memory, disk I/O, worker queue.
 
 **Roles:** `admin`, `manager`, `processor`, `auditor`
 
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+
 ### `GET /introspection/jobs/{id}/debug`
 
 Internal worker state.
 
 **Roles:** `admin`, `manager`, `processor`, `auditor`
 
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+- `404 Not Found` — Job ID does not exist
+
 ---
 
 ## 4. Error Handling for Security
+
+All error responses use the standardized `ErrorResponse` JSON format described in [Section 3](#standardized-error-response-format). Every endpoint declares its possible error responses in the OpenAPI schema via `responses=` on the route decorator, sourced from reusable declarations in `app/schemas/errors.py`.
 
 ### 4.1 Unauthorized (401)
 
@@ -1006,7 +1229,37 @@ Returned when:
 - User attempts cross‑project access
 - User attempts restricted operation (for example, processor initializing drive)
 
-### 4.3 Audit Logging
+### 4.3 Not Found (404)
+
+Returned when:
+
+- Referenced resource (drive, mount, job, user, port, hub) does not exist
+
+### 4.4 Conflict (409)
+
+Returned when:
+
+- Resource already exists (duplicate initialization, provisioning)
+- Operation conflicts with current state (e.g. drive not in expected state)
+- Concurrent operation detected (initialization lock, race condition)
+
+### 4.5 Validation Error (422)
+
+Returned when:
+
+- Request body or query parameter fails Pydantic validation
+- Malformed Unicode (null bytes, surrogate characters) in path fields
+- Invalid enum values, out-of-range numbers, or empty required fields
+
+### 4.6 Server Error (500) / Timeout (504)
+
+Returned when:
+
+- OS-level commands fail (format, mount, user/group management)
+- Database operations fail unexpectedly
+- Subprocess execution exceeds timeout bounds
+
+### 4.7 Audit Logging
 
 Every security‑relevant event is logged:
 
