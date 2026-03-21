@@ -65,8 +65,8 @@ class PortEnableRequest(BaseModel):
 
 
 class HubUpdateRequest(BaseModel):
-    location_hint: SafeStr = Field(..., min_length=1, description="Physical location label for the hub")
+    location_hint: Optional[SafeStr] = Field(..., min_length=1, description="Physical location label for the hub (null to clear)")
 
 
 class PortUpdateRequest(BaseModel):
-    friendly_label: SafeStr = Field(..., min_length=1, description="Human-readable label for the port")
+    friendly_label: Optional[SafeStr] = Field(..., min_length=1, description="Human-readable label for the port (null to clear)")
