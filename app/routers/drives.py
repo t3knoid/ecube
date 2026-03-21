@@ -10,7 +10,7 @@ from app.exceptions import EncodingError
 from app.schemas.hardware import DriveFormatRequest, DriveInitialize, UsbDriveSchema
 from app.services import drive_service, discovery_service
 from app.infrastructure import get_drive_eject, get_drive_formatter, get_filesystem_detector
-from app.schemas.errors import R_401, R_403, R_409, R_422, R_500
+from app.schemas.errors import R_401, R_403, R_404, R_409, R_422, R_500
 from app.utils.client_ip import get_client_ip
 from app.utils.sanitize import sanitize_string
 
@@ -46,7 +46,7 @@ def list_drives(
         project_id = sanitized
     return drive_service.get_all_drives(db, project_id=project_id)
 
-@router.post("/{drive_id}/initialize", response_model=UsbDriveSchema, responses={**R_401, **R_403, **R_422})
+@router.post("/{drive_id}/initialize", response_model=UsbDriveSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
 def initialize_drive(
     drive_id: int,
     body: DriveInitialize,
