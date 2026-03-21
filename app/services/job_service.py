@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy.orm import Session
 
-from app.exceptions import ECUBEException
+from app.exceptions import ECUBEException, EncodingError
 from app.models.hardware import DriveState
 from app.models.jobs import DriveAssignment, ExportJob, JobStatus, Manifest
 from app.repositories.audit_repository import AuditRepository
@@ -17,6 +17,7 @@ from app.repositories.job_repository import (
 )
 from app.schemas.jobs import JobCreate, JobStart
 from app.services import copy_engine
+from app.utils.sanitize import is_encoding_error
 
 logger = logging.getLogger(__name__)
 
@@ -88,8 +89,10 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
         db.commit()
     except (HTTPException, ECUBEException):
         raise
-    except Exception:
+    except Exception as exc:
         db.rollback()
+        if is_encoding_error(exc):
+            raise EncodingError("Job data contains invalid characters") from exc
         logger.exception("DB commit failed while creating job")
         raise HTTPException(
             status_code=500,
