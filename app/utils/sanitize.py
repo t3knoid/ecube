@@ -42,6 +42,23 @@ def sanitize_string(value: object) -> object:
     return value
 
 
+def strict_sanitize_string(value: object) -> object:
+    """Reject strings that contain null bytes or surrogate code points.
+
+    Unlike :func:`sanitize_string` (which silently strips), this raises
+    ``ValueError`` so Pydantic returns a 422.  Use for path-like fields
+    where silent modification could change the OS-level target.
+    """
+    if not isinstance(value, str):
+        return value
+    if "\x00" in value or _SURROGATE_RE.search(value):
+        raise ValueError(
+            "Value contains invalid characters (null bytes or surrogate code points) "
+            "that are not allowed in path fields"
+        )
+    return value
+
+
 def is_encoding_error(exc: BaseException) -> bool:
     """Return True if *exc* looks like a database character-encoding failure."""
     msg = str(exc).lower()
@@ -50,3 +67,6 @@ def is_encoding_error(exc: BaseException) -> bool:
 
 # Drop-in replacement for ``str`` in Pydantic schemas.
 SafeStr = Annotated[str, BeforeValidator(sanitize_string)]
+
+# Strict variant for path-like fields: rejects rather than silently modifying.
+StrictSafeStr = Annotated[str, BeforeValidator(strict_sanitize_string)]
