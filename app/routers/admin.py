@@ -350,7 +350,7 @@ def list_os_users(
     )
 
 
-@_os_router.delete("/os-users/{username}", status_code=200, responses={**R_401, **R_403, **R_404, **R_422, **R_504})
+@_os_router.delete("/os-users/{username}", status_code=200, responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
 def delete_os_user(
     username: str,
     request: Request,
@@ -412,7 +412,7 @@ def reset_os_user_password(
     return {"message": f"Password reset for user '{username}'"}
 
 
-@_os_router.put("/os-users/{username}/groups", response_model=OSUserResponse, responses={**R_401, **R_403, **R_404, **R_422, **R_504})
+@_os_router.put("/os-users/{username}/groups", response_model=OSUserResponse, responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
 def set_os_user_groups(
     username: str,
     body: SetOSGroupsRequest,
@@ -446,7 +446,7 @@ def set_os_user_groups(
     )
 
 
-@_os_router.post("/os-users/{username}/groups", response_model=OSUserResponse, responses={**R_401, **R_403, **R_404, **R_422, **R_504})
+@_os_router.post("/os-users/{username}/groups", response_model=OSUserResponse, responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
 def add_os_user_groups(
     username: str,
     body: AddOSGroupsRequest,
