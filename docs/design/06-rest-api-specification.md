@@ -85,6 +85,7 @@ Authenticate with OS credentials and receive a signed JWT.
 ### 1.3 Authentication Mechanism
 
 - All endpoints except `/health`, `/auth/token`, `/setup/status`, `/setup/initialize`, and `/introspection/version` require a bearer token.
+- `/setup/database/test-connection` and `/setup/database/provision` accept an **optional** bearer token: unauthenticated during initial setup (no admin exists), `admin` role required after.
 - Token includes:
   - `sub` — user identifier (username)
   - `username` — display name
