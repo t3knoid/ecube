@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
 from app.schemas.jobs import ExportJobSchema, JobCreate, JobStart
+from app.schemas.errors import R_401, R_403
 from app.services import job_service
 from app.utils.client_ip import get_client_ip
 
@@ -26,7 +27,7 @@ def _redact_ip(job, user: CurrentUser) -> ExportJobSchema:
     return schema
 
 
-@router.post("", response_model=ExportJobSchema)
+@router.post("", response_model=ExportJobSchema, responses={**R_401, **R_403})
 def create_job(
     body: JobCreate,
     request: Request,
@@ -44,7 +45,7 @@ def create_job(
     return _redact_ip(job, current_user)
 
 
-@router.get("/{job_id}", response_model=ExportJobSchema)
+@router.get("/{job_id}", response_model=ExportJobSchema, responses={**R_401, **R_403})
 def get_job(
     job_id: int,
     db: Session = Depends(get_db),
@@ -60,7 +61,7 @@ def get_job(
     return _redact_ip(job, current_user)
 
 
-@router.post("/{job_id}/start", response_model=ExportJobSchema)
+@router.post("/{job_id}/start", response_model=ExportJobSchema, responses={**R_401, **R_403})
 def start_job(
     job_id: int,
     body: JobStart,
@@ -80,7 +81,7 @@ def start_job(
     return _redact_ip(job, current_user)
 
 
-@router.post("/{job_id}/verify", response_model=ExportJobSchema)
+@router.post("/{job_id}/verify", response_model=ExportJobSchema, responses={**R_401, **R_403})
 def verify_job(
     job_id: int,
     background_tasks: BackgroundTasks,
@@ -99,7 +100,7 @@ def verify_job(
     return _redact_ip(job, current_user)
 
 
-@router.post("/{job_id}/manifest", response_model=ExportJobSchema)
+@router.post("/{job_id}/manifest", response_model=ExportJobSchema, responses={**R_401, **R_403})
 def create_manifest(
     job_id: int,
     request: Request,
