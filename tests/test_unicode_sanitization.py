@@ -173,6 +173,18 @@ class TestMountsUnicodeSanitization:
         assert data["remote_path"] == "server:/share"
         assert data["local_mount_point"] == "/mnt/test"
 
+    def test_post_mount_all_nulls_in_required_field_returns_422(self, manager_client, db):
+        """Required mount field that sanitizes to empty is rejected with 422."""
+        response = manager_client.post(
+            "/mounts",
+            json={
+                "type": "NFS",
+                "remote_path": "\x00\x00",
+                "local_mount_point": "/mnt/test",
+            },
+        )
+        assert response.status_code == 422
+
 
 # ---------------------------------------------------------------------------
 # Integration tests: POST /jobs with malformed Unicode
@@ -212,6 +224,18 @@ class TestJobsUnicodeSanitization:
         assert response.status_code == 200
         data = response.json()
         assert data["evidence_number"] == "EV123"
+
+    def test_post_job_all_nulls_in_required_field_returns_422(self, admin_client, db):
+        """Required field that sanitizes to empty is rejected with 422."""
+        response = admin_client.post(
+            "/jobs",
+            json={
+                "project_id": "\x00\x00",
+                "evidence_number": "EV-001",
+                "source_path": "/mnt/source",
+            },
+        )
+        assert response.status_code == 422
 
 
 # ---------------------------------------------------------------------------
