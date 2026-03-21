@@ -155,19 +155,23 @@ class TestMountsUnicodeSanitization:
         assert data["local_mount_point"] == "/mnt/evidence"
 
     def test_post_mount_surrogates_stripped(self, manager_client, db):
-        """Unpaired surrogates in mount fields are stripped — no 500 error."""
+        """Surrogate code points in persisted mount fields are sanitized."""
+        payload = json.dumps({
+            "type": "NFS",
+            "remote_path": "server\ud800:/share",
+            "local_mount_point": "/mnt/\udc00test",
+        }).encode("utf-8", "surrogatepass")
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
             response = manager_client.post(
                 "/mounts",
-                json={
-                    "type": "NFS",
-                    "remote_path": "server:/share",
-                    "local_mount_point": "/mnt/test",
-                    "credentials_file": "/etc/creds\x00file",
-                },
+                content=payload,
+                headers={"Content-Type": "application/json"},
             )
         assert response.status_code != 500
+        data = response.json()
+        assert data["remote_path"] == "server:/share"
+        assert data["local_mount_point"] == "/mnt/test"
 
 
 # ---------------------------------------------------------------------------
