@@ -172,7 +172,7 @@ All error responses use a uniform JSON payload:
 |------------|-----------------|-------------|
 | `code`     | string          | Machine-readable error code (e.g. `CONFLICT`, `NOT_FOUND`, `UNAUTHORIZED`, `ENCODING_ERROR`) |
 | `message`  | string          | Human-readable description of the error |
-| `trace_id` | string or null  | Correlation ID for log tracing (omitted when not applicable) |
+| `trace_id` | string          | Correlation ID for log tracing (always present; a UUID generated per error) |
 
 The Pydantic schema for this payload is `ErrorResponse` in `app/schemas/errors.py`.
 
