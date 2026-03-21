@@ -53,7 +53,7 @@ _init_lock = threading.Lock()
 router = APIRouter(prefix="/setup", tags=["setup"], route_class=LocalOnlyRoute)
 
 
-@router.get("/status", response_model=SetupStatusResponse)
+@router.get("/status", response_model=SetupStatusResponse, responses={**R_500})
 def get_setup_status(
     db: Session = Depends(get_db),
 ) -> SetupStatusResponse:
