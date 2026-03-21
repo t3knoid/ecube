@@ -297,6 +297,8 @@ class TestDrivesQueryParamSanitization:
         assert len(data) == 1
 
     def test_get_drives_all_null_project_id_returns_422(self, client, db):
-        """project_id that becomes empty after sanitization returns 422."""
+        """project_id that becomes empty after sanitization returns 422 ENCODING_ERROR."""
         response = client.get("/drives", params={"project_id": "\x00\x00\x00"})
         assert response.status_code == 422
+        body = response.json()
+        assert body["code"] == "ENCODING_ERROR"
