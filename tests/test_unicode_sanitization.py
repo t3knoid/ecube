@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.models.hardware import DriveState, UsbDrive
 from app.utils.sanitize import SafeStr, is_encoding_error, sanitize_string
 
 
@@ -217,11 +218,55 @@ class TestJobsUnicodeSanitization:
 class TestDrivesQueryParamSanitization:
 
     def test_get_drives_null_in_project_id(self, client, db):
-        """Null byte in project_id query param does not produce 500."""
+        """Null byte in project_id is sanitized; matching drive is returned."""
+        drive = UsbDrive(
+            device_identifier="USB-NULL-TEST",
+            current_state=DriveState.IN_USE,
+            current_project_id="PRJ123",
+        )
+        db.add(drive)
+        db.commit()
+
         response = client.get("/drives", params={"project_id": "PRJ\x00123"})
-        assert response.status_code != 500
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["device_identifier"] == "USB-NULL-TEST"
+        assert data[0]["current_project_id"] == "PRJ123"
+
+    def test_get_drives_surrogate_in_project_id(self, client, db):
+        """Percent-encoded surrogate bytes in project_id don't crash the endpoint.
+
+        Unlike JSON bodies, surrogates in query params are decoded by urllib
+        into U+FFFD replacement characters before reaching application code,
+        so exact matching against a stored project_id isn't possible.  This
+        test verifies the endpoint still returns 200 (not 500).
+        """
+        drive = UsbDrive(
+            device_identifier="USB-SURR-TEST",
+            current_state=DriveState.IN_USE,
+            current_project_id="PRJ456",
+        )
+        db.add(drive)
+        db.commit()
+
+        surrogate_bytes = "\ud800".encode("utf-8", "surrogatepass")
+        pct = "".join(f"%{b:02X}" for b in surrogate_bytes)
+        response = client.get(f"/drives?project_id=PRJ{pct}456")
+        assert response.status_code == 200
 
     def test_get_drives_normal_project_id(self, client, db):
         """Normal project_id query still works."""
+        drive = UsbDrive(
+            device_identifier="USB-NORMAL-TEST",
+            current_state=DriveState.IN_USE,
+            current_project_id="PRJ-001",
+        )
+        db.add(drive)
+        db.commit()
+
         response = client.get("/drives", params={"project_id": "PRJ-001"})
         assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["device_identifier"] == "USB-NORMAL-TEST"
