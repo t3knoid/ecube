@@ -232,6 +232,97 @@ class TestOpenAPISchema:
             "Endpoints missing HTTPBearer security requirement:\n" + "\n".join(violations)
         )
 
+    def test_protected_endpoints_declare_401_and_403(self):
+        """All authenticated endpoints must declare 401 and 403 in their OpenAPI responses."""
+        from app.main import app
+
+        openapi_schema = app.openapi()
+        # Endpoints that do not require authentication at all
+        unauthenticated_paths = {
+            "/health", "/auth/token", "/setup/status", "/setup/initialize",
+            "/introspection/version",
+        }
+        # Conditional-auth endpoints: 401 not guaranteed, but 403 may apply
+        conditional_auth_paths = {
+            "/setup/database/test-connection", "/setup/database/provision",
+        }
+        # Authenticated but no role restriction (any valid user succeeds, no 403)
+        no_role_paths = {"/admin/logs", "/admin/logs/{filename}"}
+        skip_401 = unauthenticated_paths | conditional_auth_paths
+        skip_403 = skip_401 | no_role_paths
+
+        missing_401 = []
+        missing_403 = []
+        for path, path_item in openapi_schema.get("paths", {}).items():
+            for method, operation in path_item.items():
+                if not isinstance(operation, dict) or "responses" not in operation:
+                    continue
+                responses = operation["responses"]
+                label = f"{method.upper()} {path}"
+                if path not in skip_401 and "401" not in responses:
+                    missing_401.append(label)
+                if path not in skip_403 and "403" not in responses:
+                    missing_403.append(label)
+
+        errors = []
+        if missing_401:
+            errors.append("Endpoints missing 401 response:\n  " + "\n  ".join(missing_401))
+        if missing_403:
+            errors.append("Endpoints missing 403 response:\n  " + "\n  ".join(missing_403))
+        assert not errors, "\n".join(errors)
+
+    def test_error_responses_use_error_response_schema(self):
+        """All declared 4xx/5xx responses must reference the ErrorResponse schema."""
+        from app.main import app
+
+        openapi_schema = app.openapi()
+        error_ref = "#/components/schemas/ErrorResponse"
+        violations = []
+
+        for path, path_item in openapi_schema.get("paths", {}).items():
+            for method, operation in path_item.items():
+                if not isinstance(operation, dict) or "responses" not in operation:
+                    continue
+                for status_code, resp in operation["responses"].items():
+                    code = int(status_code)
+                    if code < 400:
+                        continue
+                    # Check that content -> application/json -> schema -> $ref
+                    # points to ErrorResponse
+                    content = resp.get("content", {})
+                    json_media = content.get("application/json", {})
+                    schema = json_media.get("schema", {})
+                    ref = schema.get("$ref", "")
+                    if ref != error_ref:
+                        violations.append(
+                            f"{method.upper()} {path} [{status_code}]: "
+                            f"expected {error_ref}, got {ref or 'no schema'}"
+                        )
+
+        assert not violations, (
+            "Error responses not using ErrorResponse schema:\n  " + "\n  ".join(violations)
+        )
+
+    def test_endpoints_with_path_params_declare_422(self):
+        """Endpoints with path parameters must declare 422 for validation errors."""
+        from app.main import app
+
+        openapi_schema = app.openapi()
+        missing = []
+
+        for path, path_item in openapi_schema.get("paths", {}).items():
+            if "{" not in path:
+                continue
+            for method, operation in path_item.items():
+                if not isinstance(operation, dict) or "responses" not in operation:
+                    continue
+                if "422" not in operation["responses"]:
+                    missing.append(f"{method.upper()} {path}")
+
+        assert not missing, (
+            "Endpoints with path params missing 422 response:\n  " + "\n  ".join(missing)
+        )
+
     def test_swagger_ui_endpoint_is_accessible(self, client):
         """Swagger UI should be accessible at /docs."""
         response = client.get("/docs")
