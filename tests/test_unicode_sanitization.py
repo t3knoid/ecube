@@ -8,8 +8,6 @@ helper so they never reach the database layer.
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.models.hardware import DriveState, UsbDrive
 from app.utils.sanitize import SafeStr, is_encoding_error, sanitize_string
 
