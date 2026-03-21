@@ -53,7 +53,7 @@ class UsbDriveSchema(BaseModel):
 
 
 class DriveInitialize(BaseModel):
-    project_id: SafeStr = Field(..., description="Project ID to bind the drive to for isolation enforcement")
+    project_id: SafeStr = Field(..., min_length=1, description="Project ID to bind the drive to for isolation enforcement")
 
 
 class DriveFormatRequest(BaseModel):
@@ -65,8 +65,8 @@ class PortEnableRequest(BaseModel):
 
 
 class HubUpdateRequest(BaseModel):
-    location_hint: SafeStr = Field(..., description="Physical location label for the hub")
+    location_hint: SafeStr = Field(..., min_length=1, description="Physical location label for the hub")
 
 
 class PortUpdateRequest(BaseModel):
-    friendly_label: SafeStr = Field(..., description="Human-readable label for the port")
+    friendly_label: SafeStr = Field(..., min_length=1, description="Human-readable label for the port")
