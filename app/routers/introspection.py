@@ -10,6 +10,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.hardware import UsbDrive
 from app.models.jobs import ExportJob, JobStatus
+from app.schemas.errors import R_401, R_403, R_404
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ _ALL_ROLES = require_roles("admin", "manager", "processor", "auditor")
 _ADMIN_AUDITOR = require_roles("admin", "auditor")
 
 
-@router.get("/drives")
+@router.get("/drives", responses={**R_401, **R_403})
 def drives_inventory(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_ALL_ROLES),
@@ -49,7 +50,7 @@ def drives_inventory(
     }
 
 
-@router.get("/usb/topology")
+@router.get("/usb/topology", responses={**R_401, **R_403})
 def usb_topology(_: CurrentUser = Depends(_ALL_ROLES)):
     """Introspect USB hubs, ports, and connected devices from system sysfs.
 
@@ -80,7 +81,7 @@ def usb_topology(_: CurrentUser = Depends(_ALL_ROLES)):
     return {"devices": devices}
 
 
-@router.get("/block-devices")
+@router.get("/block-devices", responses={**R_401, **R_403})
 def block_devices(_: CurrentUser = Depends(_ALL_ROLES)):
     """List all block devices (disks, partitions) detected by the kernel.
 
@@ -104,7 +105,7 @@ def block_devices(_: CurrentUser = Depends(_ALL_ROLES)):
     return {"block_devices": stats}
 
 
-@router.get("/mounts")
+@router.get("/mounts", responses={**R_401, **R_403})
 def system_mounts(_: CurrentUser = Depends(_ALL_ROLES)):
     """List all currently mounted filesystems on the system.
 
@@ -151,7 +152,7 @@ def system_mounts(_: CurrentUser = Depends(_ALL_ROLES)):
     return {"mounts": mounts}
 
 
-@router.get("/system-health")
+@router.get("/system-health", responses={**R_401, **R_403})
 def system_health(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_ALL_ROLES),
@@ -187,7 +188,7 @@ def system_health(
     }
 
 
-@router.get("/jobs/{job_id}/debug")
+@router.get("/jobs/{job_id}/debug", responses={**R_401, **R_403, **R_404})
 def job_debug(
     job_id: int,
     db: Session = Depends(get_db),

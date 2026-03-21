@@ -10,6 +10,7 @@ from app.exceptions import EncodingError
 from app.schemas.hardware import DriveFormatRequest, DriveInitialize, UsbDriveSchema
 from app.services import drive_service, discovery_service
 from app.infrastructure import get_drive_eject, get_drive_formatter, get_filesystem_detector
+from app.schemas.errors import R_401, R_403, R_409, R_422, R_500
 from app.utils.client_ip import get_client_ip
 from app.utils.sanitize import sanitize_string
 
@@ -21,7 +22,7 @@ _ALL_ROLES = require_roles("admin", "manager", "processor", "auditor")
 _ADMIN_MANAGER = require_roles("admin", "manager")
 
 
-@router.get("", response_model=List[UsbDriveSchema])
+@router.get("", response_model=List[UsbDriveSchema], responses={**R_401, **R_403, **R_422})
 def list_drives(
     project_id: Optional[str] = Query(
         default=None,
@@ -45,7 +46,7 @@ def list_drives(
         project_id = sanitized
     return drive_service.get_all_drives(db, project_id=project_id)
 
-@router.post("/{drive_id}/initialize", response_model=UsbDriveSchema)
+@router.post("/{drive_id}/initialize", response_model=UsbDriveSchema, responses={**R_401, **R_403, **R_422})
 def initialize_drive(
     drive_id: int,
     body: DriveInitialize,
@@ -63,7 +64,7 @@ def initialize_drive(
     return drive_service.initialize_drive(drive_id, body.project_id, db, actor=current_user.username, client_ip=get_client_ip(request))
 
 
-@router.post("/{drive_id}/prepare-eject", response_model=UsbDriveSchema)
+@router.post("/{drive_id}/prepare-eject", response_model=UsbDriveSchema, responses={**R_401, **R_403, **R_409, **R_500})
 def prepare_eject(
     drive_id: int,
     request: Request,
@@ -84,7 +85,7 @@ def prepare_eject(
     )
 
 
-@router.post("/refresh")
+@router.post("/refresh", responses={**R_401, **R_403})
 def refresh_drives(
     request: Request,
     db: Session = Depends(get_db),
@@ -106,7 +107,7 @@ def refresh_drives(
     )
 
 
-@router.post("/{drive_id}/format", response_model=UsbDriveSchema)
+@router.post("/{drive_id}/format", response_model=UsbDriveSchema, responses={**R_401, **R_403, **R_409, **R_500})
 def format_drive(
     drive_id: int,
     body: DriveFormatRequest,
