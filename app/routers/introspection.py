@@ -10,7 +10,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.hardware import UsbDrive
 from app.models.jobs import ExportJob, JobStatus
-from app.schemas.errors import R_401, R_403, R_404
+from app.schemas.errors import R_401, R_403, R_404, R_422
 
 logger = logging.getLogger(__name__)
 
@@ -188,7 +188,7 @@ def system_health(
     }
 
 
-@router.get("/jobs/{job_id}/debug", responses={**R_401, **R_403, **R_404})
+@router.get("/jobs/{job_id}/debug", responses={**R_401, **R_403, **R_404, **R_422})
 def job_debug(
     job_id: int,
     db: Session = Depends(get_db),

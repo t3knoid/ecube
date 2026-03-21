@@ -64,7 +64,7 @@ def initialize_drive(
     return drive_service.initialize_drive(drive_id, body.project_id, db, actor=current_user.username, client_ip=get_client_ip(request))
 
 
-@router.post("/{drive_id}/prepare-eject", response_model=UsbDriveSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_500})
+@router.post("/{drive_id}/prepare-eject", response_model=UsbDriveSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
 def prepare_eject(
     drive_id: int,
     request: Request,
@@ -107,7 +107,7 @@ def refresh_drives(
     )
 
 
-@router.post("/{drive_id}/format", response_model=UsbDriveSchema, responses={**R_401, **R_403, **R_400, **R_404, **R_409, **R_500})
+@router.post("/{drive_id}/format", response_model=UsbDriveSchema, responses={**R_401, **R_403, **R_400, **R_404, **R_409, **R_422, **R_500})
 def format_drive(
     drive_id: int,
     body: DriveFormatRequest,
