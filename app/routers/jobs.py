@@ -45,7 +45,7 @@ def create_job(
     return _redact_ip(job, current_user)
 
 
-@router.get("/{job_id}", response_model=ExportJobSchema, responses={**R_401, **R_403, **R_404})
+@router.get("/{job_id}", response_model=ExportJobSchema, responses={**R_401, **R_403, **R_404, **R_422})
 def get_job(
     job_id: int,
     db: Session = Depends(get_db),
@@ -61,7 +61,7 @@ def get_job(
     return _redact_ip(job, current_user)
 
 
-@router.post("/{job_id}/start", response_model=ExportJobSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_500})
+@router.post("/{job_id}/start", response_model=ExportJobSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
 def start_job(
     job_id: int,
     body: JobStart,
@@ -81,7 +81,7 @@ def start_job(
     return _redact_ip(job, current_user)
 
 
-@router.post("/{job_id}/verify", response_model=ExportJobSchema, responses={**R_401, **R_403, **R_404, **R_500})
+@router.post("/{job_id}/verify", response_model=ExportJobSchema, responses={**R_401, **R_403, **R_404, **R_422, **R_500})
 def verify_job(
     job_id: int,
     background_tasks: BackgroundTasks,
@@ -100,7 +100,7 @@ def verify_job(
     return _redact_ip(job, current_user)
 
 
-@router.post("/{job_id}/manifest", response_model=ExportJobSchema, responses={**R_401, **R_403, **R_404, **R_500})
+@router.post("/{job_id}/manifest", response_model=ExportJobSchema, responses={**R_401, **R_403, **R_404, **R_422, **R_500})
 def create_manifest(
     job_id: int,
     request: Request,
