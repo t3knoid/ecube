@@ -68,3 +68,11 @@ class EngineReinitializationError(ECUBEException):
         "Database engine reinitialization is already in progress. "
         "Please retry after the current operation completes."
     )
+
+
+class EncodingError(ECUBEException):
+    """Raised when input contains invalid characters that cannot be stored (HTTP 422)."""
+
+    status_code = 422
+    default_code = "ENCODING_ERROR"
+    default_message = "Request contains invalid characters."

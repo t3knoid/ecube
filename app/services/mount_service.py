@@ -11,6 +11,9 @@ from app.repositories.audit_repository import AuditRepository
 from app.repositories.mount_repository import MountRepository
 from app.schemas.network import MountCreate
 from app.config import settings
+from app.exceptions import EncodingError
+
+from app.utils.sanitize import is_encoding_error
 
 # Re-export so existing ``mount_service.MountProvider`` access keeps working.
 from app.infrastructure.mount_protocol import MountProvider  # noqa: F401 – re-export
@@ -84,7 +87,9 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
     )
     try:
         mount_repo.add(mount)
-    except Exception:
+    except Exception as exc:
+        if is_encoding_error(exc):
+            raise EncodingError("Mount data contains invalid characters") from exc
         logger.exception("DB commit failed while creating mount record")
         raise HTTPException(
             status_code=500,
