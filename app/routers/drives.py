@@ -10,6 +10,7 @@ from app.schemas.hardware import DriveFormatRequest, DriveInitialize, UsbDriveSc
 from app.services import drive_service, discovery_service
 from app.infrastructure import get_drive_eject, get_drive_formatter, get_filesystem_detector
 from app.utils.client_ip import get_client_ip
+from app.utils.sanitize import sanitize_string
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,8 @@ def list_drives(
 
     **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
     """
+    if project_id is not None:
+        project_id = sanitize_string(project_id)
     return drive_service.get_all_drives(db, project_id=project_id)
 
 
