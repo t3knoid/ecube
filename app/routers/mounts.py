@@ -36,7 +36,7 @@ def add_mount(
     return mount_service.add_mount(body, db, actor=current_user.username, client_ip=get_client_ip(request))
 
 
-@router.delete("/{mount_id}", status_code=204, responses={**R_401, **R_403, **R_404, **R_500})
+@router.delete("/{mount_id}", status_code=204, responses={**R_401, **R_403, **R_404, **R_422, **R_500})
 def remove_mount(
     mount_id: int,
     request: Request,
@@ -82,7 +82,7 @@ def validate_all_mounts(
     return mount_service.validate_all_mounts(db, actor=current_user.username, client_ip=get_client_ip(request))
 
 
-@router.post("/{mount_id}/validate", response_model=NetworkMountSchema, responses={**R_401, **R_403, **R_404, **R_500})
+@router.post("/{mount_id}/validate", response_model=NetworkMountSchema, responses={**R_401, **R_403, **R_404, **R_422, **R_500})
 def validate_mount(
     mount_id: int,
     request: Request,

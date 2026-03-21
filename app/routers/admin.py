@@ -181,7 +181,7 @@ def list_log_files(
     )
 
 
-@router.get("/logs/{filename}", responses={**R_400, **R_401, **R_404})
+@router.get("/logs/{filename}", responses={**R_400, **R_401, **R_404, **R_422})
 def download_log_file(
     filename: str,
     request: Request,
@@ -570,7 +570,7 @@ def list_ports(
     return [UsbPortSchema.model_validate(p) for p in ports]
 
 
-@router.patch("/ports/{port_id}", response_model=UsbPortSchema, responses={**R_401, **R_403, **R_404})
+@router.patch("/ports/{port_id}", response_model=UsbPortSchema, responses={**R_401, **R_403, **R_404, **R_422})
 def toggle_port_enabled(
     port_id: int,
     body: PortEnableRequest,
@@ -610,7 +610,7 @@ def list_hubs(
     return [UsbHubSchema.model_validate(h) for h in hubs]
 
 
-@router.patch("/hubs/{hub_id}", response_model=UsbHubSchema, responses={**R_401, **R_403, **R_404})
+@router.patch("/hubs/{hub_id}", response_model=UsbHubSchema, responses={**R_401, **R_403, **R_404, **R_422})
 def update_hub_label(
     hub_id: int,
     body: HubUpdateRequest,
@@ -641,7 +641,7 @@ def update_hub_label(
     return UsbHubSchema.model_validate(hub)
 
 
-@router.patch("/ports/{port_id}/label", response_model=UsbPortSchema, responses={**R_401, **R_403, **R_404})
+@router.patch("/ports/{port_id}/label", response_model=UsbPortSchema, responses={**R_401, **R_403, **R_404, **R_422})
 def update_port_label(
     port_id: int,
     body: PortUpdateRequest,
