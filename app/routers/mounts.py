@@ -6,7 +6,7 @@ from typing import List
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
 from app.schemas.network import MountCreate, NetworkMountSchema
-from app.schemas.errors import R_401, R_403, R_404
+from app.schemas.errors import R_401, R_403, R_404, R_500
 from app.services import mount_service
 from app.utils.client_ip import get_client_ip
 
@@ -82,7 +82,7 @@ def validate_all_mounts(
     return mount_service.validate_all_mounts(db, actor=current_user.username, client_ip=get_client_ip(request))
 
 
-@router.post("/{mount_id}/validate", response_model=NetworkMountSchema, responses={**R_401, **R_403, **R_404})
+@router.post("/{mount_id}/validate", response_model=NetworkMountSchema, responses={**R_401, **R_403, **R_404, **R_500})
 def validate_mount(
     mount_id: int,
     request: Request,
