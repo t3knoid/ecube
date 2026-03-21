@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 from app.models.jobs import JobStatus, FileStatus
-from app.utils.sanitize import SafeStr
+from app.utils.sanitize import SafeStr, StrictSafeStr
 
 
 class FileHashesResponse(BaseModel):
@@ -47,8 +47,8 @@ class FileCompareResponse(BaseModel):
 class JobCreate(BaseModel):
     project_id: SafeStr = Field(..., min_length=1, description="Project ID for isolation enforcement")
     evidence_number: SafeStr = Field(..., min_length=1, description="Evidence case number or identifier")
-    source_path: SafeStr = Field(..., min_length=1, description="Path to source data on network mount or local filesystem")
-    target_mount_path: Optional[SafeStr] = Field(default=None, description="Alternative target mount; defaults to assigned drive")
+    source_path: StrictSafeStr = Field(..., min_length=1, description="Path to source data on network mount or local filesystem")
+    target_mount_path: Optional[StrictSafeStr] = Field(default=None, description="Alternative target mount; defaults to assigned drive")
     drive_id: Optional[int] = Field(default=None, description="Pre-assigned USB drive ID")
     thread_count: int = Field(default=4, ge=1, le=8, description="Number of parallel copy threads (1-8)")
     max_file_retries: int = Field(default=3, ge=0, description="Maximum number of retries for failed files (0+)")

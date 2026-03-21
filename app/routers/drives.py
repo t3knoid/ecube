@@ -39,11 +39,11 @@ def list_drives(
     **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
     """
     if project_id is not None:
-        project_id = sanitize_string(project_id)
-        if not project_id:
-            raise EncodingError("project_id is empty after removing invalid characters")
+        sanitized: str = sanitize_string(project_id)
+        if not sanitized:
+            raise EncodingError("project_id is empty after removing invalid characters")   
+        project_id = sanitized
     return drive_service.get_all_drives(db, project_id=project_id)
-
 
 @router.post("/{drive_id}/initialize", response_model=UsbDriveSchema)
 def initialize_drive(
