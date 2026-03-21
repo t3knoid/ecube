@@ -6,10 +6,11 @@ helper so they never reach the database layer.
 """
 
 import json
-from unittest.mock import MagicMock, patch
+
+import pytest
 
 from app.models.hardware import DriveState, UsbDrive
-from app.utils.sanitize import SafeStr, is_encoding_error, sanitize_string
+from app.utils.sanitize import SafeStr, StrictSafeStr, is_encoding_error, sanitize_string, strict_sanitize_string
 
 
 # ---------------------------------------------------------------------------
@@ -129,47 +130,88 @@ class TestSafeStrPydantic:
 
 
 # ---------------------------------------------------------------------------
+# Unit tests: strict_sanitize_string
+# ---------------------------------------------------------------------------
+
+
+class TestStrictSanitizeString:
+    """Direct tests for the strict_sanitize_string helper."""
+
+    def test_rejects_null_bytes(self):
+        import pytest
+        with pytest.raises(ValueError, match="invalid characters"):
+            strict_sanitize_string("hello\x00world")
+
+    def test_rejects_surrogate(self):
+        import pytest
+        with pytest.raises(ValueError, match="invalid characters"):
+            strict_sanitize_string("path/\ud800/file")
+
+    def test_accepts_normal_ascii(self):
+        assert strict_sanitize_string("/mnt/share/data") == "/mnt/share/data"
+
+    def test_accepts_normal_unicode(self):
+        assert strict_sanitize_string("/mnt/日本語") == "/mnt/日本語"
+
+    def test_passthrough_non_string(self):
+        assert strict_sanitize_string(42) == 42
+        assert strict_sanitize_string(None) is None
+
+
+class TestStrictSafeStrPydantic:
+    """Verify StrictSafeStr rejects invalid characters in Pydantic models."""
+
+    def test_rejects_null_in_model(self):
+        from pydantic import BaseModel, ValidationError
+
+        class M(BaseModel):
+            path: StrictSafeStr
+
+        with pytest.raises(ValidationError):
+            M(path="/mnt/\x00test")
+
+    def test_accepts_clean_path(self):
+        from pydantic import BaseModel
+
+        class M(BaseModel):
+            path: StrictSafeStr
+
+        m = M(path="/mnt/evidence")
+        assert m.path == "/mnt/evidence"
+
+
+# ---------------------------------------------------------------------------
 # Integration tests: POST /mounts with malformed Unicode
 # ---------------------------------------------------------------------------
 
 
 class TestMountsUnicodeSanitization:
 
-    def test_post_mount_null_bytes_stripped(self, manager_client, db):
-        """Null bytes in mount fields are stripped — no 500 error."""
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
-            response = manager_client.post(
-                "/mounts",
-                json={
-                    "type": "NFS",
-                    "remote_path": "192.168.1.1:/export\x00s",
-                    "local_mount_point": "/mnt/evi\x00dence",
-                },
-            )
-        assert response.status_code != 500
-        data = response.json()
-        assert data["remote_path"] == "192.168.1.1:/exports"
-        assert data["local_mount_point"] == "/mnt/evidence"
+    def test_post_mount_null_bytes_in_path_rejected(self, manager_client, db):
+        """Null bytes in mount path fields are rejected with 422."""
+        response = manager_client.post(
+            "/mounts",
+            json={
+                "type": "NFS",
+                "remote_path": "192.168.1.1:/export\x00s",
+                "local_mount_point": "/mnt/evidence",
+            },
+        )
+        assert response.status_code == 422
 
-    def test_post_mount_surrogates_stripped(self, manager_client, db):
-        """Surrogate code points in persisted mount fields are sanitized."""
+    def test_post_mount_surrogates_in_path_rejected(self, manager_client, db):
+        """Surrogate code points in mount path fields are rejected with 422."""
         payload = json.dumps({
             "type": "NFS",
             "remote_path": "server\ud800:/share",
-            "local_mount_point": "/mnt/\udc00test",
+            "local_mount_point": "/mnt/test",
         }).encode("utf-8", "surrogatepass")
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
-            response = manager_client.post(
-                "/mounts",
-                content=payload,
-                headers={"Content-Type": "application/json"},
-            )
-        assert response.status_code != 500
-        data = response.json()
-        assert data["remote_path"] == "server:/share"
-        assert data["local_mount_point"] == "/mnt/test"
+        response = manager_client.post(
+            "/mounts",
+            content=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        assert response.status_code == 422
 
     def test_post_mount_all_nulls_in_required_field_returns_422(self, manager_client, db):
         """Required mount field that sanitizes to empty is rejected with 422."""
@@ -191,12 +233,26 @@ class TestMountsUnicodeSanitization:
 
 class TestJobsUnicodeSanitization:
 
-    def test_post_job_surrogates_stripped(self, admin_client, db):
-        """Unpaired surrogates in job fields are sanitized before persistence."""
+    def test_post_job_surrogates_in_path_rejected(self, admin_client, db):
+        """Surrogates in source_path (a path field) are rejected with 422."""
+        payload = json.dumps({
+            "project_id": "PROJ001",
+            "evidence_number": "EV123",
+            "source_path": "/mnt/source/\ud83ddata",
+        }).encode("utf-8", "surrogatepass")
+        response = admin_client.post(
+            "/jobs",
+            content=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        assert response.status_code == 422
+
+    def test_post_job_surrogates_in_non_path_stripped(self, admin_client, db):
+        """Surrogates in non-path fields (project_id, evidence_number) are still silently stripped."""
         payload = json.dumps({
             "project_id": "PROJ\ud800001",
             "evidence_number": "EV\udc00123",
-            "source_path": "/mnt/source/\ud83ddata",
+            "source_path": "/mnt/source/data",
         }).encode("utf-8", "surrogatepass")
         response = admin_client.post(
             "/jobs",
