@@ -25,9 +25,9 @@ class ErrorResponse(BaseModel):
 _err = {"model": ErrorResponse}
 
 R_400 = {400: {**_err, "description": "Bad request"}}
-R_401 = {401: {**_err, "description": "Missing or invalid authentication token"}}
+R_401 = {401: {**_err, "description": "Missing or invalid authentication credentials"}}
 R_403 = {403: {**_err, "description": "Insufficient permissions"}}
-R_404 = {404: {**_err, "description": "Resource not found"}}
+R_404 = {404: {**_err, "description": "Not found"}}
 R_409 = {409: {**_err, "description": "Conflict — resource already exists or operation in progress"}}
 R_422 = {422: {**_err, "description": "Validation error"}}
 R_500 = {500: {**_err, "description": "Internal server error"}}
