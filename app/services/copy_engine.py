@@ -251,7 +251,8 @@ def run_copy_job(job_id: int) -> None:
             return
 
         job.status = JobStatus.RUNNING
-        job.started_at = datetime.now(timezone.utc)
+        if not job.started_at:
+            job.started_at = datetime.now(timezone.utc)
         try:
             job_repo.save(job)
         except Exception:
