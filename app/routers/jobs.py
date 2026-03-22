@@ -4,10 +4,11 @@ from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
-from app.schemas.jobs import ExportJobSchema, JobCreate, JobStart
+from app.schemas.jobs import DriveInfoSchema, ExportJobSchema, JobCreate, JobStart
 from app.schemas.errors import R_401, R_403, R_404, R_409, R_422, R_500
 from app.services import job_service
 from app.utils.client_ip import get_client_ip
+from app.models.jobs import FileStatus
 
 logger = logging.getLogger(__name__)
 
@@ -20,10 +21,31 @@ _IP_VISIBLE_ROLES = {"admin", "auditor"}
 
 
 def _redact_ip(job, user: CurrentUser) -> ExportJobSchema:
-    """Serialize an ExportJob, redacting client_ip for non-admin/auditor roles."""
+    """Serialize an ExportJob, enriching with derived fields and redacting client_ip."""
     schema = ExportJobSchema.model_validate(job)
     if not _IP_VISIBLE_ROLES.intersection(user.roles):
         schema.client_ip = None
+
+    # Derived file counts
+    files = getattr(job, "files", None) or []
+    schema.files_succeeded = sum(1 for f in files if f.status == FileStatus.DONE)
+    schema.files_failed = sum(1 for f in files if f.status == FileStatus.ERROR)
+
+    # Error summary
+    errors = [f for f in files if f.status == FileStatus.ERROR and f.error_message]
+    if errors:
+        parts = [f"{f.error_message} ({f.relative_path})" for f in errors[:5]]
+        prefix = f"{len(errors)} file{'s' if len(errors) != 1 else ''} failed: "
+        summary = prefix + ", ".join(parts)
+        if len(errors) > 5:
+            summary += f", ... and {len(errors) - 5} more"
+        schema.error_summary = summary
+
+    # Nested drive info
+    assignments = getattr(job, "assignments", None) or []
+    if assignments and getattr(assignments[0], "drive", None):
+        schema.drive = DriveInfoSchema.model_validate(assignments[0].drive)
+
     return schema
 
 

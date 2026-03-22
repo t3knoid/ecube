@@ -144,6 +144,7 @@ def start_job(
     # request arriving after this commit will observe the updated state and be
     # rejected with 409 before the background copy task begins.
     job.status = JobStatus.RUNNING
+    job.started_by = actor
     if body.thread_count:
         job.thread_count = body.thread_count
     try:

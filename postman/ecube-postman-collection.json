@@ -523,7 +523,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["jobs"]
 						},
-						"description": "Create an export job to copy data to an assigned drive. Starts in PENDING state. Roles: admin, manager, processor."
+						"description": "Create an export job to copy data to an assigned drive. Starts in PENDING state. Response includes timestamps (created_at, started_at, completed_at), user fields (created_by, started_by), file counts (files_succeeded, files_failed), nested drive object, and error_summary. Roles: admin, manager, processor."
 					}
 				},
 				{
@@ -543,7 +543,7 @@
 								}
 							]
 						},
-						"description": "Retrieve job state, progress, and verification results. Roles: admin, manager, processor, auditor."
+						"description": "Retrieve job state, progress, timestamps, file counts, drive info, and error summary. Roles: admin, manager, processor, auditor."
 					}
 				},
 				{
@@ -569,7 +569,7 @@
 								}
 							]
 						},
-						"description": "Launch copy process in background. State transitions to IN_PROGRESS. Roles: admin, manager, processor."
+						"description": "Launch copy process in background. State transitions to RUNNING. Sets started_by to the authenticated user and records started_at timestamp. Roles: admin, manager, processor."
 					}
 				},
 				{
@@ -589,7 +589,7 @@
 								}
 							]
 						},
-						"description": "Verify copied data integrity (hash comparison). State: VERIFYING → COMPLETED or FAILED. Roles: admin, manager, processor."
+						"description": "Verify copied data integrity (hash comparison). State: VERIFYING → COMPLETED or FAILED. Response includes files_succeeded, files_failed, and error_summary. Roles: admin, manager, processor."
 					}
 				},
 				{
@@ -609,7 +609,7 @@
 								}
 							]
 						},
-						"description": "Generate JSON manifest on USB drive with file hashes and copy metadata. Roles: admin, manager, processor."
+						"description": "Generate JSON manifest on USB drive with file hashes and copy metadata. Response includes full job state with enriched fields. Roles: admin, manager, processor."
 					}
 				}
 			]
