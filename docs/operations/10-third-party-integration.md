@@ -156,12 +156,12 @@ When `drive_id` is omitted, ECUBE selects a drive automatically:
   operation or its state changed), the request fails with **409** — retry
   after a short delay.
 - If no project-bound drives exist, an unbound `AVAILABLE` drive is selected and
-  bound to the project. If unbound drives exist but none can be acquired, the
-  request fails with **409** (retry).
+  bound to the project.
 - If multiple project-bound drives are `AVAILABLE`, the request fails with
   **409** — the caller must specify `drive_id` to disambiguate.
-- If no usable drive exists (none bound to the project and none unbound), the
-  request fails with **409**.
+- If no usable drive can be acquired (none bound to the project and no unbound
+  drive available), the request fails with **409**. The caller should retry, as
+  drives may be temporarily held by concurrent operations.
 
 > **Drive Capacity Warning:** ECUBE does **not** validate free space on the
 > target drive before or during copy operations. It is the caller's
