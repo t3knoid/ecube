@@ -21,6 +21,7 @@ from app.schemas.users import (
     UserListResponse,
     UserRolesResponse,
 )
+from app.schemas.errors import R_401, R_403, R_422, R_500
 from app.utils.client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,7 @@ def _validate_username(username: str) -> str:
     return username
 
 
-@router.get("", response_model=UserListResponse)
+@router.get("", response_model=UserListResponse, responses={**R_401, **R_403})
 def list_users(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(require_roles("admin")),
@@ -52,7 +53,7 @@ def list_users(
     )
 
 
-@router.get("/{username}/roles", response_model=UserRolesResponse)
+@router.get("/{username}/roles", response_model=UserRolesResponse, responses={**R_401, **R_403, **R_422})
 def get_user_roles(
     username: str,
     db: Session = Depends(get_db),
@@ -64,7 +65,7 @@ def get_user_roles(
     return UserRolesResponse(username=username, roles=roles)
 
 
-@router.put("/{username}/roles", response_model=UserRolesResponse)
+@router.put("/{username}/roles", response_model=UserRolesResponse, responses={**R_401, **R_403, **R_422, **R_500})
 def set_user_roles(
     username: str,
     body: SetRolesRequest,
@@ -111,6 +112,7 @@ def set_user_roles(
     "/{username}/roles",
     response_model=UserRolesResponse,
     status_code=status.HTTP_200_OK,
+    responses={**R_401, **R_403, **R_422, **R_500},
 )
 def delete_user_roles(
     username: str,
