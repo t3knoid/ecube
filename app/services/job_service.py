@@ -179,46 +179,61 @@ def _auto_assign_drive(
     or ``"unbound_fallback"``.  Raises 409 if the choice is ambiguous or
     no usable drive exists for the requested project.
 
-    Disambiguation rules:
-    1. Exactly one AVAILABLE drive bound to *project_id* → select it.
-       If that drive is locked by a concurrent transaction → fail 409 (retry).
-    2. Zero project-bound matches → pick the first unbound AVAILABLE drive and bind it.
-       If unbound drives exist but are all locked → fail 409 (retry).
-    3. Multiple project-bound matches → fail 409 (caller must specify).
-    4. No usable drive (none bound to the project and none unbound) → fail 409.
-    """
-    project_count = drive_repo.count_available_for_project(project_id)
+    Selection strategy (lock first, then verify uniqueness):
 
-    if project_count == 1:
-        drive = drive_repo.get_one_available_for_project(project_id)
-        if drive is None:
-            # The single candidate is locked by another transaction.
+    1. Try to lock a project-bound ``AVAILABLE`` drive (``SKIP LOCKED``).
+    2. If a drive was locked, count all project-bound ``AVAILABLE`` drives:
+
+       - Exactly one → unambiguous; use it.
+       - More than one → ambiguous; 409 (caller must specify ``drive_id``).
+
+    3. If no drive could be locked, count to diagnose:
+
+       - Zero → no project-bound drives; fall through to unbound path.
+       - One or more → drive(s) temporarily unavailable; 409 (retry).
+
+    4. Unbound fallback: pick the first unbound ``AVAILABLE`` drive and bind it.
+       If none lockable but unbound drives exist → 409 (retry).
+       If no unbound drives exist at all → 409 (no usable drive).
+    """
+    # --- Project-bound path: lock first, then verify uniqueness ---
+    drive = drive_repo.get_one_available_for_project(project_id)
+
+    if drive is not None:
+        project_count = drive_repo.count_available_for_project(project_id)
+        if project_count > 1:
             db.rollback()
             raise HTTPException(
                 status_code=409,
-                detail=f"Drive for project {project_id} is locked by another operation",
+                detail=f"Multiple drives assigned to project {project_id}; specify drive_id",
             )
         return drive, "project_bound"
 
-    if project_count > 1:
+    # No lockable project-bound drive — determine why.
+    project_count = drive_repo.count_available_for_project(project_id)
+    if project_count >= 1:
         db.rollback()
         raise HTTPException(
             status_code=409,
-            detail=f"Multiple drives assigned to project {project_id}; specify drive_id",
+            detail=(
+                f"Multiple drives assigned to project {project_id}; specify drive_id"
+                if project_count > 1
+                else f"Drive for project {project_id} is temporarily unavailable; retry"
+            ),
         )
 
-    # No project-bound drives — try an unbound AVAILABLE drive
+    # --- Unbound fallback path (project_count == 0) ---
     drive = drive_repo.get_next_unbound_available()
     if drive:
         drive.current_project_id = project_id
         return drive, "unbound_fallback"
 
-    # Distinguish "no unbound drives" from "unbound drives exist but locked"
+    # Distinguish "no unbound drives" from "all temporarily unavailable"
     if drive_repo.count_unbound_available() > 0:
         db.rollback()
         raise HTTPException(
             status_code=409,
-            detail=f"Unbound drive for project {project_id} is locked by another operation",
+            detail=f"Unbound drive for project {project_id} is temporarily unavailable; retry",
         )
 
     # No usable drive — none bound to the project and none unbound
