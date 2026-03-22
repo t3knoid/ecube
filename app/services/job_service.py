@@ -193,8 +193,7 @@ def _auto_assign_drive(
        - One or more → drive(s) temporarily unavailable; 409 (retry).
 
     4. Unbound fallback: pick the first unbound ``AVAILABLE`` drive and bind it.
-       If none lockable but unbound drives exist → 409 (retry).
-       If no unbound drives exist at all → 409 (no usable drive).
+       If no lockable unbound drive → 409 (no usable drive or retry).
     """
     # --- Project-bound path: lock first, then verify uniqueness ---
     drive = drive_repo.get_one_available_for_project(project_id)
@@ -228,15 +227,8 @@ def _auto_assign_drive(
         drive.current_project_id = project_id
         return drive, "unbound_fallback"
 
-    # Distinguish "no unbound drives" from "all temporarily unavailable"
-    if drive_repo.count_unbound_available() > 0:
-        db.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail=f"Unbound drive for project {project_id} is temporarily unavailable; retry",
-        )
-
-    # No usable drive — none bound to the project and none unbound
+    # Either no unbound AVAILABLE drives exist, or they are all
+    # temporarily unavailable — we cannot distinguish reliably.
     db.rollback()
     raise HTTPException(
         status_code=409,
