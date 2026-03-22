@@ -8,7 +8,7 @@ from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy.orm import Session
 
 from app.exceptions import ECUBEException, EncodingError
-from app.models.hardware import DriveState
+from app.models.hardware import DriveState, UsbDrive
 from app.models.audit import AuditLog
 from app.models.jobs import DriveAssignment, ExportJob, JobStatus, Manifest
 from app.repositories.audit_repository import AuditRepository
@@ -97,10 +97,9 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
                 actor=actor,
                 client_ip=client_ip,
             )
-            if drive:
-                db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
-                drive.current_state = DriveState.IN_USE
-                db.flush()
+            db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+            drive.current_state = DriveState.IN_USE
+            db.flush()
 
         db.commit()
     except (HTTPException, ECUBEException):
@@ -137,7 +136,7 @@ def _auto_assign_drive(
     db: Session,
     actor: Optional[str] = None,
     client_ip: Optional[str] = None,
-):
+) -> UsbDrive:
     """Select a drive automatically when ``drive_id`` is omitted from job creation.
 
     Disambiguation rules:
