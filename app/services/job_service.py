@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.exceptions import ECUBEException, EncodingError
 from app.models.hardware import DriveState
+from app.models.audit import AuditLog
 from app.models.jobs import DriveAssignment, ExportJob, JobStatus, Manifest
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
@@ -92,7 +93,6 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
                 project_id=body.project_id,
                 job_id=job.id,
                 drive_repo=drive_repo,
-                audit_repo=audit_repo,
                 db=db,
                 actor=actor,
                 client_ip=client_ip,
@@ -134,7 +134,6 @@ def _auto_assign_drive(
     project_id: str,
     job_id: int,
     drive_repo: DriveRepository,
-    audit_repo: AuditRepository,
     db: Session,
     actor: Optional[str] = None,
     client_ip: Optional[str] = None,
@@ -151,20 +150,17 @@ def _auto_assign_drive(
 
     if len(project_drives) == 1:
         drive = project_drives[0]
-        try:
-            audit_repo.add(
-                action="DRIVE_AUTO_ASSIGNED",
-                user=actor,
-                job_id=job_id,
-                details={
-                    "drive_id": drive.id,
-                    "project_id": project_id,
-                    "selection": "project_bound",
-                },
-                client_ip=client_ip,
-            )
-        except Exception:
-            logger.exception("Failed to write audit log for DRIVE_AUTO_ASSIGNED")
+        db.add(AuditLog(
+            action="DRIVE_AUTO_ASSIGNED",
+            user=actor,
+            job_id=job_id,
+            details={
+                "drive_id": drive.id,
+                "project_id": project_id,
+                "selection": "project_bound",
+            },
+            client_ip=client_ip,
+        ))
         return drive
 
     if len(project_drives) > 1:
@@ -178,33 +174,27 @@ def _auto_assign_drive(
     drive = drive_repo.get_next_unbound_available()
     if drive:
         drive.current_project_id = project_id
-        try:
-            audit_repo.add(
-                action="DRIVE_PROJECT_BOUND",
-                user=actor,
-                job_id=job_id,
-                details={
-                    "drive_id": drive.id,
-                    "project_id": project_id,
-                },
-                client_ip=client_ip,
-            )
-        except Exception:
-            logger.exception("Failed to write audit log for DRIVE_PROJECT_BOUND")
-        try:
-            audit_repo.add(
-                action="DRIVE_AUTO_ASSIGNED",
-                user=actor,
-                job_id=job_id,
-                details={
-                    "drive_id": drive.id,
-                    "project_id": project_id,
-                    "selection": "unbound_fallback",
-                },
-                client_ip=client_ip,
-            )
-        except Exception:
-            logger.exception("Failed to write audit log for DRIVE_AUTO_ASSIGNED")
+        db.add(AuditLog(
+            action="DRIVE_PROJECT_BOUND",
+            user=actor,
+            job_id=job_id,
+            details={
+                "drive_id": drive.id,
+                "project_id": project_id,
+            },
+            client_ip=client_ip,
+        ))
+        db.add(AuditLog(
+            action="DRIVE_AUTO_ASSIGNED",
+            user=actor,
+            job_id=job_id,
+            details={
+                "drive_id": drive.id,
+                "project_id": project_id,
+                "selection": "unbound_fallback",
+            },
+            client_ip=client_ip,
+        ))
         return drive
 
     # No drives available at all
