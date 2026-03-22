@@ -81,51 +81,36 @@ class DriveRepository:
         return drive
 
     def get_available_for_project(self, project_id: str) -> List[UsbDrive]:
-        """Return all ``AVAILABLE`` drives with matching *project_id*, locked with ``FOR UPDATE``.
+        """Return all ``AVAILABLE`` drives with matching *project_id*, locked with ``FOR UPDATE SKIP LOCKED``.
 
         Used by auto-assignment to find project-bound candidates.
+        Drives locked by concurrent transactions are silently skipped.
         """
-        try:
-            return (
-                self.db.query(UsbDrive)
-                .filter(
-                    UsbDrive.current_state == DriveState.AVAILABLE,
-                    UsbDrive.current_project_id == project_id,
-                )
-                .with_for_update(nowait=True)
-                .all()
+        return (
+            self.db.query(UsbDrive)
+            .filter(
+                UsbDrive.current_state == DriveState.AVAILABLE,
+                UsbDrive.current_project_id == project_id,
             )
-        except OperationalError as exc:
-            self.db.rollback()
-            orig = getattr(exc, "orig", None)
-            sqlstate = getattr(orig, "pgcode", None) or getattr(orig, "sqlstate", None)
-            if sqlstate == "55P03":
-                raise ConflictError(
-                    "Drive is currently locked by another operation."
-                ) from exc
-            raise
+            .order_by(UsbDrive.id)
+            .with_for_update(skip_locked=True)
+            .all()
+        )
 
     def get_next_unbound_available(self) -> Optional[UsbDrive]:
-        """Return the first ``AVAILABLE`` drive with no project binding, locked with ``FOR UPDATE``.
+        """Return the first ``AVAILABLE`` drive with no project binding, locked with ``FOR UPDATE SKIP LOCKED``.
 
         Used as a fallback when no project-bound drives are available.
+        Orders by ``UsbDrive.id`` for deterministic selection; drives locked
+        by concurrent transactions are silently skipped.
         """
-        try:
-            return (
-                self.db.query(UsbDrive)
-                .filter(
-                    UsbDrive.current_state == DriveState.AVAILABLE,
-                    UsbDrive.current_project_id.is_(None),
-                )
-                .with_for_update(nowait=True)
-                .first()
+        return (
+            self.db.query(UsbDrive)
+            .filter(
+                UsbDrive.current_state == DriveState.AVAILABLE,
+                UsbDrive.current_project_id.is_(None),
             )
-        except OperationalError as exc:
-            self.db.rollback()
-            orig = getattr(exc, "orig", None)
-            sqlstate = getattr(orig, "pgcode", None) or getattr(orig, "sqlstate", None)
-            if sqlstate == "55P03":
-                raise ConflictError(
-                    "Drive is currently locked by another operation."
-                ) from exc
-            raise
+            .order_by(UsbDrive.id)
+            .with_for_update(skip_locked=True)
+            .first()
+        )
