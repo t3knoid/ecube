@@ -12,8 +12,8 @@ ECUBE exposes a REST API that external systems (case management platforms, eDisc
 4. **Create and start the job** — Submit the copy job with source, optional drive, and parameters.
 5. **Monitor, verify, manifest** — Poll for completion, verify integrity, and generate a chain-of-custody manifest.
 
-> **Auto-Assignment:** Steps 2–3 (Select/Initialize drive) can be skipped
-> entirely. When `drive_id` is omitted from  `POST /jobs`, ECUBE automatically
+> **Auto-Assignment:** Step 2 (Select/Initialize drive) can be skipped
+> entirely. When `drive_id` is omitted from `POST /jobs`, ECUBE automatically
 > selects a drive: it picks the single project-bound `AVAILABLE` drive, or
 > falls back to an unbound drive and binds the project to it. This is the
 > recommended approach for hands-off automation. See [Step 4](#step-4--create-the-copy-job)
