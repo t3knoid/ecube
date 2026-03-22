@@ -156,7 +156,8 @@ When `drive_id` is omitted, ECUBE selects a drive automatically:
   bound to the project.
 - If multiple project-bound drives are `AVAILABLE`, the request fails with
   **409** — the caller must specify `drive_id` to disambiguate.
-- If no drives are available at all, the request fails with **409**.
+- If no usable drive exists (none bound to the project and none unbound), the
+  request fails with **409**.
 
 > **Drive Capacity Warning:** ECUBE does **not** validate free space on the
 > target drive before or during copy operations. It is the caller's
@@ -256,7 +257,7 @@ Writes a JSON manifest to the USB drive containing file paths, sizes, hashes, an
 | `401 Unauthorized` | Token missing, invalid, or expired | Re-authenticate via `POST /auth/token` |
 | `403 Forbidden` | Insufficient role or project isolation violation | Check role assignments; verify `project_id` matches the drive's bound project |
 | `404 Not Found` | Resource does not exist | Verify drive/job/mount IDs |
-| `409 Conflict` | Drive not in expected state, multiple project-bound drives (specify `drive_id`), or no drives available | Select a different drive, specify `drive_id` explicitly, or wait for a drive to become available |
+| `409 Conflict` | Drive not in expected state, multiple project-bound drives (specify `drive_id`), or no usable drive for the requested project | Select a different drive, specify `drive_id` explicitly, or wait for a drive to become available |
 | `422 Unprocessable Entity` | Invalid request body | Check field names, types, and constraints |
 | `500 Internal Server Error` | Mount failure, copy engine error | Check mount connectivity; inspect job error details |
 

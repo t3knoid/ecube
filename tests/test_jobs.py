@@ -500,7 +500,7 @@ def test_auto_assign_409_multiple_project_bound_drives(client, db):
 
 
 def test_auto_assign_409_no_drives_available(client, db):
-    """When no AVAILABLE drives exist at all, return 409."""
+    """When no usable drive exists (none bound to project, none unbound), return 409."""
     response = client.post(
         "/jobs",
         json={
