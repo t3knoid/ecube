@@ -225,6 +225,64 @@ def test_file_repo_count_errors(db):
     assert repo.count_errors(job.id) == 2
 
 
+def test_file_repo_count_done(db):
+    job = _make_job(db)
+    repo = FileRepository(db)
+
+    repo.add_bulk([
+        ExportFile(job_id=job.id, relative_path="a.txt", status=FileStatus.DONE),
+        ExportFile(job_id=job.id, relative_path="b.txt", status=FileStatus.DONE),
+        ExportFile(job_id=job.id, relative_path="c.txt", status=FileStatus.ERROR),
+        ExportFile(job_id=job.id, relative_path="d.txt", status=FileStatus.PENDING),
+    ])
+
+    assert repo.count_done(job.id) == 2
+
+
+def test_file_repo_list_error_messages(db):
+    job = _make_job(db)
+    repo = FileRepository(db)
+
+    repo.add_bulk([
+        ExportFile(job_id=job.id, relative_path="ok.txt", status=FileStatus.DONE),
+        ExportFile(job_id=job.id, relative_path="e1.txt", status=FileStatus.ERROR, error_message="disk full"),
+        ExportFile(job_id=job.id, relative_path="e2.txt", status=FileStatus.ERROR, error_message="perm denied"),
+        ExportFile(job_id=job.id, relative_path="e3.txt", status=FileStatus.ERROR, error_message=None),
+    ])
+
+    rows = repo.list_error_messages(job.id, limit=10)
+    assert len(rows) == 2  # e3.txt excluded (null error_message)
+    messages = {msg for msg, _ in rows}
+    assert "disk full" in messages
+    assert "perm denied" in messages
+
+    # Verify limit works
+    rows_limited = repo.list_error_messages(job.id, limit=1)
+    assert len(rows_limited) == 1
+
+
+def test_file_repo_count_done_and_errors(db):
+    job = _make_job(db)
+    repo = FileRepository(db)
+
+    repo.add_bulk([
+        ExportFile(job_id=job.id, relative_path="a.txt", status=FileStatus.DONE),
+        ExportFile(job_id=job.id, relative_path="b.txt", status=FileStatus.DONE),
+        ExportFile(job_id=job.id, relative_path="c.txt", status=FileStatus.ERROR),
+        ExportFile(job_id=job.id, relative_path="d.txt", status=FileStatus.PENDING),
+    ])
+
+    done, errors = repo.count_done_and_errors(job.id)
+    assert done == 2
+    assert errors == 1
+
+    # Empty job returns zeros
+    empty_job = _make_job(db)
+    done_e, errors_e = repo.count_done_and_errors(empty_job.id)
+    assert done_e == 0
+    assert errors_e == 0
+
+
 def test_file_repo_delete_by_job(db):
     job = _make_job(db)
     repo = FileRepository(db)
@@ -276,6 +334,34 @@ def test_drive_assignment_repo_add(db):
     assert assignment.id is not None
     assert assignment.drive_id == drive.id
     assert assignment.job_id == job.id
+
+
+def test_drive_assignment_repo_get_active_for_job(db):
+    from datetime import datetime, timezone
+
+    drive1 = UsbDrive(device_identifier="USB-ACT-01", current_state=DriveState.AVAILABLE)
+    drive2 = UsbDrive(device_identifier="USB-ACT-02", current_state=DriveState.IN_USE)
+    job = ExportJob(project_id="P", evidence_number="E", source_path="/src")
+    db.add_all([drive1, drive2, job])
+    db.commit()
+
+    repo = DriveAssignmentRepository(db)
+
+    # First assignment, now released
+    a1 = repo.add(DriveAssignment(
+        drive_id=drive1.id, job_id=job.id,
+        released_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    ))
+    # Second assignment, still active
+    a2 = repo.add(DriveAssignment(drive_id=drive2.id, job_id=job.id))
+
+    active = repo.get_active_for_job(job.id)
+    assert active is not None
+    assert active.id == a2.id
+    assert active.drive_id == drive2.id
+
+    # No active assignment for a non-existent job
+    assert repo.get_active_for_job(99999) is None
 
 
 # ---------------------------------------------------------------------------
