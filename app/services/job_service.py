@@ -163,6 +163,7 @@ def _auto_assign_drive(
 
     Disambiguation rules:
     1. Exactly one AVAILABLE drive bound to *project_id* → select it.
+       If that drive is locked by a concurrent transaction → fail 409 (retry).
     2. Zero project-bound matches → pick the first unbound AVAILABLE drive and bind it.
     3. Multiple project-bound matches → fail 409 (caller must specify).
     4. No usable drive (none bound to the project and none unbound) → fail 409.

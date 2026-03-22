@@ -152,6 +152,8 @@ Content-Type: application/json
 When `drive_id` is omitted, ECUBE selects a drive automatically:
 
 - If exactly one `AVAILABLE` drive is bound to the project, it is selected.
+  If that drive is temporarily locked by a concurrent operation, the request
+  fails with **409** — retry after a short delay.
 - If no project-bound drives exist, an unbound `AVAILABLE` drive is selected and
   bound to the project.
 - If multiple project-bound drives are `AVAILABLE`, the request fails with
