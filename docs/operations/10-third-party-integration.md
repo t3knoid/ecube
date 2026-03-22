@@ -7,10 +7,17 @@ This document provides guidance for third-party applications that need to progra
 ECUBE exposes a REST API that external systems (case management platforms, eDiscovery tools, automation scripts) can call to submit copy jobs. The workflow involves calling a series of endpoints in sequence:
 
 1. **Authenticate** — Obtain a Bearer JWT token.
-2. **Select a drive** — Find an available USB drive and bind it to the project.
+2. **Select a drive** *(optional)* — Find an available USB drive and bind it to the project. If omitted, ECUBE auto-assigns a drive when the job is created.
 3. **Mount the source** — Register the NFS or SMB share containing the evidence.
-4. **Create and start the job** — Submit the copy job with source, drive, and optional parameters.
+4. **Create and start the job** — Submit the copy job with source, optional drive, and parameters.
 5. **Monitor, verify, manifest** — Poll for completion, verify integrity, and generate a chain-of-custody manifest.
+
+> **Auto-Assignment:** Steps 2–3 (Select/Initialize drive) can be skipped
+> entirely. When `drive_id` is omitted from  `POST /jobs`, ECUBE automatically
+> selects a drive: it picks the single project-bound `AVAILABLE` drive, or
+> falls back to an unbound drive and binds the project to it. This is the
+> recommended approach for hands-off automation. See [Step 4](#step-4--create-the-copy-job)
+> for details.
 
 ### 1.1 Minimum Required Information
 
@@ -68,6 +75,10 @@ Authorization: Bearer <access_token>
 
 ### Step 1 — Select an Available Drive
 
+> **Note:** This step is optional. If you omit `drive_id` when creating the job
+> (Step 4), ECUBE auto-assigns a drive. Skip to Step 3 for the simplified
+> workflow.
+
 ```
 GET /drives
 ```
@@ -81,6 +92,9 @@ GET /drives?project_id=CASE-2026-001
 ```
 
 ### Step 2 — Initialize the Drive for the Project
+
+> **Note:** This step is only needed when you explicitly selected a drive in
+> Step 1. Auto-assigned drives are automatically bound to the project.
 
 ```
 POST /drives/{drive_id}/initialize
@@ -122,6 +136,36 @@ Returns the mount object with its `id` and `status` (`MOUNTED` or `ERROR`). Veri
 
 ### Step 4 — Create the Copy Job
 
+**With auto-assignment (recommended for automation):**
+
+```
+POST /jobs
+Content-Type: application/json
+
+{
+    "project_id": "CASE-2026-001",
+    "evidence_number": "EV-042",
+    "source_path": "/mnt/evidence/case-2026-001"
+}
+```
+
+When `drive_id` is omitted, ECUBE selects a drive automatically:
+
+- If exactly one `AVAILABLE` drive is bound to the project, it is selected.
+- If no project-bound drives exist, an unbound `AVAILABLE` drive is selected and
+  bound to the project.
+- If multiple project-bound drives are `AVAILABLE`, the request fails with
+  **409** — the caller must specify `drive_id` to disambiguate.
+- If no drives are available at all, the request fails with **409**.
+
+> **Drive Capacity Warning:** ECUBE does **not** validate free space on the
+> target drive before or during copy operations. It is the caller's
+> responsibility to ensure the target drive has sufficient space. When a project
+> has multiple drives, specify `drive_id` to select the drive with available
+> capacity.
+
+**With explicit drive (when disambiguation is needed):**
+
 ```
 POST /jobs
 Content-Type: application/json
@@ -134,7 +178,7 @@ Content-Type: application/json
 }
 ```
 
-The `source_path` must be the `local_mount_point` from Step 3. The `drive_id` is from Step 1.
+The `source_path` must be the `local_mount_point` from Step 3. When provided, `drive_id` is from Step 1.
 
 Optional fields to override defaults:
 
@@ -212,7 +256,7 @@ Writes a JSON manifest to the USB drive containing file paths, sizes, hashes, an
 | `401 Unauthorized` | Token missing, invalid, or expired | Re-authenticate via `POST /auth/token` |
 | `403 Forbidden` | Insufficient role or project isolation violation | Check role assignments; verify `project_id` matches the drive's bound project |
 | `404 Not Found` | Resource does not exist | Verify drive/job/mount IDs |
-| `409 Conflict` | Drive not in expected state (e.g., already IN_USE) | Select a different drive or wait for current job to complete |
+| `409 Conflict` | Drive not in expected state, multiple project-bound drives (specify `drive_id`), or no drives available | Select a different drive, specify `drive_id` explicitly, or wait for a drive to become available |
 | `422 Unprocessable Entity` | Invalid request body | Check field names, types, and constraints |
 | `500 Internal Server Error` | Mount failure, copy engine error | Check mount connectivity; inspect job error details |
 
@@ -291,7 +335,7 @@ if [ "$MOUNT_STATUS" != "MOUNTED" ]; then
 fi
 echo "  Mounted (mount_id=$MOUNT_ID)."
 
-# ── Step 5: Create the copy job ───────────────────────────────
+# ── Step 5: Create the copy job (auto-assign drive) ───────────
 echo "Creating copy job..."
 JOB_RESPONSE=$(curl -sf -X POST "$ECUBE_URL/jobs" \
   -H "$AUTH" \
@@ -300,7 +344,6 @@ JOB_RESPONSE=$(curl -sf -X POST "$ECUBE_URL/jobs" \
     \"project_id\": \"$PROJECT_ID\",
     \"evidence_number\": \"$EVIDENCE_NUMBER\",
     \"source_path\": \"$MOUNT_POINT\",
-    \"drive_id\": $DRIVE_ID,
     \"thread_count\": $THREAD_COUNT,
     \"max_file_retries\": $MAX_RETRIES,
     \"retry_delay_seconds\": $RETRY_DELAY
@@ -457,13 +500,12 @@ def main():
         sys.exit(1)
     print(f"  Mounted (mount_id={mount['id']}).")
 
-    # ── Step 5: Create the copy job ───────────────────────────
+    # ── Step 5: Create the copy job (auto-assign drive) ───────
     print("Creating copy job...")
     resp = session.post(f"{ECUBE_URL}/jobs", json={
         "project_id": PROJECT_ID,
         "evidence_number": EVIDENCE_NUMBER,
         "source_path": MOUNT_POINT,
-        "drive_id": drive_id,
         "thread_count": THREAD_COUNT,
         "max_file_retries": MAX_RETRIES,
         "retry_delay_seconds": RETRY_DELAY,
@@ -601,7 +643,7 @@ if ($mount.status -ne "MOUNTED") {
 }
 Write-Host "  Mounted (mount_id=$($mount.id))."
 
-# ── Step 5: Create the copy job ───────────────────────────────
+# ── Step 5: Create the copy job (auto-assign drive) ───────────
 Write-Host "Creating copy job..."
 $job = Invoke-RestMethod -Uri "$EcubeUrl/jobs" -Method Post `
     -ContentType "application/json" -Headers $headers `
@@ -609,7 +651,6 @@ $job = Invoke-RestMethod -Uri "$EcubeUrl/jobs" -Method Post `
         project_id         = $ProjectId
         evidence_number    = $EvidenceNum
         source_path        = $MountPoint
-        drive_id           = $driveId
         thread_count       = $ThreadCount
         max_file_retries   = $MaxRetries
         retry_delay_seconds = $RetryDelay
