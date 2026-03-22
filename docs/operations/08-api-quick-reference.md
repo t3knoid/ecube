@@ -98,7 +98,7 @@ curl -H "Authorization: Bearer $JWT_TOKEN" https://localhost:8443/endpoint
 | POST | `/jobs/{job_id}/verify` | processor+ | Verify data integrity |
 | POST | `/jobs/{job_id}/manifest` | processor+ | Generate manifest document |
 
-**Automatic Drive Assignment:** When `drive_id` is omitted from `POST /jobs`, the system auto-selects a drive: picks the single project-bound `AVAILABLE` drive, or falls back to an unbound drive. Returns **409** if multiple project-bound drives exist (caller must specify `drive_id`) or if no usable drive exists for the requested project (none bound to it and none unbound).
+**Automatic Drive Assignment:** When `drive_id` is omitted from `POST /jobs`, the system auto-selects a drive: picks the single project-bound `AVAILABLE` drive, or falls back to an unbound drive. Returns **409** if the single project-bound drive is locked by a concurrent operation (retry), if multiple project-bound drives exist (caller must specify `drive_id`), or if no usable drive exists for the requested project (none bound to it and none unbound).
 
 ---
 
