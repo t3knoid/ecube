@@ -90,7 +90,6 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
             # Auto-assign a drive when drive_id is omitted
             drive, auto_selection = _auto_assign_drive(
                 project_id=body.project_id,
-                job_id=job.id,
                 drive_repo=drive_repo,
                 db=db,
             )
@@ -153,7 +152,6 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
 
 def _auto_assign_drive(
     project_id: str,
-    job_id: int,
     drive_repo: DriveRepository,
     db: Session,
 ) -> Tuple[UsbDrive, str]:
