@@ -242,14 +242,10 @@ class TestOpenAPISchema:
             "/health", "/auth/token", "/setup/status", "/setup/initialize",
             "/introspection/version",
         }
-        # Conditional-auth endpoints: 401 not guaranteed, but 403 may apply
-        conditional_auth_paths = {
-            "/setup/database/test-connection", "/setup/database/provision",
-        }
         # Authenticated but no role restriction (any valid user succeeds, no 403)
         no_role_paths = {"/admin/logs", "/admin/logs/{filename}"}
-        skip_401 = unauthenticated_paths | conditional_auth_paths
-        skip_403 = skip_401 | no_role_paths
+        skip_401 = unauthenticated_paths
+        skip_403 = unauthenticated_paths | no_role_paths
 
         missing_401 = []
         missing_403 = []
