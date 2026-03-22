@@ -523,7 +523,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["jobs"]
 						},
-						"description": "Create an export job with an explicit drive_id. The drive must be AVAILABLE and its current_project_id must match or be null. Starts in PENDING state. Roles: admin, manager, processor."
+						"description": "Create an export job with an explicit drive_id. The drive must be AVAILABLE and its current_project_id must match or be null. If the drive is currently unbound, it is automatically bound to the requested project. Starts in PENDING state. Roles: admin, manager, processor."
 					}
 				},
 				{

@@ -83,6 +83,12 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
                     detail="Drive is not available",
                 )
 
+            # Bind the drive to this project if currently unbound.
+            explicit_bound = False
+            if drive.current_project_id is None:
+                drive.current_project_id = body.project_id
+                explicit_bound = True
+
             db.add(DriveAssignment(drive_id=body.drive_id, job_id=job.id))
             drive.current_state = DriveState.IN_USE
             db.flush()  # validate assignment + drive state change
@@ -113,6 +119,18 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
     db.refresh(job)
 
     # Best-effort audit logging — failures never abort job creation.
+    try:
+        if body.drive_id is not None and explicit_bound:
+            audit_repo.add(
+                action="DRIVE_PROJECT_BOUND",
+                user=actor,
+                job_id=job.id,
+                details={"drive_id": body.drive_id, "project_id": body.project_id},
+                client_ip=client_ip,
+            )
+    except Exception:
+        logger.exception("Failed to write audit log for explicit drive project binding")
+
     try:
         if body.drive_id is None:
             if auto_selection == "unbound_fallback":
