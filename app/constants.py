@@ -32,11 +32,17 @@ ECUBE_GROUP_PREFIX: str = "ecube-"
 # Username / group-name validation
 # ---------------------------------------------------------------------------
 
+#: Valid POSIX username pattern string (for Path() and OpenAPI).
+USERNAME_PATTERN = r"^[a-z_][a-z0-9_-]{0,31}$"
+
 #: Valid POSIX username: lowercase letter or underscore start, up to 32 chars.
-USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
+USERNAME_RE = re.compile(USERNAME_PATTERN)
+
+#: Valid group-name pattern string (same rules as usernames on Linux).
+GROUPNAME_PATTERN = r"^[a-z_][a-z0-9_-]{0,31}$"
 
 #: Valid group name (same pattern as usernames on Linux).
-GROUPNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
+GROUPNAME_RE = re.compile(GROUPNAME_PATTERN)
 
 #: Usernames that cannot be created/deleted through the API.
 RESERVED_USERNAMES: frozenset[str] = frozenset(

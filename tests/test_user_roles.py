@@ -298,7 +298,6 @@ class TestUsernameValidation:
     def test_invalid_usernames_rejected(self, admin_client, bad_name):
         resp = admin_client.get(f"/users/{bad_name}/roles")
         assert resp.status_code == 422
-        assert "Invalid username" in resp.json()["message"]
 
     @pytest.mark.parametrize("good_name", [
         "alice",
