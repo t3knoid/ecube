@@ -233,6 +233,16 @@ class TestMountsUnicodeSanitization:
 
 class TestJobsUnicodeSanitization:
 
+    def _add_drive(self, db, project_id, device_id):
+        from app.models.hardware import DriveState, UsbDrive
+        drive = UsbDrive(
+            device_identifier=device_id,
+            current_state=DriveState.AVAILABLE,
+            current_project_id=project_id,
+        )
+        db.add(drive)
+        db.commit()
+
     def test_post_job_surrogates_in_path_rejected(self, admin_client, db):
         """Surrogates in source_path (a path field) are rejected with 422."""
         payload = json.dumps({
@@ -249,6 +259,7 @@ class TestJobsUnicodeSanitization:
 
     def test_post_job_surrogates_in_non_path_stripped(self, admin_client, db):
         """Surrogates in non-path fields (project_id, evidence_number) are still silently stripped."""
+        self._add_drive(db, "PROJ001", "USB-UNICODE-SURR")
         payload = json.dumps({
             "project_id": "PROJ\ud800001",
             "evidence_number": "EV\udc00123",
@@ -267,6 +278,7 @@ class TestJobsUnicodeSanitization:
 
     def test_post_job_null_bytes_sanitized(self, admin_client, db):
         """Null bytes are stripped from job string fields."""
+        self._add_drive(db, "PROJ001", "USB-UNICODE-NULL")
         response = admin_client.post(
             "/jobs",
             json={

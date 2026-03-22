@@ -86,6 +86,21 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
             db.add(DriveAssignment(drive_id=body.drive_id, job_id=job.id))
             drive.current_state = DriveState.IN_USE
             db.flush()  # validate assignment + drive state change
+        else:
+            # Auto-assign a drive when drive_id is omitted
+            drive = _auto_assign_drive(
+                project_id=body.project_id,
+                job_id=job.id,
+                drive_repo=drive_repo,
+                audit_repo=audit_repo,
+                db=db,
+                actor=actor,
+                client_ip=client_ip,
+            )
+            if drive:
+                db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+                drive.current_state = DriveState.IN_USE
+                db.flush()
 
         db.commit()
     except (HTTPException, ECUBEException):
@@ -113,6 +128,91 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
     except Exception:
         logger.exception("Failed to write audit log for JOB_CREATED")
     return job
+
+
+def _auto_assign_drive(
+    project_id: str,
+    job_id: int,
+    drive_repo: DriveRepository,
+    audit_repo: AuditRepository,
+    db: Session,
+    actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
+):
+    """Select a drive automatically when ``drive_id`` is omitted from job creation.
+
+    Disambiguation rules:
+    1. Exactly one AVAILABLE drive bound to *project_id* → select it.
+    2. Zero project-bound matches → pick the first unbound AVAILABLE drive and bind it.
+    3. Multiple project-bound matches → fail 409 (caller must specify).
+    4. No drives available at all → fail 409.
+    """
+    project_drives = drive_repo.get_available_for_project(project_id)
+
+    if len(project_drives) == 1:
+        drive = project_drives[0]
+        try:
+            audit_repo.add(
+                action="DRIVE_AUTO_ASSIGNED",
+                user=actor,
+                job_id=job_id,
+                details={
+                    "drive_id": drive.id,
+                    "project_id": project_id,
+                    "selection": "project_bound",
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for DRIVE_AUTO_ASSIGNED")
+        return drive
+
+    if len(project_drives) > 1:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=f"Multiple drives assigned to project {project_id}; specify drive_id",
+        )
+
+    # No project-bound drives — try an unbound AVAILABLE drive
+    drive = drive_repo.get_next_unbound_available()
+    if drive:
+        drive.current_project_id = project_id
+        try:
+            audit_repo.add(
+                action="DRIVE_PROJECT_BOUND",
+                user=actor,
+                job_id=job_id,
+                details={
+                    "drive_id": drive.id,
+                    "project_id": project_id,
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for DRIVE_PROJECT_BOUND")
+        try:
+            audit_repo.add(
+                action="DRIVE_AUTO_ASSIGNED",
+                user=actor,
+                job_id=job_id,
+                details={
+                    "drive_id": drive.id,
+                    "project_id": project_id,
+                    "selection": "unbound_fallback",
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for DRIVE_AUTO_ASSIGNED")
+        return drive
+
+    # No drives available at all
+    db.rollback()
+    raise HTTPException(
+        status_code=409,
+        detail=f"No available drive for project {project_id}",
+    )
 
 
 def get_job(job_id: int, db: Session) -> ExportJob:
