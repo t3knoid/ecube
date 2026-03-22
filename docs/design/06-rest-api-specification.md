@@ -1139,7 +1139,7 @@ Partially update database connection settings.  All fields are optional — only
 
 ## 3.9 Introspection API (Read‑Only)
 
-All introspection endpoints are read-only and return `401`/`403` for authentication/authorization failures.
+All introspection endpoints are read-only. Authenticated endpoints return `401`/`403` for authentication/authorization failures; `/introspection/version` is unauthenticated and therefore does not return `401`/`403`.
 
 ### `GET /introspection/drives`
 
