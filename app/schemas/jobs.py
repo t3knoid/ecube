@@ -1,5 +1,8 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 from typing import Optional
+from app.models.hardware import DriveState
 from app.models.jobs import JobStatus, FileStatus
 from app.utils.sanitize import SafeStr, StrictSafeStr
 
@@ -73,6 +76,20 @@ class ExportFileSchema(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class DriveInfoSchema(BaseModel):
+    """Subset of drive metadata embedded in job responses."""
+
+    id: int = Field(..., description="Unique identifier for the drive")
+    device_identifier: str = Field(..., description="Stable hardware identifier for the drive")
+    filesystem_path: Optional[str] = Field(default=None, description="Current OS block device node (e.g. /dev/sdb)")
+    capacity_bytes: Optional[int] = Field(default=None, description="Total storage capacity in bytes")
+    filesystem_type: Optional[str] = Field(default=None, description="Detected filesystem label (e.g. ext4, exfat)")
+    current_state: DriveState = Field(..., description="Current drive state (EMPTY, AVAILABLE, IN_USE)")
+    current_project_id: Optional[str] = Field(default=None, description="Bound project ID if IN_USE")
+
+    model_config = {"from_attributes": True}
+
+
 class ExportJobSchema(BaseModel):
     id: int = Field(..., description="Unique identifier for the job")
     project_id: str = Field(..., description="Project ID for audit and isolation")
@@ -83,10 +100,18 @@ class ExportJobSchema(BaseModel):
     total_bytes: int = Field(..., description="Total bytes to copy")
     copied_bytes: int = Field(..., description="Bytes copied so far")
     file_count: int = Field(..., description="Total number of files to copy")
+    files_succeeded: int = Field(default=0, description="Number of files successfully copied")
+    files_failed: int = Field(default=0, description="Number of files that failed")
     thread_count: int = Field(..., ge=1, le=8, description="Number of parallel threads used (1-8)")
     max_file_retries: int = Field(default=3, ge=0, description="Maximum number of retries for failed files (0+)")
     retry_delay_seconds: int = Field(default=1, ge=0, description="Delay between retries in seconds (0+)")
     created_by: Optional[str] = Field(default=None, description="Username of the job creator")
+    started_by: Optional[str] = Field(default=None, description="Username of the user who started the job")
+    created_at: Optional[datetime] = Field(default=None, description="When the job was created")
+    started_at: Optional[datetime] = Field(default=None, description="When the copy was started")
+    completed_at: Optional[datetime] = Field(default=None, description="When the job reached a terminal state")
+    drive: Optional[DriveInfoSchema] = Field(default=None, description="Assigned drive metadata (null if no drive assigned)")
+    error_summary: Optional[str] = Field(default=None, description="Brief summary of file failures (null on success)")
     client_ip: Optional[str] = Field(default=None, description="IP address of the client that created the job (null for background tasks or when redacted; 'unknown' when the client address could not be resolved)")
 
     model_config = {"from_attributes": True}

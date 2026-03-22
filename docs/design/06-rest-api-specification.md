@@ -531,6 +531,84 @@ Returns the updated hub object (same schema as `GET /admin/hubs` elements).
 
 ## 3.3 Job Management
 
+All job endpoints that return a single job use the `ExportJobSchema` response, which includes timestamps, user attribution, file counts, an optional nested drive object, and an error summary.
+
+#### `ExportJobSchema` response fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | integer | Unique job identifier |
+| `project_id` | string | Project ID for audit and isolation |
+| `evidence_number` | string | Evidence case number |
+| `source_path` | string | Source path of evidence data |
+| `target_mount_path` | string or null | Target mount path for copied data |
+| `status` | string | `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `VERIFYING` |
+| `total_bytes` | integer | Total bytes to copy |
+| `copied_bytes` | integer | Bytes copied so far |
+| `file_count` | integer | Total number of files to copy |
+| `files_succeeded` | integer | Number of files successfully copied (status `DONE`) |
+| `files_failed` | integer | Number of files that failed (status `ERROR`) |
+| `thread_count` | integer | Number of parallel threads used (1–8) |
+| `max_file_retries` | integer | Maximum retries per failed file |
+| `retry_delay_seconds` | integer | Delay between retries in seconds |
+| `created_by` | string or null | Username of the job creator |
+| `started_by` | string or null | Username of the user who started the job |
+| `created_at` | datetime or null | When the job was created |
+| `started_at` | datetime or null | When the copy was started |
+| `completed_at` | datetime or null | When the job reached a terminal state. Reset to `null` if the job is restarted from `FAILED` |
+| `drive` | object or null | Nested `DriveInfoSchema` for the assigned drive (see below) |
+| `error_summary` | string or null | Brief summary of file failures; `null` when no files failed. Returns count-only fallback (e.g. "2 files failed") when errors lack messages |
+| `client_ip` | string or null | Client IP (redacted for non-admin/auditor roles) |
+
+#### Nested `DriveInfoSchema`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | integer | Unique drive identifier |
+| `device_identifier` | string | Stable hardware identifier |
+| `filesystem_path` | string or null | OS block device node (e.g. `/dev/sdb`) |
+| `capacity_bytes` | integer or null | Total storage capacity in bytes |
+| `filesystem_type` | string or null | Detected filesystem label |
+| `current_state` | string | `EMPTY`, `AVAILABLE`, `IN_USE` |
+| `current_project_id` | string or null | Bound project ID |
+
+#### Example response (completed job)
+
+```json
+{
+  "id": 1,
+  "project_id": "PROJECT-42",
+  "evidence_number": "EV-2026-001",
+  "source_path": "/mnt/evidence/case-001",
+  "target_mount_path": "/media/usb0",
+  "status": "COMPLETED",
+  "total_bytes": 5368709120,
+  "copied_bytes": 5368709120,
+  "file_count": 342,
+  "files_succeeded": 342,
+  "files_failed": 0,
+  "thread_count": 4,
+  "max_file_retries": 3,
+  "retry_delay_seconds": 1,
+  "created_by": "ecube-admin",
+  "started_by": "ecube-admin",
+  "created_at": "2026-03-18T14:00:00Z",
+  "started_at": "2026-03-18T14:01:00Z",
+  "completed_at": "2026-03-18T14:45:00Z",
+  "drive": {
+    "id": 3,
+    "device_identifier": "usb-Generic_Flash_Disk_12345-0:0",
+    "filesystem_path": "/dev/sdb1",
+    "capacity_bytes": 64023257088,
+    "filesystem_type": "exfat",
+    "current_state": "IN_USE",
+    "current_project_id": "PROJECT-42"
+  },
+  "error_summary": null,
+  "client_ip": "192.168.1.50"
+}
+```
+
 ### `POST /jobs`
 
 Create a new job.
@@ -539,30 +617,40 @@ Create a new job.
 
 **Error responses:**
 
-- `401 Unauthorized` — Missing/invalid token
-- `403 Forbidden` — Insufficient role
+- `401 Unauthorized` — Missing/invalid credentials
+- `403 Forbidden` — Insufficient role or project isolation violation
+- `404 Not Found` — Drive not found
+- `409 Conflict` — Drive already in use
+- `422 Validation Error` — Invalid request body
+- `500 Internal Server Error` — Database error
 
 ### `POST /jobs/{id}/start`
 
-Start job with thread count.
+Start job with thread count. Sets `started_by` to the authenticated user and `started_at` to the current timestamp. Resets `completed_at` to `null`. Accepts jobs in `PENDING` or `FAILED` status (allowing restart of failed jobs).
 
 **Roles:** `admin`, `manager`, `processor`
 
 **Error responses:**
 
-- `401 Unauthorized` — Missing/invalid token
+- `401 Unauthorized` — Missing/invalid credentials
 - `403 Forbidden` — Insufficient role
+- `404 Not Found` — Job not found
+- `409 Conflict` — Job cannot be started from its current status
+- `422 Validation Error` — Invalid path/body parameters
+- `500 Internal Server Error` — Database error
 
 ### `GET /jobs/{id}`
 
-Return job status and progress.
+Return job status, progress, file counts, timestamps, drive info, and error summary.
 
 **Roles:** `admin`, `manager`, `processor`, `auditor`
 
 **Error responses:**
 
-- `401 Unauthorized` — Missing/invalid token
+- `401 Unauthorized` — Missing/invalid credentials
 - `403 Forbidden` — Insufficient role
+- `404 Not Found` — Job not found
+- `422 Validation Error` — Invalid path parameter
 
 ### `POST /jobs/{id}/verify`
 
@@ -572,8 +660,11 @@ Re-verify checksums.
 
 **Error responses:**
 
-- `401 Unauthorized` — Missing/invalid token
+- `401 Unauthorized` — Missing/invalid credentials
 - `403 Forbidden` — Insufficient role
+- `404 Not Found` — Job not found
+- `422 Validation Error` — Invalid path parameter
+- `500 Internal Server Error` — Database error
 
 ### `POST /jobs/{id}/manifest`
 
@@ -583,8 +674,11 @@ Regenerate manifest.
 
 **Error responses:**
 
-- `401 Unauthorized` — Missing/invalid token
+- `401 Unauthorized` — Missing/invalid credentials
 - `403 Forbidden` — Insufficient role
+- `404 Not Found` — Job not found
+- `422 Validation Error` — Invalid path parameter
+- `500 Internal Server Error` — Database error
 
 ---
 
