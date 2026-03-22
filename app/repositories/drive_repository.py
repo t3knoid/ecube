@@ -80,11 +80,28 @@ class DriveRepository:
         self.db.refresh(drive)
         return drive
 
-    def get_available_for_project(self, project_id: str) -> List[UsbDrive]:
-        """Return all ``AVAILABLE`` drives with matching *project_id*, locked with ``FOR UPDATE SKIP LOCKED``.
+    def count_available_for_project(self, project_id: str) -> int:
+        """Return the number of ``AVAILABLE`` drives bound to *project_id*.
 
-        Used by auto-assignment to find project-bound candidates.
-        Drives locked by concurrent transactions are silently skipped.
+        This is an **unlocked** count used for disambiguation: the caller
+        must know the true total (including rows locked by other
+        transactions) to decide whether auto-assignment is unambiguous.
+        """
+        return (
+            self.db.query(UsbDrive)
+            .filter(
+                UsbDrive.current_state == DriveState.AVAILABLE,
+                UsbDrive.current_project_id == project_id,
+            )
+            .count()
+        )
+
+    def get_one_available_for_project(self, project_id: str) -> Optional[UsbDrive]:
+        """Return a single ``AVAILABLE`` drive bound to *project_id*, row-locked.
+
+        Uses ``FOR UPDATE SKIP LOCKED`` so that a drive held by a concurrent
+        transaction is skipped rather than blocking.  Returns ``None`` if no
+        unlocked candidate exists.
         """
         return (
             self.db.query(UsbDrive)
@@ -94,7 +111,7 @@ class DriveRepository:
             )
             .order_by(UsbDrive.id)
             .with_for_update(skip_locked=True)
-            .all()
+            .first()
         )
 
     def get_next_unbound_available(self) -> Optional[UsbDrive]:

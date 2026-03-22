@@ -2,14 +2,13 @@ from datetime import datetime, timezone
 import json
 import logging
 import os
-from typing import Optional
+from typing import Optional, Tuple
 
 from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy.orm import Session
 
 from app.exceptions import ECUBEException, EncodingError
 from app.models.hardware import DriveState, UsbDrive
-from app.models.audit import AuditLog
 from app.models.jobs import DriveAssignment, ExportJob, JobStatus, Manifest
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
@@ -89,13 +88,11 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
             db.flush()  # validate assignment + drive state change
         else:
             # Auto-assign a drive when drive_id is omitted
-            drive = _auto_assign_drive(
+            drive, auto_selection = _auto_assign_drive(
                 project_id=body.project_id,
                 job_id=job.id,
                 drive_repo=drive_repo,
                 db=db,
-                actor=actor,
-                client_ip=client_ip,
             )
             db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
             drive.current_state = DriveState.IN_USE
@@ -116,6 +113,31 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
 
     db.refresh(job)
 
+    # Best-effort audit logging — failures never abort job creation.
+    try:
+        if not body.drive_id:
+            if auto_selection == "unbound_fallback":
+                audit_repo.add(
+                    action="DRIVE_PROJECT_BOUND",
+                    user=actor,
+                    job_id=job.id,
+                    details={"drive_id": drive.id, "project_id": body.project_id},
+                    client_ip=client_ip,
+                )
+            audit_repo.add(
+                action="DRIVE_AUTO_ASSIGNED",
+                user=actor,
+                job_id=job.id,
+                details={
+                    "drive_id": drive.id,
+                    "project_id": body.project_id,
+                    "selection": auto_selection,
+                },
+                client_ip=client_ip,
+            )
+    except Exception:
+        logger.exception("Failed to write audit log for auto-assignment")
+
     try:
         audit_repo.add(
             action="JOB_CREATED",
@@ -134,35 +156,33 @@ def _auto_assign_drive(
     job_id: int,
     drive_repo: DriveRepository,
     db: Session,
-    actor: Optional[str] = None,
-    client_ip: Optional[str] = None,
-) -> UsbDrive:
+) -> Tuple[UsbDrive, str]:
     """Select a drive automatically when ``drive_id`` is omitted from job creation.
+
+    Returns ``(drive, selection)`` where *selection* is ``"project_bound"``
+    or ``"unbound_fallback"``.  Raises 409 if the choice is ambiguous or
+    no usable drive exists for the requested project.
 
     Disambiguation rules:
     1. Exactly one AVAILABLE drive bound to *project_id* → select it.
     2. Zero project-bound matches → pick the first unbound AVAILABLE drive and bind it.
     3. Multiple project-bound matches → fail 409 (caller must specify).
-    4. No drives available at all → fail 409.
+    4. No usable drive (none bound to the project and none unbound) → fail 409.
     """
-    project_drives = drive_repo.get_available_for_project(project_id)
+    project_count = drive_repo.count_available_for_project(project_id)
 
-    if len(project_drives) == 1:
-        drive = project_drives[0]
-        db.add(AuditLog(
-            action="DRIVE_AUTO_ASSIGNED",
-            user=actor,
-            job_id=job_id,
-            details={
-                "drive_id": drive.id,
-                "project_id": project_id,
-                "selection": "project_bound",
-            },
-            client_ip=client_ip,
-        ))
-        return drive
+    if project_count == 1:
+        drive = drive_repo.get_one_available_for_project(project_id)
+        if drive is None:
+            # The single candidate is locked by another transaction.
+            db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail=f"Drive for project {project_id} is locked by another operation",
+            )
+        return drive, "project_bound"
 
-    if len(project_drives) > 1:
+    if project_count > 1:
         db.rollback()
         raise HTTPException(
             status_code=409,
@@ -173,30 +193,9 @@ def _auto_assign_drive(
     drive = drive_repo.get_next_unbound_available()
     if drive:
         drive.current_project_id = project_id
-        db.add(AuditLog(
-            action="DRIVE_PROJECT_BOUND",
-            user=actor,
-            job_id=job_id,
-            details={
-                "drive_id": drive.id,
-                "project_id": project_id,
-            },
-            client_ip=client_ip,
-        ))
-        db.add(AuditLog(
-            action="DRIVE_AUTO_ASSIGNED",
-            user=actor,
-            job_id=job_id,
-            details={
-                "drive_id": drive.id,
-                "project_id": project_id,
-                "selection": "unbound_fallback",
-            },
-            client_ip=client_ip,
-        ))
-        return drive
+        return drive, "unbound_fallback"
 
-    # No drives available at all
+    # No usable drive — none bound to the project and none unbound
     db.rollback()
     raise HTTPException(
         status_code=409,

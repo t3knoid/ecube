@@ -542,7 +542,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["jobs"]
 						},
-						"description": "Create an export job without drive_id to auto-assign a drive. If exactly one AVAILABLE drive is bound to the project, it is selected. If none are bound, an unbound AVAILABLE drive is used and the project is assigned to it. Returns 409 if multiple project-bound drives exist (specify drive_id) or if no drives are available. Roles: admin, manager, processor."
+						"description": "Create an export job without drive_id to auto-assign a drive. If exactly one AVAILABLE drive is bound to the project, it is selected. If none are bound, an unbound AVAILABLE drive is used and the project is assigned to it. Returns 409 if multiple project-bound drives exist (specify drive_id) or if no usable drive exists for the requested project (none bound to it and none unbound). Roles: admin, manager, processor."
 					}
 				},
 				{
