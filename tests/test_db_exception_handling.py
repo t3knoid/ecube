@@ -57,6 +57,7 @@ class TestJobCreationDBFailures:
 
     def test_create_job_db_failure_returns_500(self, client, db):
         """If the transaction commit fails, return 500 not a raw traceback."""
+        _make_drive(db, project_id="PROJ-001", device_id="USB-DBFAIL-500")
         with patch.object(
             db, "commit",
             side_effect=Exception("simulated DB failure"),
@@ -76,6 +77,7 @@ class TestJobCreationDBFailures:
 
     def test_create_job_encoding_error_returns_422(self, client, db):
         """Encoding-like DB exception during job creation returns 422 ENCODING_ERROR."""
+        _make_drive(db, project_id="PROJ-001", device_id="USB-DBFAIL-ENC")
         with patch.object(
             db, "commit",
             side_effect=Exception("invalid byte sequence for encoding UTF8: 0xed"),
@@ -128,6 +130,7 @@ class TestJobCreationDBFailures:
 
     def test_create_job_audit_failure_does_not_abort(self, client, db):
         """Audit log failure after successful job creation must not abort."""
+        _make_drive(db, project_id="PROJ-001", device_id="USB-DBFAIL-AUDIT")
         with patch(
             "app.repositories.audit_repository.AuditRepository.add",
             side_effect=Exception("simulated audit DB failure"),

@@ -274,6 +274,16 @@ class TestJobAuthorization:
     """POST /jobs, POST /jobs/{id}/start, /verify, /manifest — admin, manager, processor.
        GET  /jobs/{id} — all four roles."""
 
+    def _add_drive(self, db, project_id, device_id):
+        from app.models.hardware import DriveState, UsbDrive
+        drive = UsbDrive(
+            device_identifier=device_id,
+            current_state=DriveState.AVAILABLE,
+            current_project_id=project_id,
+        )
+        db.add(drive)
+        db.commit()
+
     def _create_job_payload(self):
         return {
             "project_id": "PROJ-AUTHZ",
@@ -282,14 +292,17 @@ class TestJobAuthorization:
         }
 
     def test_create_job_admin_allowed(self, db):
+        self._add_drive(db, "PROJ-AUTHZ", "USB-AUTHZ-ADMIN")
         c = _client_for_role(db, ["admin"])
         assert c.post("/jobs", json=self._create_job_payload()).status_code == 200
 
     def test_create_job_manager_allowed(self, db):
+        self._add_drive(db, "PROJ-AUTHZ", "USB-AUTHZ-MGR")
         c = _client_for_role(db, ["manager"])
         assert c.post("/jobs", json=self._create_job_payload()).status_code == 200
 
     def test_create_job_processor_allowed(self, db):
+        self._add_drive(db, "PROJ-AUTHZ", "USB-AUTHZ-PROC")
         c = _client_for_role(db, ["processor"])
         assert c.post("/jobs", json=self._create_job_payload()).status_code == 200
 
@@ -298,6 +311,7 @@ class TestJobAuthorization:
         _assert_forbidden(c.post("/jobs", json=self._create_job_payload()))
 
     def test_get_job_all_roles_allowed(self, db):
+        self._add_drive(db, "PROJ-AUTHZ", "USB-AUTHZ-ALL")
         # Create a job first via admin
         admin_c = _client_for_role(db, ["admin"])
         job_id = admin_c.post("/jobs", json=self._create_job_payload()).json()["id"]
