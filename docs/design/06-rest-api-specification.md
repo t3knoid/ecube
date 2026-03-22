@@ -555,9 +555,9 @@ All job endpoints that return a single job use the `ExportJobSchema` response, w
 | `started_by` | string or null | Username of the user who started the job |
 | `created_at` | datetime or null | When the job was created |
 | `started_at` | datetime or null | When the copy was started |
-| `completed_at` | datetime or null | When the job reached a terminal state |
+| `completed_at` | datetime or null | When the job reached a terminal state. Reset to `null` if the job is restarted from `FAILED` |
 | `drive` | object or null | Nested `DriveInfoSchema` for the assigned drive (see below) |
-| `error_summary` | string or null | Brief summary of file failures; `null` on success |
+| `error_summary` | string or null | Brief summary of file failures; `null` when no files failed. Returns count-only fallback (e.g. "2 files failed") when errors lack messages |
 | `client_ip` | string or null | Client IP (redacted for non-admin/auditor roles) |
 
 #### Nested `DriveInfoSchema`
@@ -626,7 +626,7 @@ Create a new job.
 
 ### `POST /jobs/{id}/start`
 
-Start job with thread count. Sets `started_by` to the authenticated user and `started_at` to the current timestamp.
+Start job with thread count. Sets `started_by` to the authenticated user and `started_at` to the current timestamp. Resets `completed_at` to `null`. Accepts jobs in `PENDING` or `FAILED` status (allowing restart of failed jobs).
 
 **Roles:** `admin`, `manager`, `processor`
 
