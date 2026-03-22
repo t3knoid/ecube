@@ -30,6 +30,7 @@ def test_get_job(client, db):
             "source_path": "/data/evidence",
         },
     )
+    assert create_response.status_code == 200
     job_id = create_response.json()["id"]
 
     response = client.get(f"/jobs/{job_id}")
@@ -51,6 +52,7 @@ def test_start_job(client, db):
             "source_path": "/tmp",
         },
     )
+    assert create_response.status_code == 200
     job_id = create_response.json()["id"]
 
     with patch("app.services.copy_engine.run_copy_job") as mock_copy:
@@ -128,6 +130,7 @@ def test_verify_job(client, db):
             "source_path": "/tmp",
         },
     )
+    assert create_response.status_code == 200
     job_id = create_response.json()["id"]
 
     with patch("app.services.copy_engine.run_verify_job") as mock_verify:
@@ -152,6 +155,7 @@ def test_job_response_includes_timestamps(client, db):
             "source_path": "/data",
         },
     )
+    assert response.status_code == 200
     data = response.json()
     assert "created_at" in data
     assert data["created_at"] is not None
@@ -169,6 +173,7 @@ def test_job_response_includes_started_by(client, db):
             "source_path": "/tmp",
         },
     )
+    assert create_resp.status_code == 200
     job_id = create_resp.json()["id"]
     assert create_resp.json()["started_by"] is None
 
@@ -267,6 +272,7 @@ def test_failed_job_with_error_summary(client, db):
     db.commit()
 
     response = client.get(f"/jobs/{job.id}")
+    assert response.status_code == 200
     data = response.json()
 
     assert data["files_succeeded"] == 2
@@ -292,6 +298,7 @@ def test_job_with_no_drive_assigned(client, db):
     db.commit()
 
     response = client.get(f"/jobs/{job.id}")
+    assert response.status_code == 200
     data = response.json()
 
     assert data["drive"] is None
