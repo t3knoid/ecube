@@ -4,7 +4,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.exceptions import ConflictError
-from app.models.hardware import UsbDrive
+from app.models.hardware import DriveState, UsbDrive
 
 
 class DriveRepository:
@@ -79,3 +79,53 @@ class DriveRepository:
             raise
         self.db.refresh(drive)
         return drive
+
+    def get_available_for_project(self, project_id: str) -> List[UsbDrive]:
+        """Return all ``AVAILABLE`` drives with matching *project_id*, locked with ``FOR UPDATE``.
+
+        Used by auto-assignment to find project-bound candidates.
+        """
+        try:
+            return (
+                self.db.query(UsbDrive)
+                .filter(
+                    UsbDrive.current_state == DriveState.AVAILABLE,
+                    UsbDrive.current_project_id == project_id,
+                )
+                .with_for_update(nowait=True)
+                .all()
+            )
+        except OperationalError as exc:
+            self.db.rollback()
+            orig = getattr(exc, "orig", None)
+            sqlstate = getattr(orig, "pgcode", None) or getattr(orig, "sqlstate", None)
+            if sqlstate == "55P03":
+                raise ConflictError(
+                    "Drive is currently locked by another operation."
+                ) from exc
+            raise
+
+    def get_next_unbound_available(self) -> Optional[UsbDrive]:
+        """Return the first ``AVAILABLE`` drive with no project binding, locked with ``FOR UPDATE``.
+
+        Used as a fallback when no project-bound drives are available.
+        """
+        try:
+            return (
+                self.db.query(UsbDrive)
+                .filter(
+                    UsbDrive.current_state == DriveState.AVAILABLE,
+                    UsbDrive.current_project_id.is_(None),
+                )
+                .with_for_update(nowait=True)
+                .first()
+            )
+        except OperationalError as exc:
+            self.db.rollback()
+            orig = getattr(exc, "orig", None)
+            sqlstate = getattr(orig, "pgcode", None) or getattr(orig, "sqlstate", None)
+            if sqlstate == "55P03":
+                raise ConflictError(
+                    "Drive is currently locked by another operation."
+                ) from exc
+            raise
