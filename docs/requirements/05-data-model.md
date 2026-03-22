@@ -55,9 +55,13 @@
 - `copied_bytes`
 - `file_count`
 - `thread_count`
+- `max_file_retries`
+- `retry_delay_seconds`
+- `created_at`
 - `started_at`
 - `completed_at`
 - `created_by`
+- `started_by`
 - `client_ip`
 
 ### `export_files`
@@ -69,6 +73,7 @@
 - `checksum`
 - `status`
 - `error_message`
+- `retry_attempts`
 
 ### `manifests`
 
