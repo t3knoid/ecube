@@ -184,9 +184,10 @@ def list_log_files(
 @router.get("/logs/{filename}", responses={**R_400, **R_401, **R_404, **R_422})
 def download_log_file(
     filename: str,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
+    request: Request,
 ):
     """Download a specific log file.
 

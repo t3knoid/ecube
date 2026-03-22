@@ -19,9 +19,10 @@ _ADMIN_AUDITOR = require_roles("admin", "auditor")
 @router.get("/{file_id}/hashes", response_model=FileHashesResponse, responses={**R_401, **R_403, **R_404, **R_422})
 def get_file_hashes(
     file_id: int,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_AUDITOR),
+    request: Request,
 ):
     """Return MD5 and SHA-256 hashes for a single export file.
 
@@ -33,9 +34,10 @@ def get_file_hashes(
 @router.post("/compare", response_model=FileCompareResponse, responses={**R_401, **R_403, **R_404, **R_422})
 def compare_files(
     body: FileCompareRequest,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_AUDITOR),
+    request: Request,
 ):
     """Compare two export files by hash, size, and relative path.
 
