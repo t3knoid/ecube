@@ -968,10 +968,54 @@ Optional parameters:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `drive_id` | `null` | Pre-assign a specific USB drive |
+| `drive_id` | `null` | Pre-assign a specific USB drive (omit for auto-assignment) |
 | `thread_count` | `4` | Parallel copy threads (1–8) |
 | `max_file_retries` | `3` | Maximum retry attempts per failed file |
 | `retry_delay_seconds` | `1` | Delay between retries in seconds |
+
+#### Automatic Drive Assignment
+
+When `drive_id` is omitted from the request, ECUBE automatically selects a
+drive using strict disambiguation rules:
+
+1. **Single project-bound drive** — If exactly one `AVAILABLE` drive is already
+   bound to the job's `project_id`, it is selected automatically. If the drive
+   is temporarily unavailable (e.g. locked by a concurrent operation or its
+   state changed), the request fails with HTTP 409 — the caller should retry
+   after a short delay.
+2. **Unbound fallback** — If no project-bound drives are available, the system
+   picks the first `AVAILABLE` drive with no project binding and assigns the
+   project to it.
+3. **Multiple project-bound drives (409)** — If more than one `AVAILABLE` drive
+   is bound to the project, the request fails with HTTP 409. The caller must
+   specify `drive_id` to disambiguate.
+4. **No usable drive (409)** — If no `AVAILABLE` drive is bound to the project
+   and no unbound `AVAILABLE` drive can be acquired, the request fails with
+   HTTP 409. The caller should retry, as drives may be temporarily held by
+   concurrent operations.
+
+When `drive_id` is provided explicitly, the system validates project isolation
+and requires the drive to be in `AVAILABLE` state (drives in `EMPTY`, `IN_USE`,
+or any other state are rejected with HTTP 409). If the drive is currently
+unbound (`current_project_id` is null), the system binds it to the requested
+project before committing, consistent with auto-assignment behaviour.
+
+> **Drive Capacity Warning**
+>
+> ECUBE does **not** validate free space on the target drive before or during
+> copy operations. The system tracks `capacity_bytes` (total drive size from
+> sysfs) but does not compare source data size against available drive space.
+> If the drive fills up during a copy, individual files will fail with write
+> errors.
+>
+> It is the **caller's responsibility** to ensure the target drive has
+> sufficient space for the data being copied. This is especially critical for
+> automated or third-party integrations where the operator may not be
+> monitoring drive usage in real time.
+>
+> When a project has multiple drives, choosing the correct drive (by specifying
+> `drive_id`) also serves as an implicit capacity decision — the caller selects
+> the drive they know has room.
 
 Response:
 

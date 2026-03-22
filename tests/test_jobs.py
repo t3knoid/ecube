@@ -2,9 +2,18 @@ from unittest.mock import patch
 
 from app.models.hardware import UsbDrive, DriveState
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus
+from app.models.audit import AuditLog
 
 
 def test_create_job(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-CREATE-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-001",
+    )
+    db.add(drive)
+    db.commit()
+
     response = client.post(
         "/jobs",
         json={
@@ -22,6 +31,13 @@ def test_create_job(client, db):
 
 
 def test_get_job(client, db):
+    db.add(UsbDrive(
+        device_identifier="USB-GET-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-001",
+    ))
+    db.commit()
+
     create_response = client.post(
         "/jobs",
         json={
@@ -44,6 +60,13 @@ def test_get_job_not_found(client, db):
 
 
 def test_start_job(client, db):
+    db.add(UsbDrive(
+        device_identifier="USB-START-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-001",
+    ))
+    db.commit()
+
     create_response = client.post(
         "/jobs",
         json={
@@ -122,6 +145,13 @@ def test_create_job_conflict_when_drive_already_in_use(client, db):
 
 
 def test_verify_job(client, db):
+    db.add(UsbDrive(
+        device_identifier="USB-VERIFY-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-001",
+    ))
+    db.commit()
+
     create_response = client.post(
         "/jobs",
         json={
@@ -147,6 +177,13 @@ def test_verify_job(client, db):
 
 def test_job_response_includes_timestamps(client, db):
     """created_at, started_at, completed_at should be present in the response."""
+    db.add(UsbDrive(
+        device_identifier="USB-TS-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-TS",
+    ))
+    db.commit()
+
     response = client.post(
         "/jobs",
         json={
@@ -165,6 +202,13 @@ def test_job_response_includes_timestamps(client, db):
 
 def test_job_response_includes_started_by(client, db):
     """started_by should be null on create and populated after start."""
+    db.add(UsbDrive(
+        device_identifier="USB-SB-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-SB",
+    ))
+    db.commit()
+
     create_resp = client.post(
         "/jobs",
         json={
@@ -358,3 +402,208 @@ def test_restart_failed_job_resets_completed_at(client, db):
     assert data["status"] == "RUNNING"
     assert data["completed_at"] is None
     assert data["started_at"] is not None
+
+
+# ---------------------------------------------------------------------------
+# Issue #102 — Auto-assign drive when drive_id is omitted
+# ---------------------------------------------------------------------------
+
+
+def test_auto_assign_single_project_bound_drive(client, db):
+    """When exactly one AVAILABLE drive is bound to the project, auto-select it."""
+    drive = UsbDrive(
+        device_identifier="USB-AUTO-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-AUTO",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-AUTO",
+            "evidence_number": "EV-AUTO-001",
+            "source_path": "/data/evidence",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["drive"] is not None
+    assert data["drive"]["id"] == drive.id
+    assert data["drive"]["current_state"] == "IN_USE"
+
+    # Verify audit log
+    audit = db.query(AuditLog).filter(AuditLog.action == "DRIVE_AUTO_ASSIGNED").first()
+    assert audit is not None
+    assert audit.details["drive_id"] == drive.id
+    assert audit.details["selection"] == "project_bound"
+
+
+def test_auto_assign_unbound_fallback(client, db):
+    """When no project-bound drives exist, fall back to an unbound AVAILABLE drive."""
+    drive = UsbDrive(
+        device_identifier="USB-UNBOUND-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id=None,
+    )
+    db.add(drive)
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-NEW",
+            "evidence_number": "EV-NEW-001",
+            "source_path": "/data/evidence",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["drive"] is not None
+    assert data["drive"]["id"] == drive.id
+    assert data["drive"]["current_state"] == "IN_USE"
+    assert data["drive"]["current_project_id"] == "PROJ-NEW"
+
+    # Verify DRIVE_PROJECT_BOUND audit entry
+    bound_audit = db.query(AuditLog).filter(AuditLog.action == "DRIVE_PROJECT_BOUND").first()
+    assert bound_audit is not None
+    assert bound_audit.details["drive_id"] == drive.id
+    assert bound_audit.details["project_id"] == "PROJ-NEW"
+
+    # Verify DRIVE_AUTO_ASSIGNED audit entry
+    assign_audit = db.query(AuditLog).filter(AuditLog.action == "DRIVE_AUTO_ASSIGNED").first()
+    assert assign_audit is not None
+    assert assign_audit.details["selection"] == "unbound_fallback"
+
+
+def test_auto_assign_409_multiple_project_bound_drives(client, db):
+    """When multiple AVAILABLE drives are bound to the project, return 409."""
+    for i in range(2):
+        db.add(UsbDrive(
+            device_identifier=f"USB-MULTI-{i}",
+            current_state=DriveState.AVAILABLE,
+            current_project_id="PROJ-MULTI",
+        ))
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-MULTI",
+            "evidence_number": "EV-MULTI-001",
+            "source_path": "/data/evidence",
+        },
+    )
+    assert response.status_code == 409
+    assert "Multiple drives assigned to project PROJ-MULTI" in response.json()["message"]
+
+
+def test_auto_assign_409_no_drives_available(client, db):
+    """When no usable drive exists (none bound to project, none unbound), return 409."""
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-NONE",
+            "evidence_number": "EV-NONE-001",
+            "source_path": "/data/evidence",
+        },
+    )
+    assert response.status_code == 409
+    assert "No available drive for project PROJ-NONE" in response.json()["message"]
+
+
+def test_auto_assign_skips_in_use_drives(client, db):
+    """IN_USE drives should not be considered for auto-assignment."""
+    db.add(UsbDrive(
+        device_identifier="USB-INUSE-AUTO",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-SKIP",
+    ))
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-SKIP",
+            "evidence_number": "EV-SKIP-001",
+            "source_path": "/data/evidence",
+        },
+    )
+    assert response.status_code == 409
+    assert "No available drive" in response.json()["message"]
+
+
+def test_explicit_drive_id_still_works(client, db):
+    """Providing drive_id explicitly should bypass auto-assignment."""
+    drive = UsbDrive(
+        device_identifier="USB-EXPLICIT-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-EXPLICIT",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-EXPLICIT",
+            "evidence_number": "EV-EXPLICIT-001",
+            "source_path": "/data/evidence",
+            "drive_id": drive.id,
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["drive"]["id"] == drive.id
+    assert data["drive"]["current_state"] == "IN_USE"
+
+
+def test_auto_assign_prefers_project_bound_over_unbound(client, db):
+    """A project-bound AVAILABLE drive should be chosen over an unbound one."""
+    bound = UsbDrive(
+        device_identifier="USB-BOUND-PREF",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-PREF",
+    )
+    unbound = UsbDrive(
+        device_identifier="USB-UNBOUND-PREF",
+        current_state=DriveState.AVAILABLE,
+        current_project_id=None,
+    )
+    db.add_all([bound, unbound])
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-PREF",
+            "evidence_number": "EV-PREF-001",
+            "source_path": "/data/evidence",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["drive"]["id"] == bound.id
+
+
+def test_auto_assign_409_no_unbound_when_no_project_match(client, db):
+    """When no project-bound drives and no unbound drives exist, return 409."""
+    # Only drives with different projects exist
+    db.add(UsbDrive(
+        device_identifier="USB-OTHER-PROJ",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-OTHER",
+    ))
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-WANTED",
+            "evidence_number": "EV-WANT-001",
+            "source_path": "/data/evidence",
+        },
+    )
+    assert response.status_code == 409
+    assert "No available drive" in response.json()["message"]
