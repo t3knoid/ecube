@@ -1,8 +1,16 @@
 """Test thread_count validation on endpoints."""
+from app.models.hardware import DriveState, UsbDrive
 
-def test_thread_count_validation_on_create_job(admin_client):
+
+def test_thread_count_validation_on_create_job(admin_client, db):
     """Verify POST /jobs validates thread_count constraints."""
-    
+    db.add(UsbDrive(
+        device_identifier="USB-THREAD-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-001",
+    ))
+    db.commit()
+
     # Test thread_count=0 (too low)
     response = admin_client.post(
         '/jobs',
