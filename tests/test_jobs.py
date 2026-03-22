@@ -176,6 +176,7 @@ def test_job_response_includes_started_by(client, db):
         start_resp = client.post(f"/jobs/{job_id}/start", json={})
     assert start_resp.status_code == 200
     assert start_resp.json()["started_by"] == "test-user"
+    assert start_resp.json()["started_at"] is not None
 
 
 def test_completed_job_with_all_fields(client, db):
