@@ -229,7 +229,7 @@ OS user and group management endpoints are scoped to the `ecube-` namespace to p
 
 - Log role-evaluation denials in `audit_logs` with action and endpoint.
 - Log all role assignment/removal events (`ROLE_ASSIGNED`, `ROLE_REMOVED`) with actor identity.
-- Add explicit `403` response schema for authorization failures.
+- All error responses use the standardized `ErrorResponse` JSON schema (see [06-rest-api-specification.md](06-rest-api-specification.md#standardized-error-response-format)); `400`, `401`, `403`, `404`, `409`, `422`, `500`, `503`, and `504` responses are declared in the OpenAPI specification for every authenticated endpoint (and conditional-auth endpoints when applicable) via reusable response dicts in `app/schemas/errors.py`.
 - Keep introspection and audit endpoints read-only and role-gated.
 - First-run setup is available via the unauthenticated `POST /setup/initialize` API endpoint or the CLI `python -m app.setup` script.  Both refuse to re-seed if an admin already exists.  The API endpoint uses a `system_initialization` single-row table with a uniqueness constraint as a cross-process guard, ensuring only one worker can complete initialization even in multi-worker deployments.
 - Database provisioning endpoints (`POST /setup/database/test-connection`, `POST /setup/database/provision`) use a **dual-auth model with fail-closed semantics**:

@@ -119,7 +119,7 @@ All design details live under `docs/design/`:
 - `03-system-architecture.md` — component view and interaction pattern
 - `04-functional-requirements.md` — drive FSM, project isolation, copy engine, audit
 - `05-data-model.md` — table design notes and integrity constraints
-- `06-rest-api-specification.md` — all endpoints with required roles
+- `06-rest-api-specification.md` — all endpoints with required roles and error responses
 - `10-security-and-access-control.md` — role model, authorization matrix, `require_roles` pattern
 
 ## Coding Conventions
@@ -127,6 +127,8 @@ All design details live under `docs/design/`:
 - Every security-relevant event (auth success/failure, role denials, drive init, file ops) must emit a structured JSON record to `audit_logs`.
 - Introspection endpoints (`/introspection/*`) are **read-only** and must redact sensitive path or credential-like fields.
 - API returns `401` for missing/invalid/expired tokens and `403` for role or project isolation violations.
+- All error responses use the `ErrorResponse` schema (`app/schemas/errors.py`). Declare error responses on every route decorator using reusable response dicts (`R_400`, `R_401`, `R_403`, `R_404`, `R_409`, `R_422`, `R_500`, `R_503`, `R_504`) combined via `responses={**R_401, **R_403}`.
+- Path-like fields use `StrictSafeStr` (rejects malformed Unicode with 422); non-path string fields use `SafeStr` (silently strips null bytes/surrogates). Both are defined in `app/utils/sanitize.py`.
 - Background copy workers use bounded thread pools; progress updates (`copied_bytes`, file status) must be atomic.
 
 ## Continuous Integration
