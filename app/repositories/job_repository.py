@@ -1,6 +1,6 @@
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
-from sqlalchemy import update
+from sqlalchemy import func, update
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -159,16 +159,43 @@ class FileRepository:
             self.db.rollback()
             raise
 
+    def count_done(self, job_id: int) -> int:
+        """Return the number of files in DONE state for *job_id*."""
+        return (
+            self.db.query(func.count())
+            .filter(
+                ExportFile.job_id == job_id,
+                ExportFile.status == FileStatus.DONE,
+            )
+            .scalar()
+        )
+
     def count_errors(self, job_id: int) -> int:
         """Return the number of files in ERROR state for *job_id*."""
         return (
-            self.db.query(ExportFile)
+            self.db.query(func.count())
             .filter(
                 ExportFile.job_id == job_id,
                 ExportFile.status == FileStatus.ERROR,
             )
-            .count()
+            .scalar()
         )
+
+    def list_error_messages(
+        self, job_id: int, *, limit: int = 5
+    ) -> List[Tuple[str, str]]:
+        """Return ``(error_message, relative_path)`` for up to *limit* failed files."""
+        rows = (
+            self.db.query(ExportFile.error_message, ExportFile.relative_path)
+            .filter(
+                ExportFile.job_id == job_id,
+                ExportFile.status == FileStatus.ERROR,
+                ExportFile.error_message.isnot(None),
+            )
+            .limit(limit)
+            .all()
+        )
+        return [(r.error_message, r.relative_path) for r in rows]
 
     def increment_job_bytes(self, job_id: int, size_bytes: int) -> None:
         """Atomically increment the ``copied_bytes`` counter on the parent job."""

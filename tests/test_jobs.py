@@ -188,7 +188,7 @@ def test_completed_job_with_all_fields(client, db):
     """A completed job with files and a drive should include all enriched fields."""
     drive = UsbDrive(
         device_identifier="USB-ENRICH-001",
-        current_state=DriveState.AVAILABLE,
+        current_state=DriveState.IN_USE,
         current_project_id="PROJ-ENRICH",
         capacity_bytes=64_000_000_000,
         filesystem_type="exfat",
@@ -241,7 +241,7 @@ def test_completed_job_with_all_fields(client, db):
     assert data["drive"]["device_identifier"] == "USB-ENRICH-001"
     assert data["drive"]["capacity_bytes"] == 64_000_000_000
     assert data["drive"]["filesystem_type"] == "exfat"
-    assert data["drive"]["current_state"] == "AVAILABLE"
+    assert data["drive"]["current_state"] == "IN_USE"
     assert data["drive"]["current_project_id"] == "PROJ-ENRICH"
 
 
@@ -305,3 +305,56 @@ def test_job_with_no_drive_assigned(client, db):
     assert data["files_succeeded"] == 0
     assert data["files_failed"] == 0
     assert data["error_summary"] is None
+
+
+def test_failed_job_error_summary_without_messages(client, db):
+    """Error summary should still be set when error files lack error_message."""
+    job = ExportJob(
+        project_id="PROJ-NOMSG",
+        evidence_number="EV-NOMSG",
+        source_path="/data",
+        status=JobStatus.FAILED,
+        total_bytes=500,
+        copied_bytes=0,
+        file_count=2,
+    )
+    db.add(job)
+    db.flush()
+
+    db.add(ExportFile(job_id=job.id, relative_path="a.bin", status=FileStatus.ERROR))
+    db.add(ExportFile(job_id=job.id, relative_path="b.bin", status=FileStatus.ERROR, error_message=None))
+    db.commit()
+
+    response = client.get(f"/jobs/{job.id}")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["files_failed"] == 2
+    assert data["error_summary"] is not None
+    assert "2 files failed" in data["error_summary"]
+
+
+def test_restart_failed_job_resets_completed_at(client, db):
+    """Restarting a FAILED job should reset completed_at to null."""
+    from datetime import datetime, timezone
+
+    job = ExportJob(
+        project_id="PROJ-RESTART",
+        evidence_number="EV-RESTART",
+        source_path="/data",
+        status=JobStatus.FAILED,
+        total_bytes=100,
+        copied_bytes=50,
+        file_count=1,
+        completed_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    db.add(job)
+    db.commit()
+
+    with patch("app.services.copy_engine.run_copy_job"):
+        response = client.post(f"/jobs/{job.id}/start", json={})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "RUNNING"
+    assert data["completed_at"] is None
+    assert data["started_at"] is not None
