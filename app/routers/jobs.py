@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
-from app.repositories.job_repository import FileRepository
+from app.repositories.job_repository import DriveAssignmentRepository, FileRepository
 from app.schemas.jobs import DriveInfoSchema, ExportJobSchema, JobCreate, JobStart
 from app.schemas.errors import R_401, R_403, R_404, R_409, R_422, R_500
 from app.services import job_service
@@ -26,10 +26,9 @@ def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
     if not _IP_VISIBLE_ROLES.intersection(user.roles):
         schema.client_ip = None
 
-    # Derived file counts via targeted SQL queries
+    # Derived file counts via a single aggregate query
     file_repo = FileRepository(db)
-    schema.files_succeeded = file_repo.count_done(job.id)
-    schema.files_failed = file_repo.count_errors(job.id)
+    schema.files_succeeded, schema.files_failed = file_repo.count_done_and_errors(job.id)
 
     # Error summary (fetches at most 5 rows)
     if schema.files_failed:
@@ -45,10 +44,11 @@ def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
             summary = prefix
         schema.error_summary = summary
 
-    # Nested drive info
-    assignments = getattr(job, "assignments", None) or []
-    if assignments and getattr(assignments[0], "drive", None):
-        schema.drive = DriveInfoSchema.model_validate(assignments[0].drive)
+    # Nested drive info — select the most recent unreleased assignment
+    assignment_repo = DriveAssignmentRepository(db)
+    active = assignment_repo.get_active_for_job(job.id)
+    if active and getattr(active, "drive", None):
+        schema.drive = DriveInfoSchema.model_validate(active.drive)
 
     return schema
 
