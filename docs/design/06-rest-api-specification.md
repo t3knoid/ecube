@@ -727,6 +727,8 @@ Compare two files by hash/size/path.
 
 All user role management endpoints require the `admin` role. These endpoints manage authorization (role assignments) only — they do not create or delete OS/LDAP user accounts.
 
+The `{username}` path parameter must match the POSIX username pattern: `^[a-z_][a-z0-9_-]{0,31}$` (lowercase letter or underscore start, 1–32 characters, lowercase alphanumeric/hyphen/underscore only). Requests with non-matching values are rejected with `422 Unprocessable Entity`.
+
 ### `GET /users`
 
 List all users with their ECUBE role assignments.
@@ -841,6 +843,13 @@ Remove all role assignments for a user. The user will fall back to OS group-base
 ## 3.7 OS User & Group Management API
 
 All endpoints require `admin` role and are only available when `role_resolver = "local"` (returns `404` otherwise).
+
+Path parameter constraints:
+
+- `{username}` must match the POSIX username pattern: `^[a-z_][a-z0-9_-]{0,31}$`
+- `{name}` (group name) must match the same pattern: `^[a-z_][a-z0-9_-]{0,31}$`
+
+Requests with non-matching values are rejected with `422 Unprocessable Entity` at the framework level (before reaching service logic). These patterns are declared in the OpenAPI schema.
 
 ### `POST /admin/os-users`
 
