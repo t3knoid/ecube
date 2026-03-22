@@ -165,6 +165,7 @@ def _auto_assign_drive(
     1. Exactly one AVAILABLE drive bound to *project_id* → select it.
        If that drive is locked by a concurrent transaction → fail 409 (retry).
     2. Zero project-bound matches → pick the first unbound AVAILABLE drive and bind it.
+       If unbound drives exist but are all locked → fail 409 (retry).
     3. Multiple project-bound matches → fail 409 (caller must specify).
     4. No usable drive (none bound to the project and none unbound) → fail 409.
     """
@@ -193,6 +194,14 @@ def _auto_assign_drive(
     if drive:
         drive.current_project_id = project_id
         return drive, "unbound_fallback"
+
+    # Distinguish "no unbound drives" from "unbound drives exist but locked"
+    if drive_repo.count_unbound_available() > 0:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=f"Unbound drive for project {project_id} is locked by another operation",
+        )
 
     # No usable drive — none bound to the project and none unbound
     db.rollback()
