@@ -508,7 +508,7 @@
 			"name": "Jobs",
 			"item": [
 				{
-					"name": "Create Job",
+					"name": "Create Job (Explicit Drive)",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -523,7 +523,26 @@
 							"host": ["{{base_url}}"],
 							"path": ["jobs"]
 						},
-						"description": "Create an export job to copy data to an assigned drive. Starts in PENDING state. Response includes timestamps (created_at, started_at, completed_at), user fields (created_by, started_by), file counts (files_succeeded, files_failed), nested drive object, and error_summary. Roles: admin, manager, processor."
+						"description": "Create an export job with an explicit drive_id. The drive must be AVAILABLE and its current_project_id must match or be null. If the drive is currently unbound, it is automatically bound to the requested project. Starts in PENDING state. Roles: admin, manager, processor."
+					}
+				},
+				{
+					"name": "Create Job (Auto-Assign Drive)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"project_id\": \"PROJECT-001\",\n  \"evidence_number\": \"EV-001\",\n  \"source_path\": \"/mnt/source/evidence\",\n  \"thread_count\": 4\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/jobs",
+							"host": ["{{base_url}}"],
+							"path": ["jobs"]
+						},
+						"description": "Create an export job without drive_id to auto-assign a drive. If exactly one AVAILABLE drive is bound to the project, it is selected (409 if the drive is temporarily unavailable — retry). If none are bound, an unbound AVAILABLE drive is used and the project is assigned to it. Returns 409 if multiple project-bound drives exist (specify drive_id) or if no usable drive can be acquired for the requested project. Roles: admin, manager, processor."
 					}
 				},
 				{
