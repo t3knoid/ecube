@@ -985,13 +985,14 @@ drive using strict disambiguation rules:
    after a short delay.
 2. **Unbound fallback** — If no project-bound drives are available, the system
    picks the first `AVAILABLE` drive with no project binding and assigns the
-   project to it. If unbound drives exist but none can be acquired, the
-   request fails with HTTP 409 (retry).
+   project to it.
 3. **Multiple project-bound drives (409)** — If more than one `AVAILABLE` drive
    is bound to the project, the request fails with HTTP 409. The caller must
    specify `drive_id` to disambiguate.
 4. **No usable drive (409)** — If no `AVAILABLE` drive is bound to the project
-   and no unbound `AVAILABLE` drive exists, the request fails with HTTP 409.
+   and no unbound `AVAILABLE` drive can be acquired, the request fails with
+   HTTP 409. The caller should retry, as drives may be temporarily held by
+   concurrent operations.
 
 When `drive_id` is provided explicitly, the system validates project isolation
 and requires the drive to be in `AVAILABLE` state (drives in `EMPTY`, `IN_USE`,
