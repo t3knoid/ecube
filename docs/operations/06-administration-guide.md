@@ -993,7 +993,9 @@ drive using strict disambiguation rules:
 
 When `drive_id` is provided explicitly, the system validates project isolation
 and requires the drive to be in `AVAILABLE` state (drives in `EMPTY`, `IN_USE`,
-or any other state are rejected with HTTP 409).
+or any other state are rejected with HTTP 409). If the drive is currently
+unbound (`current_project_id` is null), the system binds it to the requested
+project before committing, consistent with auto-assignment behaviour.
 
 > **Drive Capacity Warning**
 >
