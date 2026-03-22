@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import json
 import logging
 import os
@@ -144,6 +145,9 @@ def start_job(
     # request arriving after this commit will observe the updated state and be
     # rejected with 409 before the background copy task begins.
     job.status = JobStatus.RUNNING
+    job.started_by = actor
+    job.started_at = datetime.now(timezone.utc)
+    job.completed_at = None
     if body.thread_count:
         job.thread_count = body.thread_count
     try:
