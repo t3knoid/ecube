@@ -254,7 +254,7 @@ app.include_router(admin.router, dependencies=[Depends(get_current_user)])
 app.include_router(users.router, dependencies=[Depends(get_current_user)])
 
 
-def _error_response(status_code: int, code: str, message: str, trace_id: str | None = None) -> JSONResponse:
+def _error_response(status_code: int, code: str, message: str, trace_id: str) -> JSONResponse:
     body = ErrorResponse(code=code, message=message, trace_id=trace_id)
     return JSONResponse(status_code=status_code, content=body.model_dump())
 

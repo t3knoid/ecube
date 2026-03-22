@@ -38,6 +38,7 @@ from app.schemas.database import (
 )
 from app.services import database_service
 from app.services.audit_service import log_and_audit
+from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500, R_503
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +187,7 @@ def _require_admin_or_initial_setup(
 @router.post(
     "/test-connection",
     response_model=DatabaseTestConnectionResponse,
+    responses={**R_400, **R_401, **R_403, **R_404, **R_422, **R_503},
 )
 def test_database_connection(
     body: DatabaseTestConnectionRequest,
@@ -237,6 +239,7 @@ def test_database_connection(
 @router.post(
     "/provision",
     response_model=DatabaseProvisionResponse,
+    responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500, **R_503},
 )
 def provision_database(
     body: DatabaseProvisionRequest,
@@ -337,6 +340,7 @@ def provision_database(
 @router.get(
     "/status",
     response_model=DatabaseStatusResponse,
+    responses={**R_401, **R_403, **R_404},
 )
 def get_database_status(
     current_user: CurrentUser = Depends(_ADMIN_ONLY),
@@ -349,6 +353,7 @@ def get_database_status(
 @router.put(
     "/settings",
     response_model=DatabaseSettingsUpdateResponse,
+    responses={**R_400, **R_401, **R_403, **R_404, **R_422, **R_500},
 )
 def update_database_settings(
     body: DatabaseSettingsUpdateRequest,

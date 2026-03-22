@@ -306,9 +306,12 @@
 						"url": {
 							"raw": "{{base_url}}/drives",
 							"host": ["{{base_url}}"],
-							"path": ["drives"]
+							"path": ["drives"],
+							"query": [
+								{ "key": "project_id", "value": "", "disabled": true, "description": "Filter drives by project ID" }
+							]
 						},
-						"description": "List all USB drives with state and project bindings. Roles: admin, manager, processor, auditor."
+						"description": "List all USB drives with state and project bindings. Optional project_id filter. Roles: admin, manager, processor, auditor."
 					}
 				},
 				{
@@ -436,14 +439,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"mount_type\": \"smb\",\n  \"path\": \"//server/share\",\n  \"username\": \"user\",\n  \"password\": \"password\"\n}"
+							"raw": "{\n  \"type\": \"SMB\",\n  \"remote_path\": \"//server/share\",\n  \"local_mount_point\": \"/mnt/evidence\",\n  \"username\": \"user\",\n  \"password\": \"password\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/mounts",
 							"host": ["{{base_url}}"],
 							"path": ["mounts"]
 						},
-						"description": "Register a new network mount (SMB/NFS). Roles: admin, manager."
+						"description": "Register a new network mount (SMB/NFS). Required fields: type (SMB or NFS), remote_path, local_mount_point. Optional: username, password, credentials_file. Roles: admin, manager."
 					}
 				},
 				{
@@ -1027,7 +1030,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"groups\": [\"ecube-managers\", \"ecube-processor\"]\n}"
+							"raw": "{\n  \"groups\": [\"ecube-managers\", \"ecube-processors\"]\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/admin/os-users/:username/groups",
