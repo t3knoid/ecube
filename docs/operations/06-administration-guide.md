@@ -986,8 +986,8 @@ drive using strict disambiguation rules:
 3. **Multiple project-bound drives (409)** — If more than one `AVAILABLE` drive
    is bound to the project, the request fails with HTTP 409. The caller must
    specify `drive_id` to disambiguate.
-4. **No drives available (409)** — If no `AVAILABLE` drives exist at all, the
-   request fails with HTTP 409.
+4. **No usable drive (409)** — If no `AVAILABLE` drive is bound to the project
+   and no unbound `AVAILABLE` drive exists, the request fails with HTTP 409.
 
 When `drive_id` is provided explicitly, existing behavior is unchanged — the
 system validates project isolation and drive state as before.
