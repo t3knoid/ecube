@@ -53,6 +53,7 @@ from app.schemas.admin import (
 from app.schemas.hardware import HubUpdateRequest, PortEnableRequest, PortUpdateRequest, UsbHubSchema, UsbPortSchema
 from app.infrastructure import get_os_user_provider
 from app.infrastructure.os_user_protocol import OSUserError, OsUserProvider
+from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500, R_504
 from app.services.os_user_service import validate_group_name, validate_username
 from app.utils.client_ip import get_client_ip
 
@@ -119,7 +120,7 @@ def _safe_filename(filename: str) -> str:
     return safe
 
 
-@router.get("/logs", response_model=LogFilesResponse)
+@router.get("/logs", response_model=LogFilesResponse, responses={**R_401, **R_404})
 def list_log_files(
     request: Request,
     db: Session = Depends(get_db),
@@ -180,7 +181,7 @@ def list_log_files(
     )
 
 
-@router.get("/logs/{filename}")
+@router.get("/logs/{filename}", responses={**R_400, **R_401, **R_404, **R_422})
 def download_log_file(
     filename: str,
     request: Request,
@@ -252,7 +253,7 @@ _os_router = APIRouter(
 # ---------------------------------------------------------------------------
 
 
-@_os_router.post("/os-users", response_model=OSUserResponse, status_code=201)
+@_os_router.post("/os-users", response_model=OSUserResponse, status_code=201, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500, **R_504})
 def create_os_user(
     body: CreateOSUserRequest,
     request: Request,
@@ -328,7 +329,7 @@ def create_os_user(
     )
 
 
-@_os_router.get("/os-users", response_model=OSUserListResponse)
+@_os_router.get("/os-users", response_model=OSUserListResponse, responses={**R_401, **R_403, **R_404})
 def list_os_users(
     _current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSUserListResponse:
@@ -349,7 +350,7 @@ def list_os_users(
     )
 
 
-@_os_router.delete("/os-users/{username}", status_code=200)
+@_os_router.delete("/os-users/{username}", status_code=200, responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
 def delete_os_user(
     username: str,
     request: Request,
@@ -385,7 +386,7 @@ def delete_os_user(
     return {"message": f"User '{username}' deleted"}
 
 
-@_os_router.put("/os-users/{username}/password", status_code=200)
+@_os_router.put("/os-users/{username}/password", status_code=200, responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
 def reset_os_user_password(
     username: str,
     body: ResetPasswordRequest,
@@ -411,7 +412,7 @@ def reset_os_user_password(
     return {"message": f"Password reset for user '{username}'"}
 
 
-@_os_router.put("/os-users/{username}/groups", response_model=OSUserResponse)
+@_os_router.put("/os-users/{username}/groups", response_model=OSUserResponse, responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
 def set_os_user_groups(
     username: str,
     body: SetOSGroupsRequest,
@@ -445,7 +446,7 @@ def set_os_user_groups(
     )
 
 
-@_os_router.post("/os-users/{username}/groups", response_model=OSUserResponse)
+@_os_router.post("/os-users/{username}/groups", response_model=OSUserResponse, responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
 def add_os_user_groups(
     username: str,
     body: AddOSGroupsRequest,
@@ -485,7 +486,7 @@ def add_os_user_groups(
 # ---------------------------------------------------------------------------
 
 
-@_os_router.post("/os-groups", response_model=OSGroupResponse, status_code=201)
+@_os_router.post("/os-groups", response_model=OSGroupResponse, status_code=201, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500, **R_504})
 def create_os_group(
     body: CreateOSGroupRequest,
     request: Request,
@@ -512,7 +513,7 @@ def create_os_group(
     )
 
 
-@_os_router.get("/os-groups", response_model=OSGroupListResponse)
+@_os_router.get("/os-groups", response_model=OSGroupListResponse, responses={**R_401, **R_403, **R_404})
 def list_os_groups(
     _current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSGroupListResponse:
@@ -526,7 +527,7 @@ def list_os_groups(
     )
 
 
-@_os_router.delete("/os-groups/{name}", status_code=200)
+@_os_router.delete("/os-groups/{name}", status_code=200, responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
 def delete_os_group(
     name: str,
     request: Request,
@@ -559,7 +560,7 @@ def delete_os_group(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/ports", response_model=List[UsbPortSchema])
+@router.get("/ports", response_model=List[UsbPortSchema], responses={**R_401, **R_403})
 def list_ports(
     db: Session = Depends(get_db),
     _current_user: CurrentUser = Depends(require_roles("admin", "manager")),
@@ -569,7 +570,7 @@ def list_ports(
     return [UsbPortSchema.model_validate(p) for p in ports]
 
 
-@router.patch("/ports/{port_id}", response_model=UsbPortSchema)
+@router.patch("/ports/{port_id}", response_model=UsbPortSchema, responses={**R_401, **R_403, **R_404, **R_422})
 def toggle_port_enabled(
     port_id: int,
     body: PortEnableRequest,
@@ -599,7 +600,7 @@ def toggle_port_enabled(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/hubs", response_model=List[UsbHubSchema])
+@router.get("/hubs", response_model=List[UsbHubSchema], responses={**R_401, **R_403})
 def list_hubs(
     db: Session = Depends(get_db),
     _current_user: CurrentUser = Depends(require_roles("admin", "manager")),
@@ -609,7 +610,7 @@ def list_hubs(
     return [UsbHubSchema.model_validate(h) for h in hubs]
 
 
-@router.patch("/hubs/{hub_id}", response_model=UsbHubSchema)
+@router.patch("/hubs/{hub_id}", response_model=UsbHubSchema, responses={**R_401, **R_403, **R_404, **R_422})
 def update_hub_label(
     hub_id: int,
     body: HubUpdateRequest,
@@ -640,7 +641,7 @@ def update_hub_label(
     return UsbHubSchema.model_validate(hub)
 
 
-@router.patch("/ports/{port_id}/label", response_model=UsbPortSchema)
+@router.patch("/ports/{port_id}/label", response_model=UsbPortSchema, responses={**R_401, **R_403, **R_404, **R_422})
 def update_port_label(
     port_id: int,
     body: PortUpdateRequest,
