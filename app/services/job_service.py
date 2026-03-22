@@ -47,7 +47,7 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
         db.add(job)
         db.flush()  # obtain job.id for the assignment FK
 
-        if body.drive_id:
+        if body.drive_id is not None:
             drive = drive_repo.get_for_update(body.drive_id)
             if not drive:
                 db.rollback()
@@ -115,7 +115,7 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
 
     # Best-effort audit logging — failures never abort job creation.
     try:
-        if not body.drive_id:
+        if body.drive_id is None:
             if auto_selection == "unbound_fallback":
                 audit_repo.add(
                     action="DRIVE_PROJECT_BOUND",
