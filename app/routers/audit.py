@@ -10,6 +10,7 @@ from app.config import settings
 from app.database import get_db
 from app.repositories.audit_repository import AuditRepository
 from app.schemas.audit import AuditLogSchema
+from app.schemas.errors import R_401, R_403, R_422
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ def _redact_ip(entry, user: CurrentUser) -> AuditLogSchema:
     return schema
 
 
-@router.get("", response_model=List[AuditLogSchema])
+@router.get("", response_model=List[AuditLogSchema], responses={**R_401, **R_403, **R_422})
 def list_audit_logs(
     user: Optional[str] = Query(default=None, description="Filter by user"),
     action: Optional[str] = Query(default=None, description="Filter by action"),
