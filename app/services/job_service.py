@@ -147,6 +147,7 @@ def start_job(
     job.status = JobStatus.RUNNING
     job.started_by = actor
     job.started_at = datetime.now(timezone.utc)
+    job.completed_at = None
     if body.thread_count:
         job.thread_count = body.thread_count
     try:

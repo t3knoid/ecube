@@ -225,6 +225,42 @@ def test_file_repo_count_errors(db):
     assert repo.count_errors(job.id) == 2
 
 
+def test_file_repo_count_done(db):
+    job = _make_job(db)
+    repo = FileRepository(db)
+
+    repo.add_bulk([
+        ExportFile(job_id=job.id, relative_path="a.txt", status=FileStatus.DONE),
+        ExportFile(job_id=job.id, relative_path="b.txt", status=FileStatus.DONE),
+        ExportFile(job_id=job.id, relative_path="c.txt", status=FileStatus.ERROR),
+        ExportFile(job_id=job.id, relative_path="d.txt", status=FileStatus.PENDING),
+    ])
+
+    assert repo.count_done(job.id) == 2
+
+
+def test_file_repo_list_error_messages(db):
+    job = _make_job(db)
+    repo = FileRepository(db)
+
+    repo.add_bulk([
+        ExportFile(job_id=job.id, relative_path="ok.txt", status=FileStatus.DONE),
+        ExportFile(job_id=job.id, relative_path="e1.txt", status=FileStatus.ERROR, error_message="disk full"),
+        ExportFile(job_id=job.id, relative_path="e2.txt", status=FileStatus.ERROR, error_message="perm denied"),
+        ExportFile(job_id=job.id, relative_path="e3.txt", status=FileStatus.ERROR, error_message=None),
+    ])
+
+    rows = repo.list_error_messages(job.id, limit=10)
+    assert len(rows) == 2  # e3.txt excluded (null error_message)
+    messages = {msg for msg, _ in rows}
+    assert "disk full" in messages
+    assert "perm denied" in messages
+
+    # Verify limit works
+    rows_limited = repo.list_error_messages(job.id, limit=1)
+    assert len(rows_limited) == 1
+
+
 def test_file_repo_delete_by_job(db):
     job = _make_job(db)
     repo = FileRepository(db)
