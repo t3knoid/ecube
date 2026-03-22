@@ -635,7 +635,7 @@ Start job with thread count. Sets `started_by` to the authenticated user and `st
 - `401 Unauthorized` — Missing/invalid credentials
 - `403 Forbidden` — Insufficient role
 - `404 Not Found` — Job not found
-- `409 Conflict` — Job already running
+- `409 Conflict` — Job cannot be started from its current status
 - `422 Validation Error` — Invalid path/body parameters
 - `500 Internal Server Error` — Database error
 
