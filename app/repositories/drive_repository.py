@@ -131,3 +131,19 @@ class DriveRepository:
             .with_for_update(skip_locked=True)
             .first()
         )
+
+    def count_unbound_available(self) -> int:
+        """Return the number of ``AVAILABLE`` drives with no project binding.
+
+        This is an **unlocked** count so it includes rows held by concurrent
+        transactions.  Used to distinguish "no unbound drives exist" from
+        "unbound drives exist but are all locked".
+        """
+        return (
+            self.db.query(UsbDrive)
+            .filter(
+                UsbDrive.current_state == DriveState.AVAILABLE,
+                UsbDrive.current_project_id.is_(None),
+            )
+            .count()
+        )
