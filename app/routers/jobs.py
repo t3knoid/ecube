@@ -30,18 +30,23 @@ def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
     file_repo = FileRepository(db)
     schema.files_succeeded, schema.files_failed = file_repo.count_done_and_errors(job.id)
 
-    # Error summary (fetches at most 5 rows)
+    # Error summary (fetches at most 5 rows, truncated to stay brief)
     if schema.files_failed:
         error_rows = file_repo.list_error_messages(job.id, limit=5)
         prefix = f"{schema.files_failed} file{'s' if schema.files_failed != 1 else ''} failed"
         if error_rows:
-            parts = [f"{msg} ({path})" for msg, path in error_rows]
+            parts = [
+                f"{msg[:120]}{'…' if len(msg) > 120 else ''} ({path[:80]}{'…' if len(path) > 80 else ''})"
+                for msg, path in error_rows
+            ]
             summary = prefix + ": " + ", ".join(parts)
             unreported = schema.files_failed - len(error_rows)
             if unreported > 0:
                 summary += f", ... and {unreported} more"
         else:
             summary = prefix
+        if len(summary) > 1024:
+            summary = summary[:1021] + "..."
         schema.error_summary = summary
 
     # Nested drive info — select the most recent unreleased assignment
