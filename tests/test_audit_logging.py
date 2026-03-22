@@ -225,7 +225,18 @@ class TestMountAuditLogging:
 
 
 class TestJobAuditLogging:
+    def _add_drive(self, db, project_id, device_id):
+        drive = UsbDrive(
+            device_identifier=device_id,
+            current_state=DriveState.AVAILABLE,
+            current_project_id=project_id,
+        )
+        db.add(drive)
+        db.commit()
+        return drive
+
     def test_create_job_logs_actor(self, client, db):
+        self._add_drive(db, "PROJ-AUDIT", "USB-AUDIT-CREATE")
         response = client.post(
             "/jobs",
             json={
@@ -271,6 +282,7 @@ class TestJobAuditLogging:
         assert entry.details["requested_project_id"] == "PROJ-DIFFERENT"
 
     def test_start_job_logs_actor(self, client, db):
+        self._add_drive(db, "PROJ-AUDIT", "USB-AUDIT-START")
         create_resp = client.post(
             "/jobs",
             json={
@@ -291,6 +303,7 @@ class TestJobAuditLogging:
         assert entry.job_id == job_id
 
     def test_verify_job_logs_actor(self, client, db):
+        self._add_drive(db, "PROJ-AUDIT", "USB-AUDIT-VERIFY")
         create_resp = client.post(
             "/jobs",
             json={
@@ -311,6 +324,7 @@ class TestJobAuditLogging:
         assert entry.job_id == job_id
 
     def test_create_manifest_logs_actor(self, client, db):
+        self._add_drive(db, "PROJ-AUDIT", "USB-AUDIT-MANIFEST")
         create_resp = client.post(
             "/jobs",
             json={

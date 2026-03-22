@@ -291,6 +291,16 @@ class TestExportJobSchema:
 class TestJobClientIpRedaction:
     """Verify that client_ip is only visible to admin and auditor roles."""
 
+    def _ensure_drive(self, db, device_id):
+        from app.models.hardware import DriveState, UsbDrive
+        drive = UsbDrive(
+            device_identifier=device_id,
+            current_state=DriveState.AVAILABLE,
+            current_project_id="PROJ-IP",
+        )
+        db.add(drive)
+        db.commit()
+
     def _create_job(self, http_client):
         return http_client.post(
             "/jobs",
@@ -302,6 +312,7 @@ class TestJobClientIpRedaction:
         )
 
     def test_admin_sees_client_ip(self, admin_client, db):
+        self._ensure_drive(db, "USB-IP-ADMIN")
         resp = self._create_job(admin_client)
         assert resp.status_code == 200
         job_id = resp.json()["id"]
@@ -311,12 +322,14 @@ class TestJobClientIpRedaction:
         assert get_resp.json()["client_ip"] is not None
 
     def test_processor_client_ip_redacted(self, client, db):
+        self._ensure_drive(db, "USB-IP-PROC")
         resp = self._create_job(client)
         assert resp.status_code == 200
         # Processor should not see the IP, even on the create response
         assert resp.json()["client_ip"] is None
 
     def test_processor_get_job_client_ip_redacted(self, admin_client, client, db):
+        self._ensure_drive(db, "USB-IP-PROC-GET")
         # Admin creates job (IP stored), processor reads it back
         resp = self._create_job(admin_client)
         job_id = resp.json()["id"]
@@ -344,6 +357,7 @@ class TestJobClientIpRedaction:
         assert get_resp.json()["client_ip"] == "10.99.99.99"
 
     def test_manager_client_ip_redacted(self, manager_client, db):
+        self._ensure_drive(db, "USB-IP-MGR")
         resp = self._create_job(manager_client)
         assert resp.status_code == 200
         assert resp.json()["client_ip"] is None
