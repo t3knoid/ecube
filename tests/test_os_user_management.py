@@ -690,6 +690,10 @@ class TestOSUserEndpoints:
             "password": "pass",
         })
         assert resp.status_code == 422
+        body = resp.json()
+        assert body["code"] == "VALIDATION_ERROR"
+        assert "trace_id" in body
+        assert "body -> username" in body["message"]
 
     @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
@@ -751,6 +755,10 @@ class TestOSUserEndpoints:
     def test_delete_invalid_username(self, admin_client):
         resp = admin_client.delete("/admin/os-users/Bob;rm")
         assert resp.status_code == 422
+        body = resp.json()
+        assert body["code"] == "HTTP_422"
+        assert "trace_id" in body
+        assert "invalid username" in body["message"].lower()
 
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
@@ -776,12 +784,20 @@ class TestOSUserEndpoints:
                 "password": bad_pw,
             })
             assert resp.status_code == 422
+            body = resp.json()
+            assert body["code"] == "VALIDATION_ERROR"
+            assert "trace_id" in body
+            assert "body -> password" in body["message"]
 
     def test_reset_password_unsafe_password_rejected(self, admin_client):
         resp = admin_client.put("/admin/os-users/testuser/password", json={
             "password": "new\npass",
         })
         assert resp.status_code == 422
+        body = resp.json()
+        assert body["code"] == "VALIDATION_ERROR"
+        assert "trace_id" in body
+        assert "body -> password" in body["message"]
 
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
@@ -808,6 +824,9 @@ class TestOSUserEndpoints:
             "groups": [],
         })
         assert resp.status_code == 422
+        body = resp.json()
+        assert body["code"] == "VALIDATION_ERROR"
+        assert "trace_id" in body
 
     @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
@@ -934,6 +953,10 @@ class TestOSGroupEndpoints:
     def test_delete_invalid_group_name(self, admin_client):
         resp = admin_client.delete("/admin/os-groups/Bad;Name")
         assert resp.status_code == 422
+        body = resp.json()
+        assert body["code"] == "HTTP_422"
+        assert "trace_id" in body
+        assert "invalid group name" in body["message"].lower()
 
     def test_group_endpoints_require_admin(self, client):
         """Processor-role client gets 403."""
@@ -1091,6 +1114,10 @@ class TestSetupEndpoints:
             "password": "s3cret",
         })
         assert resp.status_code == 422
+        body = resp.json()
+        assert body["code"] == "VALIDATION_ERROR"
+        assert "trace_id" in body
+        assert "body -> username" in body["message"]
 
     def test_initialize_empty_password(self, unauthenticated_client):
         resp = unauthenticated_client.post("/setup/initialize", json={
@@ -1098,6 +1125,10 @@ class TestSetupEndpoints:
             "password": "",
         })
         assert resp.status_code == 422
+        body = resp.json()
+        assert body["code"] == "VALIDATION_ERROR"
+        assert "trace_id" in body
+        assert "body -> password" in body["message"]
 
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
