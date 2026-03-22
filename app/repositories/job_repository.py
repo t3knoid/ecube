@@ -249,7 +249,7 @@ class DriveAssignmentRepository:
                 DriveAssignment.job_id == job_id,
                 DriveAssignment.released_at.is_(None),
             )
-            .order_by(DriveAssignment.assigned_at.desc())
+            .order_by(DriveAssignment.assigned_at.desc(), DriveAssignment.id.desc())
             .first()
         )
 
