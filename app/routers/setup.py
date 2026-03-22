@@ -77,8 +77,9 @@ def get_setup_status(
 )
 def initialize_system(
     body: SetupInitializeRequest,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
+    request: Request,
 ) -> SetupInitializeResponse:
     """Perform first-run system initialization.
 
