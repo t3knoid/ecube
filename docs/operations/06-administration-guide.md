@@ -979,12 +979,14 @@ When `drive_id` is omitted from the request, ECUBE automatically selects a
 drive using strict disambiguation rules:
 
 1. **Single project-bound drive** — If exactly one `AVAILABLE` drive is already
-   bound to the job's `project_id`, it is selected automatically. If that drive
-   is temporarily locked by a concurrent operation, the request fails with
-   HTTP 409 — the caller should retry after a short delay.
+   bound to the job's `project_id`, it is selected automatically. If the drive
+   is temporarily unavailable (e.g. locked by a concurrent operation or its
+   state changed), the request fails with HTTP 409 — the caller should retry
+   after a short delay.
 2. **Unbound fallback** — If no project-bound drives are available, the system
    picks the first `AVAILABLE` drive with no project binding and assigns the
-   project to it.
+   project to it. If unbound drives exist but none can be acquired, the
+   request fails with HTTP 409 (retry).
 3. **Multiple project-bound drives (409)** — If more than one `AVAILABLE` drive
    is bound to the project, the request fails with HTTP 409. The caller must
    specify `drive_id` to disambiguate.
