@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional
+from urllib.parse import urlparse
+
 from app.models.hardware import DriveState
 from app.models.jobs import JobStatus, FileStatus
 from app.utils.sanitize import SafeStr, StrictSafeStr
@@ -57,15 +59,22 @@ class JobCreate(BaseModel):
     max_file_retries: int = Field(default=3, ge=0, description="Maximum number of retries for failed files (0+)")
     retry_delay_seconds: int = Field(default=1, ge=0, description="Delay between retries in seconds (0+)")
     created_by: Optional[SafeStr] = Field(default=None, description="Username of the job creator")
-    callback_url: Optional[str] = Field(default=None, description="HTTPS URL to receive a POST callback when the job reaches a terminal state (COMPLETED or FAILED)")
+    callback_url: Optional[SafeStr] = Field(default=None, description="HTTPS URL to receive a POST callback when the job reaches a terminal state (COMPLETED or FAILED)")
 
     @field_validator("callback_url")
     @classmethod
-    def _callback_url_must_be_https(cls, v: Optional[str]) -> Optional[str]:
+    def _callback_url_must_be_valid_https(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return v
-        if not v.lower().startswith("https://"):
+        v = v.strip()
+        try:
+            parsed = urlparse(v)
+        except Exception:
+            raise ValueError("callback_url is not a valid URL")
+        if parsed.scheme.lower() != "https":
             raise ValueError("callback_url must use HTTPS")
+        if not parsed.hostname:
+            raise ValueError("callback_url must include a hostname")
         return v
 
 
