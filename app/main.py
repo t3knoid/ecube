@@ -98,6 +98,27 @@ async def lifespan(application: FastAPI):
             logger.exception("Audit log cleanup failed during startup")
 
     # ------------------------------------------------------------------
+    # Startup: reconcile stale mounts, jobs, and USB drives
+    # ------------------------------------------------------------------
+    try:
+        from app.database import SessionLocal
+        from app.services.reconciliation_service import run_startup_reconciliation
+        from app.infrastructure import get_mount_provider, get_drive_discovery, get_filesystem_detector
+
+        db = SessionLocal()
+        try:
+            run_startup_reconciliation(
+                db,
+                get_mount_provider(),
+                topology_source=get_drive_discovery().discover_topology,
+                filesystem_detector=get_filesystem_detector(),
+            )
+        finally:
+            db.close()
+    except Exception:
+        logger.exception("Startup reconciliation failed")
+
+    # ------------------------------------------------------------------
     # Background: periodic USB discovery
     # ------------------------------------------------------------------
     discovery_task = None
