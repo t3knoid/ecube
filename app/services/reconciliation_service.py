@@ -51,14 +51,14 @@ def reconcile_mounts(
     for mount in mounts:
         checked += 1
         result = mount_provider.check_mounted(mount.local_mount_point)
+        mount.last_checked_at = datetime.now(timezone.utc)
 
         if result is True:
-            # Still mounted — no change needed.
+            # Still mounted — no status change needed.
             continue
 
         old_status = mount.status
         mount.status = MountStatus.UNMOUNTED if result is False else MountStatus.ERROR
-        mount.last_checked_at = datetime.now(timezone.utc)
         corrected += 1
 
         audit_entries.append({
@@ -69,7 +69,7 @@ def reconcile_mounts(
             "reason": "startup reconciliation",
         })
 
-    if corrected:
+    if checked:
         try:
             db.commit()
         except Exception:
