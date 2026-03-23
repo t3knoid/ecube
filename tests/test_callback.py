@@ -410,10 +410,11 @@ class TestDeliverCallback:
         mock_client_instance.post.assert_called_once()
         logs = db.query(AuditLog).filter(
             AuditLog.job_id == 1,
-            AuditLog.action == "CALLBACK_SENT",
+            AuditLog.action == "CALLBACK_DELIVERY_FAILED",
         ).all()
         assert len(logs) == 1
         assert logs[0].details["status_code"] == 404
+        assert "rejected" in logs[0].details["reason"]
 
     @patch("app.services.callback_service._is_private_ip", return_value=True)
     @patch("app.services.callback_service.settings")
