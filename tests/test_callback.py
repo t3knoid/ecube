@@ -754,6 +754,48 @@ class TestDeliverCallback:
         posted_url = call_args[0][0]
         assert "[2001:db8::1]" in posted_url
 
+    def test_production_path_uses_bounded_executor(self):
+        """When db is None (production), deliver_callback submits to a
+        bounded ThreadPoolExecutor rather than spawning an unbounded thread."""
+        job = self._make_job()
+        with patch("app.services.callback_service._get_executor") as mock_get_exec, \
+             patch("app.services.callback_service._deliver_callback_sync"):
+            mock_executor = MagicMock()
+            mock_get_exec.return_value = mock_executor
+
+            deliver_callback(job)  # db=None → production path
+
+            mock_executor.submit.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Executor lifecycle
+# ---------------------------------------------------------------------------
+
+
+class TestExecutorLifecycle:
+
+    def test_get_executor_returns_thread_pool(self):
+        """_get_executor returns a ThreadPoolExecutor."""
+        from concurrent.futures import ThreadPoolExecutor as _TPE
+        from app.services.callback_service import _get_executor, _shutdown_executor
+        import app.services.callback_service as _mod
+
+        # Reset module state for a clean test.
+        old = _mod._executor
+        _mod._executor = None
+        try:
+            with patch.object(_mod, "settings") as mock_settings:
+                mock_settings.callback_max_workers = 2
+                pool = _get_executor()
+                assert isinstance(pool, _TPE)
+                assert pool._max_workers == 2
+        finally:
+            # Restore previous state; shut down the pool we created.
+            if _mod._executor is not None:
+                _mod._executor.shutdown(wait=False)
+            _mod._executor = old
+
 
 # ---------------------------------------------------------------------------
 # Migration test
