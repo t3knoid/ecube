@@ -65,6 +65,40 @@ class TestCallbackUrlSchemaValidation:
         )
         assert body.callback_url is None
 
+    def test_scheme_only_rejected(self):
+        """'https://' with no hostname is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            JobCreate(
+                project_id="P1",
+                evidence_number="EV1",
+                source_path="/data/source",
+                callback_url="https://",
+            )
+        errors = exc_info.value.errors()
+        assert any(e["loc"] == ("callback_url",) for e in errors)
+
+    def test_no_hostname_rejected(self):
+        """A URL with a path but no hostname is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            JobCreate(
+                project_id="P1",
+                evidence_number="EV1",
+                source_path="/data/source",
+                callback_url="https:///path/only",
+            )
+        errors = exc_info.value.errors()
+        assert any(e["loc"] == ("callback_url",) for e in errors)
+
+    def test_whitespace_stripped(self):
+        """Leading/trailing whitespace is stripped before validation."""
+        body = JobCreate(
+            project_id="P1",
+            evidence_number="EV1",
+            source_path="/data/source",
+            callback_url="  https://example.com/hook  ",
+        )
+        assert body.callback_url == "https://example.com/hook"
+
     def test_http_422_via_api(self, client, db):
         db.add(UsbDrive(
             device_identifier="USB-CB-001",
