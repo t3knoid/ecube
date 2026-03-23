@@ -806,6 +806,34 @@ class TestDeliverCallback:
         posted_url = call_args[0][0]
         assert "[2001:db8::1]" in posted_url
 
+    @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
+    @patch("app.services.callback_service.settings")
+    @patch("app.services.callback_service.httpx.Client")
+    def test_idn_hostname_sni_encoding(self, mock_client_cls, mock_settings, mock_resolve, db):
+        """Internationalized domain names must be IDNA-encoded for TLS SNI
+        so callback delivery doesn't crash on non-ASCII hostnames."""
+        mock_settings.callback_allow_private_ips = False
+        mock_settings.callback_timeout_seconds = 5
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
+        mock_client_instance.__exit__ = MagicMock(return_value=False)
+        mock_client_instance.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client_instance
+
+        # U+00FC = ü → IDNA ACE form is "xn--bcher-kva.example.com"
+        idn_url = "https://b\u00fccher.example.com/hook"
+        job = self._make_db_job(db, callback_url=idn_url)
+        deliver_callback(job, db)
+
+        call_args = mock_client_instance.post.call_args
+        sni = call_args[1]["extensions"]["sni_hostname"]
+        # Must be valid ASCII bytes (IDNA-encoded), not raw UTF-8.
+        assert sni == "b\u00fccher.example.com".encode("idna")
+        assert sni == b"xn--bcher-kva.example.com"
+
     def test_production_path_uses_bounded_executor(self):
         """When db is None (production), deliver_callback submits to a
         bounded ThreadPoolExecutor rather than spawning an unbounded thread."""
