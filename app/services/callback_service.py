@@ -401,7 +401,7 @@ def _do_deliver(
                 # original hostname despite connecting to the resolved IP.
                 post_kwargs["headers"] = {"Host": host_header}
                 post_kwargs["extensions"] = {
-                    "sni_hostname": hostname.encode("ascii"),
+                    "sni_hostname": hostname.encode("idna"),
                 }
 
             with httpx.Client(timeout=timeout) as client:
