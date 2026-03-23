@@ -1384,4 +1384,4 @@ Every security‑relevant event is logged:
 - OS user/group management (`OS_USER_CREATED`, `OS_USER_DELETED`, `OS_PASSWORD_RESET`, `OS_USER_GROUPS_MODIFIED`, `OS_USER_GROUPS_APPENDED`, `OS_GROUP_CREATED`, `OS_GROUP_DELETED`)
 - Port enablement changes (`PORT_ENABLED`, `PORT_DISABLED`)
 - System initialization (`SYSTEM_INITIALIZED`)
-- Webhook callback delivery (`CALLBACK_SENT`, `CALLBACK_DELIVERY_FAILED`)
+- Webhook callback delivery (`CALLBACK_SENT`, `CALLBACK_DELIVERY_FAILED`, `CALLBACK_DELIVERY_DROPPED`)
