@@ -79,18 +79,16 @@ def reconcile_mounts(
 
     # Best-effort audit — failures are logged but must not roll back
     # the state corrections committed above.
-    audit_repo = AuditRepository(db)
-    for details in audit_entries:
+    if audit_entries:
+        audit_repo = AuditRepository(db)
         try:
-            audit_repo.add(
-                action="MOUNT_RECONCILED",
-                user="system",
-                details=details,
-            )
+            audit_repo.add_many([
+                {"action": "MOUNT_RECONCILED", "user": "system", "details": d}
+                for d in audit_entries
+            ])
         except Exception:
             logger.exception(
-                "Failed to write audit log for MOUNT_RECONCILED (mount %s)",
-                details["mount_id"],
+                "Failed to write audit logs for MOUNT_RECONCILED",
             )
 
     return {"mounts_checked": checked, "mounts_corrected": corrected}
@@ -144,19 +142,21 @@ def reconcile_jobs(db: Session) -> Dict[str, int]:
 
     # Best-effort audit — failures are logged but must not roll back
     # the state corrections committed above.
-    audit_repo = AuditRepository(db)
-    for entry in audit_entries:
+    if audit_entries:
+        audit_repo = AuditRepository(db)
         try:
-            audit_repo.add(
-                action="JOB_RECONCILED",
-                user="system",
-                job_id=entry["job_id"],
-                details=entry,
-            )
+            audit_repo.add_many([
+                {
+                    "action": "JOB_RECONCILED",
+                    "user": "system",
+                    "job_id": e["job_id"],
+                    "details": e,
+                }
+                for e in audit_entries
+            ])
         except Exception:
             logger.exception(
-                "Failed to write audit log for JOB_RECONCILED (job %s)",
-                entry["job_id"],
+                "Failed to write audit logs for JOB_RECONCILED",
             )
 
     return {"jobs_checked": checked, "jobs_corrected": corrected}
