@@ -97,6 +97,10 @@ def test_login_missing_username_returns_422(unauthenticated_client):
         json={"password": "secret"},
     )
     assert resp.status_code == 422
+    body = resp.json()
+    assert body["code"] == "VALIDATION_ERROR"
+    assert "trace_id" in body
+    assert "body -> username" in body["message"]
 
 
 def test_login_missing_password_returns_422(unauthenticated_client):
@@ -105,6 +109,10 @@ def test_login_missing_password_returns_422(unauthenticated_client):
         json={"username": "testuser"},
     )
     assert resp.status_code == 422
+    body = resp.json()
+    assert body["code"] == "VALIDATION_ERROR"
+    assert "trace_id" in body
+    assert "body -> password" in body["message"]
 
 
 def test_login_empty_username_returns_422(unauthenticated_client):
@@ -113,6 +121,10 @@ def test_login_empty_username_returns_422(unauthenticated_client):
         json={"username": "", "password": "secret"},
     )
     assert resp.status_code == 422
+    body = resp.json()
+    assert body["code"] == "VALIDATION_ERROR"
+    assert "trace_id" in body
+    assert "body -> username" in body["message"]
 
 
 def test_login_empty_password_returns_422(unauthenticated_client):
@@ -121,6 +133,10 @@ def test_login_empty_password_returns_422(unauthenticated_client):
         json={"username": "testuser", "password": ""},
     )
     assert resp.status_code == 422
+    body = resp.json()
+    assert body["code"] == "VALIDATION_ERROR"
+    assert "trace_id" in body
+    assert "body -> password" in body["message"]
 
 
 # ---------------------------------------------------------------------------

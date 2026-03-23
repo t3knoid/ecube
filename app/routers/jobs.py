@@ -61,9 +61,10 @@ def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
 @router.post("", response_model=ExportJobSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
 def create_job(
     body: JobCreate,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
+    request: Request,
 ):
     """Create a new export job to copy eDiscovery data to an assigned drive.
 
@@ -97,9 +98,10 @@ def start_job(
     job_id: int,
     body: JobStart,
     background_tasks: BackgroundTasks,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
+    request: Request,
 ):
     """Start copying data from the source to the assigned USB drive.
 
@@ -116,9 +118,10 @@ def start_job(
 def verify_job(
     job_id: int,
     background_tasks: BackgroundTasks,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
+    request: Request,
 ):
     """Verify the integrity of copied data by comparing hashes and file counts.
 
@@ -134,9 +137,10 @@ def verify_job(
 @router.post("/{job_id}/manifest", response_model=ExportJobSchema, responses={**R_401, **R_403, **R_404, **R_422, **R_500})
 def create_manifest(
     job_id: int,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
+    request: Request,
 ):
     """Generate a JSON manifest document containing file hashes and copy metadata.
 
