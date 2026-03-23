@@ -42,11 +42,13 @@
 ### Mount Domain
 
 - `network_mounts` tracks protocol type, remote path, local path, and health.
+- Mount `status` can diverge from OS reality after an unclean shutdown (e.g. database says `MOUNTED` but the filesystem is no longer mounted). Startup reconciliation (§ 4.11) corrects this by verifying each `MOUNTED` row against the OS and transitioning stale entries to `UNMOUNTED` or `ERROR`.
 
 ### Job Domain
 
 - `export_jobs` stores job-level lifecycle and throughput counters.
   - `callback_url` (nullable `String`) — optional HTTPS URL that receives a POST callback when the job reaches a terminal state (`COMPLETED` or `FAILED`). Added in migration `0011`. Only `https://` URLs are accepted; HTTP is rejected at schema validation (422).
+- Jobs in `RUNNING` or `VERIFYING` state cannot survive a service restart (worker processes are ephemeral). Startup reconciliation (§ 4.11) transitions these to `FAILED` with `completed_at` set. Note: webhook callbacks are **not** issued for reconciliation-driven failures — only the `JOB_RECONCILED` audit event is emitted.
 - `export_files` stores per-file status/checksum for retries and verification.
 - `manifests` stores generated artifact pointers.
 - `drive_assignments` preserves assignment history over time.
