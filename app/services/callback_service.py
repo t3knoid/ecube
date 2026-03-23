@@ -387,6 +387,9 @@ def _do_deliver(
             parsed.scheme, pinned_netloc, parsed.path,
             parsed.params, parsed.query, "",
         ))
+        # Include port in Host header when the URL uses a non-default port,
+        # so virtual-host routing works on receivers listening on custom ports.
+        host_header = f"{hostname}:{port}" if parsed.port else hostname
     else:
         pinned_url = url
 
@@ -396,7 +399,7 @@ def _do_deliver(
             if pinned_ip is not None:
                 # Override Host header and TLS SNI so the server sees the
                 # original hostname despite connecting to the resolved IP.
-                post_kwargs["headers"] = {"Host": hostname}
+                post_kwargs["headers"] = {"Host": host_header}
                 post_kwargs["extensions"] = {
                     "sni_hostname": hostname.encode("ascii"),
                 }
