@@ -242,6 +242,22 @@ class TestDeliverCallback:
         logs = db.query(AuditLog).filter(AuditLog.job_id == 1).all()
         assert len(logs) == 0
 
+    def test_malformed_url_audit_record(self, db):
+        """A malformed callback_url that cannot be parsed must produce a
+        CALLBACK_DELIVERY_FAILED audit record."""
+        job = self._make_job(callback_url="not-a-url-at-all")
+
+        # Force urlparse to raise so we exercise the except branch
+        with patch("app.services.callback_service.urlparse", side_effect=ValueError("bad url")):
+            deliver_callback(job, db)
+
+        logs = db.query(AuditLog).filter(
+            AuditLog.job_id == 1,
+            AuditLog.action == "CALLBACK_DELIVERY_FAILED",
+        ).all()
+        assert len(logs) == 1
+        assert "Malformed" in logs[0].details["reason"]
+
     @patch("app.services.callback_service._is_private_ip", return_value=True)
     @patch("app.services.callback_service.settings")
     def test_ssrf_blocks_delivery(self, mock_settings, mock_priv, db):
