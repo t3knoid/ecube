@@ -740,7 +740,7 @@ Write-Host "  Drive:    $driveId"
 
 Instead of polling `GET /jobs/{id}` until a job reaches a terminal state, you can
 supply a `callback_url` when creating a job. ECUBE will `POST` a JSON payload to
-that URL whenever the job completes, fails, or is cancelled.
+that URL whenever the job completes or fails.
 
 ### 7.1 Enabling Webhooks
 
@@ -766,7 +766,7 @@ When the job reaches a terminal state, ECUBE delivers a `POST` request with a JS
 | Field | Type | Description |
 |-------|------|-------------|
 | `job_id` | `integer` | The export job ID. |
-| `status` | `string` | Terminal status: `COMPLETED`, `FAILED`, or `CANCELLED`. |
+| `status` | `string` | Terminal status: `COMPLETED` or `FAILED`. |
 | `callback_url` | `string` | The URL this payload was delivered to. |
 
 **Example payload:**
