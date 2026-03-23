@@ -414,6 +414,20 @@ class TestDeliverCallback:
         assert len(logs) == 1
         assert "empty hostname" in logs[0].details["reason"]
 
+    def test_non_https_blocked_at_runtime(self, db):
+        """A plain-HTTP callback URL stored in the DB is rejected at delivery
+        time (defense-in-depth behind the schema validator)."""
+        job = self._make_job(callback_url="http://example.com/hook")
+
+        _do_deliver(job.id, job.callback_url, build_payload(job), db)
+
+        logs = db.query(AuditLog).filter(
+            AuditLog.job_id == 1,
+            AuditLog.action == "CALLBACK_DELIVERY_FAILED",
+        ).all()
+        assert len(logs) == 1
+        assert "scheme" in logs[0].details["reason"].lower()
+
     def test_userinfo_blocked_at_runtime(self, db):
         """A callback URL with embedded credentials is rejected at delivery time
         (defense-in-depth behind the schema validator)."""

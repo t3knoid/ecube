@@ -156,6 +156,21 @@ def _do_deliver(
             logger.exception("Failed to write audit log for CALLBACK_DELIVERY_FAILED (malformed URL)")
         return
 
+    if parsed.scheme.lower() != "https":
+        logger.warning("Callback URL for job %s uses disallowed scheme: %s", job_id, parsed.scheme)
+        try:
+            audit_repo.add(
+                action="CALLBACK_DELIVERY_FAILED",
+                job_id=job_id,
+                details={
+                    "callback_url": safe_url,
+                    "reason": f"Callback URL uses disallowed scheme: {parsed.scheme}",
+                },
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for CALLBACK_DELIVERY_FAILED (scheme)")
+        return
+
     if parsed.username or parsed.password:
         logger.warning("Callback URL for job %s contains embedded credentials", job_id)
         try:
