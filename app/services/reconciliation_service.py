@@ -12,7 +12,7 @@ may still be emitted on each invocation.
 
 import logging
 from datetime import datetime, timezone
-from typing import Callable, Dict
+from typing import Any, Callable, Dict
 
 from sqlalchemy.orm import Session
 
@@ -205,13 +205,14 @@ def run_startup_reconciliation(
     *,
     topology_source: Callable[[], DiscoveredTopology],
     filesystem_detector: FilesystemDetector,
-) -> Dict[str, Dict]:
+) -> Dict[str, Any]:
     """Execute all reconciliation passes during startup.
 
     Returns a nested summary keyed by domain (``mounts``, ``jobs``,
-    ``drives``).
+    ``drives``).  Each value is either a counts dict on success or an
+    ``{"error": "..."}`` dict on failure.
     """
-    results: Dict[str, Dict] = {}
+    results: Dict[str, Any] = {}
 
     logger.info("Startup reconciliation: checking mounts")
     try:
