@@ -8,15 +8,18 @@ by default (SSRF protection).
 Delivery runs on a bounded ``ThreadPoolExecutor`` (sized by
 ``settings.callback_max_workers``, default 4) with its own short-lived
 DB session so it never blocks the copy/verify worker or ties up its
-database connection.  The bounded pool provides backpressure: when all
-workers are busy, new deliveries queue internally rather than spawning
-unlimited threads.
+database connection.  A ``BoundedSemaphore`` (sized by
+``settings.callback_max_pending``, default 100) caps the total number of
+outstanding deliveries (queued + in-flight).  When the limit is reached,
+new deliveries are dropped and an audit record is written, providing real
+backpressure against slow or unreachable callback endpoints.
 """
 
 import atexit
 import ipaddress
 import logging
 import socket
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
@@ -38,7 +41,10 @@ _BACKOFF_BASE = 5  # seconds; delays: 1 s, 5 s, 25 s
 # ---------------------------------------------------------------------------
 
 _executor: Optional[ThreadPoolExecutor] = None
-_executor_lock = __import__("threading").Lock()
+_executor_lock = threading.Lock()
+
+_pending_semaphore: Optional[threading.BoundedSemaphore] = None
+_semaphore_lock = threading.Lock()
 
 
 def _get_executor() -> ThreadPoolExecutor:
@@ -58,6 +64,24 @@ def _get_executor() -> ThreadPoolExecutor:
                 )
                 atexit.register(_shutdown_executor)
     return _executor
+
+
+def _get_pending_semaphore() -> threading.BoundedSemaphore:
+    """Return (and lazily create) the module-level pending-delivery semaphore.
+
+    The semaphore is sized by ``settings.callback_max_pending`` and caps the
+    total number of outstanding deliveries (queued in the executor + actively
+    executing).  When all permits are taken, ``deliver_callback`` drops the
+    delivery instead of growing the queue without bound.
+    """
+    global _pending_semaphore
+    if _pending_semaphore is None:
+        with _semaphore_lock:
+            if _pending_semaphore is None:
+                _pending_semaphore = threading.BoundedSemaphore(
+                    settings.callback_max_pending,
+                )
+    return _pending_semaphore
 
 
 def _shutdown_executor() -> None:
@@ -159,10 +183,9 @@ def deliver_callback(job: ExportJob, db: Any = None) -> None:
 
     * **Production (db omitted):** submits delivery to a bounded
       ``ThreadPoolExecutor`` (capped at ``settings.callback_max_workers``).
-      Returns immediately so the caller's worker thread is not blocked by
-      HTTP I/O or retry sleeps.  When all workers are occupied, additional
-      deliveries queue until a slot opens — providing backpressure instead
-      of spawning unbounded threads.
+      A ``BoundedSemaphore`` (capped at ``settings.callback_max_pending``)
+      limits the total number of outstanding deliveries.  If the limit is
+      reached the delivery is dropped and an audit record is written.
     * **Testing (db provided):** executes delivery synchronously in the
       caller's process using the supplied session, making audit-log assertions
       deterministic.
@@ -190,7 +213,42 @@ def deliver_callback(job: ExportJob, db: Any = None) -> None:
         _do_deliver(job_id, url, payload, db)
         return
 
+    # --- Backpressure: cap outstanding deliveries ---
+    if not _get_pending_semaphore().acquire(blocking=False):
+        safe_url = _sanitize_url_for_log(url)
+        logger.warning(
+            "Callback queue full for job %s; dropping delivery to %s",
+            job_id, safe_url,
+        )
+        _audit_dropped_delivery(job_id, safe_url)
+        return
+
     _get_executor().submit(_deliver_callback_sync, job_id, url, payload)
+
+
+def _audit_dropped_delivery(job_id: int, safe_url: str) -> None:
+    """Write an audit record for a delivery dropped due to backpressure.
+
+    Opens a short-lived DB session so the caller does not need one.
+    """
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        AuditRepository(db).add(
+            action="CALLBACK_DELIVERY_DROPPED",
+            job_id=job_id,
+            details={
+                "callback_url": safe_url,
+                "reason": "Callback queue full: too many outstanding deliveries",
+            },
+        )
+    except Exception:
+        logger.exception(
+            "Failed to write audit log for CALLBACK_DELIVERY_DROPPED"
+        )
+    finally:
+        db.close()
 
 
 def _deliver_callback_sync(
@@ -202,6 +260,7 @@ def _deliver_callback_sync(
 
     Opens a **dedicated** DB session for audit writes and closes it before
     returning, so no external session is held during network I/O.
+    Releases the pending-delivery semaphore on completion.
     """
     from app.database import SessionLocal
 
@@ -210,6 +269,7 @@ def _deliver_callback_sync(
         _do_deliver(job_id, url, payload, db)
     finally:
         db.close()
+        _get_pending_semaphore().release()
 
 
 def _do_deliver(
