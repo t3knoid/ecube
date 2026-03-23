@@ -553,13 +553,13 @@ class TestDeliverCallback:
         job = self._make_job()
         _do_deliver(job.id, job.callback_url, build_payload(job), db)
 
-        assert mock_client_instance.post.call_count == 3
+        assert mock_client_instance.post.call_count == 4
         logs = db.query(AuditLog).filter(
             AuditLog.job_id == 1,
             AuditLog.action == "CALLBACK_DELIVERY_FAILED",
         ).all()
         assert len(logs) == 1
-        assert logs[0].details["attempts"] == 3
+        assert logs[0].details["attempts"] == 4
         assert "503" in logs[0].details["reason"]
 
     @patch("app.services.callback_service._is_private_ip", return_value=False)
@@ -579,7 +579,7 @@ class TestDeliverCallback:
         job = self._make_job()
         _do_deliver(job.id, job.callback_url, build_payload(job), db)
 
-        assert mock_client_instance.post.call_count == 3
+        assert mock_client_instance.post.call_count == 4
         logs = db.query(AuditLog).filter(
             AuditLog.job_id == 1,
             AuditLog.action == "CALLBACK_DELIVERY_FAILED",

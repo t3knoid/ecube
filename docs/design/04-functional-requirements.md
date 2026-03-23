@@ -191,7 +191,7 @@ The callback body is a JSON object containing:
 
 ### Retry & Backoff
 
-- Up to **3 attempts** with exponential backoff (1 s, 5 s between retries).
+- Up to **4 attempts** with exponential backoff (1 s, 5 s, 25 s between retries).
 - **5xx** responses and network errors trigger retries.
 - **4xx** responses are treated as permanent failures (logged as `CALLBACK_DELIVERY_FAILED`, no retry).
 - **2xx/3xx** responses are treated as successful delivery (logged as `CALLBACK_SENT`).

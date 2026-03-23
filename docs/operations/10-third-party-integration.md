@@ -801,7 +801,8 @@ The request includes the header `Content-Type: application/json`.
 |---------|-------|-------|
 | 1st | Immediate | First delivery attempt right after state transition. |
 | 2nd | ~1 s | After first failure (5xx, network error, timeout). |
-| 3rd | ~5 s | Final attempt; failure is logged as `CALLBACK_DELIVERY_FAILED`. |
+| 3rd | ~5 s | Third attempt after continued failure. |
+| 4th | ~25 s | Final attempt; failure is logged as `CALLBACK_DELIVERY_FAILED`. |
 
 - **Trigger conditions:** HTTP 5xx responses, network/connection errors, and timeouts trigger retries. HTTP 4xx responses are treated as permanent failures and are **not** retried.
 - **Timeout:** Each attempt must complete within `CALLBACK_TIMEOUT_SECONDS` (default 30 s).
