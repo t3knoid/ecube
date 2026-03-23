@@ -1418,6 +1418,14 @@ Every audit entry contains:
 | `MOUNT_REMOVED` | Network mount deleted |
 | `MOUNT_VALIDATED` | Mount connectivity re-tested |
 
+#### Webhook Callbacks
+
+| Action | Trigger |
+|--------|---------|
+| `CALLBACK_SENT` | Callback delivered successfully (HTTP 2xx) |
+| `CALLBACK_DELIVERY_FAILED` | All retries exhausted, SSRF blocked, redirect received, or permanent failure |
+| `CALLBACK_DELIVERY_DROPPED` | Delivery dropped due to backpressure (queue full) |
+
 #### Administrative
 
 | Action | Trigger |
