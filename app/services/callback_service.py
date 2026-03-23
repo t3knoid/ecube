@@ -27,7 +27,7 @@ from app.repositories.audit_repository import AuditRepository
 logger = logging.getLogger(__name__)
 
 _MAX_RETRIES = 3
-_BACKOFF_BASE = 5  # seconds; delays: 1, 5, 25
+_BACKOFF_BASE = 5  # seconds; delays: 1 s, 5 s
 
 
 def _is_private_ip(hostname: str) -> bool:
@@ -219,7 +219,7 @@ def _do_deliver(
                 job_id, exc, attempt + 1, _MAX_RETRIES,
             )
 
-        # Exponential backoff: 1s, 5s, 25s
+        # Exponential backoff: 5^attempt → ~1 s, ~5 s
         if attempt < _MAX_RETRIES - 1:
             time.sleep(_BACKOFF_BASE ** attempt)
 
