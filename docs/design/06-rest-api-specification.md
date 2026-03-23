@@ -558,7 +558,6 @@ All job endpoints that return a single job use the `ExportJobSchema` response, w
 | `completed_at` | datetime or null | When the job reached a terminal state. Reset to `null` if the job is restarted from `FAILED` |
 | `drive` | object or null | Nested `DriveInfoSchema` for the assigned drive (see below) |
 | `error_summary` | string or null | Brief summary of file failures; `null` when no files failed. Returns count-only fallback (e.g. "2 files failed") when errors lack messages |
-| `callback_url` | string or null | HTTPS callback URL (null if none was provided) |
 | `client_ip` | string or null | Client IP (redacted for non-admin/auditor roles) |
 
 #### Nested `DriveInfoSchema`
@@ -606,7 +605,6 @@ All job endpoints that return a single job use the `ExportJobSchema` response, w
     "current_project_id": "PROJECT-42"
   },
   "error_summary": null,
-  "callback_url": null,
   "client_ip": "192.168.1.50"
 }
 ```
@@ -617,19 +615,13 @@ Create a new job.
 
 **Roles:** `admin`, `manager`, `processor`
 
-**Optional fields:**
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `callback_url` | string or null | `null` | HTTPS URL to receive a POST callback on job completion or failure. HTTP URLs are rejected (422). See [§ 4.8 Webhook Callback Delivery](04-functional-requirements.md#48-webhook-callback-delivery) for payload format, retry policy, and SSRF protection. |
-
 **Error responses:**
 
 - `401 Unauthorized` — Missing/invalid credentials
 - `403 Forbidden` — Insufficient role or project isolation violation
 - `404 Not Found` — Drive not found
 - `409 Conflict` — Drive already in use
-- `422 Validation Error` — Invalid request body (includes non-HTTPS `callback_url`)
+- `422 Validation Error` — Invalid request body
 - `500 Internal Server Error` — Database error
 
 ### `POST /jobs/{id}/start`
@@ -734,8 +726,6 @@ Compare two files by hash/size/path.
 ## 3.6 User Role Management
 
 All user role management endpoints require the `admin` role. These endpoints manage authorization (role assignments) only — they do not create or delete OS/LDAP user accounts.
-
-The `{username}` path parameter must match the POSIX username pattern: `^[a-z_][a-z0-9_-]{0,31}$` (lowercase letter or underscore start, 1–32 characters, lowercase alphanumeric/hyphen/underscore only). Requests with non-matching values are rejected with `422 Unprocessable Entity`.
 
 ### `GET /users`
 
@@ -851,13 +841,6 @@ Remove all role assignments for a user. The user will fall back to OS group-base
 ## 3.7 OS User & Group Management API
 
 All endpoints require `admin` role and are only available when `role_resolver = "local"` (returns `404` otherwise).
-
-Path parameter constraints:
-
-- `{username}` must match the POSIX username pattern: `^[a-z_][a-z0-9_-]{0,31}$`
-- `{name}` (group name) must match the same pattern: `^[a-z_][a-z0-9_-]{0,31}$`
-
-Requests with non-matching values are rejected with `422 Unprocessable Entity` at the framework level (before reaching service logic). These patterns are declared in the OpenAPI schema.
 
 ### `POST /admin/os-users`
 
@@ -1384,4 +1367,3 @@ Every security‑relevant event is logged:
 - OS user/group management (`OS_USER_CREATED`, `OS_USER_DELETED`, `OS_PASSWORD_RESET`, `OS_USER_GROUPS_MODIFIED`, `OS_USER_GROUPS_APPENDED`, `OS_GROUP_CREATED`, `OS_GROUP_DELETED`)
 - Port enablement changes (`PORT_ENABLED`, `PORT_DISABLED`)
 - System initialization (`SYSTEM_INITIALIZED`)
-- Webhook callback delivery (`CALLBACK_SENT`, `CALLBACK_DELIVERY_FAILED`)

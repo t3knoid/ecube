@@ -46,7 +46,6 @@
 ### Job Domain
 
 - `export_jobs` stores job-level lifecycle and throughput counters.
-  - `callback_url` (nullable `String`) — optional HTTPS URL that receives a POST callback when the job reaches a terminal state (`COMPLETED` or `FAILED`). Added in migration `0011`. Only `https://` URLs are accepted; HTTP is rejected at schema validation (422).
 - `export_files` stores per-file status/checksum for retries and verification.
 - `manifests` stores generated artifact pointers.
 - `drive_assignments` preserves assignment history over time.
