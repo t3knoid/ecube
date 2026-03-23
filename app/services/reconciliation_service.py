@@ -17,7 +17,6 @@ from sqlalchemy.orm import Session
 from app.infrastructure.mount_protocol import MountProvider
 from app.infrastructure.usb_discovery import DiscoveredTopology
 from app.infrastructure import FilesystemDetector
-from app.models.hardware import DriveState, UsbDrive
 from app.models.jobs import ExportJob, JobStatus
 from app.models.network import MountStatus, NetworkMount
 from app.repositories.audit_repository import AuditRepository
