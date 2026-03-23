@@ -212,6 +212,27 @@ class TestSSRFProtection:
         mock_getaddrinfo.side_effect = _socket.gaierror("Name resolution failed")
         assert _is_private_ip("nonexistent.invalid") is True
 
+    @patch("app.services.callback_service.socket.getaddrinfo")
+    def test_unspecified_address_blocked(self, mock_getaddrinfo):
+        mock_getaddrinfo.return_value = [
+            (2, 1, 6, "", ("0.0.0.0", 0)),
+        ]
+        assert _is_private_ip("zero.example") is True
+
+    @patch("app.services.callback_service.socket.getaddrinfo")
+    def test_multicast_address_blocked(self, mock_getaddrinfo):
+        mock_getaddrinfo.return_value = [
+            (2, 1, 6, "", ("224.0.0.1", 0)),
+        ]
+        assert _is_private_ip("multicast.example") is True
+
+    @patch("app.services.callback_service.socket.getaddrinfo")
+    def test_ipv6_loopback_blocked(self, mock_getaddrinfo):
+        mock_getaddrinfo.return_value = [
+            (10, 1, 6, "", ("::1", 0, 0, 0)),
+        ]
+        assert _is_private_ip("ip6-localhost") is True
+
 
 # ---------------------------------------------------------------------------
 # deliver_callback
@@ -273,6 +294,22 @@ class TestDeliverCallback:
         ).all()
         assert len(logs) == 1
         assert "SSRF" in logs[0].details["reason"]
+
+    @patch("app.services.callback_service.settings")
+    def test_empty_hostname_blocked(self, mock_settings, db):
+        """A callback URL with an empty hostname is rejected with an audit record."""
+        mock_settings.callback_allow_private_ips = False
+        mock_settings.callback_timeout_seconds = 5
+        job = self._make_job(callback_url="https:///no-host")
+
+        deliver_callback(job, db)
+
+        logs = db.query(AuditLog).filter(
+            AuditLog.job_id == 1,
+            AuditLog.action == "CALLBACK_DELIVERY_FAILED",
+        ).all()
+        assert len(logs) == 1
+        assert "empty hostname" in logs[0].details["reason"]
 
     @patch("app.services.callback_service._is_private_ip", return_value=False)
     @patch("app.services.callback_service.settings")

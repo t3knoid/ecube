@@ -29,7 +29,8 @@ _BACKOFF_BASE = 5  # seconds; delays: 1, 5, 25
 
 def _is_private_ip(hostname: str) -> bool:
     """Resolve *hostname* and return ``True`` if any resolved address is
-    private, loopback, link-local, or otherwise reserved."""
+    not globally routable (private, loopback, link-local, reserved,
+    unspecified, multicast, etc.)."""
     try:
         infos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
     except socket.gaierror:
@@ -37,7 +38,7 @@ def _is_private_ip(hostname: str) -> bool:
         return True
     for family, _type, _proto, _canonname, sockaddr in infos:
         addr = ipaddress.ip_address(sockaddr[0])
-        if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+        if not addr.is_global or addr.is_multicast:
             return True
     return False
 
@@ -94,11 +95,15 @@ def deliver_callback(job: ExportJob, db: Session) -> None:
             logger.exception("Failed to write audit log for CALLBACK_DELIVERY_FAILED (malformed URL)")
         return
 
-    if not settings.callback_allow_private_ips and _is_private_ip(hostname):
+    if not settings.callback_allow_private_ips and (not hostname or _is_private_ip(hostname)):
+        reason = (
+            "SSRF protection: empty hostname"
+            if not hostname
+            else "SSRF protection: non-globally-routable IP"
+        )
         logger.warning(
-            "Callback URL for job %s resolves to a private/reserved address; "
-            "delivery blocked (SSRF protection)",
-            job.id,
+            "Callback URL for job %s blocked: %s",
+            job.id, reason,
         )
         try:
             audit_repo.add(
@@ -106,7 +111,7 @@ def deliver_callback(job: ExportJob, db: Session) -> None:
                 job_id=job.id,
                 details={
                     "callback_url": url,
-                    "reason": "SSRF protection: private/reserved IP",
+                    "reason": reason,
                 },
             )
         except Exception:
