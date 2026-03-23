@@ -195,6 +195,26 @@ class TestReconcileMounts:
         assert mount.status == MountStatus.ERROR
         assert result["mounts_corrected"] == 1
 
+    def test_check_mounted_exception_treated_as_error(self, db: Session):
+        """An exception from check_mounted is caught and treated as ERROR."""
+        m1 = _make_mount(db, MountStatus.MOUNTED, "/mnt/broken")
+        m2 = _make_mount(db, MountStatus.MOUNTED, "/mnt/ok")
+
+        class PartialBrokenProvider(FakeMountProvider):
+            def check_mounted(self, local_mount_point: str) -> Optional[bool]:
+                if local_mount_point == "/mnt/broken":
+                    raise RuntimeError("OS error")
+                return True  # /mnt/ok is fine
+
+        result = reconcile_mounts(db, PartialBrokenProvider())
+
+        db.refresh(m1)
+        db.refresh(m2)
+        assert m1.status == MountStatus.ERROR
+        assert m2.status == MountStatus.MOUNTED
+        assert result["mounts_checked"] == 2
+        assert result["mounts_corrected"] == 1
+
     def test_multiple_mounts_each_checked(self, db: Session):
         m1 = _make_mount(db, MountStatus.MOUNTED, "/mnt/a")
         m2 = _make_mount(db, MountStatus.MOUNTED, "/mnt/b")
@@ -397,8 +417,8 @@ class TestRunStartupReconciliation:
         assert result["jobs"]["jobs_corrected"] == 1
 
     def test_one_pass_failure_does_not_block_others(self, db: Session):
-        """If mount reconciliation fails, jobs and drives still run."""
-        _make_mount(db, MountStatus.MOUNTED, "/mnt/broken")
+        """A per-mount exception is caught; jobs and drives still run."""
+        mount = _make_mount(db, MountStatus.MOUNTED, "/mnt/broken")
         _make_job(db, JobStatus.RUNNING)
 
         class BrokenMountProvider:
@@ -415,8 +435,10 @@ class TestRunStartupReconciliation:
             filesystem_detector=FakeFilesystemDetector(),
         )
 
-        # Mounts errored but jobs still reconciled
-        assert "error" in result["mounts"]
+        # Exception treated as None → mount transitions to ERROR
+        db.refresh(mount)
+        assert mount.status == MountStatus.ERROR
+        assert result["mounts"]["mounts_corrected"] == 1
         assert result["jobs"]["jobs_corrected"] == 1
 
 
@@ -563,7 +585,7 @@ class TestReconciliationLock:
         assert db.query(ReconciliationLock).count() == 0
 
     def test_orchestrator_releases_lock_after_failure(self, db: Session):
-        """Lock is released even when all passes fail."""
+        """Lock is released even when a mount check raises an exception."""
         _make_mount(db, MountStatus.MOUNTED, "/mnt/broken")
 
         class BrokenMountProvider:
@@ -581,5 +603,6 @@ class TestReconciliationLock:
             filesystem_detector=FakeFilesystemDetector(),
         )
 
-        assert "error" in result["mounts"]
+        # Exception caught per-mount, treated as ERROR — pass still succeeds
+        assert result["mounts"]["mounts_corrected"] == 1
         assert db.query(ReconciliationLock).count() == 0
