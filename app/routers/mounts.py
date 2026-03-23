@@ -21,9 +21,10 @@ _ADMIN_MANAGER = require_roles("admin", "manager")
 @router.post("", response_model=NetworkMountSchema, responses={**R_401, **R_403, **R_422, **R_500})
 def add_mount(
     body: MountCreate,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
+    request: Request,
 ):
     """Register a new network mount (SMB, NFS, etc.) as a data source.
 
@@ -39,9 +40,10 @@ def add_mount(
 @router.delete("/{mount_id}", status_code=204, responses={**R_401, **R_403, **R_404, **R_422, **R_500})
 def remove_mount(
     mount_id: int,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
+    request: Request,
 ):
     """Remove a network mount from the system.
 
@@ -85,9 +87,10 @@ def validate_all_mounts(
 @router.post("/{mount_id}/validate", response_model=NetworkMountSchema, responses={**R_401, **R_403, **R_404, **R_422, **R_500})
 def validate_mount(
     mount_id: int,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
+    request: Request,
 ):
     """Test connectivity and credentials for a specific network mount.
 
