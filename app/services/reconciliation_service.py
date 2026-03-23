@@ -8,12 +8,18 @@ All three passes are **idempotent** — running them multiple times without
 underlying state changes produces no additional state mutations.  Observability
 side-effects (e.g. ``USB_DISCOVERY_SYNC`` audit entries from the drive pass)
 may still be emitted on each invocation.
+
+A single-row ``reconciliation_lock`` guard table prevents concurrent
+reconciliation when multiple uvicorn workers start simultaneously.  Only the
+first worker to acquire the lock runs reconciliation; the others skip it.
 """
 
 import logging
-from datetime import datetime, timezone
+import os
+from datetime import datetime, timezone, timedelta
 from typing import Any, Callable, Dict
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.infrastructure.mount_protocol import MountProvider
@@ -21,9 +27,14 @@ from app.infrastructure.usb_discovery import DiscoveredTopology
 from app.infrastructure import FilesystemDetector
 from app.models.jobs import ExportJob, JobStatus
 from app.models.network import MountStatus, NetworkMount
+from app.models.system import ReconciliationLock
 from app.repositories.audit_repository import AuditRepository
 
 logger = logging.getLogger(__name__)
+
+# A lock older than this is considered stale (worker crashed mid-reconciliation)
+# and will be reclaimed by the next startup attempt.
+STALE_LOCK_SECONDS = 300  # 5 minutes
 
 
 # -----------------------------------------------------------------------
@@ -200,6 +211,95 @@ def reconcile_drives(
 
 
 # -----------------------------------------------------------------------
+# Cross-process reconciliation lock
+# -----------------------------------------------------------------------
+
+def _acquire_reconciliation_lock(db: Session) -> bool:
+    """Try to acquire the single-row reconciliation lock.
+
+    Returns ``True`` if the lock was acquired.  Returns ``False`` if
+    another worker already holds it (and it is not stale).
+
+    A stale lock (older than :data:`STALE_LOCK_SECONDS`) is reclaimed
+    automatically so that a crashed worker does not block future startups.
+    """
+    worker_id = f"pid-{os.getpid()}"
+    now = datetime.now(timezone.utc)
+
+    db.add(ReconciliationLock(id=1, locked_by=worker_id, locked_at=now))
+    try:
+        db.commit()
+        return True
+    except IntegrityError:
+        db.rollback()
+
+    # Lock row already exists — check for staleness.
+    existing = db.query(ReconciliationLock).filter_by(id=1).first()
+    if existing is None:
+        # Row disappeared between our failed INSERT and this SELECT
+        # (another worker released it).  Retry the insert once.
+        db.add(ReconciliationLock(id=1, locked_by=worker_id, locked_at=now))
+        try:
+            db.commit()
+            return True
+        except IntegrityError:
+            db.rollback()
+            return False
+
+    cutoff = now - timedelta(seconds=STALE_LOCK_SECONDS)
+    # SQLite returns naive datetimes; normalise both sides for comparison.
+    locked_at = existing.locked_at
+    if locked_at is not None:
+        if locked_at.tzinfo is not None:
+            locked_at = locked_at.replace(tzinfo=None)
+        cutoff_naive = cutoff.replace(tzinfo=None)
+        is_stale = locked_at < cutoff_naive
+    else:
+        is_stale = False
+
+    if is_stale:
+        logger.warning(
+            "Reclaiming stale reconciliation lock held by %s since %s",
+            existing.locked_by,
+            existing.locked_at,
+        )
+        db.delete(existing)
+        db.commit()
+        db.add(ReconciliationLock(id=1, locked_by=worker_id, locked_at=now))
+        try:
+            db.commit()
+            return True
+        except IntegrityError:
+            db.rollback()
+            return False
+
+    logger.info(
+        "Reconciliation lock held by %s since %s — skipping reconciliation",
+        existing.locked_by,
+        existing.locked_at,
+    )
+    return False
+
+
+def _release_reconciliation_lock(db: Session) -> bool:
+    """Delete the reconciliation lock row.
+
+    Returns ``True`` if the row was deleted, ``False`` if it was already
+    gone (harmless).
+    """
+    try:
+        row = db.query(ReconciliationLock).filter_by(id=1).first()
+        if row is not None:
+            db.delete(row)
+            db.commit()
+        return True
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to release reconciliation lock")
+        return False
+
+
+# -----------------------------------------------------------------------
 # Orchestrator — runs all three passes
 # -----------------------------------------------------------------------
 
@@ -212,42 +312,53 @@ def run_startup_reconciliation(
 ) -> Dict[str, Any]:
     """Execute all reconciliation passes during startup.
 
+    Acquires a cross-process lock before running.  If another worker
+    already holds the lock, reconciliation is skipped and the return
+    dict contains ``{"skipped": True}``.
+
     Returns a nested summary keyed by domain (``mounts``, ``jobs``,
     ``drives``).  Each value is either a counts dict on success or an
     ``{"error": "..."}`` dict on failure.
     """
-    results: Dict[str, Any] = {}
+    if not _acquire_reconciliation_lock(db):
+        logger.info("Another worker is running startup reconciliation — skipping")
+        return {"skipped": True}
 
-    logger.info("Startup reconciliation: checking mounts")
     try:
-        results["mounts"] = reconcile_mounts(db, mount_provider)
-    except Exception:
-        db.rollback()
-        db.expire_all()
-        logger.exception("Mount reconciliation failed")
-        results["mounts"] = {"error": "mount reconciliation failed"}
+        results: Dict[str, Any] = {}
 
-    logger.info("Startup reconciliation: checking jobs")
-    try:
-        results["jobs"] = reconcile_jobs(db)
-    except Exception:
-        db.rollback()
-        db.expire_all()
-        logger.exception("Job reconciliation failed")
-        results["jobs"] = {"error": "job reconciliation failed"}
+        logger.info("Startup reconciliation: checking mounts")
+        try:
+            results["mounts"] = reconcile_mounts(db, mount_provider)
+        except Exception:
+            db.rollback()
+            db.expire_all()
+            logger.exception("Mount reconciliation failed")
+            results["mounts"] = {"error": "mount reconciliation failed"}
 
-    logger.info("Startup reconciliation: checking USB drives")
-    try:
-        results["drives"] = reconcile_drives(
-            db,
-            topology_source=topology_source,
-            filesystem_detector=filesystem_detector,
-        )
-    except Exception:
-        db.rollback()
-        db.expire_all()
-        logger.exception("Drive reconciliation failed")
-        results["drives"] = {"error": "drive reconciliation failed"}
+        logger.info("Startup reconciliation: checking jobs")
+        try:
+            results["jobs"] = reconcile_jobs(db)
+        except Exception:
+            db.rollback()
+            db.expire_all()
+            logger.exception("Job reconciliation failed")
+            results["jobs"] = {"error": "job reconciliation failed"}
 
-    logger.info("Startup reconciliation complete: %s", results)
-    return results
+        logger.info("Startup reconciliation: checking USB drives")
+        try:
+            results["drives"] = reconcile_drives(
+                db,
+                topology_source=topology_source,
+                filesystem_detector=filesystem_detector,
+            )
+        except Exception:
+            db.rollback()
+            db.expire_all()
+            logger.exception("Drive reconciliation failed")
+            results["drives"] = {"error": "drive reconciliation failed"}
+
+        logger.info("Startup reconciliation complete: %s", results)
+        return results
+    finally:
+        _release_reconciliation_lock(db)
