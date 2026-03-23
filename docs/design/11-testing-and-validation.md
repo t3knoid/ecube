@@ -133,6 +133,7 @@ The `tests/test_os_user_management.py` module validates the OS user and group ma
 - **Admin router endpoints:** All nine OS management endpoints tested via `TestClient`, including auth/role gating.
 - **Non-local mode gating:** Verifies all OS endpoints return `404` when `role_resolver != "local"` (`LocalOnlyRoute`).
 - **First-run setup wizard:** Setup initialization, recovery for pre-existing users (including users not yet in `ecube-*` groups), and cross-process locking.
+- **Startup reconciliation lock:** Cross-process lock acquisition, stale lock reclaim, orchestrator skip-when-locked, and lock release on success/failure.
 - **Audit logging:** Verifies structured audit records for all OS operations.
 
 Run OS user and group management tests:
