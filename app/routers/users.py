@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, require_roles
-from app.constants import USERNAME_PATTERN, USERNAME_RE
+from app.constants import USERNAME_RE
 from app.database import get_db
 from app.repositories.audit_repository import best_effort_audit
 from app.repositories.user_role_repository import UserRoleRepository
@@ -55,7 +55,7 @@ def list_users(
 
 @router.get("/{username}/roles", response_model=UserRolesResponse, responses={**R_401, **R_403, **R_422})
 def get_user_roles(
-    username: str = Path(..., pattern=USERNAME_PATTERN),
+    username: str,
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(require_roles("admin")),
 ) -> UserRolesResponse:
@@ -67,9 +67,9 @@ def get_user_roles(
 
 @router.put("/{username}/roles", response_model=UserRolesResponse, responses={**R_401, **R_403, **R_422, **R_500})
 def set_user_roles(
-    username: str = Path(..., pattern=USERNAME_PATTERN),
-    *,
+    username: str,
     body: SetRolesRequest,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
     request: Request,
@@ -116,11 +116,11 @@ def set_user_roles(
     responses={**R_401, **R_403, **R_422, **R_500},
 )
 def delete_user_roles(
-    request: Request,
-    username: str = Path(..., pattern=USERNAME_PATTERN),
+    username: str,
     *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
+    request: Request,
 ) -> UserRolesResponse:
     """Remove all role assignments for a user."""
     _validate_username(username)

@@ -168,52 +168,7 @@ Every project-isolation decision is recorded:
 - Generate deterministic manifest per job completion (or on-demand regeneration).
 - Include source metadata, checksums, byte totals, and generation timestamp.
 
-## 4.8 Webhook Callback Delivery
-
-When a job includes a `callback_url`, the system sends an HTTPS POST request with a JSON payload to the specified URL when the job reaches a terminal state (`COMPLETED` or `FAILED`). This applies to all three terminal-state paths: copy completion, copy timeout, and post-copy verification.
-
-### Payload
-
-The callback body is a JSON object containing:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `event` | string | `JOB_COMPLETED` or `JOB_FAILED` |
-| `job_id` | integer | Job identifier |
-| `project_id` | string | Bound project ID |
-| `evidence_number` | string | Evidence case number |
-| `status` | string | Terminal status value |
-| `source_path` | string | Source data path |
-| `total_bytes` | integer | Total bytes to copy |
-| `copied_bytes` | integer | Bytes actually copied |
-| `file_count` | integer | Total file count |
-| `completed_at` | string or null | ISO 8601 timestamp (present when `completed_at` is set) |
-
-### Retry & Backoff
-
-- Up to **4 attempts** with exponential backoff (1 s, 5 s, 25 s between retries).
-- **5xx** responses and network errors trigger retries.
-- **4xx** responses are treated as permanent failures (logged as `CALLBACK_DELIVERY_FAILED`, no retry).
-- **2xx/3xx** responses are treated as successful delivery (logged as `CALLBACK_SENT`).
-
-### SSRF Protection
-
-- The callback URL's hostname is resolved via DNS before the request is sent.
-- If any resolved address is private, loopback, link-local, or reserved, delivery is **blocked** (configurable via `CALLBACK_ALLOW_PRIVATE_IPS`).
-- Unresolvable hostnames are also blocked.
-
-### Schema Enforcement
-
-- Only `https://` URLs are accepted. HTTP URLs are rejected with 422 at job creation time.
-
-### Audit Events
-
-- `CALLBACK_SENT` — Successful delivery; includes `callback_url`, `status_code`, `attempt`.
-- `CALLBACK_DELIVERY_FAILED` — All retries exhausted or SSRF blocked; includes `callback_url`, `reason`, `attempts`.
-
----
-
-## 4.9 Audit Logging Design
+## 4.8 Audit Logging Design
 
 - Emit structured JSON payloads for all critical operations.
 - Use append-only semantics and immutable timestamps.
@@ -221,7 +176,7 @@ The callback body is a JSON object containing:
   - `PORT_ENABLED` — Port enabled for ECUBE use; includes `port_id`, `system_path`, `hub_id`, `enabled`, `path`.
   - `PORT_DISABLED` — Port disabled; includes `port_id`, `system_path`, `hub_id`, `enabled`, `path`.
 
-## 4.10 USB Discovery and State Refresh Design
+## 4.9 USB Discovery and State Refresh Design
 
 - Service reads sysfs topology (`/sys/bus/usb/devices`) and returns dataclass-based snapshot.
 - Hub and Port records are upserted (identified by stable `system_identifier` and `system_path` keys).

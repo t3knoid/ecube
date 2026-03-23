@@ -255,28 +255,6 @@ class Settings(BaseSettings):
     trust_proxy_headers: bool = False
 
     # ---------------------------------------------------------------------------
-    # Webhook callback settings
-    # ---------------------------------------------------------------------------
-
-    #: Timeout in seconds for each individual callback HTTP request.
-    callback_timeout_seconds: int = 30
-
-    #: Allow callbacks to private/reserved IP addresses.  Must remain
-    #: ``False`` in production to prevent SSRF attacks.
-    callback_allow_private_ips: bool = False
-
-    #: Maximum number of concurrent callback delivery threads.
-    #: Limits resource usage under high job throughput; additional
-    #: deliveries queue until a worker becomes available.
-    callback_max_workers: int = 4
-
-    #: Maximum number of outstanding callback deliveries (queued +
-    #: in-flight).  When this limit is reached, new deliveries are
-    #: dropped and an audit record is written.  Provides real
-    #: backpressure against slow or unreachable callback endpoints.
-    callback_max_pending: int = 100
-
-    # ---------------------------------------------------------------------------
     # Database pool settings
     # ---------------------------------------------------------------------------
 

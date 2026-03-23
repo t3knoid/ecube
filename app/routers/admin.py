@@ -26,7 +26,7 @@ import os
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -55,7 +55,6 @@ from app.infrastructure import get_os_user_provider
 from app.infrastructure.os_user_protocol import OSUserError, OsUserProvider
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500, R_504
 from app.services.os_user_service import validate_group_name, validate_username
-from app.constants import GROUPNAME_PATTERN, USERNAME_PATTERN
 from app.utils.client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
@@ -355,11 +354,11 @@ def list_os_users(
 
 @_os_router.delete("/os-users/{username}", status_code=200, responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
 def delete_os_user(
-    request: Request,
-    username: str = Path(..., pattern=USERNAME_PATTERN),
+    username: str,
     *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
+    request: Request,
 ) -> dict:
     """Delete an OS user and remove their DB role assignments."""
     _validate_path_username(username)
@@ -392,9 +391,9 @@ def delete_os_user(
 
 @_os_router.put("/os-users/{username}/password", status_code=200, responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
 def reset_os_user_password(
-    username: str = Path(..., pattern=USERNAME_PATTERN),
-    *,
+    username: str,
     body: ResetPasswordRequest,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
     request: Request,
@@ -419,9 +418,9 @@ def reset_os_user_password(
 
 @_os_router.put("/os-users/{username}/groups", response_model=OSUserResponse, responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
 def set_os_user_groups(
-    username: str = Path(..., pattern=USERNAME_PATTERN),
-    *,
+    username: str,
     body: SetOSGroupsRequest,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
     request: Request,
@@ -454,9 +453,9 @@ def set_os_user_groups(
 
 @_os_router.post("/os-users/{username}/groups", response_model=OSUserResponse, responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
 def add_os_user_groups(
-    username: str = Path(..., pattern=USERNAME_PATTERN),
-    *,
+    username: str,
     body: AddOSGroupsRequest,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
     request: Request,
@@ -537,11 +536,11 @@ def list_os_groups(
 
 @_os_router.delete("/os-groups/{name}", status_code=200, responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
 def delete_os_group(
-    request: Request,
-    name: str = Path(..., pattern=GROUPNAME_PATTERN),
+    name: str,
     *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
+    request: Request,
 ) -> dict:
     """Delete an OS group from the host system."""
     try:

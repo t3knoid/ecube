@@ -302,9 +302,9 @@ class TestUsernameValidation:
         resp = admin_client.get(f"/users/{bad_name}/roles")
         assert resp.status_code == 422
         body = resp.json()
-        assert body["code"] == "VALIDATION_ERROR"
+        assert body["code"] == "HTTP_422"
         assert "trace_id" in body
-        assert "username" in body["message"].lower()
+        assert "invalid username" in body["message"].lower()
 
     @pytest.mark.parametrize("good_name", [
         "alice",

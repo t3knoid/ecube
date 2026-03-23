@@ -12,11 +12,6 @@ ECUBE exposes a REST API that external systems (case management platforms, eDisc
 4. **Create and start the job** — Submit the copy job with source, optional drive, and parameters.
 5. **Monitor, verify, manifest** — Poll for completion, verify integrity, and generate a chain-of-custody manifest.
 
-> **Webhook Callbacks:** Instead of (or in addition to) polling, you can
-> supply a `callback_url` when creating the job.  ECUBE will POST a JSON
-> payload to that URL when the job reaches a terminal state (`COMPLETED` or
-> `FAILED`).  See [Section 7 — Webhook Callbacks](#7-webhook-callbacks).
-
 > **Auto-Assignment:** Step 2 (Select/Initialize drive) can be skipped
 > entirely. When `drive_id` is omitted from `POST /jobs`, ECUBE automatically
 > selects a drive: it picks the single project-bound `AVAILABLE` drive, or
@@ -40,7 +35,6 @@ If not overridden, jobs use these defaults:
 | `thread_count` | 4 | 1–8 |
 | `max_file_retries` | 3 | 0+ |
 | `retry_delay_seconds` | 1 | 0+ |
-| `callback_url` | *(none)* | Optional HTTPS URL for completion notifications |
 
 ---
 
@@ -201,8 +195,7 @@ Optional fields to override defaults:
     "drive_id": 3,
     "thread_count": 6,
     "max_file_retries": 5,
-    "retry_delay_seconds": 2,
-    "callback_url": "https://casemgmt.example.com/ecube/webhook"
+    "retry_delay_seconds": 2
 }
 ```
 
@@ -733,112 +726,3 @@ Write-Host "  Drive:    $driveId"
 - **Credential handling:** SMB credentials (`username`, `password`) are stored server-side and never returned in API responses or logs. Prefer NFS with host-based access control when possible.
 - **Network security:** All API communication should use HTTPS in production. The `http://` examples in this document are for development only.
 - **Rate limiting:** Avoid submitting jobs faster than the system can allocate drives. Check drive availability via `GET /drives` before bulk submissions.
-
----
-
-## 7. Webhook Callbacks
-
-Instead of polling `GET /jobs/{id}` until a job reaches a terminal state, you can
-supply a `callback_url` when creating a job. ECUBE will `POST` a JSON payload to
-that URL whenever the job completes or fails.
-
-### 7.1 Enabling Webhooks
-
-Add the `callback_url` field to your `POST /jobs` request:
-
-```json
-{
-  "source_path": "/exports/ProjectAlpha/production_set_01",
-  "project_id": "ProjectAlpha",
-  "callback_url": "https://casemgmt.example.com/ecube/webhook"
-}
-```
-
-**Requirements:**
-
-- The URL **must** use the `https://` scheme. Non-HTTPS URLs are rejected with `422 Unprocessable Entity`.
-- The URL must resolve to a **publicly routable** IP address by default. Private/loopback addresses (`10.x`, `172.16–31.x`, `192.168.x`, `127.x`, `::1`) are blocked to prevent SSRF attacks. Set `CALLBACK_ALLOW_PRIVATE_IPS=true` only in trusted lab environments.
-
-### 7.2 Callback Payload
-
-When the job reaches a terminal state, ECUBE delivers a `POST` request with a JSON body:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `event` | `string` | `JOB_COMPLETED` or `JOB_FAILED`. |
-| `job_id` | `integer` | The export job ID. |
-| `project_id` | `string` | Bound project ID. |
-| `evidence_number` | `string` | Evidence case number. |
-| `status` | `string` | Terminal status: `COMPLETED` or `FAILED`. |
-| `source_path` | `string` | Source data path. |
-| `total_bytes` | `integer` | Total bytes to copy. |
-| `copied_bytes` | `integer` | Bytes actually copied. |
-| `file_count` | `integer` | Total file count. |
-| `completed_at` | `string` or absent | ISO 8601 timestamp. Present only when the job recorded a completion time. |
-
-**Example payload:**
-
-```json
-{
-  "event": "JOB_COMPLETED",
-  "job_id": 42,
-  "project_id": "ProjectAlpha",
-  "evidence_number": "EV-2026-0042",
-  "status": "COMPLETED",
-  "source_path": "/exports/ProjectAlpha/production_set_01",
-  "total_bytes": 1073741824,
-  "copied_bytes": 1073741824,
-  "file_count": 156,
-  "completed_at": "2026-03-18T16:45:00+00:00"
-}
-```
-
-The request includes the header `Content-Type: application/json`.
-
-### 7.3 Retry Behaviour
-
-| Attempt | Delay | Notes |
-|---------|-------|-------|
-| 1st | Immediate | First delivery attempt right after state transition. |
-| 2nd | ~1 s | After first failure (5xx, network error, timeout). |
-| 3rd | ~5 s | Third attempt after continued failure. |
-| 4th | ~25 s | Final attempt; failure is logged as `CALLBACK_DELIVERY_FAILED`. |
-
-- **Trigger conditions:** HTTP 5xx responses, network/connection errors, and timeouts trigger retries. HTTP 4xx responses are treated as permanent failures and are **not** retried.
-- **Timeout:** Each attempt must complete within `CALLBACK_TIMEOUT_SECONDS` (default 30 s).
-- A successful delivery (HTTP 2xx) is logged as audit event `CALLBACK_SENT`.
-- Exhausting all retries is logged as audit event `CALLBACK_DELIVERY_FAILED`.
-- **Callback failures never change the job status.** A `COMPLETED` job remains `COMPLETED` even if the callback cannot be delivered.
-
-### 7.4 Configuration
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CALLBACK_TIMEOUT_SECONDS` | `30` | Per-attempt HTTP timeout in seconds. |
-| `CALLBACK_ALLOW_PRIVATE_IPS` | `false` | Allow callbacks to RFC 1918 / loopback addresses. |
-
-### 7.5 Example Webhook Receiver
-
-A minimal Python receiver using FastAPI:
-
-```python
-from fastapi import FastAPI, Request
-
-app = FastAPI()
-
-@app.post("/ecube/webhook")
-async def ecube_callback(request: Request):
-    payload = await request.json()
-    job_id = payload["job_id"]
-    status = payload["status"]
-    print(f"Job {job_id} finished with status {status}")
-    # Trigger downstream processing here ...
-    return {"received": True}
-```
-
-### 7.6 Security Recommendations
-
-- **HTTPS only:** Always use an HTTPS endpoint so payloads are encrypted in transit.
-- **Authenticate inbound requests:** Consider placing your webhook behind a reverse proxy that validates a shared secret or HMAC signature.
-- **Idempotency:** Your receiver may be called more than once for the same job (e.g., if the first `200 OK` was lost in transit). Design your handler to be idempotent.
-- **Firewall rules:** Only allow inbound connections from the ECUBE host IP to your webhook port.
