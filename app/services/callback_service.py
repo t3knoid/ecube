@@ -15,8 +15,8 @@ import logging
 import socket
 import threading
 import time
-from typing import Any, Dict, Optional
-from urllib.parse import urlparse
+from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse, urlunparse
 
 import httpx
 
@@ -47,20 +47,43 @@ def _sanitize_url_for_log(url: str) -> str:
         return "<unparseable>"
 
 
-def _is_private_ip(hostname: str) -> bool:
-    """Resolve *hostname* and return ``True`` if any resolved address is
-    not globally routable (private, loopback, link-local, reserved,
-    unspecified, multicast, etc.)."""
+def _resolve_safe(hostname: str) -> str:
+    """Resolve *hostname* via DNS and return the first globally-routable IP.
+
+    Performs a **single** resolution that is reused for the outbound
+    connection, eliminating the DNS-rebinding / TOCTOU window that would
+    exist if we resolved once to validate and let httpx resolve again.
+
+    Raises ``ValueError`` when:
+    * DNS resolution fails (unresolvable hostname).
+    * *Any* resolved address is not globally routable (private, loopback,
+      link-local, reserved, unspecified, or multicast).  Rejecting the
+      entire set when even one address is unsafe prevents an attacker
+      from mixing a routable record with a private one.
+    """
     try:
-        infos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
-    except socket.gaierror:
-        # Unresolvable hostnames are rejected as unsafe.
-        return True
-    for family, _type, _proto, _canonname, sockaddr in infos:
+        infos = socket.getaddrinfo(
+            hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM,
+        )
+    except socket.gaierror as exc:
+        raise ValueError(f"DNS resolution failed: {exc}") from exc
+
+    if not infos:
+        raise ValueError("DNS returned no addresses")
+
+    first_ip: Optional[str] = None
+    for _family, _type, _proto, _canonname, sockaddr in infos:
         addr = ipaddress.ip_address(sockaddr[0])
         if not addr.is_global or addr.is_multicast:
-            return True
-    return False
+            raise ValueError(
+                f"Resolved to non-globally-routable address: {sockaddr[0]}"
+            )
+        if first_ip is None:
+            first_ip = sockaddr[0]
+
+    # first_ip is guaranteed non-None because infos is non-empty and we
+    # would have raised on an unsafe address before reaching here.
+    return first_ip  # type: ignore[return-value]
 
 
 def build_payload(job: ExportJob) -> Dict[str, Any]:
@@ -214,15 +237,10 @@ def _do_deliver(
             logger.exception("Failed to write audit log for CALLBACK_DELIVERY_FAILED (userinfo)")
         return
 
-    if not settings.callback_allow_private_ips and (not hostname or _is_private_ip(hostname)):
-        reason = (
-            "SSRF protection: empty hostname"
-            if not hostname
-            else "SSRF protection: non-globally-routable IP"
-        )
+    if not settings.callback_allow_private_ips and not hostname:
         logger.warning(
-            "Callback URL for job %s blocked: %s",
-            job_id, reason,
+            "Callback URL for job %s blocked: SSRF protection: empty hostname",
+            job_id,
         )
         try:
             audit_repo.add(
@@ -230,20 +248,66 @@ def _do_deliver(
                 job_id=job_id,
                 details={
                     "callback_url": safe_url,
-                    "reason": reason,
+                    "reason": "SSRF protection: empty hostname",
                 },
             )
         except Exception:
             logger.exception("Failed to write audit log for CALLBACK_DELIVERY_FAILED (SSRF)")
         return
 
+    # --- DNS resolution + SSRF validation (single resolution, pinned) ---
+    pinned_ip: Optional[str] = None
+    if not settings.callback_allow_private_ips:
+        try:
+            pinned_ip = _resolve_safe(hostname)
+        except ValueError as exc:
+            reason = f"SSRF protection: {exc}"
+            logger.warning(
+                "Callback URL for job %s blocked: %s", job_id, reason,
+            )
+            try:
+                audit_repo.add(
+                    action="CALLBACK_DELIVERY_FAILED",
+                    job_id=job_id,
+                    details={
+                        "callback_url": safe_url,
+                        "reason": reason,
+                    },
+                )
+            except Exception:
+                logger.exception("Failed to write audit log for CALLBACK_DELIVERY_FAILED (SSRF)")
+            return
+
     timeout = settings.callback_timeout_seconds
     last_error: Optional[str] = None
 
+    # Build a pinned URL that connects directly to the resolved IP,
+    # preventing DNS rebinding between our safety check and the
+    # actual TCP connection (TOCTOU elimination).
+    if pinned_ip is not None:
+        port = parsed.port or 443
+        ip_host = f"[{pinned_ip}]" if ":" in pinned_ip else pinned_ip
+        pinned_netloc = f"{ip_host}:{port}"
+        pinned_url = urlunparse((
+            parsed.scheme, pinned_netloc, parsed.path,
+            parsed.params, parsed.query, "",
+        ))
+    else:
+        pinned_url = url
+
     for attempt in range(_MAX_RETRIES):
         try:
+            post_kwargs: Dict[str, Any] = {"json": payload}
+            if pinned_ip is not None:
+                # Override Host header and TLS SNI so the server sees the
+                # original hostname despite connecting to the resolved IP.
+                post_kwargs["headers"] = {"Host": hostname}
+                post_kwargs["extensions"] = {
+                    "sni_hostname": hostname.encode("ascii"),
+                }
+
             with httpx.Client(timeout=timeout) as client:
-                response = client.post(url, json=payload)
+                response = client.post(pinned_url, **post_kwargs)
 
             if response.status_code < 400:
                 # 2xx/3xx: successful delivery.
