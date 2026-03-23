@@ -20,6 +20,7 @@ from app.models.hardware import DriveState, UsbDrive
 from app.models.jobs import ExportJob, JobStatus
 from app.schemas.jobs import ExportJobSchema, JobCreate
 from app.services.callback_service import (
+    _do_deliver,
     _is_private_ip,
     build_payload,
     deliver_callback,

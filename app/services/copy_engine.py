@@ -400,7 +400,7 @@ def run_copy_job(job_id: int) -> None:
                     except Exception:
                         logger.exception("Failed to write audit log for JOB_TIMEOUT")
                     try:
-                        deliver_callback(job, db)
+                        deliver_callback(job)
                     except Exception:
                         logger.exception("Callback delivery failed for job %s (timeout)", job_id)
             else:
@@ -439,7 +439,7 @@ def run_copy_job(job_id: int) -> None:
                     except Exception:
                         logger.exception("Failed to write audit log for %s", audit_action)
                     try:
-                        deliver_callback(job, db)
+                        deliver_callback(job)
                     except Exception:
                         logger.exception("Callback delivery failed for job %s (copy)", job_id)
     finally:
@@ -527,7 +527,7 @@ def run_verify_job(job_id: int) -> None:
                 except Exception:
                     logger.exception("Failed to write audit log for %s", audit_action)
                 try:
-                    deliver_callback(job, db)
+                    deliver_callback(job)
                 except Exception:
                     logger.exception("Callback delivery failed for job %s (verify)", job_id)
     finally:
