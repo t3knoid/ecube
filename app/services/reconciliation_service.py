@@ -66,7 +66,15 @@ def reconcile_mounts(
 
     for mount in mounts:
         checked += 1
-        result = mount_provider.check_mounted(mount.local_mount_point)
+        try:
+            result = mount_provider.check_mounted(mount.local_mount_point)
+        except Exception:
+            logger.exception(
+                "OS check failed for mount %s (%s) — treating as ERROR",
+                mount.id,
+                mount.local_mount_point,
+            )
+            result = None
         mount.last_checked_at = datetime.now(timezone.utc)
 
         if result is True:
