@@ -286,9 +286,10 @@ Reconciliation runs during the FastAPI lifespan startup, **after** audit log cle
 
 - Query all `network_mounts` rows with `status = MOUNTED`.
 - For each, call `MountProvider.check_mounted(local_mount_point)`:
-  - Returns `True` → mount is still active; no change.
+  - Returns `True` → mount is still active; no status change.  `last_checked_at` is updated.
   - Returns `False` → mount is no longer active; transition to `UNMOUNTED`.
   - Returns `None` (OS error) → transition to `ERROR`.
+- Every checked mount receives a `last_checked_at` timestamp update regardless of whether its status changed.  This is an observability side-effect, not a domain state mutation.
 - Each correction emits a `MOUNT_RECONCILED` audit event with `mount_id`, `local_mount_point`, `old_status`, `new_status`, and `reason: "startup reconciliation"`.
 - Mounts already in `UNMOUNTED` or `ERROR` state are not checked.
 
@@ -311,7 +312,7 @@ Each reconciliation pass is wrapped in an independent `try/except` block. A fail
 
 ### Idempotency Guarantee
 
-All three passes are fully idempotent — running them multiple times without underlying state changes produces no additional **state mutations**. Mount and job reconciliation emit audit records (`MOUNT_RECONCILED`, `JOB_RECONCILED`) only when a state correction occurs; repeated runs with no new corrections produce no duplicate audit rows. Drive reconciliation delegates to `run_discovery_sync()`, which unconditionally emits a `USB_DISCOVERY_SYNC` summary audit entry on every invocation as an observability record; this is expected and does not indicate a state change.
+All three passes are fully idempotent — running them multiple times without underlying state changes produces no additional **state mutations**. Mount and job reconciliation emit audit records (`MOUNT_RECONCILED`, `JOB_RECONCILED`) only when a state correction occurs; repeated runs with no new corrections produce no duplicate audit rows. Observability side-effects that **do** occur on every invocation (and are not considered state mutations) include: mount `last_checked_at` timestamp updates, and the `USB_DISCOVERY_SYNC` summary audit entry emitted by the drive pass.
 
 ### Multi-Worker Safety
 
