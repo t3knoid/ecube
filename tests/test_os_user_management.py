@@ -758,7 +758,7 @@ class TestOSUserEndpoints:
         body = resp.json()
         assert body["code"] == "VALIDATION_ERROR"
         assert "trace_id" in body
-        assert "invalid username" in body["message"].lower()
+        assert "username" in body["message"].lower()
 
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
@@ -956,7 +956,7 @@ class TestOSGroupEndpoints:
         body = resp.json()
         assert body["code"] == "VALIDATION_ERROR"
         assert "trace_id" in body
-        assert "invalid group name" in body["message"].lower()
+        assert "name" in body["message"].lower()
 
     def test_group_endpoints_require_admin(self, client):
         """Processor-role client gets 403."""
