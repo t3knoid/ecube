@@ -765,17 +765,31 @@ When the job reaches a terminal state, ECUBE delivers a `POST` request with a JS
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `event` | `string` | `JOB_COMPLETED` or `JOB_FAILED`. |
 | `job_id` | `integer` | The export job ID. |
+| `project_id` | `string` | Bound project ID. |
+| `evidence_number` | `string` | Evidence case number. |
 | `status` | `string` | Terminal status: `COMPLETED` or `FAILED`. |
-| `callback_url` | `string` | The URL this payload was delivered to. |
+| `source_path` | `string` | Source data path. |
+| `total_bytes` | `integer` | Total bytes to copy. |
+| `copied_bytes` | `integer` | Bytes actually copied. |
+| `file_count` | `integer` | Total file count. |
+| `completed_at` | `string` or absent | ISO 8601 timestamp. Present only when the job recorded a completion time. |
 
 **Example payload:**
 
 ```json
 {
+  "event": "JOB_COMPLETED",
   "job_id": 42,
+  "project_id": "ProjectAlpha",
+  "evidence_number": "EV-2026-0042",
   "status": "COMPLETED",
-  "callback_url": "https://casemgmt.example.com/ecube/webhook"
+  "source_path": "/exports/ProjectAlpha/production_set_01",
+  "total_bytes": 1073741824,
+  "copied_bytes": 1073741824,
+  "file_count": 156,
+  "completed_at": "2026-03-18T16:45:00+00:00"
 }
 ```
 
