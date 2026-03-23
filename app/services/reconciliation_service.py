@@ -188,6 +188,8 @@ def run_startup_reconciliation(
     try:
         results["mounts"] = reconcile_mounts(db, mount_provider)
     except Exception:
+        db.rollback()
+        db.expire_all()
         logger.exception("Mount reconciliation failed")
         results["mounts"] = {"error": "mount reconciliation failed"}
 
@@ -195,6 +197,8 @@ def run_startup_reconciliation(
     try:
         results["jobs"] = reconcile_jobs(db)
     except Exception:
+        db.rollback()
+        db.expire_all()
         logger.exception("Job reconciliation failed")
         results["jobs"] = {"error": "job reconciliation failed"}
 
@@ -206,6 +210,8 @@ def run_startup_reconciliation(
             filesystem_detector=filesystem_detector,
         )
     except Exception:
+        db.rollback()
+        db.expire_all()
         logger.exception("Drive reconciliation failed")
         results["drives"] = {"error": "drive reconciliation failed"}
 
