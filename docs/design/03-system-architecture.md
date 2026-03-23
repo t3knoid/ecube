@@ -39,6 +39,17 @@ Concrete implementations live alongside the interface in `app/infrastructure/` (
 
 The active platform backend is determined by `settings.platform` (default: `"linux"`) at application startup.  A factory function in `app/infrastructure/__init__.py` returns the appropriate concrete implementations.  Tests override these via FastAPI `dependency_overrides` or by supplying fakes to service functions directly.
 
+## Startup Behavior
+
+The FastAPI lifespan context manager executes the following steps during application startup, before the server begins accepting requests:
+
+1. **Session backend initialization** — connects to Redis (if configured) for session storage.
+2. **Audit log cleanup** — purges expired audit records per `AUDIT_LOG_RETENTION_DAYS`.
+3. **Startup state reconciliation** — acquires a cross-process lock (`reconciliation_lock` single-row guard table), then corrects stale mounts, fails interrupted jobs, and re-runs USB discovery.  In multi-worker deployments only the first worker runs reconciliation; the others skip it.  See [§ 4.11 Startup State Reconciliation](04-functional-requirements.md#411-startup-state-reconciliation) for full specification.
+4. **Periodic USB discovery loop** — background task that re-scans USB topology at `USB_DISCOVERY_INTERVAL` intervals.
+
+Reconciliation runs in fixed order (mounts → jobs → drives) with per-pass error isolation, so a failure in one pass does not block the others.  The lock is released in a `finally` block regardless of success or failure.
+
 ## Security Design
 
 - DB reachable only from system-layer network segment.
