@@ -265,6 +265,11 @@ class Settings(BaseSettings):
     #: ``False`` in production to prevent SSRF attacks.
     callback_allow_private_ips: bool = False
 
+    #: Maximum number of concurrent callback delivery threads.
+    #: Limits resource usage under high job throughput; additional
+    #: deliveries queue until a worker becomes available.
+    callback_max_workers: int = 4
+
     # ---------------------------------------------------------------------------
     # Database pool settings
     # ---------------------------------------------------------------------------
