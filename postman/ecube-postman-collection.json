@@ -516,14 +516,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"project_id\": \"PROJECT-001\",\n  \"evidence_number\": \"EV-001\",\n  \"source_path\": \"/mnt/source/evidence\",\n  \"drive_id\": 1,\n  \"thread_count\": 4,\n  \"max_file_retries\": 3,\n  \"retry_delay_seconds\": 1\n}"
+							"raw": "{\n  \"project_id\": \"PROJECT-001\",\n  \"evidence_number\": \"EV-001\",\n  \"source_path\": \"/mnt/source/evidence\",\n  \"drive_id\": 1,\n  \"thread_count\": 4,\n  \"max_file_retries\": 3,\n  \"retry_delay_seconds\": 1,\n  \"callback_url\": \"https://example.com/webhook/job-complete\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/jobs",
 							"host": ["{{base_url}}"],
 							"path": ["jobs"]
 						},
-						"description": "Create an export job with an explicit drive_id. The drive must be AVAILABLE and its current_project_id must match or be null. If the drive is currently unbound, it is automatically bound to the requested project. Starts in PENDING state. Roles: admin, manager, processor."
+						"description": "Create an export job with an explicit drive_id. The drive must be AVAILABLE and its current_project_id must match or be null. If the drive is currently unbound, it is automatically bound to the requested project. Starts in PENDING state. Optional callback_url (HTTPS only) receives a POST when the job reaches COMPLETED or FAILED. Roles: admin, manager, processor."
 					}
 				},
 				{
@@ -535,14 +535,14 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"project_id\": \"PROJECT-001\",\n  \"evidence_number\": \"EV-001\",\n  \"source_path\": \"/mnt/source/evidence\",\n  \"thread_count\": 4\n}"
+							"raw": "{\n  \"project_id\": \"PROJECT-001\",\n  \"evidence_number\": \"EV-001\",\n  \"source_path\": \"/mnt/source/evidence\",\n  \"thread_count\": 4,\n  \"callback_url\": \"https://example.com/webhook/job-complete\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/jobs",
 							"host": ["{{base_url}}"],
 							"path": ["jobs"]
 						},
-						"description": "Create an export job without drive_id to auto-assign a drive. If exactly one AVAILABLE drive is bound to the project, it is selected (409 if the drive is temporarily unavailable — retry). If none are bound, an unbound AVAILABLE drive is used and the project is assigned to it. Returns 409 if multiple project-bound drives exist (specify drive_id) or if no usable drive can be acquired for the requested project. Roles: admin, manager, processor."
+						"description": "Create an export job without drive_id to auto-assign a drive. If exactly one AVAILABLE drive is bound to the project, it is selected (409 if the drive is temporarily unavailable — retry). If none are bound, an unbound AVAILABLE drive is used and the project is assigned to it. Returns 409 if multiple project-bound drives exist (specify drive_id) or if no usable drive can be acquired for the requested project. Optional callback_url (HTTPS only) receives a POST when the job reaches COMPLETED or FAILED. Roles: admin, manager, processor."
 					}
 				},
 				{
