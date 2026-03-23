@@ -270,6 +270,12 @@ class Settings(BaseSettings):
     #: deliveries queue until a worker becomes available.
     callback_max_workers: int = 4
 
+    #: Maximum number of outstanding callback deliveries (queued +
+    #: in-flight).  When this limit is reached, new deliveries are
+    #: dropped and an audit record is written.  Provides real
+    #: backpressure against slow or unreachable callback endpoints.
+    callback_max_pending: int = 100
+
     # ---------------------------------------------------------------------------
     # Database pool settings
     # ---------------------------------------------------------------------------
