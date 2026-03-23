@@ -40,6 +40,36 @@ class AuditRepository:
         self.db.refresh(entry)
         return entry
 
+    def add_many(
+        self,
+        entries: List[Dict[str, Any]],
+    ) -> List[AuditLog]:
+        """Batch-insert multiple audit log entries in a single commit.
+
+        Each dict in *entries* may contain the keys accepted by
+        :meth:`add`: ``action``, ``user``, ``job_id``, ``details``,
+        ``client_ip``.
+        """
+        rows = []
+        for kwargs in entries:
+            row = AuditLog(
+                action=kwargs["action"],
+                user=kwargs.get("user"),
+                job_id=kwargs.get("job_id"),
+                details=kwargs.get("details") or {},
+                client_ip=kwargs.get("client_ip"),
+            )
+            self.db.add(row)
+            rows.append(row)
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+        for row in rows:
+            self.db.refresh(row)
+        return rows
+
     def delete_older_than(self, cutoff: datetime) -> int:
         """Delete audit log entries older than *cutoff*. Returns count deleted."""
         count = (
