@@ -125,6 +125,15 @@ Required only when `SESSION_BACKEND=redis`. If Redis is unavailable, ECUBE autom
 
 ---
 
+## Webhook Callbacks
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CALLBACK_TIMEOUT_SECONDS` | `30` | Timeout in seconds for each individual callback HTTP request. |
+| `CALLBACK_ALLOW_PRIVATE_IPS` | `false` | Allow callbacks to private/reserved IP addresses. Must remain `false` in production to prevent SSRF. |
+
+---
+
 ## Logging
 
 | Variable | Default | Description |

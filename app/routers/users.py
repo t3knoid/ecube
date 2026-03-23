@@ -70,7 +70,6 @@ def set_user_roles(
     username: str = Path(..., pattern=USERNAME_PATTERN),
     *,
     body: SetRolesRequest,
-    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
     request: Request,
@@ -119,9 +118,9 @@ def set_user_roles(
 def delete_user_roles(
     request: Request,
     username: str = Path(..., pattern=USERNAME_PATTERN),
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
-    request: Request,
 ) -> UserRolesResponse:
     """Remove all role assignments for a user."""
     _validate_username(username)
