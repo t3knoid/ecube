@@ -30,6 +30,12 @@ def _check_password_safety(v: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+class MessageResponse(BaseModel):
+    """Simple success message returned by mutating endpoints."""
+
+    message: str = Field(..., description="Human-readable success message")
+
+
 class LogFileInfo(BaseModel):
     """Metadata about a single log file."""
 

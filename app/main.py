@@ -17,6 +17,7 @@ from app.utils.sanitize import is_encoding_error
 from app.logging_config import configure_logging
 from app.routers import admin, audit, auth, database_setup, drives, files, introspection, jobs, mounts, setup, users
 from app.schemas.errors import ErrorResponse
+from app.schemas.introspection import HealthResponse, VersionResponse
 from app.session import close_session_backend, init_session_backend, mount_session_middleware
 from app.utils.client_ip import get_client_ip
 
@@ -187,12 +188,12 @@ app = FastAPI(
 mount_session_middleware(app)
 
 
-@app.get("/health")
+@app.get("/health", response_model=HealthResponse)
 def health():
     return {"status": "ok"}
 
 
-@app.get("/introspection/version")
+@app.get("/introspection/version", response_model=VersionResponse)
 def introspection_version():
     """Return application and API version information.
 

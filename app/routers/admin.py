@@ -43,6 +43,7 @@ from app.schemas.admin import (
     CreateOSUserRequest,
     LogFileInfo,
     LogFilesResponse,
+    MessageResponse,
     OSGroupListResponse,
     OSGroupResponse,
     OSUserListResponse,
@@ -182,7 +183,13 @@ def list_log_files(
     )
 
 
-@router.get("/logs/{filename}", responses={**R_400, **R_401, **R_404, **R_422})
+@router.get(
+    "/logs/{filename}",
+    responses={
+        200: {"content": {"text/plain": {}}, "description": "Log file contents"},
+        **R_400, **R_401, **R_404, **R_422,
+    },
+)
 def download_log_file(
     filename: str,
     *,
@@ -353,7 +360,7 @@ def list_os_users(
     )
 
 
-@_os_router.delete("/os-users/{username}", status_code=200, responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
+@_os_router.delete("/os-users/{username}", status_code=200, response_model=MessageResponse, responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
 def delete_os_user(
     request: Request,
     username: str = Path(..., pattern=USERNAME_PATTERN),
@@ -390,7 +397,7 @@ def delete_os_user(
     return {"message": f"User '{username}' deleted"}
 
 
-@_os_router.put("/os-users/{username}/password", status_code=200, responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
+@_os_router.put("/os-users/{username}/password", status_code=200, response_model=MessageResponse, responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
 def reset_os_user_password(
     username: str = Path(..., pattern=USERNAME_PATTERN),
     *,
@@ -535,7 +542,7 @@ def list_os_groups(
     )
 
 
-@_os_router.delete("/os-groups/{name}", status_code=200, responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
+@_os_router.delete("/os-groups/{name}", status_code=200, response_model=MessageResponse, responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
 def delete_os_group(
     request: Request,
     name: str = Path(..., pattern=GROUPNAME_PATTERN),
