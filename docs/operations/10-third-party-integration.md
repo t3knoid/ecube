@@ -804,10 +804,11 @@ The request includes the header `Content-Type: application/json`.
 | 3rd | ~5 s | Third attempt after continued failure. |
 | 4th | ~25 s | Final attempt; failure is logged as `CALLBACK_DELIVERY_FAILED`. |
 
-- **Trigger conditions:** HTTP 5xx responses, network/connection errors, and timeouts trigger retries. HTTP 4xx responses are treated as permanent failures and are **not** retried.
+- **Trigger conditions:** HTTP 5xx responses, network/connection errors, and timeouts trigger retries. HTTP 4xx responses are treated as permanent failures and are **not** retried. HTTP 3xx redirects are **not** followed (to prevent redirect-based SSRF bypass) and are treated as permanent failures.
 - **Timeout:** Each attempt must complete within `CALLBACK_TIMEOUT_SECONDS` (default 30 s).
 - A successful delivery (HTTP 2xx) is logged as audit event `CALLBACK_SENT`.
 - Exhausting all retries is logged as audit event `CALLBACK_DELIVERY_FAILED`.
+- If the delivery queue is full (more than `CALLBACK_MAX_PENDING` outstanding deliveries), new deliveries are dropped and logged as audit event `CALLBACK_DELIVERY_DROPPED`.
 - **Callback failures never change the job status.** A `COMPLETED` job remains `COMPLETED` even if the callback cannot be delivered.
 
 ### 7.4 Configuration
@@ -816,6 +817,8 @@ The request includes the header `Content-Type: application/json`.
 |----------|---------|-------------|
 | `CALLBACK_TIMEOUT_SECONDS` | `30` | Per-attempt HTTP timeout in seconds. |
 | `CALLBACK_ALLOW_PRIVATE_IPS` | `false` | Allow callbacks to RFC 1918 / loopback addresses. |
+| `CALLBACK_MAX_WORKERS` | `4` | Maximum concurrent callback delivery threads. |
+| `CALLBACK_MAX_PENDING` | `100` | Maximum outstanding deliveries (queued + in-flight). Excess deliveries are dropped. |
 
 ### 7.5 Example Webhook Receiver
 
