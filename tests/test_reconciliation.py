@@ -441,11 +441,19 @@ class TestIdempotency:
         _make_job(db, JobStatus.RUNNING)
 
         r1 = reconcile_jobs(db)
+        audit_after_first = db.query(AuditLog).filter(
+            AuditLog.action == "JOB_RECONCILED"
+        ).count()
         r2 = reconcile_jobs(db)
+        audit_after_second = db.query(AuditLog).filter(
+            AuditLog.action == "JOB_RECONCILED"
+        ).count()
 
         assert r1["jobs_corrected"] == 1
         assert r2["jobs_checked"] == 0  # Now FAILED, not rechecked
         assert r2["jobs_corrected"] == 0
+        assert audit_after_first == 1
+        assert audit_after_second == 1  # No duplicate audit rows
 
     def test_drive_reconciliation_idempotent(self, db: Session):
         hub, port = _make_hub_and_port(db, enabled=True)
