@@ -12,6 +12,7 @@ import socket
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 
 import httpx
 from sqlalchemy.orm import Session
@@ -76,11 +77,21 @@ def deliver_callback(job: ExportJob, db: Session) -> None:
 
     # --- SSRF guard ---
     try:
-        from urllib.parse import urlparse
         parsed = urlparse(url)
         hostname = parsed.hostname or ""
     except Exception:
-        logger.warning("Malformed callback_url for job %s, skipping callback", job.id)
+        logger.warning("Malformed callback_url for job %s", job.id)
+        try:
+            audit_repo.add(
+                action="CALLBACK_DELIVERY_FAILED",
+                job_id=job.id,
+                details={
+                    "callback_url": url,
+                    "reason": "Malformed callback URL: unable to parse",
+                },
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for CALLBACK_DELIVERY_FAILED (malformed URL)")
         return
 
     if not settings.callback_allow_private_ips and _is_private_ip(hostname):
