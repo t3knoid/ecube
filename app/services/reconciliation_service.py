@@ -277,7 +277,12 @@ def _acquire_reconciliation_lock(db: Session) -> bool:
             existing.locked_at,
         )
         db.delete(existing)
-        db.commit()
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("Failed to delete stale reconciliation lock")
+            return False
         db.add(ReconciliationLock(id=1, locked_by=worker_id, locked_at=now))
         try:
             db.commit()
