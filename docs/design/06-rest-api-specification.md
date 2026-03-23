@@ -1250,7 +1250,7 @@ Partially update database connection settings.  All fields are optional — only
 
 ## 3.8a Startup Behavior
 
-ECUBE performs **startup state reconciliation** during application startup (inside the FastAPI lifespan context manager), before the server begins accepting HTTP requests. This reconciliation:
+ECUBE performs **startup state reconciliation** during application startup (inside the FastAPI lifespan context manager), before the server begins accepting HTTP requests. A cross-process `reconciliation_lock` guard table ensures only one worker runs reconciliation in multi-worker deployments. This reconciliation:
 
 - Verifies all `MOUNTED` network mounts against the OS and corrects stale entries (audit action: `MOUNT_RECONCILED`).
 - Fails any `RUNNING` or `VERIFYING` export jobs that lost their worker process (audit action: `JOB_RECONCILED`). Webhook callbacks are **not** issued for these reconciliation-driven failures.
