@@ -5,16 +5,20 @@ or FAILED.  Retries up to 4 times with exponential backoff on transient
 errors (5xx, network failures).  Blocks private/reserved IP addresses
 by default (SSRF protection).
 
-Delivery runs in a dedicated daemon thread with its own short-lived DB
-session so it never blocks the copy/verify worker or ties up its
-database connection.
+Delivery runs on a bounded ``ThreadPoolExecutor`` (sized by
+``settings.callback_max_workers``, default 4) with its own short-lived
+DB session so it never blocks the copy/verify worker or ties up its
+database connection.  The bounded pool provides backpressure: when all
+workers are busy, new deliveries queue internally rather than spawning
+unlimited threads.
 """
 
+import atexit
 import ipaddress
 import logging
 import socket
-import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse, urlunparse
 
@@ -28,6 +32,40 @@ logger = logging.getLogger(__name__)
 
 _MAX_RETRIES = 4
 _BACKOFF_BASE = 5  # seconds; delays: 1 s, 5 s, 25 s
+
+# ---------------------------------------------------------------------------
+# Bounded thread pool for callback delivery
+# ---------------------------------------------------------------------------
+
+_executor: Optional[ThreadPoolExecutor] = None
+_executor_lock = __import__("threading").Lock()
+
+
+def _get_executor() -> ThreadPoolExecutor:
+    """Return (and lazily create) the module-level callback executor.
+
+    The pool is sized by ``settings.callback_max_workers`` and registered
+    for clean shutdown via ``atexit``.  Lazy creation avoids side effects
+    at import time and lets tests override the pool size via settings.
+    """
+    global _executor
+    if _executor is None:
+        with _executor_lock:
+            if _executor is None:  # double-checked locking
+                _executor = ThreadPoolExecutor(
+                    max_workers=settings.callback_max_workers,
+                    thread_name_prefix="callback",
+                )
+                atexit.register(_shutdown_executor)
+    return _executor
+
+
+def _shutdown_executor() -> None:
+    """Gracefully drain pending callbacks on interpreter shutdown."""
+    global _executor
+    if _executor is not None:
+        _executor.shutdown(wait=True)
+        _executor = None
 
 
 def _sanitize_url_for_log(url: str) -> str:
@@ -119,9 +157,12 @@ _TERMINAL_STATUSES = frozenset({JobStatus.COMPLETED, JobStatus.FAILED})
 def deliver_callback(job: ExportJob, db: Any = None) -> None:
     """Snapshot callback data from *job* and deliver the webhook callback.
 
-    * **Production (db omitted):** dispatches delivery on a background daemon
-      thread with its own short-lived DB session.  Returns immediately so the
-      caller's worker thread is not blocked by HTTP I/O or retry sleeps.
+    * **Production (db omitted):** submits delivery to a bounded
+      ``ThreadPoolExecutor`` (capped at ``settings.callback_max_workers``).
+      Returns immediately so the caller's worker thread is not blocked by
+      HTTP I/O or retry sleeps.  When all workers are occupied, additional
+      deliveries queue until a slot opens — providing backpressure instead
+      of spawning unbounded threads.
     * **Testing (db provided):** executes delivery synchronously in the
       caller's process using the supplied session, making audit-log assertions
       deterministic.
@@ -149,13 +190,7 @@ def deliver_callback(job: ExportJob, db: Any = None) -> None:
         _do_deliver(job_id, url, payload, db)
         return
 
-    thread = threading.Thread(
-        target=_deliver_callback_sync,
-        args=(job_id, url, payload),
-        daemon=True,
-        name=f"callback-job-{job_id}",
-    )
-    thread.start()
+    _get_executor().submit(_deliver_callback_sync, job_id, url, payload)
 
 
 def _deliver_callback_sync(
