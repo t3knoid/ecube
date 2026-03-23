@@ -163,10 +163,12 @@ def reconcile_drives(
 ) -> Dict[str, int]:
     """Run USB discovery and reconcile DB drive state with hardware.
 
-    Delegates the actual discovery and FSM transitions to
-    :func:`~app.services.discovery_service.run_discovery_sync`,
-    then marks any ``AVAILABLE`` drives not physically present as ``EMPTY``.
-    ``IN_USE`` drives are left untouched (project-isolation guarantee).
+    Delegates entirely to
+    :func:`~app.services.discovery_service.run_discovery_sync`, which
+    handles topology detection, FSM transitions (including demoting
+    ``AVAILABLE`` drives that are no longer physically present to
+    ``EMPTY``), and preserving ``IN_USE`` drives (project-isolation
+    guarantee).  No additional logic is applied here.
 
     Returns a summary dict with counts from the discovery sync.
     """
