@@ -82,13 +82,17 @@ def build_payload(job: ExportJob) -> Dict[str, Any]:
     return payload
 
 
-def deliver_callback(job: ExportJob) -> None:
-    """Snapshot callback data from *job* and dispatch delivery on a background
-    daemon thread.  Returns immediately so the caller's worker thread and DB
-    session are not blocked by HTTP I/O or retry sleeps.
+def deliver_callback(job: ExportJob, db: Any = None) -> None:
+    """Snapshot callback data from *job* and deliver the webhook callback.
 
-    The background thread opens its own short-lived DB session for audit
-    logging.  If *job.callback_url* is falsy the call is a no-op.
+    * **Production (db omitted):** dispatches delivery on a background daemon
+      thread with its own short-lived DB session.  Returns immediately so the
+      caller's worker thread is not blocked by HTTP I/O or retry sleeps.
+    * **Testing (db provided):** executes delivery synchronously in the
+      caller's process using the supplied session, making audit-log assertions
+      deterministic.
+
+    If *job.callback_url* is falsy the call is a no-op.
     """
     url: Optional[str] = job.callback_url
     if not url:
@@ -97,6 +101,11 @@ def deliver_callback(job: ExportJob) -> None:
     # Snapshot everything we need before leaving the caller's session scope.
     payload = build_payload(job)
     job_id: int = job.id  # type: ignore[assignment]
+
+    if db is not None:
+        # Synchronous path — used by tests for deterministic assertions.
+        _do_deliver(job_id, url, payload, db)
+        return
 
     thread = threading.Thread(
         target=_deliver_callback_sync,
