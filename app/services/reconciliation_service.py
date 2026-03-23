@@ -17,9 +17,9 @@ from sqlalchemy.orm import Session
 from app.infrastructure.mount_protocol import MountProvider
 from app.infrastructure.usb_discovery import DiscoveredTopology
 from app.infrastructure import FilesystemDetector
-from app.models.audit import AuditLog
 from app.models.jobs import ExportJob, JobStatus
 from app.models.network import MountStatus, NetworkMount
+from app.repositories.audit_repository import AuditRepository
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +44,7 @@ def reconcile_mounts(
 
     checked = 0
     corrected = 0
+    audit_entries = []
 
     for mount in mounts:
         checked += 1
@@ -58,17 +59,13 @@ def reconcile_mounts(
         mount.last_checked_at = datetime.now(timezone.utc)
         corrected += 1
 
-        db.add(AuditLog(
-            action="MOUNT_RECONCILED",
-            user="system",
-            details={
-                "mount_id": mount.id,
-                "local_mount_point": mount.local_mount_point,
-                "old_status": old_status.value,
-                "new_status": mount.status.value,
-                "reason": "startup reconciliation",
-            },
-        ))
+        audit_entries.append({
+            "mount_id": mount.id,
+            "local_mount_point": mount.local_mount_point,
+            "old_status": old_status.value,
+            "new_status": mount.status.value,
+            "reason": "startup reconciliation",
+        })
 
     if corrected:
         try:
@@ -77,6 +74,22 @@ def reconcile_mounts(
             db.rollback()
             logger.exception("DB commit failed during mount reconciliation")
             raise
+
+    # Best-effort audit — failures are logged but must not roll back
+    # the state corrections committed above.
+    audit_repo = AuditRepository(db)
+    for details in audit_entries:
+        try:
+            audit_repo.add(
+                action="MOUNT_RECONCILED",
+                user="system",
+                details=details,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to write audit log for MOUNT_RECONCILED (mount %s)",
+                details["mount_id"],
+            )
 
     return {"mounts_checked": checked, "mounts_corrected": corrected}
 
@@ -104,6 +117,7 @@ def reconcile_jobs(db: Session) -> Dict[str, int]:
 
     checked = len(jobs)
     corrected = 0
+    audit_entries = []
 
     for job in jobs:
         old_status = job.status
@@ -111,16 +125,12 @@ def reconcile_jobs(db: Session) -> Dict[str, int]:
         job.completed_at = datetime.now(timezone.utc)
         corrected += 1
 
-        db.add(AuditLog(
-            action="JOB_RECONCILED",
-            user="system",
-            job_id=job.id,
-            details={
-                "old_status": old_status.value,
-                "new_status": JobStatus.FAILED.value,
-                "reason": "interrupted by restart",
-            },
-        ))
+        audit_entries.append({
+            "job_id": job.id,
+            "old_status": old_status.value,
+            "new_status": JobStatus.FAILED.value,
+            "reason": "interrupted by restart",
+        })
 
     if corrected:
         try:
@@ -129,6 +139,23 @@ def reconcile_jobs(db: Session) -> Dict[str, int]:
             db.rollback()
             logger.exception("DB commit failed during job reconciliation")
             raise
+
+    # Best-effort audit — failures are logged but must not roll back
+    # the state corrections committed above.
+    audit_repo = AuditRepository(db)
+    for entry in audit_entries:
+        try:
+            audit_repo.add(
+                action="JOB_RECONCILED",
+                user="system",
+                job_id=entry["job_id"],
+                details=entry,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to write audit log for JOB_RECONCILED (job %s)",
+                entry["job_id"],
+            )
 
     return {"jobs_checked": checked, "jobs_corrected": corrected}
 
