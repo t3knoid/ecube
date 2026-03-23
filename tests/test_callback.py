@@ -358,7 +358,7 @@ class TestDeliverCallback:
     def test_noop_when_no_callback_url(self, db):
         """deliver_callback is a no-op when callback_url is None."""
         job = self._make_job(callback_url=None)
-        deliver_callback(job)
+        deliver_callback(job, db)
         # No audit log should exist
         logs = db.query(AuditLog).filter(AuditLog.job_id == 1).all()
         assert len(logs) == 0
@@ -372,7 +372,7 @@ class TestDeliverCallback:
         # _sanitize_url_for_log also calls urlparse, so it will fall back to
         # "<unparseable>".
         with patch("app.services.callback_service.urlparse", side_effect=ValueError("bad url")):
-            _do_deliver(job.id, job.callback_url, build_payload(job), db)
+            deliver_callback(job, db)
 
         logs = db.query(AuditLog).filter(
             AuditLog.job_id == 1,
@@ -389,7 +389,7 @@ class TestDeliverCallback:
         mock_settings.callback_timeout_seconds = 5
         job = self._make_job()
 
-        _do_deliver(job.id, job.callback_url, build_payload(job), db)
+        deliver_callback(job, db)
 
         logs = db.query(AuditLog).filter(
             AuditLog.job_id == 1,
@@ -405,7 +405,7 @@ class TestDeliverCallback:
         mock_settings.callback_timeout_seconds = 5
         job = self._make_job(callback_url="https:///no-host")
 
-        _do_deliver(job.id, job.callback_url, build_payload(job), db)
+        deliver_callback(job, db)
 
         logs = db.query(AuditLog).filter(
             AuditLog.job_id == 1,
@@ -419,7 +419,7 @@ class TestDeliverCallback:
         time (defense-in-depth behind the schema validator)."""
         job = self._make_job(callback_url="http://example.com/hook")
 
-        _do_deliver(job.id, job.callback_url, build_payload(job), db)
+        deliver_callback(job, db)
 
         logs = db.query(AuditLog).filter(
             AuditLog.job_id == 1,
@@ -433,7 +433,7 @@ class TestDeliverCallback:
         (defense-in-depth behind the schema validator)."""
         job = self._make_job(callback_url="https://user:pass@example.com/hook")
 
-        _do_deliver(job.id, job.callback_url, build_payload(job), db)
+        deliver_callback(job, db)
 
         logs = db.query(AuditLog).filter(
             AuditLog.job_id == 1,
@@ -490,7 +490,7 @@ class TestDeliverCallback:
         mock_client_cls.return_value = mock_client_instance
 
         job = self._make_job()
-        _do_deliver(job.id, job.callback_url, build_payload(job), db)
+        deliver_callback(job, db)
 
         mock_client_instance.post.assert_called_once()
         logs = db.query(AuditLog).filter(
@@ -521,7 +521,7 @@ class TestDeliverCallback:
         mock_client_cls.return_value = mock_client_instance
 
         job = self._make_job()
-        _do_deliver(job.id, job.callback_url, build_payload(job), db)
+        deliver_callback(job, db)
 
         assert mock_client_instance.post.call_count == 2
         mock_sleep.assert_called_once()
@@ -551,7 +551,7 @@ class TestDeliverCallback:
         mock_client_cls.return_value = mock_client_instance
 
         job = self._make_job()
-        _do_deliver(job.id, job.callback_url, build_payload(job), db)
+        deliver_callback(job, db)
 
         assert mock_client_instance.post.call_count == 4
         logs = db.query(AuditLog).filter(
@@ -577,7 +577,7 @@ class TestDeliverCallback:
         mock_client_cls.return_value = mock_client_instance
 
         job = self._make_job()
-        _do_deliver(job.id, job.callback_url, build_payload(job), db)
+        deliver_callback(job, db)
 
         assert mock_client_instance.post.call_count == 4
         logs = db.query(AuditLog).filter(
@@ -604,7 +604,7 @@ class TestDeliverCallback:
         mock_client_cls.return_value = mock_client_instance
 
         job = self._make_job()
-        _do_deliver(job.id, job.callback_url, build_payload(job), db)
+        deliver_callback(job, db)
 
         # Only one attempt — no retries for 4xx
         mock_client_instance.post.assert_called_once()
@@ -634,7 +634,7 @@ class TestDeliverCallback:
             mock_client_cls.return_value = mock_client_instance
 
             job = self._make_job()
-            _do_deliver(job.id, job.callback_url, build_payload(job), db)
+            deliver_callback(job, db)
 
             mock_client_instance.post.assert_called_once()
             logs = db.query(AuditLog).filter(
