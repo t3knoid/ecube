@@ -185,9 +185,10 @@ def list_log_files(
 @router.get("/logs/{filename}", responses={**R_400, **R_401, **R_404, **R_422})
 def download_log_file(
     filename: str,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
+    request: Request,
 ):
     """Download a specific log file.
 
@@ -257,9 +258,10 @@ _os_router = APIRouter(
 @_os_router.post("/os-users", response_model=OSUserResponse, status_code=201, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500, **R_504})
 def create_os_user(
     body: CreateOSUserRequest,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
+    request: Request,
 ) -> OSUserResponse:
     """Create an OS user, set password, and optionally add to groups."""
     provider = _get_provider()
@@ -357,6 +359,7 @@ def delete_os_user(
     username: str = Path(..., pattern=USERNAME_PATTERN),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
+    request: Request,
 ) -> dict:
     """Delete an OS user and remove their DB role assignments."""
     _validate_path_username(username)
@@ -392,9 +395,10 @@ def reset_os_user_password(
     username: str = Path(..., pattern=USERNAME_PATTERN),
     *,
     body: ResetPasswordRequest,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
+    request: Request,
 ) -> dict:
     """Reset an OS user's password via ``chpasswd``."""
     _validate_path_username(username)
@@ -419,9 +423,10 @@ def set_os_user_groups(
     username: str = Path(..., pattern=USERNAME_PATTERN),
     *,
     body: SetOSGroupsRequest,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
+    request: Request,
 ) -> OSUserResponse:
     """Modify an OS user's group memberships."""
     _validate_path_username(username)
@@ -454,9 +459,10 @@ def add_os_user_groups(
     username: str = Path(..., pattern=USERNAME_PATTERN),
     *,
     body: AddOSGroupsRequest,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
+    request: Request,
 ) -> OSUserResponse:
     """Add an OS user to additional groups without removing existing memberships."""
     _validate_path_username(username)
@@ -493,9 +499,10 @@ def add_os_user_groups(
 @_os_router.post("/os-groups", response_model=OSGroupResponse, status_code=201, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500, **R_504})
 def create_os_group(
     body: CreateOSGroupRequest,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
+    request: Request,
 ) -> OSGroupResponse:
     """Create a new OS group on the host system."""
     try:
@@ -537,6 +544,7 @@ def delete_os_group(
     name: str = Path(..., pattern=GROUPNAME_PATTERN),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
+    request: Request,
 ) -> dict:
     """Delete an OS group from the host system."""
     try:
@@ -578,9 +586,10 @@ def list_ports(
 def toggle_port_enabled(
     port_id: int,
     body: PortEnableRequest,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin", "manager")),
+    request: Request,
 ) -> UsbPortSchema:
     """Enable or disable a USB port for ECUBE use."""
     port = PortRepository(db).set_enabled(port_id, body.enabled)
@@ -618,9 +627,10 @@ def list_hubs(
 def update_hub_label(
     hub_id: int,
     body: HubUpdateRequest,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin", "manager")),
+    request: Request,
 ) -> UsbHubSchema:
     """Set or update the location_hint label on a USB hub."""
     hub_repo = HubRepository(db)
@@ -649,9 +659,10 @@ def update_hub_label(
 def update_port_label(
     port_id: int,
     body: PortUpdateRequest,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin", "manager")),
+    request: Request,
 ) -> UsbPortSchema:
     """Set or update the friendly_label on a USB port."""
     port_repo = PortRepository(db)

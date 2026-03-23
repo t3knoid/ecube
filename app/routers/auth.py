@@ -77,9 +77,10 @@ class TokenResponse(BaseModel):
 @router.post("/token", response_model=TokenResponse, responses={**R_401, **R_404, **R_422})
 def login(
     body: TokenRequest,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
     pam: PamAuthenticator = Depends(_get_pam),
+    request: Request,
 ) -> TokenResponse:
     """Authenticate with OS credentials and receive a signed JWT.
 

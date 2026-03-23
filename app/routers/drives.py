@@ -50,9 +50,10 @@ def list_drives(
 def initialize_drive(
     drive_id: int,
     body: DriveInitialize,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
+    request: Request,
 ):
     """Initialize a drive and bind it to a project for isolation enforcement.
 
@@ -67,9 +68,10 @@ def initialize_drive(
 @router.post("/{drive_id}/prepare-eject", response_model=UsbDriveSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
 def prepare_eject(
     drive_id: int,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
+    request: Request,
 ):
     """Prepare a drive for safe ejection and return it to available state.
 
@@ -111,9 +113,10 @@ def refresh_drives(
 def format_drive(
     drive_id: int,
     body: DriveFormatRequest,
-    request: Request,
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
+    request: Request,
 ):
     """Format a drive with the specified filesystem type.
 
