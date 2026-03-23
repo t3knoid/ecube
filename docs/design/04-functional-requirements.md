@@ -227,6 +227,9 @@ The callback body is a JSON object containing:
 - Port enablement changes emit dedicated audit events:
   - `PORT_ENABLED` — Port enabled for ECUBE use; includes `port_id`, `system_path`, `hub_id`, `enabled`, `path`.
   - `PORT_DISABLED` — Port disabled; includes `port_id`, `system_path`, `hub_id`, `enabled`, `path`.
+- Startup reconciliation events:
+  - `MOUNT_RECONCILED` — Mount state corrected after restart; includes `mount_id`, `local_mount_point`, `old_status`, `new_status`, `reason`.
+  - `JOB_RECONCILED` — In-progress job failed after restart; includes `job_id`, `old_status`, `new_status`, `reason`.
 
 ## 4.10 USB Discovery and State Refresh Design
 
@@ -262,3 +265,46 @@ The callback body is a JSON object containing:
   discovery remains idempotent under multi-worker deployments.
 - **Operational note:** When a port is discovered but its parent hub is not present in the topology snapshot, a placeholder hub is automatically created with a default name. This prevents foreign-key violations in case of sysfs race conditions or partial enumeration. The placeholder hub name can be manually updated via hub management API when the hub is fully enumerated.
 - Every sync emits a `USB_DISCOVERY_SYNC` audit log with actor and summary counts (hubs_upserted, ports_upserted, drives_inserted, drives_updated, drives_removed).
+
+## 4.11 Startup State Reconciliation
+
+After a service restart or host reboot, in-memory OS state (active mounts, running processes, USB device presence) may diverge from the database. The reconciliation service realigns persisted state with actual OS/hardware state during application startup.
+
+### Execution Order
+
+Reconciliation runs during the FastAPI lifespan startup, **after** audit log cleanup and **before** the periodic USB discovery loop. The three passes execute in fixed order:
+
+1. **Mounts** — verify OS mount state
+2. **Jobs** — fail interrupted jobs
+3. **Drives** — re-run USB discovery
+
+### 4.11.1 Mount Reconciliation
+
+- Query all `network_mounts` rows with `status = MOUNTED`.
+- For each, call `MountProvider.check_mounted(local_mount_point)`:
+  - Returns `True` → mount is still active; no change.
+  - Returns `False` → mount is no longer active; transition to `UNMOUNTED`.
+  - Returns `None` (OS error) → transition to `ERROR`.
+- Each correction emits a `MOUNT_RECONCILED` audit event with `mount_id`, `local_mount_point`, `old_status`, `new_status`, and `reason: "startup reconciliation"`.
+- Mounts already in `UNMOUNTED` or `ERROR` state are not checked.
+
+### 4.11.2 Job Reconciliation
+
+- Query all `export_jobs` rows with `status IN (RUNNING, VERIFYING)`.
+- After a restart no worker processes exist, so these jobs are unconditionally transitioned to `FAILED` with `completed_at` set to the current UTC time.
+- Each correction emits a `JOB_RECONCILED` audit event with `job_id`, `old_status`, `new_status`, and `reason: "interrupted by restart"`.
+- Jobs in `PENDING`, `COMPLETED`, or `FAILED` state are not affected.
+
+### 4.11.3 Drive Reconciliation
+
+- Delegates to `run_discovery_sync()` (see § 4.10) with `actor="system"`.
+- This re-reads the USB topology and applies the standard drive FSM transitions (EMPTY ↔ AVAILABLE, IN_USE preserved).
+- Drives that are no longer physically present and were `AVAILABLE` are transitioned to `EMPTY`.
+
+### Failure Isolation
+
+Each reconciliation pass is wrapped in an independent `try/except` block. A failure in one pass (e.g. mount provider raises an OS error) does not prevent the remaining passes from executing.
+
+### Idempotency Guarantee
+
+All three passes are fully idempotent — running them multiple times without underlying state changes produces no additional mutations or duplicate audit records.
