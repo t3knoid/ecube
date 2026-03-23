@@ -131,6 +131,8 @@ Required only when `SESSION_BACKEND=redis`. If Redis is unavailable, ECUBE autom
 |----------|---------|-------------|
 | `CALLBACK_TIMEOUT_SECONDS` | `30` | Timeout in seconds for each individual callback HTTP request. |
 | `CALLBACK_ALLOW_PRIVATE_IPS` | `false` | Allow callbacks to private/reserved IP addresses. Must remain `false` in production to prevent SSRF. |
+| `CALLBACK_MAX_WORKERS` | `4` | Maximum number of concurrent callback delivery threads. |
+| `CALLBACK_MAX_PENDING` | `100` | Maximum outstanding deliveries (queued + in-flight). When exceeded, new deliveries are dropped and logged as `CALLBACK_DELIVERY_DROPPED`. |
 
 ---
 
