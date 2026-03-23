@@ -1550,11 +1550,13 @@ ensures only one worker runs reconciliation — the others skip it:
    presence with the database (same as a periodic discovery cycle).
 
 Reconciliation is fully idempotent and each pass is error-isolated — a
-failure in one pass does not block the others. The lock is released
-automatically after reconciliation completes (success or failure). A stale
-lock (> 5 minutes, indicating a crashed worker) is reclaimed automatically
-by the next startup. No manual recovery steps are required after a service
-restart.
+failure in one pass does not block the others. Observability side-effects
+(mount `last_checked_at` timestamps and `USB_DISCOVERY_SYNC` audit entries)
+are written on every run but do not represent domain state changes. The lock
+is released automatically after reconciliation completes (success or failure).
+A stale lock (> 5 minutes, indicating a crashed worker) is reclaimed
+automatically by the next startup. No manual recovery steps are required
+after a service restart.
 
 | Setting | Default | Description |
 |---------|---------|-------------|
