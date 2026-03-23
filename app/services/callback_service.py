@@ -4,18 +4,21 @@ Sends an HTTPS POST with a JSON payload when a job reaches COMPLETED
 or FAILED.  Retries up to 3 times with exponential backoff on transient
 errors (5xx, network failures).  Blocks private/reserved IP addresses
 by default (SSRF protection).
+
+Delivery runs in a dedicated daemon thread with its own short-lived DB
+session so it never blocks the copy/verify worker or ties up its
+database connection.
 """
 
 import ipaddress
 import logging
 import socket
+import threading
 import time
-from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
 import httpx
-from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.jobs import ExportJob, JobStatus
@@ -62,18 +65,57 @@ def build_payload(job: ExportJob) -> Dict[str, Any]:
     return payload
 
 
-def deliver_callback(job: ExportJob, db: Session) -> None:
-    """Send the webhook callback for *job*, retrying on transient failures.
+def deliver_callback(job: ExportJob) -> None:
+    """Snapshot callback data from *job* and dispatch delivery on a background
+    daemon thread.  Returns immediately so the caller's worker thread and DB
+    session are not blocked by HTTP I/O or retry sleeps.
 
-    This function is designed to be called from the copy engine's background
-    thread after the job has been committed to a terminal state.  It uses
-    its own ``httpx`` client per invocation and performs synchronous I/O
-    so it integrates naturally with the thread-based copy engine.
+    The background thread opens its own short-lived DB session for audit
+    logging.  If *job.callback_url* is falsy the call is a no-op.
     """
     url: Optional[str] = job.callback_url
     if not url:
         return
 
+    # Snapshot everything we need before leaving the caller's session scope.
+    payload = build_payload(job)
+    job_id: int = job.id  # type: ignore[assignment]
+
+    thread = threading.Thread(
+        target=_deliver_callback_sync,
+        args=(job_id, url, payload),
+        daemon=True,
+        name=f"callback-job-{job_id}",
+    )
+    thread.start()
+
+
+def _deliver_callback_sync(
+    job_id: int,
+    url: str,
+    payload: Dict[str, Any],
+) -> None:
+    """Perform the actual HTTP delivery with retries.
+
+    Opens a **dedicated** DB session for audit writes and closes it before
+    returning, so no external session is held during network I/O.
+    """
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        _do_deliver(job_id, url, payload, db)
+    finally:
+        db.close()
+
+
+def _do_deliver(
+    job_id: int,
+    url: str,
+    payload: Dict[str, Any],
+    db: Any,
+) -> None:
+    """Core delivery logic (SSRF check ➜ HTTP POST ➜ retry loop ➜ audit)."""
     audit_repo = AuditRepository(db)
 
     # --- SSRF guard ---
@@ -81,11 +123,11 @@ def deliver_callback(job: ExportJob, db: Session) -> None:
         parsed = urlparse(url)
         hostname = parsed.hostname or ""
     except Exception:
-        logger.warning("Malformed callback_url for job %s", job.id)
+        logger.warning("Malformed callback_url for job %s", job_id)
         try:
             audit_repo.add(
                 action="CALLBACK_DELIVERY_FAILED",
-                job_id=job.id,
+                job_id=job_id,
                 details={
                     "callback_url": url,
                     "reason": "Malformed callback URL: unable to parse",
@@ -103,12 +145,12 @@ def deliver_callback(job: ExportJob, db: Session) -> None:
         )
         logger.warning(
             "Callback URL for job %s blocked: %s",
-            job.id, reason,
+            job_id, reason,
         )
         try:
             audit_repo.add(
                 action="CALLBACK_DELIVERY_FAILED",
-                job_id=job.id,
+                job_id=job_id,
                 details={
                     "callback_url": url,
                     "reason": reason,
@@ -118,7 +160,6 @@ def deliver_callback(job: ExportJob, db: Session) -> None:
             logger.exception("Failed to write audit log for CALLBACK_DELIVERY_FAILED (SSRF)")
         return
 
-    payload = build_payload(job)
     timeout = settings.callback_timeout_seconds
     last_error: Optional[str] = None
 
@@ -132,7 +173,7 @@ def deliver_callback(job: ExportJob, db: Session) -> None:
                 try:
                     audit_repo.add(
                         action="CALLBACK_SENT",
-                        job_id=job.id,
+                        job_id=job_id,
                         details={
                             "callback_url": url,
                             "status_code": response.status_code,
@@ -147,12 +188,12 @@ def deliver_callback(job: ExportJob, db: Session) -> None:
                 # 4xx: permanent failure — no retry.
                 logger.warning(
                     "Callback for job %s rejected with %s (permanent failure)",
-                    job.id, response.status_code,
+                    job_id, response.status_code,
                 )
                 try:
                     audit_repo.add(
                         action="CALLBACK_DELIVERY_FAILED",
-                        job_id=job.id,
+                        job_id=job_id,
                         details={
                             "callback_url": url,
                             "status_code": response.status_code,
@@ -168,14 +209,14 @@ def deliver_callback(job: ExportJob, db: Session) -> None:
             last_error = f"HTTP {response.status_code}"
             logger.warning(
                 "Callback for job %s returned %s (attempt %d/%d)",
-                job.id, response.status_code, attempt + 1, _MAX_RETRIES,
+                job_id, response.status_code, attempt + 1, _MAX_RETRIES,
             )
 
         except (httpx.HTTPError, OSError) as exc:
             last_error = str(exc)
             logger.warning(
                 "Callback for job %s failed: %s (attempt %d/%d)",
-                job.id, exc, attempt + 1, _MAX_RETRIES,
+                job_id, exc, attempt + 1, _MAX_RETRIES,
             )
 
         # Exponential backoff: 1s, 5s, 25s
@@ -186,7 +227,7 @@ def deliver_callback(job: ExportJob, db: Session) -> None:
     try:
         audit_repo.add(
             action="CALLBACK_DELIVERY_FAILED",
-            job_id=job.id,
+            job_id=job_id,
             details={
                 "callback_url": url,
                 "reason": last_error or "unknown",
