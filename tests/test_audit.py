@@ -45,7 +45,11 @@ class TestAuditListBasic:
     def test_empty_db_returns_empty_list(self, admin_client):
         response = admin_client.get("/audit")
         assert response.status_code == 200
-        assert response.json() == []
+        data = response.json()
+        # Startup reconciliation may emit a USB_DISCOVERY_SYNC entry;
+        # filter it out to verify no user-created entries exist.
+        user_entries = [e for e in data if e["action"] != "USB_DISCOVERY_SYNC"]
+        assert user_entries == []
 
     def test_returns_seeded_entries(self, admin_client, db):
         _seed_entries(
@@ -58,6 +62,8 @@ class TestAuditListBasic:
         response = admin_client.get("/audit")
         assert response.status_code == 200
         data = response.json()
+        # Filter out startup reconciliation entries.
+        data = [e for e in data if e["action"] != "USB_DISCOVERY_SYNC"]
         assert len(data) == 2
         actions = {d["action"] for d in data}
         assert actions == {"JOB_CREATED", "DRIVE_INITIALIZED"}
