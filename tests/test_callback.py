@@ -750,6 +750,39 @@ class TestDeliverCallback:
             "sni_hostname": b"example.com",
         }
 
+    @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
+    @patch("app.services.callback_service.settings")
+    @patch("app.services.callback_service.httpx.Client")
+    def test_dns_pinning_host_header_includes_nondefault_port(
+        self, mock_client_cls, mock_settings, mock_resolve, db,
+    ):
+        """When the callback URL uses a non-default port, the Host header
+        must include it so virtual-host routing works on the receiver."""
+        mock_settings.callback_allow_private_ips = False
+        mock_settings.callback_timeout_seconds = 5
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
+        mock_client_instance.__exit__ = MagicMock(return_value=False)
+        mock_client_instance.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client_instance
+
+        job = self._make_db_job(db, callback_url="https://example.com:8443/hook")
+        deliver_callback(job, db)
+
+        call_args = mock_client_instance.post.call_args
+        posted_url = call_args[0][0]
+        assert "93.184.216.34:8443" in posted_url
+
+        # Host header must include the port for non-default ports.
+        assert call_args[1]["headers"] == {"Host": "example.com:8443"}
+        # SNI carries just the hostname (port is not part of TLS SNI).
+        assert call_args[1]["extensions"] == {
+            "sni_hostname": b"example.com",
+        }
+
     @patch("app.services.callback_service._resolve_safe", return_value="2001:db8::1")
     @patch("app.services.callback_service.settings")
     @patch("app.services.callback_service.httpx.Client")
