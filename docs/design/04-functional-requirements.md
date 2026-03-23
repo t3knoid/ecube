@@ -194,7 +194,13 @@ The callback body is a JSON object containing:
 - Up to **4 attempts** with exponential backoff (1 s, 5 s, 25 s between retries).
 - **5xx** responses and network errors trigger retries.
 - **4xx** responses are treated as permanent failures (logged as `CALLBACK_DELIVERY_FAILED`, no retry).
-- **2xx/3xx** responses are treated as successful delivery (logged as `CALLBACK_SENT`).
+- **3xx** redirects are treated as permanent failures (not followed, to prevent redirect-based SSRF bypass).
+- **2xx** responses are treated as successful delivery (logged as `CALLBACK_SENT`).
+
+### Backpressure
+
+- A bounded semaphore (`CALLBACK_MAX_PENDING`, default 100) caps the total number of outstanding deliveries (queued + in-flight).
+- When the limit is reached, new deliveries are dropped and logged as `CALLBACK_DELIVERY_DROPPED`.
 
 ### SSRF Protection
 
@@ -209,7 +215,8 @@ The callback body is a JSON object containing:
 ### Audit Events
 
 - `CALLBACK_SENT` — Successful delivery; includes `callback_url`, `status_code`, `attempt`.
-- `CALLBACK_DELIVERY_FAILED` — All retries exhausted or SSRF blocked; includes `callback_url`, `reason`, `attempts`.
+- `CALLBACK_DELIVERY_FAILED` — All retries exhausted, SSRF blocked, redirect received, or permanent failure; includes `callback_url`, `reason`, `attempts`.
+- `CALLBACK_DELIVERY_DROPPED` — Delivery dropped due to backpressure (queue full); includes `callback_url`, `reason`.
 
 ---
 
