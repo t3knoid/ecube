@@ -30,6 +30,23 @@ _MAX_RETRIES = 3
 _BACKOFF_BASE = 5  # seconds; delays: 1 s, 5 s
 
 
+def _sanitize_url_for_log(url: str) -> str:
+    """Return *url* with userinfo, query string, and fragment stripped.
+
+    Prevents credentials or signed tokens from being persisted to the
+    audit log.  Falls back to ``<unparseable>`` on any parse failure.
+    """
+    try:
+        p = urlparse(url)
+        # Rebuild with only scheme, host, port, and path.
+        host_part = p.hostname or ""
+        if p.port:
+            host_part = f"{host_part}:{p.port}"
+        return f"{p.scheme}://{host_part}{p.path}"
+    except Exception:
+        return "<unparseable>"
+
+
 def _is_private_ip(hostname: str) -> bool:
     """Resolve *hostname* and return ``True`` if any resolved address is
     not globally routable (private, loopback, link-local, reserved,
@@ -118,6 +135,8 @@ def _do_deliver(
     """Core delivery logic (SSRF check ➜ HTTP POST ➜ retry loop ➜ audit)."""
     audit_repo = AuditRepository(db)
 
+    safe_url = _sanitize_url_for_log(url)
+
     # --- SSRF guard ---
     try:
         parsed = urlparse(url)
@@ -129,12 +148,27 @@ def _do_deliver(
                 action="CALLBACK_DELIVERY_FAILED",
                 job_id=job_id,
                 details={
-                    "callback_url": url,
+                    "callback_url": safe_url,
                     "reason": "Malformed callback URL: unable to parse",
                 },
             )
         except Exception:
             logger.exception("Failed to write audit log for CALLBACK_DELIVERY_FAILED (malformed URL)")
+        return
+
+    if parsed.username or parsed.password:
+        logger.warning("Callback URL for job %s contains embedded credentials", job_id)
+        try:
+            audit_repo.add(
+                action="CALLBACK_DELIVERY_FAILED",
+                job_id=job_id,
+                details={
+                    "callback_url": safe_url,
+                    "reason": "Callback URL contains embedded credentials (userinfo)",
+                },
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for CALLBACK_DELIVERY_FAILED (userinfo)")
         return
 
     if not settings.callback_allow_private_ips and (not hostname or _is_private_ip(hostname)):
@@ -152,7 +186,7 @@ def _do_deliver(
                 action="CALLBACK_DELIVERY_FAILED",
                 job_id=job_id,
                 details={
-                    "callback_url": url,
+                    "callback_url": safe_url,
                     "reason": reason,
                 },
             )
@@ -175,7 +209,7 @@ def _do_deliver(
                         action="CALLBACK_SENT",
                         job_id=job_id,
                         details={
-                            "callback_url": url,
+                            "callback_url": safe_url,
                             "status_code": response.status_code,
                             "attempt": attempt + 1,
                         },
@@ -195,7 +229,7 @@ def _do_deliver(
                         action="CALLBACK_DELIVERY_FAILED",
                         job_id=job_id,
                         details={
-                            "callback_url": url,
+                            "callback_url": safe_url,
                             "status_code": response.status_code,
                             "reason": f"HTTP {response.status_code}: receiver rejected the request",
                             "attempt": attempt + 1,
@@ -229,7 +263,7 @@ def _do_deliver(
             action="CALLBACK_DELIVERY_FAILED",
             job_id=job_id,
             details={
-                "callback_url": url,
+                "callback_url": safe_url,
                 "reason": last_error or "unknown",
                 "attempts": _MAX_RETRIES,
             },
