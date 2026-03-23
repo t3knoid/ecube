@@ -3,7 +3,7 @@
 Covers:
 - Schema validation: HTTPS-only enforcement, optional field
 - Callback delivery: success, retry on 5xx, all retries exhausted
-- SSRF protection: private IP rejection
+- SSRF protection: private IP rejection, DNS-pinned connections
 - No-op when callback_url is None
 - Audit logging for CALLBACK_SENT and CALLBACK_DELIVERY_FAILED
 - ExportJobSchema includes callback_url
@@ -22,7 +22,7 @@ from app.models.jobs import ExportJob, JobStatus
 from app.schemas.jobs import ExportJobSchema, JobCreate
 from app.services.callback_service import (
     _do_deliver,
-    _is_private_ip,
+    _resolve_safe,
     _sanitize_url_for_log,
     build_payload,
     deliver_callback,
@@ -301,48 +301,65 @@ class TestSSRFProtection:
         mock_getaddrinfo.return_value = [
             (2, 1, 6, "", ("127.0.0.1", 0)),
         ]
-        assert _is_private_ip("localhost") is True
+        with pytest.raises(ValueError, match="non-globally-routable"):
+            _resolve_safe("localhost")
 
     @patch("app.services.callback_service.socket.getaddrinfo")
     def test_private_ip_blocked(self, mock_getaddrinfo):
         mock_getaddrinfo.return_value = [
             (2, 1, 6, "", ("10.0.0.5", 0)),
         ]
-        assert _is_private_ip("internal.corp") is True
+        with pytest.raises(ValueError, match="non-globally-routable"):
+            _resolve_safe("internal.corp")
 
     @patch("app.services.callback_service.socket.getaddrinfo")
     def test_public_ip_allowed(self, mock_getaddrinfo):
         mock_getaddrinfo.return_value = [
             (2, 1, 6, "", ("93.184.216.34", 0)),
         ]
-        assert _is_private_ip("example.com") is False
+        assert _resolve_safe("example.com") == "93.184.216.34"
 
     @patch("app.services.callback_service.socket.getaddrinfo")
     def test_unresolvable_host_blocked(self, mock_getaddrinfo):
         import socket as _socket
         mock_getaddrinfo.side_effect = _socket.gaierror("Name resolution failed")
-        assert _is_private_ip("nonexistent.invalid") is True
+        with pytest.raises(ValueError, match="DNS resolution failed"):
+            _resolve_safe("nonexistent.invalid")
 
     @patch("app.services.callback_service.socket.getaddrinfo")
     def test_unspecified_address_blocked(self, mock_getaddrinfo):
         mock_getaddrinfo.return_value = [
             (2, 1, 6, "", ("0.0.0.0", 0)),
         ]
-        assert _is_private_ip("zero.example") is True
+        with pytest.raises(ValueError, match="non-globally-routable"):
+            _resolve_safe("zero.example")
 
     @patch("app.services.callback_service.socket.getaddrinfo")
     def test_multicast_address_blocked(self, mock_getaddrinfo):
         mock_getaddrinfo.return_value = [
             (2, 1, 6, "", ("224.0.0.1", 0)),
         ]
-        assert _is_private_ip("multicast.example") is True
+        with pytest.raises(ValueError, match="non-globally-routable"):
+            _resolve_safe("multicast.example")
 
     @patch("app.services.callback_service.socket.getaddrinfo")
     def test_ipv6_loopback_blocked(self, mock_getaddrinfo):
         mock_getaddrinfo.return_value = [
             (10, 1, 6, "", ("::1", 0, 0, 0)),
         ]
-        assert _is_private_ip("ip6-localhost") is True
+        with pytest.raises(ValueError, match="non-globally-routable"):
+            _resolve_safe("ip6-localhost")
+
+    @patch("app.services.callback_service.socket.getaddrinfo")
+    def test_mixed_public_private_blocked(self, mock_getaddrinfo):
+        """If any resolved address is private, the entire set is rejected
+        (prevents DNS rebinding with mixed records)."""
+        mock_getaddrinfo.return_value = [
+            (2, 1, 6, "", ("93.184.216.34", 0)),
+            (2, 1, 6, "", ("127.0.0.1", 0)),
+        ]
+        with pytest.raises(ValueError, match="non-globally-routable"):
+            _resolve_safe("rebind.example")
 
 
 # ---------------------------------------------------------------------------
@@ -406,9 +423,10 @@ class TestDeliverCallback:
         assert "Malformed" in logs[0].details["reason"]
         assert logs[0].details["callback_url"] == "<unparseable>"
 
-    @patch("app.services.callback_service._is_private_ip", return_value=True)
+    @patch("app.services.callback_service._resolve_safe",
+           side_effect=ValueError("non-globally-routable address: 10.0.0.5"))
     @patch("app.services.callback_service.settings")
-    def test_ssrf_blocks_delivery(self, mock_settings, mock_priv, db):
+    def test_ssrf_blocks_delivery(self, mock_settings, mock_resolve, db):
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
         job = self._make_job()
@@ -469,10 +487,10 @@ class TestDeliverCallback:
         assert "user" not in logs[0].details["callback_url"]
         assert "pass" not in logs[0].details["callback_url"]
 
-    @patch("app.services.callback_service._is_private_ip", return_value=False)
+    @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
     @patch("app.services.callback_service.settings")
     @patch("app.services.callback_service.httpx.Client")
-    def test_audit_url_redacted(self, mock_client_cls, mock_settings, mock_priv, db):
+    def test_audit_url_redacted(self, mock_client_cls, mock_settings, mock_resolve, db):
         """Audit logs must never contain query tokens or userinfo."""
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
@@ -498,10 +516,10 @@ class TestDeliverCallback:
         assert "token" not in logged_url
         assert "secret" not in logged_url
 
-    @patch("app.services.callback_service._is_private_ip", return_value=False)
+    @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
     @patch("app.services.callback_service.settings")
     @patch("app.services.callback_service.httpx.Client")
-    def test_successful_delivery(self, mock_client_cls, mock_settings, mock_priv, db):
+    def test_successful_delivery(self, mock_client_cls, mock_settings, mock_resolve, db):
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
 
@@ -516,7 +534,15 @@ class TestDeliverCallback:
         job = self._make_job()
         deliver_callback(job, db)
 
-        mock_client_instance.post.assert_called_once()
+        # Verify the POST was made to the pinned IP, not the hostname
+        call_args = mock_client_instance.post.call_args
+        posted_url = call_args[0][0]
+        assert "93.184.216.34" in posted_url
+        assert call_args[1]["headers"] == {"Host": "example.com"}
+        assert call_args[1]["extensions"] == {
+            "sni_hostname": b"example.com",
+        }
+
         logs = db.query(AuditLog).filter(
             AuditLog.job_id == 1,
             AuditLog.action == "CALLBACK_SENT",
@@ -525,11 +551,11 @@ class TestDeliverCallback:
         assert logs[0].details["status_code"] == 200
         assert logs[0].details["attempt"] == 1
 
-    @patch("app.services.callback_service._is_private_ip", return_value=False)
+    @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
     @patch("app.services.callback_service.settings")
     @patch("app.services.callback_service.httpx.Client")
     @patch("app.services.callback_service.time.sleep")
-    def test_retry_on_5xx_then_success(self, mock_sleep, mock_client_cls, mock_settings, mock_priv, db):
+    def test_retry_on_5xx_then_success(self, mock_sleep, mock_client_cls, mock_settings, mock_resolve, db):
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
 
@@ -557,11 +583,11 @@ class TestDeliverCallback:
         assert len(logs) == 1
         assert logs[0].details["attempt"] == 2
 
-    @patch("app.services.callback_service._is_private_ip", return_value=False)
+    @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
     @patch("app.services.callback_service.settings")
     @patch("app.services.callback_service.httpx.Client")
     @patch("app.services.callback_service.time.sleep")
-    def test_all_retries_exhausted(self, mock_sleep, mock_client_cls, mock_settings, mock_priv, db):
+    def test_all_retries_exhausted(self, mock_sleep, mock_client_cls, mock_settings, mock_resolve, db):
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
 
@@ -586,11 +612,11 @@ class TestDeliverCallback:
         assert logs[0].details["attempts"] == 4
         assert "503" in logs[0].details["reason"]
 
-    @patch("app.services.callback_service._is_private_ip", return_value=False)
+    @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
     @patch("app.services.callback_service.settings")
     @patch("app.services.callback_service.httpx.Client")
     @patch("app.services.callback_service.time.sleep")
-    def test_network_error_retries(self, mock_sleep, mock_client_cls, mock_settings, mock_priv, db):
+    def test_network_error_retries(self, mock_sleep, mock_client_cls, mock_settings, mock_resolve, db):
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
 
@@ -610,10 +636,10 @@ class TestDeliverCallback:
         ).all()
         assert len(logs) == 1
 
-    @patch("app.services.callback_service._is_private_ip", return_value=False)
+    @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
     @patch("app.services.callback_service.settings")
     @patch("app.services.callback_service.httpx.Client")
-    def test_4xx_no_retry(self, mock_client_cls, mock_settings, mock_priv, db):
+    def test_4xx_no_retry(self, mock_client_cls, mock_settings, mock_resolve, db):
         """4xx responses are not retried — they are treated as non-transient."""
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
@@ -640,15 +666,15 @@ class TestDeliverCallback:
         assert logs[0].details["status_code"] == 404
         assert "rejected" in logs[0].details["reason"]
 
-    @patch("app.services.callback_service._is_private_ip", return_value=True)
     @patch("app.services.callback_service.settings")
-    def test_ssrf_allowed_when_configured(self, mock_settings, mock_priv, db):
-        """When callback_allow_private_ips is True, private IPs are not blocked."""
+    def test_ssrf_allowed_when_configured(self, mock_settings, db):
+        """When callback_allow_private_ips is True, _resolve_safe is skipped
+        and httpx connects to the original URL (no DNS pinning)."""
         mock_settings.callback_allow_private_ips = True
         mock_settings.callback_timeout_seconds = 5
 
-        # Patch httpx to return 200 so delivery succeeds
-        with patch("app.services.callback_service.httpx.Client") as mock_client_cls:
+        with patch("app.services.callback_service.httpx.Client") as mock_client_cls, \
+             patch("app.services.callback_service._resolve_safe") as mock_resolve:
             resp_200 = MagicMock()
             resp_200.status_code = 200
             mock_client_instance = MagicMock()
@@ -660,12 +686,73 @@ class TestDeliverCallback:
             job = self._make_job()
             deliver_callback(job, db)
 
-            mock_client_instance.post.assert_called_once()
+            # _resolve_safe must NOT be called when private IPs are allowed
+            mock_resolve.assert_not_called()
+            # The POST should use the original URL, not a pinned IP
+            call_args = mock_client_instance.post.call_args
+            posted_url = call_args[0][0]
+            assert "example.com" in posted_url
             logs = db.query(AuditLog).filter(
                 AuditLog.job_id == 1,
                 AuditLog.action == "CALLBACK_SENT",
             ).all()
             assert len(logs) == 1
+
+    @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
+    @patch("app.services.callback_service.settings")
+    @patch("app.services.callback_service.httpx.Client")
+    def test_dns_pinning_prevents_rebinding(self, mock_client_cls, mock_settings, mock_resolve, db):
+        """The resolved IP from _resolve_safe must be used for the actual
+        connection, preventing DNS rebinding (TOCTOU) attacks."""
+        mock_settings.callback_allow_private_ips = False
+        mock_settings.callback_timeout_seconds = 5
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
+        mock_client_instance.__exit__ = MagicMock(return_value=False)
+        mock_client_instance.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client_instance
+
+        job = self._make_job()
+        deliver_callback(job, db)
+
+        # The outbound HTTP POST must target the pinned IP, not the hostname.
+        call_args = mock_client_instance.post.call_args
+        posted_url = call_args[0][0]
+        assert "93.184.216.34" in posted_url
+        assert "example.com" not in posted_url
+
+        # Host header and SNI must carry the original hostname for
+        # virtual-hosting and proper TLS certificate verification.
+        assert call_args[1]["headers"] == {"Host": "example.com"}
+        assert call_args[1]["extensions"] == {
+            "sni_hostname": b"example.com",
+        }
+
+    @patch("app.services.callback_service._resolve_safe", return_value="2001:db8::1")
+    @patch("app.services.callback_service.settings")
+    @patch("app.services.callback_service.httpx.Client")
+    def test_ipv6_pinning(self, mock_client_cls, mock_settings, mock_resolve, db):
+        """IPv6 addresses must be bracket-wrapped in the pinned URL."""
+        mock_settings.callback_allow_private_ips = False
+        mock_settings.callback_timeout_seconds = 5
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
+        mock_client_instance.__exit__ = MagicMock(return_value=False)
+        mock_client_instance.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client_instance
+
+        job = self._make_job()
+        deliver_callback(job, db)
+
+        call_args = mock_client_instance.post.call_args
+        posted_url = call_args[0][0]
+        assert "[2001:db8::1]" in posted_url
 
 
 # ---------------------------------------------------------------------------
