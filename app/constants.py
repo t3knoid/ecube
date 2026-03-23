@@ -39,10 +39,10 @@ USERNAME_PATTERN = r"^[a-z_][a-z0-9_-]{0,31}$"
 USERNAME_RE = re.compile(USERNAME_PATTERN)
 
 #: Valid group-name pattern string (same rules as usernames on Linux).
-GROUPNAME_PATTERN = r"^[a-z_][a-z0-9_-]{0,31}$"
+GROUPNAME_PATTERN = USERNAME_PATTERN
 
 #: Valid group name (same pattern as usernames on Linux).
-GROUPNAME_RE = re.compile(GROUPNAME_PATTERN)
+GROUPNAME_RE = USERNAME_RE
 
 #: Usernames that cannot be created/deleted through the API.
 RESERVED_USERNAMES: frozenset[str] = frozenset(
