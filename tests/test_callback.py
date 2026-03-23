@@ -277,6 +277,17 @@ class TestBuildPayload:
         assert payload["event"] == "JOB_FAILED"
         assert "completed_at" not in payload
 
+    @pytest.mark.parametrize("status", [
+        JobStatus.PENDING,
+        JobStatus.RUNNING,
+        JobStatus.VERIFYING,
+    ])
+    def test_rejects_non_terminal_status(self, status):
+        job = MagicMock(spec=ExportJob)
+        job.status = status
+        with pytest.raises(ValueError, match="terminal status"):
+            build_payload(job)
+
 
 # ---------------------------------------------------------------------------
 # SSRF protection
@@ -360,6 +371,19 @@ class TestDeliverCallback:
         job = self._make_job(callback_url=None)
         deliver_callback(job, db)
         # No audit log should exist
+        logs = db.query(AuditLog).filter(AuditLog.job_id == 1).all()
+        assert len(logs) == 0
+
+    @pytest.mark.parametrize("status", [
+        JobStatus.PENDING,
+        JobStatus.RUNNING,
+        JobStatus.VERIFYING,
+    ])
+    def test_noop_for_non_terminal_status(self, db, status):
+        """deliver_callback is a no-op when the job is not COMPLETED/FAILED."""
+        job = self._make_job()
+        job.status = status
+        deliver_callback(job, db)
         logs = db.query(AuditLog).filter(AuditLog.job_id == 1).all()
         assert len(logs) == 0
 

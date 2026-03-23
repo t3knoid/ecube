@@ -64,7 +64,15 @@ def _is_private_ip(hostname: str) -> bool:
 
 
 def build_payload(job: ExportJob) -> Dict[str, Any]:
-    """Construct the JSON callback payload from a terminal job."""
+    """Construct the JSON callback payload from a terminal job.
+
+    Raises ``ValueError`` if *job.status* is not a terminal state.
+    """
+    if job.status not in _TERMINAL_STATUSES:
+        raise ValueError(
+            f"build_payload requires a terminal status (COMPLETED/FAILED), "
+            f"got {job.status!r}"
+        )
     event = "JOB_COMPLETED" if job.status == JobStatus.COMPLETED else "JOB_FAILED"
     payload: Dict[str, Any] = {
         "event": event,
@@ -82,6 +90,9 @@ def build_payload(job: ExportJob) -> Dict[str, Any]:
     return payload
 
 
+_TERMINAL_STATUSES = frozenset({JobStatus.COMPLETED, JobStatus.FAILED})
+
+
 def deliver_callback(job: ExportJob, db: Any = None) -> None:
     """Snapshot callback data from *job* and deliver the webhook callback.
 
@@ -92,10 +103,18 @@ def deliver_callback(job: ExportJob, db: Any = None) -> None:
       caller's process using the supplied session, making audit-log assertions
       deterministic.
 
-    If *job.callback_url* is falsy the call is a no-op.
+    If *job.callback_url* is falsy or the job is not in a terminal state
+    (COMPLETED / FAILED) the call is a no-op.
     """
     url: Optional[str] = job.callback_url
     if not url:
+        return
+
+    if job.status not in _TERMINAL_STATUSES:
+        logger.warning(
+            "deliver_callback called for job %s in non-terminal status %s; ignoring",
+            job.id, job.status,
+        )
         return
 
     # Snapshot everything we need before leaving the caller's session scope.
