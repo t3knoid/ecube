@@ -1536,7 +1536,9 @@ Audit logs are retained for a configurable period (default: **365 days**).
 Expired logs are automatically purged at application startup.
 
 After audit cleanup, **startup state reconciliation** runs automatically to
-correct any stale state left by an unclean shutdown or reboot:
+correct any stale state left by an unclean shutdown or reboot.  In
+multi-worker deployments a cross-process `reconciliation_lock` guard table
+ensures only one worker runs reconciliation — the others skip it:
 
 1. **Mount reconciliation** — verifies all `MOUNTED` mounts against the OS
    and transitions stale entries to `UNMOUNTED` (or `ERROR` if the OS check
@@ -1548,8 +1550,11 @@ correct any stale state left by an unclean shutdown or reboot:
    presence with the database (same as a periodic discovery cycle).
 
 Reconciliation is fully idempotent and each pass is error-isolated — a
-failure in one pass does not block the others. No manual recovery steps are
-required after a service restart.
+failure in one pass does not block the others. The lock is released
+automatically after reconciliation completes (success or failure). A stale
+lock (> 5 minutes, indicating a crashed worker) is reclaimed automatically
+by the next startup. No manual recovery steps are required after a service
+restart.
 
 | Setting | Default | Description |
 |---------|---------|-------------|

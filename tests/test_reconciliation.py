@@ -9,12 +9,14 @@ Covers:
 """
 
 from typing import Optional, Tuple
+from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive, UsbHub, UsbPort
 from app.models.jobs import ExportJob, JobStatus
 from app.models.network import MountStatus, MountType, NetworkMount
+from app.models.system import ReconciliationLock
 from app.infrastructure.usb_discovery import (
     DiscoveredDrive,
     DiscoveredHub,
@@ -22,6 +24,9 @@ from app.infrastructure.usb_discovery import (
     DiscoveredTopology,
 )
 from app.services.reconciliation_service import (
+    STALE_LOCK_SECONDS,
+    _acquire_reconciliation_lock,
+    _release_reconciliation_lock,
     reconcile_drives,
     reconcile_jobs,
     reconcile_mounts,
@@ -476,3 +481,105 @@ class TestIdempotency:
 
         assert r1["drives_removed"] >= 1
         assert r2["drives_removed"] == 0  # Already EMPTY
+
+
+# =======================================================================
+# Cross-process reconciliation lock tests
+# =======================================================================
+
+class TestReconciliationLock:
+    """Tests for the single-row reconciliation lock guard."""
+
+    def test_lock_acquired_and_released(self, db: Session):
+        """Lock can be acquired and then released cleanly."""
+        assert _acquire_reconciliation_lock(db) is True
+        assert db.query(ReconciliationLock).count() == 1
+        assert _release_reconciliation_lock(db) is True
+        assert db.query(ReconciliationLock).count() == 0
+
+    def test_second_acquire_blocked(self, db: Session):
+        """A second acquire fails while the first lock is held."""
+        assert _acquire_reconciliation_lock(db) is True
+        assert _acquire_reconciliation_lock(db) is False
+        # Cleanup
+        _release_reconciliation_lock(db)
+
+    def test_stale_lock_reclaimed(self, db: Session):
+        """A lock older than STALE_LOCK_SECONDS is reclaimed."""
+        stale_time = datetime.now(timezone.utc) - timedelta(
+            seconds=STALE_LOCK_SECONDS + 60,
+        )
+        db.add(ReconciliationLock(id=1, locked_by="dead-worker", locked_at=stale_time))
+        db.commit()
+
+        assert _acquire_reconciliation_lock(db) is True
+        lock = db.query(ReconciliationLock).first()
+        assert lock is not None
+        assert lock.locked_by != "dead-worker"
+        _release_reconciliation_lock(db)
+
+    def test_fresh_lock_not_reclaimed(self, db: Session):
+        """A recently-acquired lock is not considered stale."""
+        fresh_time = datetime.now(timezone.utc) - timedelta(seconds=10)
+        db.add(ReconciliationLock(id=1, locked_by="active-worker", locked_at=fresh_time))
+        db.commit()
+
+        assert _acquire_reconciliation_lock(db) is False
+        lock = db.query(ReconciliationLock).first()
+        assert lock.locked_by == "active-worker"
+        _release_reconciliation_lock(db)
+
+    def test_orchestrator_skips_when_locked(self, db: Session):
+        """Orchestrator returns ``skipped`` when another worker holds the lock."""
+        db.add(ReconciliationLock(
+            id=1,
+            locked_by="other-worker",
+            locked_at=datetime.now(timezone.utc),
+        ))
+        db.commit()
+
+        result = run_startup_reconciliation(
+            db,
+            FakeMountProvider(),
+            topology_source=_empty_topology,
+            filesystem_detector=FakeFilesystemDetector(),
+        )
+
+        assert result == {"skipped": True}
+        # Lock is untouched (still held by other-worker)
+        lock = db.query(ReconciliationLock).first()
+        assert lock.locked_by == "other-worker"
+
+    def test_orchestrator_releases_lock_after_success(self, db: Session):
+        """Lock is released after a successful orchestrator run."""
+        result = run_startup_reconciliation(
+            db,
+            FakeMountProvider(),
+            topology_source=_empty_topology,
+            filesystem_detector=FakeFilesystemDetector(),
+        )
+
+        assert "skipped" not in result
+        assert db.query(ReconciliationLock).count() == 0
+
+    def test_orchestrator_releases_lock_after_failure(self, db: Session):
+        """Lock is released even when all passes fail."""
+        _make_mount(db, MountStatus.MOUNTED, "/mnt/broken")
+
+        class BrokenMountProvider:
+            def check_mounted(self, *args):
+                raise RuntimeError("OS error")
+            def os_mount(self, *args, **kwargs):
+                return False, None
+            def os_unmount(self, *args, **kwargs):
+                return True, None
+
+        result = run_startup_reconciliation(
+            db,
+            BrokenMountProvider(),
+            topology_source=_empty_topology,
+            filesystem_detector=FakeFilesystemDetector(),
+        )
+
+        assert "error" in result["mounts"]
+        assert db.query(ReconciliationLock).count() == 0

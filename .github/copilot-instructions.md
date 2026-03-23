@@ -107,7 +107,7 @@ Use the `require_roles(*roles)` decorator pattern (see `docs/design/10-security-
 | Mounts | `network_mounts` |
 | Jobs | `export_jobs`, `export_files`, `manifests`, `drive_assignments` |
 | Audit | `audit_logs` (append-only, immutable timestamps) |
-
+| System | `system_initialization`, `reconciliation_lock` (single-row guard tables) |
 - Drive states: `EMPTY → AVAILABLE → IN_USE` (finite-state machine; transitions gated through a single service module).
 - All enum columns use `native_enum=False`.
 - Index tables by `project_id`, `status`, and recent timestamps.
