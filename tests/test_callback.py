@@ -23,6 +23,7 @@ from app.schemas.jobs import ExportJobSchema, JobCreate
 from app.services.callback_service import (
     _do_deliver,
     _is_private_ip,
+    _sanitize_url_for_log,
     build_payload,
     deliver_callback,
 )
@@ -99,6 +100,31 @@ class TestCallbackUrlSchemaValidation:
         )
         assert body.callback_url == "https://example.com/hook"
 
+    def test_userinfo_rejected(self):
+        """callback_url with embedded credentials is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            JobCreate(
+                project_id="P1",
+                evidence_number="EV1",
+                source_path="/data/source",
+                callback_url="https://user:pass@example.com/hook",
+            )
+        errors = exc_info.value.errors()
+        assert any(e["loc"] == ("callback_url",) for e in errors)
+        assert "credentials" in str(exc_info.value).lower()
+
+    def test_userinfo_username_only_rejected(self):
+        """callback_url with only a username (no password) is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            JobCreate(
+                project_id="P1",
+                evidence_number="EV1",
+                source_path="/data/source",
+                callback_url="https://user@example.com/hook",
+            )
+        errors = exc_info.value.errors()
+        assert any(e["loc"] == ("callback_url",) for e in errors)
+
     def test_http_422_via_api(self, client, db):
         db.add(UsbDrive(
             device_identifier="USB-CB-001",
@@ -172,6 +198,42 @@ class TestExportJobSchemaCallbackUrl:
         db.refresh(job)
         schema = ExportJobSchema.model_validate(job)
         assert schema.callback_url is None
+
+
+# ---------------------------------------------------------------------------
+# _sanitize_url_for_log
+# ---------------------------------------------------------------------------
+
+
+class TestSanitizeUrlForLog:
+
+    def test_strips_userinfo(self):
+        result = _sanitize_url_for_log("https://user:pass@example.com/hook")
+        assert result == "https://example.com/hook"
+        assert "user" not in result
+        assert "pass" not in result
+
+    def test_strips_query_string(self):
+        result = _sanitize_url_for_log("https://example.com/hook?token=secret123")
+        assert result == "https://example.com/hook"
+        assert "token" not in result
+
+    def test_strips_fragment(self):
+        result = _sanitize_url_for_log("https://example.com/hook#section")
+        assert result == "https://example.com/hook"
+
+    def test_preserves_port(self):
+        result = _sanitize_url_for_log("https://example.com:8443/hook")
+        assert result == "https://example.com:8443/hook"
+
+    def test_preserves_plain_url(self):
+        result = _sanitize_url_for_log("https://example.com/webhook")
+        assert result == "https://example.com/webhook"
+
+    def test_unparseable_returns_placeholder(self):
+        with patch("app.services.callback_service.urlparse", side_effect=ValueError("bad")):
+            result = _sanitize_url_for_log(":::bad")
+        assert result == "<unparseable>"
 
 
 # ---------------------------------------------------------------------------
@@ -296,7 +358,7 @@ class TestDeliverCallback:
     def test_noop_when_no_callback_url(self, db):
         """deliver_callback is a no-op when callback_url is None."""
         job = self._make_job(callback_url=None)
-        deliver_callback(job, db)
+        deliver_callback(job)
         # No audit log should exist
         logs = db.query(AuditLog).filter(AuditLog.job_id == 1).all()
         assert len(logs) == 0
@@ -306,9 +368,11 @@ class TestDeliverCallback:
         CALLBACK_DELIVERY_FAILED audit record."""
         job = self._make_job(callback_url="not-a-url-at-all")
 
-        # Force urlparse to raise so we exercise the except branch
+        # Force urlparse to raise so we exercise the except branch.
+        # _sanitize_url_for_log also calls urlparse, so it will fall back to
+        # "<unparseable>".
         with patch("app.services.callback_service.urlparse", side_effect=ValueError("bad url")):
-            deliver_callback(job, db)
+            _do_deliver(job.id, job.callback_url, build_payload(job), db)
 
         logs = db.query(AuditLog).filter(
             AuditLog.job_id == 1,
@@ -316,6 +380,7 @@ class TestDeliverCallback:
         ).all()
         assert len(logs) == 1
         assert "Malformed" in logs[0].details["reason"]
+        assert logs[0].details["callback_url"] == "<unparseable>"
 
     @patch("app.services.callback_service._is_private_ip", return_value=True)
     @patch("app.services.callback_service.settings")
@@ -324,7 +389,7 @@ class TestDeliverCallback:
         mock_settings.callback_timeout_seconds = 5
         job = self._make_job()
 
-        deliver_callback(job, db)
+        _do_deliver(job.id, job.callback_url, build_payload(job), db)
 
         logs = db.query(AuditLog).filter(
             AuditLog.job_id == 1,
@@ -340,7 +405,7 @@ class TestDeliverCallback:
         mock_settings.callback_timeout_seconds = 5
         job = self._make_job(callback_url="https:///no-host")
 
-        deliver_callback(job, db)
+        _do_deliver(job.id, job.callback_url, build_payload(job), db)
 
         logs = db.query(AuditLog).filter(
             AuditLog.job_id == 1,
@@ -348,6 +413,52 @@ class TestDeliverCallback:
         ).all()
         assert len(logs) == 1
         assert "empty hostname" in logs[0].details["reason"]
+
+    def test_userinfo_blocked_at_runtime(self, db):
+        """A callback URL with embedded credentials is rejected at delivery time
+        (defense-in-depth behind the schema validator)."""
+        job = self._make_job(callback_url="https://user:pass@example.com/hook")
+
+        _do_deliver(job.id, job.callback_url, build_payload(job), db)
+
+        logs = db.query(AuditLog).filter(
+            AuditLog.job_id == 1,
+            AuditLog.action == "CALLBACK_DELIVERY_FAILED",
+        ).all()
+        assert len(logs) == 1
+        assert "credentials" in logs[0].details["reason"].lower()
+        # The logged URL must NOT contain the credentials.
+        assert "user" not in logs[0].details["callback_url"]
+        assert "pass" not in logs[0].details["callback_url"]
+
+    @patch("app.services.callback_service._is_private_ip", return_value=False)
+    @patch("app.services.callback_service.settings")
+    @patch("app.services.callback_service.httpx.Client")
+    def test_audit_url_redacted(self, mock_client_cls, mock_settings, mock_priv, db):
+        """Audit logs must never contain query tokens or userinfo."""
+        mock_settings.callback_allow_private_ips = False
+        mock_settings.callback_timeout_seconds = 5
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
+        mock_client_instance.__exit__ = MagicMock(return_value=False)
+        mock_client_instance.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client_instance
+
+        url = "https://example.com/hook?token=secret123&sig=abc"
+        _do_deliver(1, url, {"event": "JOB_COMPLETED"}, db)
+
+        logs = db.query(AuditLog).filter(
+            AuditLog.job_id == 1,
+            AuditLog.action == "CALLBACK_SENT",
+        ).all()
+        assert len(logs) == 1
+        logged_url = logs[0].details["callback_url"]
+        assert logged_url == "https://example.com/hook"
+        assert "token" not in logged_url
+        assert "secret" not in logged_url
 
     @patch("app.services.callback_service._is_private_ip", return_value=False)
     @patch("app.services.callback_service.settings")
@@ -365,7 +476,7 @@ class TestDeliverCallback:
         mock_client_cls.return_value = mock_client_instance
 
         job = self._make_job()
-        deliver_callback(job, db)
+        _do_deliver(job.id, job.callback_url, build_payload(job), db)
 
         mock_client_instance.post.assert_called_once()
         logs = db.query(AuditLog).filter(
@@ -396,7 +507,7 @@ class TestDeliverCallback:
         mock_client_cls.return_value = mock_client_instance
 
         job = self._make_job()
-        deliver_callback(job, db)
+        _do_deliver(job.id, job.callback_url, build_payload(job), db)
 
         assert mock_client_instance.post.call_count == 2
         mock_sleep.assert_called_once()
@@ -426,7 +537,7 @@ class TestDeliverCallback:
         mock_client_cls.return_value = mock_client_instance
 
         job = self._make_job()
-        deliver_callback(job, db)
+        _do_deliver(job.id, job.callback_url, build_payload(job), db)
 
         assert mock_client_instance.post.call_count == 3
         logs = db.query(AuditLog).filter(
@@ -452,7 +563,7 @@ class TestDeliverCallback:
         mock_client_cls.return_value = mock_client_instance
 
         job = self._make_job()
-        deliver_callback(job, db)
+        _do_deliver(job.id, job.callback_url, build_payload(job), db)
 
         assert mock_client_instance.post.call_count == 3
         logs = db.query(AuditLog).filter(
@@ -479,7 +590,7 @@ class TestDeliverCallback:
         mock_client_cls.return_value = mock_client_instance
 
         job = self._make_job()
-        deliver_callback(job, db)
+        _do_deliver(job.id, job.callback_url, build_payload(job), db)
 
         # Only one attempt — no retries for 4xx
         mock_client_instance.post.assert_called_once()
@@ -509,7 +620,7 @@ class TestDeliverCallback:
             mock_client_cls.return_value = mock_client_instance
 
             job = self._make_job()
-            deliver_callback(job, db)
+            _do_deliver(job.id, job.callback_url, build_payload(job), db)
 
             mock_client_instance.post.assert_called_once()
             logs = db.query(AuditLog).filter(
