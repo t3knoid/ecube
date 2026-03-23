@@ -52,6 +52,16 @@ class UsbDriveSchema(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class DiscoverySyncResponse(BaseModel):
+    """Summary returned by ``POST /drives/refresh``."""
+
+    hubs_upserted: int = Field(default=0, description="Number of USB hubs upserted")
+    ports_upserted: int = Field(default=0, description="Number of USB ports upserted")
+    drives_inserted: int = Field(default=0, description="Number of new drives inserted")
+    drives_updated: int = Field(default=0, description="Number of existing drives updated")
+    drives_removed: int = Field(default=0, description="Number of drives removed")
+
+
 class DriveInitialize(BaseModel):
     project_id: SafeStr = Field(..., min_length=1, description="Project ID to bind the drive to for isolation enforcement")
 

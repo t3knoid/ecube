@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
 from app.exceptions import EncodingError
-from app.schemas.hardware import DriveFormatRequest, DriveInitialize, UsbDriveSchema
+from app.schemas.hardware import DiscoverySyncResponse, DriveFormatRequest, DriveInitialize, UsbDriveSchema
 from app.services import drive_service, discovery_service
 from app.infrastructure import get_drive_eject, get_drive_formatter, get_filesystem_detector
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500
@@ -87,7 +87,7 @@ def prepare_eject(
     )
 
 
-@router.post("/refresh", responses={**R_401, **R_403})
+@router.post("/refresh", response_model=DiscoverySyncResponse, responses={**R_401, **R_403})
 def refresh_drives(
     request: Request,
     db: Session = Depends(get_db),
