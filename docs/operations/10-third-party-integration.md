@@ -810,6 +810,7 @@ The request includes the header `Content-Type: application/json`.
 - Exhausting all retries is logged as audit event `CALLBACK_DELIVERY_FAILED`.
 - If the delivery queue is full (more than `CALLBACK_MAX_PENDING` outstanding deliveries), new deliveries are dropped and logged as audit event `CALLBACK_DELIVERY_DROPPED`.
 - **Callback failures never change the job status.** A `COMPLETED` job remains `COMPLETED` even if the callback cannot be delivered.
+- **Startup reconciliation note:** Jobs that transition from `RUNNING`/`VERIFYING` to `FAILED` during startup reconciliation (after a service restart) do **not** trigger webhook callbacks. Only the `JOB_RECONCILED` audit event is emitted. Integrations that rely on callbacks should also implement polling or audit log queries to detect reconciliation-driven failures.
 
 ### 7.4 Configuration
 

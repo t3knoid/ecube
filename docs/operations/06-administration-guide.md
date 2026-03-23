@@ -1397,6 +1397,7 @@ Every audit entry contains:
 | `JOB_VERIFY_STARTED` | Hash verification started |
 | `JOB_TIMEOUT` | Copy job exceeded time limit |
 | `JOB_STATUS_PERSIST_FAILED` | Failed to save job status to database |
+| `JOB_RECONCILED` | In-progress job (RUNNING/VERIFYING) failed during startup reconciliation |
 | `MANIFEST_CREATED` | Manifest file generated on drive |
 
 #### File Operations
@@ -1417,6 +1418,7 @@ Every audit entry contains:
 | `MOUNT_ADDED` | Network mount registered and attempted |
 | `MOUNT_REMOVED` | Network mount deleted |
 | `MOUNT_VALIDATED` | Mount connectivity re-tested |
+| `MOUNT_RECONCILED` | Mount state corrected during startup reconciliation (MOUNTED → UNMOUNTED/ERROR) |
 
 #### Webhook Callbacks
 
@@ -1532,6 +1534,29 @@ curl -k -H "Authorization: Bearer $JWT_TOKEN" \
 
 Audit logs are retained for a configurable period (default: **365 days**).
 Expired logs are automatically purged at application startup.
+
+After audit cleanup, **startup state reconciliation** runs automatically to
+correct any stale state left by an unclean shutdown or reboot.  In
+multi-worker deployments a cross-process `reconciliation_lock` guard table
+ensures only one worker runs reconciliation — the others skip it:
+
+1. **Mount reconciliation** — verifies all `MOUNTED` mounts against the OS
+   and transitions stale entries to `UNMOUNTED` (or `ERROR` if the OS check
+   fails). Emits `MOUNT_RECONCILED` audit events.
+2. **Job reconciliation** — marks any `RUNNING` or `VERIFYING` jobs as
+   `FAILED` (no worker process survives a restart). Emits `JOB_RECONCILED`
+   audit events.
+3. **Drive reconciliation** — re-runs USB discovery to sync physical device
+   presence with the database (same as a periodic discovery cycle).
+
+Reconciliation is fully idempotent and each pass is error-isolated — a
+failure in one pass does not block the others. Observability side-effects
+(mount `last_checked_at` timestamps and `USB_DISCOVERY_SYNC` audit entries)
+are written on every run but do not represent domain state changes. The lock
+is released automatically after reconciliation completes (success or failure).
+A stale lock (> 5 minutes, indicating a crashed worker) is reclaimed
+automatically by the next startup. No manual recovery steps are required
+after a service restart.
 
 | Setting | Default | Description |
 |---------|---------|-------------|
@@ -1679,6 +1704,41 @@ curl -k -H "Authorization: Bearer $TOKEN" \
 ---
 
 ## Troubleshooting
+
+### Jobs Marked FAILED After Restart
+
+**Symptom:** Jobs that were `RUNNING` or `VERIFYING` now show `FAILED` after
+a service restart.
+
+**Explanation:** This is expected behavior. Startup reconciliation
+automatically fails any in-progress jobs because worker processes do not
+survive a restart. Check the audit log for `JOB_RECONCILED` entries to
+confirm:
+
+```bash
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  "https://localhost:8443/audit?action=JOB_RECONCILED"
+```
+
+Each entry includes the `old_status` and `reason: "interrupted by restart"`.
+These jobs can be re-created and re-started normally.
+
+### Mounts Showing UNMOUNTED or ERROR After Restart
+
+**Symptom:** Network mounts that were `MOUNTED` now show `UNMOUNTED` or
+`ERROR` after a restart.
+
+**Explanation:** Startup reconciliation verifies each `MOUNTED` mount against
+the OS. Mounts that are no longer active (e.g. the NFS/SMB server was
+unreachable during shutdown) are corrected. Check audit log for
+`MOUNT_RECONCILED` entries:
+
+```bash
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  "https://localhost:8443/audit?action=MOUNT_RECONCILED"
+```
+
+Verify current status with `POST /mounts/{id}/validate`, then re-create the mount via `POST /mounts` if it needs to be re-established.
 
 ### Service Won't Start
 
