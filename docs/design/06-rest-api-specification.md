@@ -1248,6 +1248,20 @@ Partially update database connection settings.  All fields are optional — only
 
 ---
 
+## 3.8a Startup Behavior
+
+ECUBE performs **startup state reconciliation** during application startup (inside the FastAPI lifespan context manager), before the server begins accepting HTTP requests. This reconciliation:
+
+- Verifies all `MOUNTED` network mounts against the OS and corrects stale entries (audit action: `MOUNT_RECONCILED`).
+- Fails any `RUNNING` or `VERIFYING` export jobs that lost their worker process (audit action: `JOB_RECONCILED`). Webhook callbacks are **not** issued for these reconciliation-driven failures.
+- Re-runs USB discovery to sync physical device presence with the database.
+
+API clients should be aware that after a service restart, previously `RUNNING` jobs may appear as `FAILED` and previously `MOUNTED` mounts may appear as `UNMOUNTED` or `ERROR`. The audit log contains the corresponding `MOUNT_RECONCILED` and `JOB_RECONCILED` records explaining the transitions.
+
+See [§ 4.11 Startup State Reconciliation](04-functional-requirements.md#411-startup-state-reconciliation) for the full specification.
+
+---
+
 ## 3.9 Introspection API (Read‑Only)
 
 All introspection endpoints are read-only. Authenticated endpoints return `401`/`403` for authentication/authorization failures; `/introspection/version` is unauthenticated and therefore does not return `401`/`403`.
