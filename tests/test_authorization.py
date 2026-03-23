@@ -23,6 +23,12 @@ from app.main import app
 from app.infrastructure.drive_eject import EjectResult
 
 
+# Patch target: prevent startup reconciliation from running inside the
+# short-lived TestClient lifespan.  Reconciliation has its own dedicated
+# test suite; here we only care about role/authorization behaviour.
+_RECONCILIATION_PATCH = "app.services.reconciliation_service.run_startup_reconciliation"
+
+
 def _fake_eject(flush_ok=True, unmount_ok=True,
                 flush_error=None, unmount_error=None):
     provider = MagicMock()
@@ -68,9 +74,10 @@ class _RoleClient:
 
         app.dependency_overrides[get_db] = override_get_db
         try:
-            with TestClient(app, raise_server_exceptions=False) as client:
-                client.headers.update(self._headers)
-                return getattr(client, method)(path, **kwargs)
+            with patch(_RECONCILIATION_PATCH, return_value={"skipped": True}):
+                with TestClient(app, raise_server_exceptions=False) as client:
+                    client.headers.update(self._headers)
+                    return getattr(client, method)(path, **kwargs)
         finally:
             app.dependency_overrides.clear()
 
