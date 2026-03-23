@@ -8,7 +8,9 @@ Covers:
 - Idempotency: running reconciliation twice produces no additional changes
 """
 
+import os
 from typing import Optional, Tuple
+from unittest.mock import patch
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 
@@ -26,6 +28,8 @@ from app.infrastructure.usb_discovery import (
 from app.services.reconciliation_service import (
     STALE_LOCK_SECONDS,
     _acquire_reconciliation_lock,
+    _is_holder_alive,
+    _refresh_reconciliation_lock,
     _release_reconciliation_lock,
     reconcile_drives,
     reconcile_jobs,
@@ -527,17 +531,37 @@ class TestReconciliationLock:
         _release_reconciliation_lock(db)
 
     def test_stale_lock_reclaimed(self, db: Session):
-        """A lock older than STALE_LOCK_SECONDS is reclaimed."""
+        """A lock older than STALE_LOCK_SECONDS with a dead PID is reclaimed."""
         stale_time = datetime.now(timezone.utc) - timedelta(
             seconds=STALE_LOCK_SECONDS + 60,
         )
-        db.add(ReconciliationLock(id=1, locked_by="dead-worker", locked_at=stale_time))
+        db.add(ReconciliationLock(id=1, locked_by="pid-99999", locked_at=stale_time))
         db.commit()
 
-        assert _acquire_reconciliation_lock(db) is True
+        # Mock os.kill to raise ProcessLookupError (Linux behaviour);
+        # on Windows os.kill raises a generic OSError for dead PIDs.
+        with patch("app.services.reconciliation_service.os.kill",
+                   side_effect=ProcessLookupError), \
+             patch("app.services.reconciliation_service.os.name", "posix"):
+            assert _acquire_reconciliation_lock(db) is True
         lock = db.query(ReconciliationLock).first()
         assert lock is not None
-        assert lock.locked_by != "dead-worker"
+        assert lock.locked_by != "pid-99999"
+        _release_reconciliation_lock(db)
+
+    def test_stale_lock_not_reclaimed_when_holder_alive(self, db: Session):
+        """A stale lock whose holder PID is still alive is NOT reclaimed."""
+        stale_time = datetime.now(timezone.utc) - timedelta(
+            seconds=STALE_LOCK_SECONDS + 60,
+        )
+        # Use our own PID — guaranteed to be alive
+        alive_pid = f"pid-{os.getpid()}"
+        db.add(ReconciliationLock(id=1, locked_by=alive_pid, locked_at=stale_time))
+        db.commit()
+
+        assert _acquire_reconciliation_lock(db) is False
+        lock = db.query(ReconciliationLock).first()
+        assert lock.locked_by == alive_pid
         _release_reconciliation_lock(db)
 
     def test_fresh_lock_not_reclaimed(self, db: Session):
@@ -583,6 +607,37 @@ class TestReconciliationLock:
 
         assert "skipped" not in result
         assert db.query(ReconciliationLock).count() == 0
+
+    def test_is_holder_alive_dead_pid(self):
+        """_is_holder_alive returns False for a non-existent PID."""
+        with patch("app.services.reconciliation_service.os.kill",
+                   side_effect=ProcessLookupError), \
+             patch("app.services.reconciliation_service.os.name", "posix"):
+            assert _is_holder_alive("pid-99999") is False
+
+    def test_is_holder_alive_current_pid(self):
+        """_is_holder_alive returns True for the current process."""
+        assert _is_holder_alive(f"pid-{os.getpid()}") is True
+
+    def test_is_holder_alive_unknown_format(self):
+        """_is_holder_alive assumes alive for unrecognised formats."""
+        assert _is_holder_alive("unknown-format") is True
+        assert _is_holder_alive("") is True
+
+    def test_refresh_extends_lock_timestamp(self, db: Session):
+        """_refresh_reconciliation_lock updates locked_at to a newer time."""
+        old_time = datetime.now(timezone.utc) - timedelta(seconds=120)
+        db.add(ReconciliationLock(id=1, locked_by="pid-1", locked_at=old_time))
+        db.commit()
+
+        _refresh_reconciliation_lock(db)
+
+        lock = db.query(ReconciliationLock).first()
+        # locked_at should be much more recent than old_time
+        refreshed = lock.locked_at.replace(tzinfo=None)
+        original = old_time.replace(tzinfo=None)
+        assert refreshed > original
+        _release_reconciliation_lock(db)
 
     def test_orchestrator_releases_lock_after_failure(self, db: Session):
         """Lock is released even when a mount check raises an exception."""
