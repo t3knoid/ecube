@@ -332,9 +332,9 @@ def _do_deliver(
             logger.exception("Failed to write audit log for CALLBACK_DELIVERY_FAILED (userinfo)")
         return
 
-    if not settings.callback_allow_private_ips and not hostname:
+    if not hostname:
         logger.warning(
-            "Callback URL for job %s blocked: SSRF protection: empty hostname",
+            "Callback URL for job %s blocked: empty hostname",
             job_id,
         )
         try:
@@ -343,11 +343,11 @@ def _do_deliver(
                 job_id=job_id,
                 details={
                     "callback_url": safe_url,
-                    "reason": "SSRF protection: empty hostname",
+                    "reason": "Empty hostname",
                 },
             )
         except Exception:
-            logger.exception("Failed to write audit log for CALLBACK_DELIVERY_FAILED (SSRF)")
+            logger.exception("Failed to write audit log for CALLBACK_DELIVERY_FAILED (empty hostname)")
         return
 
     # --- DNS resolution + SSRF validation (single resolution, pinned) ---
