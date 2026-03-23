@@ -427,11 +427,19 @@ class TestIdempotency:
         provider = FakeMountProvider(mounted_paths=set())
 
         r1 = reconcile_mounts(db, provider)
+        audit_after_first = db.query(AuditLog).filter(
+            AuditLog.action == "MOUNT_RECONCILED"
+        ).count()
         r2 = reconcile_mounts(db, provider)
+        audit_after_second = db.query(AuditLog).filter(
+            AuditLog.action == "MOUNT_RECONCILED"
+        ).count()
 
         assert r1["mounts_corrected"] == 1
         assert r2["mounts_checked"] == 0  # Now UNMOUNTED, not rechecked
         assert r2["mounts_corrected"] == 0
+        assert audit_after_first == 1
+        assert audit_after_second == 1  # No duplicate audit rows
 
     def test_job_reconciliation_idempotent(self, db: Session):
         _make_job(db, JobStatus.RUNNING)
