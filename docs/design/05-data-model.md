@@ -61,6 +61,7 @@
 
 - `user_roles` stores explicit username→role assignments managed through the admin API.
 - `system_initialization` is a single-row table (constrained by `CHECK (id = 1)`) that records when and by whom the system was first initialized, providing a cross-process guard against concurrent initialization attempts.
+- `reconciliation_lock` is a single-row table (constrained by `CHECK (id = 1)`) that prevents concurrent startup reconciliation across multiple Uvicorn workers.  The row records `locked_by` (worker PID) and `locked_at` (UTC timestamp for stale-lock detection).  Locks older than 5 minutes are automatically reclaimed.
 
 ## Integrity & Constraints
 
