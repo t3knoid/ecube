@@ -255,6 +255,17 @@ class Settings(BaseSettings):
     trust_proxy_headers: bool = False
 
     # ---------------------------------------------------------------------------
+    # Webhook callback settings
+    # ---------------------------------------------------------------------------
+
+    #: Timeout in seconds for each individual callback HTTP request.
+    callback_timeout_seconds: int = 30
+
+    #: Allow callbacks to private/reserved IP addresses.  Must remain
+    #: ``False`` in production to prevent SSRF attacks.
+    callback_allow_private_ips: bool = False
+
+    # ---------------------------------------------------------------------------
     # Database pool settings
     # ---------------------------------------------------------------------------
 

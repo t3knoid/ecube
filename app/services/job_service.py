@@ -37,6 +37,7 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
         max_file_retries=body.max_file_retries,
         retry_delay_seconds=body.retry_delay_seconds,
         created_by=body.created_by,
+        callback_url=body.callback_url,
         client_ip=client_ip,
     )
 
