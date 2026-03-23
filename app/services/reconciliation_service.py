@@ -4,8 +4,10 @@ After a service restart or host reboot, in-memory OS state (active mounts,
 running processes, USB device presence) may diverge from the database.  This
 module re-aligns persisted state with actual OS/hardware state.
 
-All three passes are **idempotent** — running them multiple times produces
-the same result without side-effects.
+All three passes are **idempotent** — running them multiple times without
+underlying state changes produces no additional state mutations.  Observability
+side-effects (e.g. ``USB_DISCOVERY_SYNC`` audit entries from the drive pass)
+may still be emitted on each invocation.
 """
 
 import logging
