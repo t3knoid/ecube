@@ -661,6 +661,37 @@ class TestDeliverCallback:
     @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
     @patch("app.services.callback_service.settings")
     @patch("app.services.callback_service.httpx.Client")
+    def test_3xx_redirect_rejected(self, mock_client_cls, mock_settings, mock_resolve, db):
+        """3xx redirects are treated as permanent failure — not followed and
+        not retried — to prevent redirect-based SSRF bypass."""
+        mock_settings.callback_allow_private_ips = False
+        mock_settings.callback_timeout_seconds = 5
+
+        resp_302 = MagicMock()
+        resp_302.status_code = 302
+
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
+        mock_client_instance.__exit__ = MagicMock(return_value=False)
+        mock_client_instance.post.return_value = resp_302
+        mock_client_cls.return_value = mock_client_instance
+
+        job = self._make_db_job(db)
+        deliver_callback(job, db)
+
+        # No retry — single attempt only.
+        mock_client_instance.post.assert_called_once()
+        logs = db.query(AuditLog).filter(
+            AuditLog.job_id == job.id,
+            AuditLog.action == "CALLBACK_DELIVERY_FAILED",
+        ).all()
+        assert len(logs) == 1
+        assert logs[0].details["status_code"] == 302
+        assert "redirect" in logs[0].details["reason"].lower()
+
+    @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
+    @patch("app.services.callback_service.settings")
+    @patch("app.services.callback_service.httpx.Client")
     def test_4xx_no_retry(self, mock_client_cls, mock_settings, mock_resolve, db):
         """4xx responses are not retried — they are treated as non-transient."""
         mock_settings.callback_allow_private_ips = False

@@ -404,11 +404,11 @@ def _do_deliver(
                     "sni_hostname": hostname.encode("idna"),
                 }
 
-            with httpx.Client(timeout=timeout) as client:
+            with httpx.Client(timeout=timeout, follow_redirects=False) as client:
                 response = client.post(pinned_url, **post_kwargs)
 
-            if response.status_code < 400:
-                # 2xx/3xx: successful delivery.
+            if response.status_code < 300:
+                # 2xx: successful delivery.
                 try:
                     audit_repo.add(
                         action="CALLBACK_SENT",
@@ -421,6 +421,30 @@ def _do_deliver(
                     )
                 except Exception:
                     logger.exception("Failed to write audit log for CALLBACK_SENT")
+                return
+
+            if response.status_code < 400:
+                # 3xx: redirect — treat as permanent failure.  httpx does
+                # not follow redirects (and we must not, to avoid
+                # redirect-based SSRF bypass).  A redirect means the
+                # receiver did not process the payload.
+                logger.warning(
+                    "Callback for job %s redirected with %s (not followed)",
+                    job_id, response.status_code,
+                )
+                try:
+                    audit_repo.add(
+                        action="CALLBACK_DELIVERY_FAILED",
+                        job_id=job_id,
+                        details={
+                            "callback_url": safe_url,
+                            "status_code": response.status_code,
+                            "reason": f"HTTP {response.status_code}: redirect not followed (SSRF protection)",
+                            "attempt": attempt + 1,
+                        },
+                    )
+                except Exception:
+                    logger.exception("Failed to write audit log for CALLBACK_DELIVERY_FAILED (3xx)")
                 return
 
             if response.status_code < 500:
