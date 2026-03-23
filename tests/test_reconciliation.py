@@ -8,11 +8,7 @@ Covers:
 - Idempotency: running reconciliation twice produces no additional changes
 """
 
-from datetime import datetime, timezone
 from typing import Optional, Tuple
-from unittest.mock import MagicMock
-
-import pytest
 from sqlalchemy.orm import Session
 
 from app.models.audit import AuditLog
