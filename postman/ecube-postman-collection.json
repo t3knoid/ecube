@@ -1007,7 +1007,7 @@
 								{
 									"key": "username",
 									"value": "newuser",
-									"description": "Username to delete"
+									"description": "Username to delete. Must match pattern: ^[a-z_][a-z0-9_-]{0,31}$"
 								}
 							]
 						},
@@ -1033,7 +1033,7 @@
 								{
 									"key": "username",
 									"value": "newuser",
-									"description": "Username whose password to reset"
+									"description": "Username whose password to reset. Must match pattern: ^[a-z_][a-z0-9_-]{0,31}$"
 								}
 							]
 						},
@@ -1059,7 +1059,7 @@
 								{
 									"key": "username",
 									"value": "newuser",
-									"description": "Username whose groups to set"
+									"description": "Username whose groups to set. Must match pattern: ^[a-z_][a-z0-9_-]{0,31}$"
 								}
 							]
 						},
@@ -1085,7 +1085,7 @@
 								{
 									"key": "username",
 									"value": "newuser",
-									"description": "Username to add groups to"
+									"description": "Username to add groups to. Must match pattern: ^[a-z_][a-z0-9_-]{0,31}$"
 								}
 							]
 						},
@@ -1142,7 +1142,7 @@
 								{
 									"key": "name",
 									"value": "ecube-custom",
-									"description": "Group name to delete"
+									"description": "Group name to delete. Must match pattern: ^[a-z_][a-z0-9_-]{0,31}$"
 								}
 							]
 						},
@@ -1180,7 +1180,7 @@
 								{
 									"key": "username",
 									"value": "admin",
-									"description": "Username to get roles for"
+									"description": "Username to get roles for. Must match pattern: ^[a-z_][a-z0-9_-]{0,31}$"
 								}
 							]
 						},
@@ -1206,7 +1206,7 @@
 								{
 									"key": "username",
 									"value": "newuser",
-									"description": "Username to set roles for"
+									"description": "Username to set roles for. Must match pattern: ^[a-z_][a-z0-9_-]{0,31}$"
 								}
 							]
 						},
@@ -1226,7 +1226,7 @@
 								{
 									"key": "username",
 									"value": "newuser",
-									"description": "Username to remove all roles from"
+									"description": "Username to remove all roles from. Must match pattern: ^[a-z_][a-z0-9_-]{0,31}$"
 								}
 							]
 						},
