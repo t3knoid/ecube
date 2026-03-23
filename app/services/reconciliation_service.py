@@ -87,6 +87,8 @@ def reconcile_mounts(
                 for d in audit_entries
             ])
         except Exception:
+            db.rollback()
+            db.expire_all()
             logger.exception(
                 "Failed to write audit logs for MOUNT_RECONCILED",
             )
@@ -155,6 +157,8 @@ def reconcile_jobs(db: Session) -> Dict[str, int]:
                 for e in audit_entries
             ])
         except Exception:
+            db.rollback()
+            db.expire_all()
             logger.exception(
                 "Failed to write audit logs for JOB_RECONCILED",
             )
