@@ -10,7 +10,7 @@ the same result without side-effects.
 
 import logging
 from datetime import datetime, timezone
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict
 
 from sqlalchemy.orm import Session
 
