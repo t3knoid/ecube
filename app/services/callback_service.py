@@ -1,7 +1,7 @@
 """Webhook callback delivery for terminal job states.
 
 Sends an HTTPS POST with a JSON payload when a job reaches COMPLETED
-or FAILED.  Retries up to 3 times with exponential backoff on transient
+or FAILED.  Retries up to 4 times with exponential backoff on transient
 errors (5xx, network failures).  Blocks private/reserved IP addresses
 by default (SSRF protection).
 
@@ -26,8 +26,8 @@ from app.repositories.audit_repository import AuditRepository
 
 logger = logging.getLogger(__name__)
 
-_MAX_RETRIES = 3
-_BACKOFF_BASE = 5  # seconds; delays: 1 s, 5 s
+_MAX_RETRIES = 4
+_BACKOFF_BASE = 5  # seconds; delays: 1 s, 5 s, 25 s
 
 
 def _sanitize_url_for_log(url: str) -> str:
@@ -268,7 +268,7 @@ def _do_deliver(
                 job_id, exc, attempt + 1, _MAX_RETRIES,
             )
 
-        # Exponential backoff: 5^attempt → ~1 s, ~5 s
+        # Exponential backoff: 5^attempt → ~1 s, ~5 s, ~25 s
         if attempt < _MAX_RETRIES - 1:
             time.sleep(_BACKOFF_BASE ** attempt)
 
