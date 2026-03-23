@@ -13,6 +13,7 @@ from app.database import SessionLocal
 from app.models.jobs import ExportFile, ExportJob, FileStatus, JobStatus
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.job_repository import FileRepository, JobRepository
+from app.services.callback_service import deliver_callback
 
 logger = logging.getLogger(__name__)
 
@@ -398,6 +399,10 @@ def run_copy_job(job_id: int) -> None:
                         )
                     except Exception:
                         logger.exception("Failed to write audit log for JOB_TIMEOUT")
+                    try:
+                        deliver_callback(job, db)
+                    except Exception:
+                        logger.exception("Callback delivery failed for job %s (timeout)", job_id)
             else:
                 job.status = JobStatus.FAILED if error_count > 0 else JobStatus.COMPLETED
                 job.completed_at = datetime.now(timezone.utc)
@@ -433,6 +438,10 @@ def run_copy_job(job_id: int) -> None:
                         )
                     except Exception:
                         logger.exception("Failed to write audit log for %s", audit_action)
+                    try:
+                        deliver_callback(job, db)
+                    except Exception:
+                        logger.exception("Callback delivery failed for job %s (copy)", job_id)
     finally:
         db.close()
 
@@ -517,5 +526,9 @@ def run_verify_job(job_id: int) -> None:
                     )
                 except Exception:
                     logger.exception("Failed to write audit log for %s", audit_action)
+                try:
+                    deliver_callback(job, db)
+                except Exception:
+                    logger.exception("Callback delivery failed for job %s (verify)", job_id)
     finally:
         db.close()

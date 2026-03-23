@@ -357,9 +357,9 @@ def list_os_users(
 def delete_os_user(
     request: Request,
     username: str = Path(..., pattern=USERNAME_PATTERN),
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
-    request: Request,
 ) -> dict:
     """Delete an OS user and remove their DB role assignments."""
     _validate_path_username(username)
@@ -395,7 +395,6 @@ def reset_os_user_password(
     username: str = Path(..., pattern=USERNAME_PATTERN),
     *,
     body: ResetPasswordRequest,
-    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
     request: Request,
@@ -423,7 +422,6 @@ def set_os_user_groups(
     username: str = Path(..., pattern=USERNAME_PATTERN),
     *,
     body: SetOSGroupsRequest,
-    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
     request: Request,
@@ -459,7 +457,6 @@ def add_os_user_groups(
     username: str = Path(..., pattern=USERNAME_PATTERN),
     *,
     body: AddOSGroupsRequest,
-    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
     request: Request,
@@ -542,9 +539,9 @@ def list_os_groups(
 def delete_os_group(
     request: Request,
     name: str = Path(..., pattern=GROUPNAME_PATTERN),
+    *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
-    request: Request,
 ) -> dict:
     """Delete an OS group from the host system."""
     try:
