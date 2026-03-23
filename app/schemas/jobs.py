@@ -75,6 +75,8 @@ class JobCreate(BaseModel):
             raise ValueError("callback_url must use HTTPS")
         if not parsed.hostname:
             raise ValueError("callback_url must include a hostname")
+        if parsed.username or parsed.password:
+            raise ValueError("callback_url must not contain embedded credentials")
         return v
 
 
