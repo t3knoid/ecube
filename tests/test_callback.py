@@ -461,10 +461,12 @@ class TestDeliverCallback:
         assert len(logs) == 1
         assert "SSRF" in logs[0].details["reason"]
 
+    @pytest.mark.parametrize("allow_private", [False, True])
     @patch("app.services.callback_service.settings")
-    def test_empty_hostname_blocked(self, mock_settings, db):
-        """A callback URL with an empty hostname is rejected with an audit record."""
-        mock_settings.callback_allow_private_ips = False
+    def test_empty_hostname_blocked(self, mock_settings, db, allow_private):
+        """A callback URL with an empty hostname is rejected regardless of
+        callback_allow_private_ips."""
+        mock_settings.callback_allow_private_ips = allow_private
         mock_settings.callback_timeout_seconds = 5
         job = self._make_db_job(db, callback_url="https:///no-host")
 
@@ -475,7 +477,7 @@ class TestDeliverCallback:
             AuditLog.action == "CALLBACK_DELIVERY_FAILED",
         ).all()
         assert len(logs) == 1
-        assert "empty hostname" in logs[0].details["reason"]
+        assert "empty hostname" in logs[0].details["reason"].lower()
 
     def test_non_https_blocked_at_runtime(self, db):
         """A plain-HTTP callback URL stored in the DB is rejected at delivery
