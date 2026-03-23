@@ -130,6 +130,9 @@ class TestUserRoleEndpoints:
             json={"roles": []},
         )
         assert resp.status_code == 422
+        body = resp.json()
+        assert body["code"] == "VALIDATION_ERROR"
+        assert "trace_id" in body
 
     def test_delete_roles(self, admin_client):
         admin_client.put("/users/delme/roles", json={"roles": ["admin"]})
@@ -298,6 +301,10 @@ class TestUsernameValidation:
     def test_invalid_usernames_rejected(self, admin_client, bad_name):
         resp = admin_client.get(f"/users/{bad_name}/roles")
         assert resp.status_code == 422
+        body = resp.json()
+        assert body["code"] == "VALIDATION_ERROR"
+        assert "trace_id" in body
+        assert "username" in body["message"].lower()
 
     @pytest.mark.parametrize("good_name", [
         "alice",
