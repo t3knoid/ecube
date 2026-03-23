@@ -369,12 +369,38 @@ class TestSSRFProtection:
 
 class TestDeliverCallback:
 
-    def _make_job(self, callback_url="https://example.com/hook"):
+    @staticmethod
+    def _make_db_job(db, *, callback_url="https://example.com/hook",
+                     status=JobStatus.COMPLETED):
+        """Create a *persisted* ExportJob so FK-dependent AuditLog rows
+        survive even when foreign-key enforcement is enabled."""
+        job = ExportJob(
+            project_id="PROJ-001",
+            evidence_number="EV-001",
+            source_path="/data/evidence",
+            callback_url=callback_url,
+            status=status,
+        )
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+        # Populate optional attributes expected by build_payload / tests.
+        job.total_bytes = 1024
+        job.copied_bytes = 1024
+        job.file_count = 10
+        job.completed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        return job
+
+    @staticmethod
+    def _make_mock_job(*, callback_url="https://example.com/hook",
+                       status=JobStatus.COMPLETED):
+        """Return a lightweight mock job for tests that never touch the DB
+        (no-op paths, production executor path)."""
         job = MagicMock(spec=ExportJob)
         job.id = 1
         job.project_id = "PROJ-001"
         job.evidence_number = "EV-001"
-        job.status = JobStatus.COMPLETED
+        job.status = status
         job.source_path = "/data/evidence"
         job.total_bytes = 1024
         job.copied_bytes = 1024
@@ -385,10 +411,9 @@ class TestDeliverCallback:
 
     def test_noop_when_no_callback_url(self, db):
         """deliver_callback is a no-op when callback_url is None."""
-        job = self._make_job(callback_url=None)
+        job = self._make_mock_job(callback_url=None)
         deliver_callback(job, db)
-        # No audit log should exist
-        logs = db.query(AuditLog).filter(AuditLog.job_id == 1).all()
+        logs = db.query(AuditLog).all()
         assert len(logs) == 0
 
     @pytest.mark.parametrize("status", [
@@ -398,25 +423,21 @@ class TestDeliverCallback:
     ])
     def test_noop_for_non_terminal_status(self, db, status):
         """deliver_callback is a no-op when the job is not COMPLETED/FAILED."""
-        job = self._make_job()
-        job.status = status
+        job = self._make_mock_job(status=status)
         deliver_callback(job, db)
-        logs = db.query(AuditLog).filter(AuditLog.job_id == 1).all()
+        logs = db.query(AuditLog).all()
         assert len(logs) == 0
 
     def test_malformed_url_audit_record(self, db):
         """A malformed callback_url that cannot be parsed must produce a
         CALLBACK_DELIVERY_FAILED audit record."""
-        job = self._make_job(callback_url="not-a-url-at-all")
+        job = self._make_db_job(db, callback_url="not-a-url-at-all")
 
-        # Force urlparse to raise so we exercise the except branch.
-        # _sanitize_url_for_log also calls urlparse, so it will fall back to
-        # "<unparseable>".
         with patch("app.services.callback_service.urlparse", side_effect=ValueError("bad url")):
             deliver_callback(job, db)
 
         logs = db.query(AuditLog).filter(
-            AuditLog.job_id == 1,
+            AuditLog.job_id == job.id,
             AuditLog.action == "CALLBACK_DELIVERY_FAILED",
         ).all()
         assert len(logs) == 1
@@ -429,12 +450,12 @@ class TestDeliverCallback:
     def test_ssrf_blocks_delivery(self, mock_settings, mock_resolve, db):
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
-        job = self._make_job()
+        job = self._make_db_job(db)
 
         deliver_callback(job, db)
 
         logs = db.query(AuditLog).filter(
-            AuditLog.job_id == 1,
+            AuditLog.job_id == job.id,
             AuditLog.action == "CALLBACK_DELIVERY_FAILED",
         ).all()
         assert len(logs) == 1
@@ -445,12 +466,12 @@ class TestDeliverCallback:
         """A callback URL with an empty hostname is rejected with an audit record."""
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
-        job = self._make_job(callback_url="https:///no-host")
+        job = self._make_db_job(db, callback_url="https:///no-host")
 
         deliver_callback(job, db)
 
         logs = db.query(AuditLog).filter(
-            AuditLog.job_id == 1,
+            AuditLog.job_id == job.id,
             AuditLog.action == "CALLBACK_DELIVERY_FAILED",
         ).all()
         assert len(logs) == 1
@@ -459,12 +480,12 @@ class TestDeliverCallback:
     def test_non_https_blocked_at_runtime(self, db):
         """A plain-HTTP callback URL stored in the DB is rejected at delivery
         time (defense-in-depth behind the schema validator)."""
-        job = self._make_job(callback_url="http://example.com/hook")
+        job = self._make_db_job(db, callback_url="http://example.com/hook")
 
         deliver_callback(job, db)
 
         logs = db.query(AuditLog).filter(
-            AuditLog.job_id == 1,
+            AuditLog.job_id == job.id,
             AuditLog.action == "CALLBACK_DELIVERY_FAILED",
         ).all()
         assert len(logs) == 1
@@ -473,17 +494,16 @@ class TestDeliverCallback:
     def test_userinfo_blocked_at_runtime(self, db):
         """A callback URL with embedded credentials is rejected at delivery time
         (defense-in-depth behind the schema validator)."""
-        job = self._make_job(callback_url="https://user:pass@example.com/hook")
+        job = self._make_db_job(db, callback_url="https://user:pass@example.com/hook")
 
         deliver_callback(job, db)
 
         logs = db.query(AuditLog).filter(
-            AuditLog.job_id == 1,
+            AuditLog.job_id == job.id,
             AuditLog.action == "CALLBACK_DELIVERY_FAILED",
         ).all()
         assert len(logs) == 1
         assert "credentials" in logs[0].details["reason"].lower()
-        # The logged URL must NOT contain the credentials.
         assert "user" not in logs[0].details["callback_url"]
         assert "pass" not in logs[0].details["callback_url"]
 
@@ -503,11 +523,12 @@ class TestDeliverCallback:
         mock_client_instance.post.return_value = mock_response
         mock_client_cls.return_value = mock_client_instance
 
+        job = self._make_db_job(db)
         url = "https://example.com/hook?token=secret123&sig=abc"
-        _do_deliver(1, url, {"event": "JOB_COMPLETED"}, db)
+        _do_deliver(job.id, url, {"event": "JOB_COMPLETED"}, db)
 
         logs = db.query(AuditLog).filter(
-            AuditLog.job_id == 1,
+            AuditLog.job_id == job.id,
             AuditLog.action == "CALLBACK_SENT",
         ).all()
         assert len(logs) == 1
@@ -531,10 +552,9 @@ class TestDeliverCallback:
         mock_client_instance.post.return_value = mock_response
         mock_client_cls.return_value = mock_client_instance
 
-        job = self._make_job()
+        job = self._make_db_job(db)
         deliver_callback(job, db)
 
-        # Verify the POST was made to the pinned IP, not the hostname
         call_args = mock_client_instance.post.call_args
         posted_url = call_args[0][0]
         assert "93.184.216.34" in posted_url
@@ -544,7 +564,7 @@ class TestDeliverCallback:
         }
 
         logs = db.query(AuditLog).filter(
-            AuditLog.job_id == 1,
+            AuditLog.job_id == job.id,
             AuditLog.action == "CALLBACK_SENT",
         ).all()
         assert len(logs) == 1
@@ -570,14 +590,14 @@ class TestDeliverCallback:
         mock_client_instance.post.side_effect = [resp_500, resp_200]
         mock_client_cls.return_value = mock_client_instance
 
-        job = self._make_job()
+        job = self._make_db_job(db)
         deliver_callback(job, db)
 
         assert mock_client_instance.post.call_count == 2
         mock_sleep.assert_called_once()
 
         logs = db.query(AuditLog).filter(
-            AuditLog.job_id == 1,
+            AuditLog.job_id == job.id,
             AuditLog.action == "CALLBACK_SENT",
         ).all()
         assert len(logs) == 1
@@ -600,12 +620,12 @@ class TestDeliverCallback:
         mock_client_instance.post.return_value = resp_503
         mock_client_cls.return_value = mock_client_instance
 
-        job = self._make_job()
+        job = self._make_db_job(db)
         deliver_callback(job, db)
 
         assert mock_client_instance.post.call_count == 4
         logs = db.query(AuditLog).filter(
-            AuditLog.job_id == 1,
+            AuditLog.job_id == job.id,
             AuditLog.action == "CALLBACK_DELIVERY_FAILED",
         ).all()
         assert len(logs) == 1
@@ -626,12 +646,12 @@ class TestDeliverCallback:
         mock_client_instance.post.side_effect = httpx.ConnectError("Connection refused")
         mock_client_cls.return_value = mock_client_instance
 
-        job = self._make_job()
+        job = self._make_db_job(db)
         deliver_callback(job, db)
 
         assert mock_client_instance.post.call_count == 4
         logs = db.query(AuditLog).filter(
-            AuditLog.job_id == 1,
+            AuditLog.job_id == job.id,
             AuditLog.action == "CALLBACK_DELIVERY_FAILED",
         ).all()
         assert len(logs) == 1
@@ -653,13 +673,12 @@ class TestDeliverCallback:
         mock_client_instance.post.return_value = resp_404
         mock_client_cls.return_value = mock_client_instance
 
-        job = self._make_job()
+        job = self._make_db_job(db)
         deliver_callback(job, db)
 
-        # Only one attempt — no retries for 4xx
         mock_client_instance.post.assert_called_once()
         logs = db.query(AuditLog).filter(
-            AuditLog.job_id == 1,
+            AuditLog.job_id == job.id,
             AuditLog.action == "CALLBACK_DELIVERY_FAILED",
         ).all()
         assert len(logs) == 1
@@ -683,17 +702,15 @@ class TestDeliverCallback:
             mock_client_instance.post.return_value = resp_200
             mock_client_cls.return_value = mock_client_instance
 
-            job = self._make_job()
+            job = self._make_db_job(db)
             deliver_callback(job, db)
 
-            # _resolve_safe must NOT be called when private IPs are allowed
             mock_resolve.assert_not_called()
-            # The POST should use the original URL, not a pinned IP
             call_args = mock_client_instance.post.call_args
             posted_url = call_args[0][0]
             assert "example.com" in posted_url
             logs = db.query(AuditLog).filter(
-                AuditLog.job_id == 1,
+                AuditLog.job_id == job.id,
                 AuditLog.action == "CALLBACK_SENT",
             ).all()
             assert len(logs) == 1
@@ -715,7 +732,7 @@ class TestDeliverCallback:
         mock_client_instance.post.return_value = mock_response
         mock_client_cls.return_value = mock_client_instance
 
-        job = self._make_job()
+        job = self._make_db_job(db)
         deliver_callback(job, db)
 
         # The outbound HTTP POST must target the pinned IP, not the hostname.
@@ -747,7 +764,7 @@ class TestDeliverCallback:
         mock_client_instance.post.return_value = mock_response
         mock_client_cls.return_value = mock_client_instance
 
-        job = self._make_job()
+        job = self._make_db_job(db)
         deliver_callback(job, db)
 
         call_args = mock_client_instance.post.call_args
@@ -757,7 +774,7 @@ class TestDeliverCallback:
     def test_production_path_uses_bounded_executor(self):
         """When db is None (production), deliver_callback submits to a
         bounded ThreadPoolExecutor rather than spawning an unbounded thread."""
-        job = self._make_job()
+        job = self._make_mock_job()
         with patch("app.services.callback_service._get_executor") as mock_get_exec, \
              patch("app.services.callback_service._deliver_callback_sync"):
             mock_executor = MagicMock()
