@@ -307,4 +307,4 @@ Each reconciliation pass is wrapped in an independent `try/except` block. A fail
 
 ### Idempotency Guarantee
 
-All three passes are fully idempotent — running them multiple times without underlying state changes produces no additional mutations or duplicate audit records.
+All three passes are fully idempotent — running them multiple times without underlying state changes produces no additional **state mutations**. Mount and job reconciliation emit audit records (`MOUNT_RECONCILED`, `JOB_RECONCILED`) only when a state correction occurs; repeated runs with no new corrections produce no duplicate audit rows. Drive reconciliation delegates to `run_discovery_sync()`, which unconditionally emits a `USB_DISCOVERY_SYNC` summary audit entry on every invocation as an observability record; this is expected and does not indicate a state change.
