@@ -756,7 +756,7 @@ class TestOSUserEndpoints:
         resp = admin_client.delete("/admin/os-users/Bob;rm")
         assert resp.status_code == 422
         body = resp.json()
-        assert body["code"] == "HTTP_422"
+        assert body["code"] == "VALIDATION_ERROR"
         assert "trace_id" in body
         assert "invalid username" in body["message"].lower()
 
@@ -954,7 +954,7 @@ class TestOSGroupEndpoints:
         resp = admin_client.delete("/admin/os-groups/Bad;Name")
         assert resp.status_code == 422
         body = resp.json()
-        assert body["code"] == "HTTP_422"
+        assert body["code"] == "VALIDATION_ERROR"
         assert "trace_id" in body
         assert "invalid group name" in body["message"].lower()
 
