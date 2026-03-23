@@ -122,8 +122,8 @@ def deliver_callback(job: ExportJob, db: Session) -> None:
             with httpx.Client(timeout=timeout) as client:
                 response = client.post(url, json=payload)
 
-            if response.status_code < 500:
-                # 2xx–4xx: non-transient — accept or give up.
+            if response.status_code < 400:
+                # 2xx/3xx: successful delivery.
                 try:
                     audit_repo.add(
                         action="CALLBACK_SENT",
@@ -136,6 +136,27 @@ def deliver_callback(job: ExportJob, db: Session) -> None:
                     )
                 except Exception:
                     logger.exception("Failed to write audit log for CALLBACK_SENT")
+                return
+
+            if response.status_code < 500:
+                # 4xx: permanent failure — no retry.
+                logger.warning(
+                    "Callback for job %s rejected with %s (permanent failure)",
+                    job.id, response.status_code,
+                )
+                try:
+                    audit_repo.add(
+                        action="CALLBACK_DELIVERY_FAILED",
+                        job_id=job.id,
+                        details={
+                            "callback_url": url,
+                            "status_code": response.status_code,
+                            "reason": f"HTTP {response.status_code}: receiver rejected the request",
+                            "attempt": attempt + 1,
+                        },
+                    )
+                except Exception:
+                    logger.exception("Failed to write audit log for CALLBACK_DELIVERY_FAILED (4xx)")
                 return
 
             # 5xx: transient — retry after backoff.
