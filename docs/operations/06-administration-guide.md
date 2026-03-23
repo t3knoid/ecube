@@ -1731,7 +1731,7 @@ curl -k -H "Authorization: Bearer $JWT_TOKEN" \
   "https://localhost:8443/audit?action=MOUNT_RECONCILED"
 ```
 
-Re-mount via `POST /mounts/{id}/validate` or re-add the mount as needed.
+Verify current status with `POST /mounts/{id}/validate`, then re-create the mount via `POST /mounts` if it needs to be re-established.
 
 ### Service Won't Start
 
