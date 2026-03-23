@@ -13,6 +13,12 @@ on each invocation.
 A single-row ``reconciliation_lock`` guard table prevents concurrent
 reconciliation when multiple uvicorn workers start simultaneously.  Only the
 first worker to acquire the lock runs reconciliation; the others skip it.
+
+Before reclaiming a stale lock, a **PID liveness check** verifies that the
+holding process is no longer running.  This prevents a slow-but-alive worker
+from having its lock stolen.  Additionally, ``locked_at`` is refreshed
+between reconciliation passes so that long-running startups never appear
+stale to other workers.
 """
 
 import logging
@@ -227,6 +233,36 @@ def reconcile_drives(
 # Cross-process reconciliation lock
 # -----------------------------------------------------------------------
 
+def _is_holder_alive(locked_by: str) -> bool:
+    """Check whether the process that holds the lock is still running.
+
+    Extracts the PID from the ``"pid-<N>"`` format used by
+    :func:`_acquire_reconciliation_lock`.  Returns ``True`` (assume alive)
+    if the format is unrecognised or the check is inconclusive.
+
+    On Windows, signal 0 maps to ``CTRL_C_EVENT`` and cannot be used for
+    existence checks, so this function conservatively returns ``True``.
+    The production target is Linux.
+    """
+    if not locked_by or not locked_by.startswith("pid-"):
+        return True  # Cannot determine — assume alive
+    try:
+        pid = int(locked_by[4:])
+    except (ValueError, IndexError):
+        return True  # Malformed — assume alive
+    if os.name == "nt":
+        # On Windows, os.kill(pid, 0) sends CTRL_C_EVENT to the process
+        # group — unusable for existence checks.  Assume alive.
+        return True
+    try:
+        os.kill(pid, 0)  # Signal 0: existence check, no actual signal sent
+        return True
+    except ProcessLookupError:
+        return False  # Process does not exist
+    except (PermissionError, OSError):
+        return True  # Process exists but we lack permission — assume alive
+
+
 def _acquire_reconciliation_lock(db: Session) -> bool:
     """Try to acquire the single-row reconciliation lock.
 
@@ -270,9 +306,10 @@ def _acquire_reconciliation_lock(db: Session) -> bool:
     else:
         is_stale = False
 
-    if is_stale:
+    if is_stale and not _is_holder_alive(existing.locked_by):
         logger.warning(
-            "Reclaiming stale reconciliation lock held by %s since %s",
+            "Reclaiming stale reconciliation lock held by %s since %s"
+            " (holder PID is no longer running)",
             existing.locked_by,
             existing.locked_at,
         )
@@ -291,12 +328,36 @@ def _acquire_reconciliation_lock(db: Session) -> bool:
             db.rollback()
             return False
 
-    logger.info(
-        "Reconciliation lock held by %s since %s — skipping reconciliation",
-        existing.locked_by,
-        existing.locked_at,
-    )
+    if is_stale:
+        logger.info(
+            "Reconciliation lock held by %s since %s is old but holder is"
+            " still alive — skipping reconciliation",
+            existing.locked_by,
+            existing.locked_at,
+        )
+    else:
+        logger.info(
+            "Reconciliation lock held by %s since %s — skipping reconciliation",
+            existing.locked_by,
+            existing.locked_at,
+        )
     return False
+
+
+def _refresh_reconciliation_lock(db: Session) -> None:
+    """Update ``locked_at`` to prevent stale-lock reclaim during long runs.
+
+    Called between reconciliation passes so that a slow startup never
+    appears stale to a later-starting worker.
+    """
+    try:
+        row = db.query(ReconciliationLock).filter_by(id=1).first()
+        if row is not None:
+            row.locked_at = datetime.now(timezone.utc)
+            db.commit()
+    except Exception:
+        db.rollback()
+        logger.warning("Failed to refresh reconciliation lock timestamp")
 
 
 def _release_reconciliation_lock(db: Session) -> bool:
@@ -354,6 +415,8 @@ def run_startup_reconciliation(
             logger.exception("Mount reconciliation failed")
             results["mounts"] = {"error": "mount reconciliation failed"}
 
+        _refresh_reconciliation_lock(db)
+
         logger.info("Startup reconciliation: checking jobs")
         try:
             results["jobs"] = reconcile_jobs(db)
@@ -362,6 +425,8 @@ def run_startup_reconciliation(
             db.expire_all()
             logger.exception("Job reconciliation failed")
             results["jobs"] = {"error": "job reconciliation failed"}
+
+        _refresh_reconciliation_lock(db)
 
         logger.info("Startup reconciliation: checking USB drives")
         try:
