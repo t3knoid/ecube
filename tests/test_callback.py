@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
@@ -45,13 +46,15 @@ class TestCallbackUrlSchemaValidation:
         assert body.callback_url == "https://example.com/webhook"
 
     def test_http_url_rejected(self):
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(ValidationError) as exc_info:
             JobCreate(
                 project_id="P1",
                 evidence_number="EV1",
                 source_path="/data/source",
                 callback_url="http://example.com/webhook",
             )
+        errors = exc_info.value.errors()
+        assert any(e["loc"] == ("callback_url",) for e in errors)
         assert "HTTPS" in str(exc_info.value)
 
     def test_none_accepted(self):
