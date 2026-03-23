@@ -6,8 +6,9 @@ module re-aligns persisted state with actual OS/hardware state.
 
 All three passes are **idempotent** — running them multiple times without
 underlying state changes produces no additional state mutations.  Observability
-side-effects (e.g. ``USB_DISCOVERY_SYNC`` audit entries from the drive pass)
-may still be emitted on each invocation.
+side-effects (e.g. ``USB_DISCOVERY_SYNC`` audit entries from the drive pass,
+``last_checked_at`` timestamp updates on verified mounts) may still be written
+on each invocation.
 
 A single-row ``reconciliation_lock`` guard table prevents concurrent
 reconciliation when multiple uvicorn workers start simultaneously.  Only the
@@ -46,6 +47,10 @@ def reconcile_mounts(
     mount_provider: MountProvider,
 ) -> Dict[str, int]:
     """Check all ``MOUNTED`` mounts against the OS and correct stale state.
+
+    Every checked mount receives a ``last_checked_at`` timestamp update
+    regardless of whether its status changed.  This is an observability
+    side-effect (not a domain state mutation) and is expected on every run.
 
     Returns a summary dict with counts of mounts checked and corrected.
     """
