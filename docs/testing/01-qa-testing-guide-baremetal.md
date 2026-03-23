@@ -1125,6 +1125,9 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 | 7 | USB drives re-discovered | Insert USB drives, restart the service | Drives re-appear with correct state (`AVAILABLE` on enabled ports), `USB_DISCOVERY_SYNC` audit entry present |
 | 8 | Idempotency | Restart the service twice without any state changes between restarts | Second restart produces no additional `MOUNT_RECONCILED` or `JOB_RECONCILED` audit entries |
 | 9 | Partial failure isolation | Disconnect the NFS server (to cause mount check failure), have a RUNNING job, restart the service | Job is still reconciled to `FAILED` even though mount reconciliation may error; check logs for error message |
+| 10 | Cross-process lock — only one worker reconciles | Start Uvicorn with `--workers 4`, have a RUNNING job and a MOUNTED (but stale) mount | Exactly one `JOB_RECONCILED` and one `MOUNT_RECONCILED` audit entry; remaining workers log "skipping reconciliation" at INFO level |
+| 11 | Stale lock reclaim | Insert a stale lock row (`locked_at` > 5 minutes ago) via SQL, restart the service | Service reclaims the stale lock, reconciliation runs normally |
+| 12 | Lock released after failure | Disconnect NFS, restart the service, reconnect NFS, restart again | Second restart acquires lock and runs reconciliation; lock table is empty after startup completes |
 
 ---
 

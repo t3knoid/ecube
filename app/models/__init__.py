@@ -10,4 +10,4 @@ from app.models.jobs import (  # noqa: F401
 )
 from app.models.audit import AuditLog  # noqa: F401
 from app.models.users import UserRole  # noqa: F401
-from app.models.system import SystemInitialization  # noqa: F401
+from app.models.system import SystemInitialization, ReconciliationLock  # noqa: F401

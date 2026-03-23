@@ -270,9 +270,13 @@ The callback body is a JSON object containing:
 
 After a service restart or host reboot, in-memory OS state (active mounts, running processes, USB device presence) may diverge from the database. The reconciliation service realigns persisted state with actual OS/hardware state during application startup.
 
+### Cross-Process Lock
+
+In multi-worker deployments (e.g. multiple Uvicorn workers), only one worker must run reconciliation.  A single-row `reconciliation_lock` guard table (constrained by `CHECK (id = 1)`) prevents concurrent execution.  The first worker to insert the row acquires the lock; others detect the existing row and skip reconciliation.  A stale-lock timeout (default 5 minutes) ensures a crashed worker does not block future startups — the next worker reclaims the lock automatically.  The lock row is deleted after reconciliation completes (success or failure).
+
 ### Execution Order
 
-Reconciliation runs during the FastAPI lifespan startup, **after** audit log cleanup and **before** the periodic USB discovery loop. The three passes execute in fixed order:
+Reconciliation runs during the FastAPI lifespan startup, **after** audit log cleanup and **before** the periodic USB discovery loop.  Once the cross-process lock is acquired, the three passes execute in fixed order:
 
 1. **Mounts** — verify OS mount state
 2. **Jobs** — fail interrupted jobs
@@ -308,3 +312,7 @@ Each reconciliation pass is wrapped in an independent `try/except` block. A fail
 ### Idempotency Guarantee
 
 All three passes are fully idempotent — running them multiple times without underlying state changes produces no additional **state mutations**. Mount and job reconciliation emit audit records (`MOUNT_RECONCILED`, `JOB_RECONCILED`) only when a state correction occurs; repeated runs with no new corrections produce no duplicate audit rows. Drive reconciliation delegates to `run_discovery_sync()`, which unconditionally emits a `USB_DISCOVERY_SYNC` summary audit entry on every invocation as an observability record; this is expected and does not indicate a state change.
+
+### Multi-Worker Safety
+
+The cross-process lock guarantees that exactly one worker runs reconciliation per startup cycle.  Workers that fail to acquire the lock return immediately with a `{"skipped": True}` result and log a message at INFO level.  This eliminates the risk of duplicate `MOUNT_RECONCILED` / `JOB_RECONCILED` audit rows and last-writer-wins `completed_at` races on jobs.
