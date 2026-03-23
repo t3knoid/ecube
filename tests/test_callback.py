@@ -815,6 +815,117 @@ class TestExecutorLifecycle:
 
 
 # ---------------------------------------------------------------------------
+# Backpressure (semaphore-gated pending queue)
+# ---------------------------------------------------------------------------
+
+
+class TestBackpressure:
+    """Tests for the BoundedSemaphore-based backpressure mechanism."""
+
+    def test_delivery_dropped_when_queue_full(self):
+        """When the semaphore is exhausted, deliver_callback drops and audits."""
+        import app.services.callback_service as _mod
+        from app.services.callback_service import _get_pending_semaphore
+
+        job = MagicMock(spec=ExportJob)
+        job.id = 42
+        job.callback_url = "https://example.com/hook"
+        job.status = JobStatus.COMPLETED
+
+        # Force semaphore to have 0 permits so the next acquire fails.
+        old_sem = _mod._pending_semaphore
+        _mod._pending_semaphore = __import__("threading").BoundedSemaphore(1)
+        _mod._pending_semaphore.acquire()  # consume the single permit
+        try:
+            with patch.object(_mod, "_audit_dropped_delivery") as mock_audit, \
+                 patch.object(_mod, "_get_executor") as mock_exec, \
+                 patch.object(_mod, "build_payload", return_value={"event": "JOB_COMPLETED"}):
+                deliver_callback(job)  # db=None → production path
+
+                # Should NOT have submitted to the executor.
+                mock_exec.return_value.submit.assert_not_called()
+
+                # Should have written a drop audit record.
+                mock_audit.assert_called_once()
+                args = mock_audit.call_args
+                assert args[0][0] == 42  # job_id
+                assert "example.com" in args[0][1]  # safe_url
+        finally:
+            _mod._pending_semaphore = old_sem
+
+    def test_delivery_proceeds_when_permits_available(self):
+        """When permits are available, deliver_callback submits normally."""
+        import app.services.callback_service as _mod
+
+        job = MagicMock(spec=ExportJob)
+        job.id = 7
+        job.callback_url = "https://example.com/hook"
+        job.status = JobStatus.COMPLETED
+
+        old_sem = _mod._pending_semaphore
+        _mod._pending_semaphore = __import__("threading").BoundedSemaphore(5)
+        try:
+            with patch.object(_mod, "_get_executor") as mock_exec, \
+                 patch.object(_mod, "_audit_dropped_delivery") as mock_audit, \
+                 patch.object(_mod, "build_payload", return_value={"event": "JOB_COMPLETED"}):
+                mock_executor = MagicMock()
+                mock_exec.return_value = mock_executor
+
+                deliver_callback(job)  # db=None
+
+                mock_executor.submit.assert_called_once()
+                mock_audit.assert_not_called()
+        finally:
+            _mod._pending_semaphore = old_sem
+
+    def test_semaphore_released_after_delivery(self):
+        """_deliver_callback_sync releases the semaphore even on failure."""
+        import app.services.callback_service as _mod
+        from app.services.callback_service import _deliver_callback_sync
+
+        old_sem = _mod._pending_semaphore
+        sem = __import__("threading").BoundedSemaphore(2)
+        sem.acquire()  # 1 permit left
+        _mod._pending_semaphore = sem
+        try:
+            with patch("app.database.SessionLocal") as mock_sl, \
+                 patch.object(_mod, "_do_deliver", side_effect=RuntimeError("boom")):
+                mock_db = MagicMock()
+                mock_sl.return_value = mock_db
+
+                # Should raise but still release the semaphore.
+                with pytest.raises(RuntimeError):
+                    _deliver_callback_sync(1, "https://example.com/hook", {})
+
+                mock_db.close.assert_called_once()
+
+                # Semaphore should be back to 2 permits (both should acquire).
+                assert sem.acquire(blocking=False)
+                assert sem.acquire(blocking=False)
+        finally:
+            _mod._pending_semaphore = old_sem
+
+    def test_get_pending_semaphore_creates_bounded_semaphore(self):
+        """_get_pending_semaphore returns a BoundedSemaphore sized by config."""
+        import app.services.callback_service as _mod
+        from app.services.callback_service import _get_pending_semaphore
+
+        old_sem = _mod._pending_semaphore
+        _mod._pending_semaphore = None
+        try:
+            with patch.object(_mod, "settings") as mock_settings:
+                mock_settings.callback_max_pending = 3
+                sem = _get_pending_semaphore()
+                # Verify we can acquire exactly 3 times.
+                assert sem.acquire(blocking=False)
+                assert sem.acquire(blocking=False)
+                assert sem.acquire(blocking=False)
+                assert not sem.acquire(blocking=False)  # 4th should fail
+        finally:
+            _mod._pending_semaphore = old_sem
+
+
+# ---------------------------------------------------------------------------
 # Migration test
 # ---------------------------------------------------------------------------
 
