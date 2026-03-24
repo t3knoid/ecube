@@ -592,9 +592,18 @@ class TestOSUserEndpoints:
 
     def test_create_user_no_ecube_group_returns_422(self, admin_client):
         """POST without ecube-* group returns 422."""
+        # Missing groups entirely → field required
         resp = admin_client.post("/admin/os-users", json={
             "username": "newuser",
             "password": "s3cret",
+        })
+        assert resp.status_code == 422
+
+        # groups present but without ecube-* entry → custom validator rejects
+        resp = admin_client.post("/admin/os-users", json={
+            "username": "newuser",
+            "password": "s3cret",
+            "groups": ["other-group"],
         })
         assert resp.status_code == 422
         assert "ecube-" in resp.json()["message"]
