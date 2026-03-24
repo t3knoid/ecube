@@ -25,7 +25,7 @@ COMPOSE_FILE="$PROJECT_ROOT/docker-compose.ecube.yml"
 COMPOSE_PROJECT="ecube-schemathesis"
 
 # ---- Preflight checks ----
-for cmd in docker curl python; do
+for cmd in docker curl python tee; do
   if ! command -v "$cmd" &>/dev/null; then
     echo "ERROR: '$cmd' is required but not found in PATH." >&2
     exit 1
