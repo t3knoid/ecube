@@ -42,7 +42,7 @@ Extra arguments are forwarded to `st run`:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SCHEMATHESIS_PORT` | `8000` | Host port the API is exposed on (also controls the Compose port mapping) |
-| `POSTGRES_HOST_PORT` | `0` (random) | Host port for PostgreSQL; set to `0` to let Docker pick an ephemeral port and avoid conflicts |
+| `POSTGRES_HOST_PORT` | `5432` | Host port for PostgreSQL; override to avoid conflicts with a local instance |
 | `SECRET_KEY` | `change-me-in-production-…` | Must match the app's key |
 | `SCHEMATHESIS_MAX_WAIT` | `60` | Seconds to wait for `/health` |
 | `SCHEMATHESIS_MAX_EXAMPLES` | `50` | Default `--max-examples` value |
