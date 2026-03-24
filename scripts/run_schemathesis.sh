@@ -25,12 +25,24 @@ COMPOSE_FILE="$PROJECT_ROOT/docker-compose.ecube.yml"
 COMPOSE_PROJECT="ecube-schemathesis"
 
 # ---- Preflight checks ----
-for cmd in docker curl python tee; do
+for cmd in docker curl tee; do
   if ! command -v "$cmd" &>/dev/null; then
     echo "ERROR: '$cmd' is required but not found in PATH." >&2
     exit 1
   fi
 done
+
+# Detect Python: prefer $VIRTUAL_ENV interpreter, then python, then python3
+if [[ -n "${VIRTUAL_ENV:-}" ]] && [[ -x "$VIRTUAL_ENV/bin/python" ]]; then
+  PYTHON="$VIRTUAL_ENV/bin/python"
+elif command -v python &>/dev/null; then
+  PYTHON="python"
+elif command -v python3 &>/dev/null; then
+  PYTHON="python3"
+else
+  echo "ERROR: Python is required but neither 'python' nor 'python3' was found in PATH." >&2
+  exit 1
+fi
 
 # Detect Compose command: prefer v2 plugin, fall back to legacy binary
 if docker compose version &>/dev/null 2>&1; then
@@ -49,7 +61,7 @@ else
   SUDO="sudo"
 fi
 
-if ! python -c "import jwt" 2>/dev/null; then
+if ! "$PYTHON" -c "import jwt" 2>/dev/null; then
   echo "ERROR: PyJWT is required. Install it with: pip install PyJWT" >&2
   exit 1
 fi
@@ -102,7 +114,7 @@ fi
 
 # ---- Generate JWT ----
 echo "==> Generating admin JWT…"
-TOKEN=$(SECRET_KEY="$SECRET_KEY" python - <<'PY'
+TOKEN=$(SECRET_KEY="$SECRET_KEY" "$PYTHON" - <<'PY'
 import jwt, time, os
 payload = {
     "sub": "dev-admin",
