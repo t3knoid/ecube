@@ -69,7 +69,7 @@ class JobCreate(StrictIntMixin, BaseModel):
             return v
         v = v.strip()
         if not v:
-            return None
+            raise ValueError("callback_url must not be empty")
         try:
             parsed = urlparse(v)
         except Exception:
