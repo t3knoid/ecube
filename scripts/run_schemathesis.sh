@@ -75,7 +75,7 @@ fi
 cleanup() {
   echo ""
   echo "==> Stopping containers…"
-  $SUDO $COMPOSE_CMD -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" down -v 2>/dev/null || true
+  $SUDO $COMPOSE_CMD -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" down -v --rmi all 2>/dev/null || true
 }
 trap cleanup EXIT
 
