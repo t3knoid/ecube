@@ -758,7 +758,7 @@ class TestOSUserEndpoints:
             _make_grp(name="postgres", members=["postgres"]),
         ]
         resp = admin_client.delete("/admin/os-users/postgres")
-        assert resp.status_code == 422
+        assert resp.status_code == 403
         assert "ecube" in resp.json()["message"].lower()
 
     def test_delete_invalid_username(self, admin_client):
@@ -952,7 +952,7 @@ class TestOSGroupEndpoints:
         mock_grp.getgrnam.side_effect = KeyError("no such group")
 
         resp = admin_client.delete("/admin/os-groups/ecube-nope")
-        assert resp.status_code == 422
+        assert resp.status_code == 404
 
     def test_delete_group_without_ecube_prefix(self, admin_client):
         resp = admin_client.delete("/admin/os-groups/wheel")

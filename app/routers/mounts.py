@@ -6,7 +6,7 @@ from typing import List
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
 from app.schemas.network import MountCreate, NetworkMountSchema
-from app.schemas.errors import R_401, R_403, R_404, R_422, R_500
+from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500
 from app.services import mount_service
 from app.utils.client_ip import get_client_ip
 
@@ -18,7 +18,7 @@ _ALL_ROLES = require_roles("admin", "manager", "processor", "auditor")
 _ADMIN_MANAGER = require_roles("admin", "manager")
 
 
-@router.post("", response_model=NetworkMountSchema, responses={**R_401, **R_403, **R_422, **R_500})
+@router.post("", response_model=NetworkMountSchema, responses={**R_400, **R_401, **R_403, **R_409, **R_422, **R_500})
 def add_mount(
     body: MountCreate,
     *,
@@ -73,7 +73,11 @@ def _delete_validate_not_allowed(
 ):
     """Reject DELETE on the /validate path with 405 Method Not Allowed."""
     from fastapi import HTTPException
-    raise HTTPException(status_code=405, detail="Method Not Allowed")
+    raise HTTPException(
+        status_code=405,
+        detail="Method Not Allowed",
+        headers={"Allow": "POST"},
+    )
 
 
 @router.delete("/{mount_id}", status_code=204, responses={**R_401, **R_403, **R_404, **R_422, **R_500})
