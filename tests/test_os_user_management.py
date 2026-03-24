@@ -746,7 +746,7 @@ class TestOSUserEndpoints:
     def test_delete_reserved_user(self, mock_pwd, admin_client):
         mock_pwd.getpwnam.return_value = _make_pw(name="root")
         resp = admin_client.delete("/admin/os-users/root")
-        assert resp.status_code == 422
+        assert resp.status_code == 403
 
     @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
@@ -886,7 +886,7 @@ class TestOSUserEndpoints:
         resp = admin_client.post("/admin/os-users/root/groups", json={
             "groups": ["ecube-admins"],
         })
-        assert resp.status_code == 422
+        assert resp.status_code == 403
 
     def test_os_user_endpoints_require_auth(self, unauthenticated_client):
         """Unauthenticated requests should get 401."""
