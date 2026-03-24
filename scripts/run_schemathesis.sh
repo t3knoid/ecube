@@ -62,6 +62,7 @@ trap cleanup EXIT
 # ---- Start the stack with overrides ----
 echo "==> Starting ECUBE stack (port $HOST_PORT)…"
 
+HOST_PORT="$HOST_PORT" \
 USB_DISCOVERY_INTERVAL=0 \
 LOCAL_GROUP_ROLE_MAP='{"evidence-admins": ["admin"]}' \
 SECRET_KEY="$SECRET_KEY" \
