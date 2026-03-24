@@ -5,7 +5,9 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-from pydantic import BaseModel, Field, StrictBool, field_validator, model_validator
+from pydantic import BaseModel, Field, StrictBool, StrictInt, field_validator, model_validator
+
+from app.schemas.types import StrictIntMixin
 
 # Only allow valid hostnames or IPv4 addresses — no URLs, no schemes, no paths.
 _HOSTNAME_RE = re.compile(
@@ -46,11 +48,11 @@ def _validate_pg_identifier(v: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-class DatabaseTestConnectionRequest(BaseModel):
+class DatabaseTestConnectionRequest(StrictIntMixin, BaseModel):
     """Request body for ``POST /setup/database/test-connection``."""
 
     host: str = Field(..., min_length=1, max_length=255, description="PostgreSQL server hostname or IP")
-    port: int = Field(default=5432, ge=1, le=65535, description="PostgreSQL server port")
+    port: StrictInt = Field(default=5432, ge=1, le=65535, description="PostgreSQL server port")
     admin_username: str = Field(..., min_length=1, max_length=63, description="PostgreSQL admin username")
     admin_password: str = Field(..., min_length=1, description="PostgreSQL admin password")
 
@@ -72,11 +74,11 @@ class DatabaseTestConnectionResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class DatabaseProvisionRequest(BaseModel):
+class DatabaseProvisionRequest(StrictIntMixin, BaseModel):
     """Request body for ``POST /setup/database/provision``."""
 
     host: str = Field(..., min_length=1, max_length=255, description="PostgreSQL server hostname or IP")
-    port: int = Field(default=5432, ge=1, le=65535, description="PostgreSQL server port")
+    port: StrictInt = Field(default=5432, ge=1, le=65535, description="PostgreSQL server port")
     admin_username: str = Field(..., min_length=1, max_length=63, description="PostgreSQL admin username")
     admin_password: str = Field(..., min_length=1, description="PostgreSQL admin password")
     app_database: str = Field(default="ecube", min_length=1, max_length=63, description="Application database name")
@@ -130,19 +132,19 @@ class DatabaseStatusResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class DatabaseSettingsUpdateRequest(BaseModel):
+class DatabaseSettingsUpdateRequest(StrictIntMixin, BaseModel):
     """Request body for ``PUT /setup/database/settings``.
 
     All fields are optional — only supplied fields are updated.
     """
 
     host: Optional[str] = Field(default=None, min_length=1, max_length=255, description="PostgreSQL host")
-    port: Optional[int] = Field(default=None, ge=1, le=65535, description="PostgreSQL port")
+    port: Optional[StrictInt] = Field(default=None, ge=1, le=65535, description="PostgreSQL port")
     app_database: Optional[str] = Field(default=None, min_length=1, max_length=63, description="Database name")
     app_username: Optional[str] = Field(default=None, min_length=1, max_length=63, description="Database user")
     app_password: Optional[str] = Field(default=None, min_length=1, description="Database user password")
-    pool_size: Optional[int] = Field(default=None, ge=1, le=100, description="Connection pool size")
-    pool_max_overflow: Optional[int] = Field(default=None, ge=0, le=200, description="Max overflow connections")
+    pool_size: Optional[StrictInt] = Field(default=None, ge=1, le=100, description="Connection pool size")
+    pool_max_overflow: Optional[StrictInt] = Field(default=None, ge=0, le=200, description="Max overflow connections")
 
     @model_validator(mode="after")
     def check_at_least_one_field(self) -> "DatabaseSettingsUpdateRequest":
