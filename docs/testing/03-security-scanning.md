@@ -164,14 +164,13 @@ In addition to static analysis and dependency scanning, ECUBE provides an API te
 
 #### Running locally
 
+The recommended approach uses the all-in-one script that handles containers, JWT generation, and teardown:
+
 ```bash
-pip install schemathesis
-uvicorn app.main:app &
-st run http://localhost:8000/openapi.json \
-  --header "Authorization: Bearer <your-jwt>" \
-  --checks all \
-  --max-examples 50
+./scripts/run_schemathesis.sh
 ```
+
+For manual step-by-step instructions and environment variable overrides, see the [Schemathesis Local Guide](04-schemathesis-local.md).
 
 ---
 
