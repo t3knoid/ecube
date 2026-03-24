@@ -24,12 +24,22 @@ COMPOSE_FILE="$PROJECT_ROOT/docker-compose.ecube.yml"
 COMPOSE_PROJECT="ecube-schemathesis"
 
 # ---- Preflight checks ----
-for cmd in docker docker-compose curl python; do
+for cmd in docker curl python; do
   if ! command -v "$cmd" &>/dev/null; then
     echo "ERROR: '$cmd' is required but not found in PATH." >&2
     exit 1
   fi
 done
+
+# Detect Compose command: prefer v2 plugin, fall back to legacy binary
+if docker compose version &>/dev/null 2>&1; then
+  COMPOSE_CMD="docker compose"
+elif command -v docker-compose &>/dev/null; then
+  COMPOSE_CMD="docker-compose"
+else
+  echo "ERROR: Neither 'docker compose' (plugin) nor 'docker-compose' (standalone) found." >&2
+  exit 1
+fi
 
 if ! python -c "import jwt" 2>/dev/null; then
   echo "ERROR: PyJWT is required. Install it with: pip install PyJWT" >&2
@@ -45,7 +55,7 @@ fi
 cleanup() {
   echo ""
   echo "==> Stopping containers…"
-  sudo docker-compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" down -v 2>/dev/null || true
+  sudo $COMPOSE_CMD -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" down -v 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -55,7 +65,7 @@ echo "==> Starting ECUBE stack (port $HOST_PORT)…"
 USB_DISCOVERY_INTERVAL=0 \
 LOCAL_GROUP_ROLE_MAP='{"evidence-admins": ["admin"]}' \
 SECRET_KEY="$SECRET_KEY" \
-sudo docker-compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" up -d --build \
+sudo $COMPOSE_CMD -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" up -d --build \
   --force-recreate \
   2>&1
 
