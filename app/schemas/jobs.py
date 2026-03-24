@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field, StrictBool, StrictInt, field_validator
+from pydantic import BaseModel, Field, StrictInt, field_validator
 from typing import Optional
 from urllib.parse import urlparse
 
