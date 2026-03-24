@@ -15,7 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # ---- Configurable defaults ----
-HOST_PORT="${SCHEMATHESIS_PORT:-8000}"
+HOST_PORT="${HOST_PORT:-8000}"
 POSTGRES_HOST_PORT="${POSTGRES_HOST_PORT:-5432}"
 SECRET_KEY="${SECRET_KEY:-change-me-in-production-please-rotate-32b}"
 MAX_WAIT="${SCHEMATHESIS_MAX_WAIT:-60}"        # seconds to wait for /health
