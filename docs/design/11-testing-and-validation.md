@@ -300,7 +300,19 @@ Note: this scaffold requires PostgreSQL and auto-skips on non-PostgreSQL backend
    python -m pytest tests/integration -q --run-integration
    ```
 
-## 11.8 Integration Use-Case Coverage Matrix
+## 11.8 API Fuzz Testing (Schemathesis)
+
+Schemathesis reads the OpenAPI schema and auto-generates randomised requests to detect schema violations, undocumented status codes, and server errors. It runs both in CI (`.github/workflows/schemathesis-fuzz.yml`) and locally via a helper script:
+
+```bash
+./scripts/run_schemathesis.sh
+```
+
+The script starts the Docker stack, generates an admin JWT, runs the scan, and tears down containers automatically. Results are saved to `schemathesis-output.txt`.
+
+For full setup details see the [Schemathesis Local Guide](../../docs/testing/04-schemathesis-local.md).
+
+## 11.9 Integration Use-Case Coverage Matrix
 
 - Authentication and access: `tests/integration/test_auth_use_cases_integration.py`
 - Drive management: `tests/integration/test_drives_use_cases_integration.py`
@@ -309,7 +321,7 @@ Note: this scaffold requires PostgreSQL and auto-skips on non-PostgreSQL backend
 - Introspection: `tests/integration/test_introspection_use_cases_integration.py`
 - Baseline smoke: `tests/integration/test_smoke_integration.py`
 
-## 11.9 Hardware HIL Testing
+## 11.10 Hardware HIL Testing
 
 Hardware test skeleton:
 
