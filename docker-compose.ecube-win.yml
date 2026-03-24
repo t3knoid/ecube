@@ -7,7 +7,7 @@ services:
     container_name: ecube-app
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${HOST_PORT:-8000}:8000"
     environment:
       DATABASE_URL: postgresql://ecube:ecube@postgres:5432/ecube
       PYTHONUNBUFFERED: "1"
@@ -15,6 +15,9 @@ services:
       ECUBE_DB_WAIT_MAX_RETRIES: "30"
       ECUBE_DB_WAIT_SECONDS: "2"
       USE_SUDO: "false"
+      SECRET_KEY: "${SECRET_KEY:-change-me-in-production-please-rotate-32b}"
+      LOCAL_GROUP_ROLE_MAP: '${LOCAL_GROUP_ROLE_MAP:-{}}'
+      USB_DISCOVERY_INTERVAL: "${USB_DISCOVERY_INTERVAL:-30}"
     privileged: true
     volumes:
       - ecube_runtime_data:/var/lib/ecube
@@ -34,7 +37,7 @@ services:
       POSTGRES_USER: ecube
       POSTGRES_PASSWORD: ecube
     ports:
-      - "5432:5432"
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - ecube_postgres_data:/var/lib/postgresql/data
     healthcheck:

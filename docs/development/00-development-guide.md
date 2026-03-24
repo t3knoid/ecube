@@ -127,6 +127,7 @@ tests/
   integration/         # Integration test suite (requires --run-integration)
   hardware/            # Hardware-in-the-loop tests (requires --run-hardware)
 scripts/
+  run_schemathesis.sh    # One-command Schemathesis API fuzz testing
   sync_qa_test_cases.py  # QA spreadsheet ↔ markdown sync tool
 docs/
   design/              # Architecture and design specifications
@@ -281,6 +282,16 @@ docker compose -f docker-compose.ecube.yml down -v
 ```
 
 The integration database container can be left running across test runs. Use `down -v` when you want a completely fresh database.
+
+### API Fuzz Testing (Schemathesis)
+
+Schemathesis reads the OpenAPI schema and auto-generates randomised requests to find schema violations, server errors, and undocumented status codes. A one-command script runs the full scan in Docker containers:
+
+```bash
+./scripts/run_schemathesis.sh
+```
+
+Results are saved to `schemathesis-output.txt` in the project root. See the [Schemathesis Local Guide](../testing/04-schemathesis-local.md) for manual steps, environment variables, and troubleshooting.
 
 ### QA Test-Case Sync
 
