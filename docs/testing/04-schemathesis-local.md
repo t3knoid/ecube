@@ -79,8 +79,11 @@ pip install schemathesis PyJWT
 
 ### Step 2 — Start the Containers
 
+The `docker-compose.ecube.yml` uses `${VAR:-default}` interpolation for
+`SECRET_KEY`, `LOCAL_GROUP_ROLE_MAP`, and `USB_DISCOVERY_INTERVAL`, so you can
+override them via shell environment variables:
+
 ```bash
-# Start with an isolated project name
 USB_DISCOVERY_INTERVAL=0 \
 LOCAL_GROUP_ROLE_MAP='{"evidence-admins": ["admin"]}' \
 SECRET_KEY="${SECRET_KEY:-change-me-in-production-please-rotate-32b}" \
