@@ -8,7 +8,7 @@ from app.utils.sanitize import SafeStr, StrictSafeStr
 class MountCreate(BaseModel):
     type: MountType = Field(..., description="Mount protocol type (SMB, NFS, etc.)")
     remote_path: StrictSafeStr = Field(..., min_length=1, description="Remote path on the network share (e.g., //server/share for SMB or server:/export for NFS)")
-    local_mount_point: StrictSafeStr = Field(..., min_length=2, pattern=r"^/[^\x00-\x1f\x7f\s/][^\x00-\x1f\x7f]*$", description="Local filesystem path where the mount will be attached (must be an absolute path with at least one directory component)")
+    local_mount_point: StrictSafeStr = Field(..., min_length=2, pattern=r"^/[^\x00-\x1f\x7f\s/][^\x00-\x1f\x7f\s]*$", description="Local filesystem path where the mount will be attached (must be an absolute path with at least one directory component)")
     username: Optional[SafeStr] = Field(default=None, description="Username for authentication (if required)")
     password: Optional[SafeStr] = Field(default=None, description="Password for authentication (if required)")
     credentials_file: Optional[StrictSafeStr] = Field(default=None, description="Path to credentials file (alternative to username/password)")
@@ -21,8 +21,8 @@ class MountCreate(BaseModel):
         import posixpath
         if posixpath.normpath(v) == "/":
             raise ValueError("local_mount_point cannot resolve to the root directory")
-        if any(ord(c) < 0x20 or ord(c) == 0x7F for c in v):
-            raise ValueError("local_mount_point must not contain control characters")
+        if any(ord(c) < 0x20 or ord(c) == 0x7F or c in (' ', '\t', '\n', '\r', '\x0b', '\x0c', '\x85', '\xa0') for c in v):
+            raise ValueError("local_mount_point must not contain control or whitespace characters")
         return v
 
 
