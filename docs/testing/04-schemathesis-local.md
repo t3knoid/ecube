@@ -42,6 +42,7 @@ Extra arguments are forwarded to `st run`:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SCHEMATHESIS_PORT` | `8000` | Host port the API is exposed on (also controls the Compose port mapping) |
+| `POSTGRES_HOST_PORT` | `0` (random) | Host port for PostgreSQL; set to `0` to let Docker pick an ephemeral port and avoid conflicts |
 | `SECRET_KEY` | `change-me-in-production-…` | Must match the app's key |
 | `SCHEMATHESIS_MAX_WAIT` | `60` | Seconds to wait for `/health` |
 | `SCHEMATHESIS_MAX_EXAMPLES` | `50` | Default `--max-examples` value |
@@ -80,8 +81,9 @@ pip install schemathesis PyJWT
 ### Step 2 — Start the Containers
 
 The `docker-compose.ecube.yml` uses `${VAR:-default}` interpolation for
-`HOST_PORT`, `SECRET_KEY`, `LOCAL_GROUP_ROLE_MAP`, and `USB_DISCOVERY_INTERVAL`,
-so you can override them via shell environment variables:
+`HOST_PORT`, `POSTGRES_HOST_PORT`, `SECRET_KEY`, `LOCAL_GROUP_ROLE_MAP`, and
+`USB_DISCOVERY_INTERVAL`, so you can override them via shell environment
+variables:
 
 ```bash
 HOST_PORT=8000 \
