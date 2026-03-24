@@ -9,7 +9,7 @@
 
 [Schemathesis](https://schemathesis.readthedocs.io/) reads the ECUBE OpenAPI schema and auto-generates randomised requests to find server errors, schema violations, content-type mismatches, and status-code contradictions. The CI workflow (`.github/workflows/schemathesis-fuzz.yml`) runs this automatically, but you can also run the same scan on your local machine for faster feedback during development.
 
-This guide uses the standard **`docker-compose.ecube.yml`** stack (API server + PostgreSQL) so no local services are needed. A helper script (`scripts/run_schemathesis.sh`) automates the full workflow. The API is exposed on **port 8000** (the Compose default).
+This guide uses the standard **`docker-compose.ecube.yml`** stack (API server + PostgreSQL) so no local services are needed. A helper script (`scripts/run_schemathesis.sh`) automates the full workflow. The API is exposed on **port 8000** by default (override with `HOST_PORT`).
 
 ---
 
@@ -41,7 +41,8 @@ Extra arguments are forwarded to `st run`:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SCHEMATHESIS_PORT` | `8000` | Host port the API is exposed on |
+| `HOST_PORT` | `8000` | Host port the API is exposed on (also controls the Compose port mapping) |
+| `POSTGRES_HOST_PORT` | `5432` | Host port for PostgreSQL; override to avoid conflicts with a local instance |
 | `SECRET_KEY` | `change-me-in-production-…` | Must match the app's key |
 | `SCHEMATHESIS_MAX_WAIT` | `60` | Seconds to wait for `/health` |
 | `SCHEMATHESIS_MAX_EXAMPLES` | `50` | Default `--max-examples` value |
@@ -55,7 +56,7 @@ automatically torn down when the script exits (including on errors).
 
 | Requirement | Notes |
 |-------------|-------|
-| Docker & Docker Compose | `docker-compose` must be available |
+| Docker & Docker Compose | `docker compose` (v2 plugin) or `docker-compose` (legacy) |
 | Python 3.11+ | Only needed to generate the JWT and run `st` |
 | Schemathesis | `pip install schemathesis` (host only) |
 | PyJWT | `pip install PyJWT` (for token generation) |
@@ -79,12 +80,17 @@ pip install schemathesis PyJWT
 
 ### Step 2 — Start the Containers
 
+The `docker-compose.ecube.yml` uses `${VAR:-default}` interpolation for
+`HOST_PORT`, `POSTGRES_HOST_PORT`, `SECRET_KEY`, `LOCAL_GROUP_ROLE_MAP`, and
+`USB_DISCOVERY_INTERVAL`, so you can override them via shell environment
+variables:
+
 ```bash
-# Start with an isolated project name
+HOST_PORT=8000 \
 USB_DISCOVERY_INTERVAL=0 \
 LOCAL_GROUP_ROLE_MAP='{"evidence-admins": ["admin"]}' \
 SECRET_KEY="${SECRET_KEY:-change-me-in-production-please-rotate-32b}" \
-docker-compose -p ecube-schemathesis -f docker-compose.ecube.yml up -d --build --force-recreate
+docker compose -p ecube-schemathesis -f docker-compose.ecube.yml up -d --build --force-recreate
 ```
 
 Wait for the API to be ready:
@@ -159,7 +165,7 @@ st run http://localhost:8000/openapi.json \
 ### Step 5 — Tear Down
 
 ```bash
-docker-compose -p ecube-schemathesis -f docker-compose.ecube.yml down -v
+docker compose -p ecube-schemathesis -f docker-compose.ecube.yml down -v
 ```
 
 Omit `-v` if you want to keep the database state between runs.
@@ -186,9 +192,9 @@ Schemathesis prints a summary at the end of each run. Look for:
 
 | Problem | Cause | Fix |
 |---------|-------|-----|
-| `Connection refused` | Containers not running or not ready | Run `docker-compose -p ecube-schemathesis -f docker-compose.ecube.yml ps` and wait for `/health` to return 200 |
+| `Connection refused` | Containers not running or not ready | Run `docker compose -p ecube-schemathesis -f docker-compose.ecube.yml ps` and wait for `/health` to return 200 |
 | `401 Unauthorized` on every request | Token expired or wrong `SECRET_KEY` | Regenerate the token with the same `SECRET_KEY` the container is using |
 | `403 Forbidden` | JWT roles don't map to `admin` | Verify the container's `LOCAL_GROUP_ROLE_MAP` includes `evidence-admins → admin` |
 | Build fails | Docker not running or missing Dockerfile | Ensure Docker daemon is running and `deploy/ecube-host/Dockerfile` exists |
-| Port 8000 in use | Another service on that port | Stop the conflicting service or set `SCHEMATHESIS_PORT` to a different port |
-| `password authentication failed` | Database container unhealthy | Run `docker-compose -p ecube-schemathesis -f docker-compose.ecube.yml logs postgres` to diagnose |
+| Port 8000 in use | Another service on that port | Stop the conflicting service or set `HOST_PORT` to a different port (the script passes it through to the Compose port mapping) |
+| `password authentication failed` | Database container unhealthy | Run `docker compose -p ecube-schemathesis -f docker-compose.ecube.yml logs postgres` to diagnose |
