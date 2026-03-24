@@ -218,7 +218,7 @@ class TestTestConnectionEndpoint:
             },
         )
 
-        assert resp.status_code == 400
+        assert resp.status_code == 503
         assert "Connection refused" in resp.json()["message"]
 
     @patch("app.services.database_service.test_connection")
@@ -337,7 +337,7 @@ class TestProvisionEndpoint:
             },
         )
 
-        assert resp.status_code == 400
+        assert resp.status_code == 503
         assert "auth failed" in resp.json()["message"]
 
     @patch("app.services.database_service.is_database_provisioned", return_value=False)

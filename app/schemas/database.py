@@ -51,7 +51,7 @@ def _validate_pg_identifier(v: str) -> str:
 class DatabaseTestConnectionRequest(StrictIntMixin, BaseModel):
     """Request body for ``POST /setup/database/test-connection``."""
 
-    host: str = Field(..., min_length=1, max_length=255, description="PostgreSQL server hostname or IP")
+    host: str = Field(..., min_length=1, max_length=255, json_schema_extra={"pattern": "^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$"}, description="PostgreSQL server hostname or IP")
     port: StrictInt = Field(default=5432, ge=1, le=65535, description="PostgreSQL server port")
     admin_username: str = Field(..., min_length=1, max_length=63, description="PostgreSQL admin username")
     admin_password: str = Field(..., min_length=1, description="PostgreSQL admin password")
@@ -77,12 +77,12 @@ class DatabaseTestConnectionResponse(BaseModel):
 class DatabaseProvisionRequest(StrictIntMixin, BaseModel):
     """Request body for ``POST /setup/database/provision``."""
 
-    host: str = Field(..., min_length=1, max_length=255, description="PostgreSQL server hostname or IP")
+    host: str = Field(..., min_length=1, max_length=255, json_schema_extra={"pattern": "^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$"}, description="PostgreSQL server hostname or IP")
     port: StrictInt = Field(default=5432, ge=1, le=65535, description="PostgreSQL server port")
     admin_username: str = Field(..., min_length=1, max_length=63, description="PostgreSQL admin username")
     admin_password: str = Field(..., min_length=1, description="PostgreSQL admin password")
-    app_database: str = Field(default="ecube", min_length=1, max_length=63, description="Application database name")
-    app_username: str = Field(default="ecube", min_length=1, max_length=63, description="Application database user")
+    app_database: str = Field(default="ecube", min_length=1, max_length=63, json_schema_extra={"pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"}, description="Application database name")
+    app_username: str = Field(default="ecube", min_length=1, max_length=63, json_schema_extra={"pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"}, description="Application database user")
     app_password: str = Field(..., min_length=1, description="Application database user password")
     force: StrictBool = Field(default=False, description="Allow re-provisioning an already-provisioned database")
 
@@ -138,10 +138,12 @@ class DatabaseSettingsUpdateRequest(StrictIntMixin, BaseModel):
     All fields are optional — only supplied fields are updated.
     """
 
-    host: Optional[str] = Field(default=None, min_length=1, max_length=255, description="PostgreSQL host")
+    model_config = {"json_schema_extra": {"minProperties": 1}}
+
+    host: Optional[str] = Field(default=None, min_length=1, max_length=255, json_schema_extra={"pattern": "^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$"}, description="PostgreSQL host")
     port: Optional[StrictInt] = Field(default=None, ge=1, le=65535, description="PostgreSQL port")
-    app_database: Optional[str] = Field(default=None, min_length=1, max_length=63, description="Database name")
-    app_username: Optional[str] = Field(default=None, min_length=1, max_length=63, description="Database user")
+    app_database: Optional[str] = Field(default=None, min_length=1, max_length=63, json_schema_extra={"pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"}, description="Database name")
+    app_username: Optional[str] = Field(default=None, min_length=1, max_length=63, json_schema_extra={"pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"}, description="Database user")
     app_password: Optional[str] = Field(default=None, min_length=1, description="Database user password")
     pool_size: Optional[StrictInt] = Field(default=None, ge=1, le=100, description="Connection pool size")
     pool_max_overflow: Optional[StrictInt] = Field(default=None, ge=0, le=200, description="Max overflow connections")
