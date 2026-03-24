@@ -41,6 +41,13 @@ else
   exit 1
 fi
 
+# Use sudo only when the current user cannot reach the Docker daemon directly
+if docker info &>/dev/null 2>&1; then
+  SUDO=""
+else
+  SUDO="sudo"
+fi
+
 if ! python -c "import jwt" 2>/dev/null; then
   echo "ERROR: PyJWT is required. Install it with: pip install PyJWT" >&2
   exit 1
@@ -55,7 +62,7 @@ fi
 cleanup() {
   echo ""
   echo "==> Stopping containers…"
-  sudo $COMPOSE_CMD -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" down -v 2>/dev/null || true
+  $SUDO $COMPOSE_CMD -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" down -v 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -66,7 +73,7 @@ HOST_PORT="$HOST_PORT" \
 USB_DISCOVERY_INTERVAL=0 \
 LOCAL_GROUP_ROLE_MAP='{"evidence-admins": ["admin"]}' \
 SECRET_KEY="$SECRET_KEY" \
-sudo $COMPOSE_CMD -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" up -d --build \
+$SUDO $COMPOSE_CMD -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" up -d --build \
   --force-recreate \
   2>&1
 
@@ -87,7 +94,7 @@ done
 
 if [ "$elapsed" -ge "$MAX_WAIT" ]; then
   echo "ERROR: API did not become healthy within ${MAX_WAIT}s." >&2
-  echo "       Check logs: sudo docker logs $APP_CONTAINER" >&2
+  echo "       Check logs: $SUDO docker logs $APP_CONTAINER" >&2
   exit 1
 fi
 
