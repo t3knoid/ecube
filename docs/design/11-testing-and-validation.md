@@ -310,7 +310,7 @@ Schemathesis reads the OpenAPI schema and auto-generates randomised requests to 
 
 The script starts the Docker stack, generates an admin JWT, runs the scan, and tears down containers automatically. Results are saved to `schemathesis-output.txt`.
 
-For full setup details see the [Schemathesis Local Guide](../../docs/testing/04-schemathesis-local.md).
+For full setup details see the [Schemathesis Local Guide](../testing/04-schemathesis-local.md).
 
 ## 11.9 Integration Use-Case Coverage Matrix
 
