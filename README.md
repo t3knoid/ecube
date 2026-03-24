@@ -60,6 +60,16 @@ A [Postman collection](postman/ecube-postman-collection.json) is also available 
 
 Build and deployment guidance (release artifacts, package deployment, Docker images, and compose deployment) is documented in [Build and Deployment](docs/design/13-build-and-deployment.md).
 
+## API Fuzz Testing
+
+Schemathesis auto-generates randomised requests from the OpenAPI schema to find schema violations, server errors, and undocumented status codes. A helper script runs the full scan inside Docker containers:
+
+```bash
+./scripts/run_schemathesis.sh
+```
+
+Results are saved to `schemathesis-output.txt`. See the [Schemathesis Local Guide](docs/testing/04-schemathesis-local.md) for manual steps, environment variables, and troubleshooting.
+
 ## QA Test-Case Sync
 
 The QA test-case spreadsheet (`docs/testing/ecube-qa-test-cases.xlsx`) is generated from the markdown guide (`docs/testing/01-qa-testing-guide-baremetal.md`). A sync script keeps them aligned:
@@ -82,6 +92,8 @@ python scripts/sync_qa_test_cases.py --sync
   - [Security Best Practices](docs/operations/07-security-best-practices.md)
 - [Development Guide](docs/development/00-development-guide.md)
 - [QA Testing Guide (Bare-Metal)](docs/testing/01-qa-testing-guide-baremetal.md)
+- [Schemathesis Local Fuzz Testing](docs/testing/04-schemathesis-local.md)
+- [Security Scanning (CI)](docs/testing/03-security-scanning.md)
 - [Requirements Documents](docs/requirements)
 - [Design Documents](docs/design)
 - [Linux Host Deployment & USB Passthrough](docs/design/12-linux-host-deployment-and-usb-passthrough.md)

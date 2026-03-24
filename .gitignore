@@ -208,3 +208,6 @@ __marimo__/
 
 # GitHub prompts
 .github/prompts/**
+
+# Schemathesis
+schemathesis-output.txt
