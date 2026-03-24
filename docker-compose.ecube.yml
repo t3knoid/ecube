@@ -39,6 +39,8 @@ services:
       POSTGRES_DB: ecube
       POSTGRES_USER: ecube
       POSTGRES_PASSWORD: ecube
+    ports:
+      - "5432:5432"
     volumes:
       - ecube_postgres_data:/var/lib/postgresql/data
     healthcheck:
