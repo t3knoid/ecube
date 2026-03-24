@@ -70,7 +70,7 @@ sudo $COMPOSE_CMD -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" up -d --build \
   --force-recreate \
   2>&1
 
-APP_CONTAINER="${COMPOSE_PROJECT}-ecube-app-1"
+APP_CONTAINER="ecube-app"
 
 # ---- Wait for API ----
 echo "==> Waiting for API on http://localhost:$HOST_PORT/health …"
