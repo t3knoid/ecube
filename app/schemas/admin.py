@@ -54,6 +54,32 @@ class LogFilesResponse(BaseModel):
     log_directory: str = Field(..., description="Absolute path to the log directory")
 
 
+class _GroupItem(str):
+    """Constrained string for group names used in list fields."""
+
+    @classmethod
+    def __get_pydantic_core_schema__(cls, source_type, handler):
+        from pydantic_core import core_schema
+        return core_schema.str_schema(
+            min_length=1,
+            max_length=32,
+            pattern=r"^[a-z_][a-z0-9_-]{0,31}$",
+        )
+
+
+class _EcubeGroupItem(str):
+    """Constrained string for ecube-prefixed group names."""
+
+    @classmethod
+    def __get_pydantic_core_schema__(cls, source_type, handler):
+        from pydantic_core import core_schema
+        return core_schema.str_schema(
+            min_length=1,
+            max_length=32,
+            pattern=r"^ecube-[a-z0-9_-]{0,25}$",
+        )
+
+
 # ---------------------------------------------------------------------------
 # OS user management schemas
 # ---------------------------------------------------------------------------
@@ -72,7 +98,8 @@ class CreateOSUserRequest(BaseModel):
     password: str = Field(
         ...,
         min_length=1,
-        description="Initial password for the user",
+        pattern=r"^[^\n\r:]+$",
+        description="Initial password for the user (newlines and colons are not permitted)",
     )
 
     @field_validator("password")
@@ -80,10 +107,13 @@ class CreateOSUserRequest(BaseModel):
     def password_safe_chars(cls, v: str) -> str:
         return _check_password_safety(v)
 
-    groups: List[str] = Field(
+    groups: List[_GroupItem] = Field(
         ...,
         min_length=1,
         description="OS groups to add the user to (at least one must start with 'ecube-')",
+        json_schema_extra={
+            "contains": {"type": "string", "pattern": "^ecube-[a-z0-9_-]{0,25}$"},
+        },
     )
 
     @field_validator("groups")
@@ -124,7 +154,8 @@ class ResetPasswordRequest(BaseModel):
     password: str = Field(
         ...,
         min_length=1,
-        description="New password for the user",
+        pattern=r"^[^\n\r:]+$",
+        description="New password for the user (newlines and colons are not permitted)",
     )
 
     @field_validator("password")
@@ -133,23 +164,10 @@ class ResetPasswordRequest(BaseModel):
         return _check_password_safety(v)
 
 
-class _GroupItem(str):
-    """Constrained string for group names used in list fields."""
-
-    @classmethod
-    def __get_pydantic_core_schema__(cls, source_type, handler):
-        from pydantic_core import core_schema
-        return core_schema.str_schema(
-            min_length=1,
-            max_length=32,
-            pattern=r"^[a-z_][a-z0-9_-]{0,31}$",
-        )
-
-
 class SetOSGroupsRequest(BaseModel):
     """Request body for ``PUT /admin/os-users/{username}/groups``."""
 
-    groups: List[_GroupItem] = Field(
+    groups: List[_EcubeGroupItem] = Field(
         ...,
         min_length=1,
         description=(

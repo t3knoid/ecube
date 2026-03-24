@@ -96,6 +96,20 @@ def _raise_os_error(exc: OSUserError, *, context: str = "OS operation") -> None:
     raise HTTPException(status_code=500, detail=msg)
 
 
+def _raise_value_error(exc: ValueError) -> None:
+    """Map a :class:`ValueError` from the service layer to an HTTP error.
+
+    The ``_require_ecube_managed_user`` check in the OS-user service raises
+    ``ValueError`` when the target user is not in any ``ecube-*`` group.  This
+    is an **access-control** rejection (403), not a schema-validation error.
+    All other ``ValueError`` instances are treated as validation errors (422).
+    """
+    msg = str(exc)
+    if "not in any ecube-" in msg.lower():
+        raise HTTPException(status_code=403, detail=msg)
+    raise HTTPException(status_code=422, detail=msg)
+
+
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
@@ -262,7 +276,7 @@ _os_router = APIRouter(
 # ---------------------------------------------------------------------------
 
 
-@_os_router.post("/os-users", response_model=OSUserResponse, status_code=201, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500, **R_504})
+@_os_router.post("/os-users", response_model=OSUserResponse, status_code=201, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500, **R_504})
 def create_os_user(
     body: CreateOSUserRequest,
     *,
@@ -374,7 +388,7 @@ def delete_os_user(
     try:
         _get_provider().delete_user(username)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        _raise_value_error(exc)
     except OSUserError as exc:
         _raise_os_error(exc, context="Delete OS user")
 
@@ -412,7 +426,7 @@ def reset_os_user_password(
     try:
         _get_provider().reset_password(username, body.password)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        _raise_value_error(exc)
     except OSUserError as exc:
         _raise_os_error(exc, context="Reset OS password")
 
@@ -439,7 +453,7 @@ def set_os_user_groups(
     try:
         os_user = _get_provider().set_user_groups(username, body.groups)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        _raise_value_error(exc)
     except OSUserError as exc:
         _raise_os_error(exc, context="Set OS user groups")
 
@@ -474,7 +488,7 @@ def add_os_user_groups(
     try:
         os_user = _get_provider().add_user_to_groups(username, body.groups)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        _raise_value_error(exc)
     except OSUserError as exc:
         _raise_os_error(exc, context="Add OS user to groups")
 
@@ -500,7 +514,7 @@ def add_os_user_groups(
 # ---------------------------------------------------------------------------
 
 
-@_os_router.post("/os-groups", response_model=OSGroupResponse, status_code=201, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500, **R_504})
+@_os_router.post("/os-groups", response_model=OSGroupResponse, status_code=201, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500, **R_504})
 def create_os_group(
     body: CreateOSGroupRequest,
     *,
@@ -561,6 +575,9 @@ def delete_os_group(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except OSUserError as exc:
+        msg = exc.message or str(exc) or "Delete OS group failed"
+        if "does not exist" in msg.lower():
+            raise HTTPException(status_code=404, detail=msg)
         _raise_os_error(exc, context="Delete OS group")
 
     best_effort_audit(db, "OS_GROUP_DELETED", current_user.username, {
@@ -586,7 +603,7 @@ def list_ports(
     return [UsbPortSchema.model_validate(p) for p in ports]
 
 
-@router.patch("/ports/{port_id}", response_model=UsbPortSchema, responses={**R_401, **R_403, **R_404, **R_422})
+@router.patch("/ports/{port_id}", response_model=UsbPortSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_422})
 def toggle_port_enabled(
     port_id: int,
     body: PortEnableRequest,
@@ -627,7 +644,7 @@ def list_hubs(
     return [UsbHubSchema.model_validate(h) for h in hubs]
 
 
-@router.patch("/hubs/{hub_id}", response_model=UsbHubSchema, responses={**R_401, **R_403, **R_404, **R_422})
+@router.patch("/hubs/{hub_id}", response_model=UsbHubSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_422})
 def update_hub_label(
     hub_id: int,
     body: HubUpdateRequest,
@@ -659,7 +676,7 @@ def update_hub_label(
     return UsbHubSchema.model_validate(hub)
 
 
-@router.patch("/ports/{port_id}/label", response_model=UsbPortSchema, responses={**R_401, **R_403, **R_404, **R_422})
+@router.patch("/ports/{port_id}/label", response_model=UsbPortSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_422})
 def update_port_label(
     port_id: int,
     body: PortUpdateRequest,

@@ -23,7 +23,7 @@ from app.database import get_db
 from app.repositories.audit_repository import best_effort_audit
 from app.repositories.user_role_repository import UserRoleRepository
 from app.infrastructure.pam_protocol import PamAuthenticator
-from app.schemas.errors import R_401, R_404, R_422
+from app.schemas.errors import R_400, R_401, R_404, R_422
 from app.utils.client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ class TokenResponse(BaseModel):
 # Endpoint
 # ---------------------------------------------------------------------------
 
-@router.post("/token", response_model=TokenResponse, responses={**R_401, **R_404, **R_422})
+@router.post("/token", response_model=TokenResponse, responses={**R_400, **R_401, **R_404, **R_422})
 def login(
     body: TokenRequest,
     *,
