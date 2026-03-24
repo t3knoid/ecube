@@ -7,7 +7,7 @@ services:
     container_name: ecube-app
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${HOST_PORT:-8000}:8000"
     environment:
       DATABASE_URL: postgresql://ecube:ecube@postgres:5432/ecube
       PYTHONUNBUFFERED: "1"
@@ -37,7 +37,7 @@ services:
       POSTGRES_USER: ecube
       POSTGRES_PASSWORD: ecube
     ports:
-      - "5432:5432"
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - ecube_postgres_data:/var/lib/postgresql/data
     healthcheck:

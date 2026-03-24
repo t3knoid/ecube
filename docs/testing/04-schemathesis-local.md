@@ -9,7 +9,7 @@
 
 [Schemathesis](https://schemathesis.readthedocs.io/) reads the ECUBE OpenAPI schema and auto-generates randomised requests to find server errors, schema violations, content-type mismatches, and status-code contradictions. The CI workflow (`.github/workflows/schemathesis-fuzz.yml`) runs this automatically, but you can also run the same scan on your local machine for faster feedback during development.
 
-This guide uses the standard **`docker-compose.ecube.yml`** stack (API server + PostgreSQL) so no local services are needed. A helper script (`scripts/run_schemathesis.sh`) automates the full workflow. The API is exposed on **port 8000** (the Compose default).
+This guide uses the standard **`docker-compose.ecube.yml`** stack (API server + PostgreSQL) so no local services are needed. A helper script (`scripts/run_schemathesis.sh`) automates the full workflow. The API is exposed on **port 8000** by default (override with `SCHEMATHESIS_PORT`).
 
 ---
 
@@ -41,7 +41,7 @@ Extra arguments are forwarded to `st run`:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SCHEMATHESIS_PORT` | `8000` | Host port the API is exposed on |
+| `SCHEMATHESIS_PORT` | `8000` | Host port the API is exposed on (also controls the Compose port mapping) |
 | `SECRET_KEY` | `change-me-in-production-…` | Must match the app's key |
 | `SCHEMATHESIS_MAX_WAIT` | `60` | Seconds to wait for `/health` |
 | `SCHEMATHESIS_MAX_EXAMPLES` | `50` | Default `--max-examples` value |
@@ -80,10 +80,11 @@ pip install schemathesis PyJWT
 ### Step 2 — Start the Containers
 
 The `docker-compose.ecube.yml` uses `${VAR:-default}` interpolation for
-`SECRET_KEY`, `LOCAL_GROUP_ROLE_MAP`, and `USB_DISCOVERY_INTERVAL`, so you can
-override them via shell environment variables:
+`HOST_PORT`, `SECRET_KEY`, `LOCAL_GROUP_ROLE_MAP`, and `USB_DISCOVERY_INTERVAL`,
+so you can override them via shell environment variables:
 
 ```bash
+HOST_PORT=8000 \
 USB_DISCOVERY_INTERVAL=0 \
 LOCAL_GROUP_ROLE_MAP='{"evidence-admins": ["admin"]}' \
 SECRET_KEY="${SECRET_KEY:-change-me-in-production-please-rotate-32b}" \
@@ -193,5 +194,5 @@ Schemathesis prints a summary at the end of each run. Look for:
 | `401 Unauthorized` on every request | Token expired or wrong `SECRET_KEY` | Regenerate the token with the same `SECRET_KEY` the container is using |
 | `403 Forbidden` | JWT roles don't map to `admin` | Verify the container's `LOCAL_GROUP_ROLE_MAP` includes `evidence-admins → admin` |
 | Build fails | Docker not running or missing Dockerfile | Ensure Docker daemon is running and `deploy/ecube-host/Dockerfile` exists |
-| Port 8000 in use | Another service on that port | Stop the conflicting service or set `SCHEMATHESIS_PORT` to a different port |
+| Port 8000 in use | Another service on that port | Stop the conflicting service or set `SCHEMATHESIS_PORT` to a different port (the script passes it through to the Compose port mapping) |
 | `password authentication failed` | Database container unhealthy | Run `docker compose -p ecube-schemathesis -f docker-compose.ecube.yml logs postgres` to diagnose |
