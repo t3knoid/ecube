@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, StrictBool, field_validator, model_validator
 
 # Only allow valid hostnames or IPv4 addresses — no URLs, no schemes, no paths.
 _HOSTNAME_RE = re.compile(
@@ -82,7 +82,7 @@ class DatabaseProvisionRequest(BaseModel):
     app_database: str = Field(default="ecube", min_length=1, max_length=63, description="Application database name")
     app_username: str = Field(default="ecube", min_length=1, max_length=63, description="Application database user")
     app_password: str = Field(..., min_length=1, description="Application database user password")
-    force: bool = Field(default=False, description="Allow re-provisioning an already-provisioned database")
+    force: StrictBool = Field(default=False, description="Allow re-provisioning an already-provisioned database")
 
     @field_validator("host")
     @classmethod
