@@ -1,11 +1,12 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field, StrictBool, field_validator
+from pydantic import BaseModel, Field, StrictBool, StrictInt, field_validator
 from typing import Optional
 from urllib.parse import urlparse
 
 from app.models.hardware import DriveState
 from app.models.jobs import JobStatus, FileStatus
+from app.schemas.types import StrictIntMixin
 from app.utils.sanitize import SafeStr, StrictSafeStr
 
 
@@ -49,15 +50,15 @@ class FileCompareResponse(BaseModel):
     file_b: FileCompareItem = Field(..., description="Second file details")
 
 
-class JobCreate(BaseModel):
+class JobCreate(StrictIntMixin, BaseModel):
     project_id: SafeStr = Field(..., min_length=1, description="Project ID for isolation enforcement")
     evidence_number: SafeStr = Field(..., min_length=1, description="Evidence case number or identifier")
     source_path: StrictSafeStr = Field(..., min_length=1, description="Path to source data on network mount or local filesystem")
     target_mount_path: Optional[StrictSafeStr] = Field(default=None, description="Alternative target mount; defaults to assigned drive")
     drive_id: Optional[int] = Field(default=None, description="Pre-assigned USB drive ID")
-    thread_count: int = Field(default=4, ge=1, le=8, description="Number of parallel copy threads (1-8)")
-    max_file_retries: int = Field(default=3, ge=0, description="Maximum number of retries for failed files (0+)")
-    retry_delay_seconds: int = Field(default=1, ge=0, description="Delay between retries in seconds (0+)")
+    thread_count: StrictInt = Field(default=4, ge=1, le=8, description="Number of parallel copy threads (1-8)")
+    max_file_retries: StrictInt = Field(default=3, ge=0, description="Maximum number of retries for failed files (0+)")
+    retry_delay_seconds: StrictInt = Field(default=1, ge=0, description="Delay between retries in seconds (0+)")
     created_by: Optional[SafeStr] = Field(default=None, description="Username of the job creator")
     callback_url: Optional[SafeStr] = Field(default=None, json_schema_extra={"pattern": "^https://"}, description="HTTPS URL to receive a POST callback when the job reaches a terminal state (COMPLETED or FAILED)")
 
@@ -82,8 +83,8 @@ class JobCreate(BaseModel):
         return v
 
 
-class JobStart(BaseModel):
-    thread_count: Optional[int] = Field(default=None, ge=1, le=8, description="Override thread count for this job start (1-8, optional)")
+class JobStart(StrictIntMixin, BaseModel):
+    thread_count: Optional[StrictInt] = Field(default=None, ge=1, le=8, description="Override thread count for this job start (1-8, optional)")
 
 
 class ExportFileSchema(BaseModel):
