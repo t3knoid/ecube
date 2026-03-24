@@ -99,13 +99,19 @@ def _raise_os_error(exc: OSUserError, *, context: str = "OS operation") -> None:
 def _raise_value_error(exc: ValueError) -> None:
     """Map a :class:`ValueError` from the service layer to an HTTP error.
 
-    The ``_require_ecube_managed_user`` check in the OS-user service raises
-    ``ValueError`` when the target user is not in any ``ecube-*`` group.  This
-    is an **access-control** rejection (403), not a schema-validation error.
-    All other ``ValueError`` instances are treated as validation errors (422).
+    The OS-user service raises ``ValueError`` for two categories of
+    access-control rejection:
+
+    * The target user is not in any ``ecube-*`` group.
+    * The target user or username is a reserved system account.
+
+    Both are **access-control** rejections (403), not schema-validation
+    errors.  All other ``ValueError`` instances are treated as validation
+    errors (422).
     """
     msg = str(exc)
-    if "not in any ecube-" in msg.lower():
+    lowered = msg.lower()
+    if "not in any ecube-" in lowered or "reserved" in lowered:
         raise HTTPException(status_code=403, detail=msg)
     raise HTTPException(status_code=422, detail=msg)
 
