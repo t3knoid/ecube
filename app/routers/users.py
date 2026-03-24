@@ -21,7 +21,7 @@ from app.schemas.users import (
     UserListResponse,
     UserRolesResponse,
 )
-from app.schemas.errors import R_401, R_403, R_422, R_500
+from app.schemas.errors import R_400, R_401, R_403, R_422, R_500
 from app.utils.client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
@@ -65,7 +65,7 @@ def get_user_roles(
     return UserRolesResponse(username=username, roles=roles)
 
 
-@router.put("/{username}/roles", response_model=UserRolesResponse, responses={**R_401, **R_403, **R_422, **R_500})
+@router.put("/{username}/roles", response_model=UserRolesResponse, responses={**R_400, **R_401, **R_403, **R_422, **R_500})
 def set_user_roles(
     username: str = Path(..., pattern=USERNAME_PATTERN),
     *,
