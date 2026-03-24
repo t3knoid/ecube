@@ -11,6 +11,7 @@ from app.database import get_db
 from app.repositories.audit_repository import AuditRepository
 from app.schemas.audit import AuditLogSchema
 from app.schemas.errors import R_401, R_403, R_422
+from app.schemas.types import OptionalDatetimeQuery, OptionalIntQuery
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +33,9 @@ def _redact_ip(entry, user: CurrentUser) -> AuditLogSchema:
 def list_audit_logs(
     user: Optional[str] = Query(default=None, description="Filter by user"),
     action: Optional[str] = Query(default=None, description="Filter by action"),
-    job_id: int = Query(default=None, description="Filter by job ID"),  # type: ignore[assignment]
-    since: datetime = Query(default=None, description="Filter entries at or after this timestamp (ISO 8601)"),  # type: ignore[assignment]
-    until: datetime = Query(default=None, description="Filter entries at or before this timestamp (ISO 8601)"),  # type: ignore[assignment]
+    job_id: Optional[int] = OptionalIntQuery(description="Filter by job ID"),
+    since: Optional[datetime] = OptionalDatetimeQuery(description="Filter entries at or after this timestamp (ISO 8601)"),
+    until: Optional[datetime] = OptionalDatetimeQuery(description="Filter entries at or before this timestamp (ISO 8601)"),
     limit: int = Query(default=settings.audit_log_default_limit, ge=1, le=settings.audit_log_max_limit, description="Maximum number of results"),
     offset: int = Query(default=0, ge=0, description="Number of results to skip"),
     db: Session = Depends(get_db),
