@@ -16,6 +16,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # ---- Configurable defaults ----
 HOST_PORT="${SCHEMATHESIS_PORT:-8000}"
+POSTGRES_HOST_PORT="${POSTGRES_HOST_PORT:-5432}"   # 0 = random ephemeral port (avoids conflicts)
 SECRET_KEY="${SECRET_KEY:-change-me-in-production-please-rotate-32b}"
 MAX_WAIT="${SCHEMATHESIS_MAX_WAIT:-60}"        # seconds to wait for /health
 MAX_EXAMPLES="${SCHEMATHESIS_MAX_EXAMPLES:-50}"
@@ -70,6 +71,7 @@ trap cleanup EXIT
 echo "==> Starting ECUBE stack (port $HOST_PORT)…"
 
 HOST_PORT="$HOST_PORT" \
+POSTGRES_HOST_PORT="$POSTGRES_HOST_PORT" \
 USB_DISCOVERY_INTERVAL=0 \
 LOCAL_GROUP_ROLE_MAP='{"evidence-admins": ["admin"]}' \
 SECRET_KEY="$SECRET_KEY" \
