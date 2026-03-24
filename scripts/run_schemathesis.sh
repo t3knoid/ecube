@@ -15,7 +15,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # ---- Configurable defaults ----
-HOST_PORT="${SCHEMATHESIS_PORT:-8000}"
+HOST_PORT="${HOST_PORT:-8000}"
+POSTGRES_HOST_PORT="${POSTGRES_HOST_PORT:-5432}"
 SECRET_KEY="${SECRET_KEY:-change-me-in-production-please-rotate-32b}"
 MAX_WAIT="${SCHEMATHESIS_MAX_WAIT:-60}"        # seconds to wait for /health
 MAX_EXAMPLES="${SCHEMATHESIS_MAX_EXAMPLES:-50}"
@@ -24,14 +25,43 @@ COMPOSE_FILE="$PROJECT_ROOT/docker-compose.ecube.yml"
 COMPOSE_PROJECT="ecube-schemathesis"
 
 # ---- Preflight checks ----
-for cmd in docker docker-compose curl python; do
+for cmd in docker curl tee; do
   if ! command -v "$cmd" &>/dev/null; then
     echo "ERROR: '$cmd' is required but not found in PATH." >&2
     exit 1
   fi
 done
 
-if ! python -c "import jwt" 2>/dev/null; then
+# Detect Python: prefer $VIRTUAL_ENV interpreter, then python, then python3
+if [[ -n "${VIRTUAL_ENV:-}" ]] && [[ -x "$VIRTUAL_ENV/bin/python" ]]; then
+  PYTHON="$VIRTUAL_ENV/bin/python"
+elif command -v python &>/dev/null; then
+  PYTHON="python"
+elif command -v python3 &>/dev/null; then
+  PYTHON="python3"
+else
+  echo "ERROR: Python is required but neither 'python' nor 'python3' was found in PATH." >&2
+  exit 1
+fi
+
+# Detect Compose command: prefer v2 plugin, fall back to legacy binary
+if docker compose version &>/dev/null 2>&1; then
+  COMPOSE_CMD="docker compose"
+elif command -v docker-compose &>/dev/null; then
+  COMPOSE_CMD="docker-compose"
+else
+  echo "ERROR: Neither 'docker compose' (plugin) nor 'docker-compose' (standalone) found." >&2
+  exit 1
+fi
+
+# Use sudo only when the current user cannot reach the Docker daemon directly
+if docker info &>/dev/null 2>&1; then
+  SUDO=""
+else
+  SUDO="sudo"
+fi
+
+if ! "$PYTHON" -c "import jwt" 2>/dev/null; then
   echo "ERROR: PyJWT is required. Install it with: pip install PyJWT" >&2
   exit 1
 fi
@@ -45,21 +75,23 @@ fi
 cleanup() {
   echo ""
   echo "==> Stopping containers…"
-  sudo docker-compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" down -v 2>/dev/null || true
+  $SUDO $COMPOSE_CMD -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" down -v 2>/dev/null || true
 }
 trap cleanup EXIT
 
 # ---- Start the stack with overrides ----
 echo "==> Starting ECUBE stack (port $HOST_PORT)…"
 
+HOST_PORT="$HOST_PORT" \
+POSTGRES_HOST_PORT="$POSTGRES_HOST_PORT" \
 USB_DISCOVERY_INTERVAL=0 \
 LOCAL_GROUP_ROLE_MAP='{"evidence-admins": ["admin"]}' \
 SECRET_KEY="$SECRET_KEY" \
-sudo docker-compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" up -d --build \
+$SUDO $COMPOSE_CMD -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" up -d --build \
   --force-recreate \
   2>&1
 
-APP_CONTAINER="${COMPOSE_PROJECT}-ecube-app-1"
+APP_CONTAINER="ecube-app"
 
 # ---- Wait for API ----
 echo "==> Waiting for API on http://localhost:$HOST_PORT/health …"
@@ -76,13 +108,13 @@ done
 
 if [ "$elapsed" -ge "$MAX_WAIT" ]; then
   echo "ERROR: API did not become healthy within ${MAX_WAIT}s." >&2
-  echo "       Check logs: sudo docker logs $APP_CONTAINER" >&2
+  echo "       Check logs: $SUDO docker logs $APP_CONTAINER" >&2
   exit 1
 fi
 
 # ---- Generate JWT ----
 echo "==> Generating admin JWT…"
-TOKEN=$(SECRET_KEY="$SECRET_KEY" python - <<'PY'
+TOKEN=$(SECRET_KEY="$SECRET_KEY" "$PYTHON" - <<'PY'
 import jwt, time, os
 payload = {
     "sub": "dev-admin",
