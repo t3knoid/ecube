@@ -249,11 +249,15 @@ class Settings(BaseSettings):
     # CORS configuration
     # ---------------------------------------------------------------------------
 
-    #: Origins permitted for cross-origin requests.  Typically needed only
-    #: during development (Vite dev server on a different port) or when
-    #: Swagger UI is served from a different origin.  In production, nginx
-    #: proxies everything on the same origin so CORS is not triggered.
-    cors_allowed_origins: List[str] = ["https://localhost:8443"]
+    #: Origins permitted for cross-origin requests.  Empty by default
+    #: (CORS disabled).  In production, nginx proxies everything on the
+    #: same origin so CORS is not triggered.  For local development, set
+    #: via the ``CORS_ALLOWED_ORIGINS`` env var as a JSON list, e.g.:
+    #:
+    #: .. code-block:: bash
+    #:
+    #:     CORS_ALLOWED_ORIGINS='["http://localhost:5173"]'
+    cors_allowed_origins: List[str] = []
 
     # ---------------------------------------------------------------------------
     # Reverse proxy / client IP settings
