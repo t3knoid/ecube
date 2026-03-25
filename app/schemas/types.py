@@ -66,7 +66,8 @@ class StrictIntMixin:
     @classmethod
     def _coerce_whole_floats(cls, data: Any) -> Any:
         if isinstance(data, dict):
-            for key, val in data.items():
-                if isinstance(val, float) and val.is_integer():
-                    data[key] = int(val)
+            data = {
+                k: int(v) if isinstance(v, float) and v.is_integer() else v
+                for k, v in data.items()
+            }
         return data
