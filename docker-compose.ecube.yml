@@ -13,10 +13,11 @@ services:
     security_opt:
       - apparmor:unconfined
     ports:
-      - "${HOST_PORT:-8000}:8000"
+      - "127.0.0.1:${HOST_PORT:-8000}:8000"
     environment:
       DATABASE_URL: postgresql://ecube:ecube@postgres:5432/ecube
       PYTHONUNBUFFERED: "1"
+      TRUST_PROXY_HEADERS: "true"
       ECUBE_RUN_MIGRATIONS_ON_START: "true"
       ECUBE_DB_WAIT_MAX_RETRIES: "30"
       ECUBE_DB_WAIT_SECONDS: "2"
