@@ -20,9 +20,9 @@ class FileHashesResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class FileCompareRequest(BaseModel):
-    file_id_a: int = Field(..., description="First file ID to compare")
-    file_id_b: int = Field(..., description="Second file ID to compare")
+class FileCompareRequest(StrictIntMixin, BaseModel):
+    file_id_a: StrictInt = Field(..., description="First file ID to compare")
+    file_id_b: StrictInt = Field(..., description="Second file ID to compare")
 
 
 class FileCompareItem(BaseModel):
@@ -55,7 +55,7 @@ class JobCreate(StrictIntMixin, BaseModel):
     evidence_number: SafeStr = Field(..., min_length=1, description="Evidence case number or identifier")
     source_path: StrictSafeStr = Field(..., min_length=1, description="Path to source data on network mount or local filesystem")
     target_mount_path: Optional[StrictSafeStr] = Field(default=None, description="Alternative target mount; defaults to assigned drive")
-    drive_id: Optional[int] = Field(default=None, description="Pre-assigned USB drive ID")
+    drive_id: Optional[StrictInt] = Field(default=None, description="Pre-assigned USB drive ID")
     thread_count: StrictInt = Field(default=4, ge=1, le=8, description="Number of parallel copy threads (1-8)")
     max_file_retries: StrictInt = Field(default=3, ge=0, description="Maximum number of retries for failed files (0+)")
     retry_delay_seconds: StrictInt = Field(default=1, ge=0, description="Delay between retries in seconds (0+)")
