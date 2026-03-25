@@ -16,6 +16,7 @@ from app.models.users import UserRole
 from app.models.system import SystemInitialization
 from app.repositories.user_role_repository import UserRoleRepository
 from app.services import os_user_service
+from app.exceptions import AuthorizationError
 from app.services.os_user_service import (
     OSUser,
     OSUserError,
@@ -149,7 +150,7 @@ class TestCreateUser:
             create_user("testuser", "password", groups=["ecube-admins"])
 
     def test_create_reserved_username(self):
-        with pytest.raises(ValueError, match="reserved"):
+        with pytest.raises(AuthorizationError, match="reserved"):
             create_user("root", "password", groups=["ecube-admins"])
 
     def test_create_empty_password(self):
@@ -261,7 +262,7 @@ class TestDeleteUser:
     @patch("app.services.os_user_service.pwd")
     def test_delete_reserved_user(self, mock_pwd):
         mock_pwd.getpwnam.return_value = _make_pw(name="ecube")
-        with pytest.raises(ValueError, match="reserved"):
+        with pytest.raises(AuthorizationError, match="reserved"):
             delete_user("ecube")
 
     @patch("app.services.os_user_service.grp")
@@ -273,7 +274,7 @@ class TestDeleteUser:
         mock_grp.getgrall.return_value = [
             _make_grp(name="postgres", members=["postgres"]),
         ]
-        with pytest.raises(ValueError, match="not in any ecube"):
+        with pytest.raises(AuthorizationError, match="not in any ecube"):
             delete_user("postgres")
 
 
@@ -299,7 +300,7 @@ class TestResetPassword:
     @patch("app.services.os_user_service.pwd")
     def test_reset_password_reserved_username(self, mock_pwd):
         mock_pwd.getpwnam.return_value = _make_pw(name="root")
-        with pytest.raises(ValueError, match="reserved"):
+        with pytest.raises(AuthorizationError, match="reserved"):
             reset_password("root", "newpass")
 
     @patch("app.services.os_user_service.grp")
@@ -311,7 +312,7 @@ class TestResetPassword:
         mock_grp.getgrall.return_value = [
             _make_grp(name="postgres", members=["postgres"]),
         ]
-        with pytest.raises(ValueError, match="not in any ecube"):
+        with pytest.raises(AuthorizationError, match="not in any ecube"):
             reset_password("postgres", "newpass")
 
 
@@ -378,7 +379,7 @@ class TestSetUserGroups:
     @patch("app.services.os_user_service.pwd")
     def test_set_groups_reserved_username(self, mock_pwd):
         mock_pwd.getpwnam.return_value = _make_pw(name="root")
-        with pytest.raises(ValueError, match="reserved"):
+        with pytest.raises(AuthorizationError, match="reserved"):
             set_user_groups("root", ["ecube-admins"])
 
     @patch("app.services.os_user_service.grp")
@@ -390,7 +391,7 @@ class TestSetUserGroups:
         mock_grp.getgrall.return_value = [
             _make_grp(name="postgres", members=["postgres"]),
         ]
-        with pytest.raises(ValueError, match="not in any ecube"):
+        with pytest.raises(AuthorizationError, match="not in any ecube"):
             set_user_groups("postgres", ["ecube-admins"])
 
 
@@ -400,7 +401,7 @@ class TestAddUserToGroups:
     @patch("app.services.os_user_service.pwd")
     def test_add_to_groups_reserved_username(self, mock_pwd):
         mock_pwd.getpwnam.return_value = _make_pw(name="ecube")
-        with pytest.raises(ValueError, match="reserved"):
+        with pytest.raises(AuthorizationError, match="reserved"):
             os_user_service.add_user_to_groups("ecube", ["ecube-admins"])
 
     @patch("app.services.os_user_service.grp")
@@ -412,7 +413,7 @@ class TestAddUserToGroups:
         mock_grp.getgrall.return_value = [
             _make_grp(name="www-data", members=["www-data"]),
         ]
-        with pytest.raises(ValueError, match="not in any ecube"):
+        with pytest.raises(AuthorizationError, match="not in any ecube"):
             os_user_service.add_user_to_groups("www-data", ["ecube-admins"])
 
 
@@ -592,9 +593,18 @@ class TestOSUserEndpoints:
 
     def test_create_user_no_ecube_group_returns_422(self, admin_client):
         """POST without ecube-* group returns 422."""
+        # Missing groups entirely → field required
         resp = admin_client.post("/admin/os-users", json={
             "username": "newuser",
             "password": "s3cret",
+        })
+        assert resp.status_code == 422
+
+        # groups present but without ecube-* entry → custom validator rejects
+        resp = admin_client.post("/admin/os-users", json={
+            "username": "newuser",
+            "password": "s3cret",
+            "groups": ["other-group"],
         })
         assert resp.status_code == 422
         assert "ecube-" in resp.json()["message"]
@@ -737,7 +747,7 @@ class TestOSUserEndpoints:
     def test_delete_reserved_user(self, mock_pwd, admin_client):
         mock_pwd.getpwnam.return_value = _make_pw(name="root")
         resp = admin_client.delete("/admin/os-users/root")
-        assert resp.status_code == 422
+        assert resp.status_code == 403
 
     @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
@@ -749,7 +759,7 @@ class TestOSUserEndpoints:
             _make_grp(name="postgres", members=["postgres"]),
         ]
         resp = admin_client.delete("/admin/os-users/postgres")
-        assert resp.status_code == 422
+        assert resp.status_code == 403
         assert "ecube" in resp.json()["message"].lower()
 
     def test_delete_invalid_username(self, admin_client):
@@ -877,7 +887,7 @@ class TestOSUserEndpoints:
         resp = admin_client.post("/admin/os-users/root/groups", json={
             "groups": ["ecube-admins"],
         })
-        assert resp.status_code == 422
+        assert resp.status_code == 403
 
     def test_os_user_endpoints_require_auth(self, unauthenticated_client):
         """Unauthenticated requests should get 401."""
@@ -943,7 +953,7 @@ class TestOSGroupEndpoints:
         mock_grp.getgrnam.side_effect = KeyError("no such group")
 
         resp = admin_client.delete("/admin/os-groups/ecube-nope")
-        assert resp.status_code == 422
+        assert resp.status_code == 404
 
     def test_delete_group_without_ecube_prefix(self, admin_client):
         resp = admin_client.delete("/admin/os-groups/wheel")

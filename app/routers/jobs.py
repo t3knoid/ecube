@@ -6,7 +6,7 @@ from app.auth import CurrentUser, require_roles
 from app.database import get_db
 from app.repositories.job_repository import DriveAssignmentRepository, FileRepository
 from app.schemas.jobs import DriveInfoSchema, ExportJobSchema, JobCreate, JobStart
-from app.schemas.errors import R_401, R_403, R_404, R_409, R_422, R_500
+from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500
 from app.services import job_service
 from app.utils.client_ip import get_client_ip
 
@@ -58,7 +58,7 @@ def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
     return schema
 
 
-@router.post("", response_model=ExportJobSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
+@router.post("", response_model=ExportJobSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
 def create_job(
     body: JobCreate,
     *,
@@ -93,7 +93,7 @@ def get_job(
     return _redact_ip(job, current_user, db)
 
 
-@router.post("/{job_id}/start", response_model=ExportJobSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
+@router.post("/{job_id}/start", response_model=ExportJobSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
 def start_job(
     job_id: int,
     body: JobStart,

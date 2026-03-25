@@ -56,7 +56,7 @@ from app.infrastructure import get_os_user_provider
 from app.infrastructure.os_user_protocol import OSUserError, OsUserProvider
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500, R_504
 from app.services.os_user_service import validate_group_name, validate_username
-from app.constants import GROUPNAME_PATTERN, USERNAME_PATTERN
+from app.constants import ECUBE_GROUPNAME_PATTERN, GROUPNAME_PATTERN, USERNAME_PATTERN
 from app.utils.client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
@@ -262,7 +262,7 @@ _os_router = APIRouter(
 # ---------------------------------------------------------------------------
 
 
-@_os_router.post("/os-users", response_model=OSUserResponse, status_code=201, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500, **R_504})
+@_os_router.post("/os-users", response_model=OSUserResponse, status_code=201, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500, **R_504})
 def create_os_user(
     body: CreateOSUserRequest,
     *,
@@ -397,7 +397,7 @@ def delete_os_user(
     return {"message": f"User '{username}' deleted"}
 
 
-@_os_router.put("/os-users/{username}/password", status_code=200, response_model=MessageResponse, responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
+@_os_router.put("/os-users/{username}/password", status_code=200, response_model=MessageResponse, responses={**R_400, **R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
 def reset_os_user_password(
     username: str = Path(..., pattern=USERNAME_PATTERN),
     *,
@@ -424,7 +424,7 @@ def reset_os_user_password(
     return {"message": f"Password reset for user '{username}'"}
 
 
-@_os_router.put("/os-users/{username}/groups", response_model=OSUserResponse, responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
+@_os_router.put("/os-users/{username}/groups", response_model=OSUserResponse, responses={**R_400, **R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
 def set_os_user_groups(
     username: str = Path(..., pattern=USERNAME_PATTERN),
     *,
@@ -459,7 +459,7 @@ def set_os_user_groups(
     )
 
 
-@_os_router.post("/os-users/{username}/groups", response_model=OSUserResponse, responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
+@_os_router.post("/os-users/{username}/groups", response_model=OSUserResponse, responses={**R_400, **R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
 def add_os_user_groups(
     username: str = Path(..., pattern=USERNAME_PATTERN),
     *,
@@ -500,7 +500,7 @@ def add_os_user_groups(
 # ---------------------------------------------------------------------------
 
 
-@_os_router.post("/os-groups", response_model=OSGroupResponse, status_code=201, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500, **R_504})
+@_os_router.post("/os-groups", response_model=OSGroupResponse, status_code=201, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500, **R_504})
 def create_os_group(
     body: CreateOSGroupRequest,
     *,
@@ -545,7 +545,7 @@ def list_os_groups(
 @_os_router.delete("/os-groups/{name}", status_code=200, response_model=MessageResponse, responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_504})
 def delete_os_group(
     request: Request,
-    name: str = Path(..., pattern=GROUPNAME_PATTERN),
+    name: str = Path(..., pattern=ECUBE_GROUPNAME_PATTERN),
     *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
@@ -561,6 +561,9 @@ def delete_os_group(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except OSUserError as exc:
+        msg = exc.message or str(exc) or "Delete OS group failed"
+        if "does not exist" in msg.lower():
+            raise HTTPException(status_code=404, detail=msg)
         _raise_os_error(exc, context="Delete OS group")
 
     best_effort_audit(db, "OS_GROUP_DELETED", current_user.username, {
@@ -586,7 +589,7 @@ def list_ports(
     return [UsbPortSchema.model_validate(p) for p in ports]
 
 
-@router.patch("/ports/{port_id}", response_model=UsbPortSchema, responses={**R_401, **R_403, **R_404, **R_422})
+@router.patch("/ports/{port_id}", response_model=UsbPortSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_422})
 def toggle_port_enabled(
     port_id: int,
     body: PortEnableRequest,
@@ -627,7 +630,7 @@ def list_hubs(
     return [UsbHubSchema.model_validate(h) for h in hubs]
 
 
-@router.patch("/hubs/{hub_id}", response_model=UsbHubSchema, responses={**R_401, **R_403, **R_404, **R_422})
+@router.patch("/hubs/{hub_id}", response_model=UsbHubSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_422})
 def update_hub_label(
     hub_id: int,
     body: HubUpdateRequest,
@@ -659,7 +662,7 @@ def update_hub_label(
     return UsbHubSchema.model_validate(hub)
 
 
-@router.patch("/ports/{port_id}/label", response_model=UsbPortSchema, responses={**R_401, **R_403, **R_404, **R_422})
+@router.patch("/ports/{port_id}/label", response_model=UsbPortSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_422})
 def update_port_label(
     port_id: int,
     body: PortUpdateRequest,

@@ -151,6 +151,12 @@ class TestDatabaseSchemaValidation:
         assert req.app_database == "ecube_prod"
         assert req.app_username == "ecube_user"
 
+    def test_settings_accepts_explicit_nulls_as_noop(self):
+        """Explicit null values for known fields are schema-compliant."""
+        req = DatabaseSettingsUpdateRequest(app_database=None)
+        assert req.host is None
+        assert req.app_database is None
+
     def test_settings_rejects_empty(self):
         with pytest.raises(ValidationError, match="At least one setting"):
             DatabaseSettingsUpdateRequest()
@@ -218,7 +224,7 @@ class TestTestConnectionEndpoint:
             },
         )
 
-        assert resp.status_code == 400
+        assert resp.status_code == 503
         assert "Connection refused" in resp.json()["message"]
 
     @patch("app.services.database_service.test_connection")
@@ -337,7 +343,7 @@ class TestProvisionEndpoint:
             },
         )
 
-        assert resp.status_code == 400
+        assert resp.status_code == 503
         assert "auth failed" in resp.json()["message"]
 
     @patch("app.services.database_service.is_database_provisioned", return_value=False)
@@ -687,7 +693,7 @@ class TestDatabaseSettingsEndpoint:
             json={"host": "db2.internal"},
         )
 
-        assert resp.status_code == 400
+        assert resp.status_code == 503
         assert "Could not connect" in resp.json()["message"]
 
     @patch("app.services.database_service.update_database_settings")
