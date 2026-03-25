@@ -96,26 +96,6 @@ def _raise_os_error(exc: OSUserError, *, context: str = "OS operation") -> None:
     raise HTTPException(status_code=500, detail=msg)
 
 
-def _raise_value_error(exc: ValueError) -> None:
-    """Map a :class:`ValueError` from the service layer to an HTTP error.
-
-    The OS-user service raises ``ValueError`` for two categories of
-    access-control rejection:
-
-    * The target user is not in any ``ecube-*`` group.
-    * The target user or username is a reserved system account.
-
-    Both are **access-control** rejections (403), not schema-validation
-    errors.  All other ``ValueError`` instances are treated as validation
-    errors (422).
-    """
-    msg = str(exc)
-    lowered = msg.lower()
-    if "not in any ecube-" in lowered or "reserved" in lowered:
-        raise HTTPException(status_code=403, detail=msg)
-    raise HTTPException(status_code=422, detail=msg)
-
-
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
@@ -394,7 +374,7 @@ def delete_os_user(
     try:
         _get_provider().delete_user(username)
     except ValueError as exc:
-        _raise_value_error(exc)
+        raise HTTPException(status_code=422, detail=str(exc))
     except OSUserError as exc:
         _raise_os_error(exc, context="Delete OS user")
 
@@ -432,7 +412,7 @@ def reset_os_user_password(
     try:
         _get_provider().reset_password(username, body.password)
     except ValueError as exc:
-        _raise_value_error(exc)
+        raise HTTPException(status_code=422, detail=str(exc))
     except OSUserError as exc:
         _raise_os_error(exc, context="Reset OS password")
 
@@ -459,7 +439,7 @@ def set_os_user_groups(
     try:
         os_user = _get_provider().set_user_groups(username, body.groups)
     except ValueError as exc:
-        _raise_value_error(exc)
+        raise HTTPException(status_code=422, detail=str(exc))
     except OSUserError as exc:
         _raise_os_error(exc, context="Set OS user groups")
 
@@ -494,7 +474,7 @@ def add_os_user_groups(
     try:
         os_user = _get_provider().add_user_to_groups(username, body.groups)
     except ValueError as exc:
-        _raise_value_error(exc)
+        raise HTTPException(status_code=422, detail=str(exc))
     except OSUserError as exc:
         _raise_os_error(exc, context="Add OS user to groups")
 
