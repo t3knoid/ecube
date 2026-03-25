@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.constants import ECUBE_GROUP_PREFIX
+from app.constants import ECUBE_GROUP_PREFIX, ECUBE_GROUPNAME_PATTERN
 from app.schemas.users import RoleName
 
 _UNSAFE_PASSWORD_CHARS = frozenset("\n\r:")
@@ -76,7 +76,7 @@ class _EcubeGroupItem(str):
         return core_schema.str_schema(
             min_length=1,
             max_length=32,
-            pattern=r"^ecube-[a-z0-9_-]{0,25}$",
+            pattern=ECUBE_GROUPNAME_PATTERN,
         )
 
 
@@ -87,6 +87,8 @@ class _EcubeGroupItem(str):
 
 class CreateOSUserRequest(BaseModel):
     """Request body for ``POST /admin/os-users``."""
+
+    model_config = {"extra": "forbid"}
 
     username: str = Field(
         ...,
@@ -112,7 +114,7 @@ class CreateOSUserRequest(BaseModel):
         min_length=1,
         description="OS groups to add the user to (at least one must start with 'ecube-')",
         json_schema_extra={
-            "contains": {"type": "string", "pattern": "^ecube-[a-z0-9_-]{0,25}$"},
+            "contains": {"type": "string", "pattern": ECUBE_GROUPNAME_PATTERN},
         },
     )
 
@@ -199,7 +201,7 @@ class CreateOSGroupRequest(BaseModel):
         ...,
         min_length=1,
         max_length=32,
-        pattern=r"^ecube-[a-z0-9_-]{0,25}$",
+        pattern=ECUBE_GROUPNAME_PATTERN,
         description="ECUBE-managed POSIX group name (must start with 'ecube-')",
     )
 
