@@ -8,6 +8,15 @@
 #   ./scripts/run_schemathesis.sh --max-examples 100  # override example count
 #
 # Extra arguments are forwarded directly to the `st run` command.
+#
+# Known false positives (correct server behaviour, not schema bugs):
+#
+#   POST /admin/os-users  422  — Fuzzed group names don't exist on the OS;
+#                                the API correctly rejects them.
+#   POST /setup/database/test-connection  503  — Fuzzed hostname is
+#                                unreachable; 503 is the documented response.
+#   PUT  /setup/database/settings  503  — After applying fuzzed settings the
+#                                connection check fails; 503 is documented.
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
@@ -75,7 +84,7 @@ fi
 cleanup() {
   echo ""
   echo "==> Stopping containers…"
-  $SUDO $COMPOSE_CMD -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" down -v 2>/dev/null || true
+  $SUDO $COMPOSE_CMD -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" down -v --rmi all 2>/dev/null || true
 }
 trap cleanup EXIT
 

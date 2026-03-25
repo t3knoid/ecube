@@ -46,7 +46,7 @@ def list_drives(
         project_id = sanitized
     return drive_service.get_all_drives(db, project_id=project_id)
 
-@router.post("/{drive_id}/initialize", response_model=UsbDriveSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
+@router.post("/{drive_id}/initialize", response_model=UsbDriveSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
 def initialize_drive(
     drive_id: int,
     body: DriveInitialize,
