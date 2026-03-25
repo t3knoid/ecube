@@ -667,7 +667,7 @@ Stage 2 (runtime): nginx:alpine → copy dist/ + nginx.conf → expose 443
 
 1. Add `CORS_ALLOWED_ORIGINS` setting to `app/config.py`
 2. Add `CORSMiddleware` to `app/main.py` with configurable allowed origins
-3. Default: `["https://localhost:8443"]` for development
+3. Default: `[]` (disabled). For local development, set `CORS_ALLOWED_ORIGINS='["http://localhost:5173"]'`
 
 > **Note:** If nginx proxies all API requests (frontend calls `/api/*` on the same origin), CORS may not be strictly necessary. However, it should be configured for flexibility (e.g. Swagger UI on a different port, development setups).
 
