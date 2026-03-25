@@ -142,7 +142,7 @@ class DatabaseSettingsUpdateRequest(StrictIntMixin, BaseModel):
     All fields are optional — only supplied fields are updated.
     """
 
-    model_config = {"json_schema_extra": {"minProperties": 1}}
+    model_config = {"extra": "forbid", "json_schema_extra": {"minProperties": 1}}
 
     host: Optional[str] = Field(default=None, min_length=1, max_length=255, json_schema_extra={"pattern": _HOST_PATTERN}, description="PostgreSQL host")
     port: Optional[StrictInt] = Field(default=None, ge=1, le=65535, description="PostgreSQL port")
