@@ -215,7 +215,7 @@ def _is_ecube_managed(username: str) -> bool:
 
 
 def _require_ecube_managed_user(username: str) -> None:
-    """Raise ``ValueError`` unless *username* is an ECUBE-managed account.
+    """Raise :class:`AuthorizationError` unless *username* is an ECUBE-managed account.
 
     The user must not be in :data:`RESERVED_USERNAMES` **and** must belong to
     at least one ``ecube-*`` group.  This prevents accidental mutation of
@@ -281,7 +281,8 @@ def create_user(
 ) -> OSUser:
     """Create an OS user, set password, and add to groups.
 
-    Raises :class:`OSUserError` on failure, :class:`ValueError` on bad input.
+    Raises :class:`OSUserError` on failure, :class:`ValueError` on bad input,
+    or :class:`AuthorizationError` for reserved usernames.
     """
     validate_username(username)
     if _is_reserved_username(username):
@@ -381,8 +382,8 @@ def list_users(ecube_only: bool = True) -> List[OSUser]:
 def delete_user(username: str, *, _skip_managed_check: bool = False) -> None:
     """Delete an OS user.
 
-    Raises :class:`OSUserError` on failure, :class:`ValueError` for reserved
-    or non-ECUBE-managed users.
+    Raises :class:`OSUserError` on failure, :class:`AuthorizationError` for
+    reserved or non-ECUBE-managed users.
 
     The private *_skip_managed_check* flag is used internally for compensation
     (e.g. cleaning up a just-created user whose group assignment failed before
@@ -400,8 +401,8 @@ def delete_user(username: str, *, _skip_managed_check: bool = False) -> None:
 def reset_password(username: str, password: str, *, _skip_managed_check: bool = False) -> None:
     """Reset an OS user's password.
 
-    Raises :class:`OSUserError` on failure, :class:`ValueError` for bad input
-    or non-ECUBE-managed users.
+    Raises :class:`OSUserError` on failure, :class:`ValueError` for bad input,
+    or :class:`AuthorizationError` for reserved or non-ECUBE-managed users.
 
     The private *_skip_managed_check* flag is used by the setup wizard's
     recovery path where the user may not yet be in an ``ecube-*`` group.
@@ -423,7 +424,8 @@ def set_user_groups(username: str, groups: List[str]) -> OSUser:
     Non-ECUBE supplementary groups are preserved automatically so that
     ``usermod -G`` never strips memberships the API does not manage.
 
-    Raises :class:`ValueError` on bad input, :class:`OSUserError` on failure.
+    Raises :class:`ValueError` on bad input, :class:`AuthorizationError` for
+    reserved or non-ECUBE-managed users, :class:`OSUserError` on failure.
     Returns the updated :class:`OSUser`.
     """
     validate_username(username)
@@ -472,7 +474,8 @@ def add_user_to_groups(username: str, groups: List[str], *, _skip_managed_check:
     """Add a user to supplementary groups without removing existing memberships.
 
     Uses ``usermod -aG`` (append) instead of ``-G`` (replace).
-    Returns the updated :class:`OSUser`.
+    Returns the updated :class:`OSUser`.  Raises :class:`AuthorizationError`
+    for reserved or non-ECUBE-managed users.
 
     The private *_skip_managed_check* flag is used by the setup wizard's
     recovery path where the user may not yet be in an ``ecube-*`` group.
