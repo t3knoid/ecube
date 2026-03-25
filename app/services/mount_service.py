@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional, Tuple
 
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.network import MountStatus, MountType, NetworkMount
@@ -87,6 +88,11 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
     )
     try:
         mount_repo.add(mount)
+    except IntegrityError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="A mount with this local_mount_point already exists",
+        ) from exc
     except Exception as exc:
         if is_encoding_error(exc):
             raise EncodingError("Mount data contains invalid characters") from exc

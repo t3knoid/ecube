@@ -41,7 +41,7 @@ from app.schemas.admin import (
 )
 from app.infrastructure import get_os_user_provider
 from app.infrastructure.os_user_protocol import OSUserError
-from app.schemas.errors import R_404, R_409, R_422, R_500
+from app.schemas.errors import R_400, R_404, R_409, R_422, R_500
 from app.utils.client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
@@ -73,7 +73,7 @@ def get_setup_status(
     "/initialize",
     response_model=SetupInitializeResponse,
     status_code=200,
-    responses={**R_404, **R_409, **R_422, **R_500},
+    responses={**R_400, **R_404, **R_409, **R_422, **R_500},
 )
 def initialize_system(
     body: SetupInitializeRequest,
