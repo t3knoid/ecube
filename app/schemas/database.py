@@ -154,13 +154,7 @@ class DatabaseSettingsUpdateRequest(StrictIntMixin, BaseModel):
 
     @model_validator(mode="after")
     def check_at_least_one_field(self) -> "DatabaseSettingsUpdateRequest":
-        if all(
-            getattr(self, f) is None
-            for f in (
-                "host", "port", "app_database", "app_username",
-                "app_password", "pool_size", "pool_max_overflow",
-            )
-        ):
+        if not self.model_fields_set:
             raise ValueError("At least one setting must be provided")
         return self
 
