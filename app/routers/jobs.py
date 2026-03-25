@@ -93,7 +93,7 @@ def get_job(
     return _redact_ip(job, current_user, db)
 
 
-@router.post("/{job_id}/start", response_model=ExportJobSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
+@router.post("/{job_id}/start", response_model=ExportJobSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
 def start_job(
     job_id: int,
     body: JobStart,
