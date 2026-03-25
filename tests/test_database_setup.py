@@ -687,7 +687,7 @@ class TestDatabaseSettingsEndpoint:
             json={"host": "db2.internal"},
         )
 
-        assert resp.status_code == 400
+        assert resp.status_code == 503
         assert "Could not connect" in resp.json()["message"]
 
     @patch("app.services.database_service.update_database_settings")

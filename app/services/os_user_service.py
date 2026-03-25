@@ -33,6 +33,7 @@ from app.constants import (
     RESERVED_USERNAMES,
     USERNAME_RE,
 )
+from app.exceptions import AuthorizationError
 
 # Re-export platform-neutral types so existing ``os_user_service.X`` access
 # (e.g. ``os_user_service.OSUserError``) keeps working.
@@ -222,9 +223,9 @@ def _require_ecube_managed_user(username: str) -> None:
     pass the POSIX username regex.
     """
     if _is_reserved_username(username):
-        raise ValueError(f"Cannot modify reserved system account: {username}")
+        raise AuthorizationError(f"Cannot modify reserved system account: {username}")
     if not _is_ecube_managed(username):
-        raise ValueError(
+        raise AuthorizationError(
             f"User '{username}' is not in any ecube-* group and cannot be "
             "managed through this API. Only ECUBE-managed accounts can be "
             "modified or deleted."
@@ -284,7 +285,7 @@ def create_user(
     """
     validate_username(username)
     if _is_reserved_username(username):
-        raise ValueError(f"Cannot create reserved username: {username}")
+        raise AuthorizationError(f"Cannot create reserved username: {username}")
     if user_exists(username):
         raise OSUserError(f"User '{username}' already exists")
     validate_password(password)

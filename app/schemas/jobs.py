@@ -60,7 +60,7 @@ class JobCreate(StrictIntMixin, BaseModel):
     max_file_retries: StrictInt = Field(default=3, ge=0, description="Maximum number of retries for failed files (0+)")
     retry_delay_seconds: StrictInt = Field(default=1, ge=0, description="Delay between retries in seconds (0+)")
     created_by: Optional[SafeStr] = Field(default=None, description="Username of the job creator")
-    callback_url: Optional[SafeStr] = Field(default=None, json_schema_extra={"pattern": "^https://"}, description="HTTPS URL to receive a POST callback when the job reaches a terminal state (COMPLETED or FAILED)")
+    callback_url: Optional[SafeStr] = Field(default=None, json_schema_extra={"pattern": "^https://[a-zA-Z0-9]"}, description="HTTPS URL to receive a POST callback when the job reaches a terminal state (COMPLETED or FAILED)")
 
     @field_validator("callback_url")
     @classmethod
