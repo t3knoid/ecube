@@ -246,6 +246,16 @@ class Settings(BaseSettings):
     audit_log_max_limit: int = 1000
 
     # ---------------------------------------------------------------------------
+    # CORS configuration
+    # ---------------------------------------------------------------------------
+
+    #: Origins permitted for cross-origin requests.  Typically needed only
+    #: during development (Vite dev server on a different port) or when
+    #: Swagger UI is served from a different origin.  In production, nginx
+    #: proxies everything on the same origin so CORS is not triggered.
+    cors_allowed_origins: List[str] = ["https://localhost:8443"]
+
+    # ---------------------------------------------------------------------------
     # Reverse proxy / client IP settings
     # ---------------------------------------------------------------------------
 
