@@ -143,6 +143,19 @@ class TestSettingsDefaults:
         s = Settings(database_url="sqlite://")
         assert s.api_contact_email == "support@ecube.local"
 
+    def test_cors_allowed_origins_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.cors_allowed_origins == []
+
+    def test_cors_allowed_origins_from_env(self):
+        env = {"CORS_ALLOWED_ORIGINS": '["http://localhost:5173","https://example.com"]'}
+        with patch.dict("os.environ", env):
+            s = Settings(database_url="sqlite://")
+        assert s.cors_allowed_origins == [
+            "http://localhost:5173",
+            "https://example.com",
+        ]
+
 
 # ---------------------------------------------------------------------------
 # Audit log retention cleanup
