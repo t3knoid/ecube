@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import Query
 from pydantic import model_validator
@@ -14,28 +13,39 @@ from pydantic import model_validator
 # ---------------------------------------------------------------------------
 
 # Schema overrides that force OpenAPI to emit a clean, non-nullable type
-# even though the Python annotation is Optional.
-_INT_SCHEMA = {"type": "integer", "anyOf": None}
-_DATETIME_SCHEMA = {"type": "string", "format": "date-time", "anyOf": None}
+# even though the Python annotation is Optional.  We use a callable so we
+# can *remove* the ``anyOf`` key rather than setting it to ``None`` (which
+# would produce ``anyOf: null`` — invalid in OpenAPI 3.1 / JSON Schema).
 
 
-def OptionalIntQuery(*, description: str, **kwargs: Any) -> Optional[int]:
+def _int_schema(schema: dict[str, Any]) -> None:
+    schema.pop("anyOf", None)
+    schema["type"] = "integer"
+
+
+def _datetime_schema(schema: dict[str, Any]) -> None:
+    schema.pop("anyOf", None)
+    schema["type"] = "string"
+    schema["format"] = "date-time"
+
+
+def OptionalIntQuery(*, description: str, **kwargs: Any) -> Any:
     """``Query(default=None)`` typed as ``Optional[int]`` with a clean
     ``{type: integer}`` OpenAPI schema (no ``anyOf`` / ``null``)."""
-    return Query(  # type: ignore[return-value]
+    return Query(
         default=None,
-        json_schema_extra=_INT_SCHEMA,
+        json_schema_extra=_int_schema,
         description=description,
         **kwargs,
     )
 
 
-def OptionalDatetimeQuery(*, description: str, **kwargs: Any) -> Optional[datetime]:
+def OptionalDatetimeQuery(*, description: str, **kwargs: Any) -> Any:
     """``Query(default=None)`` typed as ``Optional[datetime]`` with a clean
     ``{type: string, format: date-time}`` OpenAPI schema."""
-    return Query(  # type: ignore[return-value]
+    return Query(
         default=None,
-        json_schema_extra=_DATETIME_SCHEMA,
+        json_schema_extra=_datetime_schema,
         description=description,
         **kwargs,
     )
