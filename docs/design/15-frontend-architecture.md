@@ -61,13 +61,13 @@ This document defines the architecture for the ECUBE web frontend — a Vue 3 si
 
 | Component | Choice | Version Target | Rationale |
 |-----------|--------|---------------|-----------|
-| **Framework** | Vue 3 | 3.4+ | Composition API with `<script setup>` SFCs; gentle learning curve; strong ecosystem |
-| **Bundler** | Vite | 5.x | Fast HMR, native ES module dev server, optimized production builds |
-| **Router** | Vue Router | 4.x | Official Vue router; supports navigation guards for auth/role gating |
-| **State Management** | Pinia | 2.x | Official Vue store; Composition API native; devtools integration |
+| **Framework** | Vue 3 | 3.5+ | Composition API with `<script setup>` SFCs; gentle learning curve; strong ecosystem |
+| **Bundler** | Vite | 7.x | Fast HMR, native ES module dev server, optimized production builds |
+| **Router** | Vue Router | 5.x | Official Vue router; supports navigation guards for auth/role gating |
+| **State Management** | Pinia | 3.x | Official Vue store; Composition API native; devtools integration |
 | **HTTP Client** | Axios | 1.x | Interceptors for Bearer token injection and error handling; request cancellation |
 | **Localization** | Vue I18n | 9.x | Official i18n plugin for Vue 3; supports lazy-loaded locale files |
-| **Testing (E2E)** | Playwright | Latest | Cross-browser testing (Chromium, WebKit, Firefox); reliable auto-waiting |
+| **Testing (E2E)** | Playwright | Latest | Cross-browser testing (Chromium, WebKit); reliable auto-waiting |
 | **Testing (Unit)** | Vitest | Latest | Vite-native test runner; Vue Test Utils integration |
 | **CSS Architecture** | CSS Custom Properties | — | Theme tokens as variables; no build-time dependency; user-customizable |
 
