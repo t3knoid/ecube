@@ -355,7 +355,7 @@ def get_database_status(
 @router.put(
     "/settings",
     response_model=DatabaseSettingsUpdateResponse,
-    responses={**R_400, **R_401, **R_403, **R_404, **R_422, **R_500},
+    responses={**R_401, **R_403, **R_404, **R_422, **R_500, **R_503},
 )
 def update_database_settings(
     body: DatabaseSettingsUpdateRequest,
@@ -379,7 +379,7 @@ def update_database_settings(
         )
     except ConnectionError as exc:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
         )
     except RuntimeError as exc:
