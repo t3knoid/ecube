@@ -9,10 +9,14 @@ from pydantic import BaseModel, Field, StrictBool, StrictInt, field_validator, m
 
 from app.schemas.types import StrictIntMixin
 
-# Only allow valid hostnames or IPv4 addresses — no URLs, no schemes, no paths.
-_HOSTNAME_RE = re.compile(
-    r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.[A-Za-z0-9-]{1,63})*$"
+# Canonical hostname pattern — shared between OpenAPI schema and runtime
+# validation so the two can never drift.  Each DNS label must start and end
+# with an alphanumeric character and be 1-63 characters long.
+_HOST_PATTERN = (
+    r"^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+    r"(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$"
 )
+_HOST_RE = re.compile(_HOST_PATTERN)
 _IPV4_RE = re.compile(
     r"^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$"
 )
@@ -26,7 +30,7 @@ def _validate_host(v: str) -> str:
         raise ValueError("Host must not be empty")
     if "://" in v or "/" in v or "@" in v:
         raise ValueError("Host must be a hostname or IP address, not a URL")
-    if not (_HOSTNAME_RE.match(v) or _IPV4_RE.match(v)):
+    if not (_HOST_RE.match(v) or _IPV4_RE.match(v)):
         raise ValueError(
             "Host must be a valid hostname or IPv4 address"
         )
@@ -51,7 +55,7 @@ def _validate_pg_identifier(v: str) -> str:
 class DatabaseTestConnectionRequest(StrictIntMixin, BaseModel):
     """Request body for ``POST /setup/database/test-connection``."""
 
-    host: str = Field(..., min_length=1, max_length=255, json_schema_extra={"pattern": "^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$"}, description="PostgreSQL server hostname or IP")
+    host: str = Field(..., min_length=1, max_length=255, json_schema_extra={"pattern": _HOST_PATTERN}, description="PostgreSQL server hostname or IP")
     port: StrictInt = Field(default=5432, ge=1, le=65535, description="PostgreSQL server port")
     admin_username: str = Field(..., min_length=1, max_length=63, description="PostgreSQL admin username")
     admin_password: str = Field(..., min_length=1, description="PostgreSQL admin password")
@@ -77,7 +81,7 @@ class DatabaseTestConnectionResponse(BaseModel):
 class DatabaseProvisionRequest(StrictIntMixin, BaseModel):
     """Request body for ``POST /setup/database/provision``."""
 
-    host: str = Field(..., min_length=1, max_length=255, json_schema_extra={"pattern": "^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$"}, description="PostgreSQL server hostname or IP")
+    host: str = Field(..., min_length=1, max_length=255, json_schema_extra={"pattern": _HOST_PATTERN}, description="PostgreSQL server hostname or IP")
     port: StrictInt = Field(default=5432, ge=1, le=65535, description="PostgreSQL server port")
     admin_username: str = Field(..., min_length=1, max_length=63, description="PostgreSQL admin username")
     admin_password: str = Field(..., min_length=1, description="PostgreSQL admin password")
@@ -140,7 +144,7 @@ class DatabaseSettingsUpdateRequest(StrictIntMixin, BaseModel):
 
     model_config = {"json_schema_extra": {"minProperties": 1}}
 
-    host: Optional[str] = Field(default=None, min_length=1, max_length=255, json_schema_extra={"pattern": "^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$"}, description="PostgreSQL host")
+    host: Optional[str] = Field(default=None, min_length=1, max_length=255, json_schema_extra={"pattern": _HOST_PATTERN}, description="PostgreSQL host")
     port: Optional[StrictInt] = Field(default=None, ge=1, le=65535, description="PostgreSQL port")
     app_database: Optional[str] = Field(default=None, min_length=1, max_length=63, json_schema_extra={"pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"}, description="Database name")
     app_username: Optional[str] = Field(default=None, min_length=1, max_length=63, json_schema_extra={"pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"}, description="Database user")
