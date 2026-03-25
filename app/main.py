@@ -244,12 +244,13 @@ def custom_openapi():
             continue
         for operation in path_item.values():
             if isinstance(operation, dict) and "responses" in operation:
-                if "security" not in operation:
-                    if path in _conditional_auth_paths:
-                        # Optional bearer: allow unauthenticated OR authenticated
-                        operation["security"] = [{"HTTPBearer": []}, {}]
-                    else:
-                        operation["security"] = [{"HTTPBearer": []}]
+                if path in _conditional_auth_paths:
+                    # Optional bearer: allow unauthenticated OR authenticated.
+                    # Set unconditionally — FastAPI may pre-populate security
+                    # from the HTTPBearer dependency on these routes.
+                    operation["security"] = [{"HTTPBearer": []}, {}]
+                elif "security" not in operation:
+                    operation["security"] = [{"HTTPBearer": []}]
 
     app.openapi_schema = openapi_schema
     return app.openapi_schema
