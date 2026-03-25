@@ -5,6 +5,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.constants import ECUBE_GROUP_PREFIX, ECUBE_GROUPNAME_PATTERN
 from app.schemas.users import RoleName
 
 _UNSAFE_PASSWORD_CHARS = frozenset("\n\r:")
@@ -53,6 +54,32 @@ class LogFilesResponse(BaseModel):
     log_directory: str = Field(..., description="Absolute path to the log directory")
 
 
+class _GroupItem(str):
+    """Constrained string for group names used in list fields."""
+
+    @classmethod
+    def __get_pydantic_core_schema__(cls, source_type, handler):
+        from pydantic_core import core_schema
+        return core_schema.str_schema(
+            min_length=1,
+            max_length=32,
+            pattern=r"^[a-z_][a-z0-9_-]{0,31}$",
+        )
+
+
+class _EcubeGroupItem(str):
+    """Constrained string for ecube-prefixed group names."""
+
+    @classmethod
+    def __get_pydantic_core_schema__(cls, source_type, handler):
+        from pydantic_core import core_schema
+        return core_schema.str_schema(
+            min_length=1,
+            max_length=32,
+            pattern=ECUBE_GROUPNAME_PATTERN,
+        )
+
+
 # ---------------------------------------------------------------------------
 # OS user management schemas
 # ---------------------------------------------------------------------------
@@ -60,6 +87,8 @@ class LogFilesResponse(BaseModel):
 
 class CreateOSUserRequest(BaseModel):
     """Request body for ``POST /admin/os-users``."""
+
+    model_config = {"extra": "forbid"}
 
     username: str = Field(
         ...,
@@ -71,7 +100,8 @@ class CreateOSUserRequest(BaseModel):
     password: str = Field(
         ...,
         min_length=1,
-        description="Initial password for the user",
+        pattern=r"^[^\n\r:]+$",
+        description="Initial password for the user (newlines and colons are not permitted)",
     )
 
     @field_validator("password")
@@ -79,10 +109,24 @@ class CreateOSUserRequest(BaseModel):
     def password_safe_chars(cls, v: str) -> str:
         return _check_password_safety(v)
 
-    groups: Optional[List[str]] = Field(
-        default=None,
-        description="OS groups to add the user to",
+    groups: List[_GroupItem] = Field(
+        ...,
+        min_length=1,
+        description="OS groups to add the user to (at least one must start with 'ecube-')",
+        json_schema_extra={
+            "contains": {"type": "string", "pattern": ECUBE_GROUPNAME_PATTERN},
+        },
     )
+
+    @field_validator("groups")
+    @classmethod
+    def _require_ecube_group(cls, v: List[str]) -> List[str]:
+        if not any(g.startswith(ECUBE_GROUP_PREFIX) for g in v):
+            raise ValueError(
+                f"At least one group starting with '{ECUBE_GROUP_PREFIX}' is required "
+                "so the account remains manageable through the API."
+            )
+        return v
     roles: Optional[List[RoleName]] = Field(
         default=None,
         description="ECUBE roles to assign to the user in the database",
@@ -112,7 +156,8 @@ class ResetPasswordRequest(BaseModel):
     password: str = Field(
         ...,
         min_length=1,
-        description="New password for the user",
+        pattern=r"^[^\n\r:]+$",
+        description="New password for the user (newlines and colons are not permitted)",
     )
 
     @field_validator("password")
@@ -124,7 +169,7 @@ class ResetPasswordRequest(BaseModel):
 class SetOSGroupsRequest(BaseModel):
     """Request body for ``PUT /admin/os-users/{username}/groups``."""
 
-    groups: List[str] = Field(
+    groups: List[_EcubeGroupItem] = Field(
         ...,
         min_length=1,
         description=(
@@ -137,7 +182,7 @@ class SetOSGroupsRequest(BaseModel):
 class AddOSGroupsRequest(BaseModel):
     """Request body for ``POST /admin/os-users/{username}/groups``."""
 
-    groups: List[str] = Field(
+    groups: List[_GroupItem] = Field(
         ...,
         min_length=1,
         description="OS groups to add to the user (appends without removing existing groups)",
@@ -156,8 +201,8 @@ class CreateOSGroupRequest(BaseModel):
         ...,
         min_length=1,
         max_length=32,
-        pattern=r"^[a-z_][a-z0-9_-]{0,31}$",
-        description="POSIX group name",
+        pattern=ECUBE_GROUPNAME_PATTERN,
+        description="ECUBE-managed POSIX group name (must start with 'ecube-')",
     )
 
 
@@ -192,6 +237,8 @@ class SetupStatusResponse(BaseModel):
 class SetupInitializeRequest(BaseModel):
     """Request body for ``POST /setup/initialize``."""
 
+    model_config = {"extra": "forbid"}
+
     username: str = Field(
         ...,
         min_length=1,
@@ -202,7 +249,8 @@ class SetupInitializeRequest(BaseModel):
     password: str = Field(
         ...,
         min_length=1,
-        description="Admin password",
+        pattern=r"^[^\n\r:]+$",
+        description="Admin password (newlines and colons are not permitted)",
     )
 
     @field_validator("password")

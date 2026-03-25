@@ -6,7 +6,7 @@ from typing import List
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
 from app.schemas.network import MountCreate, NetworkMountSchema
-from app.schemas.errors import R_401, R_403, R_404, R_422, R_500
+from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500
 from app.services import mount_service
 from app.utils.client_ip import get_client_ip
 
@@ -18,7 +18,7 @@ _ALL_ROLES = require_roles("admin", "manager", "processor", "auditor")
 _ADMIN_MANAGER = require_roles("admin", "manager")
 
 
-@router.post("", response_model=NetworkMountSchema, responses={**R_401, **R_403, **R_422, **R_500})
+@router.post("", response_model=NetworkMountSchema, responses={**R_400, **R_401, **R_403, **R_409, **R_422, **R_500})
 def add_mount(
     body: MountCreate,
     *,
@@ -35,23 +35,6 @@ def add_mount(
     **Roles:** ``admin``, ``manager``
     """
     return mount_service.add_mount(body, db, actor=current_user.username, client_ip=get_client_ip(request))
-
-
-@router.delete("/{mount_id}", status_code=204, responses={**R_401, **R_403, **R_404, **R_422, **R_500})
-def remove_mount(
-    mount_id: int,
-    *,
-    db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(_ADMIN_MANAGER),
-    request: Request,
-):
-    """Remove a network mount from the system.
-
-    Deletes the mount configuration and credentials. In-progress jobs using this mount may fail.
-
-    **Roles:** ``admin``, ``manager``
-    """
-    mount_service.remove_mount(mount_id, db, actor=current_user.username, client_ip=get_client_ip(request))
 
 
 @router.get("", response_model=List[NetworkMountSchema], responses={**R_401, **R_403})
@@ -82,6 +65,36 @@ def validate_all_mounts(
     **Roles:** ``admin``, ``manager``
     """
     return mount_service.validate_all_mounts(db, actor=current_user.username, client_ip=get_client_ip(request))
+
+
+@router.delete("/validate", status_code=405, responses={**R_401, **R_403}, include_in_schema=False)
+def _delete_validate_not_allowed(
+    _: CurrentUser = Depends(_ADMIN_MANAGER),
+):
+    """Reject DELETE on the /validate path with 405 Method Not Allowed."""
+    from fastapi import HTTPException
+    raise HTTPException(
+        status_code=405,
+        detail="Method Not Allowed",
+        headers={"Allow": "POST"},
+    )
+
+
+@router.delete("/{mount_id}", status_code=204, responses={**R_401, **R_403, **R_404, **R_422, **R_500})
+def remove_mount(
+    mount_id: int,
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER),
+    request: Request,
+):
+    """Remove a network mount from the system.
+
+    Deletes the mount configuration and credentials. In-progress jobs using this mount may fail.
+
+    **Roles:** ``admin``, ``manager``
+    """
+    mount_service.remove_mount(mount_id, db, actor=current_user.username, client_ip=get_client_ip(request))
 
 
 @router.post("/{mount_id}/validate", response_model=NetworkMountSchema, responses={**R_401, **R_403, **R_404, **R_422, **R_500})
