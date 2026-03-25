@@ -211,3 +211,11 @@ __marimo__/
 
 # Schemathesis
 schemathesis-output.txt
+
+# Frontend (Node.js)
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/

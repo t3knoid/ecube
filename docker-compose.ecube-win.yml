@@ -28,6 +28,21 @@ services:
       postgres:
         condition: service_healthy
 
+  ecube-ui:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: ecube-ui
+    container_name: ecube-ui
+    restart: unless-stopped
+    ports:
+      - "${UI_PORT:-8443}:443"
+    volumes:
+      - /opt/ecube/certs:/etc/nginx/certs:ro
+      - /opt/ecube/themes:/usr/share/nginx/html/themes
+    depends_on:
+      - ecube-app
+
   postgres:
     image: postgres:16
     container_name: ecube-postgres
