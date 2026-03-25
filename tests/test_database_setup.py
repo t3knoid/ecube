@@ -151,6 +151,12 @@ class TestDatabaseSchemaValidation:
         assert req.app_database == "ecube_prod"
         assert req.app_username == "ecube_user"
 
+    def test_settings_accepts_explicit_nulls_as_noop(self):
+        """Explicit null values for known fields are schema-compliant."""
+        req = DatabaseSettingsUpdateRequest(app_database=None)
+        assert req.host is None
+        assert req.app_database is None
+
     def test_settings_rejects_empty(self):
         with pytest.raises(ValidationError, match="At least one setting"):
             DatabaseSettingsUpdateRequest()
