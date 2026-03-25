@@ -8,6 +8,8 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.routing import Match
 
 from app.auth import get_current_user
 from app import API_VERSION, __version__
@@ -242,12 +244,13 @@ def custom_openapi():
             continue
         for operation in path_item.values():
             if isinstance(operation, dict) and "responses" in operation:
-                if "security" not in operation:
-                    if path in _conditional_auth_paths:
-                        # Optional bearer: allow unauthenticated OR authenticated
-                        operation["security"] = [{"HTTPBearer": []}, {}]
-                    else:
-                        operation["security"] = [{"HTTPBearer": []}]
+                if path in _conditional_auth_paths:
+                    # Optional bearer: allow unauthenticated OR authenticated.
+                    # Set unconditionally — FastAPI may pre-populate security
+                    # from the HTTPBearer dependency on these routes.
+                    operation["security"] = [{"HTTPBearer": []}, {}]
+                elif "security" not in operation:
+                    operation["security"] = [{"HTTPBearer": []}]
 
     app.openapi_schema = openapi_schema
     return app.openapi_schema
@@ -279,6 +282,17 @@ app.include_router(users.router, dependencies=[Depends(get_current_user)])
 def _error_response(status_code: int, code: str, message: str, trace_id: str) -> JSONResponse:
     body = ErrorResponse(code=code, message=message, trace_id=trace_id)
     return JSONResponse(status_code=status_code, content=body.model_dump())
+
+
+def _compute_allowed_methods(request: Request) -> str:
+    """Compute the Allow header value for a 405 Method Not Allowed response."""
+    methods: set[str] = set()
+    for route in app.routes:
+        if hasattr(route, "methods"):
+            match, _ = route.matches(request.scope)
+            if match != Match.NONE:
+                methods.update(route.methods)
+    return ", ".join(sorted(methods))
 
 
 def _try_log_auth_failure(request: Request, reason: str, trace_id: str) -> None:
@@ -344,8 +358,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     return _error_response(422, "VALIDATION_ERROR", detail, trace_id)
 
 
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
     code_map = {
         401: "UNAUTHORIZED",
         403: "FORBIDDEN",
@@ -358,7 +372,16 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     logger.info("%d %s trace_id=%s path=%s", exc.status_code, code, trace_id, request.url.path)
     if exc.status_code == 401:
         _try_log_auth_failure(request, reason=detail, trace_id=trace_id)
-    return _error_response(exc.status_code, code, detail, trace_id)
+    response = _error_response(exc.status_code, code, detail, trace_id)
+    # Forward headers from the original exception (e.g. Allow for 405).
+    if exc.headers:
+        response.headers.update(exc.headers)
+    # Compute Allow header for 405 as fallback if Starlette didn't provide it.
+    if exc.status_code == 405 and "allow" not in response.headers:
+        allowed = _compute_allowed_methods(request)
+        if allowed:
+            response.headers["Allow"] = allowed
+    return response
 
 
 @app.exception_handler(Exception)

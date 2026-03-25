@@ -5,12 +5,18 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, StrictBool, StrictInt, field_validator, model_validator
 
-# Only allow valid hostnames or IPv4 addresses — no URLs, no schemes, no paths.
-_HOSTNAME_RE = re.compile(
-    r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.[A-Za-z0-9-]{1,63})*$"
+from app.schemas.types import StrictIntMixin
+
+# Canonical hostname pattern — shared between OpenAPI schema and runtime
+# validation so the two can never drift.  Each DNS label must start and end
+# with an alphanumeric character and be 1-63 characters long.
+_HOST_PATTERN = (
+    r"^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+    r"(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$"
 )
+_HOST_RE = re.compile(_HOST_PATTERN)
 _IPV4_RE = re.compile(
     r"^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$"
 )
@@ -24,7 +30,7 @@ def _validate_host(v: str) -> str:
         raise ValueError("Host must not be empty")
     if "://" in v or "/" in v or "@" in v:
         raise ValueError("Host must be a hostname or IP address, not a URL")
-    if not (_HOSTNAME_RE.match(v) or _IPV4_RE.match(v)):
+    if not (_HOST_RE.match(v) or _IPV4_RE.match(v)):
         raise ValueError(
             "Host must be a valid hostname or IPv4 address"
         )
@@ -46,11 +52,11 @@ def _validate_pg_identifier(v: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-class DatabaseTestConnectionRequest(BaseModel):
+class DatabaseTestConnectionRequest(StrictIntMixin, BaseModel):
     """Request body for ``POST /setup/database/test-connection``."""
 
-    host: str = Field(..., min_length=1, max_length=255, description="PostgreSQL server hostname or IP")
-    port: int = Field(default=5432, ge=1, le=65535, description="PostgreSQL server port")
+    host: str = Field(..., min_length=1, max_length=255, json_schema_extra={"pattern": _HOST_PATTERN}, description="PostgreSQL server hostname or IP")
+    port: StrictInt = Field(default=5432, ge=1, le=65535, description="PostgreSQL server port")
     admin_username: str = Field(..., min_length=1, max_length=63, description="PostgreSQL admin username")
     admin_password: str = Field(..., min_length=1, description="PostgreSQL admin password")
 
@@ -72,17 +78,17 @@ class DatabaseTestConnectionResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class DatabaseProvisionRequest(BaseModel):
+class DatabaseProvisionRequest(StrictIntMixin, BaseModel):
     """Request body for ``POST /setup/database/provision``."""
 
-    host: str = Field(..., min_length=1, max_length=255, description="PostgreSQL server hostname or IP")
-    port: int = Field(default=5432, ge=1, le=65535, description="PostgreSQL server port")
+    host: str = Field(..., min_length=1, max_length=255, json_schema_extra={"pattern": _HOST_PATTERN}, description="PostgreSQL server hostname or IP")
+    port: StrictInt = Field(default=5432, ge=1, le=65535, description="PostgreSQL server port")
     admin_username: str = Field(..., min_length=1, max_length=63, description="PostgreSQL admin username")
     admin_password: str = Field(..., min_length=1, description="PostgreSQL admin password")
-    app_database: str = Field(default="ecube", min_length=1, max_length=63, description="Application database name")
-    app_username: str = Field(default="ecube", min_length=1, max_length=63, description="Application database user")
+    app_database: str = Field(default="ecube", min_length=1, max_length=63, json_schema_extra={"pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"}, description="Application database name")
+    app_username: str = Field(default="ecube", min_length=1, max_length=63, json_schema_extra={"pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"}, description="Application database user")
     app_password: str = Field(..., min_length=1, description="Application database user password")
-    force: bool = Field(default=False, description="Allow re-provisioning an already-provisioned database")
+    force: StrictBool = Field(default=False, description="Allow re-provisioning an already-provisioned database")
 
     @field_validator("host")
     @classmethod
@@ -130,29 +136,25 @@ class DatabaseStatusResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class DatabaseSettingsUpdateRequest(BaseModel):
+class DatabaseSettingsUpdateRequest(StrictIntMixin, BaseModel):
     """Request body for ``PUT /setup/database/settings``.
 
     All fields are optional — only supplied fields are updated.
     """
 
-    host: Optional[str] = Field(default=None, min_length=1, max_length=255, description="PostgreSQL host")
-    port: Optional[int] = Field(default=None, ge=1, le=65535, description="PostgreSQL port")
-    app_database: Optional[str] = Field(default=None, min_length=1, max_length=63, description="Database name")
-    app_username: Optional[str] = Field(default=None, min_length=1, max_length=63, description="Database user")
+    model_config = {"extra": "forbid", "json_schema_extra": {"minProperties": 1}}
+
+    host: Optional[str] = Field(default=None, min_length=1, max_length=255, json_schema_extra={"pattern": _HOST_PATTERN}, description="PostgreSQL host")
+    port: Optional[StrictInt] = Field(default=None, ge=1, le=65535, description="PostgreSQL port")
+    app_database: Optional[str] = Field(default=None, min_length=1, max_length=63, json_schema_extra={"pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"}, description="Database name")
+    app_username: Optional[str] = Field(default=None, min_length=1, max_length=63, json_schema_extra={"pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"}, description="Database user")
     app_password: Optional[str] = Field(default=None, min_length=1, description="Database user password")
-    pool_size: Optional[int] = Field(default=None, ge=1, le=100, description="Connection pool size")
-    pool_max_overflow: Optional[int] = Field(default=None, ge=0, le=200, description="Max overflow connections")
+    pool_size: Optional[StrictInt] = Field(default=None, ge=1, le=100, description="Connection pool size")
+    pool_max_overflow: Optional[StrictInt] = Field(default=None, ge=0, le=200, description="Max overflow connections")
 
     @model_validator(mode="after")
     def check_at_least_one_field(self) -> "DatabaseSettingsUpdateRequest":
-        if all(
-            getattr(self, f) is None
-            for f in (
-                "host", "port", "app_database", "app_username",
-                "app_password", "pool_size", "pool_max_overflow",
-            )
-        ):
+        if not self.model_fields_set:
             raise ValueError("At least one setting must be provided")
         return self
 
