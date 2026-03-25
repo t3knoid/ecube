@@ -55,10 +55,10 @@ class JobCreate(StrictIntMixin, BaseModel):
     evidence_number: SafeStr = Field(..., min_length=1, description="Evidence case number or identifier")
     source_path: StrictSafeStr = Field(..., min_length=1, description="Path to source data on network mount or local filesystem")
     target_mount_path: Optional[StrictSafeStr] = Field(default=None, description="Alternative target mount; defaults to assigned drive")
-    drive_id: Optional[StrictInt] = Field(default=None, description="Pre-assigned USB drive ID")
+    drive_id: Optional[StrictInt] = Field(default=None, ge=1, description="Pre-assigned USB drive ID")
     thread_count: StrictInt = Field(default=4, ge=1, le=8, description="Number of parallel copy threads (1-8)")
-    max_file_retries: StrictInt = Field(default=3, ge=0, description="Maximum number of retries for failed files (0+)")
-    retry_delay_seconds: StrictInt = Field(default=1, ge=0, description="Delay between retries in seconds (0+)")
+    max_file_retries: StrictInt = Field(default=3, ge=0, le=100, description="Maximum number of retries for failed files (0-100)")
+    retry_delay_seconds: StrictInt = Field(default=1, ge=0, le=3600, description="Delay between retries in seconds (0-3600)")
     created_by: Optional[SafeStr] = Field(default=None, description="Username of the job creator")
     callback_url: Optional[SafeStr] = Field(default=None, json_schema_extra={"pattern": "^https://[a-zA-Z0-9]"}, description="HTTPS URL to receive a POST callback when the job reaches a terminal state (COMPLETED or FAILED)")
 
