@@ -188,7 +188,6 @@ def _require_admin_or_initial_setup(
     "/test-connection",
     response_model=DatabaseTestConnectionResponse,
     responses={**R_400, **R_401, **R_403, **R_404, **R_422, **R_503},
-    openapi_extra={"security": [{}]},
 )
 def test_database_connection(
     body: DatabaseTestConnectionRequest,
@@ -241,7 +240,6 @@ def test_database_connection(
     "/provision",
     response_model=DatabaseProvisionResponse,
     responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500, **R_503},
-    openapi_extra={"security": [{}]},
 )
 def provision_database(
     body: DatabaseProvisionRequest,
