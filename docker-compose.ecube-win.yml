@@ -6,8 +6,11 @@ services:
     image: ecube-app
     container_name: ecube-app
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:${HOST_PORT:-8000}:8000"
+    # Port 8000 is intentionally not published to the host.
+    # All API access goes through ecube-ui (nginx) on port 8443,
+    # which ensures TRUST_PROXY_HEADERS cannot be exploited by
+    # direct clients spoofing X-Forwarded-For / X-Real-IP.
+    # For debugging: docker compose exec ecube-app curl http://localhost:8000/health
     environment:
       DATABASE_URL: postgresql://ecube:ecube@postgres:5432/ecube
       PYTHONUNBUFFERED: "1"
