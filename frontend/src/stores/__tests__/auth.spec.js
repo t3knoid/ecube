@@ -184,6 +184,23 @@ describe('Auth Store', () => {
     vi.restoreAllMocks()
   })
 
+  it('login() throws TokenError when payload is not valid JSON', async () => {
+    const store = useAuthStore()
+    // Build a three-segment token whose payload is not valid JSON
+    const header = btoa(JSON.stringify({ alg: 'HS256' }))
+    const badPayload = btoa('not-json')
+    const sig = btoa('sig')
+    vi.spyOn(authApi, 'postLogin').mockResolvedValue({
+      data: { access_token: `${header}.${badPayload}.${sig}` },
+    })
+
+    await expect(store.login('frank', 'pass')).rejects.toThrow(TokenError)
+    await expect(store.login('frank', 'pass')).rejects.toThrow('unreadable payload')
+    expect(store.isAuthenticated).toBe(false)
+
+    vi.restoreAllMocks()
+  })
+
   it('initialize() silently logs out when stored token is malformed', () => {
     const store = useAuthStore()
     sessionStorage.setItem('ecube_token', 'garbage')
