@@ -5,8 +5,22 @@ import { postLogin } from '@/api/auth.js'
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
 const LOGIN_PATH = `${BASE}/login`
 
+class TokenError extends Error {
+  constructor(message) {
+    super(message)
+    this.name = 'TokenError'
+  }
+}
+
 function decodeJwtPayload(token) {
-  const base64Url = token.split('.')[1]
+  if (typeof token !== 'string' || !token) {
+    throw new TokenError('Server returned an invalid token (not a string).')
+  }
+  const parts = token.split('.')
+  if (parts.length !== 3 || !parts[1]) {
+    throw new TokenError('Server returned a malformed token.')
+  }
+  const base64Url = parts[1]
   let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
   // Add padding to a multiple of 4 — JWT Base64URL commonly omits '='
   const pad = base64.length % 4
@@ -142,3 +156,5 @@ export const useAuthStore = defineStore('auth', () => {
     initialize,
   }
 })
+
+export { TokenError }
