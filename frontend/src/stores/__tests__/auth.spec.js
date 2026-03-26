@@ -84,11 +84,11 @@ describe('Auth Store', () => {
     expect(store.hasAnyRole(['admin', 'manager'])).toBe(false)
   })
 
-  it('logout clears all state and sessionStorage', () => {
+  it('clearAuth resets all state and sessionStorage', () => {
     const { store } = initWithToken({ sub: 'frank', roles: ['admin'], groups: [], exp: nowSec() + 3600 })
     expect(store.isAuthenticated).toBe(true)
 
-    store.logout()
+    store.clearAuth()
     expect(store.isAuthenticated).toBe(false)
     expect(store.token).toBeNull()
     expect(store.username).toBeNull()
@@ -96,7 +96,17 @@ describe('Auth Store', () => {
     expect(sessionStorage.getItem('ecube_token')).toBeNull()
   })
 
-  it('checkExpiry returns true and logs out when token expired', () => {
+  it('logout delegates to clearAuth without navigation', () => {
+    const { store } = initWithToken({ sub: 'frank', roles: ['admin'], groups: [], exp: nowSec() + 3600 })
+    expect(store.isAuthenticated).toBe(true)
+
+    store.logout()
+    expect(store.isAuthenticated).toBe(false)
+    expect(store.token).toBeNull()
+    expect(sessionStorage.getItem('ecube_token')).toBeNull()
+  })
+
+  it('checkExpiry returns true and clears auth when token expired', () => {
     const { store } = initWithToken({ sub: 'frank', roles: ['admin'], groups: [], exp: nowSec() + 10 })
     expect(store.isAuthenticated).toBe(true)
 
