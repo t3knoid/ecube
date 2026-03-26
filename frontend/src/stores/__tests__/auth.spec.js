@@ -99,7 +99,10 @@ describe('Auth Store', () => {
     expect(sessionStorage.getItem(STORAGE_TOKEN_KEY)).toBeNull()
   })
 
-  it('logout delegates to clearAuth without navigation', () => {
+  // logout() is intentionally a pure state reset — no navigation.
+  // Callers handle redirect: AppHeader uses router.push(), router guard
+  // returns { name: 'login' }. This keeps the store free of browser coupling.
+  it('logout resets auth state without triggering navigation', () => {
     const { store } = initWithToken({ sub: 'frank', roles: ['admin'], groups: [], exp: nowSec() + 3600 })
     expect(store.isAuthenticated).toBe(true)
 
