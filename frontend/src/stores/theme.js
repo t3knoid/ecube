@@ -14,7 +14,7 @@ export const useThemeStore = defineStore('theme', () => {
   const availableThemes = ref([...BUILT_IN_THEMES])
 
   /**
-   * Fetch the theme manifest from the server and merge with built-in themes.
+   * Fetch the theme manifest from the server to replace the built-in theme list.
    * Falls back to built-ins if the manifest is missing or malformed.
    */
   async function fetchManifest() {
