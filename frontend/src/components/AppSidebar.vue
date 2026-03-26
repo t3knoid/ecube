@@ -34,7 +34,8 @@ const visibleAdmin = computed(() => adminItems.filter(isVisible))
         :key="item.to"
         :to="item.to"
         class="sidebar-link"
-        active-class="sidebar-link-active"
+        :active-class="item.to === '/' ? '' : 'sidebar-link-active'"
+        :exact-active-class="item.to === '/' ? 'sidebar-link-active' : ''"
       >
         {{ item.label }}
       </RouterLink>
@@ -46,7 +47,8 @@ const visibleAdmin = computed(() => adminItems.filter(isVisible))
         :key="item.to"
         :to="item.to"
         class="sidebar-link"
-        active-class="sidebar-link-active"
+        :active-class="item.to === '/' ? '' : 'sidebar-link-active'"
+        :exact-active-class="item.to === '/' ? 'sidebar-link-active' : ''"
       >
         {{ item.label }}
       </RouterLink>
