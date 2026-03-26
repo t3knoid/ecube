@@ -1,7 +1,7 @@
 <script setup>
-import AppHeader from '@/components/AppHeader.vue'
-import AppSidebar from '@/components/AppSidebar.vue'
-import AppFooter from '@/components/AppFooter.vue'
+import AppHeader from '@/components/layout/AppHeader.vue'
+import AppSidebar from '@/components/layout/AppSidebar.vue'
+import AppFooter from '@/components/layout/AppFooter.vue'
 </script>
 
 <template>

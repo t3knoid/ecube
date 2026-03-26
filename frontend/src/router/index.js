@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { getSetupStatus } from '@/api/setup.js'
-import AppShell from '@/components/AppShell.vue'
+import AppShell from '@/components/layout/AppShell.vue'
 
 const routes = [
   {
