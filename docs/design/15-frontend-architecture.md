@@ -646,13 +646,15 @@ ecube-ui:
     context: ./frontend
     dockerfile: Dockerfile
   ports:
-    - "8443:443"
+    - "${UI_PORT:-8443}:443"
   volumes:
-    - /opt/ecube/certs:/etc/nginx/certs:ro          # TLS certificates
-    - /opt/ecube/themes:/usr/share/nginx/html/themes  # Custom themes (optional)
+    - ${ECUBE_CERTS_DIR:-./deploy/certs}:/etc/nginx/certs:ro          # TLS certificates
+    - ${ECUBE_THEMES_DIR:-./deploy/themes}:/usr/share/nginx/html/themes:ro  # Custom themes (optional)
   depends_on:
     - ecube-app
 ```
+
+Volume paths default to project-relative `./deploy/` for local development. For production, set `ECUBE_CERTS_DIR=/opt/ecube/certs` and `ECUBE_THEMES_DIR=/opt/ecube/themes` via environment or `.env` file.
 
 ### 11.4 Dockerfile (Multi-Stage)
 

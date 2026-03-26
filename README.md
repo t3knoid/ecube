@@ -18,13 +18,24 @@ ECUBE is a secure evidence export platform designed to copy eDiscovery data onto
 
 ## Quick Start
 
-> **Prerequisites:** PostgreSQL 14+ must be running and a database created for ECUBE.
-> See the [Installation Guide](docs/operations/03-installation.md) for full setup instructions,
-> or use the included Docker Compose file for a quick local database:
->
-> ```bash
-> docker compose -f docker-compose.ecube.yml up -d postgres
-> ```
+> **Prerequisites:** Docker and Docker Compose must be installed.
+> See the [Installation Guide](docs/operations/03-installation.md) for full setup instructions.
+
+```bash
+# Generate self-signed TLS certs for local testing
+mkdir -p deploy/certs deploy/themes
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout deploy/certs/key.pem \
+  -out deploy/certs/cert.pem \
+  -subj "/CN=localhost"
+
+# Start all services (postgres, ecube-app, ecube-ui)
+docker compose -f docker-compose.ecube.yml up -d
+```
+
+The UI is available at **https://localhost:8443** and the API at **https://localhost:8443/api**.
+
+To run the backend tests (uses SQLite in-memory — no PostgreSQL needed):
 
 ```bash
 # Create and activate a virtual environment
@@ -34,13 +45,7 @@ source .venv/bin/activate
 # Install the project and dev dependencies
 pip install -e ".[dev]"
 
-# Apply database migrations
-alembic upgrade head
-
-# Start the development server
-uvicorn app.main:app --reload
-
-# Run tests (uses SQLite in-memory — no PostgreSQL needed)
+# Run tests
 python -m pytest tests/ -v
 ```
 
