@@ -1,7 +1,5 @@
 import { test, expect } from '@playwright/test'
-
-// Must match STORAGE_TOKEN_KEY from src/constants/storage.js
-const STORAGE_TOKEN_KEY = 'ecube_token'
+import { STORAGE_TOKEN_KEY } from '../src/constants/storage.js'
 
 // Helper: create a fake JWT with the given payload (valid for e2e route testing)
 function makeToken(payload) {
