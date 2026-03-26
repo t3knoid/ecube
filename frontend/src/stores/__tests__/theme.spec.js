@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useThemeStore } from '@/stores/theme.js'
+import { STORAGE_THEME_KEY } from '@/constants/storage.js'
 
 // Provide a simple localStorage mock for jsdom environments where
 // the native implementation may be incomplete.
@@ -63,18 +64,18 @@ describe('Theme Store', () => {
   it('persists theme preference to localStorage', () => {
     const store = useThemeStore()
     store.loadTheme('dark')
-    expect(localStorage.getItem('ecube_theme')).toBe('dark')
+    expect(localStorage.getItem(STORAGE_THEME_KEY)).toBe('dark')
   })
 
   it('restores theme preference from localStorage', () => {
-    localStorage.setItem('ecube_theme', 'dark')
+    localStorage.setItem(STORAGE_THEME_KEY, 'dark')
     const store = useThemeStore()
     store.initialize()
     expect(store.currentTheme).toBe('dark')
   })
 
   it('falls back to default for unknown saved theme', () => {
-    localStorage.setItem('ecube_theme', 'nonexistent')
+    localStorage.setItem(STORAGE_THEME_KEY, 'nonexistent')
     const store = useThemeStore()
     store.initialize()
     expect(store.currentTheme).toBe('default')
