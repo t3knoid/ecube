@@ -56,7 +56,7 @@ function handleLogout() {
         v-if="remainingMinutes !== null"
         class="header-timer"
         :class="{ 'timer-warning': expiryWarning }"
-        :aria-label="t('auth.sessionExpiresIn', { minutes: remainingMinutes })"
+        :aria-label="t('auth.sessionExpiresIn', remainingMinutes, { minutes: remainingMinutes })"
       >
         <span aria-hidden="true">⏱</span> {{ remainingMinutes }}m
       </span>

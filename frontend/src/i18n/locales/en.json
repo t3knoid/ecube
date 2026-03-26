@@ -21,7 +21,7 @@
     "sessionExpired": "Session Expired",
     "sessionExpiredMessage": "Your session has expired. Please log in again to continue.",
     "insufficientPermissions": "You do not have permission to access this resource.",
-    "sessionExpiresIn": "Session expires in {minutes} minutes"
+    "sessionExpiresIn": "Session expires in {minutes} minute | Session expires in {minutes} minutes"
   },
   "drives": {
     "title": "Drives",
