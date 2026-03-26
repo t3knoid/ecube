@@ -41,8 +41,9 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function _applyToken(jwt) {
-    token.value = jwt
+    // Decode first so a malformed token never leaves the store partially updated
     const payload = decodeJwtPayload(jwt)
+    token.value = jwt
     username.value = payload.sub || payload.username || null
     roles.value = payload.roles || []
     groups.value = payload.groups || []
