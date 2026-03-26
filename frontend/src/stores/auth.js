@@ -81,6 +81,7 @@ export const useAuthStore = defineStore('auth', () => {
     roles.value = []
     groups.value = []
     expiresAt.value = null
+    expiredOnLoad.value = false
     sessionStorage.removeItem(STORAGE_TOKEN_KEY)
   }
 
@@ -131,8 +132,9 @@ export const useAuthStore = defineStore('auth', () => {
         _applyToken(saved)
         if (!isAuthenticated.value) {
           // Distinguish an expired token from a corrupt/invalid one
-          expiredOnLoad.value = !!expiresAt.value && Date.now() >= expiresAt.value
+          const wasExpired = !!expiresAt.value && Date.now() >= expiresAt.value
           clearAuth()
+          expiredOnLoad.value = wasExpired
         } else {
           _startExpiryCheck()
         }
