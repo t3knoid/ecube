@@ -72,6 +72,8 @@ export const useAuthStore = defineStore('auth', () => {
     sessionStorage.removeItem('ecube_token')
     if (window.location.pathname !== LOGIN_PATH) {
       window.location.href = expired ? `${LOGIN_PATH}?expired=1` : LOGIN_PATH
+    } else if (expired && !window.location.search.includes('expired=1')) {
+      window.location.href = `${LOGIN_PATH}?expired=1`
     }
   }
 
