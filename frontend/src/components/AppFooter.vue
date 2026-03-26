@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import { getSystemHealth } from '@/api/introspection.js'
+import { getSystemHealth, getVersion } from '@/api/introspection.js'
 
 const version = ref('—')
 const dbConnected = ref(null)
@@ -8,19 +8,28 @@ const activeJobs = ref(null)
 
 let pollInterval = null
 
+async function fetchVersion() {
+  try {
+    const resp = await getVersion()
+    version.value = resp.data.version || '—'
+  } catch {
+    // Version endpoint is best-effort; leave default
+  }
+}
+
 async function fetchHealth() {
   try {
     const resp = await getSystemHealth()
     const data = resp.data
-    version.value = data.version || '—'
     dbConnected.value = data.database === 'connected' || data.database === true
-    activeJobs.value = data.active_jobs ?? data.activeJobs ?? null
+    activeJobs.value = data.active_jobs ?? null
   } catch {
     dbConnected.value = false
   }
 }
 
 onMounted(() => {
+  fetchVersion()
   fetchHealth()
   pollInterval = setInterval(fetchHealth, 30000)
 })
