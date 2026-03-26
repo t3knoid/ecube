@@ -20,12 +20,9 @@ app.use(i18n)
 const authStore = useAuthStore()
 authStore.initialize()
 
-// Restore theme preference from localStorage (fetches manifest, then applies).
-// Always mount the app even if theme initialization fails.
+// Restore theme synchronously from localStorage, then fetch manifest in background.
 const themeStore = useThemeStore()
-themeStore.initialize().catch(() => {
-  themeStore.loadTheme('default')
-}).finally(() => {
-  app.use(router)
-  app.mount('#app')
-})
+themeStore.initialize()
+
+app.use(router)
+app.mount('#app')
