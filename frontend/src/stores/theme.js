@@ -53,7 +53,11 @@ export const useThemeStore = defineStore('theme', () => {
     }
 
     currentTheme.value = name
-    localStorage.setItem(STORAGE_THEME_KEY, name)
+    try {
+      localStorage.setItem(STORAGE_THEME_KEY, name)
+    } catch {
+      // Storage may be unavailable (quota exceeded, privacy mode, etc.)
+    }
   }
 
   /**
@@ -62,7 +66,12 @@ export const useThemeStore = defineStore('theme', () => {
    */
   async function initialize() {
     await fetchManifest()
-    const saved = localStorage.getItem(STORAGE_THEME_KEY)
+    let saved = null
+    try {
+      saved = localStorage.getItem(STORAGE_THEME_KEY)
+    } catch {
+      // Storage may be unavailable
+    }
     const themeName = saved && _isKnownTheme(saved) ? saved : 'default'
     loadTheme(themeName)
   }
