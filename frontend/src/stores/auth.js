@@ -27,13 +27,17 @@ function decodeJwtPayload(token) {
   if (pad) {
     base64 += '='.repeat(4 - pad)
   }
-  const json = decodeURIComponent(
-    atob(base64)
-      .split('')
-      .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-      .join(''),
-  )
-  return JSON.parse(json)
+  try {
+    const json = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join(''),
+    )
+    return JSON.parse(json)
+  } catch {
+    throw new TokenError('Server returned a token with an unreadable payload.')
+  }
 }
 
 export const useAuthStore = defineStore('auth', () => {
