@@ -1,5 +1,8 @@
 import { test, expect } from '@playwright/test'
 
+// Must match STORAGE_TOKEN_KEY from src/constants/storage.js
+const STORAGE_TOKEN_KEY = 'ecube_token'
+
 // Helper: create a fake JWT with the given payload (valid for e2e route testing)
 function makeToken(payload) {
   const encode = (obj) => btoa(JSON.stringify(obj))
@@ -21,9 +24,9 @@ function stubSetupStatus(page, initialized) {
 function injectAuthToken(page, roles = []) {
   const exp = Math.floor(Date.now() / 1000) + 3600
   const jwt = makeToken({ sub: 'frank', roles, groups: [], exp })
-  return page.addInitScript((token) => {
-    sessionStorage.setItem('ecube_token', token)
-  }, jwt)
+  return page.addInitScript(({ token, key }) => {
+    sessionStorage.setItem(key, token)
+  }, { token: jwt, key: STORAGE_TOKEN_KEY })
 }
 
 // See here how to get started:
