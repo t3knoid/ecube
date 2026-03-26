@@ -101,7 +101,9 @@ export const useAuthStore = defineStore('auth', () => {
       try {
         _applyToken(saved)
         if (!isAuthenticated.value) {
-          logout()
+          // Distinguish an expired token from a corrupt/invalid one
+          const wasExpired = !!expiresAt.value && Date.now() >= expiresAt.value
+          logout({ expired: wasExpired })
         } else {
           _startExpiryCheck()
         }
