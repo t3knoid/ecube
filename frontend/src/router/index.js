@@ -115,8 +115,11 @@ router.beforeEach(async (to) => {
   // Check if the route (or its parent) requires auth
   const needsAuth = to.matched.some((record) => record.meta.requiresAuth)
   if (needsAuth && !authStore.isAuthenticated) {
-    // Check if there's an expired token so we can show the banner
-    const wasExpired = authStore.checkExpiry()
+    // Check if token expired at runtime, or was already expired when the app loaded
+    const wasExpired = authStore.checkExpiry() || authStore.expiredOnLoad
+    if (authStore.expiredOnLoad) {
+      authStore.expiredOnLoad = false
+    }
     if (!wasExpired) {
       // Not an expiry — just unauthenticated; ensure storage is clean
       authStore.clearAuth()
