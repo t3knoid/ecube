@@ -55,8 +55,9 @@ function handleLogout() {
         v-if="remainingMinutes !== null"
         class="header-timer"
         :class="{ 'timer-warning': expiryWarning }"
+        :aria-label="`Session expires in ${remainingMinutes} minutes`"
       >
-        ⏱ {{ remainingMinutes }}m
+        <span aria-hidden="true">⏱</span> {{ remainingMinutes }}m
       </span>
       <button class="btn-logout" @click="handleLogout">Log Out</button>
     </div>
