@@ -30,12 +30,11 @@ export const useThemeStore = defineStore('theme', () => {
    * if the manifest is missing or malformed.
    */
   async function fetchManifest() {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), MANIFEST_TIMEOUT_MS)
     try {
       const url = `${import.meta.env.BASE_URL}themes/manifest.json`
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), MANIFEST_TIMEOUT_MS)
       const resp = await fetch(url, { signal: controller.signal })
-      clearTimeout(timer)
       if (!resp.ok) return
       const data = await resp.json()
       if (Array.isArray(data)) {
@@ -51,6 +50,8 @@ export const useThemeStore = defineStore('theme', () => {
       }
     } catch {
       // Manifest unavailable — keep built-in list
+    } finally {
+      clearTimeout(timer)
     }
   }
 
