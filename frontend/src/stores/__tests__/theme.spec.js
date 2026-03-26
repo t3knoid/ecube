@@ -12,7 +12,8 @@ const localStorageMock = {
   removeItem: vi.fn((key) => { delete storage[key] }),
   clear: vi.fn(() => { Object.keys(storage).forEach((k) => delete storage[k]) }),
 }
-Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true })
+
+const originalLocalStorage = globalThis.localStorage
 
 // Default manifest response used by most tests
 const BUILT_IN_MANIFEST = [
@@ -32,6 +33,7 @@ function mockFetchManifestFailure() {
 
 describe('Theme Store', () => {
   beforeEach(() => {
+    Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true, configurable: true })
     setActivePinia(createPinia())
     localStorageMock.clear()
     vi.clearAllMocks()
@@ -42,6 +44,7 @@ describe('Theme Store', () => {
   })
 
   afterEach(() => {
+    Object.defineProperty(globalThis, 'localStorage', { value: originalLocalStorage, writable: true, configurable: true })
     const link = document.getElementById('ecube-theme-stylesheet')
     if (link) link.remove()
     delete globalThis.fetch
