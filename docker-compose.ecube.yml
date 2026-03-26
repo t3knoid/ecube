@@ -12,11 +12,15 @@ services:
       - DAC_READ_SEARCH
     security_opt:
       - apparmor:unconfined
-    ports:
-      - "${HOST_PORT:-8000}:8000"
+    # Port 8000 is intentionally not published to the host.
+    # All API access goes through ecube-ui (nginx) on port 8443,
+    # which ensures TRUST_PROXY_HEADERS cannot be exploited by
+    # direct clients spoofing X-Forwarded-For / X-Real-IP.
+    # For debugging: docker compose exec ecube-app curl http://localhost:8000/health
     environment:
       DATABASE_URL: postgresql://ecube:ecube@postgres:5432/ecube
       PYTHONUNBUFFERED: "1"
+      TRUST_PROXY_HEADERS: "true"
       ECUBE_RUN_MIGRATIONS_ON_START: "true"
       ECUBE_DB_WAIT_MAX_RETRIES: "30"
       ECUBE_DB_WAIT_SECONDS: "2"
@@ -33,6 +37,21 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  ecube-ui:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: ecube-ui
+    container_name: ecube-ui
+    restart: unless-stopped
+    ports:
+      - "${UI_PORT:-8443}:443"
+    volumes:
+      - /opt/ecube/certs:/etc/nginx/certs:ro
+      - /opt/ecube/themes:/usr/share/nginx/html/themes:ro
+    depends_on:
+      - ecube-app
 
   postgres:
     image: postgres:16
