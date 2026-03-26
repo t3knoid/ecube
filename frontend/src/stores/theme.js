@@ -89,7 +89,12 @@ export const useThemeStore = defineStore('theme', () => {
     }
 
     link.onerror = () => {
-      // Stylesheet failed to load — fall back to default (once).
+      // Stylesheet failed to load — clear broken preference and fall back.
+      try {
+        localStorage.removeItem(STORAGE_THEME_KEY)
+      } catch {
+        // Storage may be unavailable
+      }
       if (name !== 'default') {
         loadTheme('default')
       }
