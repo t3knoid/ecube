@@ -91,7 +91,7 @@ onUnmounted(() => {
 }
 
 .db-indicator {
-  font-size: 0.7rem;
+  font-size: var(--font-size-xs);
 }
 
 .db-ok {
