@@ -219,3 +219,7 @@ frontend/dist-ssr/
 frontend/coverage/
 frontend/test-results/
 frontend/playwright-report/
+
+# Local deploy artifacts (TLS certs, themes)
+deploy/certs/
+deploy/themes/

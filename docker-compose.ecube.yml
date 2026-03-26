@@ -48,8 +48,8 @@ services:
     ports:
       - "${UI_PORT:-8443}:443"
     volumes:
-      - /opt/ecube/certs:/etc/nginx/certs:ro
-      - /opt/ecube/themes:/usr/share/nginx/html/themes:ro
+      - ${ECUBE_CERTS_DIR:-./deploy/certs}:/etc/nginx/certs:ro
+      - ${ECUBE_THEMES_DIR:-./deploy/themes}:/usr/share/nginx/html/themes:ro
     depends_on:
       - ecube-app
 
