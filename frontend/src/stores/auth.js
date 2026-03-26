@@ -2,6 +2,9 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { postLogin } from '@/api/auth.js'
 
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
+const LOGIN_PATH = `${BASE}/login`
+
 function decodeJwtPayload(token) {
   const base64Url = token.split('.')[1]
   let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
@@ -67,8 +70,8 @@ export const useAuthStore = defineStore('auth', () => {
     groups.value = []
     expiresAt.value = null
     sessionStorage.removeItem('ecube_token')
-    if (window.location.pathname !== '/login') {
-      window.location.href = expired ? '/login?expired=1' : '/login'
+    if (window.location.pathname !== LOGIN_PATH) {
+      window.location.href = expired ? `${LOGIN_PATH}?expired=1` : LOGIN_PATH
     }
   }
 
