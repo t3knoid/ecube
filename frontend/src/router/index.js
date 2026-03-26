@@ -77,15 +77,14 @@ const router = createRouter({
   routes,
 })
 
-let setupChecked = false
 let systemInitialized = false
 
 router.beforeEach(async (to) => {
   const authStore = useAuthStore()
 
-  // Check setup status once on first navigation
-  if (!setupChecked) {
-    setupChecked = true
+  // Re-check setup status on every navigation until the system is initialized.
+  // Once initialized it cannot revert, so we stop polling.
+  if (!systemInitialized) {
     try {
       const resp = await getSetupStatus()
       systemInitialized = resp.data.initialized === true
