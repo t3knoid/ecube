@@ -125,8 +125,6 @@ export const useThemeStore = defineStore('theme', () => {
       } else if (!_isKnownTheme(currentTheme.value)) {
         loadTheme('default')
       }
-    }).catch(() => {
-      // Manifest unavailable — built-in list is already active
     })
   }
 
