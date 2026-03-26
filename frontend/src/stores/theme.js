@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { STORAGE_THEME_KEY } from '@/constants/storage.js'
 
 const THEME_LINK_ID = 'ecube-theme-stylesheet'
-
+const VALID_THEME_NAME = /^[a-z0-9][a-z0-9-]*$/
 const BUILT_IN_THEMES = [
   { name: 'default', label: 'Light' },
   { name: 'dark', label: 'Dark' },
@@ -12,6 +12,15 @@ const BUILT_IN_THEMES = [
 export const useThemeStore = defineStore('theme', () => {
   const currentTheme = ref('default')
   const availableThemes = ref([...BUILT_IN_THEMES])
+
+  function _isValidEntry(t) {
+    return (
+      typeof t.name === 'string' &&
+      typeof t.label === 'string' &&
+      VALID_THEME_NAME.test(t.name) &&
+      t.label.length > 0
+    )
+  }
 
   /**
    * Fetch the theme manifest from the server to replace the built-in theme list.
@@ -23,8 +32,11 @@ export const useThemeStore = defineStore('theme', () => {
       const resp = await fetch(url)
       if (!resp.ok) return
       const data = await resp.json()
-      if (Array.isArray(data) && data.every((t) => t.name && t.label)) {
-        availableThemes.value = data
+      if (Array.isArray(data)) {
+        const valid = data.filter(_isValidEntry)
+        if (valid.length > 0) {
+          availableThemes.value = valid
+        }
       }
     } catch {
       // Manifest unavailable — keep built-in list
@@ -39,6 +51,7 @@ export const useThemeStore = defineStore('theme', () => {
    * Inject or replace the theme <link> element in <head>.
    */
   function loadTheme(name) {
+    if (!VALID_THEME_NAME.test(name)) return
     const href = `${import.meta.env.BASE_URL}themes/${name}.css`
 
     let link = document.getElementById(THEME_LINK_ID)
