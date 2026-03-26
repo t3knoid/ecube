@@ -1,7 +1,10 @@
 import axios from 'axios'
 
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
+const LOGIN_PATH = `${BASE}/login`
+
 const apiClient = axios.create({
-  baseURL: '/api',
+  baseURL: `${BASE}/api`,
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
@@ -26,11 +29,11 @@ apiClient.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       sessionStorage.removeItem('ecube_token')
-      if (window.location.pathname !== '/login') {
+      if (window.location.pathname !== LOGIN_PATH) {
         // Only show the expired banner when the backend explicitly says so
         const detail = (error.response.data?.detail || '').toLowerCase()
         const isExpired = detail.includes('expired')
-        window.location.href = isExpired ? '/login?expired=1' : '/login'
+        window.location.href = isExpired ? `${LOGIN_PATH}?expired=1` : LOGIN_PATH
       }
     }
     return Promise.reject(error)
