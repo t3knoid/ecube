@@ -7,23 +7,26 @@ const dbConnected = ref(null)
 const activeJobs = ref(null)
 
 let pollInterval = null
+let stopped = false
 
 async function fetchVersion() {
   try {
     const resp = await getVersion()
-    version.value = resp.data.version || '—'
-  } catch {
-    // Version endpoint is best-effort; leave default
+    if (!stopped) version.value = resp.data.version || '—'
+  } catch (err) {
+    console.debug('Failed to fetch version:', err.message || err)
   }
 }
 
 async function fetchHealth() {
   try {
     const resp = await getSystemHealth()
+    if (stopped) return
     const data = resp.data
     dbConnected.value = data.database === 'connected' || data.database === true
     activeJobs.value = data.active_jobs ?? null
   } catch {
+    if (stopped) return
     dbConnected.value = false
     activeJobs.value = null
   }
@@ -32,17 +35,19 @@ async function fetchHealth() {
 function schedulePoll() {
   pollInterval = setTimeout(async () => {
     await fetchHealth()
-    schedulePoll()
+    if (!stopped) schedulePoll()
   }, 30000)
 }
 
 onMounted(() => {
+  stopped = false
   fetchVersion()
   fetchHealth()
   schedulePoll()
 })
 
 onUnmounted(() => {
+  stopped = true
   if (pollInterval) clearTimeout(pollInterval)
 })
 </script>
