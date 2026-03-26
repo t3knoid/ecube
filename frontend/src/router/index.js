@@ -1,6 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { getSetupStatus } from '@/api/setup.js'
+import { AUDIT_ROLES, USERS_ROLES } from '@/constants/roles.js'
+import { EXPIRED_QUERY_KEY, EXPIRED_QUERY_VALUE } from '@/constants/auth.js'
 import AppShell from '@/components/layout/AppShell.vue'
 
 const routes = [
@@ -55,13 +57,13 @@ const routes = [
         path: 'audit',
         name: 'audit',
         component: () => import('@/views/AuditView.vue'),
-        meta: { roles: ['admin', 'manager', 'auditor'] },
+        meta: { roles: AUDIT_ROLES },
       },
       {
         path: 'users',
         name: 'users',
         component: () => import('@/views/UsersView.vue'),
-        meta: { roles: ['admin'] },
+        meta: { roles: USERS_ROLES },
       },
       {
         path: 'system',
@@ -119,7 +121,7 @@ router.beforeEach(async (to) => {
       // Not an expiry — just unauthenticated; ensure storage is clean
       authStore.clearAuth()
     }
-    return { name: 'login', query: wasExpired ? { expired: '1' } : {} }
+    return { name: 'login', query: wasExpired ? { [EXPIRED_QUERY_KEY]: EXPIRED_QUERY_VALUE } : {} }
   }
 
   // Role-based guard
