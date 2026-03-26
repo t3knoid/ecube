@@ -24,8 +24,10 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   /**
-   * Fetch the theme manifest from the server to replace the built-in theme list.
-   * Falls back to built-ins if the manifest is missing or malformed.
+   * Fetch the theme manifest from the server and merge with built-in themes.
+   * Built-ins are always present; manifest entries are merged (de-duplicated
+   * by name, with manifest labels taking precedence). Falls back to built-ins
+   * if the manifest is missing or malformed.
    */
   async function fetchManifest() {
     try {
@@ -39,7 +41,12 @@ export const useThemeStore = defineStore('theme', () => {
       if (Array.isArray(data)) {
         const valid = data.filter(_isValidEntry)
         if (valid.length > 0) {
-          availableThemes.value = valid
+          // Start with built-ins, then overlay/append manifest entries
+          const merged = new Map(BUILT_IN_THEMES.map((t) => [t.name, t]))
+          for (const entry of valid) {
+            merged.set(entry.name, entry)
+          }
+          availableThemes.value = [...merged.values()]
         }
       }
     } catch {

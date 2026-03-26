@@ -134,7 +134,6 @@ describe('Theme Store', () => {
 
   it('allows custom theme from manifest to be selected', async () => {
     const custom = [
-      { name: 'default', label: 'Light' },
       { name: 'custom', label: 'Custom' },
     ]
     mockFetchManifest(custom)
@@ -142,13 +141,28 @@ describe('Theme Store', () => {
     const store = useThemeStore()
     store.initialize()
     // 'custom' is not in built-in list, so initialize applies 'default' first.
-    // After the manifest resolves 'custom' becomes known but the theme stays
-    // as 'default' because the saved value wasn't recognised at init time.
     expect(store.currentTheme).toBe('default')
-    await vi.waitFor(() => expect(store.availableThemes).toEqual(custom))
+    // After manifest resolves, built-ins are merged with manifest entries.
+    await vi.waitFor(() => expect(store.availableThemes).toEqual([
+      { name: 'default', label: 'Light' },
+      { name: 'dark', label: 'Dark' },
+      { name: 'custom', label: 'Custom' },
+    ]))
     // User can now select 'custom' from the switcher since it's in the list.
     store.loadTheme('custom')
     expect(store.currentTheme).toBe('custom')
+  })
+
+  it('preserves built-in themes when manifest omits them', async () => {
+    // Manifest only has a custom theme — built-ins must still be present
+    mockFetchManifest([{ name: 'corporate', label: 'Corporate' }])
+    const store = useThemeStore()
+    store.initialize()
+    await vi.waitFor(() => expect(store.availableThemes).toEqual([
+      { name: 'default', label: 'Light' },
+      { name: 'dark', label: 'Dark' },
+      { name: 'corporate', label: 'Corporate' },
+    ]))
   })
 
   it('keeps built-in list when manifest fetch fails', async () => {
