@@ -1,7 +1,10 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
+import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
 
+const { t } = useI18n()
 const authStore = useAuthStore()
 
 const now = ref(Date.now())
@@ -37,7 +40,7 @@ function handleLogout() {
   <header class="app-header">
     <div class="header-left">
       <span class="header-logo">[LOGO]</span>
-      <span class="header-app-name">ECUBE</span>
+      <span class="header-app-name">{{ t('app.name') }}</span>
     </div>
     <div class="header-right">
       <span class="header-username">{{ authStore.username }}</span>
@@ -45,6 +48,7 @@ function handleLogout() {
         v-for="role in authStore.roles"
         :key="role"
         class="header-role-badge"
+        :class="`badge-${role}`"
       >
         {{ role }}
       </span>
@@ -52,11 +56,12 @@ function handleLogout() {
         v-if="remainingMinutes !== null"
         class="header-timer"
         :class="{ 'timer-warning': expiryWarning }"
-        :aria-label="`Session expires in ${remainingMinutes} minutes`"
+        :aria-label="t('auth.sessionExpiresIn', { minutes: remainingMinutes })"
       >
         <span aria-hidden="true">⏱</span> {{ remainingMinutes }}m
       </span>
-      <button class="btn-logout" @click="handleLogout">Log Out</button>
+      <ThemeSwitcher />
+      <button class="btn-logout" @click="handleLogout">{{ t('auth.logout') }}</button>
     </div>
   </header>
 </template>
@@ -66,72 +71,92 @@ function handleLogout() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 1rem;
-  height: 56px;
-  background: var(--color-background-soft);
+  padding: 0 var(--space-md);
+  height: var(--header-height);
+  background: var(--color-bg-header);
   border-bottom: 1px solid var(--color-border);
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--space-sm);
 }
 
 .header-logo {
-  font-size: 0.75rem;
-  color: var(--color-text);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
   opacity: 0.5;
 }
 
 .header-app-name {
-  font-weight: 700;
-  font-size: 1.125rem;
-  color: var(--color-heading);
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-lg);
+  color: var(--color-text-primary);
 }
 
 .header-right {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--space-sm);
 }
 
 .header-username {
-  font-weight: 600;
-  color: var(--color-heading);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
 }
 
 .header-role-badge {
   display: inline-block;
-  padding: 0.125rem 0.5rem;
-  font-size: 0.75rem;
-  font-weight: 600;
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
   border-radius: 9999px;
-  background: #dbeafe;
-  color: #1d4ed8;
+  background: var(--color-badge-manager-bg);
+  color: var(--color-badge-manager-text);
+}
+
+.badge-admin {
+  background: var(--color-badge-admin-bg);
+  color: var(--color-badge-admin-text);
+}
+
+.badge-manager {
+  background: var(--color-badge-manager-bg);
+  color: var(--color-badge-manager-text);
+}
+
+.badge-processor {
+  background: var(--color-badge-processor-bg);
+  color: var(--color-badge-processor-text);
+}
+
+.badge-auditor {
+  background: var(--color-badge-auditor-bg);
+  color: var(--color-badge-auditor-text);
 }
 
 .header-timer {
-  font-size: 0.85rem;
-  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
 }
 
 .timer-warning {
-  color: #dc2626;
-  font-weight: 700;
+  color: var(--color-danger);
+  font-weight: var(--font-weight-bold);
 }
 
 .btn-logout {
-  padding: 0.375rem 0.75rem;
+  padding: var(--space-xs) var(--space-sm);
   border: 1px solid var(--color-border);
-  border-radius: 4px;
+  border-radius: var(--border-radius);
   background: transparent;
-  color: var(--color-text);
+  color: var(--color-text-primary);
   cursor: pointer;
-  font-size: 0.875rem;
+  font-size: var(--font-size-sm);
 }
 
 .btn-logout:hover {
-  background: var(--color-background-mute);
+  background: var(--color-bg-hover);
 }
 </style>
