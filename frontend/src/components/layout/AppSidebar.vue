@@ -25,8 +25,8 @@ function isVisible(item) {
   return authStore.hasAnyRole(item.roles)
 }
 
-const visibleNav = computed(() => navItems.filter(isVisible))
-const visibleAdmin = computed(() => adminItems.filter(isVisible))
+const visibleNav = computed(() => navItems.value.filter(isVisible))
+const visibleAdmin = computed(() => adminItems.value.filter(isVisible))
 </script>
 
 <template>
