@@ -17,6 +17,6 @@ const { t } = useI18n()
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  gap: 1rem;
+  gap: var(--space-md);
 }
 </style>
