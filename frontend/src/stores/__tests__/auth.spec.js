@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth.js'
+import * as authApi from '@/api/auth.js'
 
 // Helper: create a valid JWT-like token with a given payload
 function makeToken(payload) {
@@ -21,6 +22,20 @@ function makeUnpaddedToken(payload) {
   const body = encode(payload)
   const sig = encode({ fake: true })
   return `${header}.${body}.${sig}`
+}
+
+// Helper: current time in epoch seconds
+function nowSec() {
+  return Math.floor(Date.now() / 1000)
+}
+
+// Helper: create a store, inject a token into sessionStorage and initialize
+function initWithToken(payload, { unpadded = false } = {}) {
+  const store = useAuthStore()
+  const jwt = unpadded ? makeUnpaddedToken(payload) : makeToken(payload)
+  sessionStorage.setItem('ecube_token', jwt)
+  store.initialize()
+  return { store, jwt }
 }
 
 describe('Auth Store', () => {
@@ -44,52 +59,32 @@ describe('Auth Store', () => {
   })
 
   it('isAuthenticated returns false when token is expired', () => {
-    const store = useAuthStore()
-    const pastExp = Math.floor(Date.now() / 1000) - 60 // 1 minute ago
-    const jwt = makeToken({ sub: 'alice', roles: ['admin'], groups: [], exp: pastExp })
-    sessionStorage.setItem('ecube_token', jwt)
-    store.initialize()
+    const { store } = initWithToken({ sub: 'frank', roles: ['admin'], groups: [], exp: nowSec() - 60 })
     expect(store.isAuthenticated).toBe(false)
   })
 
   it('initialize restores valid token from sessionStorage', () => {
-    const store = useAuthStore()
-    const futureExp = Math.floor(Date.now() / 1000) + 3600
-    const jwt = makeToken({ sub: 'bob', roles: ['processor'], groups: ['ops'], exp: futureExp })
-    sessionStorage.setItem('ecube_token', jwt)
-    store.initialize()
+    const { store } = initWithToken({ sub: 'jordan', roles: ['processor'], groups: ['ops'], exp: nowSec() + 3600 })
     expect(store.isAuthenticated).toBe(true)
-    expect(store.username).toBe('bob')
+    expect(store.username).toBe('jordan')
     expect(store.roles).toEqual(['processor'])
     expect(store.groups).toEqual(['ops'])
   })
 
   it('hasRole checks single role membership', () => {
-    const store = useAuthStore()
-    const futureExp = Math.floor(Date.now() / 1000) + 3600
-    const jwt = makeToken({ sub: 'alice', roles: ['admin', 'manager'], groups: [], exp: futureExp })
-    sessionStorage.setItem('ecube_token', jwt)
-    store.initialize()
+    const { store } = initWithToken({ sub: 'frank', roles: ['admin', 'manager'], groups: [], exp: nowSec() + 3600 })
     expect(store.hasRole('admin')).toBe(true)
     expect(store.hasRole('auditor')).toBe(false)
   })
 
   it('hasAnyRole checks multiple roles', () => {
-    const store = useAuthStore()
-    const futureExp = Math.floor(Date.now() / 1000) + 3600
-    const jwt = makeToken({ sub: 'alice', roles: ['auditor'], groups: [], exp: futureExp })
-    sessionStorage.setItem('ecube_token', jwt)
-    store.initialize()
+    const { store } = initWithToken({ sub: 'frank', roles: ['auditor'], groups: [], exp: nowSec() + 3600 })
     expect(store.hasAnyRole(['admin', 'auditor'])).toBe(true)
     expect(store.hasAnyRole(['admin', 'manager'])).toBe(false)
   })
 
   it('logout clears all state and sessionStorage', () => {
-    const store = useAuthStore()
-    const futureExp = Math.floor(Date.now() / 1000) + 3600
-    const jwt = makeToken({ sub: 'alice', roles: ['admin'], groups: [], exp: futureExp })
-    sessionStorage.setItem('ecube_token', jwt)
-    store.initialize()
+    const { store } = initWithToken({ sub: 'frank', roles: ['admin'], groups: [], exp: nowSec() + 3600 })
     expect(store.isAuthenticated).toBe(true)
 
     store.logout()
@@ -101,12 +96,7 @@ describe('Auth Store', () => {
   })
 
   it('checkExpiry returns true and logs out when token expired', () => {
-    const store = useAuthStore()
-    // Token expires 10 seconds from now
-    const exp = Math.floor(Date.now() / 1000) + 10
-    const jwt = makeToken({ sub: 'alice', roles: ['admin'], groups: [], exp })
-    sessionStorage.setItem('ecube_token', jwt)
-    store.initialize()
+    const { store } = initWithToken({ sub: 'frank', roles: ['admin'], groups: [], exp: nowSec() + 10 })
     expect(store.isAuthenticated).toBe(true)
 
     // Advance time past expiry
@@ -117,14 +107,47 @@ describe('Auth Store', () => {
   })
 
   it('decodes unpadded Base64URL tokens correctly', () => {
-    const store = useAuthStore()
-    const futureExp = Math.floor(Date.now() / 1000) + 3600
-    const jwt = makeUnpaddedToken({ sub: 'charlie', roles: ['manager'], groups: ['team-a'], exp: futureExp })
-    sessionStorage.setItem('ecube_token', jwt)
-    store.initialize()
+    const { store } = initWithToken(
+      { sub: 'griffin', roles: ['manager'], groups: ['team-a'], exp: nowSec() + 3600 },
+      { unpadded: true },
+    )
     expect(store.isAuthenticated).toBe(true)
-    expect(store.username).toBe('charlie')
+    expect(store.username).toBe('griffin')
     expect(store.roles).toEqual(['manager'])
     expect(store.groups).toEqual(['team-a'])
+  })
+
+  it('login() calls postLogin and applies the returned token', async () => {
+    const store = useAuthStore()
+    const jwt = makeToken({ sub: 'alba', roles: ['processor', 'auditor'], groups: ['ops'], exp: nowSec() + 3600 })
+
+    const spy = vi.spyOn(authApi, 'postLogin').mockResolvedValue({
+      data: { access_token: jwt },
+    })
+
+    await store.login('alba', 's3cret')
+
+    expect(spy).toHaveBeenCalledWith('alba', 's3cret')
+    expect(store.isAuthenticated).toBe(true)
+    expect(store.username).toBe('alba')
+    expect(store.roles).toEqual(['processor', 'auditor'])
+    expect(store.groups).toEqual(['ops'])
+    expect(sessionStorage.getItem('ecube_token')).toBe(jwt)
+
+    spy.mockRestore()
+  })
+
+  it('login() surfaces API errors to the caller', async () => {
+    const store = useAuthStore()
+    const error = new Error('Request failed')
+    error.response = { status: 401, data: { detail: 'Invalid username or password.' } }
+
+    vi.spyOn(authApi, 'postLogin').mockRejectedValue(error)
+
+    await expect(store.login('bad', 'creds')).rejects.toThrow('Request failed')
+    expect(store.isAuthenticated).toBe(false)
+    expect(store.token).toBeNull()
+
+    vi.restoreAllMocks()
   })
 })
