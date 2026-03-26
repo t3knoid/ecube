@@ -86,6 +86,16 @@ Used when `ROLE_RESOLVER=oidc`.
 
 ---
 
+## UI Container (Docker Compose)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `UI_PORT` | `8443` | Host port mapped to the `ecube-ui` HTTPS listener (port 443 inside the container). |
+| `ECUBE_CERTS_DIR` | `./deploy/certs` | Host directory containing `cert.pem` and `key.pem` for nginx TLS termination. Use `/opt/ecube/certs` in production. |
+| `ECUBE_THEMES_DIR` | `./deploy/themes` | Host directory for optional CSS theme overrides served by nginx. Use `/opt/ecube/themes` in production. |
+
+---
+
 ## Session & Cookie
 
 | Variable | Default | Description |

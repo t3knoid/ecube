@@ -212,12 +212,36 @@ Compose file: `docker-compose.ecube.yml`
 
 ### Services
 
-- `ecube-host`
-- `postgres`
+- `ecube-app` — FastAPI backend (privileged, USB access)
+- `ecube-ui` — Nginx reverse proxy serving the Vue SPA over HTTPS
+- `postgres` — PostgreSQL database
+
+### Environment Variables
+
+The following variables can be set in a `.env` file or exported before running `docker compose`:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `UI_PORT` | `8443` | Host port for the `ecube-ui` HTTPS listener. |
+| `ECUBE_CERTS_DIR` | `./deploy/certs` | Host path to TLS certificate directory (must contain `cert.pem` and `key.pem`). Production: `/opt/ecube/certs`. |
+| `ECUBE_THEMES_DIR` | `./deploy/themes` | Host path to optional CSS theme overrides. Production: `/opt/ecube/themes`. |
+| `POSTGRES_HOST_PORT` | `5432` | Host port for PostgreSQL. |
+| `SECRET_KEY` | *(insecure default)* | JWT signing key — **must** be changed in production. |
 
 ### Start
 
 ```bash
+# Local development (uses ./deploy/ defaults)
+mkdir -p deploy/certs deploy/themes
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout deploy/certs/key.pem -out deploy/certs/cert.pem -subj "/CN=localhost"
+docker compose -f docker-compose.ecube.yml up -d --build
+```
+
+```bash
+# Production (Linux host with system paths)
+export ECUBE_CERTS_DIR=/opt/ecube/certs
+export ECUBE_THEMES_DIR=/opt/ecube/themes
 docker compose -f docker-compose.ecube.yml up -d --build
 ```
 
