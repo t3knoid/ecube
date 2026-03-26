@@ -57,11 +57,13 @@ describe('Auth Store', () => {
     expect(store.username).toBeNull()
     expect(store.roles).toEqual([])
     expect(store.groups).toEqual([])
+    expect(store.expiredOnLoad).toBe(false)
   })
 
   it('isAuthenticated returns false when token is expired', () => {
     const { store } = initWithToken({ sub: 'frank', roles: ['admin'], groups: [], exp: nowSec() - 60 })
     expect(store.isAuthenticated).toBe(false)
+    expect(store.expiredOnLoad).toBe(true)
   })
 
   it('initialize restores valid token from sessionStorage', () => {
