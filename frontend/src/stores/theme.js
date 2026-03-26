@@ -4,6 +4,7 @@ import { STORAGE_THEME_KEY } from '@/constants/storage.js'
 
 const THEME_LINK_ID = 'ecube-theme-stylesheet'
 const VALID_THEME_NAME = /^[a-z0-9][a-z0-9-]*$/
+const MANIFEST_TIMEOUT_MS = 3000
 const BUILT_IN_THEMES = [
   { name: 'default', label: 'Light' },
   { name: 'dark', label: 'Dark' },
@@ -29,7 +30,10 @@ export const useThemeStore = defineStore('theme', () => {
   async function fetchManifest() {
     try {
       const url = `${import.meta.env.BASE_URL}themes/manifest.json`
-      const resp = await fetch(url)
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), MANIFEST_TIMEOUT_MS)
+      const resp = await fetch(url, { signal: controller.signal })
+      clearTimeout(timer)
       if (!resp.ok) return
       const data = await resp.json()
       if (Array.isArray(data)) {
@@ -74,11 +78,11 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   /**
-   * Fetch the manifest, then restore saved theme from localStorage,
-   * falling back to 'default'.
+   * Apply the saved (or default) theme synchronously from the built-in list,
+   * then fetch the manifest in the background. If the manifest reveals the
+   * saved theme is valid, the theme stays; otherwise it is corrected.
    */
-  async function initialize() {
-    await fetchManifest()
+  function initialize() {
     let saved = null
     try {
       saved = localStorage.getItem(STORAGE_THEME_KEY)
@@ -87,6 +91,16 @@ export const useThemeStore = defineStore('theme', () => {
     }
     const themeName = saved && _isKnownTheme(saved) ? saved : 'default'
     loadTheme(themeName)
+
+    // Fetch manifest in background — updates available themes list and
+    // corrects theme if the saved one isn't in the manifest.
+    fetchManifest().then(() => {
+      if (!_isKnownTheme(currentTheme.value)) {
+        loadTheme('default')
+      }
+    }).catch(() => {
+      // Manifest unavailable — built-in list is already active
+    })
   }
 
   return {
