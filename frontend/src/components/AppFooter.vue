@@ -25,6 +25,7 @@ async function fetchHealth() {
     activeJobs.value = data.active_jobs ?? null
   } catch {
     dbConnected.value = false
+    activeJobs.value = null
   }
 }
 
