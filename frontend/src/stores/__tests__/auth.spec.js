@@ -46,6 +46,7 @@ describe('Auth Store', () => {
   })
 
   afterEach(() => {
+    vi.clearAllTimers()
     vi.useRealTimers()
   })
 
