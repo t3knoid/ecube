@@ -56,6 +56,15 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function login(user, password) {
+    // Clear any existing auth state before attempting a new login
+    _stopExpiryCheck()
+    token.value = null
+    username.value = null
+    roles.value = []
+    groups.value = []
+    expiresAt.value = null
+    sessionStorage.removeItem('ecube_token')
+
     const response = await postLogin(user, password)
     const jwt = response.data.access_token
     _applyToken(jwt)
