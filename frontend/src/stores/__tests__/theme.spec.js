@@ -32,6 +32,18 @@ function mockFetchManifestFailure() {
   globalThis.fetch = vi.fn(() => Promise.resolve({ ok: false }))
 }
 
+/** Simulate the browser firing the onload event for the theme <link>. */
+function simulateLoad() {
+  const link = document.getElementById('ecube-theme-stylesheet')
+  if (link && link.onload) link.onload()
+}
+
+/** Simulate the browser firing the onerror event for the theme <link>. */
+function simulateError() {
+  const link = document.getElementById('ecube-theme-stylesheet')
+  if (link && link.onerror) link.onerror()
+}
+
 describe('Theme Store', () => {
   beforeEach(() => {
     Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true, configurable: true })
@@ -80,10 +92,18 @@ describe('Theme Store', () => {
     expect(links[0].getAttribute('href')).toContain('themes/dark.css')
   })
 
-  it('persists theme preference to localStorage', () => {
+  it('persists theme preference to localStorage on successful load', () => {
     const store = useThemeStore()
     store.loadTheme('dark')
+    simulateLoad()
     expect(localStorage.getItem(STORAGE_THEME_KEY)).toBe('dark')
+  })
+
+  it('reverts to default on stylesheet load error', () => {
+    const store = useThemeStore()
+    store.loadTheme('dark')
+    simulateError()
+    expect(store.currentTheme).toBe('default')
   })
 
   it('restores theme preference from localStorage', () => {
