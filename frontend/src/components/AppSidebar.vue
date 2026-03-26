@@ -10,11 +10,11 @@ const navItems = [
   { label: 'Mounts', to: '/mounts', roles: null },
   { label: 'Jobs', to: '/jobs', roles: null },
   { label: 'Audit', to: '/audit', roles: ['admin', 'manager', 'auditor'] },
+  { label: 'System', to: '/system', roles: null },
 ]
 
 const adminItems = [
   { label: 'Users', to: '/users', roles: ['admin'] },
-  { label: 'System', to: '/system', roles: null },
 ]
 
 function isVisible(item) {
