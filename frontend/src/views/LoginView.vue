@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
+import { EXPIRED_QUERY_KEY, EXPIRED_QUERY_VALUE } from '@/constants/auth.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -12,7 +13,7 @@ const password = ref('')
 const error = ref('')
 const loading = ref(false)
 
-const sessionExpired = computed(() => route.query.expired === '1')
+const sessionExpired = computed(() => route.query[EXPIRED_QUERY_KEY] === EXPIRED_QUERY_VALUE)
 
 async function handleLogin() {
   error.value = ''

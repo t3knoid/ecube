@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
+import { AUDIT_ROLES, USERS_ROLES } from '@/constants/roles.js'
 
 const authStore = useAuthStore()
 
@@ -9,12 +10,12 @@ const navItems = [
   { label: 'Drives', to: '/drives', roles: null },
   { label: 'Mounts', to: '/mounts', roles: null },
   { label: 'Jobs', to: '/jobs', roles: null },
-  { label: 'Audit', to: '/audit', roles: ['admin', 'manager', 'auditor'] },
+  { label: 'Audit', to: '/audit', roles: AUDIT_ROLES },
   { label: 'System', to: '/system', roles: null },
 ]
 
 const adminItems = [
-  { label: 'Users', to: '/users', roles: ['admin'] },
+  { label: 'Users', to: '/users', roles: USERS_ROLES },
 ]
 
 function isVisible(item) {

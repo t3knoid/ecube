@@ -1,9 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { postLogin } from '@/api/auth.js'
-
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
-const LOGIN_PATH = `${BASE}/login`
+import { LOGIN_PATH } from '@/constants/routes.js'
+import { STORAGE_TOKEN_KEY } from '@/constants/storage.js'
+import { EXPIRED_QUERY_KEY, EXPIRED_QUERY_VALUE } from '@/constants/auth.js'
 
 class TokenError extends Error {
   constructor(message) {
@@ -70,7 +70,7 @@ export const useAuthStore = defineStore('auth', () => {
     groups.value = payload.groups || []
     // exp is in seconds; convert to ms
     expiresAt.value = payload.exp ? payload.exp * 1000 : null
-    sessionStorage.setItem('ecube_token', jwt)
+    sessionStorage.setItem(STORAGE_TOKEN_KEY, jwt)
   }
 
   function clearAuth() {
@@ -80,7 +80,7 @@ export const useAuthStore = defineStore('auth', () => {
     roles.value = []
     groups.value = []
     expiresAt.value = null
-    sessionStorage.removeItem('ecube_token')
+    sessionStorage.removeItem(STORAGE_TOKEN_KEY)
   }
 
   async function login(user, password) {
@@ -110,7 +110,7 @@ export const useAuthStore = defineStore('auth', () => {
     expiryInterval = setInterval(() => {
       if (checkExpiry()) {
         // Background expiry — no router guard runs, so hard redirect is needed
-        window.location.href = `${LOGIN_PATH}?expired=1`
+        window.location.href = `${LOGIN_PATH}?${EXPIRED_QUERY_KEY}=${EXPIRED_QUERY_VALUE}`
       }
     }, 30000)
   }
@@ -124,7 +124,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Restore from sessionStorage on store creation
   function initialize() {
-    const saved = sessionStorage.getItem('ecube_token')
+    const saved = sessionStorage.getItem(STORAGE_TOKEN_KEY)
     if (saved) {
       try {
         _applyToken(saved)
