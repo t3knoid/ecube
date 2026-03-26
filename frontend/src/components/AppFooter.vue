@@ -29,14 +29,21 @@ async function fetchHealth() {
   }
 }
 
+function schedulePoll() {
+  pollInterval = setTimeout(async () => {
+    await fetchHealth()
+    schedulePoll()
+  }, 30000)
+}
+
 onMounted(() => {
   fetchVersion()
   fetchHealth()
-  pollInterval = setInterval(fetchHealth, 30000)
+  schedulePoll()
 })
 
 onUnmounted(() => {
-  if (pollInterval) clearInterval(pollInterval)
+  if (pollInterval) clearTimeout(pollInterval)
 })
 </script>
 
