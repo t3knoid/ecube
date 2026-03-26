@@ -46,6 +46,7 @@ export const useAuthStore = defineStore('auth', () => {
   const roles = ref([])
   const groups = ref([])
   const expiresAt = ref(null)
+  const expiredOnLoad = ref(false)
 
   let expiryInterval = null
 
@@ -130,9 +131,8 @@ export const useAuthStore = defineStore('auth', () => {
         _applyToken(saved)
         if (!isAuthenticated.value) {
           // Distinguish an expired token from a corrupt/invalid one
-          const wasExpired = !!expiresAt.value && Date.now() >= expiresAt.value
+          expiredOnLoad.value = !!expiresAt.value && Date.now() >= expiresAt.value
           clearAuth()
-          return { expired: wasExpired }
         } else {
           _startExpiryCheck()
         }
@@ -148,6 +148,7 @@ export const useAuthStore = defineStore('auth', () => {
     roles,
     groups,
     expiresAt,
+    expiredOnLoad,
     isAuthenticated,
     hasRole,
     hasAnyRole,
