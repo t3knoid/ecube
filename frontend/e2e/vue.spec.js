@@ -60,7 +60,7 @@ test('redirects away from /audit when user lacks required role', async ({ page }
   await page.goto('/audit')
   // Should be redirected to the dashboard
   await page.waitForURL('**/')
-  await expect(page).toHaveURL(/^\/$|\/$/);
+  expect(new URL(page.url()).pathname).toBe('/');
 })
 
 test('redirects away from /users when user is not admin', async ({ page }) => {
@@ -76,5 +76,5 @@ test('redirects away from /users when user is not admin', async ({ page }) => {
 
   await page.goto('/users')
   await page.waitForURL('**/')
-  await expect(page).toHaveURL(/^\/$|\/$/);
+  expect(new URL(page.url()).pathname).toBe('/');
 })
