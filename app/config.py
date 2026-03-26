@@ -246,6 +246,20 @@ class Settings(BaseSettings):
     audit_log_max_limit: int = 1000
 
     # ---------------------------------------------------------------------------
+    # CORS configuration
+    # ---------------------------------------------------------------------------
+
+    #: Origins permitted for cross-origin requests.  Empty by default
+    #: (CORS disabled).  In production, nginx proxies everything on the
+    #: same origin so CORS is not triggered.  For local development, set
+    #: via the ``CORS_ALLOWED_ORIGINS`` env var as a JSON list, e.g.:
+    #:
+    #: .. code-block:: bash
+    #:
+    #:     CORS_ALLOWED_ORIGINS='["http://localhost:5173"]'
+    cors_allowed_origins: List[str] = []
+
+    # ---------------------------------------------------------------------------
     # Reverse proxy / client IP settings
     # ---------------------------------------------------------------------------
 
