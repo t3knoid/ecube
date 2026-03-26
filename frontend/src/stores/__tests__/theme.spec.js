@@ -14,6 +14,7 @@ const localStorageMock = {
 }
 
 const originalLocalStorage = globalThis.localStorage
+const originalFetch = globalThis.fetch
 
 // Default manifest response used by most tests
 const BUILT_IN_MANIFEST = [
@@ -45,9 +46,9 @@ describe('Theme Store', () => {
 
   afterEach(() => {
     Object.defineProperty(globalThis, 'localStorage', { value: originalLocalStorage, writable: true, configurable: true })
+    globalThis.fetch = originalFetch
     const link = document.getElementById('ecube-theme-stylesheet')
     if (link) link.remove()
-    delete globalThis.fetch
   })
 
   it('initializes with default theme', async () => {
