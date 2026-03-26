@@ -78,7 +78,7 @@ const router = createRouter({
 })
 
 let setupChecked = false
-let systemInitialized = true
+let systemInitialized = false
 
 router.beforeEach(async (to) => {
   const authStore = useAuthStore()
@@ -90,8 +90,9 @@ router.beforeEach(async (to) => {
       const resp = await getSetupStatus()
       systemInitialized = resp.data.initialized === true
     } catch {
-      // If the endpoint is unreachable, assume initialized
-      systemInitialized = true
+      // Fail closed: if the backend is unreachable, treat as not initialized
+      // so the user is redirected to /setup rather than bypassing it
+      systemInitialized = false
     }
   }
 
