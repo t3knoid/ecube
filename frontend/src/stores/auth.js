@@ -71,6 +71,10 @@ export const useAuthStore = defineStore('auth', () => {
   function checkExpiry() {
     if (expiresAt.value && Date.now() >= expiresAt.value) {
       logout()
+      // Redirect to login with expired flag so the user sees the session-expired banner
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login?expired=1'
+      }
       return true
     }
     return false
