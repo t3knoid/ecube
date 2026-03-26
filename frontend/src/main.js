@@ -20,10 +20,9 @@ app.use(i18n)
 const authStore = useAuthStore()
 authStore.initialize()
 
-// Restore theme preference from localStorage
+// Restore theme preference from localStorage (fetches manifest, then applies)
 const themeStore = useThemeStore()
-themeStore.initialize()
-
-app.use(router)
-
-app.mount('#app')
+themeStore.initialize().then(() => {
+  app.use(router)
+  app.mount('#app')
+})
