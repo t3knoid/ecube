@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAuthStore, TokenError } from '@/stores/auth.js'
+import { STORAGE_TOKEN_KEY } from '@/constants/storage.js'
 import * as authApi from '@/api/auth.js'
 
 // Helper: create a valid JWT-like token with a given payload
@@ -33,7 +34,7 @@ function nowSec() {
 function initWithToken(payload, { unpadded = false } = {}) {
   const store = useAuthStore()
   const jwt = unpadded ? makeUnpaddedToken(payload) : makeToken(payload)
-  sessionStorage.setItem('ecube_token', jwt)
+  sessionStorage.setItem(STORAGE_TOKEN_KEY, jwt)
   store.initialize()
   return { store, jwt }
 }
@@ -95,7 +96,7 @@ describe('Auth Store', () => {
     expect(store.token).toBeNull()
     expect(store.username).toBeNull()
     expect(store.roles).toEqual([])
-    expect(sessionStorage.getItem('ecube_token')).toBeNull()
+    expect(sessionStorage.getItem(STORAGE_TOKEN_KEY)).toBeNull()
   })
 
   it('logout delegates to clearAuth without navigation', () => {
@@ -105,7 +106,7 @@ describe('Auth Store', () => {
     store.logout()
     expect(store.isAuthenticated).toBe(false)
     expect(store.token).toBeNull()
-    expect(sessionStorage.getItem('ecube_token')).toBeNull()
+    expect(sessionStorage.getItem(STORAGE_TOKEN_KEY)).toBeNull()
   })
 
   it('checkExpiry returns true and clears auth when token expired', () => {
@@ -145,7 +146,7 @@ describe('Auth Store', () => {
     expect(store.username).toBe('alba')
     expect(store.roles).toEqual(['processor', 'auditor'])
     expect(store.groups).toEqual(['ops'])
-    expect(sessionStorage.getItem('ecube_token')).toBe(jwt)
+    expect(sessionStorage.getItem(STORAGE_TOKEN_KEY)).toBe(jwt)
 
     spy.mockRestore()
   })
@@ -205,7 +206,7 @@ describe('Auth Store', () => {
 
   it('initialize() silently logs out when stored token is malformed', () => {
     const store = useAuthStore()
-    sessionStorage.setItem('ecube_token', 'garbage')
+    sessionStorage.setItem(STORAGE_TOKEN_KEY, 'garbage')
     store.initialize()
     expect(store.isAuthenticated).toBe(false)
     expect(store.token).toBeNull()
