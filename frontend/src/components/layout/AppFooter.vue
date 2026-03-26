@@ -65,11 +65,11 @@ onUnmounted(() => {
         class="db-indicator"
         :class="dbConnected === true ? 'db-ok' : dbConnected === false ? 'db-err' : ''"
       >●</span>
-      {{ dbConnected === true ? t('system.dbConnected') : dbConnected === false ? t('system.dbDisconnected') : '…' }}
+      {{ dbConnected === true ? t('system.dbConnected') : dbConnected === false ? t('system.dbDisconnected') : t('common.labels.loading') }}
     </span>
     <span class="footer-separator">│</span>
     <span class="footer-jobs">
-      {{ t('jobs.activeJobs') }}: {{ activeJobs !== null ? activeJobs : '…' }}
+      {{ t('jobs.activeJobs') }}: {{ activeJobs !== null ? activeJobs : t('common.labels.loading') }}
     </span>
   </footer>
 </template>
