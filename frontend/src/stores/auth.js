@@ -58,7 +58,7 @@ export const useAuthStore = defineStore('auth', () => {
     _startExpiryCheck()
   }
 
-  function logout() {
+  function logout({ expired = false } = {}) {
     _stopExpiryCheck()
     token.value = null
     username.value = null
@@ -66,15 +66,14 @@ export const useAuthStore = defineStore('auth', () => {
     groups.value = []
     expiresAt.value = null
     sessionStorage.removeItem('ecube_token')
+    if (window.location.pathname !== '/login') {
+      window.location.href = expired ? '/login?expired=1' : '/login'
+    }
   }
 
   function checkExpiry() {
     if (expiresAt.value && Date.now() >= expiresAt.value) {
-      logout()
-      // Redirect to login with expired flag so the user sees the session-expired banner
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login?expired=1'
-      }
+      logout({ expired: true })
       return true
     }
     return false
