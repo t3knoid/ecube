@@ -36,7 +36,7 @@ function onThemeChange(event) {
 }
 
 .theme-select {
-  padding: 0.25rem 0.5rem;
+  padding: var(--space-xs) var(--space-sm);
   font-size: var(--font-size-sm);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius);
