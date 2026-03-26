@@ -132,7 +132,7 @@ describe('Theme Store', () => {
     await vi.waitFor(() => expect(store.availableThemes).toEqual(custom))
   })
 
-  it('allows custom theme from manifest to be selected', async () => {
+  it('restores saved custom theme after manifest loads', async () => {
     const custom = [
       { name: 'custom', label: 'Custom' },
     ]
@@ -142,15 +142,13 @@ describe('Theme Store', () => {
     store.initialize()
     // 'custom' is not in built-in list, so initialize applies 'default' first.
     expect(store.currentTheme).toBe('default')
-    // After manifest resolves, built-ins are merged with manifest entries.
-    await vi.waitFor(() => expect(store.availableThemes).toEqual([
+    // After manifest resolves, saved custom theme is automatically applied.
+    await vi.waitFor(() => expect(store.currentTheme).toBe('custom'))
+    expect(store.availableThemes).toEqual([
       { name: 'default', label: 'Light' },
       { name: 'dark', label: 'Dark' },
       { name: 'custom', label: 'Custom' },
-    ]))
-    // User can now select 'custom' from the switcher since it's in the list.
-    store.loadTheme('custom')
-    expect(store.currentTheme).toBe('custom')
+    ])
   })
 
   it('preserves built-in themes when manifest omits them', async () => {
