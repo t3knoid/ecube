@@ -57,11 +57,12 @@ h1, h2, h3, h4, h5, h6 {
 a {
   color: var(--color-text-link);
   text-decoration: none;
-  transition: opacity 0.15s;
+  transition: color 0.15s, background-color 0.15s;
+  padding: var(--space-xs);
 }
 
 a:hover {
-  opacity: 0.8;
+  background-color: var(--color-bg-hover);
 }
 
 /* ── Layout utilities ─────────────────────────────────────────────── */
