@@ -23,8 +23,12 @@ async function handleLogin() {
   } catch (err) {
     if (err.response?.data?.detail) {
       error.value = err.response.data.detail
+    } else if (err.response) {
+      // Server returned an unexpected error status
+      error.value = `Server error (${err.response.status}). Please try again later.`
     } else {
-      error.value = 'Invalid username or password.'
+      // No response at all — network/CORS/proxy failure
+      error.value = 'Unable to reach the server. Check your network connection and try again.'
     }
   } finally {
     loading.value = false
