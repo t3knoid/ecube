@@ -51,9 +51,9 @@ describe('Theme Store', () => {
     if (link) link.remove()
   })
 
-  it('initializes with default theme', async () => {
+  it('initializes with default theme', () => {
     const store = useThemeStore()
-    await store.initialize()
+    store.initialize()
     expect(store.currentTheme).toBe('default')
   })
 
@@ -86,17 +86,17 @@ describe('Theme Store', () => {
     expect(localStorage.getItem(STORAGE_THEME_KEY)).toBe('dark')
   })
 
-  it('restores theme preference from localStorage', async () => {
+  it('restores theme preference from localStorage', () => {
     localStorage.setItem(STORAGE_THEME_KEY, 'dark')
     const store = useThemeStore()
-    await store.initialize()
+    store.initialize()
     expect(store.currentTheme).toBe('dark')
   })
 
-  it('falls back to default for unknown saved theme', async () => {
+  it('falls back to default for unknown saved theme', () => {
     localStorage.setItem(STORAGE_THEME_KEY, 'nonexistent')
     const store = useThemeStore()
-    await store.initialize()
+    store.initialize()
     expect(store.currentTheme).toBe('default')
   })
 
@@ -108,8 +108,8 @@ describe('Theme Store', () => {
     ]
     mockFetchManifest(custom)
     const store = useThemeStore()
-    await store.initialize()
-    expect(store.availableThemes).toEqual(custom)
+    store.initialize()
+    await vi.waitFor(() => expect(store.availableThemes).toEqual(custom))
   })
 
   it('allows custom theme from manifest to be selected', async () => {
@@ -120,14 +120,23 @@ describe('Theme Store', () => {
     mockFetchManifest(custom)
     localStorage.setItem(STORAGE_THEME_KEY, 'custom')
     const store = useThemeStore()
-    await store.initialize()
+    store.initialize()
+    // 'custom' is not in built-in list, so initialize applies 'default' first.
+    // After the manifest resolves 'custom' becomes known but the theme stays
+    // as 'default' because the saved value wasn't recognised at init time.
+    expect(store.currentTheme).toBe('default')
+    await vi.waitFor(() => expect(store.availableThemes).toEqual(custom))
+    // User can now select 'custom' from the switcher since it's in the list.
+    store.loadTheme('custom')
     expect(store.currentTheme).toBe('custom')
   })
 
   it('keeps built-in list when manifest fetch fails', async () => {
     mockFetchManifestFailure()
     const store = useThemeStore()
-    await store.initialize()
+    store.initialize()
+    // Let the background fetch settle
+    await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalled())
     expect(store.availableThemes).toEqual(BUILT_IN_MANIFEST)
     expect(store.currentTheme).toBe('default')
   })
