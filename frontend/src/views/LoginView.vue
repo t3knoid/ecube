@@ -34,6 +34,8 @@ async function handleLogin() {
     } else if (err.response) {
       // Server returned an unexpected error status
       error.value = `Server error (${err.response.status}). Please try again later.`
+    } else if (err.name === 'TokenError') {
+      error.value = err.message
     } else {
       // No response at all — network/CORS/proxy failure
       error.value = 'Unable to reach the server. Check your network connection and try again.'
