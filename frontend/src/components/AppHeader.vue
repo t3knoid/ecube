@@ -30,7 +30,6 @@ const expiryWarning = computed(() => {
 
 function handleLogout() {
   authStore.logout()
-  window.location.href = '/login'
 }
 </script>
 
