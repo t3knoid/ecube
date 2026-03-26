@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import { useAuthStore } from '@/stores/auth.js'
+import { useAuthStore, TokenError } from '@/stores/auth.js'
 import * as authApi from '@/api/auth.js'
 
 // Helper: create a valid JWT-like token with a given payload
@@ -150,5 +150,35 @@ describe('Auth Store', () => {
     expect(store.token).toBeNull()
 
     vi.restoreAllMocks()
+  })
+
+  it('login() throws TokenError when access_token is not a string', async () => {
+    const store = useAuthStore()
+    vi.spyOn(authApi, 'postLogin').mockResolvedValue({ data: { access_token: 12345 } })
+
+    await expect(store.login('frank', 'pass')).rejects.toThrow(TokenError)
+    await expect(store.login('frank', 'pass')).rejects.toThrow('not a string')
+    expect(store.isAuthenticated).toBe(false)
+
+    vi.restoreAllMocks()
+  })
+
+  it('login() throws TokenError when access_token is malformed', async () => {
+    const store = useAuthStore()
+    vi.spyOn(authApi, 'postLogin').mockResolvedValue({ data: { access_token: 'not-a-jwt' } })
+
+    await expect(store.login('frank', 'pass')).rejects.toThrow(TokenError)
+    await expect(store.login('frank', 'pass')).rejects.toThrow('malformed token')
+    expect(store.isAuthenticated).toBe(false)
+
+    vi.restoreAllMocks()
+  })
+
+  it('initialize() silently logs out when stored token is malformed', () => {
+    const store = useAuthStore()
+    sessionStorage.setItem('ecube_token', 'garbage')
+    store.initialize()
+    expect(store.isAuthenticated).toBe(false)
+    expect(store.token).toBeNull()
   })
 })
