@@ -22,7 +22,15 @@ async function handleLogin() {
     router.push('/')
   } catch (err) {
     if (err.response?.data?.detail) {
-      error.value = err.response.data.detail
+      const detail = err.response.data.detail
+      if (typeof detail === 'string') {
+        error.value = detail
+      } else if (Array.isArray(detail)) {
+        // FastAPI 422 validation errors return detail as an array of objects
+        error.value = detail.map((d) => d.msg || String(d)).join('; ')
+      } else {
+        error.value = 'Invalid request. Please check your input.'
+      }
     } else if (err.response) {
       // Server returned an unexpected error status
       error.value = `Server error (${err.response.status}). Please try again later.`
