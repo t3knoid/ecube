@@ -136,9 +136,9 @@ async function handleLogin() {
 }
 
 .session-expired-banner {
-  background: #fff3cd;
-  color: #856404;
-  border: 1px solid var(--color-warning);
+  background: var(--color-alert-warning-bg);
+  color: var(--color-alert-warning-text);
+  border: 1px solid var(--color-alert-warning-border);
   border-radius: var(--border-radius);
   padding: var(--space-sm) var(--space-md);
   margin-bottom: var(--space-md);
@@ -203,9 +203,9 @@ async function handleLogin() {
 .login-error {
   margin-top: var(--space-md);
   padding: var(--space-sm) var(--space-md);
-  background: #fef2f2;
-  color: var(--color-danger);
-  border: 1px solid #fecaca;
+  background: var(--color-alert-danger-bg);
+  color: var(--color-alert-danger-text);
+  border: 1px solid var(--color-alert-danger-border);
   border-radius: var(--border-radius);
   text-align: center;
   font-size: var(--font-size-sm);

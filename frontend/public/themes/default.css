@@ -30,6 +30,14 @@
   --color-danger: #dc2626;
   --color-info: #2563eb;
 
+  /* ── Alert / banner surfaces ─────────────────────────────────────── */
+  --color-alert-warning-bg: #fff3cd;
+  --color-alert-warning-text: #856404;
+  --color-alert-warning-border: #d97706;
+  --color-alert-danger-bg: #fef2f2;
+  --color-alert-danger-text: #dc2626;
+  --color-alert-danger-border: #fecaca;
+
   /* ── Borders & dividers ─────────────────────────────────────────── */
   --color-border: #e2e8f0;
   --color-border-focus: #3b82f6;
