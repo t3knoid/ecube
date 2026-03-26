@@ -4,7 +4,12 @@ import { postLogin } from '@/api/auth.js'
 
 function decodeJwtPayload(token) {
   const base64Url = token.split('.')[1]
-  const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+  let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+  // Add padding to a multiple of 4 — JWT Base64URL commonly omits '='
+  const pad = base64.length % 4
+  if (pad) {
+    base64 += '='.repeat(4 - pad)
+  }
   const json = decodeURIComponent(
     atob(base64)
       .split('')
