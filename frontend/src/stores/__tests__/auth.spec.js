@@ -10,6 +10,19 @@ function makeToken(payload) {
   return `${header}.${body}.${sig}`
 }
 
+// Helper: create a JWT with unpadded Base64URL segments (no trailing '=')
+function makeUnpaddedToken(payload) {
+  const encode = (obj) =>
+    btoa(JSON.stringify(obj))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
+  const header = encode({ alg: 'HS256', typ: 'JWT' })
+  const body = encode(payload)
+  const sig = encode({ fake: true })
+  return `${header}.${body}.${sig}`
+}
+
 describe('Auth Store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -101,5 +114,17 @@ describe('Auth Store', () => {
     const expired = store.checkExpiry()
     expect(expired).toBe(true)
     expect(store.isAuthenticated).toBe(false)
+  })
+
+  it('decodes unpadded Base64URL tokens correctly', () => {
+    const store = useAuthStore()
+    const futureExp = Math.floor(Date.now() / 1000) + 3600
+    const jwt = makeUnpaddedToken({ sub: 'charlie', roles: ['manager'], groups: ['team-a'], exp: futureExp })
+    sessionStorage.setItem('ecube_token', jwt)
+    store.initialize()
+    expect(store.isAuthenticated).toBe(true)
+    expect(store.username).toBe('charlie')
+    expect(store.roles).toEqual(['manager'])
+    expect(store.groups).toEqual(['team-a'])
   })
 })
