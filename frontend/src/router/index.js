@@ -102,7 +102,7 @@ router.beforeEach(async (to) => {
 
   // Redirect away from setup if system is already initialized
   if (systemInitialized && to.name === 'setup') {
-    return { name: 'login' }
+    return authStore.isAuthenticated ? { name: 'dashboard' } : { name: 'login' }
   }
 
   // Allow unauthenticated routes
