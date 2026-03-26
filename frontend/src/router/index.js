@@ -117,10 +117,8 @@ router.beforeEach(async (to) => {
     const wasExpired = authStore.checkExpiry()
     if (!wasExpired) {
       // Not an expiry — just unauthenticated; ensure storage is clean
-      authStore.logout()
+      authStore.clearAuth()
     }
-    // checkExpiry/logout already handle redirect via window.location.href,
-    // but return login as fallback for the router
     return { name: 'login', query: wasExpired ? { expired: '1' } : {} }
   }
 

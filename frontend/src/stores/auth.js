@@ -69,8 +69,7 @@ export const useAuthStore = defineStore('auth', () => {
     sessionStorage.setItem('ecube_token', jwt)
   }
 
-  async function login(user, password) {
-    // Clear any existing auth state before attempting a new login
+  function clearAuth() {
     _stopExpiryCheck()
     token.value = null
     username.value = null
@@ -78,6 +77,11 @@ export const useAuthStore = defineStore('auth', () => {
     groups.value = []
     expiresAt.value = null
     sessionStorage.removeItem('ecube_token')
+  }
+
+  async function login(user, password) {
+    // Clear any existing auth state before attempting a new login
+    clearAuth()
 
     const response = await postLogin(user, password)
     const jwt = response.data.access_token
@@ -85,24 +89,13 @@ export const useAuthStore = defineStore('auth', () => {
     _startExpiryCheck()
   }
 
-  function logout({ expired = false } = {}) {
-    _stopExpiryCheck()
-    token.value = null
-    username.value = null
-    roles.value = []
-    groups.value = []
-    expiresAt.value = null
-    sessionStorage.removeItem('ecube_token')
-    if (window.location.pathname !== LOGIN_PATH) {
-      window.location.href = expired ? `${LOGIN_PATH}?expired=1` : LOGIN_PATH
-    } else if (expired && !window.location.search.includes('expired=1')) {
-      window.location.href = `${LOGIN_PATH}?expired=1`
-    }
+  function logout() {
+    clearAuth()
   }
 
   function checkExpiry() {
     if (expiresAt.value && Date.now() >= expiresAt.value) {
-      logout({ expired: true })
+      clearAuth()
       return true
     }
     return false
@@ -111,7 +104,10 @@ export const useAuthStore = defineStore('auth', () => {
   function _startExpiryCheck() {
     _stopExpiryCheck()
     expiryInterval = setInterval(() => {
-      checkExpiry()
+      if (checkExpiry()) {
+        // Background expiry — no router guard runs, so hard redirect is needed
+        window.location.href = `${LOGIN_PATH}?expired=1`
+      }
     }, 30000)
   }
 
@@ -131,12 +127,13 @@ export const useAuthStore = defineStore('auth', () => {
         if (!isAuthenticated.value) {
           // Distinguish an expired token from a corrupt/invalid one
           const wasExpired = !!expiresAt.value && Date.now() >= expiresAt.value
-          logout({ expired: wasExpired })
+          clearAuth()
+          return { expired: wasExpired }
         } else {
           _startExpiryCheck()
         }
       } catch {
-        logout()
+        clearAuth()
       }
     }
   }
@@ -150,6 +147,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     hasRole,
     hasAnyRole,
+    clearAuth,
     login,
     logout,
     checkExpiry,
