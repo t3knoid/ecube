@@ -113,7 +113,15 @@ router.beforeEach(async (to) => {
   // Check if the route (or its parent) requires auth
   const needsAuth = to.matched.some((record) => record.meta.requiresAuth)
   if (needsAuth && !authStore.isAuthenticated) {
-    return { name: 'login' }
+    // Check if there's an expired token so we can show the banner
+    const wasExpired = authStore.checkExpiry()
+    if (!wasExpired) {
+      // Not an expiry — just unauthenticated; ensure storage is clean
+      authStore.logout()
+    }
+    // checkExpiry/logout already handle redirect via window.location.href,
+    // but return login as fallback for the router
+    return { name: 'login', query: wasExpired ? { expired: '1' } : {} }
   }
 
   // Role-based guard
