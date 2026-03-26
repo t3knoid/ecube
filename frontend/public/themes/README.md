@@ -20,7 +20,17 @@ Two built-in themes ship with the application:
 2. Edit the CSS variable values — every variable in `:root` must be present.
 3. Place the file in `public/themes/` (dev) or volume-mount it into the
    Docker container at `/usr/share/nginx/html/themes/my-company.css`.
-4. The theme will appear automatically in the UI theme switcher.
+4. Add an entry to `manifest.json` in the same directory:
+   ```json
+   [
+     { "name": "default", "label": "Light" },
+     { "name": "dark", "label": "Dark" },
+     { "name": "my-company", "label": "My Company" }
+   ]
+   ```
+   The `name` must match the CSS filename (without `.css`). The `label` is
+   the human-readable text shown in the theme switcher.
+5. The theme will appear in the UI theme switcher on the next page load.
 
 > **Do not remove or rename any variables.** Components depend on the full
 > token contract listed below. Missing variables will cause visual defects.
@@ -149,7 +159,9 @@ services:
   frontend:
     volumes:
       - ./my-themes/custom.css:/usr/share/nginx/html/themes/custom.css:ro
+      - ./my-themes/manifest.json:/usr/share/nginx/html/themes/manifest.json:ro
 ```
 
+The `manifest.json` must list all available themes (including built-ins).
 The theme will be available at `/themes/custom.css` and selectable from the
 theme switcher in the UI.

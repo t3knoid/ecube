@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { STORAGE_THEME_KEY } from '@/constants/storage.js'
 
 const THEME_LINK_ID = 'ecube-theme-stylesheet'
@@ -11,7 +11,29 @@ const BUILT_IN_THEMES = [
 
 export const useThemeStore = defineStore('theme', () => {
   const currentTheme = ref('default')
-  const availableThemes = computed(() => BUILT_IN_THEMES)
+  const availableThemes = ref([...BUILT_IN_THEMES])
+
+  /**
+   * Fetch the theme manifest from the server and merge with built-in themes.
+   * Falls back to built-ins if the manifest is missing or malformed.
+   */
+  async function fetchManifest() {
+    try {
+      const url = `${import.meta.env.BASE_URL}themes/manifest.json`
+      const resp = await fetch(url)
+      if (!resp.ok) return
+      const data = await resp.json()
+      if (Array.isArray(data) && data.every((t) => t.name && t.label)) {
+        availableThemes.value = data
+      }
+    } catch {
+      // Manifest unavailable — keep built-in list
+    }
+  }
+
+  function _isKnownTheme(name) {
+    return availableThemes.value.some((t) => t.name === name)
+  }
 
   /**
    * Inject or replace the theme <link> element in <head>.
@@ -35,11 +57,13 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   /**
-   * Restore saved theme from localStorage, falling back to 'default'.
+   * Fetch the manifest, then restore saved theme from localStorage,
+   * falling back to 'default'.
    */
-  function initialize() {
+  async function initialize() {
+    await fetchManifest()
     const saved = localStorage.getItem(STORAGE_THEME_KEY)
-    const themeName = saved && BUILT_IN_THEMES.some((t) => t.name === saved) ? saved : 'default'
+    const themeName = saved && _isKnownTheme(saved) ? saved : 'default'
     loadTheme(themeName)
   }
 
