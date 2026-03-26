@@ -99,17 +99,23 @@ describe('Auth Store', () => {
     expect(sessionStorage.getItem(STORAGE_TOKEN_KEY)).toBeNull()
   })
 
-  // logout() is intentionally a pure state reset — no navigation.
-  // Callers handle redirect: AppHeader uses router.push(), router guard
-  // returns { name: 'login' }. This keeps the store free of browser coupling.
-  it('logout resets auth state without triggering navigation', () => {
+  // logout() clears state and redirects to /login per docs/design/15-frontend-architecture.md §5.1
+  it('logout clears auth state and redirects to login', () => {
     const { store } = initWithToken({ sub: 'frank', roles: ['admin'], groups: [], exp: nowSec() + 3600 })
     expect(store.isAuthenticated).toBe(true)
+
+    // jsdom doesn't implement navigation; stub location to capture the redirect
+    const originalLocation = window.location
+    delete window.location
+    window.location = { href: '' }
 
     store.logout()
     expect(store.isAuthenticated).toBe(false)
     expect(store.token).toBeNull()
     expect(sessionStorage.getItem(STORAGE_TOKEN_KEY)).toBeNull()
+    expect(window.location.href).toContain('/login')
+
+    window.location = originalLocation
   })
 
   it('checkExpiry returns true and clears auth when token expired', () => {
