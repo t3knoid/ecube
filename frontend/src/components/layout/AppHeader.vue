@@ -1,9 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 
-const router = useRouter()
 const authStore = useAuthStore()
 
 const now = ref(Date.now())
@@ -31,8 +29,7 @@ const expiryWarning = computed(() => {
 })
 
 function handleLogout() {
-  authStore.clearAuth()
-  router.push({ name: 'login' })
+  authStore.logout()
 }
 </script>
 
