@@ -101,8 +101,9 @@ export const useThemeStore = defineStore('theme', () => {
 
   /**
    * Apply the saved (or default) theme synchronously from the built-in list,
-   * then fetch the manifest in the background. If the manifest reveals the
-   * saved theme is valid, the theme stays; otherwise it is corrected.
+   * then fetch the manifest in the background. If the manifest makes a saved
+   * custom theme available, switch to it; otherwise keep the current theme
+   * (or fall back to default if it's no longer known).
    */
   function initialize() {
     let saved = null
@@ -114,10 +115,13 @@ export const useThemeStore = defineStore('theme', () => {
     const themeName = saved && _isKnownTheme(saved) ? saved : 'default'
     loadTheme(themeName)
 
-    // Fetch manifest in background — updates available themes list and
-    // corrects theme if the saved one isn't in the manifest.
+    // Fetch manifest in background — may unlock a saved custom theme or
+    // invalidate the current one.
     fetchManifest().then(() => {
-      if (!_isKnownTheme(currentTheme.value)) {
+      if (saved && saved !== currentTheme.value && _isKnownTheme(saved)) {
+        // Saved custom theme is now available after manifest loaded
+        loadTheme(saved)
+      } else if (!_isKnownTheme(currentTheme.value)) {
         loadTheme('default')
       }
     }).catch(() => {
