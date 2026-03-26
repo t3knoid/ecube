@@ -66,7 +66,6 @@ export const useThemeStore = defineStore('theme', () => {
   function loadTheme(name) {
     if (!VALID_THEME_NAME.test(name)) return
     const href = `${import.meta.env.BASE_URL}themes/${name}.css`
-    const previous = currentTheme.value
 
     let link = document.getElementById(THEME_LINK_ID)
     if (link) {
@@ -89,9 +88,9 @@ export const useThemeStore = defineStore('theme', () => {
     }
 
     link.onerror = () => {
-      // Stylesheet failed to load — revert to previous or default
+      // Stylesheet failed to load — fall back to default (once).
       if (name !== 'default') {
-        loadTheme(previous !== name ? previous : 'default')
+        loadTheme('default')
       }
     }
 
