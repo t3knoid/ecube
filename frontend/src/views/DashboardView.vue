@@ -1,6 +1,10 @@
+<script setup>
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
+</script>
+
 <template>
   <div>
-    <h1>Dashboard</h1>
-    <p>Dashboard will be implemented in a future phase.</p>
+    <h1>{{ t('nav.dashboard') }}</h1>
   </div>
 </template>

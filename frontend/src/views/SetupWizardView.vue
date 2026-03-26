@@ -1,7 +1,12 @@
+<script setup>
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
+</script>
+
 <template>
   <div class="setup-wizard">
-    <h1>System Setup</h1>
-    <p>Setup wizard will be implemented in Phase 5.</p>
+    <h1>{{ t('system.setup') }}</h1>
+    <p>{{ t('system.setupPlaceholder') }}</p>
   </div>
 </template>
 
