@@ -1,7 +1,9 @@
 <script setup>
 import { useToast } from '@/composables/useToast.js'
+import { useI18n } from 'vue-i18n'
 
 const { toasts, removeToast } = useToast()
+const { t } = useI18n()
 
 function typeClass(type) {
   return `toast--${type}`
@@ -20,11 +22,11 @@ function typeClass(type) {
         >
           <span class="toast__message">{{ toast.message }}</span>
           <span v-if="toast.traceId" class="toast__trace">
-            Ref: {{ toast.traceId }}
+            {{ t('common.labels.traceReferencePrefix') }} {{ toast.traceId }}
           </span>
           <button
             class="toast__close"
-            aria-label="Close"
+            :aria-label="t('common.actions.close')"
             @click="removeToast(toast.id)"
           >
             &times;
