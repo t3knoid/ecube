@@ -91,8 +91,8 @@ export function usePolling(fetchFn, options = {}) {
 
   function stop() {
     isPolling.value = false
-    if (timer) {
-      clearInterval(timer)
+    if (timer !== null) {
+      clearTimeout(timer)
       timer = null
     }
   }
