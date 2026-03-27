@@ -70,6 +70,14 @@ export const useThemeStore = defineStore('theme', () => {
     const href = `${import.meta.env.BASE_URL}themes/${name}.css`
 
     const oldLink = document.getElementById(THEME_LINK_ID)
+
+    // Short-circuit when the desired stylesheet is already active — avoids
+    // cancelling an in-flight load and an unnecessary network request.
+    if (oldLink && oldLink.getAttribute('href') === href) {
+      currentTheme.value = name
+      return
+    }
+
     const link = document.createElement('link')
     link.id = THEME_LINK_ID
     link.rel = 'stylesheet'
