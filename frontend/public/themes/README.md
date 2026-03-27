@@ -74,6 +74,17 @@ Every theme file must define all of the following `:root` variables.
 | `--color-danger`  | Error / danger   |
 | `--color-info`    | Informational    |
 
+### Alert / Banner Colors
+
+| Token                          | Purpose                        |
+|--------------------------------|--------------------------------|
+| `--color-alert-warning-bg`     | Warning banner background      |
+| `--color-alert-warning-text`   | Warning banner text            |
+| `--color-alert-warning-border` | Warning banner border          |
+| `--color-alert-danger-bg`      | Danger / error banner background|
+| `--color-alert-danger-text`    | Danger / error banner text     |
+| `--color-alert-danger-border`  | Danger / error banner border   |
+
 ### Borders & Dividers
 
 | Token                 | Purpose             |
