@@ -22,6 +22,7 @@ import AppFooter from '@/components/layout/AppFooter.vue'
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  background: var(--color-bg-primary);
 }
 
 .shell-body {
@@ -32,7 +33,7 @@ import AppFooter from '@/components/layout/AppFooter.vue'
 
 .shell-content {
   flex: 1;
-  padding: 1.5rem;
+  padding: var(--space-lg);
   overflow-y: auto;
 }
 </style>

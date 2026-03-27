@@ -1,0 +1,98 @@
+/*
+ * ECUBE Dark Theme — Muted Blue Accents
+ *
+ * Dark backgrounds with light text and subtle blue highlights.
+ * Implements the full CSS custom properties contract.
+ */
+
+:root {
+  /* ── Surface colors ─────────────────────────────────────────────── */
+  --color-bg-primary: #0f172a;
+  --color-bg-secondary: #1e293b;
+  --color-bg-sidebar: #1e293b;
+  --color-bg-header: #1e293b;
+  --color-bg-footer: #1e293b;
+  --color-bg-input: #334155;
+  --color-bg-hover: #334155;
+  --color-bg-selected: #1e3a5f;
+
+  /* ── Text colors ────────────────────────────────────────────────── */
+  --color-text-primary: #e2e8f0;
+  --color-text-secondary: #94a3b8;
+  --color-text-inverse: #0f172a;
+  --color-text-link: #60a5fa;
+  --color-text-disabled: #475569;
+
+  /* ── Semantic colors ────────────────────────────────────────────── */
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #60a5fa;
+
+  /* ── Alert / banner surfaces ─────────────────────────────────────── */
+  --color-alert-warning-bg: #3b2f10;
+  --color-alert-warning-text: #fde68a;
+  --color-alert-warning-border: #f59e0b;
+  --color-alert-danger-bg: #3b1a1a;
+  --color-alert-danger-text: #fca5a5;
+  --color-alert-danger-border: #ef4444;
+
+  /* ── Borders & dividers ─────────────────────────────────────────── */
+  --color-border: #334155;
+  --color-border-focus: #60a5fa;
+  --color-divider: #334155;
+
+  /* ── Buttons ────────────────────────────────────────────────────── */
+  --color-btn-primary-bg: #3b82f6;
+  --color-btn-primary-text: #ffffff;
+  --color-btn-primary-hover-bg: #2563eb;
+  --color-btn-danger-bg: #ef4444;
+  --color-btn-danger-text: #ffffff;
+  --color-btn-danger-hover-bg: #dc2626;
+
+  /* ── Role badges ────────────────────────────────────────────────── */
+  --color-badge-admin-bg: #3b1a1a;
+  --color-badge-admin-text: #fca5a5;
+  --color-badge-manager-bg: #1e2a4a;
+  --color-badge-manager-text: #93c5fd;
+  --color-badge-processor-bg: #14301d;
+  --color-badge-processor-text: #86efac;
+  --color-badge-auditor-bg: #3b2f10;
+  --color-badge-auditor-text: #fde68a;
+
+  /* ── Progress bar ───────────────────────────────────────────────── */
+  --color-progress-bar: #3b82f6;
+  --color-progress-track: #334155;
+
+  /* ── Typography ─────────────────────────────────────────────────── */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    Roboto, Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans',
+    'Helvetica Neue', sans-serif;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-bold: 700;
+
+  /* ── Spacing scale ──────────────────────────────────────────────── */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+
+  /* ── Layout tokens ──────────────────────────────────────────────── */
+  --sidebar-width: 200px;
+  --header-height: 56px;
+  --footer-height: 40px;
+  --border-radius: 4px;
+  --border-radius-lg: 8px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
+}
