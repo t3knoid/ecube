@@ -1,6 +1,10 @@
 import apiClient from './client.js'
 import { toData } from './data.js'
 
+export function listJobs(params = {}) {
+  return toData(apiClient.get('/api/jobs', { params }))
+}
+
 export function createJob(payload) {
   return toData(apiClient.post('/api/jobs', payload))
 }
