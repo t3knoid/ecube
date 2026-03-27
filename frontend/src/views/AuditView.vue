@@ -1,6 +1,11 @@
+<script setup>
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
+</script>
+
 <template>
   <div>
-    <h1>Audit</h1>
-    <p>Audit view will be implemented in a future phase.</p>
+    <h1>{{ t('audit.title') }}</h1>
+    <p>{{ t('audit.placeholder') }}</p>
   </div>
 </template>

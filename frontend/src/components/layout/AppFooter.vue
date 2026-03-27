@@ -1,6 +1,9 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getSystemHealth, getVersion } from '@/api/introspection.js'
+
+const { t } = useI18n()
 
 const version = ref('—')
 const dbConnected = ref(null)
@@ -54,19 +57,19 @@ onUnmounted(() => {
 
 <template>
   <footer class="app-footer">
-    <span class="footer-version">ECUBE {{ version }}</span>
+    <span class="footer-version">{{ t('app.name') }} {{ version }}</span>
     <span class="footer-separator">│</span>
     <span class="footer-db">
-      DB:
+      {{ t('common.labels.db') }}:
       <span
         class="db-indicator"
         :class="dbConnected === true ? 'db-ok' : dbConnected === false ? 'db-err' : ''"
       >●</span>
-      {{ dbConnected === true ? 'Connected' : dbConnected === false ? 'Disconnected' : '…' }}
+      {{ dbConnected === true ? t('system.dbConnected') : dbConnected === false ? t('system.dbDisconnected') : t('common.labels.loading') }}
     </span>
     <span class="footer-separator">│</span>
     <span class="footer-jobs">
-      Active Jobs: {{ activeJobs !== null ? activeJobs : '…' }}
+      {{ t('jobs.activeJobs') }}: {{ activeJobs !== null ? activeJobs : t('common.labels.loading') }}
     </span>
   </footer>
 </template>
@@ -75,11 +78,11 @@ onUnmounted(() => {
 .app-footer {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  font-size: 0.8rem;
-  color: var(--color-text);
-  background: var(--color-background-soft);
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-footer);
   border-top: 1px solid var(--color-border);
 }
 
@@ -88,14 +91,14 @@ onUnmounted(() => {
 }
 
 .db-indicator {
-  font-size: 0.7rem;
+  font-size: var(--font-size-xs);
 }
 
 .db-ok {
-  color: #16a34a;
+  color: var(--color-success);
 }
 
 .db-err {
-  color: #dc2626;
+  color: var(--color-danger);
 }
 </style>
