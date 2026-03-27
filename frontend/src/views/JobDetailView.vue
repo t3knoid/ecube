@@ -1,6 +1,10 @@
+<script setup>
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
+</script>
+
 <template>
   <div>
-    <h1>Job Detail</h1>
-    <p>Job detail view will be implemented in a future phase.</p>
+    <h1>{{ t('jobs.detail') }}</h1>
   </div>
 </template>

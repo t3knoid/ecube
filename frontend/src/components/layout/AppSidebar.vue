@@ -1,30 +1,32 @@
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { AUDIT_ROLES, USERS_ROLES } from '@/constants/roles.js'
 
+const { t } = useI18n()
 const authStore = useAuthStore()
 
-const navItems = [
-  { label: 'Dashboard', to: '/', roles: null },
-  { label: 'Drives', to: '/drives', roles: null },
-  { label: 'Mounts', to: '/mounts', roles: null },
-  { label: 'Jobs', to: '/jobs', roles: null },
-  { label: 'Audit', to: '/audit', roles: AUDIT_ROLES },
-  { label: 'System', to: '/system', roles: null },
-]
+const navItems = computed(() => [
+  { label: t('nav.dashboard'), to: '/', roles: null },
+  { label: t('nav.drives'), to: '/drives', roles: null },
+  { label: t('nav.mounts'), to: '/mounts', roles: null },
+  { label: t('nav.jobs'), to: '/jobs', roles: null },
+  { label: t('nav.audit'), to: '/audit', roles: AUDIT_ROLES },
+  { label: t('nav.system'), to: '/system', roles: null },
+])
 
-const adminItems = [
-  { label: 'Users', to: '/users', roles: USERS_ROLES },
-]
+const adminItems = computed(() => [
+  { label: t('nav.users'), to: '/users', roles: USERS_ROLES },
+])
 
 function isVisible(item) {
   if (!item.roles) return true
   return authStore.hasAnyRole(item.roles)
 }
 
-const visibleNav = computed(() => navItems.filter(isVisible))
-const visibleAdmin = computed(() => adminItems.filter(isVisible))
+const visibleNav = computed(() => navItems.value.filter(isVisible))
+const visibleAdmin = computed(() => adminItems.value.filter(isVisible))
 </script>
 
 <template>
@@ -59,11 +61,11 @@ const visibleAdmin = computed(() => adminItems.filter(isVisible))
 
 <style scoped>
 .app-sidebar {
-  width: 200px;
-  min-width: 200px;
-  background: var(--color-background-soft);
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  background: var(--color-bg-sidebar);
   border-right: 1px solid var(--color-border);
-  padding: 1rem 0;
+  padding: var(--space-md) 0;
   overflow-y: auto;
 }
 
@@ -74,26 +76,26 @@ const visibleAdmin = computed(() => adminItems.filter(isVisible))
 
 .sidebar-link {
   display: block;
-  padding: 0.625rem 1.25rem;
-  color: var(--color-text);
+  padding: var(--space-sm) var(--space-lg);
+  color: var(--color-text-primary);
   text-decoration: none;
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
   transition: background 0.15s;
 }
 
 .sidebar-link:hover {
-  background: var(--color-background-mute);
+  background: var(--color-bg-hover);
 }
 
 .sidebar-link-active {
-  font-weight: 700;
-  color: var(--color-heading);
-  background: var(--color-background-mute);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  background: var(--color-bg-selected);
 }
 
 .sidebar-divider {
-  margin: 0.5rem 1rem;
+  margin: var(--space-sm) var(--space-md);
   border: none;
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid var(--color-divider);
 }
 </style>
