@@ -59,7 +59,11 @@
     "errors": {
       "networkError": "Unable to reach the server. Check your network connection and try again.",
       "serverError": "Server error ({status}). Please try again later.",
-      "invalidRequest": "Invalid request. Please check your input."
+      "invalidRequest": "Invalid request. Please check your input.",
+      "insufficientPermissions": "Insufficient permissions. Your role may not allow this action.",
+      "requestConflict": "Request conflict. Please refresh and try again.",
+      "validationFailed": "Validation failed. Please review your input.",
+      "serverErrorGeneric": "Server error."
     },
     "actions": {
       "save": "Save",
@@ -83,7 +87,8 @@
       "date": "Date",
       "size": "Size",
       "count": "Count",
-      "db": "DB"
+      "db": "DB",
+      "traceReferencePrefix": "Ref:"
     },
     "plural": {
       "file": "no files | 1 file | {count} files",

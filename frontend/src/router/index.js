@@ -92,8 +92,8 @@ router.beforeEach(async (to) => {
   // Once initialized it cannot revert, so we stop polling.
   if (!systemInitialized) {
     try {
-      const resp = await getSetupStatus()
-      systemInitialized = resp.data.initialized === true
+      const setupStatus = await getSetupStatus()
+      systemInitialized = setupStatus.initialized === true
     } catch {
       // Fail closed: if the backend is unreachable, treat as not initialized
       // so the user is redirected to /setup rather than bypassing it
