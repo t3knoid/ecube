@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { mount } from '@vue/test-utils'
 import { usePolling } from '@/composables/usePolling.js'
@@ -6,6 +6,11 @@ import { usePolling } from '@/composables/usePolling.js'
 describe('usePolling', () => {
   beforeEach(() => {
     vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.clearAllTimers()
+    vi.useRealTimers()
   })
 
   it('calls fetch immediately and at interval', async () => {
@@ -158,6 +163,33 @@ describe('usePolling', () => {
 
     expect(wrapper.vm.polling.lastResponse.value).toBeNull()
     expect(wrapper.vm.polling.lastError.value).toBeNull()
+  })
+
+  it('stops overlap polling interval when stopped', async () => {
+    const fetchFn = vi.fn().mockResolvedValue({ state: 'RUNNING' })
+
+    const Comp = defineComponent({
+      template: '<div />',
+      setup() {
+        const polling = usePolling(fetchFn, { intervalMs: 3000, allowOverlap: true })
+        polling.start()
+        return { polling }
+      },
+    })
+
+    const wrapper = mount(Comp)
+
+    await Promise.resolve()
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(fetchFn).toHaveBeenCalledTimes(2)
+
+    wrapper.vm.polling.stop()
+    expect(wrapper.vm.polling.isPolling.value).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(9000)
+    expect(fetchFn).toHaveBeenCalledTimes(2)
   })
 
   it('cleans up interval on unmount', async () => {
