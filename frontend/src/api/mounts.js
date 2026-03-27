@@ -5,6 +5,14 @@ export function getMounts() {
   return toData(apiClient.get('/api/mounts'))
 }
 
+export function validateAllMounts() {
+  return toData(apiClient.post('/api/mounts/validate'))
+}
+
+export function validateMount(mountId) {
+  return toData(apiClient.post(`/api/mounts/${mountId}/validate`))
+}
+
 export function createMount(payload) {
   return toData(apiClient.post('/api/mounts', payload))
 }
