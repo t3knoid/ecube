@@ -165,6 +165,43 @@ describe('usePolling', () => {
     expect(wrapper.vm.polling.lastError.value).toBeNull()
   })
 
+  it('can restart even if previous run has unresolved in-flight request', async () => {
+    let resolveFirst
+    const first = new Promise((r) => (resolveFirst = r))
+    const fetchFn = vi
+      .fn()
+      .mockReturnValueOnce(first)
+      .mockResolvedValueOnce({ state: 'RUNNING' })
+
+    const Comp = defineComponent({
+      template: '<div />',
+      setup() {
+        const polling = usePolling(fetchFn, { intervalMs: 3000 })
+        return { polling }
+      },
+    })
+
+    const wrapper = mount(Comp)
+
+    wrapper.vm.polling.start()
+    await Promise.resolve()
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+
+    // Stop while the first run is still in-flight.
+    wrapper.vm.polling.stop()
+    expect(wrapper.vm.polling.isPolling.value).toBe(false)
+
+    // Restart should not be blocked by the old unresolved request.
+    wrapper.vm.polling.start()
+    await Promise.resolve()
+    expect(fetchFn).toHaveBeenCalledTimes(2)
+
+    resolveFirst({ state: 'OLD' })
+    await Promise.resolve()
+
+    expect(wrapper.vm.polling.lastResponse.value).toEqual({ state: 'RUNNING' })
+  })
+
   it('stops overlap polling interval when stopped', async () => {
     const fetchFn = vi.fn().mockResolvedValue({ state: 'RUNNING' })
 
