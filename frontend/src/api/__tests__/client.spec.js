@@ -163,4 +163,15 @@ describe('api/client interceptors', () => {
 
     expect(error).toHaveBeenCalledWith('Server exploded', { traceId: 'trace-123' })
   })
+
+  it('handles missing response with network error toast', async () => {
+    const { default: apiClient } = await import('@/api/client.js')
+    const responseInterceptor = apiClient._responseHandlers[0].failure
+
+    await expect(responseInterceptor({ message: 'Network Error' })).rejects.toBeTruthy()
+
+    expect(error).toHaveBeenCalledWith(
+      'Unable to reach the server. Check your network connection and try again.',
+    )
+  })
 })

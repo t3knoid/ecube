@@ -65,6 +65,12 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     const { error: toastError, warning } = useToast()
+
+    if (!error.response) {
+      toastError(i18n.global.t('common.errors.networkError'))
+      return Promise.reject(error)
+    }
+
     const status = error.response?.status
     const data = error.response?.data || {}
 
