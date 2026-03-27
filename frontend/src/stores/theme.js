@@ -75,8 +75,10 @@ export const useThemeStore = defineStore('theme', () => {
     link.rel = 'stylesheet'
 
     // Attach handlers before setting href so cached loads cannot fire
-    // before the callbacks are in place.
+    // before the callbacks are in place.  Guard against stale events from
+    // a previous loadTheme call whose <link> has since been replaced.
     link.onload = () => {
+      if (document.getElementById(THEME_LINK_ID) !== link) return
       currentTheme.value = name
       try {
         localStorage.setItem(STORAGE_THEME_KEY, name)
@@ -86,6 +88,7 @@ export const useThemeStore = defineStore('theme', () => {
     }
 
     link.onerror = () => {
+      if (document.getElementById(THEME_LINK_ID) !== link) return
       // Stylesheet failed to load — clear broken preference and fall back.
       try {
         localStorage.removeItem(STORAGE_THEME_KEY)
