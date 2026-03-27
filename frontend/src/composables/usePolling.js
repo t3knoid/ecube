@@ -5,6 +5,7 @@ export function usePolling(fetchFn, options = {}) {
     intervalMs = 3000,
     isTerminal = () => false,
     immediate = true,
+    allowOverlap = false,
   } = options
 
   const isPolling = ref(false)
@@ -12,10 +13,21 @@ export function usePolling(fetchFn, options = {}) {
   const lastError = ref(null)
 
   let timer = null
+  let inFlight = false
+  let seq = 0
 
   async function tick() {
+    if (!allowOverlap && inFlight) return
+
+    const currentSeq = ++seq
+    inFlight = true
+
     try {
       const response = await fetchFn()
+
+      // Discard stale responses when overlap is allowed.
+      if (allowOverlap && currentSeq !== seq) return
+
       lastResponse.value = response
       lastError.value = null
 
@@ -25,8 +37,14 @@ export function usePolling(fetchFn, options = {}) {
 
       return response
     } catch (error) {
-      lastError.value = error
+      if (!allowOverlap || currentSeq === seq) {
+        lastError.value = error
+      }
       throw error
+    } finally {
+      if (!allowOverlap || currentSeq === seq) {
+        inFlight = false
+      }
     }
   }
 

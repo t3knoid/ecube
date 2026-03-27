@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { AUTH_RESET_EVENT } from '@/constants/auth.js'
 import { STORAGE_TOKEN_KEY } from '@/constants/storage.js'
 
 vi.mock('axios', () => {
@@ -73,6 +74,21 @@ describe('api/client interceptors', () => {
     expect(warning).toHaveBeenCalledWith(
       'Insufficient permissions. Your role may not allow this action.',
     )
+  })
+
+  it('handles 401 by clearing token and dispatching auth reset event', async () => {
+    sessionStorage.setItem(STORAGE_TOKEN_KEY, 'abc123')
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
+
+    const { default: apiClient } = await import('@/api/client.js')
+    const responseInterceptor = apiClient._responseHandlers[0].failure
+
+    await expect(
+      responseInterceptor({ response: { status: 401, data: { detail: 'Token expired' } } }),
+    ).rejects.toBeTruthy()
+
+    expect(sessionStorage.getItem(STORAGE_TOKEN_KEY)).toBeNull()
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({ type: AUTH_RESET_EVENT }))
   })
 
   it('handles 409 using backend message', async () => {

@@ -61,6 +61,76 @@ describe('usePolling', () => {
     expect(wrapper.vm.polling.isPolling.value).toBe(false)
   })
 
+  it('skips interval tick when a fetch is already in flight (single-flight default)', async () => {
+    let resolveFirst
+    const first = new Promise((r) => (resolveFirst = r))
+    const fetchFn = vi
+      .fn()
+      .mockReturnValueOnce(first)
+      .mockResolvedValue({ state: 'RUNNING' })
+
+    const Comp = defineComponent({
+      template: '<div />',
+      setup() {
+        const polling = usePolling(fetchFn, { intervalMs: 3000 })
+        polling.start()
+        return {}
+      },
+    })
+
+    mount(Comp)
+
+    // First tick is in flight (unresolved).
+    await Promise.resolve()
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+
+    // Interval fires while first tick is still in flight — should be skipped.
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+
+    // Resolve the first fetch; next interval should proceed normally.
+    resolveFirst({ state: 'RUNNING' })
+    await Promise.resolve()
+
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(fetchFn).toHaveBeenCalledTimes(2)
+  })
+
+  it('allows overlapping fetches and drops stale responses when allowOverlap is true', async () => {
+    let resolveFirst
+    const first = new Promise((r) => (resolveFirst = r))
+    const second = Promise.resolve({ state: 'SECOND' })
+    const fetchFn = vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second)
+
+    const Comp = defineComponent({
+      template: '<div />',
+      setup() {
+        const polling = usePolling(fetchFn, { intervalMs: 3000, allowOverlap: true })
+        polling.start()
+        return { polling }
+      },
+    })
+
+    const wrapper = mount(Comp)
+
+    // Immediate first tick; in flight and unresolved.
+    await Promise.resolve()
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+
+    // Interval fires — overlap allowed so second fetch starts.
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(fetchFn).toHaveBeenCalledTimes(2)
+
+    // Let the second resolve first.
+    await Promise.resolve()
+    expect(wrapper.vm.polling.lastResponse.value).toEqual({ state: 'SECOND' })
+
+    // Resolve the first (stale — lower seq) — lastResponse must NOT regress.
+    resolveFirst({ state: 'FIRST' })
+    await Promise.resolve()
+    expect(wrapper.vm.polling.lastResponse.value).toEqual({ state: 'SECOND' })
+  })
+
   it('cleans up interval on unmount', async () => {
     const fetchFn = vi.fn().mockResolvedValue({ state: 'RUNNING' })
 
