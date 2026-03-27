@@ -23,13 +23,16 @@ Two built-in themes ship with the application:
 4. Add an entry to `manifest.json` in the same directory:
    ```json
    [
-     { "name": "default", "label": "Light" },
-     { "name": "dark", "label": "Dark" },
      { "name": "my-company", "label": "My Company" }
    ]
    ```
    The `name` must match the CSS filename (without `.css`). The `label` is
    the human-readable text shown in the theme switcher.
+
+   The built-in themes (`default` and `dark`) are always available regardless
+   of what the manifest contains. The manifest only needs to list custom
+   themes. If a manifest entry shares a name with a built-in theme, its
+   `label` will override the built-in label.
 5. The theme will appear in the UI theme switcher on the next page load.
 
 > **Do not remove or rename any variables.** Components depend on the full
