@@ -17,7 +17,7 @@ function normalizeErrorMessage(data, fallbackMessage) {
   }
 
   if (Array.isArray(data.detail)) {
-    return data.detail
+    const detailMessage = data.detail
       .map((item) => {
         if (typeof item === 'string') return item
         if (item && typeof item.msg === 'string') {
@@ -28,6 +28,8 @@ function normalizeErrorMessage(data, fallbackMessage) {
       })
       .filter(Boolean)
       .join('; ')
+
+    return detailMessage.trim() ? detailMessage : fallbackMessage
   }
 
   return fallbackMessage
