@@ -127,6 +127,24 @@ describe('api/client interceptors', () => {
     expect(warning).toHaveBeenCalledWith('body.username: field required')
   })
 
+  it('falls back for 422 when detail array has no usable messages', async () => {
+    const { default: apiClient } = await import('@/api/client.js')
+    const responseInterceptor = apiClient._responseHandlers[0].failure
+
+    await expect(
+      responseInterceptor({
+        response: {
+          status: 422,
+          data: {
+            detail: [{ foo: 'bar' }],
+          },
+        },
+      }),
+    ).rejects.toBeTruthy()
+
+    expect(warning).toHaveBeenCalledWith('Validation failed. Please review your input.')
+  })
+
   it('handles 5xx with trace id', async () => {
     const { default: apiClient } = await import('@/api/client.js')
     const responseInterceptor = apiClient._responseHandlers[0].failure
