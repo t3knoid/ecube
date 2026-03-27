@@ -1,0 +1,95 @@
+{
+  "app": {
+    "name": "ECUBE",
+    "title": "Evidence Copying & USB Based Export"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "drives": "Drives",
+    "mounts": "Mounts",
+    "jobs": "Jobs",
+    "audit": "Audit",
+    "system": "System",
+    "users": "Users"
+  },
+  "auth": {
+    "login": "Log In",
+    "logout": "Log Out",
+    "loggingIn": "Logging in…",
+    "username": "Username",
+    "password": "Password",
+    "sessionExpired": "Session Expired",
+    "sessionExpiredMessage": "Your session has expired. Please log in again to continue.",
+    "insufficientPermissions": "You do not have permission to access this resource.",
+    "sessionExpiresIn": "Session expires in {minutes} minute | Session expires in {minutes} minutes",
+    "sessionTimerShort": "{minutes}m"
+  },
+  "drives": {
+    "title": "Drives",
+    "detail": "Drive Detail",
+    "placeholder": "Drives view will be implemented in a future phase."
+  },
+  "jobs": {
+    "title": "Jobs",
+    "detail": "Job Detail",
+    "placeholder": "Jobs view will be implemented in a future phase.",
+    "activeJobs": "Active Jobs"
+  },
+  "mounts": {
+    "title": "Mounts",
+    "placeholder": "Mounts view will be implemented in a future phase."
+  },
+  "audit": {
+    "title": "Audit",
+    "placeholder": "Audit view will be implemented in a future phase."
+  },
+  "users": {
+    "title": "Users",
+    "placeholder": "Users view will be implemented in a future phase."
+  },
+  "system": {
+    "title": "System",
+    "placeholder": "System view will be implemented in a future phase.",
+    "setup": "System Setup",
+    "setupPlaceholder": "Setup wizard will be implemented in Phase 5.",
+    "dbConnected": "Connected",
+    "dbDisconnected": "Disconnected"
+  },
+  "common": {
+    "errors": {
+      "networkError": "Unable to reach the server. Check your network connection and try again.",
+      "serverError": "Server error ({status}). Please try again later.",
+      "invalidRequest": "Invalid request. Please check your input."
+    },
+    "actions": {
+      "save": "Save",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "edit": "Edit",
+      "create": "Create",
+      "refresh": "Refresh",
+      "close": "Close",
+      "confirm": "Confirm",
+      "back": "Back",
+      "next": "Next"
+    },
+    "labels": {
+      "loading": "Loading…",
+      "theme": "Theme",
+      "version": "Version",
+      "status": "Status",
+      "name": "Name",
+      "type": "Type",
+      "date": "Date",
+      "size": "Size",
+      "count": "Count",
+      "db": "DB"
+    },
+    "plural": {
+      "file": "no files | 1 file | {count} files",
+      "item": "no items | 1 item | {count} items",
+      "job": "no jobs | 1 job | {count} jobs",
+      "drive": "no drives | 1 drive | {count} drives"
+    }
+  }
+}
