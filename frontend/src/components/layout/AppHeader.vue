@@ -58,7 +58,7 @@ function handleLogout() {
         :class="{ 'timer-warning': expiryWarning }"
         :aria-label="t('auth.sessionExpiresIn', remainingMinutes, { minutes: remainingMinutes })"
       >
-        <span aria-hidden="true">⏱</span> {{ remainingMinutes }}m
+        <span aria-hidden="true">⏱</span> {{ t('auth.sessionTimerShort', { minutes: remainingMinutes }) }}
       </span>
       <ThemeSwitcher />
       <button class="btn-logout" @click="handleLogout">{{ t('auth.logout') }}</button>
