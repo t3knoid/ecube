@@ -165,6 +165,7 @@ services:
       - ./my-themes/manifest.json:/usr/share/nginx/html/themes/manifest.json:ro
 ```
 
-The `manifest.json` must list all available themes (including built-ins).
-The theme will be available at `/themes/custom.css` and selectable from the
-theme switcher in the UI.
+The `manifest.json` only needs to list custom themes. Built-in themes
+(`default` and `dark`) are always available regardless of the manifest
+contents. If a manifest entry shares a name with a built-in theme, its
+label will override the built-in label in the theme switcher.
