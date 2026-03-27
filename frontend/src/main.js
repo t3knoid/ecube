@@ -23,7 +23,7 @@ authStore.initialize()
 
 // Keep auth reset centralized without introducing api/store circular imports.
 window.addEventListener(AUTH_RESET_EVENT, () => {
-	authStore.clearAuth()
+  authStore.clearAuth()
 })
 
 // Restore theme synchronously from localStorage, then fetch manifest in background.
