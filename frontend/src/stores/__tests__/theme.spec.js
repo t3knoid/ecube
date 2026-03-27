@@ -172,4 +172,23 @@ describe('Theme Store', () => {
     expect(store.availableThemes).toEqual(BUILT_IN_MANIFEST)
     expect(store.currentTheme).toBe('default')
   })
+
+  it('does not override a user-selected theme when manifest resolves', async () => {
+    // Saved theme is 'custom', which only becomes known after manifest loads.
+    const custom = [{ name: 'custom', label: 'Custom' }]
+    mockFetchManifest(custom)
+    localStorage.setItem(STORAGE_THEME_KEY, 'custom')
+    const store = useThemeStore()
+    store.initialize()
+    // initialize applies 'default' because 'custom' is not yet known.
+    expect(store.currentTheme).toBe('default')
+    // User switches to 'dark' before the manifest fetch resolves.
+    store.loadTheme('dark')
+    expect(store.currentTheme).toBe('dark')
+    // After manifest resolves, the user's choice ('dark') must be preserved.
+    await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalled())
+    // Give the .then() callback a chance to run
+    await new Promise((r) => setTimeout(r, 0))
+    expect(store.currentTheme).toBe('dark')
+  })
 })
