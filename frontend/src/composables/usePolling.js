@@ -84,6 +84,7 @@ export function usePolling(fetchFn, options = {}) {
     if (isPolling.value) return
 
     runId += 1
+    inFlight = false
     isPolling.value = true
 
     if (allowOverlap) {
@@ -113,6 +114,7 @@ export function usePolling(fetchFn, options = {}) {
 
   function stop() {
     runId += 1
+    inFlight = false
     isPolling.value = false
     clearTimer()
   }
