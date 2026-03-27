@@ -13,13 +13,28 @@ export function usePolling(fetchFn, options = {}) {
   const lastError = ref(null)
 
   let timer = null
+  let timerKind = null
   let inFlight = false
   let seq = 0
   let runId = 0
 
+  function clearTimer() {
+    if (timer === null) return
+
+    if (timerKind === 'interval') {
+      clearInterval(timer)
+    } else {
+      clearTimeout(timer)
+    }
+
+    timer = null
+    timerKind = null
+  }
+
   function scheduleNextTick() {
     if (!isPolling.value || allowOverlap) return
 
+    timerKind = 'timeout'
     timer = setTimeout(() => {
       tick()
         .catch(() => {})
@@ -77,6 +92,7 @@ export function usePolling(fetchFn, options = {}) {
         tick().catch(() => {})
       }
 
+      timerKind = 'interval'
       timer = setInterval(() => {
         tick().catch(() => {})
       }, intervalMs)
@@ -98,10 +114,7 @@ export function usePolling(fetchFn, options = {}) {
   function stop() {
     runId += 1
     isPolling.value = false
-    if (timer !== null) {
-      clearTimeout(timer)
-      timer = null
-    }
+    clearTimer()
   }
 
   onBeforeUnmount(stop)
