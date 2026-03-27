@@ -89,8 +89,8 @@ export const useAuthStore = defineStore('auth', () => {
     // Clear any existing auth state before attempting a new login
     clearAuth()
 
-    const response = await postLogin(user, password)
-    const jwt = response.data.access_token
+    const payload = await postLogin(user, password)
+    const jwt = payload.access_token
     _applyToken(jwt)
     _startExpiryCheck()
   }
