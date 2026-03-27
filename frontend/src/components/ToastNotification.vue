@@ -8,6 +8,14 @@ const { t } = useI18n()
 function typeClass(type) {
   return `toast--${type}`
 }
+
+function toastRole(type) {
+  return type === 'warning' || type === 'error' ? 'alert' : 'status'
+}
+
+function toastAriaLive(type) {
+  return type === 'warning' || type === 'error' ? 'assertive' : 'polite'
+}
 </script>
 
 <template>
@@ -23,7 +31,8 @@ function typeClass(type) {
         v-for="toast in toasts"
         :key="toast.id"
         :class="['toast', typeClass(toast.type)]"
-        role="alert"
+        :role="toastRole(toast.type)"
+        :aria-live="toastAriaLive(toast.type)"
       >
         <span class="toast__message">{{ toast.message }}</span>
         <span v-if="toast.traceId" class="toast__trace">
