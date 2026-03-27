@@ -144,9 +144,7 @@ describe('Auth Store', () => {
     const store = useAuthStore()
     const jwt = makeToken({ sub: 'alba', roles: ['processor', 'auditor'], groups: ['ops'], exp: nowSec() + 3600 })
 
-    const spy = vi.spyOn(authApi, 'postLogin').mockResolvedValue({
-      data: { access_token: jwt },
-    })
+    const spy = vi.spyOn(authApi, 'postLogin').mockResolvedValue({ access_token: jwt })
 
     await store.login('alba', 's3cret')
 
@@ -176,7 +174,7 @@ describe('Auth Store', () => {
 
   it('login() throws TokenError when access_token is not a string', async () => {
     const store = useAuthStore()
-    vi.spyOn(authApi, 'postLogin').mockResolvedValue({ data: { access_token: 12345 } })
+    vi.spyOn(authApi, 'postLogin').mockResolvedValue({ access_token: 12345 })
 
     await expect(store.login('frank', 'pass')).rejects.toThrow(TokenError)
     await expect(store.login('frank', 'pass')).rejects.toThrow('not a string')
@@ -187,7 +185,7 @@ describe('Auth Store', () => {
 
   it('login() throws TokenError when access_token is malformed', async () => {
     const store = useAuthStore()
-    vi.spyOn(authApi, 'postLogin').mockResolvedValue({ data: { access_token: 'not-a-jwt' } })
+    vi.spyOn(authApi, 'postLogin').mockResolvedValue({ access_token: 'not-a-jwt' })
 
     await expect(store.login('frank', 'pass')).rejects.toThrow(TokenError)
     await expect(store.login('frank', 'pass')).rejects.toThrow('malformed token')
@@ -203,7 +201,7 @@ describe('Auth Store', () => {
     const badPayload = btoa('not-json')
     const sig = btoa('sig')
     vi.spyOn(authApi, 'postLogin').mockResolvedValue({
-      data: { access_token: `${header}.${badPayload}.${sig}` },
+      access_token: `${header}.${badPayload}.${sig}`,
     })
 
     await expect(store.login('frank', 'pass')).rejects.toThrow(TokenError)

@@ -14,8 +14,8 @@ let stopped = false
 
 async function fetchVersion() {
   try {
-    const resp = await getVersion()
-    if (!stopped) version.value = resp.data.version || '—'
+    const versionData = await getVersion()
+    if (!stopped) version.value = versionData.version || '—'
   } catch (err) {
     console.debug('Failed to fetch version:', err.message || err)
   }
@@ -23,9 +23,8 @@ async function fetchVersion() {
 
 async function fetchHealth() {
   try {
-    const resp = await getSystemHealth()
+    const data = await getSystemHealth()
     if (stopped) return
-    const data = resp.data
     dbConnected.value = data.database === 'connected' || data.database === true
     activeJobs.value = data.active_jobs ?? null
   } catch {
