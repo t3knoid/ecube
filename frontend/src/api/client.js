@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { LOGIN_PATH } from '@/constants/routes.js'
 import { STORAGE_TOKEN_KEY } from '@/constants/storage.js'
-import { EXPIRED_QUERY_KEY, EXPIRED_QUERY_VALUE } from '@/constants/auth.js'
+import { AUTH_RESET_EVENT, EXPIRED_QUERY_KEY, EXPIRED_QUERY_VALUE } from '@/constants/auth.js'
 import { useToast } from '@/composables/useToast.js'
 
 function normalizeErrorMessage(data, fallbackMessage) {
@@ -51,8 +51,8 @@ apiClient.interceptors.request.use((config) => {
 
 // Response interceptor: handle auth errors
 // Intentionally store-agnostic to avoid a circular dependency
-// (store → api/auth → api/client → store). The redirect triggers a full
-// page reload which re-initializes the Pinia store from sessionStorage.
+// (store → api/auth → api/client → store). Instead, 401 dispatches a global
+// auth-reset event that main.js wires to authStore.clearAuth().
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -62,6 +62,7 @@ apiClient.interceptors.response.use(
 
     if (status === 401) {
       sessionStorage.removeItem(STORAGE_TOKEN_KEY)
+      window.dispatchEvent(new Event(AUTH_RESET_EVENT))
       if (window.location.pathname !== LOGIN_PATH) {
         // Only show the expired banner when the backend explicitly says so
         const detail = (data.detail || '').toLowerCase()
