@@ -61,24 +61,21 @@ export const useThemeStore = defineStore('theme', () => {
 
   /**
    * Inject or replace the theme <link> element in <head>.
-   * Attaches load/error handlers — only commits the theme on successful load.
+   * Sets currentTheme optimistically so the UI reflects the selection
+   * immediately. Persists to localStorage only after successful load.
    * Falls back to 'default' if the stylesheet fails to load (unless already default).
    */
   function loadTheme(name) {
     if (!VALID_THEME_NAME.test(name)) return
     const href = `${import.meta.env.BASE_URL}themes/${name}.css`
 
-    let link = document.getElementById(THEME_LINK_ID)
-    if (link) {
-      link.setAttribute('href', href)
-    } else {
-      link = document.createElement('link')
-      link.id = THEME_LINK_ID
-      link.rel = 'stylesheet'
-      link.href = href
-      document.head.appendChild(link)
-    }
+    const oldLink = document.getElementById(THEME_LINK_ID)
+    const link = document.createElement('link')
+    link.id = THEME_LINK_ID
+    link.rel = 'stylesheet'
 
+    // Attach handlers before setting href so cached loads cannot fire
+    // before the callbacks are in place.
     link.onload = () => {
       currentTheme.value = name
       try {
@@ -98,6 +95,13 @@ export const useThemeStore = defineStore('theme', () => {
       if (name !== 'default') {
         loadTheme('default')
       }
+    }
+
+    link.setAttribute('href', href)
+    if (oldLink) {
+      oldLink.replaceWith(link)
+    } else {
+      document.head.appendChild(link)
     }
 
     // Commit optimistically so the UI reflects the selection immediately.
