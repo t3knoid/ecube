@@ -13,6 +13,6 @@ export function setUserRoles(username, payload) {
   return toData(apiClient.put(`/api/users/${username}/roles`, payload))
 }
 
-export function deleteUserRoles(username, payload) {
-  return toData(apiClient.delete(`/api/users/${username}/roles`, { data: payload }))
+export function deleteUserRoles(username) {
+  return toData(apiClient.delete(`/api/users/${username}/roles`))
 }
