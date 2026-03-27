@@ -12,28 +12,32 @@ function typeClass(type) {
 
 <template>
   <Teleport to="body">
-    <div class="toast-container" aria-live="polite" aria-atomic="false">
-      <TransitionGroup name="toast">
-        <div
-          v-for="toast in toasts"
-          :key="toast.id"
-          :class="['toast', typeClass(toast.type)]"
-          role="alert"
+    <TransitionGroup
+      name="toast"
+      tag="div"
+      class="toast-container"
+      aria-live="polite"
+      aria-atomic="false"
+    >
+      <div
+        v-for="toast in toasts"
+        :key="toast.id"
+        :class="['toast', typeClass(toast.type)]"
+        role="alert"
+      >
+        <span class="toast__message">{{ toast.message }}</span>
+        <span v-if="toast.traceId" class="toast__trace">
+          {{ t('common.labels.traceReferencePrefix') }} {{ toast.traceId }}
+        </span>
+        <button
+          class="toast__close"
+          :aria-label="t('common.actions.close')"
+          @click="removeToast(toast.id)"
         >
-          <span class="toast__message">{{ toast.message }}</span>
-          <span v-if="toast.traceId" class="toast__trace">
-            {{ t('common.labels.traceReferencePrefix') }} {{ toast.traceId }}
-          </span>
-          <button
-            class="toast__close"
-            :aria-label="t('common.actions.close')"
-            @click="removeToast(toast.id)"
-          >
-            &times;
-          </button>
-        </div>
-      </TransitionGroup>
-    </div>
+          &times;
+        </button>
+      </div>
+    </TransitionGroup>
   </Teleport>
 </template>
 
