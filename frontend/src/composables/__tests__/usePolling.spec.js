@@ -131,6 +131,35 @@ describe('usePolling', () => {
     expect(wrapper.vm.polling.lastResponse.value).toEqual({ state: 'SECOND' })
   })
 
+  it('does not commit in-flight response after stop', async () => {
+    let resolveFirst
+    const first = new Promise((r) => (resolveFirst = r))
+    const fetchFn = vi.fn().mockReturnValueOnce(first)
+
+    const Comp = defineComponent({
+      template: '<div />',
+      setup() {
+        const polling = usePolling(fetchFn, { intervalMs: 3000 })
+        polling.start()
+        return { polling }
+      },
+    })
+
+    const wrapper = mount(Comp)
+
+    await Promise.resolve()
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+
+    wrapper.vm.polling.stop()
+    expect(wrapper.vm.polling.isPolling.value).toBe(false)
+
+    resolveFirst({ state: 'RUNNING' })
+    await Promise.resolve()
+
+    expect(wrapper.vm.polling.lastResponse.value).toBeNull()
+    expect(wrapper.vm.polling.lastError.value).toBeNull()
+  })
+
   it('cleans up interval on unmount', async () => {
     const fetchFn = vi.fn().mockResolvedValue({ state: 'RUNNING' })
 

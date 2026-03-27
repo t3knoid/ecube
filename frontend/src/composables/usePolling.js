@@ -15,6 +15,7 @@ export function usePolling(fetchFn, options = {}) {
   let timer = null
   let inFlight = false
   let seq = 0
+  let runId = 0
 
   function scheduleNextTick() {
     if (!isPolling.value || allowOverlap) return
@@ -32,10 +33,14 @@ export function usePolling(fetchFn, options = {}) {
     if (!allowOverlap && inFlight) return
 
     const currentSeq = ++seq
+    const currentRunId = runId
     inFlight = true
 
     try {
       const response = await fetchFn()
+
+      // Ignore results from a stopped/restarted polling run.
+      if (currentRunId !== runId || !isPolling.value) return response
 
       // Discard stale responses when overlap is allowed.
       if (allowOverlap && currentSeq !== seq) return
@@ -49,7 +54,7 @@ export function usePolling(fetchFn, options = {}) {
 
       return response
     } catch (error) {
-      if (!allowOverlap || currentSeq === seq) {
+      if ((!allowOverlap || currentSeq === seq) && currentRunId === runId && isPolling.value) {
         lastError.value = error
       }
       throw error
@@ -63,6 +68,7 @@ export function usePolling(fetchFn, options = {}) {
   function start() {
     if (isPolling.value) return
 
+    runId += 1
     isPolling.value = true
 
     if (allowOverlap) {
@@ -90,6 +96,7 @@ export function usePolling(fetchFn, options = {}) {
   }
 
   function stop() {
+    runId += 1
     isPolling.value = false
     if (timer !== null) {
       clearTimeout(timer)
