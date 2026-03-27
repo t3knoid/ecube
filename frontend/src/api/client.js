@@ -3,6 +3,7 @@ import { LOGIN_PATH } from '@/constants/routes.js'
 import { STORAGE_TOKEN_KEY } from '@/constants/storage.js'
 import { AUTH_RESET_EVENT, EXPIRED_QUERY_KEY, EXPIRED_QUERY_VALUE } from '@/constants/auth.js'
 import { useToast } from '@/composables/useToast.js'
+import i18n from '@/i18n'
 
 function normalizeErrorMessage(data, fallbackMessage) {
   if (!data) return fallbackMessage
@@ -30,6 +31,11 @@ function normalizeErrorMessage(data, fallbackMessage) {
   }
 
   return fallbackMessage
+}
+
+export function isExpiredAuthPayload(data) {
+  const message = normalizeErrorMessage(data, '').toLowerCase()
+  return message.includes('expired')
 }
 
 const apiClient = axios.create({
@@ -64,19 +70,18 @@ apiClient.interceptors.response.use(
       sessionStorage.removeItem(STORAGE_TOKEN_KEY)
       window.dispatchEvent(new Event(AUTH_RESET_EVENT))
       if (window.location.pathname !== LOGIN_PATH) {
-        // Only show the expired banner when the backend explicitly says so
-        const detail = (data.detail || '').toLowerCase()
-        const isExpired = detail.includes('expired')
+        // Only show the expired banner when the backend explicitly says so.
+        const isExpired = isExpiredAuthPayload(data)
         window.location.href = isExpired ? `${LOGIN_PATH}?${EXPIRED_QUERY_KEY}=${EXPIRED_QUERY_VALUE}` : LOGIN_PATH
       }
     } else if (status === 403) {
-      warning('Insufficient permissions. Your role may not allow this action.')
+      warning(i18n.global.t('common.errors.insufficientPermissions'))
     } else if (status === 409) {
-      warning(normalizeErrorMessage(data, 'Request conflict. Please refresh and try again.'))
+      warning(normalizeErrorMessage(data, i18n.global.t('common.errors.requestConflict')))
     } else if (status === 422) {
-      warning(normalizeErrorMessage(data, 'Validation failed. Please review your input.'))
+      warning(normalizeErrorMessage(data, i18n.global.t('common.errors.validationFailed')))
     } else if (status >= 500 && status < 600) {
-      toastError(normalizeErrorMessage(data, 'Server error.'), { traceId: data.trace_id || null })
+      toastError(normalizeErrorMessage(data, i18n.global.t('common.errors.serverErrorGeneric')), { traceId: data.trace_id || null })
     }
 
     return Promise.reject(error)

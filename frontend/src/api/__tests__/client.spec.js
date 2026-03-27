@@ -91,6 +91,13 @@ describe('api/client interceptors', () => {
     expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({ type: AUTH_RESET_EVENT }))
   })
 
+  it('detects expired session from ErrorResponse.message', async () => {
+    const { isExpiredAuthPayload } = await import('@/api/client.js')
+
+    expect(isExpiredAuthPayload({ message: 'Token expired' })).toBe(true)
+    expect(isExpiredAuthPayload({ message: 'Unauthorized' })).toBe(false)
+  })
+
   it('handles 409 using backend message', async () => {
     const { default: apiClient } = await import('@/api/client.js')
     const responseInterceptor = apiClient._responseHandlers[0].failure

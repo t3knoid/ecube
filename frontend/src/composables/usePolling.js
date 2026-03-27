@@ -16,6 +16,18 @@ export function usePolling(fetchFn, options = {}) {
   let inFlight = false
   let seq = 0
 
+  function scheduleNextTick() {
+    if (!isPolling.value || allowOverlap) return
+
+    timer = setTimeout(() => {
+      tick()
+        .catch(() => {})
+        .finally(() => {
+          scheduleNextTick()
+        })
+    }, intervalMs)
+  }
+
   async function tick() {
     if (!allowOverlap && inFlight) return
 
@@ -53,14 +65,28 @@ export function usePolling(fetchFn, options = {}) {
 
     isPolling.value = true
 
-    if (immediate) {
-      // Fire and forget initial fetch; callers can use lastError for failures.
-      tick().catch(() => {})
+    if (allowOverlap) {
+      if (immediate) {
+        // Fire and forget initial fetch; callers can use lastError for failures.
+        tick().catch(() => {})
+      }
+
+      timer = setInterval(() => {
+        tick().catch(() => {})
+      }, intervalMs)
+      return
     }
 
-    timer = setInterval(() => {
-      tick().catch(() => {})
-    }, intervalMs)
+    if (immediate) {
+      tick()
+        .catch(() => {})
+        .finally(() => {
+          scheduleNextTick()
+        })
+      return
+    }
+
+    scheduleNextTick()
   }
 
   function stop() {
