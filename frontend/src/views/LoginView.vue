@@ -189,19 +189,6 @@ async function handleLogin() {
   cursor: pointer;
 }
 
-.btn-primary {
-  background: var(--color-btn-primary-bg);
-  color: var(--color-btn-primary-text);
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--color-btn-primary-hover-bg);
-}
-
-.btn-primary:disabled {
-  background: color-mix(in srgb, var(--color-btn-primary-bg) 55%, var(--color-bg-input));
-}
-
 .login-error {
   margin-top: var(--space-md);
   padding: var(--space-sm) var(--space-md);

@@ -259,18 +259,6 @@ select,
   cursor: pointer;
 }
 
-.btn-primary {
-  background: var(--color-btn-primary-bg);
-  border-color: var(--color-btn-primary-bg);
-  color: var(--color-btn-primary-text);
-}
-
-.btn-danger {
-  background: var(--color-btn-danger-bg);
-  border-color: var(--color-btn-danger-bg);
-  color: var(--color-btn-danger-text);
-}
-
 .error-banner {
   color: var(--color-alert-danger-text);
   background: var(--color-alert-danger-bg);
