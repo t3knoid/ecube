@@ -209,7 +209,8 @@
     "createAdmin": "Create Admin User",
     "completeTitle": "Setup Complete",
     "completeBody": "System initialization has completed successfully.",
-    "goToLogin": "Go to Login"
+    "goToLogin": "Go to Login",
+    "alreadyInitialized": "Setup is already complete. Please log in."
   },
   "common": {
     "errors": {
