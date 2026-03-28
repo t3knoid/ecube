@@ -7,12 +7,9 @@ import {
   getOsUsers,
   resetOsUserPassword,
   getOsGroups,
-  createOsGroup,
-  deleteOsGroup,
 } from '@/api/admin.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const { t } = useI18n()
 
@@ -28,8 +25,6 @@ const osUsers = ref([])
 const osGroups = ref([])
 const passwordResetTarget = ref('')
 const passwordResetValue = ref('')
-const showDeleteGroupDialog = ref(false)
-const deleteGroupTarget = ref(null)
 
 const userPage = ref(1)
 const osUserPage = ref(1)
@@ -43,8 +38,6 @@ const createUserForm = ref({
   groups: 'ecube-processors',
   roles: [],
 })
-
-const createGroupInput = ref('ecube-')
 
 const roleColumns = computed(() => [
   { key: 'username', label: t('auth.username') },
@@ -61,7 +54,6 @@ const osUserColumns = computed(() => [
 const osGroupColumns = computed(() => [
   { key: 'name', label: t('users.groupName') },
   { key: 'members', label: t('users.members') },
-  { key: 'actions', label: t('common.actions.delete'), align: 'center' },
 ])
 
 const pagedUsers = computed(() => {
@@ -160,41 +152,6 @@ async function submitResetPassword(username) {
   }
 }
 
-async function submitCreateGroup() {
-  const name = createGroupInput.value.trim()
-  if (!name.startsWith('ecube-')) {
-    error.value = t('users.groupPrefixError')
-    return
-  }
-  saving.value = true
-  error.value = ''
-  try {
-    await createOsGroup({ name })
-    createGroupInput.value = 'ecube-'
-    await loadAll()
-  } catch {
-    error.value = t('common.errors.requestConflict')
-  } finally {
-    saving.value = false
-  }
-}
-
-async function submitDeleteGroup() {
-  if (!deleteGroupTarget.value) return
-  saving.value = true
-  error.value = ''
-  try {
-    await deleteOsGroup(deleteGroupTarget.value.name)
-    deleteGroupTarget.value = null
-    showDeleteGroupDialog.value = false
-    await loadAll()
-  } catch {
-    error.value = t('common.errors.requestConflict')
-  } finally {
-    saving.value = false
-  }
-}
-
 onMounted(loadAll)
 </script>
 
@@ -251,15 +208,8 @@ onMounted(loadAll)
     </article>
 
     <article v-else class="panel">
-      <div class="panel-actions">
-        <input v-model="createGroupInput" type="text" :placeholder="t('users.groupName')" />
-        <button class="btn btn-primary" @click="submitCreateGroup">{{ t('users.createGroup') }}</button>
-      </div>
       <DataTable :columns="osGroupColumns" :rows="pagedOsGroups" row-key="name" :empty-text="t('users.emptyGroups')">
         <template #cell-members="{ row }">{{ (row.members || []).join(', ') }}</template>
-        <template #cell-actions="{ row }">
-          <button class="btn btn-danger" @click="deleteGroupTarget = row; showDeleteGroupDialog = true">{{ t('common.actions.delete') }}</button>
-        </template>
       </DataTable>
       <Pagination v-model:page="osGroupPage" :page-size="pageSize" :total="osGroups.length" />
     </article>
@@ -290,16 +240,6 @@ onMounted(loadAll)
       </div>
     </teleport>
 
-    <ConfirmDialog
-      v-model="showDeleteGroupDialog"
-      :title="t('users.deleteGroupTitle')"
-      :message="t('users.deleteGroupBody')"
-      :confirm-label="t('common.actions.delete')"
-      :cancel-label="t('common.actions.cancel')"
-      :busy="saving"
-      dangerous
-      @confirm="submitDeleteGroup"
-    />
   </section>
 </template>
 
