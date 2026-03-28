@@ -1,4 +1,4 @@
-"""Startup state reconciliation — mounts, jobs, and USB drives.
+"""Startup state reconciliation — identity groups, mounts, jobs, and USB drives.
 
 After a service restart or host reboot, in-memory OS state (active mounts,
 running processes, USB device presence) may diverge from the database.  This
@@ -23,6 +23,8 @@ stale to other workers.
 
 import logging
 import os
+import secrets
+import string
 from datetime import datetime, timezone, timedelta
 from typing import Any, Callable, Dict
 
@@ -30,18 +32,138 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.infrastructure.mount_protocol import MountProvider
+from app.infrastructure.os_user_protocol import OsUserProvider
 from app.infrastructure.usb_discovery import DiscoveredTopology
 from app.infrastructure import FilesystemDetector
 from app.models.jobs import ExportJob, JobStatus
 from app.models.network import MountStatus, NetworkMount
 from app.models.system import ReconciliationLock
+from app.repositories.user_role_repository import UserRoleRepository
 from app.repositories.audit_repository import AuditRepository
+from app.constants import ECUBE_GROUP_ROLE_MAP
 
 logger = logging.getLogger(__name__)
 
 # A lock older than this is considered stale (worker crashed mid-reconciliation)
 # and will be reclaimed by the next startup attempt.
 STALE_LOCK_SECONDS = 300  # 5 minutes
+
+
+# -----------------------------------------------------------------------
+# Identity reconciliation
+# -----------------------------------------------------------------------
+
+def reconcile_identity_groups(
+    os_user_provider: OsUserProvider,
+) -> Dict[str, Any]:
+    """Ensure default ``ecube-*`` OS groups exist.
+
+    This operation is idempotent. Existing groups are left unchanged,
+    and only missing default groups are created.
+    """
+    created_groups = os_user_provider.ensure_ecube_groups()
+    return {
+        "groups_created": len(created_groups),
+        "created_group_names": created_groups,
+    }
+
+
+_ROLE_TO_GROUP = {role: group for group, role in ECUBE_GROUP_ROLE_MAP.items()}
+
+
+def _temporary_recovery_password(length: int = 24) -> str:
+    """Generate a chpasswd-safe temporary password.
+
+    Includes at least one upper-case letter, one lower-case letter,
+    and one digit. Avoids ``:`` and newlines for ``chpasswd`` safety.
+    """
+    alphabet = string.ascii_letters + string.digits + "-_@"
+    chars = [
+        secrets.choice(string.ascii_uppercase),
+        secrets.choice(string.ascii_lowercase),
+        secrets.choice(string.digits),
+    ]
+    chars.extend(secrets.choice(alphabet) for _ in range(max(0, length - len(chars))))
+    secrets.SystemRandom().shuffle(chars)
+    return "".join(chars)
+
+
+def reconcile_identity_users(
+    db: Session,
+    os_user_provider: OsUserProvider,
+) -> Dict[str, Any]:
+    """Reconcile DB role assignments with OS users/group memberships.
+
+    For each user present in ``user_roles``:
+    - Ensures mapped ``ecube-*`` groups are assigned on the OS account.
+    - Creates a missing OS user with mapped groups and a temporary password.
+
+    Temporary passwords are intentionally *not* returned to avoid accidental
+    exposure in logs or API responses. Newly created users therefore require
+    an immediate password reset by an administrator.
+    """
+    repo = UserRoleRepository(db)
+    assignments = repo.list_users()
+    os_users = {u.username: set(u.groups) for u in os_user_provider.list_users(ecube_only=False)}
+
+    checked = 0
+    with_mapped_roles = 0
+    created_users = 0
+    groups_updated = 0
+    errors: list[dict[str, str]] = []
+
+    for row in assignments:
+        username = row.get("username")
+        roles = row.get("roles", [])
+        if not username:
+            continue
+
+        checked += 1
+        required_groups = sorted({_ROLE_TO_GROUP[r] for r in roles if r in _ROLE_TO_GROUP})
+        if not required_groups:
+            continue
+
+        with_mapped_roles += 1
+
+        try:
+            if username not in os_users:
+                temp_password = _temporary_recovery_password()
+                os_user_provider.create_user(
+                    username=username,
+                    password=temp_password,
+                    groups=required_groups,
+                )
+                created_users += 1
+                logger.warning(
+                    "Startup reconciliation created missing OS user '%s' from user_roles. "
+                    "Password reset is required before user login.",
+                    username,
+                )
+                os_users[username] = set(required_groups)
+                continue
+
+            missing_groups = [g for g in required_groups if g not in os_users[username]]
+            if missing_groups:
+                os_user_provider.add_user_to_groups(
+                    username,
+                    missing_groups,
+                    _skip_managed_check=True,
+                )
+                groups_updated += 1
+                os_users[username].update(missing_groups)
+        except Exception as exc:
+            logger.exception("Identity user reconciliation failed for '%s'", username)
+            errors.append({"username": username, "error": str(exc)})
+
+    return {
+        "users_checked": checked,
+        "users_with_mapped_roles": with_mapped_roles,
+        "users_created": created_users,
+        "users_groups_updated": groups_updated,
+        "users_created_password_reset_required": created_users,
+        "users_with_errors": len(errors),
+        "errors": errors,
+    }
 
 
 # -----------------------------------------------------------------------
@@ -386,6 +508,7 @@ def run_startup_reconciliation(
     db: Session,
     mount_provider: MountProvider,
     *,
+    os_user_provider: OsUserProvider | None = None,
     topology_source: Callable[[], DiscoveredTopology],
     filesystem_detector: FilesystemDetector,
 ) -> Dict[str, Any]:
@@ -395,8 +518,8 @@ def run_startup_reconciliation(
     already holds the lock, reconciliation is skipped and the return
     dict contains ``{"skipped": True}``.
 
-    Returns a nested summary keyed by domain (``mounts``, ``jobs``,
-    ``drives``).  Each value is either a counts dict on success or an
+    Returns a nested summary keyed by domain (``identity``, ``mounts``,
+    ``jobs``, ``drives``).  Each value is either a counts dict on success or an
     ``{"error": "..."}`` dict on failure.
     """
     if not _acquire_reconciliation_lock(db):
@@ -405,6 +528,27 @@ def run_startup_reconciliation(
 
     try:
         results: Dict[str, Any] = {}
+
+        if os_user_provider is not None:
+            results["identity"] = {}
+
+            logger.info("Startup reconciliation: ensuring default ECUBE OS groups")
+            try:
+                results["identity"]["groups"] = reconcile_identity_groups(os_user_provider)
+            except Exception:
+                logger.exception("Identity group reconciliation failed")
+                results["identity"]["groups"] = {"error": "identity group reconciliation failed"}
+
+            _refresh_reconciliation_lock(db)
+
+            logger.info("Startup reconciliation: reconciling DB users to OS users")
+            try:
+                results["identity"]["users"] = reconcile_identity_users(db, os_user_provider)
+            except Exception:
+                logger.exception("Identity user reconciliation failed")
+                results["identity"]["users"] = {"error": "identity user reconciliation failed"}
+
+            _refresh_reconciliation_lock(db)
 
         logger.info("Startup reconciliation: checking mounts")
         try:
