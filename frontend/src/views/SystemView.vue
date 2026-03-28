@@ -9,6 +9,7 @@ import {
   getJobDebug,
 } from '@/api/introspection.js'
 import { getLogFiles } from '@/api/admin.js'
+import { listJobs } from '@/api/jobs.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
@@ -27,6 +28,8 @@ const mounts = ref([])
 const logs = ref([])
 const jobDebug = ref(null)
 const jobDebugId = ref('')
+const jobs = ref([])
+const jobsListUnavailable = ref(false)
 
 const page = ref(1)
 const pageSize = ref(10)
@@ -157,9 +160,30 @@ async function loadJobDebug() {
   }
 }
 
+async function loadJobOptions() {
+  jobsListUnavailable.value = false
+  try {
+    const response = await listJobs({ limit: 200 })
+    jobs.value = Array.isArray(response) ? response : []
+  } catch {
+    jobs.value = []
+    jobsListUnavailable.value = true
+  }
+}
+
+function onJobPickerChange(event) {
+  const selected = String(event?.target?.value || '')
+  jobDebugId.value = selected
+  if (selected) {
+    loadJobDebug()
+  }
+}
+
 watch(activeTab, async () => {
   page.value = 1
-  if (activeTab.value !== 'job-debug') {
+  if (activeTab.value === 'job-debug') {
+    await loadJobOptions()
+  } else {
     await loadTabData()
   }
 })
@@ -205,9 +229,17 @@ onMounted(loadTabData)
 
     <article v-else-if="activeTab === 'job-debug'" class="panel">
       <div class="job-debug-form">
+        <label class="job-picker-label" for="job-picker">{{ t('system.jobPickerLabel') }}</label>
+        <select id="job-picker" class="job-picker" :value="jobDebugId" @change="onJobPickerChange">
+          <option value="">{{ t('system.jobPickerPlaceholder') }}</option>
+          <option v-for="job in jobs" :key="job.id" :value="String(job.id)">
+            #{{ job.id }} - {{ job.project_id || 'project' }} - {{ job.status || 'unknown' }}
+          </option>
+        </select>
         <input v-model="jobDebugId" type="number" min="1" :placeholder="t('jobs.jobId')" />
         <button class="btn" @click="loadJobDebug">{{ t('system.loadDebug') }}</button>
       </div>
+      <p v-if="jobsListUnavailable" class="muted">{{ t('system.jobPickerUnavailable') }}</p>
 
       <div v-if="jobDebug" class="health-grid">
         <span>{{ t('jobs.jobId') }}</span><strong>{{ jobDebug.job_id }}</strong>
@@ -268,6 +300,11 @@ onMounted(loadTabData)
   flex-wrap: wrap;
 }
 
+.job-picker-label {
+  align-self: center;
+  color: var(--color-text-secondary);
+}
+
 .panel {
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-lg);
@@ -285,6 +322,7 @@ onMounted(loadTabData)
 }
 
 input,
+.job-picker,
 .btn,
 a.btn {
   border: 1px solid var(--color-border);
