@@ -237,18 +237,6 @@ onMounted(loadDrive)
   cursor: pointer;
 }
 
-.btn-primary {
-  background: var(--color-btn-primary-bg);
-  color: var(--color-btn-primary-text);
-  border-color: var(--color-btn-primary-bg);
-}
-
-.btn-danger {
-  background: var(--color-btn-danger-bg);
-  color: var(--color-btn-danger-text);
-  border-color: var(--color-btn-danger-bg);
-}
-
 .muted {
   color: var(--color-text-secondary);
 }

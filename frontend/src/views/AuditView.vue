@@ -178,12 +178,6 @@ input,
   cursor: pointer;
 }
 
-.btn-primary {
-  background: var(--color-btn-primary-bg);
-  color: var(--color-btn-primary-text);
-  border-color: var(--color-btn-primary-bg);
-}
-
 .details-cell {
   display: grid;
   gap: var(--space-xs);
