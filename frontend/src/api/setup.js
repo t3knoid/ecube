@@ -17,6 +17,10 @@ export function provisionDatabase(payload) {
   return toData(apiClient.post('/api/setup/database/provision', payload))
 }
 
+export function getDatabaseProvisionStatus() {
+  return toData(apiClient.get('/api/setup/database/provision-status'))
+}
+
 export function getDatabaseStatus() {
   return toData(apiClient.get('/api/setup/database/status'))
 }
