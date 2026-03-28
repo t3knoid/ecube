@@ -199,6 +199,7 @@
     "appDbUser": "Application DB User",
     "appDbPass": "Application DB Password",
     "provisionOk": "Database provisioned successfully.",
+    "provisionAlready": "Database is already provisioned. Continuing with existing schema.",
     "createAdmin": "Create Admin User",
     "completeTitle": "Setup Complete",
     "completeBody": "System initialization has completed successfully.",
