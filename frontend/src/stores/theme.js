@@ -3,12 +3,96 @@ import { ref } from 'vue'
 import { STORAGE_THEME_KEY } from '@/constants/storage.js'
 
 const THEME_LINK_ID = 'ecube-theme-stylesheet'
+const THEME_FALLBACK_STYLE_ID = 'ecube-theme-inline-fallback'
 const VALID_THEME_NAME = /^[a-z0-9][a-z0-9-]*$/
 const MANIFEST_TIMEOUT_MS = 3000
 const BUILT_IN_THEMES = [
   { name: 'default', label: 'Light' },
   { name: 'dark', label: 'Dark' },
 ]
+
+// Safety net: if external theme files are missing (e.g. empty mounted
+// /themes directory in Docker), keep the UI readable with built-in defaults.
+const DEFAULT_THEME_INLINE_CSS = `
+:root {
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #f8f9fa;
+  --color-bg-sidebar: #f1f5f9;
+  --color-bg-header: #f8f9fa;
+  --color-bg-footer: #f8f9fa;
+  --color-bg-input: #ffffff;
+  --color-bg-hover: #e2e8f0;
+  --color-bg-selected: #dbeafe;
+
+  --color-text-primary: #1e293b;
+  --color-text-secondary: #64748b;
+  --color-text-inverse: #ffffff;
+  --color-text-link: #2563eb;
+  --color-text-disabled: #94a3b8;
+
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+  --color-info: #2563eb;
+
+  --color-alert-warning-bg: #fff3cd;
+  --color-alert-warning-text: #856404;
+  --color-alert-warning-border: #d97706;
+  --color-alert-danger-bg: #fef2f2;
+  --color-alert-danger-text: #dc2626;
+  --color-alert-danger-border: #fecaca;
+
+  --color-border: #e2e8f0;
+  --color-border-focus: #3b82f6;
+  --color-divider: #e2e8f0;
+
+  --color-btn-primary-bg: #2563eb;
+  --color-btn-primary-text: #ffffff;
+  --color-btn-primary-hover-bg: #1d4ed8;
+  --color-btn-danger-bg: #dc2626;
+  --color-btn-danger-text: #ffffff;
+  --color-btn-danger-hover-bg: #b91c1c;
+
+  --color-badge-admin-bg: #fef2f2;
+  --color-badge-admin-text: #dc2626;
+  --color-badge-manager-bg: #eff6ff;
+  --color-badge-manager-text: #2563eb;
+  --color-badge-processor-bg: #f0fdf4;
+  --color-badge-processor-text: #16a34a;
+  --color-badge-auditor-bg: #fefce8;
+  --color-badge-auditor-text: #ca8a04;
+
+  --color-progress-bar: #2563eb;
+  --color-progress-track: #e2e8f0;
+
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-bold: 700;
+
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+
+  --sidebar-width: 200px;
+  --header-height: 56px;
+  --footer-height: 40px;
+  --border-radius: 4px;
+  --border-radius-lg: 8px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+}
+`
 
 export const useThemeStore = defineStore('theme', () => {
   const currentTheme = ref('default')
@@ -59,6 +143,24 @@ export const useThemeStore = defineStore('theme', () => {
     return availableThemes.value.some((t) => t.name === name)
   }
 
+  function _clearInlineFallbackTheme() {
+    const style = document.getElementById(THEME_FALLBACK_STYLE_ID)
+    if (style) {
+      style.remove()
+    }
+  }
+
+  function _applyInlineFallbackTheme() {
+    let style = document.getElementById(THEME_FALLBACK_STYLE_ID)
+    if (!style) {
+      style = document.createElement('style')
+      style.id = THEME_FALLBACK_STYLE_ID
+      document.head.appendChild(style)
+    }
+    style.textContent = DEFAULT_THEME_INLINE_CSS
+    currentTheme.value = 'default'
+  }
+
   /**
    * Inject or replace the theme <link> element in <head>.
    * Sets currentTheme optimistically so the UI reflects the selection
@@ -87,6 +189,7 @@ export const useThemeStore = defineStore('theme', () => {
     // a previous loadTheme call whose <link> has since been replaced.
     link.onload = () => {
       if (document.getElementById(THEME_LINK_ID) !== link) return
+      _clearInlineFallbackTheme()
       currentTheme.value = name
       try {
         localStorage.setItem(STORAGE_THEME_KEY, name)
@@ -105,7 +208,11 @@ export const useThemeStore = defineStore('theme', () => {
       }
       if (name !== 'default') {
         loadTheme('default')
+        return
       }
+
+      // Even default.css failed — use embedded defaults as a safe fallback.
+      _applyInlineFallbackTheme()
     }
 
     link.setAttribute('href', href)
