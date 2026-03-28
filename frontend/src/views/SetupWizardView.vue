@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import {
   getSetupStatus,
   getDatabaseProvisionStatus,
+  getSystemInfo,
   testDatabaseConnection,
   provisionDatabase,
   initializeSetup,
@@ -39,6 +40,7 @@ const admin = ref({
 const connectionOk = ref(false)
 const provisionOk = ref(false)
 const provisionDetected = ref(false)
+const inDocker = ref(false)
 
 function extractApiMessage(err, fallback) {
   const data = err?.response?.data || {}
@@ -175,6 +177,18 @@ function finish() {
 
 onMounted(async () => {
   try {
+    // Detect runtime environment first so db.host is correct before any
+    // user interaction.
+    try {
+      const info = await getSystemInfo()
+      inDocker.value = info?.in_docker ?? false
+      if (info?.suggested_db_host) {
+        db.value.host = info.suggested_db_host
+      }
+    } catch {
+      // Non-fatal; keep localhost default.
+    }
+
     const setupStatus = await getSetupStatus()
     if (setupStatus?.initialized === true) {
       error.value = t('setup.alreadyInitialized')
@@ -209,6 +223,7 @@ onMounted(async () => {
         <h2>{{ t('setup.testConnection') }}</h2>
         <label>{{ t('setup.dbHost') }}</label>
         <input v-model="db.host" type="text" />
+        <p v-if="inDocker" class="info-hint">{{ t('setup.dockerHostHint') }}</p>
         <label>{{ t('setup.dbPort') }}</label>
         <input v-model.number="db.port" type="number" min="1" max="65535" />
         <label>{{ t('setup.dbAdminUser') }}</label>
@@ -241,9 +256,10 @@ onMounted(async () => {
         <input v-model="admin.username" type="text" />
         <label>{{ t('auth.password') }}</label>
         <input v-model="admin.password" type="password" autocomplete="new-password" />
-        <button class="btn" :disabled="busy || !step3Valid()" @click="runInitializeSetup">
+        <button class="btn" :disabled="busy || !step3Valid() || complete" @click="runInitializeSetup">
           {{ t('setup.createAdmin') }}
         </button>
+        <p v-if="complete" class="ok-text">{{ t('setup.adminCreated') }}</p>
       </div>
 
       <div v-else class="step-grid">
@@ -291,23 +307,12 @@ onMounted(async () => {
   gap: var(--space-xs);
 }
 
-input,
-.btn {
+input {
   border: 1px solid var(--color-border);
   background: var(--color-bg-input);
   color: var(--color-text-primary);
   border-radius: var(--border-radius);
   padding: var(--space-xs) var(--space-sm);
-}
-
-.btn {
-  cursor: pointer;
-}
-
-.btn-primary {
-  background: var(--color-btn-primary-bg);
-  color: var(--color-btn-primary-text);
-  border-color: var(--color-btn-primary-bg);
 }
 
 .actions {
@@ -323,6 +328,14 @@ input,
 .ok-text {
   color: var(--color-success);
   font-weight: var(--font-weight-medium);
+}
+
+.info-hint {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  border-left: 3px solid var(--color-border-focus);
+  padding-left: var(--space-sm);
+  margin: 0;
 }
 
 .error-banner {

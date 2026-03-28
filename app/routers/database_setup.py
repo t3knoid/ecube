@@ -36,7 +36,10 @@ from app.schemas.database import (
     DatabaseStatusResponse,
     DatabaseTestConnectionRequest,
     DatabaseTestConnectionResponse,
+    SystemInfoResponse,
 )
+from app.utils.docker import is_running_in_docker
+from app.config import settings
 from app.services import database_service
 from app.services.audit_service import log_and_audit
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500, R_503
@@ -335,6 +338,24 @@ def provision_database(
         database=body.app_database,
         user=body.app_username,
         migrations_applied=migrations_applied,
+    )
+
+
+@router.get(
+    "/system-info",
+    response_model=SystemInfoResponse,
+)
+def get_system_info() -> SystemInfoResponse:
+    """Return runtime environment hints for the setup wizard.
+
+    **Authentication:** Always public — the wizard needs this before any
+    credentials exist.  Returns whether the server is running inside a Docker
+    container and the recommended PostgreSQL hostname to pre-fill in the UI.
+    """
+    in_docker = is_running_in_docker()
+    return SystemInfoResponse(
+        in_docker=in_docker,
+        suggested_db_host=settings.setup_docker_db_host if in_docker else "localhost",
     )
 
 
