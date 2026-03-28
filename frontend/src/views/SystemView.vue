@@ -99,6 +99,11 @@ function asLocalDate(value) {
   return parsed.toLocaleString()
 }
 
+function extractApiMessage(err) {
+  const data = err?.response?.data || {}
+  return String(data.message || data.detail || '').trim()
+}
+
 async function loadTabData() {
   loading.value = true
   error.value = ''
@@ -118,21 +123,35 @@ async function loadTabData() {
       const response = await getLogFiles()
       logs.value = response.log_files || []
     }
-  } catch {
-    error.value = t('common.errors.requestConflict')
+  } catch (err) {
+    const status = err?.response?.status
+    if (activeTab.value === 'logs' && status === 404) {
+      error.value = t('system.logsNotConfigured')
+    } else {
+      error.value = extractApiMessage(err) || t('common.errors.requestConflict')
+    }
   } finally {
     loading.value = false
   }
 }
 
 async function loadJobDebug() {
-  if (!jobDebugId.value) return
+  if (!jobDebugId.value) {
+    error.value = t('system.enterJobId')
+    return
+  }
   loading.value = true
   error.value = ''
   try {
     jobDebug.value = await getJobDebug(Number(jobDebugId.value))
-  } catch {
-    error.value = t('common.errors.requestConflict')
+  } catch (err) {
+    const status = err?.response?.status
+    if (status === 404) {
+      error.value = t('system.jobNotFound')
+      jobDebug.value = null
+    } else {
+      error.value = extractApiMessage(err) || t('common.errors.requestConflict')
+    }
   } finally {
     loading.value = false
   }
