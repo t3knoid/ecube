@@ -86,6 +86,8 @@ Authenticate with OS credentials and receive a signed JWT.
 
 - All endpoints except `/health`, `/auth/token`, `/setup/status`, `/setup/initialize`, and `/introspection/version` require a bearer token.
 - `/setup/database/test-connection` and `/setup/database/provision` accept an **optional** bearer token: unauthenticated during initial setup (no admin exists), `admin` role required after.
+- `/setup/database/test-connection`, `/setup/database/provision`, and `/setup/database/provision-status` accept an **optional** bearer token: unauthenticated during initial setup (no admin exists), `admin` role required after.
+- `/setup/database/system-info` is always public — no bearer token is required or checked at any point.
 - Token includes:
   - `sub` — user identifier (username)
   - `username` — display name
@@ -1081,6 +1083,15 @@ Perform first-run system initialization: create OS groups, create admin user, se
 
 These endpoints support the setup wizard's database configuration step.  They live under `/setup/database/`.
 
+| Endpoint | Auth |
+|----------|------|
+| `POST /setup/database/test-connection` | Optional bearer token (open during setup, admin required after) |
+| `POST /setup/database/provision` | Optional bearer token (open during setup, admin required after) |
+| `GET /setup/database/provision-status` | Optional bearer token (open during setup, admin required after) |
+| `GET /setup/database/system-info` | Always public |
+| `GET /setup/database/status` | `admin` role required |
+| `PUT /setup/database/settings` | `admin` role required |
+
 #### `POST /setup/database/test-connection`
 
 Test connectivity to a PostgreSQL server.
@@ -1168,6 +1179,46 @@ Create the application database user, database, and run Alembic migrations.
 - `503 Service Unavailable` — Database unreachable and no valid admin JWT provided (fail-closed)
 
 **Audit events:** `DATABASE_PROVISIONED`
+
+#### `GET /setup/database/status`
+#### `GET /setup/database/provision-status`
+
+Report whether the application database has already been provisioned.
+
+**Authentication:** Unauthenticated during initial setup (no admin exists); `admin` role required after.  **Fail-closed:** if the database is unreachable and no valid admin JWT is provided, returns `503`.
+
+**Response (200 OK):**
+
+```json
+{"provisioned": true}
+```
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing token (after setup)
+- `403 Forbidden` — Non-admin role (after setup)
+- `503 Service Unavailable` — Database unreachable and no valid admin JWT provided (fail-closed)
+
+**Use:** The setup wizard calls this on load to disable the Provision button when the database is already provisioned, preventing accidental re-provisioning.
+
+#### `GET /setup/database/system-info`
+
+Return runtime environment hints for the setup wizard.
+
+**Authentication:** Always public — no credentials required at any point.
+
+**Response (200 OK):**
+
+```json
+{"in_docker": true, "suggested_db_host": "postgres"}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `in_docker` | `boolean` | Whether the server process is running inside a Docker container |
+| `suggested_db_host` | `string` | Recommended PostgreSQL hostname to pre-fill in the setup wizard (`"postgres"` in Docker, `"localhost"` otherwise; overridable via `SETUP_DOCKER_DB_HOST`) |
+
+**Use:** The setup wizard fetches this on load to pre-fill the database host field.  When `in_docker` is `true`, a contextual hint is displayed below the host input reminding the operator to use the Docker Compose service name.
 
 #### `GET /setup/database/status`
 

@@ -13,6 +13,7 @@
 - [Overview](#overview)
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
+- [Setup Wizard Auto-Detection](#setup-wizard-auto-detection)
 - [Starting and Stopping](#starting-and-stopping)
   - [Start Services](#start-services)
   - [Check Status](#check-status)
@@ -75,6 +76,21 @@ complete list of environment variables, defaults, and descriptions, see:
 Copy the example file and edit as needed:
 
 ```bash
+## Setup Wizard Auto-Detection
+
+When you open the ECUBE web UI for the first time inside a Docker Compose environment, the setup wizard automatically detects that it is running inside a container and pre-fills the **Database Host** field with the PostgreSQL service name (default: `postgres`).
+
+A contextual hint is displayed below the host field confirming that the Docker Compose service name is being used.  You do not need to enter the host manually for standard Docker Compose deployments.
+
+**Customising the suggested host:** If your PostgreSQL service is named something other than `postgres`, set the `SETUP_DOCKER_DB_HOST` environment variable in your `.env` file before starting the stack:
+
+```env
+SETUP_DOCKER_DB_HOST=my-postgres-service
+```
+
+See [02-configuration-reference.md](02-configuration-reference.md) for the full list of environment variables.
+
+---
 cp .env.example .env
 nano .env
 ```
