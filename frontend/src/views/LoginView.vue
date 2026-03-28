@@ -24,8 +24,11 @@ async function handleLogin() {
     await authStore.login(username.value, password.value)
     router.push('/')
   } catch (err) {
-    if (err.response?.data?.detail) {
-      const detail = err.response.data.detail
+    const responseData = err.response?.data || {}
+    if (typeof responseData.message === 'string' && responseData.message.trim()) {
+      error.value = responseData.message
+    } else if (responseData.detail) {
+      const detail = responseData.detail
       if (typeof detail === 'string') {
         error.value = detail
       } else if (Array.isArray(detail)) {
