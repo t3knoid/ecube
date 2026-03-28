@@ -12,11 +12,12 @@ const step = ref(1)
 const busy = ref(false)
 const error = ref('')
 const complete = ref(false)
+const provisionNote = ref('')
 
 const db = ref({
   host: 'localhost',
   port: 5432,
-  admin_username: 'postgres',
+  admin_username: 'ecube',
   admin_password: '',
   app_database: 'ecube',
   app_username: 'ecube',
@@ -67,6 +68,7 @@ async function runProvision() {
   if (!step2Valid()) return
   busy.value = true
   error.value = ''
+  provisionNote.value = ''
   try {
     await provisionDatabase({
       host: db.value.host,
@@ -79,9 +81,21 @@ async function runProvision() {
       force: false,
     })
     provisionOk.value = true
-  } catch {
-    provisionOk.value = false
-    error.value = t('common.errors.requestConflict')
+    provisionNote.value = t('setup.provisionOk')
+  } catch (err) {
+    const errorData = err?.response?.data || {}
+    const detail = String(errorData.detail || errorData.message || '')
+    const alreadyProvisioned = err?.response?.status === 409 && detail.toLowerCase().includes('already provisioned')
+
+    if (alreadyProvisioned) {
+      // Backend confirms schema/db already exist; allow setup flow to continue.
+      provisionOk.value = true
+      error.value = ''
+      provisionNote.value = t('setup.provisionAlready')
+    } else {
+      provisionOk.value = false
+      error.value = t('common.errors.requestConflict')
+    }
   } finally {
     busy.value = false
   }
@@ -151,7 +165,7 @@ function finish() {
         <button class="btn" :disabled="busy || !step2Valid()" @click="runProvision">
           {{ t('setup.provisionDb') }}
         </button>
-        <p v-if="provisionOk" class="ok-text">{{ t('setup.provisionOk') }}</p>
+        <p v-if="provisionOk" class="ok-text">{{ provisionNote || t('setup.provisionOk') }}</p>
       </div>
 
       <div v-else-if="step === 3" class="step-grid">
@@ -174,8 +188,9 @@ function finish() {
       <div class="actions">
         <button class="btn" :disabled="busy || step === 1" @click="goBack">{{ t('common.actions.back') }}</button>
         <button
+          v-if="step < 4"
           class="btn btn-primary"
-          :disabled="busy || (step === 1 && !connectionOk) || (step === 2 && !provisionOk) || (step === 3 && !complete) || step === 4"
+          :disabled="busy || (step === 1 && !connectionOk) || (step === 2 && !provisionOk) || (step === 3 && !complete)"
           @click="goNext"
         >
           {{ t('common.actions.next') }}
