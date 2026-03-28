@@ -199,8 +199,7 @@ async function handleLogin() {
 }
 
 .btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+  background: color-mix(in srgb, var(--color-btn-primary-bg) 55%, var(--color-bg-input));
 }
 
 .login-error {

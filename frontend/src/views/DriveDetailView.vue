@@ -249,11 +249,6 @@ onMounted(loadDrive)
   border-color: var(--color-btn-danger-bg);
 }
 
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
 .muted {
   color: var(--color-text-secondary);
 }
