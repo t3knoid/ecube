@@ -35,6 +35,13 @@ function normalizeErrorMessage(data, fallbackMessage) {
   return fallbackMessage
 }
 
+function isAlreadyProvisionedConflict(status, data, requestUrl = '') {
+  if (status !== 409) return false
+  const detail = normalizeErrorMessage(data, '').toLowerCase()
+  const url = String(requestUrl || '')
+  return url.includes('/api/setup/database/provision') && detail.includes('already provisioned')
+}
+
 export function isExpiredAuthPayload(data) {
   const message = normalizeErrorMessage(data, '').toLowerCase()
   return message.includes('expired')
@@ -73,6 +80,7 @@ apiClient.interceptors.response.use(
 
     const status = error.response?.status
     const data = error.response?.data || {}
+    const requestUrl = error.config?.url || ''
 
     if (status === 401) {
       sessionStorage.removeItem(STORAGE_TOKEN_KEY)
@@ -85,7 +93,9 @@ apiClient.interceptors.response.use(
     } else if (status === 403) {
       warning(i18n.global.t('common.errors.insufficientPermissions'))
     } else if (status === 409) {
-      warning(normalizeErrorMessage(data, i18n.global.t('common.errors.requestConflict')))
+      if (!isAlreadyProvisionedConflict(status, data, requestUrl)) {
+        warning(normalizeErrorMessage(data, i18n.global.t('common.errors.requestConflict')))
+      }
     } else if (status === 422) {
       warning(normalizeErrorMessage(data, i18n.global.t('common.errors.validationFailed')))
     } else if (status >= 500 && status < 600) {
