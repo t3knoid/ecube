@@ -176,7 +176,10 @@
     "workerQueue": "Worker Queue",
     "loadDebug": "Load Debug",
     "empty": "No data available",
-    "error": "Error"
+    "error": "Error",
+    "logsNotConfigured": "System logs are unavailable because file-based logging is not configured on the backend.",
+    "enterJobId": "Enter a job ID before loading debug details.",
+    "jobNotFound": "No job was found for the provided job ID."
   },
   "dashboard": {
     "systemHealth": "System Health",
