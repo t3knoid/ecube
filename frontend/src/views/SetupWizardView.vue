@@ -3,7 +3,13 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
-import { getSetupStatus, testDatabaseConnection, provisionDatabase, initializeSetup } from '@/api/setup.js'
+import {
+  getSetupStatus,
+  getDatabaseProvisionStatus,
+  testDatabaseConnection,
+  provisionDatabase,
+  initializeSetup,
+} from '@/api/setup.js'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -32,6 +38,7 @@ const admin = ref({
 
 const connectionOk = ref(false)
 const provisionOk = ref(false)
+const provisionDetected = ref(false)
 
 function extractApiMessage(err, fallback) {
   const data = err?.response?.data || {}
@@ -93,7 +100,7 @@ async function runConnectionTest() {
 }
 
 async function runProvision() {
-  if (!step2Valid()) return
+  if (!step2Valid() || provisionDetected.value) return
   busy.value = true
   error.value = ''
   provisionNote.value = ''
@@ -172,6 +179,18 @@ onMounted(async () => {
     if (setupStatus?.initialized === true) {
       error.value = t('setup.alreadyInitialized')
       routeAfterSetupCheck()
+      return
+    }
+
+    try {
+      const provisionStatus = await getDatabaseProvisionStatus()
+      if (provisionStatus?.provisioned === true) {
+        provisionDetected.value = true
+        provisionOk.value = true
+        provisionNote.value = t('setup.provisionAlready')
+      }
+    } catch {
+      // Provision-status check is best effort; keep manual provision path available.
     }
   } catch {
     // If status check fails, keep wizard visible so user can retry once backend is ready.
@@ -210,7 +229,7 @@ onMounted(async () => {
         <input v-model="db.app_username" type="text" />
         <label>{{ t('setup.appDbPass') }}</label>
         <input v-model="db.app_password" type="password" autocomplete="new-password" />
-        <button class="btn" :disabled="busy || !step2Valid()" @click="runProvision">
+        <button class="btn" :disabled="busy || !step2Valid() || provisionDetected" @click="runProvision">
           {{ t('setup.provisionDb') }}
         </button>
         <p v-if="provisionOk" class="ok-text">{{ provisionNote || t('setup.provisionOk') }}</p>
