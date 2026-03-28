@@ -207,10 +207,12 @@
     "provisionOk": "Database provisioned successfully.",
     "provisionAlready": "Database is already provisioned. Continuing with existing schema.",
     "createAdmin": "Create Admin User",
+    "adminCreated": "Admin user created successfully. Continue to the next step.",
     "completeTitle": "Setup Complete",
     "completeBody": "System initialization has completed successfully.",
     "goToLogin": "Go to Login",
-    "alreadyInitialized": "Setup is already complete. Please log in."
+    "alreadyInitialized": "Setup is already complete. Please log in.",
+    "dockerHostHint": "Running inside a container — using the Docker Compose service name as the database host."
   },
   "common": {
     "errors": {

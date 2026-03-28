@@ -25,6 +25,10 @@ export function getDatabaseStatus() {
   return toData(apiClient.get('/api/setup/database/status'))
 }
 
+export function getSystemInfo() {
+  return toData(apiClient.get('/api/setup/database/system-info'))
+}
+
 export function updateDatabaseSettings(payload) {
   return toData(apiClient.put('/api/setup/database/settings', payload))
 }

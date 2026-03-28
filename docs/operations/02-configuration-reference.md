@@ -24,14 +24,21 @@ See `.env.example` in the release package for a copy-paste starting point.
 | `DATABASE_URL` | `postgresql://ecube:ecube@localhost/ecube` | PostgreSQL connection URI. |
 
 ---
-
 ## Security & Authentication
 
+---
+| Variable | Default | Description |
+## First-Run Setup
+|----------|---------|-------------|
+These settings control the behaviour of the first-run setup wizard before the application database is provisioned.
+| `SECRET_KEY` | `change-me-in-production-please-rotate-32b` | Signing key for JWT tokens **and** cookie-based sessions (`SESSION_BACKEND=cookie`). Rotating this value invalidates all outstanding JWTs and active cookie sessions. Generate with `openssl rand -hex 32`. |
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SECRET_KEY` | `change-me-in-production-please-rotate-32b` | Signing key for JWT tokens **and** cookie-based sessions (`SESSION_BACKEND=cookie`). Rotating this value invalidates all outstanding JWTs and active cookie sessions. Generate with `openssl rand -hex 32`. |
+| `SETUP_DOCKER_DB_HOST` | `postgres` | PostgreSQL hostname suggested to the setup wizard when the application detects it is running inside a Docker container.  The setup wizard pre-fills the database host field with this value when `GET /setup/database/system-info` reports `in_docker: true`.  Set this to the Docker Compose service name of your PostgreSQL container if it differs from the default `postgres`. |
 | `ALGORITHM` | `HS256` | JWT signing algorithm. |
+---
 | `TOKEN_EXPIRE_MINUTES` | `60` | Minutes before a locally-issued JWT expires. |
+## Security & Authentication
 | `ROLE_RESOLVER` | `local` | Role resolver provider: `local`, `ldap`, or `oidc`. |
 
 ---
