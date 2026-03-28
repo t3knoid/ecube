@@ -33,9 +33,9 @@ function goToPage(nextPage) {
 <template>
   <div class="pagination-wrap" role="navigation" aria-label="Pagination">
     <span class="pagination-range">{{ startIndex }}-{{ endIndex }} / {{ total }}</span>
-    <button class="page-btn" :disabled="page <= 1" @click="goToPage(page - 1)">Prev</button>
+    <button class="btn page-btn" :disabled="page <= 1" @click="goToPage(page - 1)">Prev</button>
     <span class="page-label">{{ page }} / {{ totalPages }}</span>
-    <button class="page-btn" :disabled="page >= totalPages" @click="goToPage(page + 1)">Next</button>
+    <button class="btn page-btn" :disabled="page >= totalPages" @click="goToPage(page + 1)">Next</button>
   </div>
 </template>
 
@@ -51,17 +51,7 @@ function goToPage(nextPage) {
 }
 
 .page-btn {
-  border: 1px solid var(--color-border);
   background: var(--color-bg-secondary);
-  color: var(--color-text-primary);
-  border-radius: var(--border-radius);
-  padding: var(--space-xs) var(--space-sm);
-  cursor: pointer;
-}
-
-.page-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
 }
 
 .page-label,

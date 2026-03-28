@@ -250,6 +250,7 @@ def custom_openapi():
     # initial setup, admin-required after the first admin user is created).
     _conditional_auth_paths = {
         "/setup/database/test-connection", "/setup/database/provision",
+        "/setup/database/provision-status",
     }
     for path, path_item in openapi_schema["paths"].items():
         if path in _unauthenticated_paths:
