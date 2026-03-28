@@ -1,12 +1,13 @@
 <script setup>
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { testDatabaseConnection, provisionDatabase } from '@/api/setup.js'
-import { initializeSetup } from '@/api/setup.js'
+import { useAuthStore } from '@/stores/auth.js'
+import { getSetupStatus, testDatabaseConnection, provisionDatabase, initializeSetup } from '@/api/setup.js'
 
 const router = useRouter()
 const { t } = useI18n()
+const authStore = useAuthStore()
 
 const step = ref(1)
 const busy = ref(false)
@@ -32,6 +33,28 @@ const admin = ref({
 const connectionOk = ref(false)
 const provisionOk = ref(false)
 
+function extractApiMessage(err, fallback) {
+  const data = err?.response?.data || {}
+
+  if (typeof data.message === 'string' && data.message.trim()) {
+    return data.message
+  }
+
+  if (typeof data.detail === 'string' && data.detail.trim()) {
+    return data.detail
+  }
+
+  return fallback
+}
+
+function routeAfterSetupCheck() {
+  if (authStore.isAuthenticated) {
+    router.replace({ name: 'dashboard' })
+    return
+  }
+  router.replace({ name: 'login' })
+}
+
 function step1Valid() {
   return !!db.value.host && !!db.value.port && !!db.value.admin_username && !!db.value.admin_password
 }
@@ -56,9 +79,14 @@ async function runConnectionTest() {
       admin_password: db.value.admin_password,
     })
     connectionOk.value = true
-  } catch {
+  } catch (err) {
+    if (err?.response?.status === 401) {
+      error.value = t('setup.alreadyInitialized')
+      routeAfterSetupCheck()
+      return
+    }
     connectionOk.value = false
-    error.value = t('common.errors.requestConflict')
+    error.value = extractApiMessage(err, t('common.errors.requestConflict'))
   } finally {
     busy.value = false
   }
@@ -92,9 +120,12 @@ async function runProvision() {
       provisionOk.value = true
       error.value = ''
       provisionNote.value = t('setup.provisionAlready')
+    } else if (err?.response?.status === 401) {
+      error.value = t('setup.alreadyInitialized')
+      routeAfterSetupCheck()
     } else {
       provisionOk.value = false
-      error.value = t('common.errors.requestConflict')
+      error.value = extractApiMessage(err, t('common.errors.requestConflict'))
     }
   } finally {
     busy.value = false
@@ -111,8 +142,13 @@ async function runInitializeSetup() {
       password: admin.value.password,
     })
     complete.value = true
-  } catch {
-    error.value = t('common.errors.requestConflict')
+  } catch (err) {
+    if (err?.response?.status === 401) {
+      error.value = t('setup.alreadyInitialized')
+      routeAfterSetupCheck()
+      return
+    }
+    error.value = extractApiMessage(err, t('common.errors.requestConflict'))
   } finally {
     busy.value = false
   }
@@ -129,6 +165,18 @@ function goBack() {
 function finish() {
   router.push({ name: 'login' })
 }
+
+onMounted(async () => {
+  try {
+    const setupStatus = await getSetupStatus()
+    if (setupStatus?.initialized === true) {
+      error.value = t('setup.alreadyInitialized')
+      routeAfterSetupCheck()
+    }
+  } catch {
+    // If status check fails, keep wizard visible so user can retry once backend is ready.
+  }
+})
 </script>
 
 <template>
