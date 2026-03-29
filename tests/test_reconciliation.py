@@ -19,6 +19,8 @@ from app.models.hardware import DriveState, UsbDrive, UsbHub, UsbPort
 from app.models.jobs import ExportJob, JobStatus
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.models.system import ReconciliationLock
+from app.models.users import UserRole
+from app.infrastructure.os_user_protocol import OSUser
 from app.infrastructure.usb_discovery import (
     DiscoveredDrive,
     DiscoveredHub,
@@ -31,6 +33,8 @@ from app.services.reconciliation_service import (
     _is_holder_alive,
     _refresh_reconciliation_lock,
     _release_reconciliation_lock,
+    reconcile_identity_groups,
+    reconcile_identity_users,
     reconcile_drives,
     reconcile_jobs,
     reconcile_mounts,
@@ -118,6 +122,77 @@ class FakeMountProvider:
 class FakeFilesystemDetector:
     def detect(self, path: str) -> str:
         return "ext4"
+
+
+class FakeOsUserProvider:
+    def __init__(
+        self,
+        created_groups: Optional[list[str]] = None,
+        should_fail_groups: bool = False,
+        should_fail_users: bool = False,
+        existing_users: Optional[dict[str, set[str]]] = None,
+    ):
+        self.created_groups = created_groups or []
+        self.should_fail_groups = should_fail_groups
+        self.should_fail_users = should_fail_users
+        self.ensure_calls = 0
+        self.list_users_calls = 0
+        self.users = {u: set(gs) for u, gs in (existing_users or {}).items()}
+        self.created_usernames: list[str] = []
+        self.updated_group_usernames: list[str] = []
+
+    def ensure_ecube_groups(self) -> list[str]:
+        self.ensure_calls += 1
+        if self.should_fail_groups:
+            raise RuntimeError("group reconciliation failed")
+        return list(self.created_groups)
+
+    def list_users(self, ecube_only: bool = True):
+        self.list_users_calls += 1
+        result = []
+        for username, groups in sorted(self.users.items()):
+            if ecube_only and not any(g.startswith("ecube-") for g in groups):
+                continue
+            result.append(OSUser(
+                username=username,
+                uid=1000,
+                gid=1000,
+                home=f"/home/{username}",
+                shell="/bin/bash",
+                groups=sorted(groups),
+            ))
+        return result
+
+    def user_exists(self, username: str) -> bool:
+        return username in self.users
+
+    def create_user(self, username: str, password: str, groups: Optional[list[str]] = None):
+        if self.should_fail_users:
+            raise RuntimeError("user reconciliation failed")
+        self.created_usernames.append(username)
+        self.users.setdefault(username, set()).update(groups or [])
+        return OSUser(
+            username=username,
+            uid=1001,
+            gid=1001,
+            home=f"/home/{username}",
+            shell="/bin/bash",
+            groups=sorted(self.users[username]),
+        )
+
+    def add_user_to_groups(self, username: str, groups: list[str], _skip_managed_check: bool = False):
+        if self.should_fail_users:
+            raise RuntimeError("user reconciliation failed")
+        self.updated_group_usernames.append(username)
+        self.users.setdefault(username, set()).update(groups)
+        return OSUser(
+            username=username,
+            uid=1001,
+            gid=1001,
+            home=f"/home/{username}",
+            shell="/bin/bash",
+            groups=sorted(self.users[username]),
+        )
 
 
 def _empty_topology() -> DiscoveredTopology:
@@ -396,6 +471,84 @@ class TestReconcileDrives:
 
 
 # =======================================================================
+# Identity reconciliation tests
+# =======================================================================
+
+class TestReconcileIdentityGroups:
+    def test_creates_missing_default_groups(self):
+        provider = FakeOsUserProvider(created_groups=["ecube-processors", "ecube-auditors"])
+
+        result = reconcile_identity_groups(provider)
+
+        assert provider.ensure_calls == 1
+        assert result["groups_created"] == 2
+        assert result["created_group_names"] == ["ecube-processors", "ecube-auditors"]
+
+    def test_noop_when_groups_already_exist(self):
+        provider = FakeOsUserProvider(created_groups=[])
+
+        result = reconcile_identity_groups(provider)
+
+        assert provider.ensure_calls == 1
+        assert result["groups_created"] == 0
+        assert result["created_group_names"] == []
+
+
+class TestReconcileIdentityUsers:
+    def test_reports_missing_os_user_from_db_roles_without_creating(self, db: Session):
+        db.add(UserRole(username="frank", role="manager"))
+        db.commit()
+
+        provider = FakeOsUserProvider(existing_users={"admin": {"ecube-admins"}})
+        result = reconcile_identity_users(db, provider)
+
+        assert result["users_checked"] == 1
+        assert result["users_created"] == 0
+        assert result["users_missing_os_account"] == 1
+        assert result["users_groups_updated"] == 0
+        assert result["users_created_password_reset_required"] == 0
+        assert provider.created_usernames == []
+        assert "frank" not in provider.users
+
+    def test_syncs_missing_groups_for_existing_os_user(self, db: Session):
+        db.add(UserRole(username="frank", role="manager"))
+        db.add(UserRole(username="frank", role="auditor"))
+        db.commit()
+
+        provider = FakeOsUserProvider(existing_users={"frank": {"ecube-managers"}})
+        result = reconcile_identity_users(db, provider)
+
+        assert result["users_created"] == 0
+        assert result["users_missing_os_account"] == 0
+        assert result["users_groups_updated"] == 1
+        assert provider.updated_group_usernames == ["frank"]
+        assert "ecube-auditors" in provider.users["frank"]
+
+    def test_does_not_scan_all_os_users(self, db: Session):
+        db.add(UserRole(username="frank", role="manager"))
+        db.commit()
+
+        provider = FakeOsUserProvider(existing_users={"frank": {"ecube-managers"}})
+        result = reconcile_identity_users(db, provider)
+
+        assert result["users_with_errors"] == 0
+        assert provider.list_users_calls == 0
+
+    def test_user_reconcile_failure_reported(self, db: Session):
+        db.add(UserRole(username="frank", role="manager"))
+        db.commit()
+
+        provider = FakeOsUserProvider(
+            should_fail_users=True,
+            existing_users={"frank": set()},
+        )
+        result = reconcile_identity_users(db, provider)
+
+        assert result["users_with_errors"] == 1
+        assert result["errors"][0]["username"] == "frank"
+
+
+# =======================================================================
 # Orchestrator tests
 # =======================================================================
 
@@ -407,16 +560,38 @@ class TestRunStartupReconciliation:
         _make_job(db, JobStatus.RUNNING)
 
         provider = FakeMountProvider(mounted_paths=set())
+        os_user_provider = FakeOsUserProvider(created_groups=["ecube-processors"])
 
         result = run_startup_reconciliation(
             db, provider,
+            os_user_provider=os_user_provider,
             topology_source=_empty_topology,
             filesystem_detector=FakeFilesystemDetector(),
         )
 
+        assert "identity" in result
+        assert "groups" in result["identity"]
+        assert "users" in result["identity"]
         assert "mounts" in result
         assert "jobs" in result
         assert "drives" in result
+        assert result["identity"]["groups"]["groups_created"] == 1
+        assert result["mounts"]["mounts_corrected"] == 1
+        assert result["jobs"]["jobs_corrected"] == 1
+
+    def test_identity_failure_does_not_block_other_passes(self, db: Session):
+        _make_mount(db, MountStatus.MOUNTED, "/mnt/stale")
+        _make_job(db, JobStatus.RUNNING)
+
+        result = run_startup_reconciliation(
+            db,
+            FakeMountProvider(mounted_paths=set()),
+            os_user_provider=FakeOsUserProvider(should_fail_groups=True),
+            topology_source=_empty_topology,
+            filesystem_detector=FakeFilesystemDetector(),
+        )
+
+        assert result["identity"]["groups"]["error"] == "identity group reconciliation failed"
         assert result["mounts"]["mounts_corrected"] == 1
         assert result["jobs"]["jobs_corrected"] == 1
 

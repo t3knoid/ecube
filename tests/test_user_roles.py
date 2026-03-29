@@ -30,14 +30,14 @@ class TestUserRoleRepository:
 
     def test_set_and_get_roles(self, db):
         repo = UserRoleRepository(db)
-        repo.set_roles("alice", ["admin", "manager"])
-        assert sorted(repo.get_roles("alice")) == ["admin", "manager"]
+        repo.set_roles("griffin", ["admin", "manager"])
+        assert sorted(repo.get_roles("griffin")) == ["admin", "manager"]
 
     def test_set_roles_replaces_existing(self, db):
         repo = UserRoleRepository(db)
-        repo.set_roles("bob", ["admin", "processor"])
-        repo.set_roles("bob", ["auditor"])
-        assert repo.get_roles("bob") == ["auditor"]
+        repo.set_roles("alba", ["admin", "processor"])
+        repo.set_roles("alba", ["auditor"])
+        assert repo.get_roles("alba") == ["auditor"]
 
     def test_delete_roles(self, db):
         repo = UserRoleRepository(db)
@@ -52,14 +52,14 @@ class TestUserRoleRepository:
 
     def test_list_users(self, db):
         repo = UserRoleRepository(db)
-        repo.set_roles("alice", ["admin"])
-        repo.set_roles("bob", ["processor", "auditor"])
+        repo.set_roles("griffin", ["admin"])
+        repo.set_roles("alba", ["processor", "auditor"])
         users = repo.list_users()
         assert len(users) == 2
-        alice = next(u for u in users if u["username"] == "alice")
-        bob = next(u for u in users if u["username"] == "bob")
-        assert alice["roles"] == ["admin"]
-        assert sorted(bob["roles"]) == ["auditor", "processor"]
+        griffin = next(u for u in users if u["username"] == "griffin")
+        alba = next(u for u in users if u["username"] == "alba")
+        assert griffin["roles"] == ["admin"]
+        assert sorted(alba["roles"]) == ["auditor", "processor"]
 
     def test_has_any_admin(self, db):
         repo = UserRoleRepository(db)
@@ -307,7 +307,7 @@ class TestUsernameValidation:
         assert "username" in body["message"].lower()
 
     @pytest.mark.parametrize("good_name", [
-        "alice",
+        "griffin",
         "_svc-account",
         "user-01",
         "a",

@@ -30,12 +30,16 @@ from app.repositories.user_role_repository import UserRoleRepository
 from app.schemas.database import (
     DatabaseProvisionRequest,
     DatabaseProvisionResponse,
+    DatabaseProvisionStatusResponse,
     DatabaseSettingsUpdateRequest,
     DatabaseSettingsUpdateResponse,
     DatabaseStatusResponse,
     DatabaseTestConnectionRequest,
     DatabaseTestConnectionResponse,
+    SystemInfoResponse,
 )
+from app.utils.docker import is_running_in_docker
+from app.config import settings
 from app.services import database_service
 from app.services.audit_service import log_and_audit
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500, R_503
@@ -335,6 +339,54 @@ def provision_database(
         user=body.app_username,
         migrations_applied=migrations_applied,
     )
+
+
+@router.get(
+    "/system-info",
+    response_model=SystemInfoResponse,
+    responses={**R_403, **R_500},
+)
+def get_system_info() -> SystemInfoResponse:
+    """GET /setup/database/system-info: runtime hints for the setup wizard.
+
+    **Authentication:** Always public — the wizard needs this before any
+    credentials exist.  Returns whether the server is running inside a Docker
+    container and the recommended PostgreSQL hostname to pre-fill in the UI.
+    """
+    in_docker = is_running_in_docker()
+    return SystemInfoResponse(
+        in_docker=in_docker,
+        suggested_db_host=settings.setup_docker_db_host if in_docker else "localhost",
+    )
+
+
+@router.get(
+    "/provision-status",
+    response_model=DatabaseProvisionStatusResponse,
+    responses={**R_401, **R_403, **R_404, **R_503},
+)
+def get_database_provision_status(
+    _db: Optional[Session] = Depends(_get_db_or_none),
+    _current_user: Optional[CurrentUser] = Depends(_require_admin_or_initial_setup),
+) -> DatabaseProvisionStatusResponse:
+    """Report whether the application database is already provisioned.
+
+    **Authentication:** During initial setup (no admin user exists), this
+    endpoint accepts unauthenticated requests. Once the system is initialized,
+    a valid admin JWT is required.
+    """
+    try:
+        provisioned = database_service.is_database_provisioned()
+    except DatabaseStatusUnknownError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Cannot determine database provisioning state. "
+                "The database may be temporarily unreachable."
+            ),
+        )
+
+    return DatabaseProvisionStatusResponse(provisioned=provisioned)
 
 
 @router.get(
