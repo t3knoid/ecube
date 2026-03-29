@@ -8,7 +8,7 @@ import {
   getSystemMounts,
   getJobDebug,
 } from '@/api/introspection.js'
-import { getLogFiles } from '@/api/admin.js'
+import { downloadLogFile, getLogFiles } from '@/api/admin.js'
 import { listJobs } from '@/api/jobs.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
@@ -26,6 +26,7 @@ const usbDevices = ref([])
 const blockDevices = ref([])
 const mounts = ref([])
 const logs = ref([])
+const downloadingLogName = ref('')
 const jobDebug = ref(null)
 const jobDebugId = ref('')
 const jobs = ref([])
@@ -179,6 +180,31 @@ function onJobPickerChange(event) {
   }
 }
 
+async function downloadLog(row) {
+  const name = String(row?.name || '')
+  if (!name) return
+
+  downloadingLogName.value = name
+  error.value = ''
+  try {
+    const response = await downloadLogFile(name)
+    const contentType = response?.headers?.['content-type'] || 'application/octet-stream'
+    const blob = response.data instanceof Blob ? response.data : new Blob([response.data], { type: contentType })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = name
+    document.body.appendChild(anchor)
+    anchor.click()
+    document.body.removeChild(anchor)
+    URL.revokeObjectURL(url)
+  } catch (err) {
+    error.value = extractApiMessage(err) || t('common.errors.requestConflict')
+  } finally {
+    downloadingLogName.value = ''
+  }
+}
+
 watch(activeTab, async () => {
   page.value = 1
   if (activeTab.value === 'job-debug') {
@@ -267,9 +293,9 @@ onMounted(loadTabData)
         <template #cell-size="{ row }">{{ formatBytes(row.size) }}</template>
         <template #cell-modified="{ row }">{{ asLocalDate(row.modified) }}</template>
         <template #cell-download="{ row }">
-          <a class="btn" :href="`/api/admin/logs/${encodeURIComponent(row.name)}`" target="_blank" rel="noopener">
+          <button class="btn" :disabled="downloadingLogName === row.name" @click="downloadLog(row)">
             {{ t('system.download') }}
-          </a>
+          </button>
         </template>
       </DataTable>
       <Pagination v-model:page="page" :page-size="pageSize" :total="tabRows.length" />
