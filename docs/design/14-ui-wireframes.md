@@ -745,7 +745,7 @@ Visible only to admin role.
 ┌──────────────┬───────────────────────────────────────────────────────────────┐
 │              │  User Management                              [ + New User ] │
 │  ◎ Dashboard │                                                               │
-│  ◎ Drives    │  Tab: [ Users ]  [ Groups ]                                   │
+│  ◎ Drives    │  Tab: [ User Roles ]  [ Users ]                               │
 │  ◎ Mounts    │                                                               │
 │  ◎ Jobs      │  ┌───────────────┬──────────────────────────┬────────────────┐│
 │  ◎ Audit     │  │ Username      │ DB Roles                 │ OS Groups      ││
@@ -801,42 +801,19 @@ Visible only to admin role.
 │  Password:  [ _____________________ ]                         │
 │  Confirm:   [ _____________________ ]                         │
 │                                                               │
-│  OS Groups:                                                   │
-│  [✓] ecube-processors                                         │
-│  [ ] ecube-managers                                           │
-│  [ ] ecube-auditors                                           │
-│  [ ] ecube-admins                                             │
-│                                                               │
-│  DB Roles (optional — assigned immediately):                  │
+│  Roles (required — OS groups derived automatically):          │
 │  [ ] admin   [ ] manager   [✓] processor   [ ] auditor       │
 │                                                               │
 │                            [ Cancel ]   [ Create User ]       │
 └───────────────────────────────────────────────────────────────┘
 ```
 
-### 8d — Groups Tab (UC-3.10)
+### 8d — Group Listing (API Only, No UI Tab)
 
-```
-┌──────────────┬───────────────────────────────────────────────────────────────┐
-│              │  User Management                                              │
-│              │                                                               │
-│              │  Tab: [ Users ]  [Groups]                                  │
-│              │                                                               │
-│              │  ┌─────────────────────┬──────────────┐                      │
-│              │  │ Group Name          │ Members      │                      │
-│              │  ├─────────────────────┼──────────────┤                      │
-│              │  │ ecube-admins        │ griffin      │                      │
-│              │  │ ecube-managers      │ jordan       │                      │
-│              │  │ ecube-processors    │ alba, jordan │                      │
-│              │  │ ecube-auditors      │ (none)       │                      │
-│              │  └─────────────────────┴──────────────┘                      │
-│              │                                                               │
-│              │  (Read-only — groups are managed at the system level.)        │
-│              │                                                               │
-└──────────────┴───────────────────────────────────────────────────────────────┘
-```
+Group visibility is intentionally hidden from the user-facing UI. Group listing
+and management remain available through admin API endpoints only.
 
-**Use Cases Covered:** UC-3.1 through UC-3.12
+**Use Cases Covered:** UC-3.1 through UC-3.9 (UI), UC-3.10 through UC-3.12 (API only)
 
 ---
 
@@ -1043,8 +1020,7 @@ Used for: Format Drive (UC-4.4), Delete User (UC-3.8), Remove Mount (UC-5.4), Re
 | UC-3.5 | Screen 8c: Create User Dialog |
 | UC-3.6 – UC-3.9 | Screen 8a: User List (inline actions) |
 | UC-3.7 | Modal: Reset Password |
-| UC-3.10 | Screen 8d: Groups Tab (read-only list) |
-| UC-3.11 – UC-3.12 | API only in current UI build |
+| UC-3.10 – UC-3.12 | API only in current UI build |
 | UC-4.1 – UC-4.2 | Screen 4a: Drive List |
 | UC-4.3 | Screen 4a: Refresh button |
 | UC-4.4 – UC-4.6 | Screen 4b: Drive Detail (action panels) |

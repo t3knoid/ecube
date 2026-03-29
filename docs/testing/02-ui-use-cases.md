@@ -71,7 +71,7 @@
 | UC-3.11 | Create an OS group *(API only; not exposed in current UI)* | Admin | admin |
 | UC-3.12 | Delete an OS group *(API only; not exposed in current UI)* | Admin | admin |
 
-**UI Implication:** Admin panel with user list table (showing username + role badges), inline role editing, user creation form with group picker, and a separate **Groups** tab that is read-only in the current UI.
+**UI Implication:** Admin panel exposes only **User Roles** and **Users** views: user list with role badges, inline role editing, and user creation with role picker (OS groups derived from selected roles). Group listing/management is API-only in the current UI build.
 
 ---
 
