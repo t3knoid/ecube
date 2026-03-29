@@ -26,6 +26,12 @@ a.btn {
   color: var(--color-btn-danger-text);
 }
 
+.btn:hover:not(:disabled):not([aria-disabled='true']) {
+  background: var(--color-btn-primary-hover-bg);
+  border-color: var(--color-btn-primary-hover-bg);
+  color: var(--color-btn-primary-text);
+}
+
 .btn-primary:hover:not(:disabled):not([aria-disabled='true']) {
   background: var(--color-btn-primary-hover-bg);
   border-color: var(--color-btn-primary-hover-bg);
