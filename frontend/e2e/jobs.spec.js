@@ -51,8 +51,43 @@ test('jobs create, start, verify, and manifest flow', async ({ page }) => {
 
   await expect(page).toHaveURL(/\/jobs\/77$/)
   await page.getByRole('button', { name: 'Start' }).click()
+  // After starting, the job enters RUNNING state; the progress bar should be visible
+  await expect(page.locator('.progress-bar')).toBeVisible()
+
   await page.getByRole('button', { name: 'Verify' }).click()
   await page.getByRole('button', { name: 'Generate Manifest' }).click()
 
   await expectNoCriticalA11yViolations(page)
+})
+
+test('job detail polls and reflects status progression', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['admin'])
+
+  let pollCount = 0
+  const base = { id: 88, project_id: 'P-88', evidence_number: 'EV-88', thread_count: 4, total_bytes: 400 }
+
+  // Register the broad catch-all FIRST so that more-specific handlers registered
+  // afterward take precedence (Playwright uses LIFO route priority).
+  await routeJson(page, '**/api/jobs**', [{ ...base, copied_bytes: 0, status: 'RUNNING' }])
+  await routeJson(page, '**/api/jobs/88/files', { files: [] })
+  await routeJson(page, '**/api/introspection/jobs/88/debug', { files: [] })
+  await page.route('**/api/jobs/88', async (route) => {
+    pollCount += 1
+    const copied = Math.min(pollCount * 100, 400)
+    const status = copied >= 400 ? 'COMPLETED' : 'RUNNING'
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ...base, copied_bytes: copied, status }),
+    })
+  })
+
+  await page.goto('/jobs/88')
+
+  // First render: job is RUNNING
+  await expect(page.getByText('RUNNING')).toBeVisible()
+  // Progress bar is rendered while in progress
+  await expect(page.locator('.progress-bar')).toBeVisible()
+  // Polling eventually advances to COMPLETED (polling interval is 3 s; allow up to 20 s)
+  await expect(page.getByText('COMPLETED')).toBeVisible({ timeout: 20000 })
 })
