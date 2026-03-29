@@ -56,7 +56,7 @@ from app.infrastructure import get_os_user_provider
 from app.infrastructure.os_user_protocol import OSUserError, OsUserProvider
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500, R_504
 from app.services.os_user_service import validate_group_name, validate_username
-from app.constants import ECUBE_GROUPNAME_PATTERN, GROUPNAME_PATTERN, USERNAME_PATTERN
+from app.constants import ECUBE_GROUPNAME_PATTERN, GROUPNAME_PATTERN, USERNAME_PATTERN, ECUBE_GROUP_ROLE_MAP
 from app.utils.client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
@@ -270,62 +270,74 @@ def create_os_user(
     current_user: CurrentUser = Depends(require_roles("admin")),
     request: Request,
 ) -> OSUserResponse:
-    """Create an OS user, set password, and optionally add to groups."""
+    """Create an OS user, set password, and assign groups derived from roles."""
     provider = _get_provider()
+
+    deduplicated_roles = sorted(set(body.roles or []))
+    role_to_group = {role: group for group, role in ECUBE_GROUP_ROLE_MAP.items()}
+    derived_groups = sorted({role_to_group[r] for r in deduplicated_roles if r in role_to_group})
+    extra_groups = sorted(set(body.groups or []))
+    effective_groups = sorted(set(derived_groups + extra_groups))
+
+    if not effective_groups:
+        raise HTTPException(
+            status_code=422,
+            detail="At least one mapped ECUBE role is required to derive OS groups.",
+        )
+
     try:
         os_user = provider.create_user(
             username=body.username,
             password=body.password,
-            groups=body.groups,
+            groups=effective_groups,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except OSUserError as exc:
         _raise_os_error(exc, context="Create OS user")
 
-    # Assign ECUBE DB roles if requested.
-    if body.roles:
-        repo = UserRoleRepository(db)
-        deduplicated = sorted(set(body.roles))
+    repo = UserRoleRepository(db)
+    try:
+        repo.set_roles(body.username, deduplicated_roles)
+    except ValueError as exc:
+        # Invalid role name — shouldn't reach here (schema validates), but
+        # guard defensively.  The OS user was already created; delete it to
+        # avoid leaving partial state.
         try:
-            repo.set_roles(body.username, deduplicated)
-        except ValueError as exc:
-            # Invalid role name — shouldn't reach here (schema validates), but
-            # guard defensively.  The OS user was already created; delete it to
-            # avoid leaving partial state.
-            try:
-                provider.delete_user(body.username, _skip_managed_check=True)
-            except Exception:
-                logger.exception(
-                    "Failed to clean up OS user '%s' after role validation error",
-                    body.username,
-                )
-            raise HTTPException(status_code=422, detail=str(exc))
+            provider.delete_user(body.username, _skip_managed_check=True)
         except Exception:
-            # DB failure — OS user exists but role assignment failed.
-            db.rollback()
-            try:
-                provider.delete_user(body.username, _skip_managed_check=True)
-            except Exception:
-                logger.exception(
-                    "Failed to clean up OS user '%s' after DB error in set_roles",
-                    body.username,
-                )
             logger.exception(
-                "Failed to assign roles to OS user '%s'", body.username
+                "Failed to clean up OS user '%s' after role validation error",
+                body.username,
             )
-            raise HTTPException(
-                status_code=500,
-                detail=(
-                    f"OS user '{body.username}' was created but role assignment "
-                    "failed. The user has been removed. Please retry."
-                ),
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception:
+        # DB failure — OS user exists but role assignment failed.
+        db.rollback()
+        try:
+            provider.delete_user(body.username, _skip_managed_check=True)
+        except Exception:
+            logger.exception(
+                "Failed to clean up OS user '%s' after DB error in set_roles",
+                body.username,
             )
+        logger.exception(
+            "Failed to assign roles to OS user '%s'", body.username
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"OS user '{body.username}' was created but role assignment "
+                "failed. The user has been removed. Please retry."
+            ),
+        )
 
     best_effort_audit(db, "OS_USER_CREATED", current_user.username, {
         "target_user": body.username,
-        "groups": body.groups or [],
-        "roles": list(body.roles) if body.roles else [],
+        "groups": effective_groups,
+        "groups_derived_from_roles": derived_groups,
+        "groups_extra": extra_groups,
+        "roles": deduplicated_roles,
         "path": str(request.url.path),
     }, client_ip=get_client_ip(request))
 
