@@ -67,11 +67,11 @@
 | UC-3.7 | Reset a user's password | Admin | admin |
 | UC-3.8 | Delete an OS user account | Admin | admin |
 | UC-3.9 | Set/modify a user's OS group memberships | Admin | admin |
-| UC-3.10 | List OS groups | Admin | admin |
-| UC-3.11 | Create an OS group | Admin | admin |
-| UC-3.12 | Delete an OS group | Admin | admin |
+| UC-3.10 | List groups | Admin | admin |
+| UC-3.11 | Create an OS group *(API only; not exposed in current UI)* | Admin | admin |
+| UC-3.12 | Delete an OS group *(API only; not exposed in current UI)* | Admin | admin |
 
-**UI Implication:** Admin panel with user list table (showing username + role badges), inline role editing, user creation form with group picker, and a separate groups management tab. Reserved username/group guardrails enforced in form validation.
+**UI Implication:** Admin panel with user list table (showing username + role badges), inline role editing, user creation form with group picker, and a separate **Groups** tab that is read-only in the current UI.
 
 ---
 
