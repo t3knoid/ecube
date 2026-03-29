@@ -122,7 +122,7 @@ onMounted(loadDrive)
 
     <article v-if="drive" class="detail-card">
       <div class="detail-grid">
-        <div><strong>ID</strong><span>{{ drive.id }}</span></div>
+        <div><strong>{{ t('common.labels.id') }}</strong><span>{{ drive.id }}</span></div>
         <div><strong>{{ t('drives.device') }}</strong><span>{{ drive.device_identifier }}</span></div>
         <div><strong>{{ t('drives.filesystemPath') }}</strong><span>{{ drive.filesystem_path || '-' }}</span></div>
         <div><strong>{{ t('drives.filesystem') }}</strong><span>{{ drive.filesystem_type || '-' }}</span></div>
