@@ -22,7 +22,7 @@ const page = ref(1)
 const pageSize = ref(10)
 
 const columns = computed(() => [
-  { key: 'id', label: 'ID', align: 'right' },
+  { key: 'id', label: t('common.labels.id'), align: 'right' },
   { key: 'device_identifier', label: t('drives.device') },
   { key: 'filesystem_type', label: t('drives.filesystem') },
   { key: 'capacity', label: t('common.labels.size'), align: 'right' },
@@ -144,12 +144,12 @@ onMounted(loadDrives)
       <input v-model="search" type="text" :placeholder="t('drives.searchPlaceholder')" />
       <select v-model="stateFilter">
         <option value="ALL">{{ t('drives.allStates') }}</option>
-        <option value="EMPTY">EMPTY</option>
-        <option value="AVAILABLE">AVAILABLE</option>
-        <option value="IN_USE">IN_USE</option>
+        <option value="EMPTY">{{ t('drives.states.empty') }}</option>
+        <option value="AVAILABLE">{{ t('drives.states.available') }}</option>
+        <option value="IN_USE">{{ t('drives.states.inUse') }}</option>
       </select>
       <select v-model="sortKey">
-        <option value="id">ID</option>
+        <option value="id">{{ t('common.labels.id') }}</option>
         <option value="device_identifier">{{ t('drives.device') }}</option>
         <option value="filesystem_type">{{ t('drives.filesystem') }}</option>
         <option value="current_state">{{ t('common.labels.status') }}</option>
