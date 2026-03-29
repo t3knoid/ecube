@@ -77,11 +77,11 @@ class TestValidation:
     """Username and group name validation."""
 
     def test_valid_usernames(self):
-        for name in ["alice", "bob", "user_1", "_test", "a-b-c"]:
+        for name in ["griffin", "alba", "user_1", "_test", "a-b-c"]:
             validate_username(name)  # should not raise
 
     def test_invalid_usernames(self):
-        for name in ["Alice", "1user", "a" * 33, "bob;rm", "root/../etc", ""]:
+        for name in ["Alice", "1user", "a" * 33, "alba;rm", "root/../etc", ""]:
             with pytest.raises(ValueError):
                 validate_username(name)
 

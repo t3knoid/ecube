@@ -756,7 +756,7 @@ List all users with their ECUBE role assignments.
 {
     "users": [
         { "username": "frank", "roles": ["admin"] },
-        { "username": "alice", "roles": ["processor", "auditor"] }
+        { "username": "griffin", "roles": ["processor", "auditor"] }
     ]
 }
 ```
@@ -777,7 +777,7 @@ Get role assignments for a specific user.
 
 ```json
 {
-    "username": "alice",
+    "username": "griffin",
     "roles": ["processor", "auditor"]
 }
 ```
@@ -802,7 +802,7 @@ Set roles for a user. Replaces all existing role assignments.
 
 ```json
 {
-    "username": "alice",
+    "username": "griffin",
     "roles": ["auditor", "processor"]
 }
 ```
@@ -839,7 +839,7 @@ Remove all role assignments for a user. The user will fall back to OS group-base
 
 ```json
 {
-    "username": "alice",
+    "username": "griffin",
     "roles": []
 }
 ```
@@ -871,7 +871,7 @@ Create an OS user, set password, and add to groups and optionally assign DB role
 
 ```json
 {
-    "username": "alice",
+    "username": "griffin",
     "password": "s3cret",
     "groups": ["ecube-processors"],
     "roles": ["processor"]
