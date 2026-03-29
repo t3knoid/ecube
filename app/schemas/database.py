@@ -127,7 +127,7 @@ class DatabaseProvisionStatusResponse(BaseModel):
 
 
 class SystemInfoResponse(BaseModel):
-    """Response for ``GET /setup/system-info``."""
+    """Response for ``GET /setup/database/system-info``."""
 
     in_docker: bool = Field(..., description="Whether the server process runs inside a Docker container")
     suggested_db_host: str = Field(..., description="Recommended PostgreSQL hostname for this runtime environment")
