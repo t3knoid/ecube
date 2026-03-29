@@ -28,6 +28,11 @@
     "title": "Drives",
     "detail": "Drive Detail",
     "placeholder": "Drives view will be implemented in a future phase.",
+    "states": {
+      "empty": "Empty",
+      "available": "Available",
+      "inUse": "In Use"
+    },
     "device": "Device",
     "filesystem": "Filesystem",
     "filesystemPath": "Filesystem Path",
