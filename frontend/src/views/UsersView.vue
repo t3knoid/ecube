@@ -153,6 +153,11 @@ function cancelResetPassword() {
   passwordResetValue.value = ''
 }
 
+function openResetPassword(username) {
+  passwordResetTarget.value = username
+  passwordResetValue.value = ''
+}
+
 onMounted(loadAll)
 </script>
 
@@ -184,7 +189,7 @@ onMounted(loadAll)
         </template>
         <template #cell-reset="{ row }">
           <div class="inline-reset">
-            <button class="btn" @click="passwordResetTarget = row.username">{{ t('users.resetPassword') }}</button>
+            <button class="btn" @click="openResetPassword(row.username)">{{ t('users.resetPassword') }}</button>
             <div v-if="passwordResetTarget === row.username" class="inline-form">
               <input v-model="passwordResetValue" type="password" :placeholder="t('auth.password')" :aria-label="t('users.resetPassword')" autocomplete="new-password" />
               <button class="btn btn-primary" @click="submitResetPassword(row.username)">{{ t('users.savePassword') }}</button>
