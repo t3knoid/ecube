@@ -1,5 +1,8 @@
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps({
   page: {
@@ -31,11 +34,11 @@ function goToPage(nextPage) {
 </script>
 
 <template>
-  <div class="pagination-wrap" role="navigation" aria-label="Pagination">
+  <div class="pagination-wrap" role="navigation" :aria-label="t('common.labels.pagination')">
     <span class="pagination-range">{{ startIndex }}-{{ endIndex }} / {{ total }}</span>
-    <button class="btn page-btn" :disabled="page <= 1" @click="goToPage(page - 1)">Prev</button>
+    <button class="btn page-btn" :disabled="page <= 1" @click="goToPage(page - 1)">{{ t('common.actions.previous') }}</button>
     <span class="page-label">{{ page }} / {{ totalPages }}</span>
-    <button class="btn page-btn" :disabled="page >= totalPages" @click="goToPage(page + 1)">Next</button>
+    <button class="btn page-btn" :disabled="page >= totalPages" @click="goToPage(page + 1)">{{ t('common.actions.next') }}</button>
   </div>
 </template>
 

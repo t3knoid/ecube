@@ -43,6 +43,10 @@ const pagedOsUsers = computed(() => {
   return osUsers.value.slice(start, start + pageSize.value)
 })
 
+function roleLabel(role) {
+  return t(`users.roleNames.${role}`)
+}
+
 function normalizeRoleSelection(value) {
   return roles.filter((role) => value.includes(role))
 }
@@ -166,7 +170,7 @@ onMounted(loadAll)
             <div class="role-grid">
               <label v-for="role in roles" :key="`${row.username}-${role}`">
                 <input v-model="row.roles" type="checkbox" :value="role" />
-                {{ role }}
+                {{ roleLabel(role) }}
               </label>
             </div>
             <button class="btn btn-primary" :disabled="saving || !hasRoleChanges(row)" @click="saveRoles(row)">{{ t('users.saveRoles') }}</button>
@@ -198,7 +202,7 @@ onMounted(loadAll)
           <div class="role-grid">
             <label v-for="role in roles" :key="`new-${role}`">
               <input v-model="createUserForm.roles" type="checkbox" :value="role" />
-              {{ role }}
+              {{ roleLabel(role) }}
             </label>
           </div>
 
