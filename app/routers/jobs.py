@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
 from app.repositories.job_repository import DriveAssignmentRepository, FileRepository
-from app.schemas.jobs import DriveInfoSchema, ExportJobSchema, JobCreate, JobStart
+from app.schemas.jobs import DriveInfoSchema, ExportJobSchema, JobCreate, JobFilesResponse, JobStart
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500
 from app.services import job_service
 from app.utils.client_ip import get_client_ip
@@ -91,6 +91,24 @@ def get_job(
     """
     job = job_service.get_job(job_id, db)
     return _redact_ip(job, current_user, db)
+
+
+@router.get("/{job_id}/files", response_model=JobFilesResponse, responses={**R_401, **R_403, **R_404, **R_422})
+def get_job_files(
+    job_id: int,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(_ALL_ROLES),
+):
+    """Retrieve operator-safe file status rows for an export job.
+
+    Returns per-file copy status and checksum metadata without exposing
+    introspection-only path details from system diagnostics endpoints.
+
+    **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
+    """
+    job = job_service.get_job(job_id, db)
+    files = FileRepository(db).list_by_job(job.id)
+    return JobFilesResponse(job_id=job.id, files=files)
 
 
 @router.post("/{job_id}/start", response_model=ExportJobSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
