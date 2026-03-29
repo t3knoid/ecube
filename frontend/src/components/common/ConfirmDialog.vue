@@ -1,4 +1,6 @@
 <script setup>
+import { computed } from 'vue'
+
 const props = defineProps({
   modelValue: {
     type: Boolean,
@@ -32,6 +34,16 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'confirm'])
 
+const dialogId = `confirm-dialog-${Math.random().toString(36).slice(2, 10)}`
+const titleId = `${dialogId}-title`
+const messageId = `${dialogId}-message`
+const contentId = `${dialogId}-content`
+const describedBy = computed(() => {
+  const ids = []
+  if (props.message) ids.push(messageId)
+  return ids.length ? ids.join(' ') : undefined
+})
+
 function close() {
   emit('update:modelValue', false)
 }
@@ -44,10 +56,16 @@ function confirm() {
 <template>
   <teleport to="body">
     <div v-if="modelValue" class="dialog-overlay" @click.self="close">
-      <div class="dialog-panel" role="dialog" aria-modal="true" :aria-label="title">
-        <h3 class="dialog-title">{{ title }}</h3>
-        <p class="dialog-message">{{ message }}</p>
-        <div v-if="$slots.default" class="dialog-content">
+      <div
+        class="dialog-panel"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="titleId"
+        :aria-describedby="describedBy"
+      >
+        <h3 :id="titleId" class="dialog-title">{{ title }}</h3>
+        <p v-if="message" :id="messageId" class="dialog-message">{{ message }}</p>
+        <div v-if="$slots.default" :id="contentId" class="dialog-content">
           <slot />
         </div>
         <div class="dialog-actions">
