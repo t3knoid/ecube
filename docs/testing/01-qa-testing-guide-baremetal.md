@@ -554,6 +554,10 @@ curl -sk -X POST https://localhost:8443/jobs/{id}/start \
 curl -sk https://localhost:8443/jobs/{id} \
   -H "Authorization: Bearer $TOKEN" | jq
 
+# List file-level status rows (operator-safe)
+curl -sk https://localhost:8443/jobs/{id}/files \
+  -H "Authorization: Bearer $TOKEN" | jq
+
 # Verify checksums after completion
 curl -sk -X POST https://localhost:8443/jobs/{id}/verify \
   -H "Authorization: Bearer $TOKEN" | jq
@@ -804,7 +808,8 @@ curl -sk -X POST https://localhost:8443/setup/database/test-connection \
 | 7 | Processor reads audit | `GET /audit` with processor token | 403, `FORBIDDEN` |
 | 8 | Auditor reads audit | `GET /audit` with auditor token | 200 |
 | 9 | Processor creates job | `POST /jobs` with processor token | 200 |
-| 10 | All error responses have `trace_id` | Inspect any 4xx/5xx JSON body | `trace_id` field present |
+| 10 | All four roles read job files | `GET /jobs/{id}/files` with admin/manager/processor/auditor tokens | 200 for each role |
+| 11 | All error responses have `trace_id` | Inspect any 4xx/5xx JSON body | `trace_id` field present |
 
 ### 12.3 Project Isolation
 
@@ -989,12 +994,13 @@ Walk through the complete data export lifecycle:
 | # | Test | Expected |
 |---|------|----------|
 | 1 | `GET /jobs/99999` | 404, `NOT_FOUND` |
-| 2 | `DELETE /mounts/99999` | 404, `NOT_FOUND` |
-| 3 | Start an already-running job | 409, `CONFLICT` |
-| 4 | All error responses | JSON body includes `code`, `message`, and `trace_id` |
-| 5 | `POST /drives/999/format` with `{"filesystem_type": "ext4"}` | 404, `NOT_FOUND` |
-| 6 | `POST /drives/{id}/format` with `{"filesystem_type": "ntfs"}` | 422, validation error |
-| 7 | `POST /drives/{id}/format` with empty body | 422 |
+| 2 | `GET /jobs/99999/files` | 404, `NOT_FOUND` |
+| 3 | `DELETE /mounts/99999` | 404, `NOT_FOUND` |
+| 4 | Start an already-running job | 409, `CONFLICT` |
+| 5 | All error responses | JSON body includes `code`, `message`, and `trace_id` |
+| 6 | `POST /drives/999/format` with `{"filesystem_type": "ext4"}` | 404, `NOT_FOUND` |
+| 7 | `POST /drives/{id}/format` with `{"filesystem_type": "ntfs"}` | 422, validation error |
+| 8 | `POST /drives/{id}/format` with empty body | 422 |
 
 ### 12.8 User Role Management
 
