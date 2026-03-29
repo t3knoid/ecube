@@ -47,6 +47,9 @@ function confirm() {
       <div class="dialog-panel" role="dialog" aria-modal="true" :aria-label="title">
         <h3 class="dialog-title">{{ title }}</h3>
         <p class="dialog-message">{{ message }}</p>
+        <div v-if="$slots.default" class="dialog-content">
+          <slot />
+        </div>
         <div class="dialog-actions">
           <button class="btn" :disabled="busy" @click="close">{{ cancelLabel }}</button>
           <button
@@ -99,6 +102,10 @@ function confirm() {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-sm);
+}
+
+.dialog-content {
+  margin-bottom: var(--space-md);
 }
 
 </style>
