@@ -127,6 +127,12 @@
     "title": "Users",
     "placeholder": "Users view will be implemented in a future phase.",
     "roles": "Roles",
+    "roleNames": {
+      "admin": "Admin",
+      "manager": "Manager",
+      "processor": "Processor",
+      "auditor": "Auditor"
+    },
     "groups": "Groups",
     "roleTab": "User Roles",
     "osUsersTab": "Users",
@@ -227,6 +233,7 @@
       "close": "Close",
       "confirm": "Confirm",
       "back": "Back",
+      "previous": "Previous",
       "next": "Next"
     },
     "labels": {
@@ -239,6 +246,8 @@
       "date": "Date",
       "size": "Size",
       "count": "Count",
+      "pagination": "Pagination",
+      "noData": "No data",
       "db": "DB",
       "traceReferencePrefix": "Ref:"
     },
