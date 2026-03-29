@@ -276,7 +276,7 @@ onMounted(loadTabData)
 
       <DataTable
         :columns="[
-          { key: 'id', label: 'ID', align: 'right' },
+          { key: 'id', label: t('common.labels.id'), align: 'right' },
           { key: 'relative_path', label: t('jobs.path') },
           { key: 'status', label: t('common.labels.status') },
           { key: 'checksum', label: t('jobs.checksum') },
