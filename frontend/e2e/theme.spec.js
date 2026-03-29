@@ -49,4 +49,7 @@ test('visual regression snapshots for key screens in default and dark themes', a
     await page.goto(shot.path)
     await expect(page).toHaveScreenshot(`${shot.name}-dark.png`)
   }
+
+  // Accessibility scan on last page covered by visual regression
+  await expectNoCriticalA11yViolations(page)
 })

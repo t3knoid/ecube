@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { makeToken, routeJson, stubSetupStatus, stubFooterApis } from './helpers/app.js'
 import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
+import { STORAGE_TOKEN_KEY } from '../src/constants/storage.js'
 
 test('login success, login failure, and session expiry banner', async ({ page }) => {
   await stubSetupStatus(page, true)
@@ -38,4 +39,26 @@ test('login success, login failure, and session expiry banner', async ({ page })
   await expect(page.getByText('Session Expired')).toBeVisible()
 
   await expectNoCriticalA11yViolations(page)
+})
+
+test('redirect to login when stored token is already expired', async ({ page }) => {
+  await stubSetupStatus(page, true)
+  await stubFooterApis(page)
+  await routeJson(page, '**/api/drives', [])
+  await routeJson(page, '**/api/jobs**', [])
+
+  // Inject a token that has already expired
+  const expiredToken = makeToken({
+    sub: 'frank',
+    roles: ['admin'],
+    groups: [],
+    exp: Math.floor(Date.now() / 1000) - 120,
+  })
+  await page.addInitScript(
+    ({ token, key }) => { sessionStorage.setItem(key, token) },
+    { token: expiredToken, key: STORAGE_TOKEN_KEY },
+  )
+
+  await page.goto('/')
+  await expect(page).toHaveURL(/\/login/)
 })
