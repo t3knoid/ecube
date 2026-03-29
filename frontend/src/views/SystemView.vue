@@ -162,6 +162,8 @@ async function loadJobDebug() {
 }
 
 async function loadJobOptions() {
+  loading.value = true
+  error.value = ''
   jobsListUnavailable.value = false
   try {
     const response = await listJobs({ limit: 200 })
@@ -169,6 +171,8 @@ async function loadJobOptions() {
   } catch {
     jobs.value = []
     jobsListUnavailable.value = true
+  } finally {
+    loading.value = false
   }
 }
 
@@ -207,6 +211,7 @@ async function downloadLog(row) {
 
 watch(activeTab, async () => {
   page.value = 1
+  error.value = ''
   if (activeTab.value === 'job-debug') {
     await loadJobOptions()
   } else {
