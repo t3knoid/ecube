@@ -8,6 +8,13 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env")
 
     database_url: str = "postgresql://ecube:ecube@localhost/ecube"
+
+    #: PostgreSQL hostname suggested to the setup wizard when the application
+    #: is detected to be running inside a Docker container.  In a standard
+    #: Docker Compose deployment this matches the ``postgres`` service name.
+    #: Override with ``SETUP_DOCKER_DB_HOST=<name>`` if your Compose service
+    #: is named differently.
+    setup_docker_db_host: str = "postgres"
     
     #: Target platform for infrastructure implementations.  Factory functions
     #: in ``app.infrastructure`` use this to select concrete Protocol

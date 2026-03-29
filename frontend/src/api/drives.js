@@ -5,6 +5,10 @@ export function getDrives() {
   return toData(apiClient.get('/api/drives'))
 }
 
+export function refreshDrives() {
+  return toData(apiClient.post('/api/drives/refresh'))
+}
+
 export function initializeDrive(driveId, payload) {
   return toData(apiClient.post(`/api/drives/${driveId}/initialize`, payload))
 }
