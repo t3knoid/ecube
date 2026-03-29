@@ -6,8 +6,10 @@ import { getDrives, refreshDrives } from '@/api/drives.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import { useStatusLabels } from '@/composables/useStatusLabels.js'
 
 const { t } = useI18n()
+const { driveStateLabel } = useStatusLabels()
 const router = useRouter()
 
 const drives = ref([])
@@ -161,7 +163,7 @@ onMounted(loadDrives)
 
     <DataTable :columns="columns" :rows="paged" :empty-text="t('drives.empty')">
       <template #cell-current_state="{ row }">
-        <StatusBadge :status="row.current_state" />
+        <StatusBadge :status="row.current_state" :label="driveStateLabel(row.current_state)" />
       </template>
       <template #cell-capacity_bytes="{ row }">
         {{ formatBytes(row.capacity_bytes) }}

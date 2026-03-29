@@ -9,9 +9,11 @@ import { getMounts } from '@/api/mounts.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import { useStatusLabels } from '@/composables/useStatusLabels.js'
 
 const router = useRouter()
 const { t } = useI18n()
+const { jobStatusLabel } = useStatusLabels()
 const authStore = useAuthStore()
 
 const jobs = ref([])
@@ -180,7 +182,7 @@ onMounted(async () => {
 
     <DataTable :columns="columns" :rows="paged" :empty-text="t('jobs.empty')">
       <template #cell-status="{ row }">
-        <StatusBadge :status="row.status" />
+        <StatusBadge :status="row.status" :label="jobStatusLabel(row.status)" />
       </template>
       <template #cell-progress="{ row }">{{ progressPercent(row) }}%</template>
       <template #cell-actions="{ row }">

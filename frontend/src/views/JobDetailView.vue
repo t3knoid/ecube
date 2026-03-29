@@ -9,6 +9,7 @@ import { getFileHashes, compareFiles } from '@/api/files.js'
 import { usePolling } from '@/composables/usePolling.js'
 import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import { useStatusLabels } from '@/composables/useStatusLabels.js'
 
 const route = useRoute()
 const { t } = useI18n()
