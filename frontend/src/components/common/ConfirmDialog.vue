@@ -47,6 +47,7 @@ const describedBy = computed(() => {
 })
 
 function close() {
+  if (props.busy) return
   emit('update:modelValue', false)
 }
 
