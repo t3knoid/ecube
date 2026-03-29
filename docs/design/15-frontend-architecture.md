@@ -79,7 +79,7 @@ Vue was selected for its template syntax (closer to standard HTML), simpler ment
 
 ## 3. Project Structure
 
-```
+```text
 frontend/
 ├── public/
 │   ├── favicon.ico
@@ -103,7 +103,8 @@ frontend/
 │   │   ├── setup.js               # GET/POST/PUT /setup/*
 │   │   └── introspection.js       # GET /introspection/*
 │   ├── assets/
-│   │   └── base.css               # Reset, typography, layout utilities
+│   │   ├── base.css               # Reset, typography, layout utilities
+│   │   └── buttons.css            # Shared button primitives and disabled/hover states (imported by main.css)
 │   ├── components/
 │   │   ├── layout/                # Shell components
 │   │   │   ├── AppShell.vue       # Main authenticated layout
@@ -200,7 +201,7 @@ The authenticated layout uses a persistent `AppShell` component wrapping all pos
 
 ### 4.3 Navigation Guards
 
-```
+```text
 beforeEach(to, from):
   1. If to.path === '/setup' → allow (handled by setup status check)
   2. If to.meta.requiresAuth && !authStore.isAuthenticated → redirect('/login')
@@ -255,7 +256,7 @@ See [Section 7](#7-theme--styling-system) for the theme CSS contract.
 
 ### 6.1 Axios Instance (`api/client.js`)
 
-```
+```text
 Base URL:  '' (same-origin; nginx proxies /api/* to backend)
 Timeout:   30 seconds
 Headers:   Content-Type: application/json
@@ -279,14 +280,14 @@ Each module exports thin wrapper functions around Axios calls. Modules map 1:1 t
 | Module | Endpoints Covered | Used By |
 |--------|------------------|---------|
 | `auth.js` | `POST /auth/token` | LoginView, auth store |
-| `setup.js` | `GET /setup/status`, `POST /setup/initialize`, `POST /setup/database/test-connection`, `POST /setup/database/provision`, `GET /setup/database/status`, `PUT /setup/database/settings` | SetupWizardView |
+| `setup.js` | `GET /setup/status`, `POST /setup/initialize`, `POST /setup/database/test-connection`, `POST /setup/database/provision`, `GET /setup/database/provision-status`, `GET /setup/database/system-info`, `GET /setup/database/status`, `PUT /setup/database/settings` | SetupWizardView |
 | `drives.js` | `GET /drives`, `POST /drives/{id}/initialize`, `POST /drives/{id}/format`, `POST /drives/{id}/prepare-eject` | DrivesView, DriveDetailView, DashboardView |
 | `mounts.js` | `GET /mounts`, `POST /mounts`, `DELETE /mounts/{id}` | MountsView |
 | `jobs.js` | `POST /jobs`, `POST /jobs/{id}/start`, `GET /jobs/{id}`, `POST /jobs/{id}/verify`, `POST /jobs/{id}/manifest` | JobsView, JobDetailView, DashboardView |
 | `audit.js` | `GET /audit` | AuditView |
 | `files.js` | `GET /files/{file_id}/hashes`, `POST /files/compare` | JobDetailView (hash viewer, file compare) |
 | `users.js` | `GET /users`, `GET /users/{username}/roles`, `PUT /users/{username}/roles`, `DELETE /users/{username}/roles` | UsersView |
-| `admin.js` | `POST /admin/os-users`, `GET /admin/os-users`, `DELETE /admin/os-users/{username}`, `PUT /admin/os-users/{username}/password`, `PUT /admin/os-users/{username}/groups`, `POST /admin/os-users/{username}/groups`, `POST /admin/os-groups`, `GET /admin/os-groups`, `DELETE /admin/os-groups/{name}` | UsersView (OS Users/Groups tabs) |
+| `admin.js` | `POST /admin/os-users`, `GET /admin/os-users`, `DELETE /admin/os-users/{username}`, `PUT /admin/os-users/{username}/password`, `PUT /admin/os-users/{username}/groups`, `POST /admin/os-users/{username}/groups`, `GET /admin/os-groups` | UsersView (single users/roles editor) |
 | `introspection.js` | `GET /introspection/usb/topology`, `GET /introspection/block-devices`, `GET /introspection/mounts`, `GET /introspection/system-health`, `GET /introspection/jobs/{id}/debug` | SystemView, DashboardView, AppFooter |
 
 ### 6.3 Job Progress Polling
@@ -300,7 +301,7 @@ Job progress is tracked via HTTP polling rather than WebSocket. Rationale:
 
 The `usePolling` composable provides a standard pattern:
 
-```
+```text
 usePolling(fetchFn, intervalMs, options):
   - Calls fetchFn immediately, then every intervalMs
   - Stops automatically when component unmounts
@@ -500,7 +501,7 @@ Vue I18n 9.x provides the localization infrastructure. All user-visible strings 
 | `JobsView.vue` | Screen 6a | UC-6.1, UC-6.3 | Job list with status/progress; create-job button |
 | `JobDetailView.vue` | Screen 6b–d | UC-6.2 – UC-6.8 | Progress bar with polling; file list table; start/verify/manifest actions; hash viewer; file compare |
 | `AuditView.vue` | Screen 7 | UC-7.1 – UC-7.7 | Filterable audit log table; date range, user, action filters; CSV export |
-| `UsersView.vue` | Screen 8 | UC-3.1 – UC-3.12 | Tabbed: User list + role assignment, OS users tab, OS groups tab; admin-only |
+| `UsersView.vue` | Screen 8 | UC-3.1 – UC-3.9 | Single editable users table: role selection, per-user save, password reset, and create-user flow; admin-only |
 | `SystemView.vue` | Screen 9 | UC-8.1 – UC-8.8 | Tabbed: Health, USB Topology, Block Devices, Mounts, Logs, Job Debug |
 
 ### 9.3 Common/Shared Components
@@ -533,7 +534,7 @@ Vue I18n 9.x provides the localization infrastructure. All user-visible strings 
 | UC-3.5 | Screen 8c: Create User Dialog | `UsersView` (dialog) |
 | UC-3.6 – UC-3.9 | Screen 8a: Inline actions | `UsersView` |
 | UC-3.7 | Modal: Reset Password | `UsersView` (dialog) |
-| UC-3.10 – UC-3.12 | Screen 8d: OS Groups Tab | `UsersView` (tab) |
+| UC-3.10 | Group listing | API only in current UI build |
 | UC-4.1 – UC-4.2 | Screen 4a: Drive List | `DrivesView` |
 | UC-4.3 | Screen 4a: Refresh | `DrivesView` |
 | UC-4.4 – UC-4.6 | Screen 4b: Actions | `DriveDetailView` |
@@ -586,7 +587,7 @@ Vue I18n 9.x provides the localization infrastructure. All user-visible strings 
 | View file hashes | ✔ | ✗ | ✗ | ✔ |
 | Compare files | ✔ | ✗ | ✗ | ✔ |
 | Manage users/roles | ✔ | ✗ | ✗ | ✗ |
-| Manage OS users/groups | ✔ | ✗ | ✗ | ✗ |
+| Manage users/groups | ✔ | ✗ | ✗ | ✗ |
 | Export audit CSV | ✔ | ✔ | ✗ | ✔ |
 
 ### 10.3 Implementation Pattern
@@ -609,7 +610,7 @@ Actions are hidden (not just disabled) when the user's role cannot perform them.
 
 ### 11.1 Container Topology
 
-```
+```text
 ┌──────────────┐       ┌───────────────┐       ┌──────────────┐
 │              │  :443  │               │ :8000  │              │
 │   Browser    │───────▶│   ecube-ui    │───────▶│  ecube-app   │
@@ -702,7 +703,7 @@ Playwright runs tests against a real backend (or mock API server). Tests target 
 | `jobs.spec.js` | Create job → start → monitor progress → verify → manifest |
 | `mounts.spec.js` | Add mount, test connection, remove mount |
 | `audit.spec.js` | Filter audit logs, export CSV |
-| `users.spec.js` | List users, assign roles, create OS user (admin role) |
+| `users.spec.js` | List users, assign roles, create user (admin role) |
 | `theme.spec.js` | Switch between default and dark theme; verify CSS properties change |
 | `role-gating.spec.js` | Verify hidden actions for processor/auditor roles |
 

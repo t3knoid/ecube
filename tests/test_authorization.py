@@ -279,7 +279,7 @@ class TestMountAuthorization:
 
 class TestJobAuthorization:
     """POST /jobs, POST /jobs/{id}/start, /verify, /manifest — admin, manager, processor.
-       GET  /jobs/{id} — all four roles."""
+    GET  /jobs/{id} and GET /jobs/{id}/files — all four roles."""
 
     def _add_drive(self, db, project_id, device_id):
         from app.models.hardware import DriveState, UsbDrive
@@ -330,6 +330,19 @@ class TestJobAuthorization:
     def test_get_job_no_role_denied(self, db):
         c = _client_for_role(db, [])
         _assert_forbidden(c.get("/jobs/1"))
+
+    def test_get_job_files_all_roles_allowed(self, db):
+        self._add_drive(db, "PROJ-AUTHZ", "USB-AUTHZ-FILES")
+        admin_c = _client_for_role(db, ["admin"])
+        job_id = admin_c.post("/jobs", json=self._create_job_payload()).json()["id"]
+
+        for role in ["admin", "manager", "processor", "auditor"]:
+            c = _client_for_role(db, [role])
+            assert c.get(f"/jobs/{job_id}/files").status_code == 200, f"role={role} should be allowed"
+
+    def test_get_job_files_no_role_denied(self, db):
+        c = _client_for_role(db, [])
+        _assert_forbidden(c.get("/jobs/1/files"))
 
     def test_start_job_auditor_denied(self, db):
         c = _client_for_role(db, ["auditor"])

@@ -1,4 +1,4 @@
-"""Startup state reconciliation — mounts, jobs, and USB drives.
+"""Startup state reconciliation — identity groups, mounts, jobs, and USB drives.
 
 After a service restart or host reboot, in-memory OS state (active mounts,
 running processes, USB device presence) may diverge from the database.  This
@@ -30,18 +30,114 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.infrastructure.mount_protocol import MountProvider
+from app.infrastructure.os_user_protocol import OsUserProvider
 from app.infrastructure.usb_discovery import DiscoveredTopology
 from app.infrastructure import FilesystemDetector
 from app.models.jobs import ExportJob, JobStatus
 from app.models.network import MountStatus, NetworkMount
 from app.models.system import ReconciliationLock
+from app.repositories.user_role_repository import UserRoleRepository
 from app.repositories.audit_repository import AuditRepository
+from app.constants import ECUBE_GROUP_ROLE_MAP
 
 logger = logging.getLogger(__name__)
 
 # A lock older than this is considered stale (worker crashed mid-reconciliation)
 # and will be reclaimed by the next startup attempt.
 STALE_LOCK_SECONDS = 300  # 5 minutes
+
+
+# -----------------------------------------------------------------------
+# Identity reconciliation
+# -----------------------------------------------------------------------
+
+def reconcile_identity_groups(
+    os_user_provider: OsUserProvider,
+) -> Dict[str, Any]:
+    """Ensure default ``ecube-*`` OS groups exist.
+
+    This operation is idempotent. Existing groups are left unchanged,
+    and only missing default groups are created.
+    """
+    created_groups = os_user_provider.ensure_ecube_groups()
+    return {
+        "groups_created": len(created_groups),
+        "created_group_names": created_groups,
+    }
+
+
+_ROLE_TO_GROUP = {role: group for group, role in ECUBE_GROUP_ROLE_MAP.items()}
+
+
+def reconcile_identity_users(
+    db: Session,
+    os_user_provider: OsUserProvider,
+) -> Dict[str, Any]:
+    """Reconcile DB role assignments with OS users/group memberships.
+
+    For each user present in ``user_roles``:
+    - Ensures mapped ``ecube-*`` groups are assigned on existing OS accounts.
+    - Does **not** create missing OS users during startup reconciliation.
+
+    Missing OS accounts are reported in the summary and logs for operator
+    action, but no user-creation side effects occur at startup.
+    """
+    repo = UserRoleRepository(db)
+    assignments = repo.list_users()
+
+    checked = 0
+    with_mapped_roles = 0
+    created_users = 0
+    missing_os_accounts = 0
+    groups_updated = 0
+    errors: list[dict[str, str]] = []
+
+    for row in assignments:
+        username = row.get("username")
+        roles = row.get("roles", [])
+        if not username:
+            continue
+
+        checked += 1
+        required_groups = sorted({_ROLE_TO_GROUP[r] for r in roles if r in _ROLE_TO_GROUP})
+        if not required_groups:
+            continue
+
+        with_mapped_roles += 1
+
+        try:
+            if not os_user_provider.user_exists(username):
+                missing_os_accounts += 1
+                logger.warning(
+                    "Startup reconciliation found DB user '%s' with roles %s (groups %s) but no OS account. "
+                    "Skipping OS user creation.",
+                    username,
+                    roles,
+                    required_groups,
+                )
+                continue
+
+            # Treat add_user_to_groups as idempotent and avoid scanning all OS users.
+            os_user_provider.add_user_to_groups(
+                username,
+                required_groups,
+                _skip_managed_check=True,
+            )
+            groups_updated += 1
+        except Exception as exc:
+            logger.exception("Identity user reconciliation failed for '%s'", username)
+            errors.append({"username": username, "error": str(exc)})
+
+    return {
+        "users_checked": checked,
+        "users_with_mapped_roles": with_mapped_roles,
+        "users_created": created_users,
+        "users_missing_os_account": missing_os_accounts,
+        "users_groups_updated": groups_updated,
+        "users_created_password_reset_required": created_users,
+        "users_with_errors": len(errors),
+        "errors": errors,
+    }
 
 
 # -----------------------------------------------------------------------
@@ -386,6 +482,7 @@ def run_startup_reconciliation(
     db: Session,
     mount_provider: MountProvider,
     *,
+    os_user_provider: OsUserProvider | None = None,
     topology_source: Callable[[], DiscoveredTopology],
     filesystem_detector: FilesystemDetector,
 ) -> Dict[str, Any]:
@@ -395,8 +492,8 @@ def run_startup_reconciliation(
     already holds the lock, reconciliation is skipped and the return
     dict contains ``{"skipped": True}``.
 
-    Returns a nested summary keyed by domain (``mounts``, ``jobs``,
-    ``drives``).  Each value is either a counts dict on success or an
+    Returns a nested summary keyed by domain (``identity``, ``mounts``,
+    ``jobs``, ``drives``).  Each value is either a counts dict on success or an
     ``{"error": "..."}`` dict on failure.
     """
     if not _acquire_reconciliation_lock(db):
@@ -405,6 +502,27 @@ def run_startup_reconciliation(
 
     try:
         results: Dict[str, Any] = {}
+
+        if os_user_provider is not None:
+            results["identity"] = {}
+
+            logger.info("Startup reconciliation: ensuring default ECUBE OS groups")
+            try:
+                results["identity"]["groups"] = reconcile_identity_groups(os_user_provider)
+            except Exception:
+                logger.exception("Identity group reconciliation failed")
+                results["identity"]["groups"] = {"error": "identity group reconciliation failed"}
+
+            _refresh_reconciliation_lock(db)
+
+            logger.info("Startup reconciliation: reconciling DB users to OS users")
+            try:
+                results["identity"]["users"] = reconcile_identity_users(db, os_user_provider)
+            except Exception:
+                logger.exception("Identity user reconciliation failed")
+                results["identity"]["users"] = {"error": "identity user reconciliation failed"}
+
+            _refresh_reconciliation_lock(db)
 
         logger.info("Startup reconciliation: checking mounts")
         try:

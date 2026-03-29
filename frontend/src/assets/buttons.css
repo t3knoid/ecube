@@ -1,0 +1,66 @@
+/* Shared button primitives and state handling.
+ * View-scoped styles can override spacing/layout, but interaction states
+ * (hover/disabled/cursor) should stay centralized here.
+ */
+
+.btn,
+button.btn,
+a.btn {
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-input);
+  color: var(--color-text-primary);
+  border-radius: var(--border-radius);
+  padding: var(--space-xs) var(--space-sm);
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: var(--color-btn-primary-bg);
+  border-color: var(--color-btn-primary-bg);
+  color: var(--color-btn-primary-text);
+}
+
+.btn-danger {
+  background: var(--color-btn-danger-bg);
+  border-color: var(--color-btn-danger-bg);
+  color: var(--color-btn-danger-text);
+}
+
+.btn:hover:not(:disabled):not([aria-disabled='true']) {
+  background: var(--color-btn-primary-hover-bg);
+  border-color: var(--color-btn-primary-hover-bg);
+  color: var(--color-btn-primary-text);
+}
+
+.btn-primary:hover:not(:disabled):not([aria-disabled='true']) {
+  background: var(--color-btn-primary-hover-bg);
+  border-color: var(--color-btn-primary-hover-bg);
+}
+
+.btn-danger:hover:not(:disabled):not([aria-disabled='true']) {
+  background: color-mix(in srgb, var(--color-btn-danger-bg) 88%, #000000);
+  border-color: color-mix(in srgb, var(--color-btn-danger-bg) 88%, #000000);
+}
+
+.btn:disabled,
+.btn[aria-disabled='true'] {
+  background: var(--color-bg-input);
+  color: var(--color-text-secondary);
+  border-color: var(--color-border);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.btn-primary:disabled,
+.btn-primary[aria-disabled='true'] {
+  background: var(--color-bg-input);
+  border-color: var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.btn-danger:disabled,
+.btn-danger[aria-disabled='true'] {
+  background: var(--color-bg-input);
+  border-color: var(--color-border);
+  color: var(--color-text-secondary);
+}
