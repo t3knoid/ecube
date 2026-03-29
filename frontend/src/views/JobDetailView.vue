@@ -9,6 +9,7 @@ import { getFileHashes, compareFiles } from '@/api/files.js'
 import { usePolling } from '@/composables/usePolling.js'
 import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import ProgressBar from '@/components/common/ProgressBar.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
 
 const route = useRoute()
@@ -165,9 +166,7 @@ onUnmounted(() => {
         <span>{{ t('jobs.evidence') }}: {{ job.evidence_number }}</span>
       </div>
 
-      <div class="progress-track">
-        <div class="progress-bar" :style="{ width: `${progressPercent()}%` }" />
-      </div>
+      <ProgressBar :value="job.copied_bytes || 0" :total="job.total_bytes || 0" />
       <p class="muted">{{ progressPercent() }}% ({{ job.copied_bytes }} / {{ job.total_bytes }} bytes)</p>
 
       <div class="actions">
@@ -268,18 +267,6 @@ onUnmounted(() => {
 .job-header {
   flex-wrap: wrap;
   align-items: center;
-}
-
-.progress-track {
-  height: 10px;
-  background: var(--color-progress-track);
-  border-radius: 999px;
-  overflow: hidden;
-}
-
-.progress-bar {
-  height: 100%;
-  background: var(--color-progress-bar);
 }
 
 select {
