@@ -206,15 +206,6 @@ select {
   padding: var(--space-xs) var(--space-sm);
 }
 
-.btn {
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-input);
-  color: var(--color-text-primary);
-  border-radius: var(--border-radius);
-  padding: var(--space-xs) var(--space-sm);
-  cursor: pointer;
-}
-
 .error-banner {
   color: var(--color-alert-danger-text);
   background: var(--color-alert-danger-bg);

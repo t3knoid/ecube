@@ -180,15 +180,6 @@ async function handleLogin() {
   outline-offset: -1px;
 }
 
-.btn {
-  padding: var(--space-sm) var(--space-md);
-  border: none;
-  border-radius: var(--border-radius);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-bold);
-  cursor: pointer;
-}
-
 .login-error {
   margin-top: var(--space-md);
   padding: var(--space-sm) var(--space-md);
