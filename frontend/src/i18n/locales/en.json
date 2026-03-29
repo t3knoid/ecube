@@ -128,17 +128,12 @@
     "placeholder": "Users view will be implemented in a future phase.",
     "roles": "Roles",
     "groups": "Groups",
-    "groupName": "Group Name",
-    "members": "Members",
     "roleTab": "User Roles",
     "osUsersTab": "Users",
-    "osGroupsTab": "Groups",
     "empty": "No users found",
     "createOsUser": "Create User",
     "emptyOsUsers": "No users found",
-    "resetPassword": "Reset Password",
-    "emptyGroups": "No groups found",
-    "groupsCsv": "Groups (comma-separated)"
+    "resetPassword": "Reset Password"
   },
   "system": {
     "title": "System",

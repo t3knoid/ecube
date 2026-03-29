@@ -79,3 +79,40 @@ test('redirects away from /users when user is not admin', async ({ page }) => {
   await page.waitForURL('**/')
   expect(new URL(page.url()).pathname).toBe('/')
 })
+
+test('admin users page shows only User Roles and Users tabs', async ({ page }) => {
+  await stubSetupStatus(page, true)
+
+  // Footer polling endpoints
+  await page.route('**/api/introspection/system-health', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
+  )
+  await page.route('**/api/introspection/version', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{"version":"test"}' }),
+  )
+
+  // Users screen data endpoints
+  await page.route('**/api/users', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ users: [{ username: 'frank', roles: ['admin'] }] }),
+    }),
+  )
+  await page.route('**/api/admin/os-users', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ users: [{ username: 'alba', uid: 1001, gid: 1001, home: '/home/alba', shell: '/bin/bash', groups: ['ecube-processors'] }] }),
+    }),
+  )
+
+  await injectAuthToken(page, ['admin'])
+  await page.goto('/users')
+
+  const tabButtons = page.locator('.tabs .btn')
+  await expect(tabButtons).toHaveCount(2)
+  await expect(page.getByRole('button', { name: 'User Roles' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Users' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Groups' })).toHaveCount(0)
+})

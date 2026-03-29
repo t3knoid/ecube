@@ -79,7 +79,7 @@ Vue was selected for its template syntax (closer to standard HTML), simpler ment
 
 ## 3. Project Structure
 
-```
+```text
 frontend/
 ├── public/
 │   ├── favicon.ico
@@ -201,7 +201,7 @@ The authenticated layout uses a persistent `AppShell` component wrapping all pos
 
 ### 4.3 Navigation Guards
 
-```
+```text
 beforeEach(to, from):
   1. If to.path === '/setup' → allow (handled by setup status check)
   2. If to.meta.requiresAuth && !authStore.isAuthenticated → redirect('/login')
@@ -256,7 +256,7 @@ See [Section 7](#7-theme--styling-system) for the theme CSS contract.
 
 ### 6.1 Axios Instance (`api/client.js`)
 
-```
+```text
 Base URL:  '' (same-origin; nginx proxies /api/* to backend)
 Timeout:   30 seconds
 Headers:   Content-Type: application/json
@@ -301,7 +301,7 @@ Job progress is tracked via HTTP polling rather than WebSocket. Rationale:
 
 The `usePolling` composable provides a standard pattern:
 
-```
+```text
 usePolling(fetchFn, intervalMs, options):
   - Calls fetchFn immediately, then every intervalMs
   - Stops automatically when component unmounts
@@ -501,7 +501,7 @@ Vue I18n 9.x provides the localization infrastructure. All user-visible strings 
 | `JobsView.vue` | Screen 6a | UC-6.1, UC-6.3 | Job list with status/progress; create-job button |
 | `JobDetailView.vue` | Screen 6b–d | UC-6.2 – UC-6.8 | Progress bar with polling; file list table; start/verify/manifest actions; hash viewer; file compare |
 | `AuditView.vue` | Screen 7 | UC-7.1 – UC-7.7 | Filterable audit log table; date range, user, action filters; CSV export |
-| `UsersView.vue` | Screen 8 | UC-3.1 – UC-3.10 | Tabbed: User list + role assignment, Users tab, Groups tab (read-only); admin-only |
+| `UsersView.vue` | Screen 8 | UC-3.1 – UC-3.9 | Tabbed: User Roles + Users; create user and reset password flows; admin-only |
 | `SystemView.vue` | Screen 9 | UC-8.1 – UC-8.8 | Tabbed: Health, USB Topology, Block Devices, Mounts, Logs, Job Debug |
 
 ### 9.3 Common/Shared Components
@@ -534,7 +534,7 @@ Vue I18n 9.x provides the localization infrastructure. All user-visible strings 
 | UC-3.5 | Screen 8c: Create User Dialog | `UsersView` (dialog) |
 | UC-3.6 – UC-3.9 | Screen 8a: Inline actions | `UsersView` |
 | UC-3.7 | Modal: Reset Password | `UsersView` (dialog) |
-| UC-3.10 | Screen 8d: Groups Tab (read-only list) | `UsersView` (tab) |
+| UC-3.10 | Group listing | API only in current UI build |
 | UC-4.1 – UC-4.2 | Screen 4a: Drive List | `DrivesView` |
 | UC-4.3 | Screen 4a: Refresh | `DrivesView` |
 | UC-4.4 – UC-4.6 | Screen 4b: Actions | `DriveDetailView` |
@@ -610,7 +610,7 @@ Actions are hidden (not just disabled) when the user's role cannot perform them.
 
 ### 11.1 Container Topology
 
-```
+```text
 ┌──────────────┐       ┌───────────────┐       ┌──────────────┐
 │              │  :443  │               │ :8000  │              │
 │   Browser    │───────▶│   ecube-ui    │───────▶│  ecube-app   │

@@ -6,7 +6,6 @@ import {
   createOsUser,
   getOsUsers,
   resetOsUserPassword,
-  getOsGroups,
 } from '@/api/admin.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
@@ -22,21 +21,18 @@ const error = ref('')
 
 const users = ref([])
 const osUsers = ref([])
-const osGroups = ref([])
 const passwordResetTarget = ref('')
 const passwordResetValue = ref('')
 
 const userPage = ref(1)
 const osUserPage = ref(1)
-const osGroupPage = ref(1)
 const pageSize = ref(10)
 
 const createUserDialog = ref(false)
 const createUserForm = ref({
   username: '',
   password: '',
-  groups: 'ecube-processors',
-  roles: [],
+  roles: ['processor'],
 })
 
 const roleColumns = computed(() => [
@@ -51,11 +47,6 @@ const osUserColumns = computed(() => [
   { key: 'actions', label: t('common.actions.edit'), align: 'center' },
 ])
 
-const osGroupColumns = computed(() => [
-  { key: 'name', label: t('users.groupName') },
-  { key: 'members', label: t('users.members') },
-])
-
 const pagedUsers = computed(() => {
   const start = (userPage.value - 1) * pageSize.value
   return users.value.slice(start, start + pageSize.value)
@@ -66,11 +57,6 @@ const pagedOsUsers = computed(() => {
   return osUsers.value.slice(start, start + pageSize.value)
 })
 
-const pagedOsGroups = computed(() => {
-  const start = (osGroupPage.value - 1) * pageSize.value
-  return osGroups.value.slice(start, start + pageSize.value)
-})
-
 function normalizeRoleSelection(value) {
   return roles.filter((role) => value.includes(role))
 }
@@ -79,14 +65,12 @@ async function loadAll() {
   loading.value = true
   error.value = ''
   try {
-    const [roleResult, osUserResult, osGroupResult] = await Promise.allSettled([
+    const [roleResult, osUserResult] = await Promise.allSettled([
       getUsers(),
       getOsUsers(),
-      getOsGroups(),
     ])
     users.value = roleResult.status === 'fulfilled' ? roleResult.value.users || [] : []
     osUsers.value = osUserResult.status === 'fulfilled' ? osUserResult.value.users || [] : []
-    osGroups.value = osGroupResult.status === 'fulfilled' ? osGroupResult.value.groups || [] : []
   } catch {
     error.value = t('common.errors.networkError')
   } finally {
@@ -120,15 +104,11 @@ async function submitCreateOsUser() {
     const payload = {
       username: createUserForm.value.username.trim(),
       password: createUserForm.value.password,
-      groups: createUserForm.value.groups
-        .split(',')
-        .map((value) => value.trim())
-        .filter(Boolean),
       roles: normalizeRoleSelection(createUserForm.value.roles),
     }
     await createOsUser(payload)
     createUserDialog.value = false
-    createUserForm.value = { username: '', password: '', groups: 'ecube-processors', roles: [] }
+    createUserForm.value = { username: '', password: '', roles: ['processor'] }
     await loadAll()
   } catch {
     error.value = t('common.errors.validationFailed')
@@ -165,7 +145,6 @@ onMounted(loadAll)
     <div class="tabs">
       <button class="btn" :class="{ active: activeTab === 'roles' }" @click="activeTab = 'roles'">{{ t('users.roleTab') }}</button>
       <button class="btn" :class="{ active: activeTab === 'os-users' }" @click="activeTab = 'os-users'">{{ t('users.osUsersTab') }}</button>
-      <button class="btn" :class="{ active: activeTab === 'os-groups' }" @click="activeTab = 'os-groups'">{{ t('users.osGroupsTab') }}</button>
     </div>
 
     <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
@@ -207,13 +186,6 @@ onMounted(loadAll)
       <Pagination v-model:page="osUserPage" :page-size="pageSize" :total="osUsers.length" />
     </article>
 
-    <article v-else class="panel">
-      <DataTable :columns="osGroupColumns" :rows="pagedOsGroups" row-key="gid" :empty-text="t('users.emptyGroups')">
-        <template #cell-members="{ row }">{{ (row.members || []).join(', ') }}</template>
-      </DataTable>
-      <Pagination v-model:page="osGroupPage" :page-size="pageSize" :total="osGroups.length" />
-    </article>
-
     <teleport to="body">
       <div v-if="createUserDialog" class="dialog-overlay" @click.self="createUserDialog = false">
         <div class="dialog-panel" role="dialog" aria-modal="true">
@@ -222,8 +194,6 @@ onMounted(loadAll)
           <input v-model="createUserForm.username" type="text" />
           <label>{{ t('auth.password') }}</label>
           <input v-model="createUserForm.password" type="password" autocomplete="new-password" />
-          <label>{{ t('users.groupsCsv') }}</label>
-          <input v-model="createUserForm.groups" type="text" />
           <label>{{ t('users.roles') }}</label>
           <div class="role-grid">
             <label v-for="role in roles" :key="`new-${role}`">
