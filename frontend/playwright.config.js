@@ -20,6 +20,9 @@ export default defineConfig({
      * For example in `await expect(locator).toHaveText();`
      */
     timeout: 5000,
+    toHaveScreenshot: {
+      maxDiffPixelRatio: 0.002,
+    },
   },
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
@@ -34,13 +37,13 @@ export default defineConfig({
     /* Maximum time each action such as `click()` can take. Defaults to 0 (no limit). */
     actionTimeout: 0,
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: process.env.CI ? 'http://localhost:4173' : 'http://localhost:5173',
+    baseURL: 'http://localhost:4173',
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
 
-    /* Only on CI systems run the tests headless */
-    headless: !!process.env.CI,
+    /* Default to headless unless explicitly disabled with PW_HEADLESS=false */
+    headless: process.env.PW_HEADLESS ? process.env.PW_HEADLESS !== 'false' : true,
   },
 
   /* Configure projects for supported browsers (Chrome/Edge share Chromium) */
@@ -97,8 +100,8 @@ export default defineConfig({
      * Use the preview server on CI for more realistic testing.
      * Playwright will re-use the local server if there is already a dev-server running.
      */
-    command: process.env.CI ? 'npm run preview' : 'npm run dev',
-    port: process.env.CI ? 4173 : 5173,
-    reuseExistingServer: !process.env.CI,
+    command: process.env.CI ? 'npm run preview' : 'npm run build && npm run preview',
+    port: 4173,
+    reuseExistingServer: false,
   },
 })

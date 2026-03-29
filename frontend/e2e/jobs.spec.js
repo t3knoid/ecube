@@ -1,0 +1,58 @@
+import { test, expect } from '@playwright/test'
+import { setupAuthenticatedPage, routeJson } from './helpers/app.js'
+import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
+
+test('jobs create, start, verify, and manifest flow', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['admin'])
+
+  const createdJob = {
+    id: 77,
+    project_id: 'P-77',
+    evidence_number: 'EV-77',
+    status: 'PENDING',
+    copied_bytes: 0,
+    total_bytes: 100,
+    thread_count: 4,
+  }
+
+  await routeJson(page, '**/api/drives', [{ id: 1, device_identifier: '/dev/sdb' }])
+  await routeJson(page, '**/api/mounts', [{ id: 4, remote_path: '10.1.1.1:/share', local_mount_point: '/mnt/share' }])
+
+  await page.route('**/api/jobs', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([createdJob]) })
+      return
+    }
+    if (route.request().method() === 'POST') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(createdJob) })
+      return
+    }
+    await route.fallback()
+  })
+
+  await routeJson(page, '**/api/jobs/77', createdJob)
+  await routeJson(page, '**/api/jobs/77/files', { files: [{ id: 101, relative_path: 'a.txt', status: 'COMPLETED', checksum: 'abc' }] })
+  await routeJson(page, '**/api/jobs/77/start', { ...createdJob, status: 'RUNNING', copied_bytes: 50 })
+  await routeJson(page, '**/api/jobs/77/verify', { ...createdJob, status: 'VERIFYING', copied_bytes: 100 })
+  await routeJson(page, '**/api/jobs/77/manifest', { ...createdJob, status: 'COMPLETED', copied_bytes: 100 })
+  await routeJson(page, '**/api/introspection/jobs/77/debug', { files: [{ id: 101, relative_path: 'a.txt', status: 'COMPLETED', checksum: 'abc' }] })
+
+  await page.goto('/jobs')
+  await page.getByRole('button', { name: 'Create Job' }).click()
+  await page.getByLabel('Select drive').selectOption('1')
+  await page.getByRole('button', { name: 'Next' }).click()
+  await page.getByLabel('Select mount source').selectOption('4')
+  await page.getByRole('button', { name: 'Next' }).click()
+  await page.getByLabel('Project').fill('P-77')
+  await page.getByLabel('Evidence').fill('EV-77')
+  await page.getByLabel('Source path').fill('folder')
+  await page.getByRole('button', { name: 'Next' }).click()
+  await page.getByRole('button', { name: 'Create Job' }).click()
+
+  await expect(page).toHaveURL(/\/jobs\/77$/)
+  await page.getByRole('button', { name: 'Start' }).click()
+  await page.getByRole('button', { name: 'Verify' }).click()
+  await page.getByRole('button', { name: 'Generate Manifest' }).click()
+
+  await expectNoCriticalA11yViolations(page)
+})

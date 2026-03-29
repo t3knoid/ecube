@@ -57,13 +57,13 @@ const badgeClass = computed(() => {
 .badge-success {
   background: color-mix(in srgb, var(--color-success) 16%, var(--color-bg-secondary));
   border-color: color-mix(in srgb, var(--color-success) 45%, var(--color-border));
-  color: var(--color-success);
+  color: #14532d;
 }
 
 .badge-warning {
   background: color-mix(in srgb, var(--color-warning) 16%, var(--color-bg-secondary));
   border-color: color-mix(in srgb, var(--color-warning) 45%, var(--color-border));
-  color: var(--color-warning);
+  color: #7c3f00;
 }
 
 .badge-danger {
