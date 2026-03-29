@@ -365,8 +365,8 @@ def get_system_info() -> SystemInfoResponse:
     responses={**R_401, **R_403, **R_404, **R_503},
 )
 def get_database_provision_status(
-    db: Optional[Session] = Depends(_get_db_or_none),
-    current_user: Optional[CurrentUser] = Depends(_require_admin_or_initial_setup),
+    _db: Optional[Session] = Depends(_get_db_or_none),
+    _current_user: Optional[CurrentUser] = Depends(_require_admin_or_initial_setup),
 ) -> DatabaseProvisionStatusResponse:
     """Report whether the application database is already provisioned.
 
