@@ -14,17 +14,14 @@ const { t } = useI18n()
 
 const roles = ['admin', 'manager', 'processor', 'auditor']
 
-const activeTab = ref('roles')
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
 
-const users = ref([])
 const osUsers = ref([])
 const passwordResetTarget = ref('')
 const passwordResetValue = ref('')
 
-const userPage = ref(1)
 const osUserPage = ref(1)
 const pageSize = ref(10)
 
@@ -35,22 +32,11 @@ const createUserForm = ref({
   roles: ['processor'],
 })
 
-const roleColumns = computed(() => [
+const userColumns = computed(() => [
   { key: 'username', label: t('auth.username') },
   { key: 'roles', label: t('users.roles') },
-  { key: 'actions', label: t('common.actions.save'), align: 'center' },
+  { key: 'reset', label: t('users.resetPassword'), align: 'center' },
 ])
-
-const osUserColumns = computed(() => [
-  { key: 'username', label: t('auth.username') },
-  { key: 'groups', label: t('users.groups') },
-  { key: 'actions', label: t('common.actions.edit'), align: 'center' },
-])
-
-const pagedUsers = computed(() => {
-  const start = (userPage.value - 1) * pageSize.value
-  return users.value.slice(start, start + pageSize.value)
-})
 
 const pagedOsUsers = computed(() => {
   const start = (osUserPage.value - 1) * pageSize.value
@@ -61,6 +47,17 @@ function normalizeRoleSelection(value) {
   return roles.filter((role) => value.includes(role))
 }
 
+function rolesEqual(left, right) {
+  const normalizedLeft = normalizeRoleSelection(left || [])
+  const normalizedRight = normalizeRoleSelection(right || [])
+  return normalizedLeft.length === normalizedRight.length
+    && normalizedLeft.every((role, index) => role === normalizedRight[index])
+}
+
+function hasRoleChanges(user) {
+  return !rolesEqual(user.roles, user.savedRoles)
+}
+
 async function loadAll() {
   loading.value = true
   error.value = ''
@@ -69,8 +66,16 @@ async function loadAll() {
       getUsers(),
       getOsUsers(),
     ])
-    users.value = roleResult.status === 'fulfilled' ? roleResult.value.users || [] : []
-    osUsers.value = osUserResult.status === 'fulfilled' ? osUserResult.value.users || [] : []
+    const roleUsers = roleResult.status === 'fulfilled' ? roleResult.value.users || [] : []
+    const roleMap = new Map(
+      roleUsers.map((row) => [row.username, normalizeRoleSelection(row.roles || [])]),
+    )
+    const rawOsUsers = osUserResult.status === 'fulfilled' ? osUserResult.value.users || [] : []
+    osUsers.value = rawOsUsers.map((row) => ({
+      ...row,
+      roles: roleMap.get(row.username) || [],
+      savedRoles: roleMap.get(row.username) || [],
+    }))
   } catch {
     error.value = t('common.errors.networkError')
   } finally {
@@ -88,8 +93,9 @@ async function saveRoles(user) {
       user.roles = []
     } else {
       const updated = await setUserRoles(user.username, { roles: roleList })
-      user.roles = updated.roles
+      user.roles = normalizeRoleSelection(updated.roles || [])
     }
+    user.savedRoles = normalizeRoleSelection(user.roles || [])
   } catch {
     error.value = t('common.errors.requestConflict')
   } finally {
@@ -132,6 +138,11 @@ async function submitResetPassword(username) {
   }
 }
 
+function cancelResetPassword() {
+  passwordResetTarget.value = ''
+  passwordResetValue.value = ''
+}
+
 onMounted(loadAll)
 </script>
 
@@ -142,43 +153,32 @@ onMounted(loadAll)
       <button class="btn" @click="loadAll">{{ t('common.actions.refresh') }}</button>
     </header>
 
-    <div class="tabs">
-      <button class="btn" :class="{ active: activeTab === 'roles' }" @click="activeTab = 'roles'">{{ t('users.roleTab') }}</button>
-      <button class="btn" :class="{ active: activeTab === 'os-users' }" @click="activeTab = 'os-users'">{{ t('users.osUsersTab') }}</button>
-    </div>
-
     <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
     <p v-if="error" class="error-banner">{{ error }}</p>
 
-    <article v-if="activeTab === 'roles'" class="panel">
-      <DataTable :columns="roleColumns" :rows="pagedUsers" row-key="username" :empty-text="t('users.empty')">
-        <template #cell-roles="{ row }">
-          <div class="role-grid">
-            <label v-for="role in roles" :key="`${row.username}-${role}`">
-              <input v-model="row.roles" type="checkbox" :value="role" />
-              {{ role }}
-            </label>
-          </div>
-        </template>
-        <template #cell-actions="{ row }">
-          <button class="btn btn-primary" :disabled="saving" @click="saveRoles(row)">{{ t('common.actions.save') }}</button>
-        </template>
-      </DataTable>
-      <Pagination v-model:page="userPage" :page-size="pageSize" :total="users.length" />
-    </article>
-
-    <article v-else-if="activeTab === 'os-users'" class="panel">
+    <article class="panel">
       <div class="panel-actions">
         <button class="btn btn-primary" @click="createUserDialog = true">{{ t('users.createOsUser') }}</button>
       </div>
-      <DataTable :columns="osUserColumns" :rows="pagedOsUsers" row-key="uid" :empty-text="t('users.emptyOsUsers')">
-        <template #cell-groups="{ row }">{{ (row.groups || []).join(', ') }}</template>
-        <template #cell-actions="{ row }">
+      <DataTable :columns="userColumns" :rows="pagedOsUsers" row-key="uid" :empty-text="t('users.emptyOsUsers')">
+        <template #cell-roles="{ row }">
+          <div class="role-cell">
+            <div class="role-grid">
+              <label v-for="role in roles" :key="`${row.username}-${role}`">
+                <input v-model="row.roles" type="checkbox" :value="role" />
+                {{ role }}
+              </label>
+            </div>
+            <button class="btn btn-primary" :disabled="saving || !hasRoleChanges(row)" @click="saveRoles(row)">{{ t('users.saveRoles') }}</button>
+          </div>
+        </template>
+        <template #cell-reset="{ row }">
           <div class="inline-reset">
             <button class="btn" @click="passwordResetTarget = row.username">{{ t('users.resetPassword') }}</button>
             <div v-if="passwordResetTarget === row.username" class="inline-form">
               <input v-model="passwordResetValue" type="password" :placeholder="t('auth.password')" autocomplete="new-password" />
-              <button class="btn btn-primary" @click="submitResetPassword(row.username)">{{ t('common.actions.save') }}</button>
+              <button class="btn btn-primary" @click="submitResetPassword(row.username)">{{ t('users.savePassword') }}</button>
+              <button class="btn" @click="cancelResetPassword">{{ t('common.actions.cancel') }}</button>
             </div>
           </div>
         </template>
@@ -222,6 +222,7 @@ onMounted(loadAll)
 .header-row,
 .tabs,
 .panel-actions,
+.role-cell,
 .role-grid,
 .inline-form,
 .dialog-actions {
@@ -237,8 +238,14 @@ onMounted(loadAll)
 .tabs,
 .panel-actions,
 .role-grid,
+.role-cell,
 .inline-form {
   flex-wrap: wrap;
+}
+
+.role-cell {
+  justify-content: space-between;
+  align-items: center;
 }
 
 .panel {
@@ -250,21 +257,12 @@ onMounted(loadAll)
   gap: var(--space-sm);
 }
 
-input,
-.btn {
+input {
   border: 1px solid var(--color-border);
   background: var(--color-bg-input);
   color: var(--color-text-primary);
   border-radius: var(--border-radius);
   padding: var(--space-xs) var(--space-sm);
-}
-
-.btn {
-  cursor: pointer;
-}
-
-.btn.active {
-  background: var(--color-bg-selected);
 }
 
 .error-banner {

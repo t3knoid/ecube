@@ -80,7 +80,7 @@ test('redirects away from /users when user is not admin', async ({ page }) => {
   expect(new URL(page.url()).pathname).toBe('/')
 })
 
-test('admin users page shows only User Roles and Users tabs', async ({ page }) => {
+test('admin users page exposes a single editable users table', async ({ page }) => {
   await stubSetupStatus(page, true)
 
   // Footer polling endpoints
@@ -106,13 +106,34 @@ test('admin users page shows only User Roles and Users tabs', async ({ page }) =
       body: JSON.stringify({ users: [{ username: 'alba', uid: 1001, gid: 1001, home: '/home/alba', shell: '/bin/bash', groups: ['ecube-processors'] }] }),
     }),
   )
+  await page.route('**/api/users/alba/roles', (route) => {
+    if (route.request().method() === 'PUT') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ username: 'alba', roles: ['manager'] }),
+      })
+    }
+    return route.continue()
+  })
 
   await injectAuthToken(page, ['admin'])
   await page.goto('/users')
 
-  const tabButtons = page.locator('.tabs .btn')
-  await expect(tabButtons).toHaveCount(2)
-  await expect(page.getByRole('button', { name: 'User Roles' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Users' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Groups' })).toHaveCount(0)
+  // Tabs are removed; editing is consolidated into one users table.
+  await expect(page.locator('.tabs .btn')).toHaveCount(0)
+  await expect(page.getByRole('columnheader', { name: 'Roles' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Reset Password' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: 'Save' })).toHaveCount(0)
+
+  const userRow = page.getByRole('row').filter({ hasText: 'alba' })
+  const saveButton = userRow.getByRole('button', { name: 'Save' })
+  const managerCheckbox = userRow.getByRole('checkbox', { name: 'manager' })
+
+  await expect(saveButton).toBeVisible()
+  await expect(saveButton).toBeDisabled()
+  await managerCheckbox.check()
+  await expect(saveButton).toBeEnabled()
+  await saveButton.click()
+  await expect(saveButton).toBeDisabled()
 })
