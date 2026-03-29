@@ -7,8 +7,8 @@ const THEME_FALLBACK_STYLE_ID = 'ecube-theme-inline-fallback'
 const VALID_THEME_NAME = /^[a-z0-9][a-z0-9-]*$/
 const MANIFEST_TIMEOUT_MS = 3000
 const BUILT_IN_THEMES = [
-  { name: 'default', label: 'Light' },
-  { name: 'dark', label: 'Dark' },
+  { name: 'default', labelKey: 'themes.light' },
+  { name: 'dark', labelKey: 'themes.dark' },
 ]
 
 // Safety net: if external theme files are missing (e.g. empty mounted
