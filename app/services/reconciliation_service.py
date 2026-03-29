@@ -110,9 +110,10 @@ def reconcile_identity_users(
             if username not in os_users:
                 missing_os_accounts += 1
                 logger.warning(
-                    "Startup reconciliation found DB user '%s' with roles %s but no OS account. "
+                    "Startup reconciliation found DB user '%s' with roles %s (groups %s) but no OS account. "
                     "Skipping OS user creation.",
                     username,
+                    roles,
                     required_groups,
                 )
                 continue
