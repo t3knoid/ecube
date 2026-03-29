@@ -403,15 +403,15 @@ ECUBE uses a **DB-first hybrid model** to resolve roles at login time:
 **Example Flow:**
 
 ```text
-User "alice" calls POST /auth/token
+User "griffin" calls POST /auth/token
     → PAM validates password
-    → DB lookup: user_roles("alice") → ["admin"]    # found → use these
+    → DB lookup: user_roles("griffin") → ["admin"]    # found → use these
     → JWT issued with roles=["admin"]
     → All endpoints accessible until token expires
 
-User "bob" calls POST /auth/token
+User "alba" calls POST /auth/token
     → PAM validates password
-    → DB lookup: user_roles("bob") → []              # empty → fall back
+    → DB lookup: user_roles("alba") → []              # empty → fall back
     → OS groups: ["ecube-processors", "users"]
     → LOCAL_GROUP_ROLE_MAP: "ecube-processors" → ["processor"]
     → JWT issued with roles=["processor"]
@@ -450,8 +450,8 @@ Response:
 ```json
 {
   "users": [
-    {"username": "alice", "roles": ["admin"]},
-    {"username": "bob", "roles": ["processor"]}
+    {"username": "griffin", "roles": ["admin"]},
+    {"username": "alba", "roles": ["processor"]}
   ]
 }
 ```
@@ -460,13 +460,13 @@ Response:
 
 ```bash
 curl -k -H "Authorization: Bearer $TOKEN" \
-  https://localhost:8443/users/alice/roles
+  https://localhost:8443/users/griffin/roles
 ```
 
 Response:
 
 ```json
-{"username": "alice", "roles": ["admin"]}
+{"username": "griffin", "roles": ["admin"]}
 ```
 
 #### Set roles for a user (replaces all existing assignments)
@@ -475,26 +475,26 @@ Response:
 curl -k -X PUT -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"roles": ["manager", "processor"]}' \
-  https://localhost:8443/users/bob/roles
+  https://localhost:8443/users/alba/roles
 ```
 
 Response:
 
 ```json
-{"username": "bob", "roles": ["manager", "processor"]}
+{"username": "alba", "roles": ["manager", "processor"]}
 ```
 
 #### Remove all roles for a user
 
 ```bash
 curl -k -X DELETE -H "Authorization: Bearer $TOKEN" \
-  https://localhost:8443/users/bob/roles
+  https://localhost:8443/users/alba/roles
 ```
 
 Response:
 
 ```json
-{"username": "bob", "roles": []}
+{"username": "alba", "roles": []}
 ```
 
 > **Note:** Removing all DB roles does not lock out a user if they still
@@ -1449,7 +1449,7 @@ curl -k -H "Authorization: Bearer $JWT_TOKEN" \
 
 # Filter by user and action
 curl -k -H "Authorization: Bearer $JWT_TOKEN" \
-  "https://localhost:8443/audit?user=alice&action=JOB_STARTED&limit=50"
+  "https://localhost:8443/audit?user=griffin&action=JOB_STARTED&limit=50"
 
 # Filter by job ID
 curl -k -H "Authorization: Bearer $JWT_TOKEN" \
@@ -1483,7 +1483,7 @@ Example response:
   {
     "id": 847,
     "timestamp": "2026-03-18T14:30:00Z",
-    "user": "alice",
+    "user": "griffin",
     "action": "JOB_STARTED",
     "job_id": 42,
     "details": {
@@ -1493,7 +1493,7 @@ Example response:
   {
     "id": 846,
     "timestamp": "2026-03-18T14:29:55Z",
-    "user": "alice",
+    "user": "griffin",
     "action": "JOB_CREATED",
     "job_id": 42,
     "details": {
@@ -1519,7 +1519,7 @@ curl -k -H "Authorization: Bearer $JWT_TOKEN" \
 
 # Activity for a specific user
 curl -k -H "Authorization: Bearer $JWT_TOKEN" \
-  "https://localhost:8443/audit?user=bob"
+  "https://localhost:8443/audit?user=alba"
 
 # Full timeline for a specific job
 curl -k -H "Authorization: Bearer $JWT_TOKEN" \

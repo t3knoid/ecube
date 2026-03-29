@@ -33,7 +33,7 @@ The authenticated application uses a persistent shell with a top header bar cont
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │  ┌────────┐                                                                  │
-│  │ [LOGO] │  ECUBE                       alice [admin] ▾  ⏱ 54m  [ Log Out ]│
+│  │ [LOGO] │  ECUBE                       griffin [admin] ▾  ⏱ 54m  [ Log Out ]│
 │  └────────┘                                                                  │
 ├──────────────┬───────────────────────────────────────────────────────────────┤
 │              │                                                               │
@@ -560,7 +560,7 @@ Accessible from the Drive Management screen via a "Manage Hubs" button. Visible 
 ```
 ┌─ Job #3 — PROJ-042 / EV-2026-003 ───────────────────────────────────────────┐
 │                                                                              │
-│  Status: ● RUNNING                                         Created by: alice │
+│  Status: ● RUNNING                                         Created by: griffin │
 │                                                                              │
 │  ┌─ Overview ──────────────────────────────────────────────────────────┐     │
 │  │  Project:      PROJ-042             Evidence #:  EV-2026-003       │     │
@@ -700,11 +700,11 @@ Accessible from the Drive Management screen via a "Manage Hubs" button. Visible 
 │              │  ┌─────┬────────────────────┬────────┬────────────────┬─────┐  │
 │              │  │ ID  │ Timestamp          │ User   │ Action         │ Job │  │
 │              │  ├─────┼────────────────────┼────────┼────────────────┼─────┤  │
-│              │  │ 847 │ 2026-03-18 14:30   │ alice  │ JOB_STARTED    │ 42  │  │
-│              │  │ 846 │ 2026-03-18 14:29   │ alice  │ JOB_CREATED    │ 42  │  │
-│              │  │ 845 │ 2026-03-18 14:25   │ bob    │ DRIVE_INIT     │ —   │  │
+│              │  │ 847 │ 2026-03-18 14:30   │ griffin  │ JOB_STARTED    │ 42  │  │
+│              │  │ 846 │ 2026-03-18 14:29   │ griffin  │ JOB_CREATED    │ 42  │  │
+│              │  │ 845 │ 2026-03-18 14:25   │ alba    │ DRIVE_INIT     │ —   │  │
 │              │  │ 844 │ 2026-03-18 14:20   │ —      │ USB_DISC_SYNC  │ —   │  │
-│              │  │ 843 │ 2026-03-18 13:55   │ alice  │ MOUNT_ADDED    │ —   │  │
+│              │  │ 843 │ 2026-03-18 13:55   │ griffin  │ MOUNT_ADDED    │ —   │  │
 │              │  └─────┴────────────────────┴────────┴────────────────┴─────┘  │
 │              │                                                               │
 │              │  ▼ Entry #847 — Expanded Detail                               │
@@ -750,17 +750,17 @@ Visible only to admin role.
 │  ◎ Jobs      │  ┌───────────────┬──────────────────────────┬────────────────┐│
 │  ◎ Audit     │  │ Username      │ DB Roles                 │ OS Groups      ││
 │  ─────────── │  ├───────────────┼──────────────────────────┼────────────────┤│
-│  ◉ Users     │  │ alice         │ [admin]                  │ ecube-admins   ││
+│  ◉ Users     │  │ griffin         │ [admin]                  │ ecube-admins   ││
 │  ◎ System    │  │               │                          │                ││
 │              │  │               │  [ Edit Roles ] [ Reset  │ [ Edit Groups ]││
 │              │  │               │                  Pwd   ] │ [ Delete ]     ││
 │              │  ├───────────────┼──────────────────────────┼────────────────┤│
-│              │  │ bob           │ [processor]              │ ecube-processors│
+│              │  │ alba           │ [processor]              │ ecube-processors│
 │              │  │               │                          │                ││
 │              │  │               │  [ Edit Roles ] [ Reset  │ [ Edit Groups ]││
 │              │  │               │                  Pwd   ] │ [ Delete ]     ││
 │              │  ├───────────────┼──────────────────────────┼────────────────┤│
-│              │  │ carol         │ [manager] [processor]    │ ecube-managers ││
+│              │  │ jordan         │ [manager] [processor]    │ ecube-managers ││
 │              │  │               │                          │ ecube-processors│
 │              │  │               │  [ Edit Roles ] [ Reset  │ [ Edit Groups ]││
 │              │  │               │                  Pwd   ] │ [ Delete ]     ││
@@ -772,7 +772,7 @@ Visible only to admin role.
 ### 8b — Edit Roles Dialog (UC-3.3, UC-3.4)
 
 ```
-┌─ Edit Roles — bob ───────────────────────────────────┐
+┌─ Edit Roles — alba ───────────────────────────────────┐
 │                                                       │
 │  Select roles for this user:                          │
 │                                                       │
@@ -822,14 +822,14 @@ Visible only to admin role.
 │              │                                                               │
 │              │  Tab: [ Users ]  [Groups]                                  │
 │              │                                                               │
-│              │  ┌─────────────────────┬───────┬──────────────┐              │
-│              │  │ Group Name          │ GID   │ Members      │              │
-│              │  ├─────────────────────┼───────┼──────────────┤              │
-│              │  │ ecube-admins        │ 1001  │ alice        │              │
-│              │  │ ecube-managers      │ 1002  │ carol        │              │
-│              │  │ ecube-processors    │ 1003  │ bob, carol   │              │
-│              │  │ ecube-auditors      │ 1004  │ (none)       │              │
-│              │  └─────────────────────┴───────┴──────────────┘              │
+│              │  ┌─────────────────────┬──────────────┐                      │
+│              │  │ Group Name          │ Members      │                      │
+│              │  ├─────────────────────┼──────────────┤                      │
+│              │  │ ecube-admins        │ griffin      │                      │
+│              │  │ ecube-managers      │ jordan       │                      │
+│              │  │ ecube-processors    │ alba, jordan │                      │
+│              │  │ ecube-auditors      │ (none)       │                      │
+│              │  └─────────────────────┴──────────────┘                      │
 │              │                                                               │
 │              │  (Read-only — groups are managed at the system level.)        │
 │              │                                                               │
@@ -962,7 +962,7 @@ Used for: Format Drive (UC-4.4), Delete User (UC-3.8), Remove Mount (UC-5.4), Re
 ### Reset Password Dialog (UC-3.7)
 
 ```
-┌─ Reset Password — bob ───────────────────────────┐
+┌─ Reset Password — alba ───────────────────────────┐
 │                                                    │
 │  New Password:     [ _____________________ ]       │
 │  Confirm Password: [ _____________________ ]       │
