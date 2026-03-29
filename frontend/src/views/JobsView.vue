@@ -42,7 +42,7 @@ const form = ref({
 const canOperate = computed(() => authStore.hasAnyRole(['admin', 'manager', 'processor']))
 
 const columns = computed(() => [
-  { key: 'id', label: 'ID', align: 'right' },
+  { key: 'id', label: t('common.labels.id'), align: 'right' },
   { key: 'project_id', label: t('dashboard.project') },
   { key: 'evidence_number', label: t('jobs.evidence') },
   { key: 'status', label: t('common.labels.status') },
@@ -170,11 +170,11 @@ onMounted(async () => {
       <input v-model="search" type="text" :placeholder="t('jobs.searchPlaceholder')" />
       <select v-model="statusFilter">
         <option value="ALL">{{ t('jobs.allStatuses') }}</option>
-        <option value="PENDING">PENDING</option>
-        <option value="RUNNING">RUNNING</option>
-        <option value="VERIFYING">VERIFYING</option>
-        <option value="COMPLETED">COMPLETED</option>
-        <option value="FAILED">FAILED</option>
+        <option value="PENDING">{{ t('jobs.statuses.pending') }}</option>
+        <option value="RUNNING">{{ t('jobs.statuses.running') }}</option>
+        <option value="VERIFYING">{{ t('jobs.statuses.verifying') }}</option>
+        <option value="COMPLETED">{{ t('jobs.statuses.completed') }}</option>
+        <option value="FAILED">{{ t('jobs.statuses.failed') }}</option>
       </select>
     </div>
 
