@@ -2,11 +2,13 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getAudit } from '@/api/audit.js'
+import { useSettingsStore } from '@/stores/settings.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 
 const { t } = useI18n()
+const settingsStore = useSettingsStore()
 
 const logs = ref([])
 const loading = ref(false)
@@ -97,7 +99,8 @@ function exportCsv() {
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = 'audit-log-export.csv'
+  const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+  anchor.download = `${settingsStore.auditExportFilename}-${timestamp}.csv`
   anchor.click()
   URL.revokeObjectURL(url)
 }
