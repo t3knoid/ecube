@@ -86,6 +86,8 @@
     "hashes": "View Hashes",
     "hashViewer": "Hash Viewer",
     "hashViewerEmpty": "Select a file to load hashes.",
+    "md5": "MD5",
+    "sha256": "SHA-256",
     "compareTitle": "File Compare",
     "fileA": "File A",
     "fileB": "File B",
