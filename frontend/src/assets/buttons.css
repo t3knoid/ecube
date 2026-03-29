@@ -47,14 +47,14 @@ a.btn {
 
 .btn-primary:disabled,
 .btn-primary[aria-disabled='true'] {
-  background: color-mix(in srgb, var(--color-btn-primary-bg) 55%, var(--color-bg-input));
-  border-color: color-mix(in srgb, var(--color-btn-primary-bg) 50%, var(--color-border));
-  color: color-mix(in srgb, var(--color-btn-primary-text) 75%, var(--color-text-secondary));
+  background: var(--color-bg-input);
+  border-color: var(--color-border);
+  color: var(--color-text-secondary);
 }
 
 .btn-danger:disabled,
 .btn-danger[aria-disabled='true'] {
-  background: color-mix(in srgb, var(--color-btn-danger-bg) 55%, var(--color-bg-input));
-  border-color: color-mix(in srgb, var(--color-btn-danger-bg) 50%, var(--color-border));
-  color: color-mix(in srgb, var(--color-btn-danger-text) 75%, var(--color-text-secondary));
+  background: var(--color-bg-input);
+  border-color: var(--color-border);
+  color: var(--color-text-secondary);
 }
