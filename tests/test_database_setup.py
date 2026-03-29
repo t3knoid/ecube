@@ -413,6 +413,59 @@ class TestProvisionEndpoint:
         assert "supersecret" not in text
         assert "mypassword" not in text
 
+
+# ---------------------------------------------------------------------------
+# Endpoint tests — system-info
+# ---------------------------------------------------------------------------
+
+
+class TestSystemInfoEndpoint:
+    """Tests for GET /setup/database/system-info."""
+
+    @patch("app.routers.database_setup.is_running_in_docker", return_value=False)
+    def test_system_info_non_docker_uses_localhost(
+        self, mock_is_running_in_docker, unauthenticated_client
+    ):
+        resp = unauthenticated_client.get("/setup/database/system-info")
+
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "in_docker": False,
+            "suggested_db_host": "localhost",
+        }
+        mock_is_running_in_docker.assert_called_once_with()
+
+    @patch("app.routers.database_setup.is_running_in_docker", return_value=True)
+    def test_system_info_docker_uses_configured_host(
+        self, mock_is_running_in_docker, unauthenticated_client
+    ):
+        with patch(
+            "app.routers.database_setup.settings.setup_docker_db_host",
+            "postgres-service",
+        ):
+            resp = unauthenticated_client.get("/setup/database/system-info")
+
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "in_docker": True,
+            "suggested_db_host": "postgres-service",
+        }
+        mock_is_running_in_docker.assert_called_once_with()
+
+    @patch("app.routers.database_setup.is_running_in_docker", return_value=False)
+    def test_system_info_remains_public_after_setup(
+        self, mock_is_running_in_docker, unauthenticated_client, db
+    ):
+        db.add(UserRole(username="admin-user", role="admin"))
+        db.commit()
+
+        resp = unauthenticated_client.get("/setup/database/system-info")
+
+        assert resp.status_code == 200
+        assert resp.json()["in_docker"] is False
+        assert resp.json()["suggested_db_host"] == "localhost"
+        mock_is_running_in_docker.assert_called_once_with()
+
     @patch("app.services.database_service.is_database_provisioned", return_value=True)
     def test_provision_blocked_when_already_provisioned(
         self, mock_provisioned, unauthenticated_client
@@ -594,6 +647,51 @@ class TestProvisionEndpoint:
         )
 
         assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Endpoint tests — provision-status
+# ---------------------------------------------------------------------------
+
+
+class TestProvisionStatusEndpoint:
+    """Tests for GET /setup/database/provision-status."""
+
+    @patch("app.services.database_service.is_database_provisioned", return_value=False)
+    def test_provision_status_unauthenticated_allowed_pre_init(
+        self, mock_provisioned, unauthenticated_client
+    ):
+        resp = unauthenticated_client.get("/setup/database/provision-status")
+
+        assert resp.status_code == 200
+        assert resp.json() == {"provisioned": False}
+        mock_provisioned.assert_called_once_with()
+
+    @patch("app.services.database_service.is_database_provisioned", return_value=True)
+    def test_provision_status_requires_admin_after_setup(
+        self, mock_provisioned, unauthenticated_client, db
+    ):
+        db.add(UserRole(username="admin-user", role="admin"))
+        db.commit()
+
+        resp = unauthenticated_client.get("/setup/database/provision-status")
+
+        assert resp.status_code == 401
+        mock_provisioned.assert_not_called()
+
+    def test_provision_status_503_when_provisioning_state_unknown(
+        self, unauthenticated_client
+    ):
+        from app.exceptions import DatabaseStatusUnknownError
+
+        with patch(
+            "app.services.database_service.is_database_provisioned",
+            side_effect=DatabaseStatusUnknownError(),
+        ):
+            resp = unauthenticated_client.get("/setup/database/provision-status")
+
+        assert resp.status_code == 503
+        assert "provisioning state" in resp.json()["message"].lower()
 
 
 # ---------------------------------------------------------------------------
