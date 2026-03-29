@@ -1179,7 +1179,6 @@ Create the application database user, database, and run Alembic migrations.
 
 **Audit events:** `DATABASE_PROVISIONED`
 
-#### `GET /setup/database/status`
 #### `GET /setup/database/provision-status`
 
 Report whether the application database has already been provisioned.
