@@ -112,7 +112,7 @@ curl -H "Authorization: Bearer $JWT_TOKEN" https://localhost:8443/endpoint
 
 **Filters:**
 
-- `user=alice` — Filter by user
+- `user=griffin` — Filter by user
 - `action=JOB_CREATED` — Filter by action
 - `job_id=5` — Filter by job
 - `since=2026-03-01T00:00:00Z` — Start timestamp (ISO 8601)
@@ -124,7 +124,7 @@ curl -H "Authorization: Bearer $JWT_TOKEN" https://localhost:8443/endpoint
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
-  'https://localhost:8443/audit?action=JOB_STARTED&user=alice&limit=50&offset=0'
+  'https://localhost:8443/audit?action=JOB_STARTED&user=griffin&limit=50&offset=0'
 ```
 
 ---

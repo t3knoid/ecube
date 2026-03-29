@@ -55,8 +55,8 @@ class TestAuditListBasic:
         _seed_entries(
             db,
             [
-                {"action": "JOB_CREATED", "user": "alice", "details": {}},
-                {"action": "DRIVE_INITIALIZED", "user": "bob", "details": {}},
+                {"action": "JOB_CREATED", "user": "griffin", "details": {}},
+                {"action": "DRIVE_INITIALIZED", "user": "alba", "details": {}},
             ],
         )
         response = admin_client.get("/audit")
@@ -91,24 +91,24 @@ class TestAuditFilters:
         _seed_entries(
             db,
             [
-                {"action": "ACTION_A", "user": "alice", "details": {}},
-                {"action": "ACTION_B", "user": "bob", "details": {}},
-                {"action": "ACTION_C", "user": "alice", "details": {}},
+                {"action": "ACTION_A", "user": "griffin", "details": {}},
+                {"action": "ACTION_B", "user": "alba", "details": {}},
+                {"action": "ACTION_C", "user": "griffin", "details": {}},
             ],
         )
-        response = admin_client.get("/audit?user=alice")
+        response = admin_client.get("/audit?user=griffin")
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 2
-        assert all(d["user"] == "alice" for d in data)
+        assert all(d["user"] == "griffin" for d in data)
 
     def test_filter_by_action(self, admin_client, db):
         _seed_entries(
             db,
             [
-                {"action": "JOB_CREATED", "user": "alice", "details": {}},
-                {"action": "DRIVE_INITIALIZED", "user": "alice", "details": {}},
-                {"action": "JOB_CREATED", "user": "bob", "details": {}},
+                {"action": "JOB_CREATED", "user": "griffin", "details": {}},
+                {"action": "DRIVE_INITIALIZED", "user": "griffin", "details": {}},
+                {"action": "JOB_CREATED", "user": "alba", "details": {}},
             ],
         )
         response = admin_client.get("/audit?action=JOB_CREATED")
@@ -121,9 +121,9 @@ class TestAuditFilters:
         _seed_entries(
             db,
             [
-                {"action": "JOB_CREATED", "user": "alice", "job_id": 1, "details": {}},
-                {"action": "JOB_STARTED", "user": "alice", "job_id": 1, "details": {}},
-                {"action": "JOB_CREATED", "user": "bob", "job_id": 2, "details": {}},
+                {"action": "JOB_CREATED", "user": "griffin", "job_id": 1, "details": {}},
+                {"action": "JOB_STARTED", "user": "griffin", "job_id": 1, "details": {}},
+                {"action": "JOB_CREATED", "user": "alba", "job_id": 2, "details": {}},
             ],
         )
         response = admin_client.get("/audit?job_id=1")
@@ -199,20 +199,20 @@ class TestAuditFilters:
         _seed_entries(
             db,
             [
-                {"action": "JOB_CREATED", "user": "alice", "job_id": 1, "details": {}},
-                {"action": "JOB_CREATED", "user": "bob", "job_id": 2, "details": {}},
-                {"action": "JOB_STARTED", "user": "alice", "job_id": 1, "details": {}},
+                {"action": "JOB_CREATED", "user": "griffin", "job_id": 1, "details": {}},
+                {"action": "JOB_CREATED", "user": "alba", "job_id": 2, "details": {}},
+                {"action": "JOB_STARTED", "user": "griffin", "job_id": 1, "details": {}},
             ],
         )
-        response = admin_client.get("/audit?user=alice&action=JOB_CREATED")
+        response = admin_client.get("/audit?user=griffin&action=JOB_CREATED")
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 1
-        assert data[0]["user"] == "alice"
+        assert data[0]["user"] == "griffin"
         assert data[0]["action"] == "JOB_CREATED"
 
     def test_no_match_returns_empty(self, admin_client, db):
-        _seed_entries(db, [{"action": "JOB_CREATED", "user": "alice", "details": {}}])
+        _seed_entries(db, [{"action": "JOB_CREATED", "user": "griffin", "details": {}}])
         response = admin_client.get("/audit?user=nobody")
         assert response.status_code == 200
         assert response.json() == []

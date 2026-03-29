@@ -192,7 +192,7 @@ onMounted(loadAll)
       <div class="panel-actions">
         <button class="btn btn-primary" @click="createUserDialog = true">{{ t('users.createOsUser') }}</button>
       </div>
-      <DataTable :columns="osUserColumns" :rows="pagedOsUsers" row-key="username" :empty-text="t('users.emptyOsUsers')">
+      <DataTable :columns="osUserColumns" :rows="pagedOsUsers" row-key="uid" :empty-text="t('users.emptyOsUsers')">
         <template #cell-groups="{ row }">{{ (row.groups || []).join(', ') }}</template>
         <template #cell-actions="{ row }">
           <div class="inline-reset">
@@ -208,7 +208,7 @@ onMounted(loadAll)
     </article>
 
     <article v-else class="panel">
-      <DataTable :columns="osGroupColumns" :rows="pagedOsGroups" row-key="name" :empty-text="t('users.emptyGroups')">
+      <DataTable :columns="osGroupColumns" :rows="pagedOsGroups" row-key="gid" :empty-text="t('users.emptyGroups')">
         <template #cell-members="{ row }">{{ (row.members || []).join(', ') }}</template>
       </DataTable>
       <Pagination v-model:page="osGroupPage" :page-size="pageSize" :total="osGroups.length" />
