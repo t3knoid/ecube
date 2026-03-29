@@ -344,6 +344,7 @@ def provision_database(
 @router.get(
     "/system-info",
     response_model=SystemInfoResponse,
+    responses={**R_403, **R_500},
 )
 def get_system_info() -> SystemInfoResponse:
     """GET /setup/database/system-info: runtime hints for the setup wizard.
