@@ -272,7 +272,7 @@ class TestGracefulRedisFailover:
 
         @test_app.get("/set")
         async def _set(request: Request):
-            request.session["user"] = "alice"
+            request.session["user"] = "griffin"
             return JSONResponse({"status": "ok"})
 
         @test_app.get("/get")
@@ -301,7 +301,7 @@ class TestGracefulRedisFailover:
         # Read it back — proves cookie sessions work after Redis fallback
         resp = client.get("/get")
         assert resp.status_code == 200
-        assert resp.json()["user"] == "alice"
+        assert resp.json()["user"] == "griffin"
 
     def test_mount_does_not_trigger_redis_io(self):
         """mount_session_middleware never calls _try_redis_backend."""
@@ -363,7 +363,7 @@ class TestRedisBackendStoresServerSide:
 
         @inner.get("/set")
         async def set_session(request: Request):
-            request.session["user"] = "alice"
+            request.session["user"] = "griffin"
             return JSONResponse({"ok": True})
 
         @inner.get("/get")
@@ -398,7 +398,7 @@ class TestRedisBackendStoresServerSide:
         key = next(iter(fake))
         assert key.startswith("ecube:session:")
         stored = json.loads(fake[key])
-        assert stored == {"user": "alice"}
+        assert stored == {"user": "griffin"}
 
     def test_cookie_contains_only_session_id(self):
         fake = _FakeRedis()
@@ -409,7 +409,7 @@ class TestRedisBackendStoresServerSide:
         cookie_header = resp.headers.get("set-cookie", "")
         assert "sid=" in cookie_header
         # The cookie value must NOT contain the session payload
-        assert "alice" not in cookie_header
+        assert "griffin" not in cookie_header
 
     def test_session_round_trip(self):
         fake = _FakeRedis()
@@ -420,7 +420,7 @@ class TestRedisBackendStoresServerSide:
         client.get("/set")
         # Read it back (cookie is forwarded automatically by TestClient)
         resp = client.get("/get")
-        assert resp.json() == {"user": "alice"}
+        assert resp.json() == {"user": "griffin"}
 
     def test_read_only_request_refreshes_ttl(self):
         """A request that reads but doesn't modify the session should
@@ -438,7 +438,7 @@ class TestRedisBackendStoresServerSide:
         # Read-only request — should trigger TTL refresh
         resp = client.get("/get")
         assert resp.status_code == 200
-        assert resp.json() == {"user": "alice"}
+        assert resp.json() == {"user": "griffin"}
 
         # expire() must have been called with the correct key and TTL
         assert len(fake.expire_calls) == 1
@@ -451,7 +451,7 @@ class TestRedisBackendStoresServerSide:
         failing = AsyncMock()
         valid_id = "B" * 43
         # Simulate an existing session that loads fine but expire fails
-        failing.get.return_value = json.dumps({"user": "alice"})
+        failing.get.return_value = json.dumps({"user": "griffin"})
         failing.expire.side_effect = ConnectionError("expire failed")
         app = self._make_app(failing)
         client = TestClient(app, cookies={"sid": valid_id})
@@ -734,7 +734,7 @@ class TestCookieAttributes:
 
         @inner_app.get("/set-session")
         async def set_session(request: Request):
-            request.session["user"] = "alice"
+            request.session["user"] = "griffin"
             return JSONResponse({"ok": True})
 
         defaults = dict(
@@ -807,7 +807,7 @@ class TestRedisBackendCookieAttributes:
 
         @inner.get("/set-session")
         async def set_session(request: Request):
-            request.session["user"] = "alice"
+            request.session["user"] = "griffin"
             return JSONResponse({"ok": True})
 
         defaults = dict(
@@ -952,7 +952,7 @@ class TestRedactUrl:
     def test_redacts_user_and_password(self):
         from app.session import _redact_url
 
-        assert _redact_url("redis://alice:s3cret@db.host:6379/0") == "redis://***@db.host:6379/0"
+        assert _redact_url("redis://griffin:s3cret@db.host:6379/0") == "redis://***@db.host:6379/0"
 
     def test_redacts_password_only(self):
         from app.session import _redact_url
@@ -962,7 +962,7 @@ class TestRedactUrl:
     def test_redacts_user_only(self):
         from app.session import _redact_url
 
-        assert _redact_url("redis://alice@db.host:6379/0") == "redis://***@db.host:6379/0"
+        assert _redact_url("redis://griffin@db.host:6379/0") == "redis://***@db.host:6379/0"
 
     def test_no_credentials_unchanged(self):
         from app.session import _redact_url
@@ -972,7 +972,7 @@ class TestRedactUrl:
     def test_no_port_with_credentials(self):
         from app.session import _redact_url
 
-        assert _redact_url("redis://alice:pass@db.host/2") == "redis://***@db.host/2"
+        assert _redact_url("redis://griffin:pass@db.host/2") == "redis://***@db.host/2"
 
     def test_ipv6_host_with_credentials(self):
         from app.session import _redact_url
