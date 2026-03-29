@@ -42,10 +42,13 @@ function progressPercent(job) {
 }
 
 async function refreshSnapshot() {
+  const warnings = []
   const results = await Promise.allSettled([getDrives(), listJobs({ limit: 200 })])
 
   if (results[0].status === 'fulfilled') {
     drives.value = Array.isArray(results[0].value) ? results[0].value : []
+  } else {
+    warnings.push(t('dashboard.loadDrivesError'))
   }
 
   if (results[1].status === 'fulfilled') {
@@ -54,6 +57,8 @@ async function refreshSnapshot() {
     // Backward compatibility for servers that do not yet expose GET /jobs.
     jobs.value = []
   }
+
+  error.value = warnings.join(' ')
 }
 
 const healthPoller = usePolling(async () => {
