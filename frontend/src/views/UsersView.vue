@@ -70,11 +70,18 @@ async function loadAll() {
       getUsers(),
       getOsUsers(),
     ])
+    if (osUserResult.status === 'rejected') {
+      error.value = t('users.loadUsersError')
+      return
+    }
+    if (roleResult.status === 'rejected') {
+      error.value = t('users.loadRolesError')
+    }
     const roleUsers = roleResult.status === 'fulfilled' ? roleResult.value.users || [] : []
     const roleMap = new Map(
       roleUsers.map((row) => [row.username, normalizeRoleSelection(row.roles || [])]),
     )
-    const rawOsUsers = osUserResult.status === 'fulfilled' ? osUserResult.value.users || [] : []
+    const rawOsUsers = osUserResult.value.users || []
     osUsers.value = rawOsUsers.map((row) => {
       const roles = roleMap.get(row.username) || []
       return { ...row, roles, savedRoles: [...roles] }
