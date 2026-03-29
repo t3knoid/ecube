@@ -95,7 +95,14 @@
     "sizeMatch": "Size Match",
     "pathMatch": "Path Match",
     "path": "Path",
-    "checksum": "Checksum"
+    "checksum": "Checksum",
+    "statuses": {
+      "pending": "Pending",
+      "running": "Running",
+      "verifying": "Verifying",
+      "completed": "Completed",
+      "failed": "Failed"
+    }
   },
   "mounts": {
     "title": "Mounts",
@@ -254,6 +261,7 @@
       "pagination": "Pagination",
       "noData": "No data",
       "db": "DB",
+      "id": "ID",
       "traceReferencePrefix": "Ref:"
     },
     "plural": {

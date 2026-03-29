@@ -32,7 +32,7 @@ const form = ref({
 })
 
 const columns = computed(() => [
-  { key: 'id', label: 'ID', align: 'right' },
+  { key: 'id', label: t('common.labels.id'), align: 'right' },
   { key: 'type', label: t('common.labels.type') },
   { key: 'remote_path', label: t('mounts.remotePath') },
   { key: 'local_mount_point', label: t('mounts.localPath') },
