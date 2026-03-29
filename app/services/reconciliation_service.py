@@ -23,8 +23,6 @@ stale to other workers.
 
 import logging
 import os
-import secrets
-import string
 from datetime import datetime, timezone, timedelta
 from typing import Any, Callable, Dict
 
@@ -71,23 +69,6 @@ def reconcile_identity_groups(
 _ROLE_TO_GROUP = {role: group for group, role in ECUBE_GROUP_ROLE_MAP.items()}
 
 
-def _temporary_recovery_password(length: int = 24) -> str:
-    """Generate a chpasswd-safe temporary password.
-
-    Includes at least one upper-case letter, one lower-case letter,
-    and one digit. Avoids ``:`` and newlines for ``chpasswd`` safety.
-    """
-    alphabet = string.ascii_letters + string.digits + "-_@"
-    chars = [
-        secrets.choice(string.ascii_uppercase),
-        secrets.choice(string.ascii_lowercase),
-        secrets.choice(string.digits),
-    ]
-    chars.extend(secrets.choice(alphabet) for _ in range(max(0, length - len(chars))))
-    secrets.SystemRandom().shuffle(chars)
-    return "".join(chars)
-
-
 def reconcile_identity_users(
     db: Session,
     os_user_provider: OsUserProvider,
@@ -95,12 +76,11 @@ def reconcile_identity_users(
     """Reconcile DB role assignments with OS users/group memberships.
 
     For each user present in ``user_roles``:
-    - Ensures mapped ``ecube-*`` groups are assigned on the OS account.
-    - Creates a missing OS user with mapped groups and a temporary password.
+    - Ensures mapped ``ecube-*`` groups are assigned on existing OS accounts.
+    - Does **not** create missing OS users during startup reconciliation.
 
-    Temporary passwords are intentionally *not* returned to avoid accidental
-    exposure in logs or API responses. Newly created users therefore require
-    an immediate password reset by an administrator.
+    Missing OS accounts are reported in the summary and logs for operator
+    action, but no user-creation side effects occur at startup.
     """
     repo = UserRoleRepository(db)
     assignments = repo.list_users()
@@ -109,6 +89,7 @@ def reconcile_identity_users(
     checked = 0
     with_mapped_roles = 0
     created_users = 0
+    missing_os_accounts = 0
     groups_updated = 0
     errors: list[dict[str, str]] = []
 
@@ -127,19 +108,13 @@ def reconcile_identity_users(
 
         try:
             if username not in os_users:
-                temp_password = _temporary_recovery_password()
-                os_user_provider.create_user(
-                    username=username,
-                    password=temp_password,
-                    groups=required_groups,
-                )
-                created_users += 1
+                missing_os_accounts += 1
                 logger.warning(
-                    "Startup reconciliation created missing OS user '%s' from user_roles. "
-                    "Password reset is required before user login.",
+                    "Startup reconciliation found DB user '%s' with roles %s but no OS account. "
+                    "Skipping OS user creation.",
                     username,
+                    required_groups,
                 )
-                os_users[username] = set(required_groups)
                 continue
 
             missing_groups = [g for g in required_groups if g not in os_users[username]]
@@ -159,6 +134,7 @@ def reconcile_identity_users(
         "users_checked": checked,
         "users_with_mapped_roles": with_mapped_roles,
         "users_created": created_users,
+        "users_missing_os_account": missing_os_accounts,
         "users_groups_updated": groups_updated,
         "users_created_password_reset_required": created_users,
         "users_with_errors": len(errors),

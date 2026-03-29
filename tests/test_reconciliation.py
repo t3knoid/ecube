@@ -490,7 +490,7 @@ class TestReconcileIdentityGroups:
 
 
 class TestReconcileIdentityUsers:
-    def test_creates_missing_os_user_from_db_roles(self, db: Session):
+    def test_reports_missing_os_user_from_db_roles_without_creating(self, db: Session):
         db.add(UserRole(username="frank", role="manager"))
         db.commit()
 
@@ -498,11 +498,12 @@ class TestReconcileIdentityUsers:
         result = reconcile_identity_users(db, provider)
 
         assert result["users_checked"] == 1
-        assert result["users_created"] == 1
+        assert result["users_created"] == 0
+        assert result["users_missing_os_account"] == 1
         assert result["users_groups_updated"] == 0
-        assert result["users_created_password_reset_required"] == 1
-        assert "frank" in provider.created_usernames
-        assert "ecube-managers" in provider.users["frank"]
+        assert result["users_created_password_reset_required"] == 0
+        assert provider.created_usernames == []
+        assert "frank" not in provider.users
 
     def test_syncs_missing_groups_for_existing_os_user(self, db: Session):
         db.add(UserRole(username="frank", role="manager"))
@@ -513,6 +514,7 @@ class TestReconcileIdentityUsers:
         result = reconcile_identity_users(db, provider)
 
         assert result["users_created"] == 0
+        assert result["users_missing_os_account"] == 0
         assert result["users_groups_updated"] == 1
         assert provider.updated_group_usernames == ["frank"]
         assert "ecube-auditors" in provider.users["frank"]
@@ -521,7 +523,10 @@ class TestReconcileIdentityUsers:
         db.add(UserRole(username="frank", role="manager"))
         db.commit()
 
-        provider = FakeOsUserProvider(should_fail_users=True)
+        provider = FakeOsUserProvider(
+            should_fail_users=True,
+            existing_users={"frank": set()},
+        )
         result = reconcile_identity_users(db, provider)
 
         assert result["users_with_errors"] == 1
