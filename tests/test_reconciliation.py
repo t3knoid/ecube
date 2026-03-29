@@ -136,6 +136,7 @@ class FakeOsUserProvider:
         self.should_fail_groups = should_fail_groups
         self.should_fail_users = should_fail_users
         self.ensure_calls = 0
+        self.list_users_calls = 0
         self.users = {u: set(gs) for u, gs in (existing_users or {}).items()}
         self.created_usernames: list[str] = []
         self.updated_group_usernames: list[str] = []
@@ -147,6 +148,7 @@ class FakeOsUserProvider:
         return list(self.created_groups)
 
     def list_users(self, ecube_only: bool = True):
+        self.list_users_calls += 1
         result = []
         for username, groups in sorted(self.users.items()):
             if ecube_only and not any(g.startswith("ecube-") for g in groups):
@@ -160,6 +162,9 @@ class FakeOsUserProvider:
                 groups=sorted(groups),
             ))
         return result
+
+    def user_exists(self, username: str) -> bool:
+        return username in self.users
 
     def create_user(self, username: str, password: str, groups: Optional[list[str]] = None):
         if self.should_fail_users:
@@ -518,6 +523,16 @@ class TestReconcileIdentityUsers:
         assert result["users_groups_updated"] == 1
         assert provider.updated_group_usernames == ["frank"]
         assert "ecube-auditors" in provider.users["frank"]
+
+    def test_does_not_scan_all_os_users(self, db: Session):
+        db.add(UserRole(username="frank", role="manager"))
+        db.commit()
+
+        provider = FakeOsUserProvider(existing_users={"frank": {"ecube-managers"}})
+        result = reconcile_identity_users(db, provider)
+
+        assert result["users_with_errors"] == 0
+        assert provider.list_users_calls == 0
 
     def test_user_reconcile_failure_reported(self, db: Session):
         db.add(UserRole(username="frank", role="manager"))
