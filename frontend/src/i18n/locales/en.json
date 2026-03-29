@@ -263,6 +263,7 @@
       "pagination": "Pagination",
       "noData": "No data",
       "notAvailable": "N/A",
+      "unknown": "Unknown",
       "db": "DB",
       "id": "ID",
       "traceReferencePrefix": "Ref:"
