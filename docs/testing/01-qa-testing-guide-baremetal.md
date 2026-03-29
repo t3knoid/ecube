@@ -1025,14 +1025,14 @@ All OS user and group management endpoints require the `admin` role and are only
 | 3 | List groups | `GET /admin/os-groups` | 200, only `ecube-*` groups listed |
 | 4 | Delete group | `DELETE /admin/os-groups/ecube-testers` | 200 |
 | 5 | Delete group without prefix | `DELETE /admin/os-groups/somegroup` | 422, group name must start with `ecube-` |
-| 6 | Create user | `POST /admin/os-users` with username, password, groups, roles | 201, returns username, uid, gid, home, shell, groups |
+| 6 | Create user | `POST /admin/os-users` with username, password, roles | 201, returns username, uid, gid, home, shell, groups |
 | 7 | Create user — duplicate | `POST /admin/os-users` with existing username | 409, Conflict |
 | 8 | Create user — reserved name | `POST /admin/os-users` with `{"username": "root", ...}` | 422, reserved username |
 | 9 | Create user — empty password | `POST /admin/os-users` with `{"password": "", ...}` | 422 |
 | 10 | Create user — password with newline | `POST /admin/os-users` with password containing `\n` | 422, unsafe characters |
 | 11 | Create user — password with colon | `POST /admin/os-users` with password containing `:` | 422, unsafe characters |
 | 12 | Create user — invalid group | `POST /admin/os-users` with non-existent group in groups list | 422, group does not exist |
-| 13 | Create user — no ecube-* group | `POST /admin/os-users` with no groups or only non-`ecube-*` groups | 422, at least one `ecube-*` group required |
+| 13 | Create user — no roles | `POST /admin/os-users` with empty/omitted roles | 422, at least one role required |
 | 14 | List users | `GET /admin/os-users` | 200, only users in `ecube-*` groups listed |
 | 15 | Reset password | `PUT /admin/os-users/{username}/password` with `{"password": "NewPass!"}` | 200 |
 | 16 | Reset password — non-ECUBE user | `PUT /admin/os-users/postgres/password` | 422, user is not ECUBE-managed |
