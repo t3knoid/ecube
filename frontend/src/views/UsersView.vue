@@ -193,12 +193,12 @@ onMounted(loadAll)
       <div v-if="createUserDialog" class="dialog-overlay" @click.self="createUserDialog = false">
         <div class="dialog-panel" role="dialog" aria-modal="true">
           <h2>{{ t('users.createOsUser') }}</h2>
-          <label>{{ t('auth.username') }}</label>
-          <input v-model="createUserForm.username" type="text" />
-          <label>{{ t('auth.password') }}</label>
-          <input v-model="createUserForm.password" type="password" autocomplete="new-password" />
-          <label>{{ t('users.roles') }}</label>
-          <div class="role-grid">
+          <label for="create-user-username">{{ t('auth.username') }}</label>
+          <input id="create-user-username" v-model="createUserForm.username" type="text" />
+          <label for="create-user-password">{{ t('auth.password') }}</label>
+          <input id="create-user-password" v-model="createUserForm.password" type="password" autocomplete="new-password" />
+          <span id="create-user-roles-label">{{ t('users.roles') }}</span>
+          <div class="role-grid" role="group" :aria-labelledby="'create-user-roles-label'">
             <label v-for="role in roles" :key="`new-${role}`">
               <input v-model="createUserForm.roles" type="checkbox" :value="role" />
               {{ roleLabel(role) }}
