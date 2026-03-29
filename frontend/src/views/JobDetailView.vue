@@ -265,17 +265,12 @@ onUnmounted(() => {
   background: var(--color-progress-bar);
 }
 
-.btn,
 select {
   border: 1px solid var(--color-border);
   background: var(--color-bg-input);
   color: var(--color-text-primary);
   border-radius: var(--border-radius);
   padding: var(--space-xs) var(--space-sm);
-}
-
-.btn {
-  cursor: pointer;
 }
 
 .split-grid {

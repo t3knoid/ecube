@@ -101,13 +101,4 @@ function confirm() {
   gap: var(--space-sm);
 }
 
-.btn {
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-input);
-  color: var(--color-text-primary);
-  border-radius: var(--border-radius);
-  padding: var(--space-xs) var(--space-md);
-  cursor: pointer;
-}
-
 </style>
