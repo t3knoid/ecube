@@ -180,9 +180,9 @@ onUnmounted(() => {
         <h2>{{ t('jobs.hashViewer') }}</h2>
         <p class="muted" v-if="!selectedFileId">{{ t('jobs.hashViewerEmpty') }}</p>
         <div v-else-if="fileHashes" class="hash-grid">
-          <span>ID</span><strong>{{ fileHashes.file_id }}</strong>
-          <span>MD5</span><strong class="mono">{{ fileHashes.md5 || '-' }}</strong>
-          <span>SHA256</span><strong class="mono">{{ fileHashes.sha256 || '-' }}</strong>
+          <span>{{ t('common.labels.id') }}</span><strong>{{ fileHashes.file_id }}</strong>
+          <span>{{ t('jobs.md5') }}</span><strong class="mono">{{ fileHashes.md5 || '-' }}</strong>
+          <span>{{ t('jobs.sha256') }}</span><strong class="mono">{{ fileHashes.sha256 || '-' }}</strong>
           <span>{{ t('common.labels.size') }}</span><strong>{{ fileHashes.size_bytes || '-' }}</strong>
         </div>
       </article>
