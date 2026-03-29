@@ -147,6 +147,7 @@ Every authenticated request resolves to:
 | Create jobs | ✔ | ✔ | ✔ | ✖ |
 | Start copy jobs | ✔ | ✔ | ✔ | ✖ |
 | View job status | ✔ | ✔ | ✔ | ✔ |
+| View job file status rows (`GET /jobs/{id}/files`) | ✔ | ✔ | ✔ | ✔ |
 | Regenerate manifest | ✔ | ✔ | ✔ | ✖ |
 | Verify job | ✔ | ✔ | ✔ | ✖ |
 | Read audit logs | ✔ | ✔ | ✖ | ✔ |
@@ -654,6 +655,44 @@ Start job with thread count. Sets `started_by` to the authenticated user and `st
 Return job status, progress, file counts, timestamps, drive info, and error summary.
 
 **Roles:** `admin`, `manager`, `processor`, `auditor`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid credentials
+- `403 Forbidden` — Insufficient role
+- `404 Not Found` — Job not found
+- `422 Validation Error` — Invalid path parameter
+
+### `GET /jobs/{id}/files`
+
+Return operator-safe file status rows for a job.
+
+This endpoint is intended for role-safe job detail views and returns per-file
+copy status metadata without requiring introspection-only debug access.
+
+**Roles:** `admin`, `manager`, `processor`, `auditor`
+
+**Response (200 OK):**
+
+```json
+{
+    "job_id": 17,
+    "files": [
+        {
+            "id": 9001,
+            "relative_path": "evidence/case-17/documents/report.pdf",
+            "status": "DONE",
+            "checksum": "c3ab8ff13720e8ad9047dd39466b3c89"
+        },
+        {
+            "id": 9002,
+            "relative_path": "evidence/case-17/videos/interview.mp4",
+            "status": "ERROR",
+            "checksum": null
+        }
+    ]
+}
+```
 
 **Error responses:**
 
