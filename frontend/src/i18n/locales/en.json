@@ -133,7 +133,9 @@
     "empty": "No users found",
     "createOsUser": "Create User",
     "emptyOsUsers": "No users found",
-    "resetPassword": "Reset Password"
+    "resetPassword": "Reset Password",
+    "saveRoles": "Save",
+    "savePassword": "Save Password"
   },
   "system": {
     "title": "System",
