@@ -128,7 +128,7 @@ test('admin users page exposes a single editable users table', async ({ page }) 
 
   const userRow = page.getByRole('row').filter({ hasText: 'alba' })
   const saveButton = userRow.getByRole('button', { name: 'Save' })
-  const managerCheckbox = userRow.getByRole('checkbox', { name: 'manager' })
+  const managerCheckbox = userRow.getByRole('checkbox', { name: /^manager$/i })
 
   await expect(saveButton).toBeVisible()
   await expect(saveButton).toBeDisabled()
