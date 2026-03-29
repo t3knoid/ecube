@@ -229,6 +229,10 @@
     "alreadyInitialized": "Setup is already complete. Please log in.",
     "dockerHostHint": "Running inside a container — using the Docker Compose service name as the database host."
   },
+  "themes": {
+    "light": "Light",
+    "dark": "Dark"
+  },
   "common": {
     "errors": {
       "networkError": "Unable to reach the server. Check your network connection and try again.",
