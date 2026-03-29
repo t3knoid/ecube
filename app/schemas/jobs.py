@@ -100,6 +100,24 @@ class ExportFileSchema(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class JobFileRowSchema(BaseModel):
+    """Operator-safe file row for ``GET /jobs/{job_id}/files``."""
+
+    id: int = Field(..., description="Unique identifier for the file")
+    relative_path: str = Field(..., description="Relative path from source root")
+    status: FileStatus = Field(..., description="Current file status")
+    checksum: Optional[str] = Field(default=None, description="Stored checksum when available")
+
+    model_config = {"from_attributes": True}
+
+
+class JobFilesResponse(BaseModel):
+    """Response for ``GET /jobs/{job_id}/files``."""
+
+    job_id: int = Field(..., description="Parent export job ID")
+    files: list[JobFileRowSchema] = Field(default_factory=list, description="File-level status rows for the job")
+
+
 class DriveInfoSchema(BaseModel):
     """Subset of drive metadata embedded in job responses."""
 

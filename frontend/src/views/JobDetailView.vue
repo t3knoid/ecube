@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
-import { getJob, startJob, verifyJob, generateManifest } from '@/api/jobs.js'
+import { getJob, getJobFiles, startJob, verifyJob, generateManifest } from '@/api/jobs.js'
 import { getJobDebug } from '@/api/introspection.js'
 import { getFileHashes, compareFiles } from '@/api/files.js'
 import { usePolling } from '@/composables/usePolling.js'
@@ -31,6 +31,7 @@ const compareResult = ref(null)
 
 const canOperate = computed(() => authStore.hasAnyRole(['admin', 'manager', 'processor']))
 const canInspectHashes = computed(() => authStore.hasAnyRole(['admin', 'auditor']))
+const canViewIntrospectionDebug = computed(() => authStore.hasAnyRole(['admin', 'auditor']))
 
 const fileColumns = computed(() => [
   { key: 'id', label: t('common.labels.id'), align: 'right' },
@@ -46,10 +47,25 @@ function progressPercent() {
 }
 
 async function loadDebug() {
+  if (!canViewIntrospectionDebug.value) {
+    try {
+      const response = await getJobFiles(jobId.value)
+      debug.value = { files: Array.isArray(response?.files) ? response.files : [] }
+    } catch {
+      debug.value = { files: [] }
+    }
+    return
+  }
+
   try {
     debug.value = await getJobDebug(jobId.value)
   } catch {
-    debug.value = { files: [] }
+    try {
+      const response = await getJobFiles(jobId.value)
+      debug.value = { files: Array.isArray(response?.files) ? response.files : [] }
+    } catch {
+      debug.value = { files: [] }
+    }
   }
 }
 

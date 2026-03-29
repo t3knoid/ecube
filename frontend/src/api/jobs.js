@@ -17,6 +17,10 @@ export function getJob(jobId) {
   return toData(apiClient.get(`/api/jobs/${jobId}`))
 }
 
+export function getJobFiles(jobId) {
+  return toData(apiClient.get(`/api/jobs/${jobId}/files`))
+}
+
 export function verifyJob(jobId) {
   return toData(apiClient.post(`/api/jobs/${jobId}/verify`))
 }

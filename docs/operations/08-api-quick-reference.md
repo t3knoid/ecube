@@ -9,14 +9,19 @@
 
 ## Table of Contents
 
-1. [Interactive API Documentation](#interactive-api-documentation)
-2. [Authentication](#authentication)
-3. [Drives](#drives-drives)
-4. [Mounts](#mounts-mounts)
-5. [Jobs](#jobs-jobs)
-6. [Audit](#audit-audit)
-7. [Introspection](#introspection-introspection)
-8. [Support and Resources](#support-and-resources)
+- [Table of Contents](#table-of-contents)
+- [Interactive API Documentation](#interactive-api-documentation)
+- [Authentication](#authentication)
+- [Drives (`/drives`)](#drives-drives)
+- [Mounts (`/mounts`)](#mounts-mounts)
+- [Jobs (`/jobs`)](#jobs-jobs)
+- [Audit (`/audit`)](#audit-audit)
+- [Introspection (`/introspection`)](#introspection-introspection)
+- [Support and Resources](#support-and-resources)
+  - [Documentation](#documentation)
+  - [Logging and Debugging](#logging-and-debugging)
+  - [Contacting Support](#contacting-support)
+  - [Quick Command Reference](#quick-command-reference)
 
 ---
 
@@ -93,7 +98,8 @@ curl -H "Authorization: Bearer $JWT_TOKEN" https://localhost:8443/endpoint
 | Method | Endpoint | Role | Description |
 | ------ | -------- | -------- | ----------- |
 | POST | `/jobs` | processor+ | Create new export job (omit `drive_id` for auto-assignment) |
-| GET | `/jobs/{job_id}` | processor+ | Get job detail (status, progress) |
+| GET | `/jobs/{job_id}` | admin/manager/processor/auditor | Get job detail (status, progress) |
+| GET | `/jobs/{job_id}/files` | admin/manager/processor/auditor | List operator-safe file status rows for the job |
 | POST | `/jobs/{job_id}/start` | processor | Start copy operation |
 | POST | `/jobs/{job_id}/verify` | processor+ | Verify data integrity |
 | POST | `/jobs/{job_id}/manifest` | processor+ | Generate manifest document |
