@@ -155,7 +155,9 @@
     "emptyOsUsers": "No users found",
     "resetPassword": "Reset Password",
     "saveRoles": "Save",
-    "savePassword": "Save Password"
+    "savePassword": "Save Password",
+    "loadRolesError": "Failed to load role assignments. Role data may be incomplete.",
+    "loadUsersError": "Failed to load user list."
   },
   "system": {
     "title": "System",
