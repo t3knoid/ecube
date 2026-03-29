@@ -84,7 +84,6 @@ def reconcile_identity_users(
     """
     repo = UserRoleRepository(db)
     assignments = repo.list_users()
-    os_users = {u.username: set(u.groups) for u in os_user_provider.list_users(ecube_only=False)}
 
     checked = 0
     with_mapped_roles = 0
@@ -107,7 +106,7 @@ def reconcile_identity_users(
         with_mapped_roles += 1
 
         try:
-            if username not in os_users:
+            if not os_user_provider.user_exists(username):
                 missing_os_accounts += 1
                 logger.warning(
                     "Startup reconciliation found DB user '%s' with roles %s (groups %s) but no OS account. "
@@ -118,15 +117,13 @@ def reconcile_identity_users(
                 )
                 continue
 
-            missing_groups = [g for g in required_groups if g not in os_users[username]]
-            if missing_groups:
-                os_user_provider.add_user_to_groups(
-                    username,
-                    missing_groups,
-                    _skip_managed_check=True,
-                )
-                groups_updated += 1
-                os_users[username].update(missing_groups)
+            # Treat add_user_to_groups as idempotent and avoid scanning all OS users.
+            os_user_provider.add_user_to_groups(
+                username,
+                required_groups,
+                _skip_managed_check=True,
+            )
+            groups_updated += 1
         except Exception as exc:
             logger.exception("Identity user reconciliation failed for '%s'", username)
             errors.append({"username": username, "error": str(exc)})
