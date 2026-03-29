@@ -346,7 +346,7 @@ def provision_database(
     response_model=SystemInfoResponse,
 )
 def get_system_info() -> SystemInfoResponse:
-    """Return runtime environment hints for the setup wizard.
+    """GET /setup/database/system-info: runtime hints for the setup wizard.
 
     **Authentication:** Always public — the wizard needs this before any
     credentials exist.  Returns whether the server is running inside a Docker
