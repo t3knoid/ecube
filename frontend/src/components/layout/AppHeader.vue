@@ -85,8 +85,8 @@ function handleLogout() {
 
 .header-logo {
   font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-  opacity: 0.5;
+  color: var(--color-text-primary);
+  opacity: 0.9;
 }
 
 .header-app-name {
@@ -112,28 +112,29 @@ function handleLogout() {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-bold);
   border-radius: 9999px;
-  background: var(--color-badge-manager-bg);
-  color: var(--color-badge-manager-text);
+  border: 1px solid var(--color-border);
+  background: #dbeafe;
+  color: #1e3a8a;
 }
 
 .badge-admin {
-  background: var(--color-badge-admin-bg);
-  color: var(--color-badge-admin-text);
+  background: #fee2e2;
+  color: #7f1d1d;
 }
 
 .badge-manager {
-  background: var(--color-badge-manager-bg);
-  color: var(--color-badge-manager-text);
+  background: #dbeafe;
+  color: #1e3a8a;
 }
 
 .badge-processor {
-  background: var(--color-badge-processor-bg);
-  color: var(--color-badge-processor-text);
+  background: #dcfce7;
+  color: #14532d;
 }
 
 .badge-auditor {
-  background: var(--color-badge-auditor-bg);
-  color: var(--color-badge-auditor-text);
+  background: #fef9c3;
+  color: #713f12;
 }
 
 .header-timer {
