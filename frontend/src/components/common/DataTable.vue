@@ -1,5 +1,8 @@
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps({
   columns: {
@@ -16,7 +19,7 @@ const props = defineProps({
   },
   emptyText: {
     type: String,
-    default: 'No data',
+    default: '',
   },
 })
 
@@ -28,6 +31,8 @@ const normalizedColumns = computed(() =>
     width: column.width || null,
   })),
 )
+
+const resolvedEmptyText = computed(() => props.emptyText || t('common.labels.noData'))
 
 function getRowKey(row, index) {
   if (row && row[props.rowKey] !== undefined && row[props.rowKey] !== null) {
@@ -56,7 +61,7 @@ function getRowKey(row, index) {
       <tbody>
         <tr v-if="rows.length === 0">
           <td :colspan="normalizedColumns.length || 1" class="empty-state">
-            <slot name="empty">{{ emptyText }}</slot>
+            <slot name="empty">{{ resolvedEmptyText }}</slot>
           </td>
         </tr>
         <tr v-for="(row, index) in rows" :key="getRowKey(row, index)">
