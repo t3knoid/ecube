@@ -205,7 +205,8 @@
     "project": "Project",
     "progress": "Progress",
     "noActiveJobs": "No active jobs",
-    "jobId": "Job ID"
+    "jobId": "Job ID",
+    "loadDrivesError": "Failed to load drive data."
   },
   "setup": {
     "stepCounter": "Step {step} of 4",
