@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { getDrives, formatDrive, initializeDrive, prepareEjectDrive } from '@/api/drives.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import { useStatusLabels } from '@/composables/useStatusLabels.js'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const route = useRoute()
@@ -24,6 +25,8 @@ const showInitializeDialog = ref(false)
 
 const filesystemType = ref('ext4')
 const projectId = ref('')
+
+const { driveStateLabel } = useStatusLabels()
 
 const driveId = computed(() => Number(route.params.id))
 const canManage = computed(() => authStore.hasAnyRole(['admin', 'manager']))
@@ -128,7 +131,7 @@ onMounted(loadDrive)
         <div><strong>{{ t('drives.filesystem') }}</strong><span>{{ drive.filesystem_type || '-' }}</span></div>
         <div><strong>{{ t('common.labels.size') }}</strong><span>{{ formatBytes(drive.capacity_bytes) }}</span></div>
         <div><strong>{{ t('dashboard.project') }}</strong><span>{{ drive.current_project_id || '-' }}</span></div>
-        <div><strong>{{ t('common.labels.status') }}</strong><StatusBadge :status="drive.current_state" /></div>
+        <div><strong>{{ t('common.labels.status') }}</strong><StatusBadge :status="drive.current_state" :label="driveStateLabel(drive.current_state)" /></div>
       </div>
 
       <div class="action-row">

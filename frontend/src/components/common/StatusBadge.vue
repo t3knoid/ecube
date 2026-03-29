@@ -6,9 +6,15 @@ const props = defineProps({
     type: [String, Number, Boolean],
     default: null,
   },
+  label: {
+    type: String,
+    default: '',
+  },
 })
 
 const normalized = computed(() => String(props.status ?? 'unknown').toUpperCase())
+
+const displayText = computed(() => props.label || String(props.status ?? 'unknown'))
 
 const badgeClass = computed(() => {
   const value = normalized.value
@@ -30,7 +36,7 @@ const badgeClass = computed(() => {
 
 <template>
   <span class="status-badge" :class="badgeClass">
-    {{ String(status ?? 'unknown') }}
+    {{ displayText }}
   </span>
 </template>
 
