@@ -149,7 +149,15 @@ onMounted(loadDrive)
       :busy="saving"
       dangerous
       @confirm="runFormat"
-    />
+    >
+      <div class="format-selector">
+        <label class="field-label" for="filesystem-selector">{{ t('drives.filesystem') }}</label>
+        <select id="filesystem-selector" v-model="filesystemType">
+          <option value="ext4">ext4</option>
+          <option value="exfat">exfat</option>
+        </select>
+      </div>
+    </ConfirmDialog>
 
     <ConfirmDialog
       v-model="showEjectDialog"
@@ -177,13 +185,6 @@ onMounted(loadDrive)
       </div>
     </teleport>
 
-    <div class="fs-selector" v-if="showFormatDialog">
-      <label for="filesystem-selector">{{ t('drives.filesystem') }}</label>
-      <select id="filesystem-selector" v-model="filesystemType">
-        <option value="ext4">ext4</option>
-        <option value="exfat">exfat</option>
-      </select>
-    </div>
   </section>
 </template>
 
@@ -289,16 +290,8 @@ select {
   padding: var(--space-xs) var(--space-sm);
 }
 
-.fs-selector {
-  position: fixed;
-  bottom: var(--space-md);
-  right: var(--space-md);
+.format-selector {
   display: grid;
   gap: var(--space-xs);
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius);
-  padding: var(--space-sm);
-  box-shadow: var(--shadow-sm);
 }
 </style>
