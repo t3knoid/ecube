@@ -194,15 +194,6 @@ onUnmounted(() => {
   background: var(--color-progress-bar);
 }
 
-.btn {
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-input);
-  color: var(--color-text-primary);
-  padding: var(--space-xs) var(--space-md);
-  border-radius: var(--border-radius);
-  cursor: pointer;
-}
-
 .error-banner {
   color: var(--color-alert-danger-text);
   background: var(--color-alert-danger-bg);

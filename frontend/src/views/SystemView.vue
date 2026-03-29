@@ -322,23 +322,12 @@ onMounted(loadTabData)
 }
 
 input,
-.job-picker,
-.btn,
-a.btn {
+.job-picker {
   border: 1px solid var(--color-border);
   background: var(--color-bg-input);
   color: var(--color-text-primary);
   border-radius: var(--border-radius);
   padding: var(--space-xs) var(--space-sm);
-  text-decoration: none;
-}
-
-.btn {
-  cursor: pointer;
-}
-
-.btn.active {
-  background: var(--color-bg-selected);
 }
 
 .muted {
