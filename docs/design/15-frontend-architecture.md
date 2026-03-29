@@ -287,7 +287,7 @@ Each module exports thin wrapper functions around Axios calls. Modules map 1:1 t
 | `audit.js` | `GET /audit` | AuditView |
 | `files.js` | `GET /files/{file_id}/hashes`, `POST /files/compare` | JobDetailView (hash viewer, file compare) |
 | `users.js` | `GET /users`, `GET /users/{username}/roles`, `PUT /users/{username}/roles`, `DELETE /users/{username}/roles` | UsersView |
-| `admin.js` | `POST /admin/os-users`, `GET /admin/os-users`, `DELETE /admin/os-users/{username}`, `PUT /admin/os-users/{username}/password`, `PUT /admin/os-users/{username}/groups`, `POST /admin/os-users/{username}/groups`, `GET /admin/os-groups` | UsersView (Users/Groups tabs) |
+| `admin.js` | `POST /admin/os-users`, `GET /admin/os-users`, `DELETE /admin/os-users/{username}`, `PUT /admin/os-users/{username}/password`, `PUT /admin/os-users/{username}/groups`, `POST /admin/os-users/{username}/groups`, `GET /admin/os-groups` | UsersView (single users/roles editor) |
 | `introspection.js` | `GET /introspection/usb/topology`, `GET /introspection/block-devices`, `GET /introspection/mounts`, `GET /introspection/system-health`, `GET /introspection/jobs/{id}/debug` | SystemView, DashboardView, AppFooter |
 
 ### 6.3 Job Progress Polling
@@ -501,7 +501,7 @@ Vue I18n 9.x provides the localization infrastructure. All user-visible strings 
 | `JobsView.vue` | Screen 6a | UC-6.1, UC-6.3 | Job list with status/progress; create-job button |
 | `JobDetailView.vue` | Screen 6b–d | UC-6.2 – UC-6.8 | Progress bar with polling; file list table; start/verify/manifest actions; hash viewer; file compare |
 | `AuditView.vue` | Screen 7 | UC-7.1 – UC-7.7 | Filterable audit log table; date range, user, action filters; CSV export |
-| `UsersView.vue` | Screen 8 | UC-3.1 – UC-3.9 | Tabbed: User Roles + Users; create user and reset password flows; admin-only |
+| `UsersView.vue` | Screen 8 | UC-3.1 – UC-3.9 | Single editable users table: role selection, per-user save, password reset, and create-user flow; admin-only |
 | `SystemView.vue` | Screen 9 | UC-8.1 – UC-8.8 | Tabbed: Health, USB Topology, Block Devices, Mounts, Logs, Job Debug |
 
 ### 9.3 Common/Shared Components
