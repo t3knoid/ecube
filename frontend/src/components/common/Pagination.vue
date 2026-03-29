@@ -27,7 +27,7 @@ watch(totalPages, (maxPage) => {
   if (props.page > maxPage) {
     emit('update:page', maxPage)
   }
-})
+}, { immediate: true })
 const startIndex = computed(() => (props.total === 0 ? 0 : (props.page - 1) * props.pageSize + 1))
 const endIndex = computed(() => Math.min(props.page * props.pageSize, props.total))
 
