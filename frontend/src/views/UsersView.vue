@@ -75,11 +75,10 @@ async function loadAll() {
       roleUsers.map((row) => [row.username, normalizeRoleSelection(row.roles || [])]),
     )
     const rawOsUsers = osUserResult.status === 'fulfilled' ? osUserResult.value.users || [] : []
-    osUsers.value = rawOsUsers.map((row) => ({
-      ...row,
-      roles: roleMap.get(row.username) || [],
-      savedRoles: roleMap.get(row.username) || [],
-    }))
+    osUsers.value = rawOsUsers.map((row) => {
+      const roles = roleMap.get(row.username) || []
+      return { ...row, roles, savedRoles: [...roles] }
+    })
   } catch {
     error.value = t('common.errors.networkError')
   } finally {
