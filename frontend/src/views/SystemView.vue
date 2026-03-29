@@ -259,7 +259,7 @@ onMounted(loadTabData)
         <select id="job-picker" class="job-picker" :value="jobDebugId" @change="onJobPickerChange">
           <option value="">{{ t('system.jobPickerPlaceholder') }}</option>
           <option v-for="job in jobs" :key="job.id" :value="String(job.id)">
-            #{{ job.id }} - {{ job.project_id || 'project' }} - {{ job.status || 'unknown' }}
+            #{{ job.id }} - {{ job.project_id || t('dashboard.project') }} - {{ job.status || t('common.labels.unknown') }}
           </option>
         </select>
         <input v-model="jobDebugId" type="number" min="1" :placeholder="t('jobs.jobId')" />
