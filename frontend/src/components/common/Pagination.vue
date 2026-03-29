@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -22,6 +22,12 @@ const props = defineProps({
 const emit = defineEmits(['update:page'])
 
 const totalPages = computed(() => Math.max(1, Math.ceil(props.total / props.pageSize)))
+
+watch(totalPages, (maxPage) => {
+  if (props.page > maxPage) {
+    emit('update:page', maxPage)
+  }
+})
 const startIndex = computed(() => (props.total === 0 ? 0 : (props.page - 1) * props.pageSize + 1))
 const endIndex = computed(() => Math.min(props.page * props.pageSize, props.total))
 
