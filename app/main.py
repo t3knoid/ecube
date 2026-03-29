@@ -114,7 +114,7 @@ async def lifespan(application: FastAPI):
             run_startup_reconciliation(
                 db,
                 get_mount_provider(),
-                os_user_provider=get_os_user_provider(),
+                os_user_provider=get_os_user_provider() if settings.role_resolver == "local" else None,
                 topology_source=get_drive_discovery().discover_topology,
                 filesystem_detector=get_filesystem_detector(),
             )
