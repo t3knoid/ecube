@@ -25,7 +25,7 @@ const columns = computed(() => [
   { key: 'id', label: t('common.labels.id'), align: 'right' },
   { key: 'device_identifier', label: t('drives.device') },
   { key: 'filesystem_type', label: t('drives.filesystem') },
-  { key: 'capacity', label: t('common.labels.size'), align: 'right' },
+  { key: 'capacity_bytes', label: t('common.labels.size'), align: 'right' },
   { key: 'current_state', label: t('common.labels.status') },
   { key: 'current_project_id', label: t('dashboard.project') },
   { key: 'actions', label: t('common.actions.edit'), align: 'center' },
@@ -163,7 +163,7 @@ onMounted(loadDrives)
       <template #cell-current_state="{ row }">
         <StatusBadge :status="row.current_state" />
       </template>
-      <template #cell-capacity="{ row }">
+      <template #cell-capacity_bytes="{ row }">
         {{ formatBytes(row.capacity_bytes) }}
       </template>
       <template #cell-actions="{ row }">
