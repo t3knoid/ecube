@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, useSlots } from 'vue'
 
 const props = defineProps({
   modelValue: {
@@ -33,6 +33,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue', 'confirm'])
+const slots = useSlots()
 
 const dialogId = `confirm-dialog-${Math.random().toString(36).slice(2, 10)}`
 const titleId = `${dialogId}-title`
@@ -41,6 +42,7 @@ const contentId = `${dialogId}-content`
 const describedBy = computed(() => {
   const ids = []
   if (props.message) ids.push(messageId)
+  if (slots.default) ids.push(contentId)
   return ids.length ? ids.join(' ') : undefined
 })
 
