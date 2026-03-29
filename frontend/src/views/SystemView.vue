@@ -246,10 +246,10 @@ onMounted(loadTabData)
         <span>{{ t('common.labels.status') }}</span><StatusBadge :status="health?.status || 'unknown'" />
         <span>{{ t('common.labels.db') }}</span><StatusBadge :status="health?.database || 'unknown'" />
         <span>{{ t('jobs.activeJobs') }}</span><strong>{{ health?.active_jobs || 0 }}</strong>
-        <span>{{ t('system.cpu') }}</span><strong>N/A</strong>
-        <span>{{ t('system.memory') }}</span><strong>N/A</strong>
-        <span>{{ t('system.diskIo') }}</span><strong>N/A</strong>
-        <span>{{ t('system.workerQueue') }}</span><strong>N/A</strong>
+        <span>{{ t('system.cpu') }}</span><strong>{{ t('common.labels.notAvailable') }}</strong>
+        <span>{{ t('system.memory') }}</span><strong>{{ t('common.labels.notAvailable') }}</strong>
+        <span>{{ t('system.diskIo') }}</span><strong>{{ t('common.labels.notAvailable') }}</strong>
+        <span>{{ t('system.workerQueue') }}</span><strong>{{ t('common.labels.notAvailable') }}</strong>
       </div>
     </article>
 
