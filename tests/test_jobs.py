@@ -59,6 +59,67 @@ def test_get_job_not_found(client, db):
     assert response.status_code == 404
 
 
+def test_get_job_files_processor_allowed(client, db):
+    job = ExportJob(
+        project_id="PROJ-FILES-001",
+        evidence_number="EV-FILES-001",
+        source_path="/data/files",
+        status=JobStatus.RUNNING,
+    )
+    db.add(job)
+    db.flush()
+    db.add(ExportFile(job_id=job.id, relative_path="doc/a.txt", status=FileStatus.DONE, checksum="sha256:a"))
+    db.add(ExportFile(job_id=job.id, relative_path="doc/b.txt", status=FileStatus.ERROR, checksum=None))
+    db.commit()
+
+    response = client.get(f"/jobs/{job.id}/files")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["job_id"] == job.id
+    assert len(data["files"]) == 2
+    assert data["files"][0]["relative_path"] == "doc/a.txt"
+    assert data["files"][0]["status"] == "DONE"
+    assert data["files"][0]["checksum"] == "sha256:a"
+
+
+def test_get_job_files_manager_allowed(manager_client, db):
+    job = ExportJob(
+        project_id="PROJ-FILES-002",
+        evidence_number="EV-FILES-002",
+        source_path="/data/files-2",
+        status=JobStatus.PENDING,
+    )
+    db.add(job)
+    db.flush()
+    db.add(ExportFile(job_id=job.id, relative_path="set/file.bin", status=FileStatus.PENDING, checksum=None))
+    db.commit()
+
+    response = manager_client.get(f"/jobs/{job.id}/files")
+
+    assert response.status_code == 200
+    assert response.json()["job_id"] == job.id
+
+
+def test_get_job_files_not_found(client, db):
+    response = client.get("/jobs/999/files")
+    assert response.status_code == 404
+
+
+def test_get_job_files_requires_auth(unauthenticated_client, db):
+    job = ExportJob(
+        project_id="PROJ-FILES-003",
+        evidence_number="EV-FILES-003",
+        source_path="/data/files-3",
+        status=JobStatus.PENDING,
+    )
+    db.add(job)
+    db.commit()
+
+    response = unauthenticated_client.get(f"/jobs/{job.id}/files")
+    assert response.status_code == 401
+
+
 def test_start_job(client, db):
     db.add(UsbDrive(
         device_identifier="USB-START-001",

@@ -24,8 +24,11 @@ async function handleLogin() {
     await authStore.login(username.value, password.value)
     router.push('/')
   } catch (err) {
-    if (err.response?.data?.detail) {
-      const detail = err.response.data.detail
+    const responseData = err.response?.data || {}
+    if (typeof responseData.message === 'string' && responseData.message.trim()) {
+      error.value = responseData.message
+    } else if (responseData.detail) {
+      const detail = responseData.detail
       if (typeof detail === 'string') {
         error.value = detail
       } else if (Array.isArray(detail)) {
@@ -175,29 +178,6 @@ async function handleLogin() {
 .form-group input:focus {
   outline: 2px solid var(--color-border-focus);
   outline-offset: -1px;
-}
-
-.btn {
-  padding: var(--space-sm) var(--space-md);
-  border: none;
-  border-radius: var(--border-radius);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-bold);
-  cursor: pointer;
-}
-
-.btn-primary {
-  background: var(--color-btn-primary-bg);
-  color: var(--color-btn-primary-text);
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--color-btn-primary-hover-bg);
-}
-
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 .login-error {

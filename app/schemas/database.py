@@ -115,6 +115,24 @@ class DatabaseProvisionResponse(BaseModel):
     migrations_applied: int = Field(..., description="Number of migrations applied")
 
 
+class DatabaseProvisionStatusResponse(BaseModel):
+    """Response for ``GET /setup/database/provision-status``."""
+
+    provisioned: bool = Field(..., description="Whether the application database is already provisioned")
+
+
+# ---------------------------------------------------------------------------
+# System info
+# ---------------------------------------------------------------------------
+
+
+class SystemInfoResponse(BaseModel):
+    """Response for ``GET /setup/database/system-info``."""
+
+    in_docker: bool = Field(..., description="Whether the server process runs inside a Docker container")
+    suggested_db_host: str = Field(..., description="Recommended PostgreSQL hostname for this runtime environment")
+
+
 # ---------------------------------------------------------------------------
 # Status
 # ---------------------------------------------------------------------------
