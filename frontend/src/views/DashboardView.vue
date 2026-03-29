@@ -109,9 +109,9 @@ onUnmounted(() => {
 
       <article class="summary-card">
         <h2>{{ t('dashboard.driveSummary') }}</h2>
-        <div class="summary-row"><span>EMPTY</span><strong>{{ driveCounts.EMPTY }}</strong></div>
-        <div class="summary-row"><span>AVAILABLE</span><strong>{{ driveCounts.AVAILABLE }}</strong></div>
-        <div class="summary-row"><span>IN_USE</span><strong>{{ driveCounts.IN_USE }}</strong></div>
+        <div class="summary-row"><span>{{ t('drives.states.empty') }}</span><strong>{{ driveCounts.EMPTY }}</strong></div>
+        <div class="summary-row"><span>{{ t('drives.states.available') }}</span><strong>{{ driveCounts.AVAILABLE }}</strong></div>
+        <div class="summary-row"><span>{{ t('drives.states.inUse') }}</span><strong>{{ driveCounts.IN_USE }}</strong></div>
       </article>
     </div>
 
