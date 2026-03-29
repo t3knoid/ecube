@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.constants import ECUBE_GROUP_PREFIX, ECUBE_GROUPNAME_PATTERN
+from app.constants import ECUBE_GROUPNAME_PATTERN
 from app.schemas.users import RoleName
 
 _UNSAFE_PASSWORD_CHARS = frozenset("\n\r:")
@@ -109,27 +109,18 @@ class CreateOSUserRequest(BaseModel):
     def password_safe_chars(cls, v: str) -> str:
         return _check_password_safety(v)
 
-    groups: List[_GroupItem] = Field(
+    roles: List[RoleName] = Field(
         ...,
         min_length=1,
-        description="OS groups to add the user to (at least one must start with 'ecube-')",
-        json_schema_extra={
-            "contains": {"type": "string", "pattern": ECUBE_GROUPNAME_PATTERN},
-        },
+        description="ECUBE roles to assign to the user in the database (required)",
     )
 
-    @field_validator("groups")
-    @classmethod
-    def _require_ecube_group(cls, v: List[str]) -> List[str]:
-        if not any(g.startswith(ECUBE_GROUP_PREFIX) for g in v):
-            raise ValueError(
-                f"At least one group starting with '{ECUBE_GROUP_PREFIX}' is required "
-                "so the account remains manageable through the API."
-            )
-        return v
-    roles: Optional[List[RoleName]] = Field(
+    groups: Optional[List[_GroupItem]] = Field(
         default=None,
-        description="ECUBE roles to assign to the user in the database",
+        description=(
+            "Optional additional OS groups for backward compatibility. "
+            "ECUBE groups are derived from selected roles."
+        ),
     )
 
 

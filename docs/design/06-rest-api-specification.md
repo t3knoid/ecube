@@ -863,7 +863,7 @@ Requests with non-matching values are rejected with `422 Unprocessable Entity` a
 
 ### `POST /admin/os-users`
 
-Create an OS user, set password, and add to groups and optionally assign DB roles. At least one `ecube-*` group is required so the account remains manageable through the API.
+Create an OS user, set password, and assign roles. ECUBE OS groups are derived from the selected roles. Optional extra groups may be included for compatibility, but role-derived ECUBE groups are always applied.
 
 **Roles:** `admin`
 
@@ -873,7 +873,6 @@ Create an OS user, set password, and add to groups and optionally assign DB role
 {
     "username": "griffin",
     "password": "s3cret",
-    "groups": ["ecube-processors"],
     "roles": ["processor"]
 }
 ```
@@ -885,7 +884,7 @@ Create an OS user, set password, and add to groups and optionally assign DB role
 - `401 Unauthorized` — Missing/invalid token
 - `403 Forbidden` — Insufficient role (non-admin)
 - `409 Conflict` — User already exists
-- `422 Unprocessable Entity` — Invalid username, empty password, reserved username, or no `ecube-*` group provided
+- `422 Unprocessable Entity` — Invalid username, empty password, reserved username, invalid/empty role list, or invalid extra group name
 - `500 Internal Server Error` — OS command failed
 - `504 Gateway Timeout` — OS command timed out
 

@@ -561,6 +561,7 @@ class TestOSUserEndpoints:
         resp = client.post("/admin/os-users", json={
             "username": "newuser",
             "password": "s3cret",
+            "roles": ["processor"],
         })
         assert resp.status_code == 403
 
@@ -584,30 +585,30 @@ class TestOSUserEndpoints:
         resp = admin_client.post("/admin/os-users", json={
             "username": "newuser",
             "password": "s3cret",
-            "groups": ["ecube-admins"],
+            "roles": ["admin"],
         })
         assert resp.status_code == 201
         data = resp.json()
         assert data["username"] == "newuser"
         assert data["uid"] == 1050
 
-    def test_create_user_no_ecube_group_returns_422(self, admin_client):
-        """POST without ecube-* group returns 422."""
-        # Missing groups entirely → field required
+    def test_create_user_requires_roles_and_rejects_invalid_extra_group(self, admin_client):
+        """POST requires roles and rejects non-existent extra groups."""
+        # Missing roles entirely -> field required.
         resp = admin_client.post("/admin/os-users", json={
             "username": "newuser",
             "password": "s3cret",
         })
         assert resp.status_code == 422
 
-        # groups present but without ecube-* entry → custom validator rejects
+        # Extra groups are optional, but invalid names/groups should fail.
         resp = admin_client.post("/admin/os-users", json={
             "username": "newuser",
             "password": "s3cret",
+            "roles": ["processor"],
             "groups": ["other-group"],
         })
         assert resp.status_code == 422
-        assert "ecube-" in resp.json()["message"]
 
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
@@ -630,8 +631,7 @@ class TestOSUserEndpoints:
         resp = admin_client.post("/admin/os-users", json={
             "username": "roleuser",
             "password": "pass",
-            "groups": ["ecube-admins"],
-            "roles": ["admin", "manager"],
+            "roles": ["admin"],
         })
         assert resp.status_code == 201
 
@@ -639,7 +639,6 @@ class TestOSUserEndpoints:
         repo = UserRoleRepository(db)
         roles = repo.get_roles("roleuser")
         assert "admin" in roles
-        assert "manager" in roles
 
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
@@ -669,7 +668,6 @@ class TestOSUserEndpoints:
             resp = admin_client.post("/admin/os-users", json={
                 "username": "dbfail",
                 "password": "pass",
-                "groups": ["ecube-admins"],
                 "roles": ["admin"],
             })
         assert resp.status_code == 500
@@ -690,7 +688,7 @@ class TestOSUserEndpoints:
         resp = admin_client.post("/admin/os-users", json={
             "username": "testuser",
             "password": "pass",
-            "groups": ["ecube-admins"],
+            "roles": ["admin"],
         })
         assert resp.status_code == 409
 
@@ -698,6 +696,7 @@ class TestOSUserEndpoints:
         resp = admin_client.post("/admin/os-users", json={
             "username": "Invalid!",
             "password": "pass",
+            "roles": ["processor"],
         })
         assert resp.status_code == 422
         body = resp.json()
@@ -792,6 +791,7 @@ class TestOSUserEndpoints:
             resp = admin_client.post("/admin/os-users", json={
                 "username": "newuser",
                 "password": bad_pw,
+                "roles": ["processor"],
             })
             assert resp.status_code == 422
             body = resp.json()
@@ -1295,7 +1295,7 @@ class TestOSUserAuditLogging:
         admin_client.post("/admin/os-users", json={
             "username": "audituser",
             "password": "secret",
-            "groups": ["ecube-admins"],
+            "roles": ["admin"],
         })
 
         from app.repositories.audit_repository import AuditRepository
