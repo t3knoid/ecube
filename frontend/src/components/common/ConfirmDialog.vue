@@ -14,11 +14,11 @@ const props = defineProps({
   },
   confirmLabel: {
     type: String,
-    default: 'Confirm',
+    required: true,
   },
   cancelLabel: {
     type: String,
-    default: 'Cancel',
+    required: true,
   },
   dangerous: {
     type: Boolean,
