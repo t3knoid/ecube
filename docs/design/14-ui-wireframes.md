@@ -745,7 +745,7 @@ Visible only to admin role.
 ┌──────────────┬───────────────────────────────────────────────────────────────┐
 │              │  User Management                              [ + New User ] │
 │  ◎ Dashboard │                                                               │
-│  ◎ Drives    │  Tab: [ Users ]  [ OS Groups ]                                │
+│  ◎ Drives    │  Tab: [ Users ]  [ Groups ]                                   │
 │  ◎ Mounts    │                                                               │
 │  ◎ Jobs      │  ┌───────────────┬──────────────────────────┬────────────────┐│
 │  ◎ Audit     │  │ Username      │ DB Roles                 │ OS Groups      ││
@@ -814,24 +814,24 @@ Visible only to admin role.
 └───────────────────────────────────────────────────────────────┘
 ```
 
-### 8d — OS Groups Tab (UC-3.10, UC-3.11, UC-3.12)
+### 8d — Groups Tab (UC-3.10)
 
 ```
 ┌──────────────┬───────────────────────────────────────────────────────────────┐
-│              │  User Management                             [ + New Group ] │
+│              │  User Management                                              │
 │              │                                                               │
-│              │  Tab: [ Users ]  [OS Groups]                                  │
+│              │  Tab: [ Users ]  [Groups]                                  │
 │              │                                                               │
-│              │  ┌─────────────────────┬───────┬──────────────┬─────────────┐ │
-│              │  │ Group Name          │ GID   │ Members      │ Actions     │ │
-│              │  ├─────────────────────┼───────┼──────────────┼─────────────┤ │
-│              │  │ ecube-admins        │ 1001  │ alice        │ [ Delete ]  │ │
-│              │  │ ecube-managers      │ 1002  │ carol        │ [ Delete ]  │ │
-│              │  │ ecube-processors    │ 1003  │ bob, carol   │ [ Delete ]  │ │
-│              │  │ ecube-auditors      │ 1004  │ (none)       │ [ Delete ]  │ │
-│              │  └─────────────────────┴───────┴──────────────┴─────────────┘ │
+│              │  ┌─────────────────────┬───────┬──────────────┐              │
+│              │  │ Group Name          │ GID   │ Members      │              │
+│              │  ├─────────────────────┼───────┼──────────────┤              │
+│              │  │ ecube-admins        │ 1001  │ alice        │              │
+│              │  │ ecube-managers      │ 1002  │ carol        │              │
+│              │  │ ecube-processors    │ 1003  │ bob, carol   │              │
+│              │  │ ecube-auditors      │ 1004  │ (none)       │              │
+│              │  └─────────────────────┴───────┴──────────────┘              │
 │              │                                                               │
-│              │  ⚠ Groups must start with "ecube-".                           │
+│              │  (Read-only — groups are managed at the system level.)        │
 │              │                                                               │
 └──────────────┴───────────────────────────────────────────────────────────────┘
 ```
@@ -1043,7 +1043,8 @@ Used for: Format Drive (UC-4.4), Delete User (UC-3.8), Remove Mount (UC-5.4), Re
 | UC-3.5 | Screen 8c: Create User Dialog |
 | UC-3.6 – UC-3.9 | Screen 8a: User List (inline actions) |
 | UC-3.7 | Modal: Reset Password |
-| UC-3.10 – UC-3.12 | Screen 8d: OS Groups Tab |
+| UC-3.10 | Screen 8d: Groups Tab (read-only list) |
+| UC-3.11 – UC-3.12 | API only in current UI build |
 | UC-4.1 – UC-4.2 | Screen 4a: Drive List |
 | UC-4.3 | Screen 4a: Refresh button |
 | UC-4.4 – UC-4.6 | Screen 4b: Drive Detail (action panels) |
