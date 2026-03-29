@@ -40,3 +40,9 @@ export function deleteOsGroup(name) {
 export function getLogFiles() {
   return toData(apiClient.get('/api/admin/logs'))
 }
+
+export function downloadLogFile(name) {
+  return apiClient.get(`/api/admin/logs/${encodeURIComponent(name)}`, {
+    responseType: 'blob',
+  })
+}
