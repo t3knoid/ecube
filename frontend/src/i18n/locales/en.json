@@ -3,6 +3,11 @@
     "name": "ECUBE",
     "title": "Evidence Copying & USB Based Export"
   },
+  "table": {
+    "sortAsc": "Sort ascending",
+    "sortDesc": "Sort descending",
+    "sortUnsorted": "Unsorted"
+  },
   "nav": {
     "dashboard": "Dashboard",
     "drives": "Drives",
