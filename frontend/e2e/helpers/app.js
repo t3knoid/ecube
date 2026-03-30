@@ -1,8 +1,9 @@
 import { STORAGE_TOKEN_KEY } from '../../src/constants/storage.js'
 
 export function makeToken(payload) {
-  const encode = (obj) => Buffer.from(JSON.stringify(obj)).toString('base64')
-  return `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode(payload)}.${encode('sig')}`
+  const encode = (obj) =>
+    Buffer.from(JSON.stringify(obj)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+  return `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode(payload)}.fake_sig`
 }
 
 export async function routeJson(page, pattern, body, status = 200) {
