@@ -12,7 +12,12 @@ from app.schemas.jobs import FileCompareItem, FileCompareRequest, FileCompareRes
 
 
 def _path_accessible(path: Path) -> bool:
-    """Return True if *path* exists and is accessible; suppress PermissionError."""
+    """Return True if *path* exists and is accessible.
+
+    Suppresses any ``OSError`` (including ``PermissionError``,
+    ``FileNotFoundError``, and I/O errors from broken symlinks or
+    unreadable filesystems) and returns False instead.
+    """
     try:
         return path.exists()
     except OSError:
