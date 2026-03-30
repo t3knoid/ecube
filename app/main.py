@@ -124,6 +124,15 @@ async def lifespan(application: FastAPI):
         logger.exception("Startup reconciliation failed")
 
     # ------------------------------------------------------------------
+    # Startup: prime psutil CPU baseline
+    # ------------------------------------------------------------------
+    try:
+        from app.routers.introspection import prime_cpu_sampler
+        prime_cpu_sampler()
+    except Exception:
+        logger.exception("CPU sampler priming failed")
+
+    # ------------------------------------------------------------------
     # Background: periodic USB discovery
     # ------------------------------------------------------------------
     discovery_task = None
