@@ -31,9 +31,9 @@ def test_system_health_psutil_metrics(client, db):
 
     with (
         patch("app.routers.introspection._PSUTIL_AVAILABLE", True),
-        patch("app.routers.introspection._cpu_cache", 12.5),
         patch("app.routers.introspection._psutil") as mock_psutil,
     ):
+        mock_psutil.cpu_percent.return_value = 12.5
         mock_psutil.virtual_memory.return_value = fake_vm
         mock_psutil.disk_io_counters.return_value = fake_io
 
@@ -42,6 +42,7 @@ def test_system_health_psutil_metrics(client, db):
     assert response.status_code == 200
     data = response.json()
     assert data["cpu_percent"] == 12.5
+    mock_psutil.cpu_percent.assert_called_once_with(interval=None)
     assert data["memory_percent"] == 42.0
     assert data["memory_used_bytes"] == 2_000_000_000
     assert data["memory_total_bytes"] == 8_000_000_000
