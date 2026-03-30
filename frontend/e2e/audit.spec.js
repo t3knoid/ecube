@@ -27,11 +27,8 @@ test('audit filters and export csv', async ({ page }) => {
   await page.getByPlaceholder('Filter by user').fill('frank')
   await page.getByPlaceholder('Filter by action').fill('LOGIN')
 
-  // Date filter
-  const dateInput = page.locator('input[type="date"]').first()
-  if (await dateInput.isVisible()) {
-    await dateInput.fill('2026-03-29')
-  }
+  // Date filter — inputs are datetime-local, targeted by aria-label
+  await page.getByLabel('From Date').fill('2026-03-29T00:00')
 
   await page.getByRole('button', { name: 'Apply' }).click()
 
