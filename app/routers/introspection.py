@@ -1,6 +1,5 @@
 import logging
 import os
-import threading
 
 try:
     import psutil as _psutil
@@ -9,35 +8,21 @@ except ImportError:  # pragma: no cover
     _psutil = None  # type: ignore[assignment]
     _PSUTIL_AVAILABLE = False
 
-# ---------------------------------------------------------------------------
-# CPU % background sampler
-#
-# psutil.cpu_percent(interval=N) blocks for N seconds. To avoid adding latency
-# to every system-health request, a daemon thread calls cpu_percent with a
-# 1-second blocking interval in the background and stores the result in
-# _cpu_cache. The endpoint reads _cpu_cache non-blocking (interval=None),
-# so the first call before the thread has run returns 0.0 (psutil semantics)
-# rather than blocking the request.
-# ---------------------------------------------------------------------------
-_cpu_cache: float | None = None
-_cpu_lock = threading.Lock()
 
+def prime_cpu_sampler() -> None:  # pragma: no cover
+    """Prime psutil's internal CPU baseline by making one blocking sample.
 
-def _cpu_sampler() -> None:  # pragma: no cover
-    """Daemon thread: refresh CPU % every second."""
-    global _cpu_cache
-    while True:
+    Call this once during application startup (e.g. from the FastAPI lifespan)
+    so that subsequent non-blocking ``cpu_percent(interval=None)`` calls in the
+    system-health endpoint return a meaningful value immediately rather than 0.0.
+    The 1-second block happens before the server starts accepting requests and
+    does not affect request latency.
+    """
+    if _PSUTIL_AVAILABLE:
         try:
-            sample = _psutil.cpu_percent(interval=1.0)
-            with _cpu_lock:
-                _cpu_cache = sample
+            _psutil.cpu_percent(interval=1.0)
         except Exception:
             pass
-
-
-if _PSUTIL_AVAILABLE:
-    _t = threading.Thread(target=_cpu_sampler, name="cpu-sampler", daemon=True)
-    _t.start()
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
@@ -244,8 +229,7 @@ def system_health(
 
     if _PSUTIL_AVAILABLE:
         try:
-            with _cpu_lock:
-                cpu_percent = _cpu_cache
+            cpu_percent = _psutil.cpu_percent(interval=None)
         except Exception:
             pass
         try:
