@@ -8,6 +8,8 @@ Covers:
 - Setup script helpers (non-root checks)
 """
 
+import sys
+
 import jwt
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -322,6 +324,7 @@ class TestUsernameValidation:
 # ───────────────────────────────────────────────────────────────────────
 
 class TestSetupScript:
+    @pytest.mark.skipif(sys.platform == "win32", reason="os.geteuid is POSIX-only")
     def test_refuses_to_run_as_non_root(self, monkeypatch):
         """Setup script should exit if not root."""
         monkeypatch.setattr("os.geteuid", lambda: 1000)

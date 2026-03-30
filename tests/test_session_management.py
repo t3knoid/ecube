@@ -208,6 +208,7 @@ class TestGracefulRedisFailover:
         assert "not installed" in caplog.text
 
     def test_fallback_when_redis_url_not_set(self, caplog):
+        pytest.importorskip("redis", reason="redis package required for this test")
         from app.session import _try_redis_backend
 
         import asyncio
@@ -220,6 +221,7 @@ class TestGracefulRedisFailover:
         assert "REDIS_URL" in caplog.text
 
     def test_fallback_when_redis_connection_fails(self, caplog):
+        pytest.importorskip("redis", reason="redis package required for this test")
         from app.session import _try_redis_backend
 
         mock_client = AsyncMock()
@@ -691,6 +693,7 @@ class TestInitSessionBackendRedis:
     """init_session_backend upgrades the proxy to Redis when Redis works."""
 
     def test_redis_backend_upgrades_proxy(self, caplog):
+        pytest.importorskip("redis", reason="redis package required for this test")
         from app.session import init_session_backend, mount_session_middleware
 
         mock_redis = AsyncMock()
@@ -876,6 +879,7 @@ class TestSessionEventLogging:
         assert "Session backend: cookie" in caplog.text
 
     def test_logs_redis_fallback(self, caplog):
+        pytest.importorskip("redis", reason="redis package required for this test")
         from app.session import init_session_backend, mount_session_middleware
 
         test_app = FastAPI()
