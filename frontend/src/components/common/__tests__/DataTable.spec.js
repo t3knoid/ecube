@@ -36,6 +36,21 @@ describe('DataTable', () => {
     expect(wrapper.emitted('sort-change')?.[0]).toEqual([{ key: 'name', dir: 'desc' }])
   })
 
+  it('sets aria-sort on sortable columns and hides indicator from screen readers', () => {
+    const wrapper = mount(DataTable, {
+      props: { columns, rows, sortable: true, sortKey: 'name', sortDir: 'asc' },
+      global: { plugins: [i18n] },
+    })
+
+    const ths = wrapper.findAll('th')
+    // Active ascending sort column
+    expect(ths[1].attributes('aria-sort')).toBe('ascending')
+    // Inactive sortable column
+    expect(ths[0].attributes('aria-sort')).toBe('none')
+    // Sort indicator glyph is hidden from AT
+    expect(ths[1].find('.sort-indicator').attributes('aria-hidden')).toBe('true')
+  })
+
   it('emits page-change and update:page from pagination controls', async () => {
     const wrapper = mount(DataTable, {
       props: {
