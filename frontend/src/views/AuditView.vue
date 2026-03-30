@@ -119,8 +119,8 @@ onMounted(loadAudit)
     </header>
 
     <div class="filters">
-      <input v-model="filters.user" type="text" :placeholder="t('audit.userFilter')" />
-      <input v-model="filters.action" type="text" :placeholder="t('audit.actionFilter')" />
+      <input v-model="filters.user" type="text" :placeholder="t('audit.userFilter')" :aria-label="t('audit.userFilter')" />
+      <input v-model="filters.action" type="text" :placeholder="t('audit.actionFilter')" :aria-label="t('audit.actionFilter')" />
       <input v-model="filters.since" type="datetime-local" :aria-label="t('audit.dateFrom')" />
       <input v-model="filters.until" type="datetime-local" :aria-label="t('audit.dateTo')" />
       <button class="btn" @click="loadAudit">{{ t('audit.applyFilters') }}</button>
