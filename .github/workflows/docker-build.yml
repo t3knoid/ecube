@@ -1,0 +1,172 @@
+name: Docker Build
+
+# Builds both application images, runs a smoke test against the full stack,
+# and (on release) pushes images to GHCR and publishes a production
+# docker-compose.yml as a release asset.
+#
+# Jobs:
+#   build-and-smoke-test  — runs on every push/PR; validates images start cleanly
+#   publish               — runs on published releases only; pushes images and
+#                           attaches docker-compose.yml to the GitHub Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+  release:
+    types: [published]
+
+# Cancel any in-progress run for the same branch/PR when a new commit is pushed.
+# Release and workflow_dispatch runs are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+
+env:
+  REGISTRY: ghcr.io
+  APP_IMAGE: ghcr.io/${{ github.repository_owner }}/ecube-app
+  UI_IMAGE: ghcr.io/${{ github.repository_owner }}/ecube-ui
+
+jobs:
+  build-and-smoke-test:
+    name: Build and smoke test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+
+    outputs:
+      tag: ${{ steps.tag.outputs.value }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine image tag
+        id: tag
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=sha-${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build images
+        run: docker compose -f docker-compose.ecube.yml build
+
+      - name: Tag images for registry
+        run: |
+          docker tag ecube-app ${{ env.APP_IMAGE }}:${{ steps.tag.outputs.value }}
+          docker tag ecube-ui  ${{ env.UI_IMAGE }}:${{ steps.tag.outputs.value }}
+
+      - name: Generate self-signed TLS certificate for smoke test
+        run: |
+          mkdir -p deploy/certs
+          openssl req -x509 -newkey rsa:2048 -nodes \
+            -keyout deploy/certs/key.pem \
+            -out    deploy/certs/cert.pem \
+            -days   1 \
+            -subj   '/CN=localhost' 2>/dev/null
+
+      - name: Start stack
+        env:
+          SECRET_KEY: ci-smoke-test-key-not-for-production
+        run: |
+          docker compose -f docker-compose.ecube.yml up -d
+          echo "Waiting for postgres to be healthy..."
+          for i in $(seq 1 30); do
+            STATUS=$(docker inspect --format='{{.State.Health.Status}}' ecube-postgres 2>/dev/null || echo "starting")
+            [ "$STATUS" = "healthy" ] && echo "postgres is healthy" && break
+            echo "  attempt $i/30 — $STATUS"
+            sleep 3
+          done
+
+      - name: Smoke test — API health check (via app container)
+        run: |
+          echo "Waiting for ecube-app to respond..."
+          for i in $(seq 1 20); do
+            CODE=$(docker compose -f docker-compose.ecube.yml exec -T ecube-app \
+              curl -sf -o /dev/null -w "%{http_code}" http://localhost:8000/health 2>/dev/null || echo "000")
+            [ "$CODE" = "200" ] && echo "Health check passed (HTTP $CODE)" && break
+            echo "  attempt $i/20 — HTTP $CODE"
+            sleep 3
+          done
+          docker compose -f docker-compose.ecube.yml exec -T ecube-app \
+            curl -sf http://localhost:8000/health | grep '"status"'
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          docker compose -f docker-compose.ecube.yml logs ecube-app   || true
+          docker compose -f docker-compose.ecube.yml logs ecube-ui    || true
+          docker compose -f docker-compose.ecube.yml logs postgres     || true
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose -f docker-compose.ecube.yml down -v
+
+  publish:
+    name: Push images and publish release compose
+    needs: build-and-smoke-test
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push ecube-app
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/ecube-host/Dockerfile
+          push: true
+          tags: |
+            ${{ env.APP_IMAGE }}:${{ needs.build-and-smoke-test.outputs.tag }}
+            ${{ env.APP_IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push ecube-ui
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.UI_IMAGE }}:${{ needs.build-and-smoke-test.outputs.tag }}
+            ${{ env.UI_IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Generate production docker-compose
+        run: |
+          mkdir -p dist
+          python scripts/generate_release_compose.py \
+            --app-image "${{ env.APP_IMAGE }}:${{ needs.build-and-smoke-test.outputs.tag }}" \
+            --ui-image  "${{ env.UI_IMAGE }}:${{ needs.build-and-smoke-test.outputs.tag }}"  \
+            --output    dist/docker-compose.yml
+
+      - name: Upload production docker-compose to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/docker-compose.yml

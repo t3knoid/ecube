@@ -6,9 +6,20 @@ on:
     branches: [main, "UI-Phase-*"]
   pull_request:
 
+# Cancel any in-progress run for the same branch/PR when a new commit is pushed.
+# workflow_dispatch runs are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+
 jobs:
-  backend-tests:
-    runs-on: ubuntu-latest
+  backend-unit-tests:
+    name: Unit tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout repository
@@ -22,8 +33,44 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[dev]"
 
-      - name: Run tests
-        run: python -m pytest tests/ -v
+      - name: Run unit tests
+        run: python -m pytest tests/ --ignore=tests/integration --ignore=tests/hardware -v
+
+  backend-integration-tests:
+    name: Integration tests (ubuntu)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: ecube_integration
+          POSTGRES_USER: ecube_test
+          POSTGRES_PASSWORD: ecube_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U ecube_test -d ecube_integration"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run integration tests
+        env:
+          INTEGRATION_DATABASE_URL: postgresql://ecube_test:ecube_test@localhost:5433/ecube_integration
+        run: python -m pytest tests/integration/ -v --run-integration
 
   frontend-unit-tests:
     runs-on: ubuntu-latest
