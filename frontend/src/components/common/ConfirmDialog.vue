@@ -71,6 +71,7 @@ watch(
       document.removeEventListener('keydown', onKeydown)
     }
   },
+  { immediate: true },
 )
 
 onUnmounted(() => {
