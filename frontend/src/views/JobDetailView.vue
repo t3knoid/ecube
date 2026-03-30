@@ -162,7 +162,7 @@ onUnmounted(() => {
       </div>
 
       <ProgressBar :value="job.copied_bytes || 0" :total="job.total_bytes || 0" />
-      <p class="muted">{{ job.copied_bytes }} / {{ job.total_bytes }} bytes</p>
+      <p class="muted">{{ job.copied_bytes || 0 }} / {{ job.total_bytes || 0 }} bytes</p>
 
       <div class="actions">
         <button class="btn" :disabled="!canOperate || acting" @click="runAction('start')">{{ t('jobs.start') }}</button>
