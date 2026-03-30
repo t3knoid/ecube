@@ -42,11 +42,6 @@ const fileColumns = computed(() => [
   { key: 'actions', label: t('common.actions.edit'), align: 'center' },
 ])
 
-function progressPercent() {
-  if (!job.value || !job.value.total_bytes) return 0
-  return Math.min(100, Math.round((job.value.copied_bytes / job.value.total_bytes) * 100))
-}
-
 async function loadDebug() {
   if (!canViewIntrospectionDebug.value) {
     try {
@@ -167,7 +162,7 @@ onUnmounted(() => {
       </div>
 
       <ProgressBar :value="job.copied_bytes || 0" :total="job.total_bytes || 0" />
-      <p class="muted">{{ progressPercent() }}% ({{ job.copied_bytes }} / {{ job.total_bytes }} bytes)</p>
+      <p class="muted">{{ job.copied_bytes }} / {{ job.total_bytes }} bytes</p>
 
       <div class="actions">
         <button class="btn" :disabled="!canOperate || acting" @click="runAction('start')">{{ t('jobs.start') }}</button>
