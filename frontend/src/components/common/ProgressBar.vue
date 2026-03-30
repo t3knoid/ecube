@@ -1,5 +1,8 @@
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps({
   value: {
@@ -20,7 +23,7 @@ const props = defineProps({
   },
   ariaLabel: {
     type: String,
-    default: 'Progress',
+    default: '',
   },
 })
 
@@ -30,6 +33,7 @@ const percentage = computed(() => {
 })
 
 const resolvedLabel = computed(() => props.label || `${percentage.value}%`)
+const resolvedAriaLabel = computed(() => props.ariaLabel || t('common.labels.progress'))
 </script>
 
 <template>
@@ -37,7 +41,7 @@ const resolvedLabel = computed(() => props.label || `${percentage.value}%`)
     <div
       class="progress-track"
       role="progressbar"
-      :aria-label="ariaLabel"
+      :aria-label="resolvedAriaLabel"
       :aria-valuemin="0"
       :aria-valuemax="100"
       :aria-valuenow="percentage"
