@@ -103,6 +103,31 @@ function asLocalDate(value) {
   return parsed.toLocaleString()
 }
 
+const cpuDisplay = computed(() => {
+  const p = health.value?.cpu_percent
+  return p != null ? `${p.toFixed(1)}%` : t('common.labels.notAvailable')
+})
+
+const memoryDisplay = computed(() => {
+  const h = health.value
+  if (h?.memory_percent == null) return t('common.labels.notAvailable')
+  if (h.memory_used_bytes != null && h.memory_total_bytes != null) {
+    return `${h.memory_percent.toFixed(1)}% (${formatBytes(h.memory_used_bytes)} / ${formatBytes(h.memory_total_bytes)})`
+  }
+  return `${h.memory_percent.toFixed(1)}%`
+})
+
+const diskIoDisplay = computed(() => {
+  const h = health.value
+  if (h?.disk_read_bytes == null) return t('common.labels.notAvailable')
+  return `${formatBytes(h.disk_read_bytes)} R / ${formatBytes(h.disk_write_bytes)} W`
+})
+
+const workerQueueDisplay = computed(() => {
+  if (health.value == null) return t('common.labels.notAvailable')
+  return health.value.worker_queue_size
+})
+
 function extractApiMessage(err) {
   const data = err?.response?.data || {}
   return String(data.message || data.detail || '').trim()
@@ -251,10 +276,10 @@ onMounted(loadTabData)
         <span>{{ t('common.labels.status') }}</span><StatusBadge :status="health?.status || 'unknown'" />
         <span>{{ t('common.labels.db') }}</span><StatusBadge :status="health?.database || 'unknown'" />
         <span>{{ t('jobs.activeJobs') }}</span><strong>{{ health?.active_jobs || 0 }}</strong>
-        <span>{{ t('system.cpu') }}</span><strong>{{ t('common.labels.notAvailable') }}</strong>
-        <span>{{ t('system.memory') }}</span><strong>{{ t('common.labels.notAvailable') }}</strong>
-        <span>{{ t('system.diskIo') }}</span><strong>{{ t('common.labels.notAvailable') }}</strong>
-        <span>{{ t('system.workerQueue') }}</span><strong>{{ t('common.labels.notAvailable') }}</strong>
+        <span>{{ t('system.cpu') }}</span><strong>{{ cpuDisplay }}</strong>
+        <span>{{ t('system.memory') }}</span><strong>{{ memoryDisplay }}</strong>
+        <span>{{ t('system.diskIo') }}</span><strong>{{ diskIoDisplay }}</strong>
+        <span>{{ t('system.workerQueue') }}</span><strong>{{ workerQueueDisplay }}</strong>
       </div>
     </article>
 

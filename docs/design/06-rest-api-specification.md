@@ -1404,6 +1404,40 @@ CPU, memory, disk I/O, worker queue.
 
 **Roles:** `admin`, `manager`, `processor`, `auditor`
 
+**Response (200 OK):**
+
+```json
+{
+  "status": "ok",
+  "database": "connected",
+  "database_error": null,
+  "active_jobs": 1,
+  "cpu_percent": 12.4,
+  "memory_percent": 54.3,
+  "memory_used_bytes": 4294967296,
+  "memory_total_bytes": 8589934592,
+  "disk_read_bytes": 1073741824,
+  "disk_write_bytes": 536870912,
+  "worker_queue_size": 0
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `status` | string | `"ok"` or `"degraded"` |
+| `database` | string | `"connected"` or `"error"` |
+| `database_error` | string\|null | Error detail when database is unreachable |
+| `active_jobs` | integer | Number of jobs currently in `RUNNING` state |
+| `cpu_percent` | number\|null | CPU utilisation 0–100; `null` if psutil unavailable |
+| `memory_percent` | number\|null | Physical memory utilisation 0–100; `null` if psutil unavailable |
+| `memory_used_bytes` | integer\|null | Used physical memory in bytes |
+| `memory_total_bytes` | integer\|null | Total physical memory in bytes |
+| `disk_read_bytes` | integer\|null | Cumulative disk read bytes since boot |
+| `disk_write_bytes` | integer\|null | Cumulative disk write bytes since boot |
+| `worker_queue_size` | integer | Number of jobs in `PENDING` state (queued but not yet running) |
+
+**Implementation note:** CPU, memory, and disk I/O metrics are collected via `psutil`. All metric fields are `null` when `psutil` is not installed rather than returning a hard error.
+
 **Error responses:**
 
 - `401 Unauthorized` — Missing/invalid token

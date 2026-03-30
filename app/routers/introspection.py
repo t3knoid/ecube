@@ -1,6 +1,13 @@
 import logging
 import os
 
+try:
+    import psutil as _psutil
+    _PSUTIL_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _psutil = None  # type: ignore[assignment]
+    _PSUTIL_AVAILABLE = False
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -188,11 +195,54 @@ def system_health(
         except Exception:
             pass
 
+    worker_queue_size = 0
+    if db_status == "connected":
+        try:
+            worker_queue_size = (
+                db.query(ExportJob).filter(ExportJob.status == JobStatus.PENDING).count()
+            )
+        except Exception:
+            pass
+
+    cpu_percent: float | None = None
+    memory_percent: float | None = None
+    memory_used_bytes: int | None = None
+    memory_total_bytes: int | None = None
+    disk_read_bytes: int | None = None
+    disk_write_bytes: int | None = None
+
+    if _PSUTIL_AVAILABLE:
+        try:
+            cpu_percent = _psutil.cpu_percent(interval=0.1)
+        except Exception:
+            pass
+        try:
+            vm = _psutil.virtual_memory()
+            memory_percent = vm.percent
+            memory_used_bytes = vm.used
+            memory_total_bytes = vm.total
+        except Exception:
+            pass
+        try:
+            io = _psutil.disk_io_counters()
+            if io is not None:
+                disk_read_bytes = io.read_bytes
+                disk_write_bytes = io.write_bytes
+        except Exception:
+            pass
+
     return {
         "status": "ok" if db_status == "connected" else "degraded",
         "database": db_status,
         "database_error": db_error,
         "active_jobs": active_jobs,
+        "cpu_percent": cpu_percent,
+        "memory_percent": memory_percent,
+        "memory_used_bytes": memory_used_bytes,
+        "memory_total_bytes": memory_total_bytes,
+        "disk_read_bytes": disk_read_bytes,
+        "disk_write_bytes": disk_write_bytes,
+        "worker_queue_size": worker_queue_size,
     }
 
 
