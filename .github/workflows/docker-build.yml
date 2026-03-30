@@ -35,6 +35,9 @@ jobs:
     permissions:
       contents: read
       packages: read
+    env:
+      SECRET_KEY: ci-smoke-test-key-not-for-production
+      POSTGRES_PASSWORD: ci-smoke-test-postgres-password
 
     outputs:
       tag: ${{ steps.tag.outputs.value }}
@@ -70,9 +73,6 @@ jobs:
             -subj   '/CN=localhost' 2>/dev/null
 
       - name: Start stack
-        env:
-          SECRET_KEY: ci-smoke-test-key-not-for-production
-          POSTGRES_PASSWORD: ci-smoke-test-postgres-password
         run: |
           docker compose -f docker-compose.ecube.yml up -d
           echo "Waiting for postgres to be healthy..."
