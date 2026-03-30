@@ -140,9 +140,9 @@ function getRowKey(row, index) {
       </tbody>
     </table>
     <div v-if="hasPagination" class="table-pagination">
-      <button class="btn" :disabled="page <= 1" @click="goToPage(page - 1)">{{ t('common.actions.previous') }}</button>
+      <button type="button" class="btn" :disabled="page <= 1" @click="goToPage(page - 1)">{{ t('common.actions.previous') }}</button>
       <span class="pagination-label">{{ page }} / {{ totalPages }}</span>
-      <button class="btn" :disabled="page >= totalPages" @click="goToPage(page + 1)">{{ t('common.actions.next') }}</button>
+      <button type="button" class="btn" :disabled="page >= totalPages" @click="goToPage(page + 1)">{{ t('common.actions.next') }}</button>
     </div>
   </div>
 </template>
