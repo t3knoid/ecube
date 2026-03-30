@@ -249,7 +249,7 @@ onMounted(loadDrive)
 }
 
 .ok-banner {
-  color: var(--color-success);
+  color: var(--color-ok-banner-text, #14532d);
   background: color-mix(in srgb, var(--color-success) 14%, var(--color-bg-secondary));
   border: 1px solid color-mix(in srgb, var(--color-success) 45%, var(--color-border));
 }

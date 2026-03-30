@@ -60,6 +60,14 @@
   --color-badge-auditor-bg: #3b2f10;
   --color-badge-auditor-text: #fde68a;
 
+  /* ── Status badge text (must contrast against badge background) ── */
+  --color-status-ok-text: #bbf7d0;
+  --color-status-warn-text: #fde68a;
+  --color-status-danger-text: #fca5a5;
+  --color-status-info-text: #bfdbfe;
+  --color-status-muted-text: #cbd5e1;
+  --color-ok-banner-text: #86efac;
+
   /* ── Progress bar ───────────────────────────────────────────────── */
   --color-progress-bar: #3b82f6;
   --color-progress-track: #334155;

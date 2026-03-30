@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import Pagination from './Pagination.vue'
 
 const { t } = useI18n()
 
@@ -21,7 +22,33 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  sortable: {
+    type: Boolean,
+    default: false,
+  },
+  sortKey: {
+    type: String,
+    default: '',
+  },
+  sortDir: {
+    type: String,
+    default: 'asc',
+  },
+  page: {
+    type: Number,
+    default: 1,
+  },
+  pageSize: {
+    type: Number,
+    default: 10,
+  },
+  total: {
+    type: Number,
+    default: 0,
+  },
 })
+
+const emit = defineEmits(['sort-change', 'page-change', 'update:page'])
 
 const normalizedColumns = computed(() =>
   props.columns.map((column) => ({
@@ -29,10 +56,54 @@ const normalizedColumns = computed(() =>
     label: column.label,
     align: column.align || 'left',
     width: column.width || null,
+    sortable: column.sortable,
   })),
 )
 
 const resolvedEmptyText = computed(() => props.emptyText || t('common.labels.noData'))
+const totalPages = computed(() => {
+  if (!props.total || !props.pageSize) return 0
+  return Math.max(1, Math.ceil(props.total / props.pageSize))
+})
+const hasPagination = computed(() => totalPages.value > 1)
+
+const displayRows = computed(() => {
+  let result = [...props.rows]
+  if (props.sortable && props.sortKey) {
+    result.sort((a, b) => {
+      const av = a[props.sortKey]
+      const bv = b[props.sortKey]
+      if (av == null && bv == null) return 0
+      if (av == null) return props.sortDir === 'asc' ? 1 : -1
+      if (bv == null) return props.sortDir === 'asc' ? -1 : 1
+      const cmp = av < bv ? -1 : av > bv ? 1 : 0
+      return props.sortDir === 'asc' ? cmp : -cmp
+    })
+  }
+  if (props.total > 0) {
+    const start = (props.page - 1) * props.pageSize
+    result = result.slice(start, start + props.pageSize)
+  }
+  return result
+})
+
+function columnSortable(column) {
+  return props.sortable && column.key && column.key !== 'actions' && column.sortable !== false
+}
+
+function onSort(column) {
+  if (!columnSortable(column)) return
+  let nextDir = 'asc'
+  if (props.sortKey === column.key) {
+    nextDir = props.sortDir === 'asc' ? 'desc' : 'asc'
+  }
+  emit('sort-change', { key: column.key, dir: nextDir })
+}
+
+function onPageUpdate(nextPage) {
+  emit('update:page', nextPage)
+  emit('page-change', nextPage)
+}
 
 function getRowKey(row, index) {
   if (row && row[props.rowKey] !== undefined && row[props.rowKey] !== null) {
@@ -53,18 +124,43 @@ function getRowKey(row, index) {
             :class="`align-${column.align}`"
             :style="column.width ? { width: column.width } : undefined"
             scope="col"
+            :aria-sort="columnSortable(column)
+              ? (sortKey === column.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none')
+              : undefined"
           >
-            {{ column.label }}
+            <button
+              v-if="columnSortable(column)"
+              type="button"
+              class="sort-button"
+              @click="onSort(column)"
+            >
+              <span>{{ column.label }}</span>
+              <span
+                class="sort-indicator"
+                :class="{
+                  active: sortKey === column.key,
+                  asc: sortKey === column.key && sortDir === 'asc',
+                  desc: sortKey === column.key && sortDir === 'desc',
+                }"
+                aria-hidden="true"
+              />
+              <span class="sr-only">{{
+                sortKey === column.key
+                  ? (sortDir === 'asc' ? t('table.sortAsc') : t('table.sortDesc'))
+                  : t('table.sortUnsorted')
+              }}</span>
+            </button>
+            <span v-else>{{ column.label }}</span>
           </th>
         </tr>
       </thead>
       <tbody>
-        <tr v-if="rows.length === 0">
+        <tr v-if="displayRows.length === 0">
           <td :colspan="normalizedColumns.length || 1" class="empty-state">
             <slot name="empty">{{ resolvedEmptyText }}</slot>
           </td>
         </tr>
-        <tr v-for="(row, index) in rows" :key="getRowKey(row, index)">
+        <tr v-for="(row, index) in displayRows" :key="getRowKey(row, index)">
           <td
             v-for="column in normalizedColumns"
             :key="column.key"
@@ -77,6 +173,13 @@ function getRowKey(row, index) {
         </tr>
       </tbody>
     </table>
+    <Pagination
+      v-if="hasPagination"
+      :page="page"
+      :page-size="pageSize"
+      :total="total"
+      @update:page="onPageUpdate"
+    />
   </div>
 </template>
 
@@ -110,6 +213,35 @@ function getRowKey(row, index) {
   z-index: 1;
 }
 
+.sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  cursor: pointer;
+}
+
+.sort-indicator::after {
+  content: '↕';
+  opacity: 0.45;
+}
+
+.sort-indicator.active::after {
+  opacity: 1;
+}
+
+.sort-indicator.asc::after {
+  content: '↑';
+}
+
+.sort-indicator.desc::after {
+  content: '↓';
+}
+
 .data-table tr:last-child td {
   border-bottom: none;
 }
@@ -130,5 +262,11 @@ function getRowKey(row, index) {
   text-align: center;
   color: var(--color-text-secondary);
   padding: var(--space-lg);
+}
+
+:deep(.pagination-wrap) {
+  padding: var(--space-sm);
+  border-top: 1px solid var(--color-border);
+  margin-top: 0;
 }
 </style>
