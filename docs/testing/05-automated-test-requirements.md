@@ -11,11 +11,12 @@
 2. [Test Suite Layout](#2-test-suite-layout)
 3. [Tooling and Dependencies](#3-tooling-and-dependencies)
 4. [Running the Tests](#4-running-the-tests)
-5. [Test Infrastructure and Fixtures](#5-test-infrastructure-and-fixtures)
-6. [Coding Conventions](#6-coding-conventions)
-7. [Platform Compatibility Rules](#7-platform-compatibility-rules)
-8. [Test Coverage Areas](#8-test-coverage-areas)
-9. [Writing New Tests](#9-writing-new-tests)
+5. [Cross-Platform Testing Strategy](#5-cross-platform-testing-strategy)
+6. [Test Infrastructure and Fixtures](#6-test-infrastructure-and-fixtures)
+7. [Coding Conventions](#7-coding-conventions)
+8. [Platform Compatibility Rules](#8-platform-compatibility-rules)
+9. [Test Coverage Areas](#9-test-coverage-areas)
+10. [Writing New Tests](#10-writing-new-tests)
 
 ---
 
@@ -29,7 +30,9 @@ ECUBE has three tiers of automated tests:
 | **Integration** | `tests/integration/` | `@pytest.mark.integration` | PostgreSQL database |
 | **Hardware-in-the-loop (HIL)** | `tests/hardware/` | `@pytest.mark.hardware` | Physical USB hardware |
 
-Unit tests are the primary automated quality gate. They use an in-memory SQLite database with `StaticPool` and mock all OS-level calls so they run on any platform without external services.
+Unit tests are the primary automated quality gate. They use an in-memory SQLite database with `StaticPool` and mock all OS-level calls so they run on any platform (Linux, macOS, Windows) without external services.
+
+Integration tests require only a PostgreSQL instance. Docker provides a portable way to supply that dependency on every platform without installing PostgreSQL natively. See [section 5](#5-cross-platform-testing-strategy) for the full strategy.
 
 ---
 
@@ -162,9 +165,90 @@ python -m pytest tests/ -q
 
 ---
 
-## 5. Test Infrastructure and Fixtures
+## 5. Cross-Platform Testing Strategy
 
-### 5.1 Database
+### 5.1 Why Docker for integration tests
+
+Unit tests run natively on Linux, macOS, and Windows without Docker — they need no external services. Integration tests, however, require PostgreSQL. Rather than requiring each developer to install PostgreSQL locally, a dedicated test compose file provides the database as a container that works identically on all three platforms.
+
+```
+needs Docker?   unit tests     integration tests    hardware tests
+─────────────   ──────────     ─────────────────    ──────────────
+Linux           no             yes (postgres only)  yes (+ USB HW)
+macOS           no             yes (postgres only)  not supported
+Windows         no             yes (postgres only)  not supported
+```
+
+### 5.2 Compose file roles
+
+| File | Purpose | Exposes |
+|------|---------|--------|
+| `docker-compose.ecube.yml` | Production (Linux) — full stack with USB passthrough | UI port only (8443) |
+| `docker-compose.ecube-win.yml` | Production (Windows Docker Desktop) — no USB passthrough | UI port only (8443) |
+| `docker-compose.test.yml` | **Cross-platform test support** — PostgreSQL only | `localhost:5433` |
+| `docker-compose.dev.yml` | Development overlay — exposes API port for direct access | `localhost:8000` (overlay) |
+
+### 5.3 Running integration tests with Docker
+
+**Step 1 — start the test PostgreSQL container (any platform):**
+
+```bash
+docker compose -f docker-compose.test.yml up -d
+```
+
+**Step 2 — run integration tests:**
+
+```bash
+INTEGRATION_DATABASE_URL=postgresql://ecube_test:ecube_test@localhost:5433/ecube_integration \
+  python -m pytest tests/integration/ -v --run-integration
+```
+
+**Step 3 — tear down (also removes the test data volume):**
+
+```bash
+docker compose -f docker-compose.test.yml down -v
+```
+
+The `INTEGRATION_DATABASE_URL` defaults to the above value in `tests/integration/conftest.py`, so the environment variable is only needed when overriding.
+
+### 5.4 Exposing the API port for local development
+
+The production compose files intentionally do not publish the FastAPI port (8000) to the host. All traffic is routed through the nginx reverse proxy to prevent `TRUST_PROXY_HEADERS` spoofing. For local development or manual API testing, the `docker-compose.dev.yml` overlay adds the API port:
+
+```bash
+# Linux
+docker compose -f docker-compose.ecube.yml -f docker-compose.dev.yml up
+
+# Windows
+docker compose -f docker-compose.ecube-win.yml -f docker-compose.dev.yml up
+```
+
+The API is then reachable at `http://localhost:8000` in addition to `https://localhost:8443/api/` via the proxy.
+
+> **Never use `docker-compose.dev.yml` in production.** It defeats the proxy trust model described in the compose file comment.
+
+### 5.5 CI strategy
+
+| Workflow | Trigger | What runs |
+|----------|---------|----------|
+| `run-tests.yml` — unit tests | push / PR | pytest unit tests on **Linux, macOS, Windows** matrix (no Docker) |
+| `run-tests.yml` — integration tests | push / PR | pytest integration tests on Linux with a GitHub Actions PostgreSQL service container |
+| `docker-build.yml` — build & smoke test | push to main / PR / release | Builds both images, starts full stack, verifies `/health` |
+| `docker-build.yml` — publish | GitHub Release only | Pushes images to GHCR, attaches production `docker-compose.yml` to the release |
+
+### 5.6 Production release artifact
+
+When a GitHub Release is published, the `docker-build.yml` workflow:
+
+1. Builds and pushes `ecube-app` and `ecube-ui` to `ghcr.io/t3knoid/`.
+2. Runs `scripts/generate_release_compose.py` to produce a `docker-compose.yml` that references the pushed images by tag (no `build:` directives).
+3. Attaches that file to the GitHub Release so operators can deploy without a source checkout.
+
+---
+
+## 6. Test Infrastructure and Fixtures
+
+### 6.1 Database
 
 Unit tests use SQLite in-memory with `StaticPool` — no PostgreSQL instance is needed:
 
@@ -180,7 +264,7 @@ engine = create_engine(
 
 Each test function gets a **fresh schema** (tables created on entry, dropped on exit) via the `db` fixture in `conftest.py`.
 
-### 5.2 Standard Fixtures
+### 6.2 Standard Fixtures
 
 Defined in `tests/conftest.py`:
 
@@ -196,7 +280,7 @@ Defined in `tests/conftest.py`:
 
 All role-bearing clients inject a JWT signed with `settings.secret_key` directly — no PAM or OIDC call is made.
 
-### 5.3 Custom Pytest Options
+### 6.3 Custom Pytest Options
 
 | Option | Effect |
 |--------|--------|
@@ -205,9 +289,9 @@ All role-bearing clients inject a JWT signed with `settings.secret_key` directly
 
 ---
 
-## 6. Coding Conventions
+## 7. Coding Conventions
 
-### 6.1 SQLAlchemy / SQLite compatibility
+### 7.1 SQLAlchemy / SQLite compatibility
 
 All `Enum` columns in ORM models **must** use `native_enum=False`:
 
@@ -219,7 +303,7 @@ status = Column(Enum(DriveState, native_enum=False), ...)
 status = Column(Enum(DriveState), ...)
 ```
 
-### 6.2 JSON columns
+### 7.2 JSON columns
 
 ORM models must use SQLAlchemy's `JSON` type (not `JSONB`). The Alembic migration
 may use `JSONB` for the PostgreSQL-specific schema; the ORM model must be portable:
@@ -229,7 +313,7 @@ may use `JSONB` for the PostgreSQL-specific schema; the ORM model must be portab
 details = Column(JSON, nullable=True)
 ```
 
-### 6.3 Async tests
+### 7.3 Async tests
 
 The project uses `asyncio_mode = "strict"` (set in `[tool.pytest.ini_options]`).
 Async tests must be explicitly decorated:
@@ -240,7 +324,7 @@ async def test_something():
     ...
 ```
 
-### 6.4 Dependency injection
+### 7.4 Dependency injection
 
 Override FastAPI dependencies using `app.dependency_overrides` within the test, and
 **always** clear them on teardown to avoid leaking state between tests:
@@ -263,7 +347,7 @@ mock_pam.authenticate.return_value = False
 app.dependency_overrides[_get_pam] = lambda: mock_pam
 ```
 
-### 6.5 Audit log assertions
+### 7.5 Audit log assertions
 
 Many tests assert that a specific audit event was emitted. Pass the live `db` session to
 the endpoint's dependency override so the same session is visible to both the service
@@ -277,12 +361,12 @@ assert log.actor == "test-user"
 
 ---
 
-## 7. Platform Compatibility Rules
+## 8. Platform Compatibility Rules
 
 The CI target platform is Linux, but tests must also **pass on Windows** (developer
 workstations). The following rules apply.
 
-### 7.1 POSIX-only modules (`pwd`, `grp`, `os.geteuid`)
+### 8.1 POSIX-only modules (`pwd`, `grp`, `os.geteuid`)
 
 `app/services/os_user_service.py` imports `pwd` and `grp` at module level with a
 try/except that sets them to `None` on Windows. Any test that would directly import
@@ -313,7 +397,7 @@ def test_posix_only():
     ...
 ```
 
-### 7.2 Optional packages (`redis`)
+### 8.2 Optional packages (`redis`)
 
 Tests that exercise the Redis session backend require the `redis` package, which may
 not be installed in all environments. Use `pytest.importorskip` at the top of each
@@ -325,7 +409,7 @@ def test_redis_backend():
     ...
 ```
 
-### 7.3 File I/O in tests
+### 8.3 File I/O in tests
 
 When writing files and comparing their content in tests, use binary mode to avoid
 Windows CRLF translation:
@@ -341,7 +425,7 @@ with open(path, "w") as f:
     f.write("test content\n")
 ```
 
-### 7.4 File handles and temp directories
+### 8.4 File handles and temp directories
 
 Close any `RotatingFileHandler` (or other file handles) **before** the enclosing
 `TemporaryDirectory` context exits. Windows cannot delete a file while a handle is
@@ -359,7 +443,7 @@ finally:
 
 ---
 
-## 8. Test Coverage Areas
+## 9. Test Coverage Areas
 
 | Area | Key Test Files |
 |------|---------------|
@@ -398,7 +482,7 @@ finally:
 
 ---
 
-## 9. Writing New Tests
+## 10. Writing New Tests
 
 ### Checklist for new unit tests
 
