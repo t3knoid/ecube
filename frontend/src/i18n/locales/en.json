@@ -275,7 +275,8 @@
       "unknown": "Unknown",
       "db": "DB",
       "id": "ID",
-      "traceReferencePrefix": "Ref:"
+      "traceReferencePrefix": "Ref:",
+      "progress": "Progress"
     },
     "plural": {
       "file": "no files | 1 file | {count} files",
