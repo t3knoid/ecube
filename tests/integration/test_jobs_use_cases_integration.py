@@ -10,6 +10,10 @@ from app.models.jobs import DriveAssignment, ExportJob, JobStatus, Manifest
 
 @pytest.mark.integration
 def test_create_job_persists_and_audits(integration_client, integration_db):
+    drive = UsbDrive(device_identifier="IT-DRV-AUTO-001", current_state=DriveState.AVAILABLE)
+    integration_db.add(drive)
+    integration_db.commit()
+
     response = integration_client.post(
         "/jobs",
         json={
@@ -87,7 +91,11 @@ def test_create_job_conflict_when_drive_belongs_to_different_project(integration
 
 
 @pytest.mark.integration
-def test_get_job_and_get_job_not_found(integration_client):
+def test_get_job_and_get_job_not_found(integration_client, integration_db):
+    drive = UsbDrive(device_identifier="IT-DRV-AUTO-004", current_state=DriveState.AVAILABLE)
+    integration_db.add(drive)
+    integration_db.commit()
+
     create_response = integration_client.post(
         "/jobs",
         json={
@@ -109,6 +117,10 @@ def test_get_job_and_get_job_not_found(integration_client):
 
 @pytest.mark.integration
 def test_start_job_updates_thread_count_and_audits(integration_client, integration_db):
+    drive = UsbDrive(device_identifier="IT-DRV-AUTO-005", current_state=DriveState.AVAILABLE)
+    integration_db.add(drive)
+    integration_db.commit()
+
     create_response = integration_client.post(
         "/jobs",
         json={
@@ -153,6 +165,10 @@ def test_start_job_conflict_when_already_running(integration_client, integration
 
 @pytest.mark.integration
 def test_verify_job_sets_verifying_and_audits(integration_client, integration_db):
+    drive = UsbDrive(device_identifier="IT-DRV-AUTO-007", current_state=DriveState.AVAILABLE)
+    integration_db.add(drive)
+    integration_db.commit()
+
     create_response = integration_client.post(
         "/jobs",
         json={
@@ -181,6 +197,9 @@ def test_verify_job_sets_verifying_and_audits(integration_client, integration_db
 @pytest.mark.integration
 def test_create_manifest_writes_record_file_and_audit(integration_client, integration_db, tmp_path):
     target_path = tmp_path / "manifest-target"
+    drive = UsbDrive(device_identifier="IT-DRV-AUTO-008", current_state=DriveState.AVAILABLE)
+    integration_db.add(drive)
+    integration_db.commit()
 
     create_response = integration_client.post(
         "/jobs",
