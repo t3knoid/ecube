@@ -28,4 +28,20 @@ describe('useRoleGuard', () => {
     const { canAccess } = useRoleGuard(['admin', 'manager'])
     expect(canAccess.value).toBe(false)
   })
+
+  it('normalizes a bare string role to a single-element array', () => {
+    const authStore = useAuthStore()
+    authStore.roles = ['admin']
+
+    const { canAccess } = useRoleGuard('admin')
+    expect(canAccess.value).toBe(true)
+  })
+
+  it('denies access when bare string role does not match', () => {
+    const authStore = useAuthStore()
+    authStore.roles = ['auditor']
+
+    const { canAccess } = useRoleGuard('admin')
+    expect(canAccess.value).toBe(false)
+  })
 })
