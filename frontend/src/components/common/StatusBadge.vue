@@ -57,30 +57,30 @@ const badgeClass = computed(() => {
 .badge-success {
   background: color-mix(in srgb, var(--color-success) 16%, var(--color-bg-secondary));
   border-color: color-mix(in srgb, var(--color-success) 45%, var(--color-border));
-  color: #14532d;
+  color: var(--color-status-ok-text, #14532d);
 }
 
 .badge-warning {
   background: color-mix(in srgb, var(--color-warning) 16%, var(--color-bg-secondary));
   border-color: color-mix(in srgb, var(--color-warning) 45%, var(--color-border));
-  color: #7c3f00;
+  color: var(--color-status-warn-text, #7c3f00);
 }
 
 .badge-danger {
   background: color-mix(in srgb, var(--color-danger) 16%, var(--color-bg-secondary));
   border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border));
-  color: var(--color-danger);
+  color: var(--color-status-danger-text, #991b1b);
 }
 
 .badge-info {
   background: color-mix(in srgb, var(--color-info) 16%, var(--color-bg-secondary));
   border-color: color-mix(in srgb, var(--color-info) 45%, var(--color-border));
-  color: var(--color-info);
+  color: var(--color-status-info-text, #1e40af);
 }
 
 .badge-muted {
   background: var(--color-bg-hover);
   border-color: var(--color-border);
-  color: var(--color-text-secondary);
+  color: var(--color-status-muted-text, #475569);
 }
 </style>

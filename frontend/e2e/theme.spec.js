@@ -18,9 +18,21 @@ test('theme switch changes css variables', async ({ page }) => {
   await page.goto('/')
 
   const before = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--color-bg-primary').trim())
-  await page.locator('.theme-select').selectOption('dark')
-  const after = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--color-bg-primary').trim())
 
+  // Disable CSS transitions so the theme change is instant (avoids mid-transition color values
+  // during the a11y scan when body color animates over 0.5 s in base.css).
+  await page.addStyleTag({ content: '*, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; }' })
+  await page.locator('.theme-select').selectOption('dark')
+
+  // Wait for dark theme CSS to fully settle (all variables must reflect dark values)
+  await page.waitForFunction(
+    (lightBgPrimary) => getComputedStyle(document.documentElement).getPropertyValue('--color-bg-primary').trim() !== lightBgPrimary,
+    before,
+  )
+  // Allow two paint cycles so all cascaded variables fully propagate (webkit needs this)
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+
+  const after = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--color-bg-primary').trim())
   expect(before).not.toBe(after)
   await expectNoCriticalA11yViolations(page)
 })
@@ -43,10 +55,32 @@ test('visual regression snapshots for key screens in default and dark themes', a
   }
 
   await page.goto('/')
+
+  // Disable CSS transitions so the theme change is instant (avoids mid-transition colour values
+  // that cause a11y color-contrast failures and incorrect screenshots).
+  await page.addStyleTag({ content: '*, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; }' })
   await page.locator('.theme-select').selectOption('dark')
+
+  // Wait for localStorage to be written — this confirms the dark.css onload has fired and
+  // the preference is committed. Waiting only for the CSS variable is insufficient because
+  // the variable changes just before onload (before localStorage.setItem('dark') runs), and
+  // an immediate page.goto() can race past that write.
+  await page.waitForFunction(() => localStorage.getItem('ecube_theme') === 'dark')
+
+  const darkBgPrimary = await page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue('--color-bg-primary').trim()
+  )
 
   for (const shot of shots) {
     await page.goto(shot.path)
+    // After each navigation the app re-reads localStorage ('dark') and reloads dark.css;
+    // wait until --color-bg-primary matches the known dark value before screenshotting.
+    await page.waitForFunction(
+      (darkBg) => getComputedStyle(document.documentElement).getPropertyValue('--color-bg-primary').trim() === darkBg,
+      darkBgPrimary,
+    )
+    // Double RAF: ensures all cascaded CSS variable updates are rendered (webkit needs two frames)
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
     await expect(page).toHaveScreenshot(`${shot.name}-dark.png`)
   }
 

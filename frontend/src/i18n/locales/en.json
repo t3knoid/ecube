@@ -133,6 +133,8 @@
     "userFilter": "Filter by user",
     "actionFilter": "Filter by action",
     "applyFilters": "Apply",
+    "dateFrom": "From Date",
+    "dateTo": "To Date",
     "empty": "No audit entries found",
     "showDetails": "Show",
     "hideDetails": "Hide"

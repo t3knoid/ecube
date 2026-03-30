@@ -30,24 +30,36 @@ test('jobs create, start, verify, and manifest flow', async ({ page }) => {
     await route.fallback()
   })
 
-  await routeJson(page, '**/api/jobs/77', createdJob)
+  let jobState = { ...createdJob }
+  await page.route('**/api/jobs/77', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobState) })
+  })
   await routeJson(page, '**/api/jobs/77/files', { files: [{ id: 101, relative_path: 'a.txt', status: 'COMPLETED', checksum: 'abc' }] })
-  await routeJson(page, '**/api/jobs/77/start', { ...createdJob, status: 'RUNNING', copied_bytes: 50 })
-  await routeJson(page, '**/api/jobs/77/verify', { ...createdJob, status: 'VERIFYING', copied_bytes: 100 })
-  await routeJson(page, '**/api/jobs/77/manifest', { ...createdJob, status: 'COMPLETED', copied_bytes: 100 })
+  await page.route('**/api/jobs/77/start', async (route) => {
+    jobState = { ...jobState, status: 'RUNNING', copied_bytes: 50 }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobState) })
+  })
+  await page.route('**/api/jobs/77/verify', async (route) => {
+    jobState = { ...jobState, status: 'VERIFYING', copied_bytes: 100 }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobState) })
+  })
+  await page.route('**/api/jobs/77/manifest', async (route) => {
+    jobState = { ...jobState, status: 'COMPLETED', copied_bytes: 100 }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobState) })
+  })
   await routeJson(page, '**/api/introspection/jobs/77/debug', { files: [{ id: 101, relative_path: 'a.txt', status: 'COMPLETED', checksum: 'abc' }] })
 
   await page.goto('/jobs')
   await page.getByRole('button', { name: 'Create Job' }).click()
   await page.getByLabel('Select drive').selectOption('1')
-  await page.getByRole('button', { name: 'Next' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Next' }).click()
   await page.getByLabel('Select mount source').selectOption('4')
-  await page.getByRole('button', { name: 'Next' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Next' }).click()
   await page.getByLabel('Project').fill('P-77')
   await page.getByLabel('Evidence').fill('EV-77')
   await page.getByLabel('Source path').fill('folder')
-  await page.getByRole('button', { name: 'Next' }).click()
-  await page.getByRole('button', { name: 'Create Job' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Next' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Create Job' }).click()
 
   await expect(page).toHaveURL(/\/jobs\/77$/)
   await page.getByRole('button', { name: 'Start' }).click()

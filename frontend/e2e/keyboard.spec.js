@@ -87,7 +87,7 @@ test('keyboard navigation: ConfirmDialog confirm button reachable by Tab', async
 test('keyboard navigation: DataTable pagination controls are keyboard-reachable', async ({ page }) => {
   await setupAuthenticatedPage(page, ['auditor'])
 
-  const logs = Array.from({ length: 20 }, (_, i) => ({
+  const logs = Array.from({ length: 21 }, (_, i) => ({
     id: i + 1,
     timestamp: '2026-03-29T10:00:00Z',
     user: `user${i}`,
@@ -103,7 +103,7 @@ test('keyboard navigation: DataTable pagination controls are keyboard-reachable'
 
   await page.goto('/audit')
 
-  const pagination = page.locator('.table-pagination')
+  const pagination = page.locator('.pagination-wrap')
   await expect(pagination).toBeVisible()
 
   // The Next-page button must be focusable and activatable with the keyboard
@@ -123,6 +123,7 @@ test('keyboard navigation: sidebar navigation links are Tab-reachable', async ({
 
   await page.goto('/')
 
+  await expect(page.locator('.app-sidebar')).toBeVisible()
   const navLinks = page.locator('nav a[href]')
   const count = await navLinks.count()
   expect(count).toBeGreaterThan(0)
