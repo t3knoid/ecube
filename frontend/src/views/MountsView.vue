@@ -188,21 +188,21 @@ onMounted(loadMounts)
       <div v-if="showAddDialog" class="dialog-overlay" @click.self="showAddDialog = false">
         <div class="dialog-panel" role="dialog" aria-modal="true">
           <h2>{{ t('mounts.add') }}</h2>
-          <label>{{ t('common.labels.type') }}</label>
-          <select v-model="form.type">
+          <label for="mount-type">{{ t('common.labels.type') }}</label>
+          <select id="mount-type" v-model="form.type">
             <option value="SMB">SMB</option>
             <option value="NFS">NFS</option>
           </select>
-          <label>{{ t('mounts.remotePath') }}</label>
-          <input v-model="form.remote_path" type="text" />
-          <label>{{ t('mounts.localPath') }}</label>
-          <input v-model="form.local_mount_point" type="text" />
-          <label>{{ t('auth.username') }}</label>
-          <input v-model="form.username" type="text" autocomplete="off" />
-          <label>{{ t('auth.password') }}</label>
-          <input v-model="form.password" type="password" autocomplete="new-password" />
-          <label>{{ t('mounts.credentialsFile') }}</label>
-          <input v-model="form.credentials_file" type="text" />
+          <label for="mount-remote-path">{{ t('mounts.remotePath') }}</label>
+          <input id="mount-remote-path" v-model="form.remote_path" type="text" />
+          <label for="mount-local-path">{{ t('mounts.localPath') }}</label>
+          <input id="mount-local-path" v-model="form.local_mount_point" type="text" />
+          <label for="mount-username">{{ t('auth.username') }}</label>
+          <input id="mount-username" v-model="form.username" type="text" autocomplete="off" />
+          <label for="mount-password">{{ t('auth.password') }}</label>
+          <input id="mount-password" v-model="form.password" type="password" autocomplete="new-password" />
+          <label for="mount-creds-file">{{ t('mounts.credentialsFile') }}</label>
+          <input id="mount-creds-file" v-model="form.credentials_file" type="text" />
 
           <div class="dialog-actions">
             <button class="btn" @click="showAddDialog = false">{{ t('common.actions.cancel') }}</button>
