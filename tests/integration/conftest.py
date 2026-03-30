@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
+import app.database as _app_database
 from app.config import settings
 from app.database import Base, get_db
 from app.main import app
@@ -19,6 +20,25 @@ INTEGRATION_DATABASE_URL = os.getenv(
 
 engine = create_engine(INTEGRATION_DATABASE_URL, pool_pre_ping=True)
 IntegrationSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _restore_session_local_for_integration():
+    """Point app.database.SessionLocal at PostgreSQL for integration tests.
+
+    tests/conftest.py (the root conftest) replaces SessionLocal with a
+    SQLite in-memory factory so that unit-test fixtures work in isolation.
+    That global patch persists into the integration-test run, causing the
+    app lifespan (which calls SessionLocal() directly) to connect to SQLite
+    and log spurious OperationalErrors on startup.
+
+    This session-scoped autouse fixture swaps it back to the PostgreSQL
+    IntegrationSessionLocal for the duration of the integration test session.
+    """
+    original = _app_database.SessionLocal
+    _app_database.SessionLocal = IntegrationSessionLocal
+    yield
+    _app_database.SessionLocal = original
 
 
 def _clear_database(session) -> None:
