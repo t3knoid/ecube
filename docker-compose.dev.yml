@@ -1,0 +1,25 @@
+# docker-compose.dev.yml — Development / local-testing overlay
+#
+# Publishes the ecube-app FastAPI port directly on localhost so tests
+# and tools (curl, Postman, schemathesis, pytest integration tests that
+# hit a live stack) can reach the API without going through the nginx
+# reverse-proxy.
+#
+# NOT for production use. Only expose the API port when connecting
+# directly to a running stack is needed for local development.
+#
+# Usage (Linux):
+#   docker compose -f docker-compose.ecube.yml -f docker-compose.dev.yml up
+#
+# Usage (Windows):
+#   docker compose -f docker-compose.ecube-win.yml -f docker-compose.dev.yml up
+#
+# The API will be reachable at:  http://localhost:${API_PORT:-8000}
+# The UI will still be reachable at: https://localhost:${UI_PORT:-8443}
+#
+# The API_PORT variable can be set in a local .env file to avoid conflicts.
+
+services:
+  ecube-app:
+    ports:
+      - "${API_PORT:-8000}:8000"
