@@ -104,6 +104,9 @@ function getRowKey(row, index) {
             :class="`align-${column.align}`"
             :style="column.width ? { width: column.width } : undefined"
             scope="col"
+            :aria-sort="columnSortable(column)
+              ? (sortKey === column.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none')
+              : undefined"
           >
             <button
               v-if="columnSortable(column)"
@@ -112,7 +115,7 @@ function getRowKey(row, index) {
               @click="onSort(column)"
             >
               <span>{{ column.label }}</span>
-              <span class="sort-indicator" :class="{ active: sortKey === column.key }">
+              <span class="sort-indicator" :class="{ active: sortKey === column.key }" aria-hidden="true">
                 {{ sortKey === column.key ? (sortDir === 'asc' ? '↑' : '↓') : '↕' }}
               </span>
             </button>
