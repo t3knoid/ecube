@@ -221,15 +221,15 @@ onMounted(async () => {
 
       <div v-if="step === 1" class="step-grid">
         <h2>{{ t('setup.testConnection') }}</h2>
-        <label>{{ t('setup.dbHost') }}</label>
-        <input v-model="db.host" type="text" />
+        <label for="db-host">{{ t('setup.dbHost') }}</label>
+        <input id="db-host" v-model="db.host" type="text" />
         <p v-if="inDocker" class="info-hint">{{ t('setup.dockerHostHint') }}</p>
-        <label>{{ t('setup.dbPort') }}</label>
-        <input v-model.number="db.port" type="number" min="1" max="65535" />
-        <label>{{ t('setup.dbAdminUser') }}</label>
-        <input v-model="db.admin_username" type="text" />
-        <label>{{ t('setup.dbAdminPass') }}</label>
-        <input v-model="db.admin_password" type="password" autocomplete="new-password" />
+        <label for="db-port">{{ t('setup.dbPort') }}</label>
+        <input id="db-port" v-model.number="db.port" type="number" min="1" max="65535" />
+        <label for="db-admin-user">{{ t('setup.dbAdminUser') }}</label>
+        <input id="db-admin-user" v-model="db.admin_username" type="text" />
+        <label for="db-admin-pass">{{ t('setup.dbAdminPass') }}</label>
+        <input id="db-admin-pass" v-model="db.admin_password" type="password" autocomplete="new-password" />
         <button class="btn" :disabled="busy || !step1Valid()" @click="runConnectionTest">
           {{ t('setup.testConnection') }}
         </button>
@@ -238,12 +238,12 @@ onMounted(async () => {
 
       <div v-else-if="step === 2" class="step-grid">
         <h2>{{ t('setup.provisionDb') }}</h2>
-        <label>{{ t('setup.appDbName') }}</label>
-        <input v-model="db.app_database" type="text" />
-        <label>{{ t('setup.appDbUser') }}</label>
-        <input v-model="db.app_username" type="text" />
-        <label>{{ t('setup.appDbPass') }}</label>
-        <input v-model="db.app_password" type="password" autocomplete="new-password" />
+        <label for="app-db-name">{{ t('setup.appDbName') }}</label>
+        <input id="app-db-name" v-model="db.app_database" type="text" />
+        <label for="app-db-user">{{ t('setup.appDbUser') }}</label>
+        <input id="app-db-user" v-model="db.app_username" type="text" />
+        <label for="app-db-pass">{{ t('setup.appDbPass') }}</label>
+        <input id="app-db-pass" v-model="db.app_password" type="password" autocomplete="new-password" />
         <button class="btn" :disabled="busy || !step2Valid() || provisionDetected" @click="runProvision">
           {{ t('setup.provisionDb') }}
         </button>
@@ -252,10 +252,10 @@ onMounted(async () => {
 
       <div v-else-if="step === 3" class="step-grid">
         <h2>{{ t('setup.createAdmin') }}</h2>
-        <label>{{ t('auth.username') }}</label>
-        <input v-model="admin.username" type="text" />
-        <label>{{ t('auth.password') }}</label>
-        <input v-model="admin.password" type="password" autocomplete="new-password" />
+        <label for="admin-username">{{ t('auth.username') }}</label>
+        <input id="admin-username" v-model="admin.username" type="text" />
+        <label for="admin-password">{{ t('auth.password') }}</label>
+        <input id="admin-password" v-model="admin.password" type="password" autocomplete="new-password" />
         <button class="btn" :disabled="busy || !step3Valid() || complete" @click="runInitializeSetup">
           {{ t('setup.createAdmin') }}
         </button>
@@ -326,7 +326,7 @@ input {
 }
 
 .ok-text {
-  color: var(--color-success);
+  color: var(--color-ok-banner-text, #14532d);
   font-weight: var(--font-weight-medium);
 }
 

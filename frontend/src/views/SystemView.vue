@@ -276,7 +276,7 @@ onMounted(loadTabData)
         <span>{{ t('jobs.jobId') }}</span><strong>{{ jobDebug.job_id }}</strong>
         <span>{{ t('common.labels.status') }}</span><StatusBadge :status="jobDebug.status" />
         <span>{{ t('dashboard.project') }}</span><strong>{{ jobDebug.project_id }}</strong>
-        <span>{{ t('dashboard.progress') }}</span><strong>{{ jobDebug.copied_bytes }} / {{ jobDebug.total_bytes }}</strong>
+        <span>{{ t('dashboard.progress') }}</span><strong>{{ jobDebug.copied_bytes || 0 }} / {{ jobDebug.total_bytes || 0 }}</strong>
       </div>
 
       <DataTable
