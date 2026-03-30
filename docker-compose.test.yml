@@ -1,0 +1,35 @@
+# docker-compose.test.yml — Cross-platform integration-test support
+#
+# Provides the PostgreSQL instance required by integration tests.
+# Contains no USB/udev bind-mounts so it works on Linux, macOS, and Windows.
+#
+# Start:
+#   docker compose -f docker-compose.test.yml up -d
+#
+# Then run integration tests:
+#   INTEGRATION_DATABASE_URL=postgresql://ecube_test:ecube_test@localhost:5433/ecube_integration \
+#     python -m pytest tests/integration/ -v --run-integration
+#
+# Tear down (removes container and test data volume):
+#   docker compose -f docker-compose.test.yml down -v
+
+services:
+  postgres-test:
+    image: postgres:16
+    container_name: ecube-postgres-test
+    environment:
+      POSTGRES_DB: ecube_integration
+      POSTGRES_USER: ecube_test
+      POSTGRES_PASSWORD: ecube_test
+    ports:
+      - "5433:5432"
+    volumes:
+      - ecube_test_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ecube_test -d ecube_integration"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  ecube_test_postgres_data:

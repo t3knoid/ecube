@@ -223,3 +223,4 @@ frontend/playwright-report/
 # Local deploy artifacts (TLS certs, themes)
 deploy/certs/
 deploy/themes/
+test-results/.last-run.json
