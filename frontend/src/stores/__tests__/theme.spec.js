@@ -18,8 +18,8 @@ const originalFetch = globalThis.fetch
 
 // Default manifest response used by most tests
 const BUILT_IN_MANIFEST = [
-  { name: 'default', label: 'Light' },
-  { name: 'dark', label: 'Dark' },
+  { name: 'default', labelKey: 'themes.light' },
+  { name: 'dark', labelKey: 'themes.dark' },
 ]
 
 function mockFetchManifest(data = BUILT_IN_MANIFEST) {
@@ -145,8 +145,8 @@ describe('Theme Store', () => {
     // After manifest resolves, saved custom theme is automatically applied.
     await vi.waitFor(() => expect(store.currentTheme).toBe('custom'))
     expect(store.availableThemes).toEqual([
-      { name: 'default', label: 'Light' },
-      { name: 'dark', label: 'Dark' },
+      { name: 'default', labelKey: 'themes.light' },
+      { name: 'dark', labelKey: 'themes.dark' },
       { name: 'custom', label: 'Custom' },
     ])
   })
@@ -157,8 +157,8 @@ describe('Theme Store', () => {
     const store = useThemeStore()
     store.initialize()
     await vi.waitFor(() => expect(store.availableThemes).toEqual([
-      { name: 'default', label: 'Light' },
-      { name: 'dark', label: 'Dark' },
+      { name: 'default', labelKey: 'themes.light' },
+      { name: 'dark', labelKey: 'themes.dark' },
       { name: 'corporate', label: 'Corporate' },
     ]))
   })

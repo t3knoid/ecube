@@ -143,8 +143,9 @@ class TestCreateUser:
         assert ["sudo", "/usr/sbin/chpasswd"] in calls
         assert ["sudo", "/usr/sbin/usermod", "-aG", "ecube-admins", "testuser"] in calls
 
+    @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
-    def test_create_user_already_exists(self, mock_pwd):
+    def test_create_user_already_exists(self, mock_pwd, mock_grp):
         mock_pwd.getpwnam.return_value = _make_pw()
         with pytest.raises(OSUserError, match="already exists"):
             create_user("testuser", "password", groups=["ecube-admins"])
@@ -153,12 +154,18 @@ class TestCreateUser:
         with pytest.raises(AuthorizationError, match="reserved"):
             create_user("root", "password", groups=["ecube-admins"])
 
-    def test_create_empty_password(self):
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_create_empty_password(self, mock_pwd, mock_grp):
+        mock_pwd.getpwnam.side_effect = KeyError("no such user")
         with pytest.raises(ValueError, match="empty"):
             create_user("testuser", "", groups=["ecube-admins"])
 
-    def test_create_user_no_ecube_group_rejected(self):
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_create_user_no_ecube_group_rejected(self, mock_pwd, mock_grp):
         """create_user without any ecube-* group must raise ValueError."""
+        mock_pwd.getpwnam.side_effect = KeyError("no such user")
         with pytest.raises(ValueError, match="ecube-"):
             create_user("testuser", "s3cret")
 
@@ -253,14 +260,16 @@ class TestDeleteUser:
         calls = [c.args[0] for c in mock_subprocess.call_args_list]
         assert ["sudo", "/usr/sbin/userdel", "-r", "testuser"] in calls
 
+    @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
-    def test_delete_nonexistent_user(self, mock_pwd):
+    def test_delete_nonexistent_user(self, mock_pwd, mock_grp):
         mock_pwd.getpwnam.side_effect = KeyError("no such user")
         with pytest.raises(OSUserError, match="does not exist"):
             delete_user("nobody_here")
 
+    @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
-    def test_delete_reserved_user(self, mock_pwd):
+    def test_delete_reserved_user(self, mock_pwd, mock_grp):
         mock_pwd.getpwnam.return_value = _make_pw(name="ecube")
         with pytest.raises(AuthorizationError, match="reserved"):
             delete_user("ecube")
@@ -297,8 +306,9 @@ class TestResetPassword:
         assert call.args[0] == ["sudo", "/usr/sbin/chpasswd"]
         assert call.kwargs["input"] == "testuser:newpass"
 
+    @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
-    def test_reset_password_reserved_username(self, mock_pwd):
+    def test_reset_password_reserved_username(self, mock_pwd, mock_grp):
         mock_pwd.getpwnam.return_value = _make_pw(name="root")
         with pytest.raises(AuthorizationError, match="reserved"):
             reset_password("root", "newpass")
@@ -376,8 +386,9 @@ class TestSetUserGroups:
         with pytest.raises(ValueError, match="does not start with"):
             set_user_groups("testuser", ["docker"])
 
+    @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
-    def test_set_groups_reserved_username(self, mock_pwd):
+    def test_set_groups_reserved_username(self, mock_pwd, mock_grp):
         mock_pwd.getpwnam.return_value = _make_pw(name="root")
         with pytest.raises(AuthorizationError, match="reserved"):
             set_user_groups("root", ["ecube-admins"])
@@ -398,8 +409,9 @@ class TestSetUserGroups:
 class TestAddUserToGroups:
     """os_user_service.add_user_to_groups()."""
 
+    @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
-    def test_add_to_groups_reserved_username(self, mock_pwd):
+    def test_add_to_groups_reserved_username(self, mock_pwd, mock_grp):
         mock_pwd.getpwnam.return_value = _make_pw(name="ecube")
         with pytest.raises(AuthorizationError, match="reserved"):
             os_user_service.add_user_to_groups("ecube", ["ecube-admins"])
@@ -421,8 +433,9 @@ class TestCreateGroup:
     """os_user_service.create_group()."""
 
     @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.pwd")
     @patch("app.services.os_user_service.grp")
-    def test_create_group(self, mock_grp, mock_subprocess):
+    def test_create_group(self, mock_grp, mock_pwd, mock_subprocess):
         mock_grp.getgrnam.side_effect = [
             KeyError("no such group"),  # group_exists check
             _make_grp(name="ecube-newgroup", gid=3000),  # lookup after creation
@@ -433,8 +446,9 @@ class TestCreateGroup:
         assert group.name == "ecube-newgroup"
         assert group.gid == 3000
 
+    @patch("app.services.os_user_service.pwd")
     @patch("app.services.os_user_service.grp")
-    def test_create_existing_group(self, mock_grp):
+    def test_create_existing_group(self, mock_grp, mock_pwd):
         mock_grp.getgrnam.return_value = _make_grp(name="ecube-existing")
         with pytest.raises(OSUserError, match="already exists"):
             create_group("ecube-existing")
@@ -448,8 +462,9 @@ class TestDeleteGroup:
     """os_user_service.delete_group()."""
 
     @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.pwd")
     @patch("app.services.os_user_service.grp")
-    def test_delete_group(self, mock_grp, mock_subprocess):
+    def test_delete_group(self, mock_grp, mock_pwd, mock_subprocess):
         mock_grp.getgrnam.return_value = _make_grp(name="ecube-oldgroup")
         mock_subprocess.return_value = _ok_result()
 
@@ -458,8 +473,9 @@ class TestDeleteGroup:
         calls = [c.args[0] for c in mock_subprocess.call_args_list]
         assert ["sudo", "/usr/sbin/groupdel", "ecube-oldgroup"] in calls
 
+    @patch("app.services.os_user_service.pwd")
     @patch("app.services.os_user_service.grp")
-    def test_delete_nonexistent_group(self, mock_grp):
+    def test_delete_nonexistent_group(self, mock_grp, mock_pwd):
         mock_grp.getgrnam.side_effect = KeyError("no such group")
         with pytest.raises(OSUserError, match="does not exist"):
             delete_group("ecube-nope")
@@ -501,8 +517,9 @@ class TestListUsers:
 class TestListGroups:
     """os_user_service.list_groups()."""
 
+    @patch("app.services.os_user_service.pwd")
     @patch("app.services.os_user_service.grp")
-    def test_list_ecube_groups(self, mock_grp):
+    def test_list_ecube_groups(self, mock_grp, mock_pwd):
         mock_grp.getgrall.return_value = [
             _make_grp(name="ecube-admins", gid=3001),
             _make_grp(name="ecube-managers", gid=3002),
@@ -522,8 +539,9 @@ class TestEnsureEcubeGroups:
     """os_user_service.ensure_ecube_groups()."""
 
     @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.pwd")
     @patch("app.services.os_user_service.grp")
-    def test_creates_missing_groups(self, mock_grp, mock_subprocess):
+    def test_creates_missing_groups(self, mock_grp, mock_pwd, mock_subprocess):
         # All groups missing.
         mock_grp.getgrnam.side_effect = KeyError("no such group")
         mock_subprocess.return_value = _ok_result()
@@ -592,8 +610,12 @@ class TestOSUserEndpoints:
         assert data["username"] == "newuser"
         assert data["uid"] == 1050
 
-    def test_create_user_requires_roles_and_rejects_invalid_extra_group(self, admin_client):
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_create_user_requires_roles_and_rejects_invalid_extra_group(self, mock_pwd, mock_grp, admin_client):
         """POST requires roles and rejects non-existent extra groups."""
+        mock_pwd.getpwnam.side_effect = KeyError("no such user")
+        mock_grp.getgrnam.side_effect = KeyError("no such group")
         # Missing roles entirely -> field required.
         resp = admin_client.post("/admin/os-users", json={
             "username": "newuser",
@@ -742,8 +764,9 @@ class TestOSUserEndpoints:
         roles = UserRoleRepository(db).get_roles("deluser")
         assert roles == []
 
+    @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
-    def test_delete_reserved_user(self, mock_pwd, admin_client):
+    def test_delete_reserved_user(self, mock_pwd, mock_grp, admin_client):
         mock_pwd.getpwnam.return_value = _make_pw(name="root")
         resp = admin_client.delete("/admin/os-users/root")
         assert resp.status_code == 403
@@ -899,8 +922,9 @@ class TestOSGroupEndpoints:
     """Admin OS group management endpoints."""
 
     @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.pwd")
     @patch("app.services.os_user_service.grp")
-    def test_create_group(self, mock_grp, mock_subprocess, admin_client):
+    def test_create_group(self, mock_grp, mock_pwd, mock_subprocess, admin_client):
         mock_grp.getgrnam.side_effect = [
             KeyError("no such group"),
             _make_grp(name="ecube-newgroup", gid=4000),
@@ -911,8 +935,9 @@ class TestOSGroupEndpoints:
         assert resp.status_code == 201
         assert resp.json()["name"] == "ecube-newgroup"
 
+    @patch("app.services.os_user_service.pwd")
     @patch("app.services.os_user_service.grp")
-    def test_create_existing_group(self, mock_grp, admin_client):
+    def test_create_existing_group(self, mock_grp, mock_pwd, admin_client):
         mock_grp.getgrnam.return_value = _make_grp(name="ecube-existing")
 
         resp = admin_client.post("/admin/os-groups", json={"name": "ecube-existing"})
@@ -923,8 +948,9 @@ class TestOSGroupEndpoints:
         assert resp.status_code == 422
         assert "ecube-" in resp.json()["message"]
 
+    @patch("app.services.os_user_service.pwd")
     @patch("app.services.os_user_service.grp")
-    def test_list_groups(self, mock_grp, admin_client):
+    def test_list_groups(self, mock_grp, mock_pwd, admin_client):
         mock_grp.getgrall.return_value = [
             _make_grp(name="ecube-admins", gid=3001),
             _make_grp(name="ecube-managers", gid=3002),
@@ -940,16 +966,18 @@ class TestOSGroupEndpoints:
         assert "wheel" not in names
 
     @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.pwd")
     @patch("app.services.os_user_service.grp")
-    def test_delete_group(self, mock_grp, mock_subprocess, admin_client):
+    def test_delete_group(self, mock_grp, mock_pwd, mock_subprocess, admin_client):
         mock_grp.getgrnam.return_value = _make_grp(name="ecube-oldgroup")
         mock_subprocess.return_value = _ok_result()
 
         resp = admin_client.delete("/admin/os-groups/ecube-oldgroup")
         assert resp.status_code == 200
 
+    @patch("app.services.os_user_service.pwd")
     @patch("app.services.os_user_service.grp")
-    def test_delete_nonexistent_group(self, mock_grp, admin_client):
+    def test_delete_nonexistent_group(self, mock_grp, mock_pwd, admin_client):
         mock_grp.getgrnam.side_effect = KeyError("no such group")
 
         resp = admin_client.delete("/admin/os-groups/ecube-nope")
@@ -1344,8 +1372,9 @@ class TestOSUserAuditLogging:
             assert log.details["target_user"] == "testuser"
 
     @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.pwd")
     @patch("app.services.os_user_service.grp")
-    def test_create_group_audit(self, mock_grp, mock_subprocess, admin_client, db):
+    def test_create_group_audit(self, mock_grp, mock_pwd, mock_subprocess, admin_client, db):
         mock_grp.getgrnam.side_effect = [
             KeyError("no such group"),
             _make_grp(name="ecube-audgrp", gid=5000),

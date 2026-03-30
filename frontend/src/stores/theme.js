@@ -62,6 +62,13 @@ const DEFAULT_THEME_INLINE_CSS = `
   --color-badge-auditor-bg: #fefce8;
   --color-badge-auditor-text: #ca8a04;
 
+  --color-status-ok-text: #14532d;
+  --color-status-warn-text: #7c3f00;
+  --color-status-danger-text: #991b1b;
+  --color-status-info-text: #1e40af;
+  --color-status-muted-text: #475569;
+  --color-ok-banner-text: #14532d;
+
   --color-progress-bar: #2563eb;
   --color-progress-track: #e2e8f0;
 
