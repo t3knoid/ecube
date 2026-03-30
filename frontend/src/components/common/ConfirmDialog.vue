@@ -1,5 +1,5 @@
 <script setup>
-import { computed, useSlots } from 'vue'
+import { computed, useSlots, watch, onUnmounted } from 'vue'
 
 const props = defineProps({
   modelValue: {
@@ -54,6 +54,28 @@ function close() {
 function confirm() {
   emit('confirm')
 }
+
+function onKeydown(event) {
+  if (event.key === 'Escape' && props.modelValue) {
+    event.preventDefault()
+    close()
+  }
+}
+
+watch(
+  () => props.modelValue,
+  (open) => {
+    if (open) {
+      document.addEventListener('keydown', onKeydown)
+    } else {
+      document.removeEventListener('keydown', onKeydown)
+    }
+  },
+)
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', onKeydown)
+})
 </script>
 
 <template>
