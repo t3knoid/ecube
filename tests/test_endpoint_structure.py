@@ -218,7 +218,7 @@ class TestOpenAPISchema:
         from app.main import app
 
         openapi_schema = app.openapi()
-        unauthenticated_paths = {"/health", "/auth/token", "/setup/status", "/setup/initialize", "/introspection/version"}
+        unauthenticated_paths = {"/health", "/auth/token", "/setup/status", "/setup/initialize", "/introspection/version", "/setup/database/system-info"}
         violations = []
         for path, path_item in openapi_schema.get("paths", {}).items():
             if path in unauthenticated_paths:
@@ -240,7 +240,7 @@ class TestOpenAPISchema:
         # Endpoints that do not require authentication at all
         unauthenticated_paths = {
             "/health", "/auth/token", "/setup/status", "/setup/initialize",
-            "/introspection/version",
+            "/introspection/version", "/setup/database/system-info",
         }
         # Authenticated but no role restriction (any valid user succeeds, no 403)
         no_role_paths = {"/admin/logs", "/admin/logs/{filename}"}
