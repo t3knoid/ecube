@@ -1,7 +1,6 @@
 import logging
 import os
 import threading
-import time
 
 try:
     import psutil as _psutil
