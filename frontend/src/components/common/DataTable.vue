@@ -115,9 +115,20 @@ function getRowKey(row, index) {
               @click="onSort(column)"
             >
               <span>{{ column.label }}</span>
-              <span class="sort-indicator" :class="{ active: sortKey === column.key }" aria-hidden="true">
-                {{ sortKey === column.key ? (sortDir === 'asc' ? '↑' : '↓') : '↕' }}
-              </span>
+              <span
+                class="sort-indicator"
+                :class="{
+                  active: sortKey === column.key,
+                  asc: sortKey === column.key && sortDir === 'asc',
+                  desc: sortKey === column.key && sortDir === 'desc',
+                }"
+                aria-hidden="true"
+              />
+              <span class="sr-only">{{
+                sortKey === column.key
+                  ? (sortDir === 'asc' ? t('table.sortAsc') : t('table.sortDesc'))
+                  : t('table.sortUnsorted')
+              }}</span>
             </button>
             <span v-else>{{ column.label }}</span>
           </th>
@@ -194,12 +205,21 @@ function getRowKey(row, index) {
   cursor: pointer;
 }
 
-.sort-indicator {
+.sort-indicator::after {
+  content: '↕';
   opacity: 0.45;
 }
 
-.sort-indicator.active {
+.sort-indicator.active::after {
   opacity: 1;
+}
+
+.sort-indicator.asc::after {
+  content: '↑';
+}
+
+.sort-indicator.desc::after {
+  content: '↓';
 }
 
 .data-table tr:last-child td {
