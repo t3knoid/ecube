@@ -85,7 +85,8 @@ const pagedRows = computed(() => {
 })
 
 function formatBytes(value) {
-  if (typeof value !== 'number' || value <= 0) return '-'
+  if (typeof value !== 'number' || value < 0) return '-'
+  if (value === 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB']
   let next = value
   let idx = 0
