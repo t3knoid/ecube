@@ -42,9 +42,9 @@ function goToPage(nextPage) {
 <template>
   <div class="pagination-wrap" role="navigation" :aria-label="t('common.labels.pagination')">
     <span class="pagination-range">{{ startIndex }}-{{ endIndex }} / {{ total }}</span>
-    <button class="btn page-btn" :disabled="page <= 1" @click="goToPage(page - 1)">{{ t('common.actions.previous') }}</button>
+    <button type="button" class="btn page-btn" :disabled="page <= 1" @click="goToPage(page - 1)">{{ t('common.actions.previous') }}</button>
     <span class="page-label">{{ page }} / {{ totalPages }}</span>
-    <button class="btn page-btn" :disabled="page >= totalPages" @click="goToPage(page + 1)">{{ t('common.actions.next') }}</button>
+    <button type="button" class="btn page-btn" :disabled="page >= totalPages" @click="goToPage(page + 1)">{{ t('common.actions.next') }}</button>
   </div>
 </template>
 
