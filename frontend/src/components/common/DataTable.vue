@@ -56,6 +56,7 @@ const normalizedColumns = computed(() =>
     label: column.label,
     align: column.align || 'left',
     width: column.width || null,
+    sortable: column.sortable,
   })),
 )
 
