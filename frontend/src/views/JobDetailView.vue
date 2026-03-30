@@ -206,15 +206,15 @@ onUnmounted(() => {
       <article class="panel">
         <h2>{{ t('jobs.compareTitle') }}</h2>
         <div class="compare-form">
-          <label>{{ t('jobs.fileA') }}</label>
-          <select v-model="compareA">
+          <label for="compare-file-a">{{ t('jobs.fileA') }}</label>
+          <select id="compare-file-a" v-model="compareA">
             <option :value="null">-</option>
             <option v-for="file in debug.files || []" :key="`a-${file.id}`" :value="file.id">
               #{{ file.id }} {{ file.relative_path }}
             </option>
           </select>
-          <label>{{ t('jobs.fileB') }}</label>
-          <select v-model="compareB">
+          <label for="compare-file-b">{{ t('jobs.fileB') }}</label>
+          <select id="compare-file-b" v-model="compareB">
             <option :value="null">-</option>
             <option v-for="file in debug.files || []" :key="`b-${file.id}`" :value="file.id">
               #{{ file.id }} {{ file.relative_path }}

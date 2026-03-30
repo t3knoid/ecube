@@ -12,10 +12,12 @@ test('setup wizard full step flow on uninitialized system', async ({ page }) => 
 
   await page.goto('/setup')
 
+  await page.getByLabel('DB Admin Password').fill('testpassword')
   await page.getByRole('button', { name: 'Test Database Connection' }).click()
   await expect(page.getByText('Database connection succeeded.')).toBeVisible()
   await page.getByRole('button', { name: 'Next' }).click()
 
+  await page.getByLabel('Application DB Password').fill('dbapppassword')
   await page.getByRole('button', { name: 'Provision Database' }).click()
   await expect(page.getByText('Database provisioned successfully.')).toBeVisible()
   await page.getByRole('button', { name: 'Next' }).click()

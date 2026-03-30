@@ -35,7 +35,7 @@ test('audit filters and export csv', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Apply' }).click()
 
-  await expect(page.getByText('frank')).toBeVisible()
+  await expect(page.locator('tbody').getByText('frank')).toBeVisible()
 
   // Export CSV — verify download is triggered
   const exportBtn = page.getByRole('button', { name: 'Export CSV' })
