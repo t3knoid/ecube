@@ -67,6 +67,26 @@ const totalPages = computed(() => {
 })
 const hasPagination = computed(() => totalPages.value > 1)
 
+const displayRows = computed(() => {
+  let result = [...props.rows]
+  if (props.sortable && props.sortKey) {
+    result.sort((a, b) => {
+      const av = a[props.sortKey]
+      const bv = b[props.sortKey]
+      if (av == null && bv == null) return 0
+      if (av == null) return props.sortDir === 'asc' ? 1 : -1
+      if (bv == null) return props.sortDir === 'asc' ? -1 : 1
+      const cmp = av < bv ? -1 : av > bv ? 1 : 0
+      return props.sortDir === 'asc' ? cmp : -cmp
+    })
+  }
+  if (props.total > 0) {
+    const start = (props.page - 1) * props.pageSize
+    result = result.slice(start, start + props.pageSize)
+  }
+  return result
+})
+
 function columnSortable(column) {
   return props.sortable && column.key && column.key !== 'actions' && column.sortable !== false
 }
@@ -135,12 +155,12 @@ function getRowKey(row, index) {
         </tr>
       </thead>
       <tbody>
-        <tr v-if="rows.length === 0">
+        <tr v-if="displayRows.length === 0">
           <td :colspan="normalizedColumns.length || 1" class="empty-state">
             <slot name="empty">{{ resolvedEmptyText }}</slot>
           </td>
         </tr>
-        <tr v-for="(row, index) in rows" :key="getRowKey(row, index)">
+        <tr v-for="(row, index) in displayRows" :key="getRowKey(row, index)">
           <td
             v-for="column in normalizedColumns"
             :key="column.key"
