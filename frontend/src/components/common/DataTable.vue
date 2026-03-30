@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import Pagination from './Pagination.vue'
 
 const { t } = useI18n()
 
@@ -78,11 +79,9 @@ function onSort(column) {
   emit('sort-change', { key: column.key, dir: nextDir })
 }
 
-function goToPage(nextPage) {
-  const bounded = Math.min(Math.max(nextPage, 1), totalPages.value)
-  if (bounded === props.page) return
-  emit('update:page', bounded)
-  emit('page-change', bounded)
+function onPageUpdate(nextPage) {
+  emit('update:page', nextPage)
+  emit('page-change', nextPage)
 }
 
 function getRowKey(row, index) {
@@ -142,11 +141,13 @@ function getRowKey(row, index) {
         </tr>
       </tbody>
     </table>
-    <div v-if="hasPagination" class="table-pagination">
-      <button type="button" class="btn" :disabled="page <= 1" @click="goToPage(page - 1)">{{ t('common.actions.previous') }}</button>
-      <span class="pagination-label">{{ page }} / {{ totalPages }}</span>
-      <button type="button" class="btn" :disabled="page >= totalPages" @click="goToPage(page + 1)">{{ t('common.actions.next') }}</button>
-    </div>
+    <Pagination
+      v-if="hasPagination"
+      :page="page"
+      :page-size="pageSize"
+      :total="total"
+      @update:page="onPageUpdate"
+    />
   </div>
 </template>
 
@@ -222,17 +223,9 @@ function getRowKey(row, index) {
   padding: var(--space-lg);
 }
 
-.table-pagination {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-sm);
+:deep(.pagination-wrap) {
   padding: var(--space-sm);
   border-top: 1px solid var(--color-border);
-}
-
-.pagination-label {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
+  margin-top: 0;
 }
 </style>
