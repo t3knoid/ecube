@@ -1,9 +1,11 @@
 """Tests for POST /auth/token local login endpoint."""
 
+import sys
 from unittest.mock import MagicMock, patch
 
 import jwt
 
+import pytest
 
 from app.config import settings
 from app.main import app as fastapi_app
@@ -92,6 +94,8 @@ def test_login_invalid_credentials_returns_401(unauthenticated_client):
 
 
 def test_login_missing_username_returns_422(unauthenticated_client):
+    mock_pam = MagicMock()
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
     resp = unauthenticated_client.post(
         "/auth/token",
         json={"password": "secret"},
@@ -104,6 +108,8 @@ def test_login_missing_username_returns_422(unauthenticated_client):
 
 
 def test_login_missing_password_returns_422(unauthenticated_client):
+    mock_pam = MagicMock()
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
     resp = unauthenticated_client.post(
         "/auth/token",
         json={"username": "testuser"},
@@ -116,6 +122,8 @@ def test_login_missing_password_returns_422(unauthenticated_client):
 
 
 def test_login_empty_username_returns_422(unauthenticated_client):
+    mock_pam = MagicMock()
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
     resp = unauthenticated_client.post(
         "/auth/token",
         json={"username": "", "password": "secret"},
@@ -128,6 +136,8 @@ def test_login_empty_username_returns_422(unauthenticated_client):
 
 
 def test_login_empty_password_returns_422(unauthenticated_client):
+    mock_pam = MagicMock()
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
     resp = unauthenticated_client.post(
         "/auth/token",
         json={"username": "testuser", "password": ""},
@@ -258,6 +268,7 @@ def test_login_returns_404_when_oidc_mode(unauthenticated_client):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="requires POSIX grp/pwd modules")
 def test_get_user_groups_reads_os_groups():
     """get_user_groups should return primary + supplementary groups."""
     import grp
@@ -287,6 +298,7 @@ def test_get_user_groups_reads_os_groups():
     assert "extra" in groups
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="requires POSIX pwd module")
 def test_get_user_groups_handles_unknown_user():
     """get_user_groups should return empty list for unknown users."""
     import pwd

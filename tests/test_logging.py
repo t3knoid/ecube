@@ -168,6 +168,11 @@ class TestConfigureLogging:
             ]
             assert len(file_handlers) == 1
             assert file_handlers[0].baseFilename == log_path
+            # Close and remove file handlers before temp dir cleanup so that
+            # Windows does not raise PermissionError on the open file.
+            for h in list(file_handlers):
+                h.close()
+                root.removeHandler(h)
             # Restore
             configure_logging(level="INFO", log_format="text")
 
@@ -277,15 +282,15 @@ class TestAdminLogsEndpoints:
     def test_download_log_file_success(self, client, db):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = os.path.join(tmpdir, "app.log")
-            content = "test log content\n"
-            with open(log_path, "w") as f:
+            content = b"test log content\n"
+            with open(log_path, "wb") as f:
                 f.write(content)
 
             with patch("app.routers.admin.settings") as mock_settings:
                 mock_settings.log_file = log_path
                 resp = client.get("/admin/logs/app.log")
                 assert resp.status_code == 200
-                assert resp.text == content
+                assert resp.content == content
 
     def test_download_rejects_path_traversal(self, client):
         with tempfile.TemporaryDirectory() as tmpdir:
