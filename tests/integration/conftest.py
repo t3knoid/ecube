@@ -4,7 +4,7 @@ import time
 import jwt
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 from app.config import settings
@@ -22,8 +22,17 @@ IntegrationSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=e
 
 
 def _clear_database(session) -> None:
+    """Delete all rows from every application table that currently exists.
+
+    Only operates on tables present in the database to avoid
+    ``ProgrammingError`` on a fresh schema where some tables may not
+    exist yet (e.g., if this is called before migrations have run).
+    """
+    inspector = inspect(session.get_bind())
+    existing = set(inspector.get_table_names())
     for table in reversed(Base.metadata.sorted_tables):
-        session.execute(table.delete())
+        if table.name in existing:
+            session.execute(table.delete())
     session.commit()
 
 
