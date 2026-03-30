@@ -11,6 +11,14 @@ from app.repositories.job_repository import FileRepository, JobRepository
 from app.schemas.jobs import FileCompareItem, FileCompareRequest, FileCompareResponse, FileHashesResponse
 
 
+def _path_accessible(path: Path) -> bool:
+    """Return True if *path* exists and is accessible; suppress PermissionError."""
+    try:
+        return path.exists()
+    except OSError:
+        return False
+
+
 def _compute_hashes(file_path: Path) -> tuple[Optional[str], Optional[str]]:
     """Return (md5_hex, sha256_hex) for *file_path*, or (None, None) on error."""
     try:
@@ -42,7 +50,7 @@ def _file_to_item(ef: ExportFile, db: Session) -> FileCompareItem:
     sha256: Optional[str] = ef.checksum  # stored SHA-256 from copy engine
 
     file_path = _resolve_file_path(ef, db)
-    if file_path is not None and file_path.exists():
+    if file_path is not None and _path_accessible(file_path):
         md5, sha256_live = _compute_hashes(file_path)
         if sha256_live is not None:
             sha256 = sha256_live
@@ -76,7 +84,8 @@ def get_file_hashes(
     sha256: Optional[str] = ef.checksum
 
     file_path = _resolve_file_path(ef, db)
-    if file_path is not None and file_path.exists():
+    file_on_disk = file_path is not None and _path_accessible(file_path)
+    if file_on_disk:
         md5, sha256_live = _compute_hashes(file_path)
         if sha256_live is not None:
             sha256 = sha256_live
@@ -88,7 +97,7 @@ def get_file_hashes(
         details={
             "file_id": file_id,
             "relative_path": ef.relative_path,
-            "live_computed": file_path is not None and file_path.exists(),
+            "live_computed": file_on_disk,
         },
         client_ip=client_ip,
     )
