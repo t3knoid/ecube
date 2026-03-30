@@ -200,8 +200,8 @@ onMounted(async () => {
           <h2>{{ t('jobs.createWizard') }} - {{ wizardStep }}/4</h2>
 
           <div v-if="wizardStep === 1" class="step-grid">
-            <label>{{ t('jobs.selectDrive') }}</label>
-            <select v-model="form.drive_id">
+            <label for="wizard-drive">{{ t('jobs.selectDrive') }}</label>
+            <select id="wizard-drive" v-model="form.drive_id">
               <option :value="null">{{ t('jobs.chooseDrive') }}</option>
               <option v-for="drive in drives" :key="drive.id" :value="drive.id">
                 #{{ drive.id }} - {{ drive.device_identifier }}
@@ -210,8 +210,8 @@ onMounted(async () => {
           </div>
 
           <div v-else-if="wizardStep === 2" class="step-grid">
-            <label>{{ t('jobs.selectMount') }}</label>
-            <select v-model="form.mount_id">
+            <label for="wizard-mount">{{ t('jobs.selectMount') }}</label>
+            <select id="wizard-mount" v-model="form.mount_id">
               <option :value="null">{{ t('jobs.chooseMount') }}</option>
               <option v-for="mount in mounts" :key="mount.id" :value="mount.id">
                 {{ mount.remote_path }} ({{ mount.local_mount_point }})
@@ -220,17 +220,17 @@ onMounted(async () => {
           </div>
 
           <div v-else-if="wizardStep === 3" class="step-grid">
-            <label>{{ t('dashboard.project') }}</label>
-            <input v-model="form.project_id" type="text" />
-            <label>{{ t('jobs.evidence') }}</label>
-            <input v-model="form.evidence_number" type="text" />
-            <label>{{ t('jobs.sourcePath') }}</label>
-            <input v-model="form.source_path" type="text" :placeholder="t('jobs.sourcePathHint')" />
+            <label for="wizard-project">{{ t('dashboard.project') }}</label>
+            <input id="wizard-project" v-model="form.project_id" type="text" />
+            <label for="wizard-evidence">{{ t('jobs.evidence') }}</label>
+            <input id="wizard-evidence" v-model="form.evidence_number" type="text" />
+            <label for="wizard-source-path">{{ t('jobs.sourcePath') }}</label>
+            <input id="wizard-source-path" v-model="form.source_path" type="text" :placeholder="t('jobs.sourcePathHint')" />
           </div>
 
           <div v-else class="step-grid">
-            <label>{{ t('jobs.threadCount') }}</label>
-            <input v-model.number="form.thread_count" type="number" min="1" max="8" />
+            <label for="wizard-threads">{{ t('jobs.threadCount') }}</label>
+            <input id="wizard-threads" v-model.number="form.thread_count" type="number" min="1" max="8" />
           </div>
 
           <div class="dialog-actions">
