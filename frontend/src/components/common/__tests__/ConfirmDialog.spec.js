@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 describe('ConfirmDialog', () => {
@@ -60,6 +61,27 @@ describe('ConfirmDialog', () => {
     })
 
     await wrapper.findAll('button')[0].trigger('click')
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([false])
+    wrapper.unmount()
+  })
+
+  it('closes via Escape when dialog is open on initial mount', async () => {
+    const wrapper = mount(ConfirmDialog, {
+      props: {
+        modelValue: true,
+        title: 'Confirm',
+        confirmLabel: 'Yes',
+        cancelLabel: 'No',
+      },
+      global: {
+        stubs: {
+          teleport: true,
+        },
+      },
+    })
+
+    await nextTick()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([false])
     wrapper.unmount()
   })
