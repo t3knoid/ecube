@@ -227,6 +227,11 @@ The following variables can be set in a `.env` file or exported before running `
 | `ECUBE_THEMES_DIR` | `./deploy/themes` | Host path to optional CSS theme overrides. Production: `/opt/ecube/themes`. |
 | `POSTGRES_HOST_PORT` | `5432` | Host port for PostgreSQL. |
 | `SECRET_KEY` | *(insecure default)* | JWT signing key — **must** be changed in production. |
+| `POSTGRES_USER` | **no default** | PostgreSQL username. **Required** in the release compose — the stack will not start without it. |
+| `POSTGRES_PASSWORD` | **no default** | PostgreSQL password. **Required** in the release compose — the stack will not start without it. |
+| `POSTGRES_DB` | **no default** | PostgreSQL database name. **Required** in the release compose — the stack will not start without it. |
+
+> **Note:** `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB` have no insecure defaults in the production release compose. They must be set in the `.env` file or the environment before running `docker compose up`. The `DATABASE_URL` inside `ecube-app` is constructed from these values automatically.
 
 ### Start
 

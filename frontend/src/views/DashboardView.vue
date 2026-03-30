@@ -7,6 +7,7 @@ import { listJobs } from '@/api/jobs.js'
 import { usePolling } from '@/composables/usePolling.js'
 import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import ProgressBar from '@/components/common/ProgressBar.vue'
 
 const { t } = useI18n()
 
@@ -35,11 +36,6 @@ const healthColumns = computed(() => [
   { key: 'status', label: t('common.labels.status') },
   { key: 'progress', label: t('dashboard.progress') },
 ])
-
-function progressPercent(job) {
-  if (!job || !job.total_bytes) return 0
-  return Math.min(100, Math.round((job.copied_bytes / job.total_bytes) * 100))
-}
 
 async function refreshSnapshot() {
   const warnings = []
@@ -127,12 +123,7 @@ onUnmounted(() => {
           <StatusBadge :status="row.status" />
         </template>
         <template #cell-progress="{ row }">
-          <div class="progress-wrap">
-            <div class="progress-track">
-              <div class="progress-bar" :style="{ width: `${progressPercent(row)}%` }" />
-            </div>
-            <span>{{ progressPercent(row) }}%</span>
-          </div>
+          <ProgressBar :value="row.copied_bytes || 0" :total="row.total_bytes || 0" />
         </template>
       </DataTable>
     </article>
@@ -178,25 +169,6 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: var(--space-xs) 0;
-}
-
-.progress-wrap {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.progress-track {
-  width: 120px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--color-progress-track);
-  overflow: hidden;
-}
-
-.progress-bar {
-  height: 100%;
-  background: var(--color-progress-bar);
 }
 
 .error-banner {
