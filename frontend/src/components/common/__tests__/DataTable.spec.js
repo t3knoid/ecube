@@ -51,7 +51,7 @@ describe('DataTable', () => {
     expect(ths[1].find('.sort-indicator').attributes('aria-hidden')).toBe('true')
   })
 
-  it('emits page-change and update:page from pagination controls', async () => {
+  it('emits page-change and update:page when Pagination component triggers page navigation', async () => {
     const wrapper = mount(DataTable, {
       props: {
         columns,
