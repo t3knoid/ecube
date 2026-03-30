@@ -22,7 +22,13 @@ def prime_cpu_sampler() -> None:  # pragma: no cover
         try:
             _psutil.cpu_percent(interval=1.0)
         except Exception:
-            pass
+            # Log rather than silently discard so failures are observable.
+            # cpu_percent(interval=None) will fall back to 0.0 until psutil recovers.
+            logging.getLogger(__name__).warning(
+                "Failed to prime psutil CPU sampler; cpu_percent will report 0.0 "
+                "until a successful sample is collected.",
+                exc_info=True,
+            )
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
