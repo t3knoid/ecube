@@ -9,6 +9,7 @@ import { getFileHashes, compareFiles } from '@/api/files.js'
 import { usePolling } from '@/composables/usePolling.js'
 import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import ProgressBar from '@/components/common/ProgressBar.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
 
 const route = useRoute()
@@ -40,11 +41,6 @@ const fileColumns = computed(() => [
   { key: 'checksum', label: t('jobs.checksum') },
   { key: 'actions', label: t('common.actions.edit'), align: 'center' },
 ])
-
-function progressPercent() {
-  if (!job.value || !job.value.total_bytes) return 0
-  return Math.min(100, Math.round((job.value.copied_bytes / job.value.total_bytes) * 100))
-}
 
 async function loadDebug() {
   if (!canViewIntrospectionDebug.value) {
@@ -165,10 +161,8 @@ onUnmounted(() => {
         <span>{{ t('jobs.evidence') }}: {{ job.evidence_number }}</span>
       </div>
 
-      <div class="progress-track">
-        <div class="progress-bar" :style="{ width: `${progressPercent()}%` }" />
-      </div>
-      <p class="muted">{{ progressPercent() }}% ({{ job.copied_bytes }} / {{ job.total_bytes }} bytes)</p>
+      <ProgressBar :value="job.copied_bytes || 0" :total="job.total_bytes || 0" />
+      <p class="muted">{{ job.copied_bytes || 0 }} / {{ job.total_bytes || 0 }} bytes</p>
 
       <div class="actions">
         <button class="btn" :disabled="!canOperate || acting" @click="runAction('start')">{{ t('jobs.start') }}</button>
@@ -207,15 +201,15 @@ onUnmounted(() => {
       <article class="panel">
         <h2>{{ t('jobs.compareTitle') }}</h2>
         <div class="compare-form">
-          <label>{{ t('jobs.fileA') }}</label>
-          <select v-model="compareA">
+          <label for="compare-file-a">{{ t('jobs.fileA') }}</label>
+          <select id="compare-file-a" v-model="compareA">
             <option :value="null">-</option>
             <option v-for="file in debug.files || []" :key="`a-${file.id}`" :value="file.id">
               #{{ file.id }} {{ file.relative_path }}
             </option>
           </select>
-          <label>{{ t('jobs.fileB') }}</label>
-          <select v-model="compareB">
+          <label for="compare-file-b">{{ t('jobs.fileB') }}</label>
+          <select id="compare-file-b" v-model="compareB">
             <option :value="null">-</option>
             <option v-for="file in debug.files || []" :key="`b-${file.id}`" :value="file.id">
               #{{ file.id }} {{ file.relative_path }}
@@ -268,18 +262,6 @@ onUnmounted(() => {
 .job-header {
   flex-wrap: wrap;
   align-items: center;
-}
-
-.progress-track {
-  height: 10px;
-  background: var(--color-progress-track);
-  border-radius: 999px;
-  overflow: hidden;
-}
-
-.progress-bar {
-  height: 100%;
-  background: var(--color-progress-bar);
 }
 
 select {

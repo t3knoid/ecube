@@ -85,8 +85,8 @@ function handleLogout() {
 
 .header-logo {
   font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-  opacity: 0.5;
+  color: var(--color-text-primary);
+  opacity: 0.9;
 }
 
 .header-app-name {
@@ -112,6 +112,7 @@ function handleLogout() {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-bold);
   border-radius: 9999px;
+  border: 1px solid var(--color-border);
   background: var(--color-badge-manager-bg);
   color: var(--color-badge-manager-text);
 }
