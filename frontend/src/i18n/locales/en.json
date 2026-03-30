@@ -275,6 +275,7 @@
       "size": "Size",
       "count": "Count",
       "pagination": "Pagination",
+      "range": "{start}–{end} / {total}",
       "noData": "No data",
       "notAvailable": "N/A",
       "unknown": "Unknown",
