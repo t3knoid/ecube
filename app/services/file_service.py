@@ -90,7 +90,7 @@ def get_file_hashes(
 
     file_path = _resolve_file_path(ef, db)
     file_on_disk = file_path is not None and _path_accessible(file_path)
-    if file_on_disk:
+    if file_path is not None and file_on_disk:
         md5, sha256_live = _compute_hashes(file_path)
         if sha256_live is not None:
             sha256 = sha256_live
