@@ -490,7 +490,7 @@ finally:
   creating a new engine or `TestClient`.
 - [ ] Do not connect to a real PostgreSQL database, filesystem, or USB device.
 - [ ] Mock **all** OS-level calls (`subprocess`, `shutil`, `os.path`, PAM, `grp`, `pwd`).
-- [ ] If the test is POSIX-only, apply the platform guard from [section 7.1](#71-posix-only-modules-pwd-grp-osgeteuid).
+- [ ] If the test is POSIX-only, apply the platform guard from [section 8.1](#81-posix-only-modules-pwd-grp-osgeteuid).
 - [ ] Assert the audit log entry for every security-relevant operation.
 - [ ] Use `native_enum=False` on any new `Enum` column.
 - [ ] Use `JSON` (not `JSONB`) in ORM models.
