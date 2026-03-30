@@ -72,6 +72,7 @@ jobs:
       - name: Start stack
         env:
           SECRET_KEY: ci-smoke-test-key-not-for-production
+          POSTGRES_PASSWORD: ci-smoke-test-postgres-password
         run: |
           docker compose -f docker-compose.ecube.yml up -d
           echo "Waiting for postgres to be healthy..."
