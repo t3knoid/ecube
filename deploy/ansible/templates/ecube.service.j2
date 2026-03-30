@@ -1,0 +1,29 @@
+[Unit]
+Description=ECUBE Evidence Export Service
+Documentation=https://github.com/{{ github_owner }}/{{ github_repo }}
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ ecube_user }}
+Group={{ ecube_group }}
+WorkingDirectory={{ ecube_install_dir }}
+
+EnvironmentFile=-{{ ecube_install_dir }}/.env
+
+ExecStart={{ ecube_venv }}/bin/uvicorn \
+  --host 0.0.0.0 \
+  --port {{ ecube_port }} \
+  --ssl-keyfile={{ ecube_certs_dir }}/key.pem \
+  --ssl-certfile={{ ecube_certs_dir }}/cert.pem \
+  app.main:app
+
+Restart=on-failure
+RestartSec=10
+
+PrivateTmp=yes
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
