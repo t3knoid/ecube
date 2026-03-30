@@ -113,28 +113,28 @@ function handleLogout() {
   font-weight: var(--font-weight-bold);
   border-radius: 9999px;
   border: 1px solid var(--color-border);
-  background: #dbeafe;
-  color: #1e3a8a;
+  background: var(--color-badge-manager-bg);
+  color: var(--color-badge-manager-text);
 }
 
 .badge-admin {
-  background: #fee2e2;
-  color: #7f1d1d;
+  background: var(--color-badge-admin-bg);
+  color: var(--color-badge-admin-text);
 }
 
 .badge-manager {
-  background: #dbeafe;
-  color: #1e3a8a;
+  background: var(--color-badge-manager-bg);
+  color: var(--color-badge-manager-text);
 }
 
 .badge-processor {
-  background: #dcfce7;
-  color: #14532d;
+  background: var(--color-badge-processor-bg);
+  color: var(--color-badge-processor-text);
 }
 
 .badge-auditor {
-  background: #fef9c3;
-  color: #713f12;
+  background: var(--color-badge-auditor-bg);
+  color: var(--color-badge-auditor-text);
 }
 
 .header-timer {
