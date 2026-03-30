@@ -1,0 +1,58 @@
+# ---------------------------------------------------------------------------
+# ECUBE deployment variables
+# Copy this file to group_vars/ecube_hosts.yml and edit before running.
+# Secrets (db_password, admin_password, secret_key) should be stored in an
+# Ansible Vault file (ansible-vault create group_vars/vault.yml) and
+# referenced here with vault_ prefixed variables.
+# ---------------------------------------------------------------------------
+
+# --- GitHub release ---
+# Use "latest" to auto-detect the latest published release, or pin a tag e.g. "v1.2.0".
+ecube_version: "latest"
+
+github_owner: "t3knoid"
+github_repo:  "ecube"
+
+# --- Installation paths ---
+ecube_install_dir: /opt/ecube
+ecube_venv:        "{{ ecube_install_dir }}/venv"
+ecube_certs_dir:   "{{ ecube_install_dir }}/certs"
+
+# --- OS service account ---
+ecube_user:  ecube
+ecube_group: ecube
+
+# --- PostgreSQL (assumed already running; set to true to install locally) ---
+install_postgres: false
+postgres_version: 16
+postgres_db:       ecube
+postgres_user:     ecube
+# Reference vault variable: postgres_password: "{{ vault_postgres_password }}"
+postgres_password: "changeme"
+
+# --- Application config (written to /opt/ecube/.env) ---
+# Reference vault variable: ecube_secret_key: "{{ vault_ecube_secret_key }}"
+ecube_secret_key:             "change-me-in-production-please-rotate-32b"
+ecube_algorithm:              "HS256"
+ecube_token_expire_minutes:   60
+ecube_role_resolver:          "local"
+ecube_local_group_role_map:   "{}"
+ecube_usb_discovery_interval: 30
+
+# --- HTTPS certificate (self-signed generated if cert files not provided) ---
+# Set to paths on the *control* machine to copy existing certs instead:
+# ecube_cert_src: /path/to/cert.pem
+# ecube_key_src:  /path/to/key.pem
+ecube_cert_src: ""
+ecube_key_src:  ""
+ecube_tls_cn:   "ecube.example.com"   # CN used when generating self-signed cert
+
+# Service listen port (uvicorn --port)
+ecube_port: 8443
+
+# --- First-run setup (admin user created via setup API) ---
+# Set to false if you handle initialization manually (ecube-setup CLI).
+run_setup_wizard: true
+ecube_admin_username: "ecube-admin"
+# Reference vault variable: ecube_admin_password: "{{ vault_ecube_admin_password }}"
+ecube_admin_password: "changeme"
