@@ -124,6 +124,13 @@ class SystemHealthResponse(BaseModel):
     database: str = Field(..., description="Database connectivity ('connected' or 'error')")
     database_error: Optional[str] = Field(default=None, description="Error detail if database is unreachable")
     active_jobs: int = Field(default=0, description="Number of currently running export jobs")
+    cpu_percent: Optional[float] = Field(default=None, description="CPU utilisation percent (0–100)")
+    memory_percent: Optional[float] = Field(default=None, description="Memory utilisation percent (0–100)")
+    memory_used_bytes: Optional[int] = Field(default=None, description="Used physical memory in bytes")
+    memory_total_bytes: Optional[int] = Field(default=None, description="Total physical memory in bytes")
+    disk_read_bytes: Optional[int] = Field(default=None, description="Cumulative disk read bytes since boot")
+    disk_write_bytes: Optional[int] = Field(default=None, description="Cumulative disk write bytes since boot")
+    worker_queue_size: int = Field(default=0, description="Number of pending (queued) export jobs")
 
 
 # ---------------------------------------------------------------------------

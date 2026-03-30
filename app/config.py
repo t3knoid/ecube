@@ -5,7 +5,7 @@ from pydantic import Field, field_validator, model_validator
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str = "postgresql://ecube:ecube@localhost/ecube"
 
