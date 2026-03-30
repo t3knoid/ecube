@@ -37,11 +37,6 @@ const healthColumns = computed(() => [
   { key: 'progress', label: t('dashboard.progress') },
 ])
 
-function progressPercent(job) {
-  if (!job || !job.total_bytes) return 0
-  return Math.min(100, Math.round((job.copied_bytes / job.total_bytes) * 100))
-}
-
 async function refreshSnapshot() {
   const warnings = []
   const results = await Promise.allSettled([getDrives(), listJobs({ limit: 200 })])
