@@ -63,7 +63,7 @@ describe('DataTable', () => {
       global: { plugins: [i18n] },
     })
 
-    const nextButton = wrapper.findAll('.table-pagination .btn')[1]
+    const nextButton = wrapper.findAll('.pagination-wrap .btn')[1]
     await nextButton.trigger('click')
 
     expect(wrapper.emitted('update:page')?.[0]).toEqual([2])
