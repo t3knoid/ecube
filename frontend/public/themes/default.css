@@ -52,14 +52,14 @@
   --color-btn-danger-hover-bg: #b91c1c;
 
   /* ── Role badges ────────────────────────────────────────────────── */
-  --color-badge-admin-bg: #fef2f2;
-  --color-badge-admin-text: #dc2626;
-  --color-badge-manager-bg: #eff6ff;
-  --color-badge-manager-text: #2563eb;
-  --color-badge-processor-bg: #f0fdf4;
-  --color-badge-processor-text: #16a34a;
-  --color-badge-auditor-bg: #fefce8;
-  --color-badge-auditor-text: #ca8a04;
+  --color-badge-admin-bg: #fee2e2;
+  --color-badge-admin-text: #7f1d1d;
+  --color-badge-manager-bg: #dbeafe;
+  --color-badge-manager-text: #1e3a8a;
+  --color-badge-processor-bg: #dcfce7;
+  --color-badge-processor-text: #14532d;
+  --color-badge-auditor-bg: #fef9c3;
+  --color-badge-auditor-text: #713f12;
 
   /* ── Status badge text (must contrast against badge background) ── */
   --color-status-ok-text: #14532d;
