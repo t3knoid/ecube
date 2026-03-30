@@ -1139,6 +1139,14 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 | 2 | Verifying job failed after restart | Start a job, let it reach VERIFYING, restart the service | Job status is `FAILED`, audit log contains `JOB_RECONCILED` with `old_status: "VERIFYING"` |
 | 3 | Pending job not affected | Create a job (PENDING), restart the service | Job remains `PENDING`, no `JOB_RECONCILED` audit entry for this job |
 | 4 | Completed job not affected | Complete a job, restart the service | Job remains `COMPLETED`, no `JOB_RECONCILED` audit entry |
+| 5 | Stale mount corrected | Add and mount a network share, unmount it at OS level (`sudo umount`), restart the service | Mount status is `UNMOUNTED`, audit log contains `MOUNT_RECONCILED` |
+| 6 | Active mount preserved | Add and mount a network share (leave it mounted), restart the service | Mount status remains `MOUNTED`, no `MOUNT_RECONCILED` audit entry |
+| 7 | USB drives re-discovered | Insert USB drives, restart the service | Drives re-appear with correct state (`AVAILABLE` on enabled ports), `USB_DISCOVERY_SYNC` audit entry present |
+| 8 | Idempotency | Restart the service twice without any state changes between restarts | Second restart produces no additional `MOUNT_RECONCILED` or `JOB_RECONCILED` audit entries |
+| 9 | Partial failure isolation | Disconnect the NFS server (to cause mount check failure), have a RUNNING job, restart the service | Job is still reconciled to `FAILED` even though mount reconciliation may error; check logs for error message |
+| 10 | Cross-process lock — only one worker reconciles | Start Uvicorn with `--workers 4`, have a RUNNING job and a MOUNTED (but stale) mount | Exactly one `JOB_RECONCILED` and one `MOUNT_RECONCILED` audit entry; remaining workers log "skipping reconciliation" at INFO level |
+| 11 | Stale lock reclaim | Insert a stale lock row (`locked_at` > 5 minutes ago) via SQL, restart the service | Service reclaims the stale lock, reconciliation runs normally |
+| 12 | Lock released after failure | Disconnect NFS, restart the service, reconnect NFS, restart again | Second restart acquires lock and runs reconciliation; lock table is empty after startup completes |
 
 ### 12.13 System Health
 
@@ -1156,14 +1164,6 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 | 8 | Degraded when DB down | Stop PostgreSQL, call endpoint with valid token | 200, `status: "degraded"`, `database: "error"`, `database_error` is non-null |
 | 9 | Unauthenticated rejected | `GET /introspection/system-health` without token | 401 |
 | 10 | Processor role allowed | `GET /introspection/system-health` with processor token | 200 |
-| 5 | Stale mount corrected | Add and mount a network share, unmount it at OS level (`sudo umount`), restart the service | Mount status is `UNMOUNTED`, audit log contains `MOUNT_RECONCILED` |
-| 6 | Active mount preserved | Add and mount a network share (leave it mounted), restart the service | Mount status remains `MOUNTED`, no `MOUNT_RECONCILED` audit entry |
-| 7 | USB drives re-discovered | Insert USB drives, restart the service | Drives re-appear with correct state (`AVAILABLE` on enabled ports), `USB_DISCOVERY_SYNC` audit entry present |
-| 8 | Idempotency | Restart the service twice without any state changes between restarts | Second restart produces no additional `MOUNT_RECONCILED` or `JOB_RECONCILED` audit entries |
-| 9 | Partial failure isolation | Disconnect the NFS server (to cause mount check failure), have a RUNNING job, restart the service | Job is still reconciled to `FAILED` even though mount reconciliation may error; check logs for error message |
-| 10 | Cross-process lock — only one worker reconciles | Start Uvicorn with `--workers 4`, have a RUNNING job and a MOUNTED (but stale) mount | Exactly one `JOB_RECONCILED` and one `MOUNT_RECONCILED` audit entry; remaining workers log "skipping reconciliation" at INFO level |
-| 11 | Stale lock reclaim | Insert a stale lock row (`locked_at` > 5 minutes ago) via SQL, restart the service | Service reclaims the stale lock, reconciliation runs normally |
-| 12 | Lock released after failure | Disconnect NFS, restart the service, reconnect NFS, restart again | Second restart acquires lock and runs reconciliation; lock table is empty after startup completes |
 
 ---
 
