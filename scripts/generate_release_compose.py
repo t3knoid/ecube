@@ -25,8 +25,14 @@ def build_compose(app_image: str, ui_image: str, version: str) -> str:
     #
     # Minimum required .env settings:
     #   SECRET_KEY=<random string, at least 32 characters>
+    #   POSTGRES_USER=<db username>
+    #   POSTGRES_PASSWORD=<db password>
+    #   POSTGRES_DB=<db name>
     #   LOCAL_GROUP_ROLE_MAP={{}}
     #   ECUBE_CERTS_DIR=./certs
+    #
+    # POSTGRES_USER, POSTGRES_PASSWORD, and POSTGRES_DB have no defaults and
+    # MUST be set — the stack will not start without them.
     #
     # See README.md for full deployment instructions.
     #
@@ -45,7 +51,7 @@ def build_compose(app_image: str, ui_image: str, version: str) -> str:
         security_opt:
           - apparmor:unconfined
         environment:
-          DATABASE_URL: postgresql://ecube:ecube@postgres:5432/ecube
+          DATABASE_URL: postgresql://${{POSTGRES_USER}}:${{POSTGRES_PASSWORD}}@postgres:5432/${{POSTGRES_DB}}
           PYTHONUNBUFFERED: "1"
           TRUST_PROXY_HEADERS: "true"
           ECUBE_RUN_MIGRATIONS_ON_START: "true"
@@ -82,13 +88,13 @@ def build_compose(app_image: str, ui_image: str, version: str) -> str:
         container_name: ecube-postgres
         restart: unless-stopped
         environment:
-          POSTGRES_DB: ecube
-          POSTGRES_USER: ecube
-          POSTGRES_PASSWORD: ecube
+          POSTGRES_DB: "${{POSTGRES_DB}}"
+          POSTGRES_USER: "${{POSTGRES_USER}}"
+          POSTGRES_PASSWORD: "${{POSTGRES_PASSWORD}}"
         volumes:
           - ecube_postgres_data:/var/lib/postgresql/data
         healthcheck:
-          test: ["CMD-SHELL", "pg_isready -U ecube -d ecube"]
+          test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
           interval: 5s
           timeout: 5s
           retries: 10
