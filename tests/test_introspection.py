@@ -88,16 +88,23 @@ def test_system_health_worker_queue_size(client, db):
 
 
 def test_system_health_worker_queue_size_null_on_count_failure(client, db):
-    """worker_queue_size is None when the PENDING count query raises while the DB is still reachable.
+    """worker_queue_size is None when only the PENDING count query raises.
 
-    The SELECT 1 connectivity probe uses Session.execute (not Query.count), so patching
-    Query.count to raise simulates a transient query failure without marking the database
-    as unreachable.  The endpoint must leave worker_queue_size as None rather than
-    defaulting to 0 so callers can distinguish "no pending jobs" from "count unknown".
+    The SELECT 1 connectivity probe uses Session.execute (not Query.count), so the
+    database is still reported as reachable.  The RUNNING count (active_jobs) is
+    allowed to succeed (returns 0); only the subsequent PENDING count raises, isolating
+    the worker_queue_size error path from the active_jobs path.  The endpoint must
+    leave worker_queue_size as None rather than defaulting to 0 so callers can
+    distinguish "no pending jobs" from "count unknown".
     """
     from sqlalchemy.exc import OperationalError
 
-    with patch("sqlalchemy.orm.Query.count", side_effect=OperationalError("", {}, None)):
+    # side_effect list: first call (RUNNING / active_jobs) returns 0;
+    # second call (PENDING / worker_queue_size) raises.
+    with patch(
+        "sqlalchemy.orm.Query.count",
+        side_effect=[0, OperationalError("", {}, None)],
+    ):
         response = client.get("/introspection/system-health")
 
     assert response.status_code == 200
@@ -105,7 +112,7 @@ def test_system_health_worker_queue_size_null_on_count_failure(client, db):
     # DB connectivity check still passes — status/database must not be degraded.
     assert data["status"] == "ok"
     assert data["database"] == "connected"
-    # count query failed — size must be null, not zero.
+    # Only the PENDING count failed — size must be null, not zero.
     assert data["worker_queue_size"] is None
 
 
