@@ -77,7 +77,6 @@ GITHUB_OWNER="t3knoid"
 GITHUB_REPO="ecube"
 
 # Runtime state
-ADDED_DEADSNAKES=false
 
 # ---------------------------------------------------------------------------
 # Argument parsing
@@ -238,13 +237,11 @@ preflight() {
         # deadsnakes PPA — Ubuntu only
         run apt-get install -y software-properties-common
         run add-apt-repository -y ppa:deadsnakes/ppa
-        ADDED_DEADSNAKES=true
       else
         # Debian: add the deadsnakes apt source manually (no PPA support)
         run apt-get install -y curl gpg
         run curl -fsSL https://raw.githubusercontent.com/deadsnakes/python3.11/master/debian/setup-repos.sh \
           | bash
-        ADDED_DEADSNAKES=true
       fi
       run apt-get update -qq
       run apt-get install -y python3.11 python3.11-venv python3.11-distutils
@@ -758,9 +755,17 @@ do_uninstall() {
     run groupdel ecube 2>/dev/null || true
   fi
 
-  # Optionally remove deadsnakes repository
-  if [[ "${ADDED_DEADSNAKES}" == true ]]; then
-    if _confirm "Remove the deadsnakes repository entry added by this installer?"; then
+  # Optionally remove deadsnakes repository.
+  # Detect presence at runtime rather than relying on an in-process flag, so
+  # that --uninstall works correctly even when run as a separate invocation.
+  _deadsnakes_present() {
+    ls /etc/apt/sources.list.d/deadsnakes*.list \
+       /etc/apt/sources.list.d/*deadsnakes* \
+       /etc/apt/sources.list.d/python3*.list 2>/dev/null | grep -qi deadsnakes || \
+    (command -v apt-cache &>/dev/null && apt-cache policy 2>/dev/null | grep -q deadsnakes)
+  }
+  if _deadsnakes_present; then
+    if _confirm "Remove the deadsnakes repository entry (detected in apt sources)?"; then
       if [[ "${ID:-}" == "ubuntu" ]]; then
         run add-apt-repository -y --remove ppa:deadsnakes/ppa
       else
