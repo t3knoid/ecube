@@ -37,6 +37,7 @@ jobs:
           chmod 755 install.sh
           mkdir -p dist
           tar -czf "dist/${{ steps.meta.outputs.artifact_name }}.tar.gz" \
+            --transform "s|^|${{ steps.meta.outputs.artifact_name }}/|" \
             install.sh \
             app \
             alembic \
