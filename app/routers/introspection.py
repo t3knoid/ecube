@@ -1,16 +1,15 @@
 import logging
 import os
+import sys
 
 try:
     import psutil as _psutil
     _PSUTIL_AVAILABLE = True
+    _PSUTIL_IMPORT_EXC_INFO: "tuple | None" = None
 except Exception:  # pragma: no cover  # ImportError or dynamic-loader / ABI failures
-    logging.getLogger(__name__).warning(
-        "psutil could not be imported; system-health metrics will be null.",
-        exc_info=True,
-    )
     _psutil = None  # type: ignore[assignment]
     _PSUTIL_AVAILABLE = False
+    _PSUTIL_IMPORT_EXC_INFO = sys.exc_info()
 
 
 def prime_cpu_sampler() -> None:  # pragma: no cover
@@ -21,18 +20,28 @@ def prime_cpu_sampler() -> None:  # pragma: no cover
     latency to the startup sequence.  Subsequent non-blocking
     ``cpu_percent(interval=None)`` calls in the system-health endpoint will
     return a meaningful value rather than 0.0.
+
+    When psutil could not be imported the failure is logged here (once, at
+    startup) rather than at module-import time so that logging is already
+    configured before the warning is emitted.
     """
-    if _PSUTIL_AVAILABLE:
-        try:
-            _psutil.cpu_percent(interval=1.0)
-        except Exception:
-            # Log rather than silently discard so failures are observable.
-            # cpu_percent(interval=None) will fall back to 0.0 until psutil recovers.
-            logging.getLogger(__name__).warning(
-                "Failed to prime psutil CPU sampler; cpu_percent will report 0.0 "
-                "until a successful sample is collected.",
-                exc_info=True,
-            )
+    _log = logging.getLogger(__name__)
+    if not _PSUTIL_AVAILABLE:
+        _log.warning(
+            "psutil could not be imported; system-health metrics will be null.",
+            exc_info=_PSUTIL_IMPORT_EXC_INFO,
+        )
+        return
+    try:
+        _psutil.cpu_percent(interval=1.0)
+    except Exception:
+        # Log rather than silently discard so failures are observable.
+        # cpu_percent(interval=None) will fall back to 0.0 until psutil recovers.
+        _log.warning(
+            "Failed to prime psutil CPU sampler; cpu_percent will report 0.0 "
+            "until a successful sample is collected.",
+            exc_info=True,
+        )
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
