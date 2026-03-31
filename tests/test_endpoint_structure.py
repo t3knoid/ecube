@@ -199,6 +199,43 @@ class TestOpenAPISchema:
         assert scheme.get("scheme") == "bearer"
         assert scheme.get("bearerFormat") == "JWT"
 
+    def test_openapi_servers_absent_without_root_path(self):
+        """No servers entry should be injected when api_root_path is empty."""
+        from unittest.mock import patch
+
+        from app.main import app
+
+        app.openapi_schema = None  # force regeneration
+        with patch("app.main.settings") as mock_settings:
+            mock_settings.api_root_path = ""
+            mock_settings.api_contact_name = app.contact["name"]
+            mock_settings.api_contact_email = app.contact["email"]
+            schema = app.openapi()
+
+        assert "servers" not in schema or schema["servers"] is None, (
+            "OpenAPI schema must not inject a servers entry when api_root_path is empty"
+        )
+        app.openapi_schema = None  # reset so other tests are not affected
+
+    def test_openapi_servers_set_when_root_path_configured(self):
+        """When api_root_path is set, the OpenAPI schema must contain a matching servers entry."""
+        from unittest.mock import patch
+
+        from app.main import app
+
+        app.openapi_schema = None  # force regeneration
+        with patch("app.main.settings") as mock_settings:
+            mock_settings.api_root_path = "/api"
+            mock_settings.api_contact_name = app.contact["name"]
+            mock_settings.api_contact_email = app.contact["email"]
+            schema = app.openapi()
+
+        servers = schema.get("servers", [])
+        assert any(s.get("url") == "/api" for s in servers), (
+            "OpenAPI schema must include servers[{url: '/api'}] when api_root_path='/api'"
+        )
+        app.openapi_schema = None  # reset so other tests are not affected
+
     def test_openapi_tag_descriptions_present(self):
         """Tag descriptions defined in tags_metadata must appear in the OpenAPI schema."""
         from app.main import app
