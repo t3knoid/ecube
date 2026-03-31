@@ -759,6 +759,18 @@ configure_firewall() {
 # UNINSTALL
 # ===========================================================================
 do_uninstall() {
+  # Ensure root and a known OS regardless of call order relative to preflight.
+  if [[ "${EUID}" -ne 0 ]]; then
+    error "This script must be run as root (or via sudo)."
+    exit 1
+  fi
+  if [[ ! -f /etc/os-release ]]; then
+    error "Cannot determine OS: /etc/os-release not found."
+    exit 1
+  fi
+  # shellcheck source=/dev/null
+  source /etc/os-release
+
   header "\n── Uninstall ECUBE ─────────────────────────────────────────────"
 
   if ! _confirm "This will remove ECUBE and all installed files. Continue?"; then
