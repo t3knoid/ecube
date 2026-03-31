@@ -28,6 +28,9 @@ services:
       SECRET_KEY: "${SECRET_KEY:-change-me-in-production-please-rotate-32b}"
       LOCAL_GROUP_ROLE_MAP: '${LOCAL_GROUP_ROLE_MAP:-{}}'
       USB_DISCOVERY_INTERVAL: "${USB_DISCOVERY_INTERVAL:-30}"
+      # nginx strips /api before forwarding — tell FastAPI its mounted prefix
+      # so Swagger UI "Try it out" generates correct request paths.
+      API_ROOT_PATH: "/api"
     volumes:
       - ecube_runtime_data:/var/lib/ecube
       - /dev/bus/usb:/dev/bus/usb
