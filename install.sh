@@ -232,11 +232,11 @@ while [[ $# -gt 0 ]]; do
       INSTALL_DIR="${_idir}"; shift 2 ;;
     --api-port)
       _require_arg "$1" "${2-}"
-      [[ "$2" =~ ^[0-9]+$ ]] || { echo "ERROR: --api-port must be a positive integer." >&2; exit 1; }
+      [[ "$2" =~ ^[0-9]+$ && "$2" -ge 1 && "$2" -le 65535 ]] || { echo "ERROR: --api-port must be a number between 1 and 65535." >&2; exit 1; }
       API_PORT="$2"; shift 2 ;;
     --ui-port)
       _require_arg "$1" "${2-}"
-      [[ "$2" =~ ^[0-9]+$ ]] || { echo "ERROR: --ui-port must be a positive integer." >&2; exit 1; }
+      [[ "$2" =~ ^[0-9]+$ && "$2" -ge 1 && "$2" -le 65535 ]] || { echo "ERROR: --ui-port must be a number between 1 and 65535." >&2; exit 1; }
       UI_PORT="$2"; shift 2 ;;
     --hostname)
       _require_arg "$1" "${2-}"
