@@ -117,17 +117,68 @@ Options:
 EOF
 }
 
+# Validate that a hostname/IP argument contains only DNS- and IP-safe characters:
+# alphanumerics, dots, hyphens, and brackets (for IPv6 literals).
+# Rejects whitespace, newlines, slashes, semicolons, and any other character
+# that could break an nginx config directive or an OpenSSL subject field.
+_validate_host_arg() {
+  local flag="$1"
+  local val="$2"
+  if [[ -z "${val}" ]]; then
+    echo "ERROR: ${flag} value must not be empty." >&2
+    exit 1
+  fi
+  if [[ "${val}" =~ [^a-zA-Z0-9.\:\-\[\]] ]]; then
+    echo "ERROR: ${flag} value '${val}' contains invalid characters." >&2
+    echo "       Allowed: alphanumerics, '.', '-', ':', '[', ']' (DNS names and IPv4/IPv6 addresses only)." >&2
+    exit 1
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --backend-only)   INSTALL_FRONTEND=false; shift ;;
     --frontend-only)  INSTALL_BACKEND=false;  shift ;;
-    --backend-host)            BACKEND_HOST="$2"; shift 2 ;;
+    --backend-host)
+      _validate_host_arg "--backend-host" "$2"
+      BACKEND_HOST="$2"; shift 2 ;;
     --allow-insecure-backend)  ALLOW_INSECURE_BACKEND=true; shift ;;
     --backend-ca-file)         BACKEND_CA_FILE="$2"; shift 2 ;;
-    --install-dir)    INSTALL_DIR="$2";  shift 2 ;;
-    --api-port)       API_PORT="$2";     shift 2 ;;
-    --ui-port)        UI_PORT="$2";      shift 2 ;;
-    --hostname)       HOSTNAME_OVERRIDE="$2"; shift 2 ;;
+    --install-dir)
+      # Reject values that are empty, /, a known system root, contain whitespace
+      # or newlines, or are not absolute paths.  Any of these could cause
+      # accidental rm -rf of critical paths or break systemd unit parsing.
+      local _idir="$2"
+      if [[ -z "${_idir}" ]]; then
+        echo "ERROR: --install-dir value must not be empty." >&2; exit 1
+      fi
+      if [[ "${_idir}" != /* ]]; then
+        echo "ERROR: --install-dir must be an absolute path (got '${_idir}')." >&2; exit 1
+      fi
+      if [[ "${_idir}" =~ [[:space:]] ]]; then
+        echo "ERROR: --install-dir must not contain spaces or whitespace (got '${_idir}')." >&2; exit 1
+      fi
+      # Block /, single-depth paths like /tmp, and common system directories.
+      local _canonical
+      _canonical="$(realpath -m "${_idir}" 2>/dev/null || echo "${_idir}")"
+      local _dangerous=("/" "/bin" "/boot" "/dev" "/etc" "/home" "/lib" "/lib64"
+                        "/proc" "/root" "/run" "/sbin" "/srv" "/sys" "/tmp"
+                        "/usr" "/var")
+      for _d in "${_dangerous[@]}"; do
+        if [[ "${_canonical}" == "${_d}" ]]; then
+          echo "ERROR: --install-dir '${_idir}' is a protected system path." >&2; exit 1
+        fi
+      done
+      INSTALL_DIR="${_idir}"; shift 2 ;;
+    --api-port)
+      [[ "$2" =~ ^[0-9]+$ ]] || { echo "ERROR: --api-port must be a positive integer." >&2; exit 1; }
+      API_PORT="$2"; shift 2 ;;
+    --ui-port)
+      [[ "$2" =~ ^[0-9]+$ ]] || { echo "ERROR: --ui-port must be a positive integer." >&2; exit 1; }
+      UI_PORT="$2"; shift 2 ;;
+    --hostname)
+      _validate_host_arg "--hostname" "$2"
+      HOSTNAME_OVERRIDE="$2"; shift 2 ;;
     --cert-validity)  CERT_VALIDITY="$2"; shift 2 ;;
     --yes|-y)         YES=true;  shift ;;
     --version)        VERSION_TAG="$2"; shift 2 ;;
