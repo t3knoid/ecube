@@ -12,7 +12,7 @@ ECUBE is a secure evidence export platform designed to copy eDiscovery data onto
 
 - **System Layer API:** Python 3.11+, FastAPI
 - **Data Layer:** PostgreSQL 14+ with SQLAlchemy + Alembic
-- **Background Processing:** Celery or RQ workers for copy, verification, and manifest tasks
+- **Background Processing:** FastAPI `BackgroundTasks` with a bounded `ThreadPoolExecutor` for copy, verification, and manifest tasks
 - **UI Layer:** React, Vue, or server-rendered templates (HTTPS-only)
 - **Runtime Platform:** Linux-based copy machine with USB hub integration and NFS/SMB mount support
 
@@ -51,11 +51,13 @@ python -m pytest tests/ -v
 
 ## API Documentation
 
-Once the API server is running, interactive documentation is available at:
+Once running, interactive documentation is available through the nginx reverse proxy at:
 
-- **Swagger UI:** `http://localhost:8000/docs`
-- **ReDoc:** `http://localhost:8000/redoc`
-- **OpenAPI Schema:** `http://localhost:8000/openapi.json`
+- **Swagger UI:** `https://localhost:8443/docs`
+- **ReDoc:** `https://localhost:8443/redoc`
+- **OpenAPI Schema:** `https://localhost:8443/openapi.json`
+
+> **Note:** Port 8000 (FastAPI) is not published to the host in the default compose setup — all traffic routes through the nginx proxy on port 8443. To expose port 8000 directly for local development, add the `docker-compose.dev.yml` overlay (see that file for details).
 
 All endpoints (except `/health`, `/docs`, `/redoc`, `/openapi.json`) require authentication via JWT bearer tokens. See the [REST API Specification](docs/design/06-rest-api-specification.md) and [Security & Access Control](docs/design/10-security-and-access-control.md) for details.
 
