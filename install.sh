@@ -326,7 +326,7 @@ _generate_certs() {
 }
 
 # ===========================================================================
-# ENSURE ECUBE SYSTEM USER AND ROLE GROUPS
+# ENSURE ECUBE SYSTEM USER 
 # Called by both install_backend and install_frontend so that chown operations
 # succeed regardless of which component is being installed.
 # ===========================================================================
