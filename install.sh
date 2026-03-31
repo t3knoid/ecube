@@ -728,7 +728,7 @@ install_frontend() {
   # 4. nginx site config
   info "Writing nginx site config /etc/nginx/sites-available/ecube..."
   if [[ "${DRY_RUN}" != true ]]; then
-    cat > /etc/nginx/sites-available/ecube <<EOF
+    cat > /etc/nginx/sites-available/ecube <<EOF_NGINX
 server {
     listen ${UI_PORT} ssl;
     listen [::]:${UI_PORT} ssl;
@@ -751,7 +751,7 @@ server {
     # requests to /api/drives, /api/health, etc. reach the backend at
     # /drives, /health, etc. (FastAPI routes are at root level).
     location /api/ {
-EOF_LOCATION
+EOF_NGINX
   if [[ "${BACKEND_HOST}" == "127.0.0.1" ]]; then
     # Same-host: uvicorn serves plain HTTP on loopback; TLS is terminated here.
     cat >> /etc/nginx/sites-available/ecube <<EOF_PROXY
