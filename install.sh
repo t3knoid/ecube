@@ -303,6 +303,10 @@ while [[ $# -gt 0 ]]; do
     --yes|-y)         YES=true;  shift ;;
     --version)
       _require_arg "$1" "${2-}"
+      if [[ ! "$2" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        error "--version value '$2' is invalid. Expected format: v<major>.<minor>.<patch> (e.g. v0.2.0)."
+        exit 1
+      fi
       VERSION_TAG="$2"; shift 2 ;;
     --uninstall)      UNINSTALL=true; shift ;;
     --dry-run)        DRY_RUN=true; shift ;;
@@ -591,18 +595,28 @@ _maybe_download_release() {
   local base_url="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/${VERSION_TAG}"
 
   info "Downloading ECUBE ${VERSION_TAG} from GitHub Releases..."
-  run curl -fsSL -o "/tmp/${tarball_name}" "${base_url}/${tarball_name}"
-  run curl -fsSL -o "/tmp/${checksum_name}" "${base_url}/${checksum_name}"
+  # Use mktemp paths so VERSION_TAG is never interpolated into the filesystem.
+  local tmp_tarball tmp_checksum
+  tmp_tarball=$(mktemp /tmp/ecube-package.XXXXXXXXXX.tar.gz)
+  tmp_checksum=$(mktemp /tmp/ecube-package.XXXXXXXXXX.sha256)
+  run curl -fsSL -o "${tmp_tarball}" "${base_url}/${tarball_name}"
+  run curl -fsSL -o "${tmp_checksum}" "${base_url}/${checksum_name}"
 
   info "Verifying checksum..."
   if [[ "${DRY_RUN}" != true ]]; then
-    (cd /tmp && sha256sum -c "${checksum_name}")
+    # sha256sum -c expects the filename recorded inside the checksum file to match
+    # the tarball on disk.  Rewrite the recorded name to our mktemp path.
+    local recorded_name
+    recorded_name=$(awk '{print $2}' "${tmp_checksum}")
+    sed -i "s|${recorded_name}|${tmp_tarball}|" "${tmp_checksum}"
+    sha256sum -c "${tmp_checksum}"
     ok "Checksum verified"
   fi
 
   info "Extracting package to ${INSTALL_DIR}..."
   run mkdir -p "${INSTALL_DIR}"
-  run tar -xzf "/tmp/${tarball_name}" -C "${INSTALL_DIR}" --strip-components=1
+  run tar -xzf "${tmp_tarball}" -C "${INSTALL_DIR}" --strip-components=1
+  rm -f "${tmp_tarball}" "${tmp_checksum}"
 }
 
 # ===========================================================================
