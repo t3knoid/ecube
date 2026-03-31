@@ -85,7 +85,9 @@ curl -fsSL -O \
 sha256sum -c "ecube-package-${LATEST_TAG}.sha256"
 
 # Extract and fix ownership so the ecube user can access all files
-tar -xzf "ecube-package-${LATEST_TAG}.tar.gz" -C /opt/ecube/
+# --strip-components=1 removes the top-level ecube-package-<version>/ prefix
+# so files land directly under /opt/ecube/ (e.g. /opt/ecube/app/, /opt/ecube/frontend/).
+tar -xzf "ecube-package-${LATEST_TAG}.tar.gz" -C /opt/ecube/ --strip-components=1
 chown -R ecube:ecube /opt/ecube
 ```
 
