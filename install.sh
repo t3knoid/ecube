@@ -168,6 +168,21 @@ _require_arg() {
   fi
 }
 
+# Validate a file-path argument intended for use inside an nginx config directive.
+# Requires an absolute path and rejects any character that could break a directive
+# (whitespace, newlines, semicolons, braces, quotes, backslashes, null bytes).
+_validate_ca_file_arg() {
+  local flag="$1" val="$2"
+  if [[ "${val}" != /* ]]; then
+    echo "ERROR: ${flag} must be an absolute path (starting with /)." >&2
+    exit 1
+  fi
+  if [[ "${val}" =~ [[:space:]]|\'|\"|\\|\;|\{|\}|\| ]]; then
+    echo "ERROR: ${flag} path contains characters not allowed in an nginx config directive (whitespace, ;, {}, quotes, or backslash)." >&2
+    exit 1
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --backend-only)   INSTALL_FRONTEND=false; shift ;;
@@ -180,6 +195,7 @@ while [[ $# -gt 0 ]]; do
     --secure-backend)          ALLOW_INSECURE_BACKEND=false; shift ;;
     --backend-ca-file)
       _require_arg "$1" "${2-}"
+      _validate_ca_file_arg "$1" "$2"
       BACKEND_CA_FILE="$2"; shift 2 ;;
     --db-host)
       _require_arg "$1" "${2-}"
