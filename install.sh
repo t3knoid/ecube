@@ -531,6 +531,15 @@ install_frontend() {
   # --frontend-only mode (i.e., when install_backend was not called).
   _ensure_ecube_user
 
+  # When --version TAG is given and only the frontend is being installed,
+  # install_backend has not run so _maybe_download_release has not been called.
+  # Call it here to download/extract the release package (which includes
+  # frontend/dist) into ${INSTALL_DIR} before the dist lookup below.
+  if [[ -n "${VERSION_TAG}" && "${INSTALL_BACKEND}" == false ]]; then
+    run mkdir -p "${INSTALL_DIR}"
+    _maybe_download_release
+  fi
+
   # 1. Install nginx if absent
   if ! command -v nginx &>/dev/null; then
     info "Installing nginx..."
