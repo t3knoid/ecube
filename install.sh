@@ -227,14 +227,28 @@ preflight() {
   # Python 3.11
   if ! command -v python3.11 &>/dev/null; then
     warn "python3.11 not found."
-    if _confirm "Install python3.11 via the deadsnakes PPA?"; then
+    if [[ "${ID}" == "ubuntu" ]]; then
+      local prompt_msg="Install python3.11 via the deadsnakes PPA (ppa:deadsnakes/ppa)?"
+    else
+      local prompt_msg="Install python3.11 via the deadsnakes apt repository?"
+    fi
+    if _confirm "${prompt_msg}"; then
       run apt-get update -qq
-      run apt-get install -y software-properties-common
-      run add-apt-repository -y ppa:deadsnakes/python3.11
+      if [[ "${ID}" == "ubuntu" ]]; then
+        # deadsnakes PPA — Ubuntu only
+        run apt-get install -y software-properties-common
+        run add-apt-repository -y ppa:deadsnakes/ppa
+        ADDED_DEADSNAKES=true
+      else
+        # Debian: add the deadsnakes apt source manually (no PPA support)
+        run apt-get install -y curl gpg
+        run curl -fsSL https://raw.githubusercontent.com/deadsnakes/python3.11/master/debian/setup-repos.sh \
+          | bash
+        ADDED_DEADSNAKES=true
+      fi
       run apt-get update -qq
       run apt-get install -y python3.11 python3.11-venv python3.11-distutils
-      ADDED_DEADSNAKES=true
-      ok "python3.11 installed via deadsnakes PPA"
+      ok "python3.11 installed"
     else
       error "python3.11 is required. Aborting."
       exit 1
@@ -748,10 +762,17 @@ do_uninstall() {
     fi
   done
 
-  # Optionally remove deadsnakes PPA
+  # Optionally remove deadsnakes repository
   if [[ "${ADDED_DEADSNAKES}" == true ]]; then
-    if _confirm "Remove deadsnakes PPA (added by this installer)?"; then
-      run add-apt-repository -y --remove ppa:deadsnakes/python3.11
+    if _confirm "Remove the deadsnakes repository entry added by this installer?"; then
+      if [[ "${ID:-}" == "ubuntu" ]]; then
+        run add-apt-repository -y --remove ppa:deadsnakes/ppa
+      else
+        run rm -f /etc/apt/sources.list.d/deadsnakes*.list \
+                  /etc/apt/trusted.gpg.d/deadsnakes*.gpg \
+                  /etc/apt/keyrings/deadsnakes*.gpg
+        run apt-get update -qq
+      fi
     fi
   fi
 
