@@ -448,7 +448,13 @@ _write_env_file() {
   fi
 
   local trust_proxy="false"
-  [[ "${INSTALL_FRONTEND}" == true ]] && trust_proxy="true"
+  local api_root_path=""
+  if [[ "${INSTALL_FRONTEND}" == true ]]; then
+    trust_proxy="true"
+    # When nginx fronts uvicorn, set API_ROOT_PATH so FastAPI knows its
+    # mount prefix for Swagger UI and the OpenAPI servers list.
+    api_root_path="/api"
+  fi
 
   if [[ "${DRY_RUN}" != true ]]; then
     cat > "${env_file}" <<EOF
@@ -461,13 +467,17 @@ DATABASE_URL=postgresql://ecube:CHANGE_ME@localhost/ecube
 # Set to true if a reverse proxy (nginx) sits in front of uvicorn.
 TRUST_PROXY_HEADERS=${trust_proxy}
 
+# Mount prefix used by nginx to proxy /api/* to the backend.
+# Affects Swagger UI and OpenAPI schema server URL.
+API_ROOT_PATH=${api_root_path}
+
 # Automatically run Alembic migrations on service start.
 ECUBE_RUN_MIGRATIONS_ON_START=true
 EOF
     chmod 600 "${env_file}"
     chown ecube:ecube "${env_file}"
   else
-    echo "[DRY-RUN] Would write ${env_file} with SECRET_KEY, DATABASE_URL placeholder, TRUST_PROXY_HEADERS=${trust_proxy}, ECUBE_RUN_MIGRATIONS_ON_START=true"
+    echo "[DRY-RUN] Would write ${env_file} with SECRET_KEY, DATABASE_URL placeholder, TRUST_PROXY_HEADERS=${trust_proxy}, API_ROOT_PATH=${api_root_path}, ECUBE_RUN_MIGRATIONS_ON_START=true"
   fi
   ok ".env written (remember to update DATABASE_URL before starting the service)"
 }
@@ -612,9 +622,12 @@ server {
         try_files \$uri \$uri/ /index.html;
     }
 
-    # Proxy API requests to the backend
+    # Proxy API requests to the backend.
+    # The trailing slash on proxy_pass strips the /api prefix so that
+    # requests to /api/drives, /api/health, etc. reach the backend at
+    # /drives, /health, etc. (FastAPI routes are at root level).
     location /api/ {
-        proxy_pass https://127.0.0.1:${API_PORT};
+        proxy_pass https://127.0.0.1:${API_PORT}/;
         proxy_ssl_verify off;
         proxy_set_header Host \$host;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
