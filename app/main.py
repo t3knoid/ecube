@@ -138,7 +138,6 @@ async def lifespan(application: FastAPI):
             )
 
     try:
-        import asyncio
         from app.routers.introspection import prime_cpu_sampler
         _prime_task = asyncio.create_task(asyncio.to_thread(prime_cpu_sampler))
         _prime_task.add_done_callback(_log_prime_failure)
