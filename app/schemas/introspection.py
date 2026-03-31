@@ -130,7 +130,7 @@ class SystemHealthResponse(BaseModel):
     memory_total_bytes: Optional[int] = Field(default=None, description="Total physical memory in bytes")
     disk_read_bytes: Optional[int] = Field(default=None, description="Cumulative disk read bytes since boot")
     disk_write_bytes: Optional[int] = Field(default=None, description="Cumulative disk write bytes since boot")
-    worker_queue_size: int = Field(default=0, description="Number of pending (queued) export jobs")
+    worker_queue_size: Optional[int] = Field(default=None, description="Number of pending (queued) export jobs; null when the database is unreachable or the count query fails")
 
 
 # ---------------------------------------------------------------------------
