@@ -1,7 +1,7 @@
 # ECUBE — Automated Test Requirements
 
 **Audience:** Developers, Contributors  
-**Scope:** Unit tests, integration tests, hardware-in-the-loop (HIL) tests
+**Scope:** Backend unit tests, backend integration tests, hardware-in-the-loop (HIL) tests, frontend unit tests, frontend E2E tests
 
 ---
 
@@ -22,17 +22,21 @@
 
 ## 1. Overview
 
-ECUBE has three tiers of automated tests:
+ECUBE has five tiers of automated tests:
 
-| Tier | Location | Marker | External Requirements |
-|------|----------|--------|-----------------------|
-| **Unit** | `tests/` (top-level files) | *(none — runs by default)* | None — uses in-memory SQLite |
-| **Integration** | `tests/integration/` | `@pytest.mark.integration` | PostgreSQL database |
-| **Hardware-in-the-loop (HIL)** | `tests/hardware/` | `@pytest.mark.hardware` | Physical USB hardware |
+| Tier | Location | Tool | External Requirements |
+|------|----------|------|-----------------------|
+| **Backend unit** | `tests/` (top-level files) | pytest | None — uses in-memory SQLite |
+| **Backend integration** | `tests/integration/` | pytest (`@pytest.mark.integration`) | PostgreSQL database |
+| **Hardware-in-the-loop (HIL)** | `tests/hardware/` | pytest (`@pytest.mark.hardware`) | Physical USB hardware |
+| **Frontend unit** | `frontend/src/**/__tests__/` | Vitest (jsdom) | Node.js |
+| **Frontend E2E** | `frontend/e2e/` | Playwright (Chromium + WebKit) | Node.js + built frontend |
 
-Unit tests are the primary automated quality gate. They use an in-memory SQLite database with `StaticPool` and mock all OS-level calls so they run on any platform (Linux, macOS, Windows) without external services.
+Backend unit tests are the primary automated quality gate. They use an in-memory SQLite database with `StaticPool` and mock all OS-level calls so they run on any platform (Linux, macOS, Windows) without external services.
 
-Integration tests require only a PostgreSQL instance. Docker provides a portable way to supply that dependency on every platform without installing PostgreSQL natively. See [section 5](#5-cross-platform-testing-strategy) for the full strategy.
+Backend integration tests require only a PostgreSQL instance. Docker provides a portable way to supply that dependency on every platform without installing PostgreSQL natively. See [section 5](#5-cross-platform-testing-strategy) for the full strategy.
+
+Frontend unit tests run in a jsdom environment via Vitest and cover Vue components, stores, composables, and the API client in isolation. Frontend E2E tests run against a locally built and previewed frontend using Playwright across Chromium and WebKit.
 
 ---
 
@@ -88,11 +92,49 @@ tests/
     test_smoke_integration.py
   hardware/
     test_usb_hub_hil.py            # Physical USB hub detection and ports
+
+frontend/
+  src/
+    api/
+      __tests__/
+        client.spec.js             # Axios API client
+    components/
+      common/
+        __tests__/
+          ConfirmDialog.spec.js    # Modal component
+          DataTable.spec.js        # Sortable/paginated table
+          ProgressBar.spec.js      # Job progress indicator
+          StatusBadge.spec.js      # Drive/job state badge
+      __tests__/
+        HelloWorld.spec.js
+    composables/
+      __tests__/
+        usePolling.spec.js         # Periodic refresh composable
+        useRoleGuard.spec.js       # Role-based navigation guard
+    stores/
+      __tests__/
+        auth.spec.js               # Pinia auth store
+        theme.spec.js              # Pinia theme store
+  e2e/
+    audit.spec.js                  # Audit log view
+    dashboard.spec.js              # Dashboard / home page
+    drives.spec.js                 # Drive management flows
+    jobs.spec.js                   # Job creation and monitoring
+    keyboard.spec.js               # Keyboard accessibility
+    login.spec.js                  # Authentication flow
+    mounts.spec.js                 # Network mount management
+    role-gating.spec.js            # Role-based UI gating
+    setup-wizard.spec.js           # First-run setup wizard
+    theme.spec.js                  # Theme switching
+    users.spec.js                  # User management
+    vue.spec.js
 ```
 
 ---
 
 ## 3. Tooling and Dependencies
+
+### 3.1 Backend
 
 Test dependencies are declared under `[project.optional-dependencies] dev` in `pyproject.toml`:
 
@@ -109,6 +151,27 @@ Install all dev dependencies:
 
 ```bash
 pip install -e ".[dev]"
+```
+
+### 3.2 Frontend
+
+Frontend test dependencies are declared in `frontend/package.json` (dev dependencies):
+
+| Package | Purpose |
+|---------|---------|
+| `vitest` | Unit test runner (Jest-compatible API) |
+| `@vitest/coverage-v8` | V8-based code coverage |
+| `jsdom` | DOM environment for component rendering |
+| `@vue/test-utils` | Vue component mounting and interaction helpers |
+| `@playwright/test` | E2E test runner |
+| `@axe-core/playwright` | Accessibility assertions in E2E tests |
+
+Install frontend dependencies:
+
+```bash
+cd frontend
+npm ci
+npx playwright install --with-deps chromium webkit  # first-time E2E setup
 ```
 
 ---
@@ -156,7 +219,34 @@ Requires physical USB hub hardware attached to the machine. Must run on Linux.
 python -m pytest tests/hardware/ -v --run-hardware
 ```
 
-### 4.4 Quick smoke check
+### 4.4 Frontend unit tests
+
+Runs all Vitest unit tests under `frontend/src/` with coverage:
+
+```bash
+cd frontend
+npm run test:unit
+```
+
+Coverage thresholds are enforced for stores and composables (≥ 80 % lines). Coverage reports are written to `frontend/coverage/`.
+
+### 4.5 Frontend E2E tests
+
+Requires a built and previewed frontend. Playwright runs against `http://localhost:4173` (Vite preview):
+
+```bash
+cd frontend
+npm run build
+npx playwright test
+```
+
+The report is written to `frontend/playwright-report/`. To run interactively:
+
+```bash
+npx playwright test --ui
+```
+
+### 4.6 Quick smoke check
 
 ```bash
 python -m pytest tests/ -q
@@ -171,7 +261,7 @@ python -m pytest tests/ -q
 
 Unit tests run natively on Linux, macOS, and Windows without Docker — they need no external services. Integration tests, however, require PostgreSQL. Rather than requiring each developer to install PostgreSQL locally, a dedicated test compose file provides the database as a container that works identically on all three platforms.
 
-```
+```text
 needs Docker?   unit tests     integration tests    hardware tests
 ─────────────   ──────────     ─────────────────    ──────────────
 Linux           no             yes (postgres only)  yes (+ USB HW)
@@ -231,8 +321,10 @@ The API is then reachable at `http://localhost:8000` in addition to `https://loc
 
 | Workflow | Trigger | What runs |
 |----------|---------|----------|
-| `run-tests.yml` — unit tests | push / PR | pytest unit tests on **Linux, macOS, Windows** matrix (no Docker) |
-| `run-tests.yml` — integration tests | push / PR | pytest integration tests on Linux with a GitHub Actions PostgreSQL service container |
+| `run-tests.yml` — backend unit tests | push / PR | pytest unit tests on **Linux, macOS, Windows** matrix (no Docker) |
+| `run-tests.yml` — backend integration tests | push / PR | pytest integration tests on Linux with a GitHub Actions PostgreSQL service container |
+| `run-tests.yml` — frontend unit tests | push / PR | `npm run test:unit` (Vitest + coverage) on ubuntu-latest |
+| `run-tests.yml` — frontend E2E tests | push / PR | `npx playwright test` (Chromium + WebKit) on ubuntu-latest; Playwright report uploaded as artifact |
 | `docker-build.yml` — build & smoke test | push to main / PR / release | Builds both images, starts full stack, verifies `/health` |
 | `docker-build.yml` — publish | GitHub Release only | Pushes images to GHCR, attaches production `docker-compose.yml` to the release |
 
@@ -509,3 +601,19 @@ finally:
 - [ ] Place the file under `tests/hardware/`.
 - [ ] Document the physical setup required in the test module docstring.
 - [ ] Never run destructively (no drive wipe) without a confirmation guard or explicit skip condition.
+
+### Checklist for new frontend unit tests
+
+- [ ] Place the file under `src/<module>/__tests__/` alongside the source file it tests.
+- [ ] Use `@vue/test-utils` `mount`/`shallowMount` for component tests; use Vitest directly for stores and composables.
+- [ ] Mock API calls via `vi.mock` — do not make real HTTP requests.
+- [ ] Assert both the happy path and error/empty states.
+- [ ] Ensure coverage thresholds (≥ 80 % lines/statements for stores and composables) are maintained.
+
+### Checklist for new frontend E2E tests
+
+- [ ] Place the file under `frontend/e2e/` with a `.spec.js` extension.
+- [ ] Use Playwright `page` fixtures — do not import Vue or Vitest APIs.
+- [ ] Set up required backend state (drives, jobs, mounts) via API calls in a `beforeEach` / `test.beforeAll` hook or use a test-specific mock server.
+- [ ] Add accessibility assertions using `@axe-core/playwright` where appropriate.
+- [ ] Keep tests isolated — reset state in `afterEach` so test order does not matter.
