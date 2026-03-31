@@ -67,15 +67,13 @@ A [Postman collection](postman/ecube-postman-collection.json) is also available 
 
 Build and deployment guidance (release artifacts, package deployment, Docker images, and compose deployment) is documented in [Build and Deployment](docs/design/13-build-and-deployment.md).
 
-## API Fuzz Testing
+## CI Status
 
-Schemathesis auto-generates randomised requests from the OpenAPI schema to find schema violations, server errors, and undocumented status codes. A helper script runs the full scan inside Docker containers:
+The three badges at the top of this file reflect the current state of automated CI workflows:
 
-```bash
-./scripts/run_schemathesis.sh
-```
-
-Results are saved to `schemathesis-output.txt`. See the [Schemathesis Local Guide](docs/testing/04-schemathesis-local.md) for manual steps, environment variables, and troubleshooting.
+- **Tests** — four test suites run on every push: backend unit tests (pytest, SQLite in-memory, cross-platform), backend integration tests (pytest against a live PostgreSQL instance), frontend unit tests (Vitest with coverage), and frontend end-to-end tests (Playwright). See [docs/testing/05-automated-test-requirements.md](docs/testing/05-automated-test-requirements.md) for test conventions.
+- **Security Scan** — static analysis and dependency vulnerability checks. See [docs/testing/03-security-scanning.md](docs/testing/03-security-scanning.md) for details.
+- **Schemathesis API Fuzz** — auto-generated requests from the OpenAPI schema to detect schema violations, server errors, and undocumented status codes. See the [Schemathesis Local Guide](docs/testing/04-schemathesis-local.md) for running the scan locally.
 
 ## QA Test-Case Sync
 
