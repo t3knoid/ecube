@@ -470,14 +470,11 @@ TRUST_PROXY_HEADERS=${trust_proxy}
 # Mount prefix used by nginx to proxy /api/* to the backend.
 # Affects Swagger UI and OpenAPI schema server URL.
 API_ROOT_PATH=${api_root_path}
-
-# Automatically run Alembic migrations on service start.
-ECUBE_RUN_MIGRATIONS_ON_START=true
 EOF
     chmod 600 "${env_file}"
     chown ecube:ecube "${env_file}"
   else
-    echo "[DRY-RUN] Would write ${env_file} with SECRET_KEY, DATABASE_URL placeholder, TRUST_PROXY_HEADERS=${trust_proxy}, API_ROOT_PATH=${api_root_path}, ECUBE_RUN_MIGRATIONS_ON_START=true"
+    echo "[DRY-RUN] Would write ${env_file} with SECRET_KEY, DATABASE_URL placeholder, TRUST_PROXY_HEADERS=${trust_proxy}, API_ROOT_PATH=${api_root_path}"
   fi
   ok ".env written (remember to update DATABASE_URL before starting the service)"
 }
@@ -500,6 +497,7 @@ User=ecube
 Group=ecube
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=-${INSTALL_DIR}/.env
+ExecStartPre=${INSTALL_DIR}/venv/bin/alembic upgrade head
 ExecStart=${INSTALL_DIR}/venv/bin/uvicorn \\
   --host ${bind_host} \\
   --port ${API_PORT} \\
