@@ -136,7 +136,7 @@ Installs the backend **and** the nginx-fronted frontend on the same host. uvicor
 sudo ./install.sh --backend-only
 ```
 
-Installs the backend service only. uvicorn binds to `0.0.0.0` so the API is directly reachable from the network. No nginx configuration is created.
+Installs the backend service only. uvicorn binds to `0.0.0.0` so the API is directly reachable from the network. No nginx configuration is created. If you later run `--frontend-only` on the same host, the installer will automatically rebind uvicorn to `127.0.0.1` and update `.env`.
 
 ### Frontend Only
 
@@ -144,9 +144,15 @@ Installs the backend service only. uvicorn binds to `0.0.0.0` so the API is dire
 sudo ./install.sh --frontend-only
 ```
 
-Installs nginx and deploys the pre-built frontend bundle only. Use this when the backend is already installed on the same host or on a separate server. Ensure the backend API is reachable at `https://127.0.0.1:<api-port>` for the nginx proxy to function.
+Installs nginx and deploys the pre-built frontend bundle only. Use this when the backend is already installed on the same host or on a separate server.
 
-Two successive invocations (one `--backend-only`, one `--frontend-only`) on the same host are fully supported.
+When `--frontend-only` detects an existing backend install on the same host (i.e., `/etc/systemd/system/ecube.service` is present), it automatically:
+
+- Patches `.env` to set `TRUST_PROXY_HEADERS=true` and `API_ROOT_PATH=/api` so FastAPI renders Swagger UI and OpenAPI schema URLs correctly behind nginx.
+- Rewrites the systemd unit so uvicorn binds to `127.0.0.1` instead of `0.0.0.0`, removing direct external API access.
+- Restarts `ecube.service` to apply the changes.
+
+Two successive invocations (one `--backend-only`, one `--frontend-only`) on the same host are therefore fully supported without any manual reconfiguration.
 
 ---
 
