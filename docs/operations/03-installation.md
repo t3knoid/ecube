@@ -112,6 +112,7 @@ At the end it prints a summary with the UI URL, API URL, and service management 
 | `--api-port PORT` | `8443` | Port the backend (uvicorn) binds to (HTTP when behind nginx, HTTPS in backend-only mode) |
 | `--ui-port PORT` | `443` | HTTPS port nginx listens on |
 | `--backend-host HOST` | `127.0.0.1` | Hostname/IP of the backend; set when the backend is on a separate host |
+| `--allow-insecure-backend` | off | Disable TLS certificate verification (`proxy_ssl_verify off`) when proxying to a remote backend. Required when `--backend-host` is not `127.0.0.1` and the backend uses a self-signed certificate. Only use on trusted networks. |
 | `--hostname HOST` | `$(hostname -f)` | Hostname/IP used as TLS certificate CN and in summary URLs |
 | `--cert-validity DAYS` | `3650` | Self-signed certificate validity in days |
 | `--yes` / `-y` | off | Non-interactive / unattended mode |
@@ -159,7 +160,13 @@ Installs nginx and deploys the pre-built frontend bundle only.
 
 Two successive invocations (`--backend-only` then `--frontend-only`) on the same host are therefore fully supported without any manual reconfiguration.
 
-**Remote backend (`--backend-host HOST`):** nginx proxies `/api/` to `https://<HOST>:<api-port>/` with `proxy_ssl_verify off`, because the remote backend may use a self-signed certificate. Only use `--backend-host` on trusted networks (VPN, private subnet, etc.). To enable certificate verification, place the backend's CA certificate at `<install-dir>/certs/backend-ca.pem` and manually update the nginx site config with `proxy_ssl_verify on; proxy_ssl_trusted_certificate <path>;` after installation.
+**Remote backend (`--backend-host HOST`):** nginx proxies `/api/` to `https://<HOST>:<api-port>/`. Because the remote backend may use a self-signed certificate, you must explicitly opt in to disabling TLS verification with `--allow-insecure-backend`; without this flag the installer will abort if a remote host is specified.
+
+```bash
+sudo ./install.sh --frontend-only --backend-host <backend-ip-or-hostname> --allow-insecure-backend
+```
+
+Only use `--allow-insecure-backend` on trusted networks (VPN, private subnet, etc.). To enable proper certificate verification instead, place the backend's CA certificate at `<install-dir>/certs/backend-ca.pem` and manually update the nginx site config with `proxy_ssl_verify on; proxy_ssl_trusted_certificate <path>;` after installation.
 
 ---
 

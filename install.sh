@@ -73,6 +73,7 @@ VERSION_TAG=""
 INSTALL_BACKEND=true
 INSTALL_FRONTEND=true
 BACKEND_HOST="127.0.0.1"
+ALLOW_INSECURE_BACKEND=false
 
 GITHUB_OWNER="t3knoid"
 GITHUB_REPO="ecube"
@@ -96,6 +97,11 @@ Options:
   --ui-port PORT         HTTPS port for nginx         (default: 443)
   --backend-host HOST    Hostname/IP of the backend   (default: 127.0.0.1)
                          Set this when the backend is on a separate host.
+  --allow-insecure-backend
+                         Disable TLS verification when proxying to a remote
+                         backend (proxy_ssl_verify off). Only use on trusted
+                         networks. Required when --backend-host is not 127.0.0.1
+                         and the backend uses a self-signed certificate.
   --hostname HOST        Hostname/IP for TLS cert CN  (default: \$(hostname -f))
   --cert-validity DAYS   Self-signed cert validity    (default: 3650)
   --yes, -y              Non-interactive / unattended mode
@@ -110,7 +116,8 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --backend-only)   INSTALL_FRONTEND=false; shift ;;
     --frontend-only)  INSTALL_BACKEND=false;  shift ;;
-    --backend-host)   BACKEND_HOST="$2"; shift 2 ;;
+    --backend-host)            BACKEND_HOST="$2"; shift 2 ;;
+    --allow-insecure-backend)  ALLOW_INSECURE_BACKEND=true; shift ;;
     --install-dir)    INSTALL_DIR="$2";  shift 2 ;;
     --api-port)       API_PORT="$2";     shift 2 ;;
     --ui-port)        UI_PORT="$2";      shift 2 ;;
@@ -728,7 +735,7 @@ install_frontend() {
   # 4. nginx site config
   info "Writing nginx site config /etc/nginx/sites-available/ecube..."
   if [[ "${DRY_RUN}" != true ]]; then
-    cat > /etc/nginx/sites-available/ecube <<EOF_NGINX
+        cat > /etc/nginx/sites-available/ecube <<EOF_NGINX
 server {
     listen ${UI_PORT} ssl;
     listen [::]:${UI_PORT} ssl;
@@ -759,15 +766,21 @@ EOF_NGINX
 EOF_PROXY
   else
     # Remote backend: proxy over HTTPS.
-    # SECURITY: proxy_ssl_verify is off because the remote backend may use a
-    # self-signed certificate.  Only use --backend-host on trusted networks.
-    # To enable verification, place the backend's CA certificate at
-    # ${INSTALL_DIR}/certs/backend-ca.pem and replace the lines below with:
+    if [[ "${ALLOW_INSECURE_BACKEND}" != true ]]; then
+      error "--backend-host is set to a remote host but TLS verification is enabled."
+      error "If the remote backend uses a self-signed certificate, re-run with --allow-insecure-backend."
+      error "Only use --allow-insecure-backend on trusted networks."
+      exit 1
+    fi
+    # SECURITY: proxy_ssl_verify is off because --allow-insecure-backend was passed.
+    # Only use on trusted networks. To enable verification instead, place the
+    # backend's CA certificate at ${INSTALL_DIR}/certs/backend-ca.pem and replace
+    # proxy_ssl_verify off with:
     #   proxy_ssl_verify on;
     #   proxy_ssl_trusted_certificate ${INSTALL_DIR}/certs/backend-ca.pem;
     cat >> /etc/nginx/sites-available/ecube <<EOF_PROXY
         proxy_pass https://${BACKEND_HOST}:${API_PORT}/;
-        proxy_ssl_verify off; # trusted-network only — see installer docs
+        proxy_ssl_verify off; # --allow-insecure-backend passed; trusted-network only
 EOF_PROXY
   fi
   cat >> /etc/nginx/sites-available/ecube <<EOF_PROXY2
