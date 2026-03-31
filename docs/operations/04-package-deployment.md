@@ -145,8 +145,9 @@ sudo systemctl daemon-reload
 
 ## Initialize Database
 
-Database setup can be done manually or via the API-based provisioning endpoint.
-Choose **one** option:
+> **Pre-requisite for `install.sh` users:** The installer validates credentials against an already-running PostgreSQL instance — it does not create the database or user. You must complete this step (or an equivalent) **before** running `install.sh`. Once the database and user exist, the installer will collect the connection details interactively and write `DATABASE_URL` to `.env`.
+
+For manual deployments, database setup can be done via the API-based provisioning endpoint or manually. Choose **one** option:
 
 ### Option A: API-Based Database Provisioning (Recommended)
 
@@ -169,9 +170,7 @@ curl -k -X POST https://localhost:8443/setup/database/provision \
   -d '{"host": "localhost", "port": 5432, "admin_username": "postgres", "admin_password": "secret", "app_database": "ecube", "app_username": "ecube", "app_password": "ecube123"}'
 ```
 
-The provision endpoint creates the PostgreSQL user and database, runs Alembic
-migrations, and writes `DATABASE_URL` to `.env`. The running service
-reconfigures its connection pool in-place — no restart is required.
+The provision endpoint creates the PostgreSQL user and database and runs Alembic migrations. For manual deployments, it also writes `DATABASE_URL` to `.env` and the running service reconfigures its connection pool in-place — no restart is required. When `install.sh` was used, `DATABASE_URL` is already present in `.env` (written during installation); the provision endpoint in that case only runs migrations.
 
 ### Option B: Manual Setup (CLI)
 
@@ -282,7 +281,11 @@ For the complete list of environment variables, defaults, and descriptions, see:
 
 ### Quick Start
 
-ECUBE reads configuration from environment variables or a `.env` file. All settings have built-in defaults — the `.env` file is **optional**. Create one only to override defaults:
+ECUBE reads configuration from environment variables or a `.env` file. All settings have built-in defaults.
+
+> **`install.sh` users:** `.env` is always created by the installer with a random `SECRET_KEY` and the `DATABASE_URL` you supplied during installation. Edit it only to change a setting after the fact.
+
+For **manual deployments**, `.env` is optional — create one only to override defaults:
 
 ```bash
 # Copy the example file as a starting point
