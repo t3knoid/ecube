@@ -1160,7 +1160,7 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 | 4 | Disk I/O metrics present | Inspect response body | `disk_read_bytes` and `disk_write_bytes` are non-negative integers |
 | 5 | Active jobs count | Start an export job, call endpoint | `active_jobs` ≥ 1 |
 | 6 | Worker queue size | Create a PENDING job (created but not started), call endpoint | `worker_queue_size` ≥ 1 |
-| 7 | Worker queue size decrements | Start the pending job, call endpoint again | `worker_queue_size` is 0 (job moved to RUNNING) |
+| 7 | Worker queue size decrements | Start the pending job, call endpoint again | `worker_queue_size` decreases by 1 (is 0 if no other PENDING jobs exist; job moved to RUNNING) |
 | 8 | Degraded when DB down | Stop PostgreSQL, call endpoint with valid token | 200, `status: "degraded"`, `database: "error"`, `database_error` is non-null |
 | 9 | Unauthenticated rejected | `GET /introspection/system-health` without token | 401 |
 | 10 | Processor role allowed | `GET /introspection/system-health` with processor token | 200 |
