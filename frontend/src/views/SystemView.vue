@@ -125,8 +125,9 @@ const diskIoDisplay = computed(() => {
 })
 
 const workerQueueDisplay = computed(() => {
-  if (health.value == null) return t('common.labels.notAvailable')
-  return health.value.worker_queue_size
+  const q = health.value?.worker_queue_size
+  if (q == null) return t('common.labels.notAvailable')
+  return q
 })
 
 function extractApiMessage(err) {
