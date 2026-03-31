@@ -456,6 +456,15 @@ _check_port() {
 # ===========================================================================
 _resolve_host() {
   HOST="${HOSTNAME_OVERRIDE:-$(hostname -f 2>/dev/null || hostname)}"
+
+  # Validate HOST before it is embedded in an OpenSSL -subj field or an nginx
+  # server_name directive.  --hostname is already validated at parse time, so
+  # this guard primarily catches unsafe values returned by `hostname -f`.
+  if ! _is_valid_host "${HOST}"; then
+    warn "Resolved hostname '${HOST}' contains characters unsafe for OpenSSL/nginx — falling back to 'localhost'."
+    HOST="localhost"
+  fi
+
   # Primary non-loopback IPv4 — prefer `ip` (iproute2), fall back to `hostname -I`.
   if command -v ip &>/dev/null; then
     HOST_IP=$(ip -4 addr show scope global 2>/dev/null | awk '/inet/{print $2}' | cut -d/ -f1 | head -1 || true)
