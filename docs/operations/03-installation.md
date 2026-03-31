@@ -1,6 +1,6 @@
 # ECUBE Installation Guide
 
-**Version:** 1.0  
+**Version:** 2.0  
 **Last Updated:** March 2026  
 **Audience:** Systems Administrators, IT Staff  
 **Document Type:** Installation Procedures
@@ -9,10 +9,28 @@
 
 ## Table of Contents
 
-1. [Prerequisites](#prerequisites)
-2. [Hardware Requirements](#hardware-requirements)
-3. [Software Requirements](#software-requirements)
-4. [Deployment Options](#deployment-options)
+1. [Deployment Options](#deployment-options)
+2. [Prerequisites](#prerequisites)
+3. [Quick Start (bare-metal)](#quick-start-bare-metal)
+4. [CLI Flags Reference](#cli-flags-reference)
+5. [Install Modes](#install-modes)
+   - [Full Install (default)](#full-install-default)
+   - [Backend Only](#backend-only)
+   - [Frontend Only](#frontend-only)
+6. [TLS Certificates](#tls-certificates)
+7. [Post-Install: Setup Wizard](#post-install-setup-wizard)
+8. [Upgrade Procedure](#upgrade-procedure)
+9. [Uninstall Procedure](#uninstall-procedure)
+10. [Docker Compose Deployment](#docker-compose-deployment)
+
+---
+
+## Deployment Options
+
+| Method | When to use |
+|--------|-------------|
+| **Bare-metal (`install.sh`)** | Dedicated Linux host or VM; no Docker required. |
+| **Docker Compose** | Dev/lab environments or container-native ops. See [05-docker-deployment.md](05-docker-deployment.md). |
 
 ---
 
@@ -24,7 +42,7 @@
 
 - CPU: Quad-core 2.0 GHz x86-64
 - RAM: 8 GB
-- Storage: 256 GB SSD (for system, database, logs)
+- Storage: 256 GB SSD (for system, database, logs) — installer requires ≥ 2 GiB free
 - USB: USB 3.1 hub with ≥4 ports
 - Network: 1Gbps Ethernet
 
@@ -32,36 +50,168 @@
 
 - HTTPS network access to identity provider (LDAP, OIDC provider, or local authentication)
 - NFS/SMB mount access to evidence source shares
-- PostgreSQL 14+ database over network or localhost
+- PostgreSQL 14+ database over network or localhost (the installer does **not** install PostgreSQL)
 
 ### Software Requirements
 
-**Operating System:**
+**Operating System:** Ubuntu 20.04 LTS, 22.04 LTS, or later (Debian 11+ also supported).
 
-- Ubuntu 20.04 LTS, 22.04 LTS, or later (recommended)
-- CentOS/RHEL 8+ (supported, similar steps)
-- Linux kernel 5.10+ (for USB device handling)
+The installer will:
+- Verify Debian/Ubuntu and bail out on unsupported OS.
+- Offer to install `python3.11` via the `deadsnakes` PPA if it is absent.
+- Install `nginx` via `apt` if `--frontend-only` or full install is selected and nginx is absent.
 
-**System Packages:**
+**Required commands (must be present before running `install.sh`):**
+
+- `curl`
+- `openssl`
+- `systemctl`
+
+---
+
+## Quick Start (bare-metal)
+
+Download a release package from [GitHub Releases](https://github.com/t3knoid/ecube/releases), extract it, and run the installer as root:
 
 ```bash
-sudo apt update
-sudo apt install -y \
-  python3.11 \
-  python3.11-venv \
-  python3-pip \
-  postgresql \
-  postgresql-contrib \
-  nfs-common \
-  cifs-utils \
-  usbutils \
-  udev \
-  git
+tar -xzf ecube-package-<version>.tar.gz
+cd ecube-package-<version>
+sudo ./install.sh
 ```
 
-## Deployment Options
+The installer will:
+1. Run pre-flight checks (OS, disk space, ports, Python 3.11).
+2. Create the `ecube` system user and ECUBE role groups.
+3. Set up a Python virtual environment in `/opt/ecube/venv`.
+4. Generate a self-signed TLS certificate.
+5. Write `/opt/ecube/.env` with a random `SECRET_KEY` and a `DATABASE_URL` placeholder.
+6. Write and start the `ecube.service` systemd unit.
+7. (Full install) Configure nginx to serve the frontend and proxy `/api/` to the backend.
+8. Optionally configure `ufw` firewall rules.
 
-Two deployment methods are supported:
+At the end it prints a summary with the UI URL, API URL, and service management commands.
 
-- **Package Deployment (Systemd Service):** See [04-package-deployment.md](04-package-deployment.md)
-- **Docker Compose:** See [05-docker-deployment.md](05-docker-deployment.md)
+---
+
+## CLI Flags Reference
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| *(none)* | — | Install both backend and frontend |
+| `--backend-only` | — | Install the backend service and systemd unit only |
+| `--frontend-only` | — | Install nginx and the pre-built frontend only |
+| `--install-dir DIR` | `/opt/ecube` | Root installation directory |
+| `--api-port PORT` | `8443` | HTTPS port the backend (uvicorn) binds to |
+| `--ui-port PORT` | `443` | HTTPS port nginx listens on |
+| `--hostname HOST` | `$(hostname -f)` | Hostname/IP used as TLS certificate CN and in summary URLs |
+| `--cert-validity DAYS` | `3650` | Self-signed certificate validity in days |
+| `--yes` / `-y` | off | Non-interactive / unattended mode |
+| `--version TAG` | *(current package)* | Download and install a specific release tag from GitHub |
+| `--uninstall` | — | Remove all installed ECUBE components |
+| `--dry-run` | — | Print all planned actions without executing them |
+
+---
+
+## Install Modes
+
+### Full Install (default)
+
+```bash
+sudo ./install.sh
+```
+
+Installs the backend **and** the nginx-fronted frontend on the same host. uvicorn binds to `127.0.0.1` (loopback only); all external traffic enters through nginx on port `443`.
+
+### Backend Only
+
+```bash
+sudo ./install.sh --backend-only
+```
+
+Installs the backend service only. uvicorn binds to `0.0.0.0` so the API is directly reachable from the network. No nginx configuration is created.
+
+### Frontend Only
+
+```bash
+sudo ./install.sh --frontend-only
+```
+
+Installs nginx and deploys the pre-built frontend bundle only. Use this when the backend is already installed on the same host or on a separate server. Ensure the backend API is reachable at `https://127.0.0.1:<api-port>` for the nginx proxy to function.
+
+Two successive invocations (one `--backend-only`, one `--frontend-only`) on the same host are fully supported.
+
+---
+
+## TLS Certificates
+
+The installer generates a self-signed RSA-2048 certificate if `<install-dir>/certs/cert.pem` does not already exist:
+
+```bash
+openssl req -x509 -nodes -days <cert-validity> -newkey rsa:2048 \
+  -keyout <install-dir>/certs/key.pem \
+  -out   <install-dir>/certs/cert.pem \
+  -subj  "/CN=<hostname>" \
+  -addext "subjectAltName=IP:<ip>,DNS:<hostname>"
+```
+
+**Bring your own certificate:** Place your `cert.pem` and `key.pem` in `<install-dir>/certs/` before running the installer. The installer skips generation if those files already exist.
+
+---
+
+## Post-Install: Setup Wizard
+
+After installation, open the setup wizard in a browser:
+
+```
+https://<hostname>:<ui-port>/setup
+```
+
+The wizard will:
+1. Test and provision the PostgreSQL database connection.
+2. Run Alembic migrations.
+3. Create the initial admin user.
+
+> **Note:** `<install-dir>/.env` contains `DATABASE_URL=postgresql://ecube:CHANGE_ME@localhost/ecube` as a placeholder. Update it with your real PostgreSQL credentials **before** completing the setup wizard, or use the wizard's database provisioning form which overwrites it automatically.
+
+The `ecube-setup` CLI (`/opt/ecube/venv/bin/ecube-setup`) is an advanced alternative for headless environments. The setup wizard is the recommended path.
+
+---
+
+## Upgrade Procedure
+
+1. Download the new release package.
+2. Extract it and run the installer:
+
+   ```bash
+   tar -xzf ecube-package-<new-version>.tar.gz
+   cd ecube-package-<new-version>
+   sudo ./install.sh
+   ```
+
+3. The installer detects the existing installation, prompts before overwriting files, and **never overwrites** `.env`.
+4. The service is restarted only if files changed.
+5. `ECUBE_RUN_MIGRATIONS_ON_START=true` in `.env` ensures Alembic migrations run automatically on service restart.
+
+---
+
+## Uninstall Procedure
+
+```bash
+sudo ./install.sh --uninstall
+```
+
+This will:
+1. Stop and disable `ecube.service`.
+2. Remove the nginx ecube site and reload nginx.
+3. Prompt to remove `<install-dir>` and `/var/lib/ecube`.
+4. Prompt to remove the `ecube` system user and group.
+5. Remove ECUBE role groups (`ecube-admin`, `ecube-manager`, `ecube-processor`, `ecube-auditor`).
+6. Optionally remove the `deadsnakes` PPA if it was added by the installer.
+
+Use `--yes` to skip all confirmation prompts.
+
+---
+
+## Docker Compose Deployment
+
+See [05-docker-deployment.md](05-docker-deployment.md) for Docker-based setup.
