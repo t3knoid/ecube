@@ -250,10 +250,10 @@ def system_health(
         except Exception:
             pass
         try:
-            io = _psutil.disk_io_counters()
-            if io is not None:
-                disk_read_bytes = io.read_bytes
-                disk_write_bytes = io.write_bytes
+            disk_counters = _psutil.disk_io_counters()
+            if disk_counters is not None:
+                disk_read_bytes = disk_counters.read_bytes
+                disk_write_bytes = disk_counters.write_bytes
         except Exception:
             pass
 
