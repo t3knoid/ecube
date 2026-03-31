@@ -360,6 +360,11 @@ _maybe_download_release() {
     for item in app alembic alembic.ini pyproject.toml README.md LICENSE frontend/dist; do
       if [[ -e "${src_dir}/${item}" ]]; then
         run mkdir -p "${INSTALL_DIR}/$(dirname "${item}")"
+        # Remove a pre-existing destination *directory* before copying so that
+        # GNU cp does not nest it (cp -r src/app existing/app → existing/app/app).
+        if [[ -d "${src_dir}/${item}" ]]; then
+          run rm -rf "${INSTALL_DIR}/${item}"
+        fi
         run cp -r "${src_dir}/${item}" "${INSTALL_DIR}/${item}"
       fi
     done
@@ -594,6 +599,8 @@ install_frontend() {
     exit 1
   fi
   info "Using frontend bundle from ${dist_src}"
+  # Clear the web root before copying so upgrades never leave stale files behind.
+  run rm -rf "${www_dir:?}"
   run mkdir -p "${www_dir}"
   run cp -r "${dist_src}/." "${www_dir}/"
   # Static files are read by nginx (www-data); root ownership with world-readable
