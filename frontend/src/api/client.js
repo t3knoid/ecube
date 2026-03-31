@@ -38,8 +38,14 @@ function normalizeErrorMessage(data, fallbackMessage) {
 function isAlreadyProvisionedConflict(status, data, requestUrl = '') {
   if (status !== 409) return false
   const detail = normalizeErrorMessage(data, '').toLowerCase()
+  // Match on the path suffix so this works regardless of BASE_URL or a
+  // cross-origin VITE_API_BASE_URL override (full URLs won't have a bare
+  // "/api/..." prefix but will still end with the same path segment).
   const url = String(requestUrl || '')
-  return url.includes('/api/setup/database/provision') && detail.includes('already provisioned')
+  const isProvisionUrl =
+    url.includes('/setup/database/provision') &&
+    !url.includes('/setup/database/provision-status')
+  return isProvisionUrl && detail.includes('already provisioned')
 }
 
 export function isExpiredAuthPayload(data) {
