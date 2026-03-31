@@ -116,14 +116,14 @@ At the end it prints a summary with the UI URL, API URL, and service management 
 | `--api-port PORT` | `8443` | Port the backend (uvicorn) binds to (HTTP when behind nginx, HTTPS in backend-only mode) |
 | `--ui-port PORT` | `443` | HTTPS port nginx listens on |
 | `--backend-host HOST` | `127.0.0.1` | Hostname/IP of the backend. The default (`127.0.0.1`) assumes the backend runs on the same host and is only valid for same-host deployments. **Must be specified when using `--frontend-only` with a backend on a separate host.** |
-| `--allow-insecure-backend` | on | Disable TLS certificate verification (`proxy_ssl_verify off`) when proxying to a remote backend. **On by default** for quick bring-up — a warning is printed when in effect. |
+| `--allow-insecure-backend` | *(default)* | Explicitly select TLS verification disabled (`proxy_ssl_verify off`) when proxying to a remote backend. This is already the default behaviour; the flag is provided for clarity in scripts that also set `--secure-backend` in some code paths. A warning is always printed when verification is off. |
 | `--secure-backend` | — | Enable TLS certificate verification against the OS trust store (`proxy_ssl_verify on`). Use when the remote backend has a CA-signed cert already trusted by the system and no custom CA file is needed. Mutually exclusive with `--allow-insecure-backend`. |
 | `--backend-ca-file FILE` | — | Path to a PEM CA certificate used to verify the remote backend's TLS certificate (`proxy_ssl_trusted_certificate`). Use when the backend has a private CA-signed cert that is not in the system trust store. Implies `proxy_ssl_verify on`. |
 | `--db-host HOST` | *(prompted)* | **Backend installs only.** PostgreSQL server hostname or IP address. Must be non-empty and contain only DNS/IP-safe characters. Required in `--yes` mode. Ignored for `--frontend-only`. |
 | `--db-port PORT` | `5432` | **Backend installs only.** PostgreSQL server port. Must be a valid integer between 1 and 65535. Ignored for `--frontend-only`. |
 | `--db-name NAME` | `ecube` | **Backend installs only.** Name of the PostgreSQL database. Must contain only alphanumerics and underscores. Ignored for `--frontend-only`. |
 | `--db-user USER` | *(prompted)* | **Backend installs only.** PostgreSQL username. Must be non-empty and must not contain whitespace, `/`, or `@`. Required in `--yes` mode. Ignored for `--frontend-only`. |
-| `--db-password PASS` | *(prompted)* | **Backend installs only.** PostgreSQL password. Must be non-empty and must not contain whitespace. Required in `--yes` mode. URL-unsafe characters (`%`, `@`, `:`, `/`, space) are percent-encoded automatically when building `DATABASE_URL`. Ignored for `--frontend-only`. |
+| `--db-password PASS` | *(prompted)* | **Backend installs only.** PostgreSQL password. Must be non-empty and must not contain whitespace. Required in `--yes` mode. All characters outside the RFC 3986 unreserved set are percent-encoded automatically when building `DATABASE_URL`. Ignored for `--frontend-only`. |
 | `--hostname HOST` | `$(hostname -f)` | Hostname/IP used as TLS certificate CN and in summary URLs |
 | `--cert-validity DAYS` | `3650` | Self-signed certificate validity in days |
 | `--yes` / `-y` | off | Non-interactive / unattended mode |
@@ -181,7 +181,7 @@ Two successive invocations (`--backend-only` then `--frontend-only`) on the same
 | Backend has a private/internal CA cert | `sudo ./install.sh --frontend-only --backend-host <host> --backend-ca-file /path/to/ca.pem` |
 | Backend has a CA-signed cert trusted by the OS | `sudo ./install.sh --frontend-only --backend-host <host> --secure-backend` |
 
-Only leave `--allow-insecure-backend` in effect on trusted networks (VPN, private subnet, etc.).
+Only leave TLS verification disabled (the default) on trusted networks (VPN, private subnet, etc.). Pass `--secure-backend` or `--backend-ca-file` to enable certificate verification in any other environment.
 
 ---
 
@@ -210,7 +210,7 @@ Each value is validated as it is entered. The installer then:
 
 1. **TCP reachability check** — uses `nc -z` (or `/dev/tcp` as a fallback) to confirm the port is reachable. The install aborts if the check fails.
 2. **Credential verification** — if `psql` is found on `PATH`, it runs `SELECT 1` against the database to verify the username and password. The install aborts if authentication fails.
-3. Percent-encodes URL-unsafe characters (`%`, `@`, `:`, `/`, space) in the password before embedding it in the connection string.
+3. Percent-encodes all characters outside the RFC 3986 unreserved set (`A–Z a–z 0–9 - _ . ~`) in the password before embedding it in the connection string. This ensures any valid PostgreSQL password produces a valid connection URL regardless of which reserved characters it contains.
 4. Writes `DATABASE_URL=postgresql://<user>:<encoded-pass>@<host>:<port>/<dbname>` into `.env`.
 
 ### Unattended mode (`--yes`)
