@@ -104,7 +104,7 @@ At the end it prints a summary with the UI URL, API URL, and service management 
 ## CLI Flags Reference
 
 | Flag | Default | Description |
-| ------ |--------- | ------------- |
+| ------ | --------- | ------------- |
 | *(none)* | — | Install both backend and frontend |
 | `--backend-only` | — | Install the backend service and systemd unit only |
 | `--frontend-only` | — | Install nginx and the pre-built frontend only |
