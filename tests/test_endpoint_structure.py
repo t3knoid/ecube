@@ -178,6 +178,16 @@ class TestPydanticSchemas:
 class TestOpenAPISchema:
     """Verify OpenAPI/Swagger schema is properly generated."""
 
+    @pytest.fixture(autouse=True)
+    def _restore_openapi_schema(self):
+        """Save and restore app.openapi_schema around every test so that
+        tests which force schema regeneration cannot leak state to each other."""
+        saved = app.openapi_schema
+        try:
+            yield
+        finally:
+            app.openapi_schema = saved
+
     def test_openapi_schema_is_generated(self):
         """FastAPI should generate a valid OpenAPI schema."""
         # The /openapi.json endpoint returns the schema
@@ -346,7 +356,6 @@ class TestOpenAPISchema:
         assert not servers, (
             "OpenAPI schema must not inject a servers entry when api_root_path is empty"
         )
-        app.openapi_schema = None
 
     def test_openapi_servers_set_when_root_path_configured(self):
         """servers[{url}] must match api_root_path when it is set."""
@@ -365,7 +374,6 @@ class TestOpenAPISchema:
         assert any(s.get("url") == "/api" for s in servers), (
             "OpenAPI schema must include servers[{url: '/api'}] when api_root_path='/api'"
         )
-        app.openapi_schema = None
 
 
 class TestAuthenticationStructure:
