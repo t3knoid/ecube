@@ -1,13 +1,25 @@
 # ECUBE Package Deployment
 
-**Version:** 1.0  
+**Version:** 2.0  
 **Last Updated:** March 2026  
 **Audience:** Systems Administrators, IT Staff  
 **Document Type:** Deployment Procedures
 
+> **Note:** The manual steps below are now automated by `install.sh`.  
+> For new deployments, use the installer:
+>
+> ```bash
+> tar -xzf ecube-package-<version>.tar.gz
+> cd ecube-package-<version>
+> sudo ./install.sh
+> ```
+>
+> See [03-installation.md](03-installation.md) for all installer options.  
+> The manual steps are retained below as a reference for advanced or custom deployments.
+
 ---
 
-## Table of Contents
+## Table of Contents (Manual / Advanced Reference)
 
 - [Table of Contents](#table-of-contents)
 - [Create Service Account](#create-service-account)
