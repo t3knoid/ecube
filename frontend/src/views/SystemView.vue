@@ -85,8 +85,9 @@ const pagedRows = computed(() => {
 })
 
 function formatBytes(value) {
-  if (typeof value !== 'number' || value <= 0) return '-'
-  const units = ['B', 'KB', 'MB', 'GB']
+  if (typeof value !== 'number' || value < 0) return '-'
+  if (value === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
   let next = value
   let idx = 0
   while (next >= 1024 && idx < units.length - 1) {
@@ -102,6 +103,32 @@ function asLocalDate(value) {
   if (Number.isNaN(parsed.getTime())) return '-'
   return parsed.toLocaleString()
 }
+
+const cpuDisplay = computed(() => {
+  const p = health.value?.cpu_percent
+  return p != null ? `${p.toFixed(1)}%` : t('common.labels.notAvailable')
+})
+
+const memoryDisplay = computed(() => {
+  const h = health.value
+  if (h?.memory_percent == null) return t('common.labels.notAvailable')
+  if (h.memory_used_bytes != null && h.memory_total_bytes != null) {
+    return `${h.memory_percent.toFixed(1)}% (${formatBytes(h.memory_used_bytes)} / ${formatBytes(h.memory_total_bytes)})`
+  }
+  return `${h.memory_percent.toFixed(1)}%`
+})
+
+const diskIoDisplay = computed(() => {
+  const h = health.value
+  if (h?.disk_read_bytes == null || h?.disk_write_bytes == null) return t('common.labels.notAvailable')
+  return `${formatBytes(h.disk_read_bytes)} R / ${formatBytes(h.disk_write_bytes)} W`
+})
+
+const workerQueueDisplay = computed(() => {
+  const q = health.value?.worker_queue_size
+  if (q == null) return t('common.labels.notAvailable')
+  return q
+})
 
 function extractApiMessage(err) {
   const data = err?.response?.data || {}
@@ -251,10 +278,10 @@ onMounted(loadTabData)
         <span>{{ t('common.labels.status') }}</span><StatusBadge :status="health?.status || 'unknown'" />
         <span>{{ t('common.labels.db') }}</span><StatusBadge :status="health?.database || 'unknown'" />
         <span>{{ t('jobs.activeJobs') }}</span><strong>{{ health?.active_jobs || 0 }}</strong>
-        <span>{{ t('system.cpu') }}</span><strong>{{ t('common.labels.notAvailable') }}</strong>
-        <span>{{ t('system.memory') }}</span><strong>{{ t('common.labels.notAvailable') }}</strong>
-        <span>{{ t('system.diskIo') }}</span><strong>{{ t('common.labels.notAvailable') }}</strong>
-        <span>{{ t('system.workerQueue') }}</span><strong>{{ t('common.labels.notAvailable') }}</strong>
+        <span>{{ t('system.cpu') }}</span><strong>{{ cpuDisplay }}</strong>
+        <span>{{ t('system.memory') }}</span><strong>{{ memoryDisplay }}</strong>
+        <span>{{ t('system.diskIo') }}</span><strong>{{ diskIoDisplay }}</strong>
+        <span>{{ t('system.workerQueue') }}</span><strong>{{ workerQueueDisplay }}</strong>
       </div>
     </article>
 

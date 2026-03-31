@@ -1,4 +1,4 @@
-from unittest.mock import mock_open, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 
 def test_system_health(client, db):
@@ -8,6 +8,112 @@ def test_system_health(client, db):
     assert data["status"] == "ok"
     assert data["database"] == "connected"
     assert "active_jobs" in data
+    assert "worker_queue_size" in data
+    # metric fields are present (may be null when psutil unavailable in CI)
+    assert "cpu_percent" in data
+    assert "memory_percent" in data
+    assert "memory_used_bytes" in data
+    assert "memory_total_bytes" in data
+    assert "disk_read_bytes" in data
+    assert "disk_write_bytes" in data
+
+
+def test_system_health_psutil_metrics(client, db):
+    """When psutil is available the metric fields are populated with real values."""
+    fake_vm = MagicMock()
+    fake_vm.percent = 42.0
+    fake_vm.used = 2_000_000_000
+    fake_vm.total = 8_000_000_000
+
+    fake_io = MagicMock()
+    fake_io.read_bytes = 1_000_000
+    fake_io.write_bytes = 500_000
+
+    with (
+        patch("app.routers.introspection._PSUTIL_AVAILABLE", True),
+        patch("app.routers.introspection._psutil") as mock_psutil,
+    ):
+        mock_psutil.cpu_percent.return_value = 12.5
+        mock_psutil.virtual_memory.return_value = fake_vm
+        mock_psutil.disk_io_counters.return_value = fake_io
+
+        response = client.get("/introspection/system-health")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["cpu_percent"] == 12.5
+    # Use assert_any_call rather than assert_called_once_with: the background
+    # priming task (asyncio.to_thread(prime_cpu_sampler)) may also call
+    # cpu_percent(interval=1.0) on the same mock if it races with this patch,
+    # so we only assert that the endpoint made its expected non-blocking call.
+    mock_psutil.cpu_percent.assert_any_call(interval=None)
+    assert data["memory_percent"] == 42.0
+    assert data["memory_used_bytes"] == 2_000_000_000
+    assert data["memory_total_bytes"] == 8_000_000_000
+    assert data["disk_read_bytes"] == 1_000_000
+    assert data["disk_write_bytes"] == 500_000
+
+
+def test_system_health_psutil_unavailable(client, db):
+    """When psutil is not installed all metric fields are null."""
+    with patch("app.routers.introspection._PSUTIL_AVAILABLE", False):
+        response = client.get("/introspection/system-health")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["cpu_percent"] is None
+    assert data["memory_percent"] is None
+    assert data["memory_used_bytes"] is None
+    assert data["memory_total_bytes"] is None
+    assert data["disk_read_bytes"] is None
+    assert data["disk_write_bytes"] is None
+
+
+def test_system_health_worker_queue_size(client, db):
+    """worker_queue_size counts PENDING jobs."""
+    from app.models.jobs import ExportJob, JobStatus
+
+    job = ExportJob(
+        project_id="PROJ-Q",
+        evidence_number="EV-Q",
+        source_path="/data/q",
+        status=JobStatus.PENDING,
+    )
+    db.add(job)
+    db.commit()
+
+    response = client.get("/introspection/system-health")
+    assert response.status_code == 200
+    assert response.json()["worker_queue_size"] >= 1
+
+
+def test_system_health_worker_queue_size_null_on_count_failure(client, db):
+    """worker_queue_size is None when only the PENDING count query raises.
+
+    The SELECT 1 connectivity probe uses Session.execute (not Query.count), so the
+    database is still reported as reachable.  The RUNNING count (active_jobs) is
+    allowed to succeed (returns 0); only the subsequent PENDING count raises, isolating
+    the worker_queue_size error path from the active_jobs path.  The endpoint must
+    leave worker_queue_size as None rather than defaulting to 0 so callers can
+    distinguish "no pending jobs" from "count unknown".
+    """
+    from sqlalchemy.exc import OperationalError
+
+    # side_effect list: first call (RUNNING / active_jobs) returns 0;
+    # second call (PENDING / worker_queue_size) raises.
+    with patch(
+        "sqlalchemy.orm.Query.count",
+        side_effect=[0, OperationalError("", {}, None)],
+    ):
+        response = client.get("/introspection/system-health")
+
+    assert response.status_code == 200
+    data = response.json()
+    # DB connectivity check still passes — status/database must not be degraded.
+    assert data["status"] == "ok"
+    assert data["database"] == "connected"
+    # Only the PENDING count failed — size must be null, not zero.
+    assert data["worker_queue_size"] is None
 
 
 def test_system_mounts(client, db):

@@ -1,5 +1,47 @@
 import logging
 import os
+import traceback
+
+try:
+    import psutil as _psutil
+    _PSUTIL_AVAILABLE = True
+    _PSUTIL_IMPORT_TRACEBACK: "str | None" = None
+except Exception:  # pragma: no cover  # ImportError or dynamic-loader / ABI failures
+    _psutil = None  # type: ignore[assignment]
+    _PSUTIL_AVAILABLE = False
+    _PSUTIL_IMPORT_TRACEBACK = traceback.format_exc()
+
+
+def prime_cpu_sampler() -> None:  # pragma: no cover
+    """Prime psutil's internal CPU baseline by making one blocking sample.
+
+    Intended to be called from a background thread during application startup
+    (via ``asyncio.to_thread``) so the 1-second blocking sample does not add
+    latency to the startup sequence.  Subsequent non-blocking
+    ``cpu_percent(interval=None)`` calls in the system-health endpoint will
+    return a meaningful value rather than 0.0.
+
+    When psutil could not be imported the failure is logged here (once, at
+    startup) rather than at module-import time so that logging is already
+    configured before the warning is emitted.
+    """
+    _log = logging.getLogger(__name__)
+    if not _PSUTIL_AVAILABLE:
+        _log.warning(
+            "psutil could not be imported; system-health metrics will be null.\n%s",
+            _PSUTIL_IMPORT_TRACEBACK,
+        )
+        return
+    try:
+        _psutil.cpu_percent(interval=1.0)
+    except Exception:
+        # Log rather than silently discard so failures are observable.
+        # cpu_percent(interval=None) will fall back to 0.0 until psutil recovers.
+        _log.warning(
+            "Failed to prime psutil CPU sampler; cpu_percent will report 0.0 "
+            "until a successful sample is collected.",
+            exc_info=True,
+        )
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
@@ -188,11 +230,54 @@ def system_health(
         except Exception:
             pass
 
+    worker_queue_size: int | None = None
+    if db_status == "connected":
+        try:
+            worker_queue_size = (
+                db.query(ExportJob).filter(ExportJob.status == JobStatus.PENDING).count()
+            )
+        except Exception:
+            pass  # leave None — count is unknown, not zero
+
+    cpu_percent: float | None = None
+    memory_percent: float | None = None
+    memory_used_bytes: int | None = None
+    memory_total_bytes: int | None = None
+    disk_read_bytes: int | None = None
+    disk_write_bytes: int | None = None
+
+    if _PSUTIL_AVAILABLE:
+        try:
+            cpu_percent = _psutil.cpu_percent(interval=None)
+        except Exception:
+            pass
+        try:
+            vm = _psutil.virtual_memory()
+            memory_percent = vm.percent
+            memory_used_bytes = vm.used
+            memory_total_bytes = vm.total
+        except Exception:
+            pass
+        try:
+            disk_counters = _psutil.disk_io_counters()
+            if disk_counters is not None:
+                disk_read_bytes = disk_counters.read_bytes
+                disk_write_bytes = disk_counters.write_bytes
+        except Exception:
+            pass
+
     return {
         "status": "ok" if db_status == "connected" else "degraded",
         "database": db_status,
         "database_error": db_error,
         "active_jobs": active_jobs,
+        "cpu_percent": cpu_percent,
+        "memory_percent": memory_percent,
+        "memory_used_bytes": memory_used_bytes,
+        "memory_total_bytes": memory_total_bytes,
+        "disk_read_bytes": disk_read_bytes,
+        "disk_write_bytes": disk_write_bytes,
+        "worker_queue_size": worker_queue_size,
     }
 
 
