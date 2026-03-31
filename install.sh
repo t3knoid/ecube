@@ -1036,6 +1036,12 @@ install_frontend() {
   fi
   ok "Frontend files deployed to ${www_dir}"
 
+  # ${INSTALL_DIR} is owned ecube:ecube with mode 750, so "other" (e.g. the nginx
+  # www-data user) cannot traverse it to reach ${www_dir}.  Add the execute bit
+  # for "other" — this grants path traversal only; directory listing (read bit)
+  # remains restricted to the ecube group.
+  run chmod o+x "${INSTALL_DIR}"
+
   # 3. TLS certificates (shared with backend if co-installed, or generate fresh)
   _generate_certs
 
