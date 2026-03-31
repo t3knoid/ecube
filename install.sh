@@ -133,20 +133,22 @@ Options:
 EOF
 }
 
-# Validate that a hostname/IP argument contains only DNS- and IP-safe characters:
-# alphanumerics, dots, hyphens, and brackets (for IPv6 literals).
-# Rejects whitespace, newlines, slashes, semicolons, and any other character
-# that could break an nginx config directive or an OpenSSL subject field.
+# Validate that a hostname/IP argument contains only DNS- and IP-safe characters.
+# Delegates to _is_valid_host so the allowed character set is defined once.
 _validate_host_arg() {
-  local flag="$1"
-  local val="$2"
-  if [[ -z "${val}" ]]; then
-    echo "ERROR: ${flag} value must not be empty." >&2
-    exit 1
-  fi
-  if [[ "${val}" =~ [^a-zA-Z0-9.\:\-\[\]] ]]; then
+  local flag="$1" val="$2"
+  if ! _is_valid_host "${val}"; then
     echo "ERROR: ${flag} value '${val}' contains invalid characters." >&2
     echo "       Allowed: alphanumerics, '.', '-', ':', '[', ']' (DNS names and IPv4/IPv6 addresses only)." >&2
+    exit 1
+  fi
+}
+
+# Validate that a port argument is a number in the range 1–65535.
+_validate_port_arg() {
+  local flag="$1" val="$2"
+  if ! [[ "${val}" =~ ^[0-9]+$ && "${val}" -ge 1 && "${val}" -le 65535 ]]; then
+    echo "ERROR: ${flag} must be a number between 1 and 65535." >&2
     exit 1
   fi
 }
@@ -203,7 +205,7 @@ while [[ $# -gt 0 ]]; do
       DB_HOST="$2"; shift 2 ;;
     --db-port)
       _require_arg "$1" "${2-}"
-      [[ "$2" =~ ^[0-9]+$ ]] || { echo "ERROR: --db-port must be a positive integer." >&2; exit 1; }
+      _validate_port_arg "$1" "$2"
       DB_PORT="$2"; shift 2 ;;
     --db-name)
       _require_arg "$1" "${2-}"
@@ -248,11 +250,11 @@ while [[ $# -gt 0 ]]; do
       INSTALL_DIR="${_idir}"; shift 2 ;;
     --api-port)
       _require_arg "$1" "${2-}"
-      [[ "$2" =~ ^[0-9]+$ && "$2" -ge 1 && "$2" -le 65535 ]] || { echo "ERROR: --api-port must be a number between 1 and 65535." >&2; exit 1; }
+      _validate_port_arg "$1" "$2"
       API_PORT="$2"; shift 2 ;;
     --ui-port)
       _require_arg "$1" "${2-}"
-      [[ "$2" =~ ^[0-9]+$ && "$2" -ge 1 && "$2" -le 65535 ]] || { echo "ERROR: --ui-port must be a number between 1 and 65535." >&2; exit 1; }
+      _validate_port_arg "$1" "$2"
       UI_PORT="$2"; shift 2 ;;
     --hostname)
       _require_arg "$1" "${2-}"
@@ -569,18 +571,6 @@ _maybe_download_release() {
 # ===========================================================================
 # DATABASE CONFIGURATION
 # ===========================================================================
-_validate_db_str() {
-  # Reject values containing whitespace, @, /, or characters that would break
-  # a postgresql:// URL or a psql connection string.
-  local flag="$1" val="$2"
-  if [[ -z "${val}" ]]; then
-    echo "ERROR: ${flag} must not be empty." >&2; exit 1
-  fi
-  if [[ "${val}" =~ [[:space:]/@] ]]; then
-    echo "ERROR: ${flag} value contains invalid characters (whitespace, '/' or '@' not allowed)." >&2; exit 1
-  fi
-}
-
 _collect_db_config() {
   header "\n── PostgreSQL database configuration ──────────────────────────"
 
