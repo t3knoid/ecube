@@ -109,6 +109,48 @@ describe('api/client interceptors', () => {
     expect(warning).toHaveBeenCalledWith('Conflict details')
   })
 
+  it('suppresses 409 toast for already-provisioned on same-origin provision URL', async () => {
+    const { default: apiClient } = await import('@/api/client.js')
+    const responseInterceptor = apiClient._responseHandlers[0].failure
+
+    await expect(
+      responseInterceptor({
+        config: { url: '/api/setup/database/provision' },
+        response: { status: 409, data: { detail: 'Database already provisioned' } },
+      }),
+    ).rejects.toBeTruthy()
+
+    expect(warning).not.toHaveBeenCalled()
+  })
+
+  it('suppresses 409 toast for already-provisioned on cross-origin provision URL', async () => {
+    const { default: apiClient } = await import('@/api/client.js')
+    const responseInterceptor = apiClient._responseHandlers[0].failure
+
+    await expect(
+      responseInterceptor({
+        config: { url: 'https://api.corp.local:8443/api/setup/database/provision' },
+        response: { status: 409, data: { detail: 'Database already provisioned' } },
+      }),
+    ).rejects.toBeTruthy()
+
+    expect(warning).not.toHaveBeenCalled()
+  })
+
+  it('does not suppress 409 for provision-status URL', async () => {
+    const { default: apiClient } = await import('@/api/client.js')
+    const responseInterceptor = apiClient._responseHandlers[0].failure
+
+    await expect(
+      responseInterceptor({
+        config: { url: '/api/setup/database/provision-status' },
+        response: { status: 409, data: { detail: 'already provisioned' } },
+      }),
+    ).rejects.toBeTruthy()
+
+    expect(warning).toHaveBeenCalled()
+  })
+
   it('handles 422 FastAPI validation array', async () => {
     const { default: apiClient } = await import('@/api/client.js')
     const responseInterceptor = apiClient._responseHandlers[0].failure
