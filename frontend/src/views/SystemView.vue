@@ -120,7 +120,7 @@ const memoryDisplay = computed(() => {
 
 const diskIoDisplay = computed(() => {
   const h = health.value
-  if (h?.disk_read_bytes == null) return t('common.labels.notAvailable')
+  if (h?.disk_read_bytes == null || h?.disk_write_bytes == null) return t('common.labels.notAvailable')
   return `${formatBytes(h.disk_read_bytes)} R / ${formatBytes(h.disk_write_bytes)} W`
 })
 
