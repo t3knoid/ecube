@@ -227,6 +227,13 @@ preflight() {
     fi
   done
 
+  # Optional but recommended commands
+  if ! command -v ip &>/dev/null; then
+    warn "ip (iproute2) not found — host IP detection will fall back to 'hostname -I'. Install iproute2 for reliable results."
+  else
+    ok "Command found: ip"
+  fi
+
   # Python 3.11
   if ! command -v python3.11 &>/dev/null; then
     warn "python3.11 not found."
@@ -300,8 +307,12 @@ _check_port() {
 # ===========================================================================
 _resolve_host() {
   HOST="${HOSTNAME_OVERRIDE:-$(hostname -f 2>/dev/null || hostname)}"
-  # Primary non-loopback IPv4
-  HOST_IP=$(ip -4 addr show scope global | awk '/inet/{print $2}' | cut -d/ -f1 | head -1 || true)
+  # Primary non-loopback IPv4 — prefer `ip` (iproute2), fall back to `hostname -I`.
+  if command -v ip &>/dev/null; then
+    HOST_IP=$(ip -4 addr show scope global 2>/dev/null | awk '/inet/{print $2}' | cut -d/ -f1 | head -1 || true)
+  else
+    HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
+  fi
   HOST_IP="${HOST_IP:-127.0.0.1}"
   info "Hostname: ${HOST}  IP: ${HOST_IP}"
 }
