@@ -12,11 +12,11 @@ except ImportError:  # pragma: no cover
 def prime_cpu_sampler() -> None:  # pragma: no cover
     """Prime psutil's internal CPU baseline by making one blocking sample.
 
-    Call this once during application startup (e.g. from the FastAPI lifespan)
-    so that subsequent non-blocking ``cpu_percent(interval=None)`` calls in the
-    system-health endpoint return a meaningful value immediately rather than 0.0.
-    The 1-second block happens before the server starts accepting requests and
-    does not affect request latency.
+    Intended to be called from a background thread during application startup
+    (via ``asyncio.to_thread``) so the 1-second blocking sample does not add
+    latency to the startup sequence.  Subsequent non-blocking
+    ``cpu_percent(interval=None)`` calls in the system-health endpoint will
+    return a meaningful value rather than 0.0.
     """
     if _PSUTIL_AVAILABLE:
         try:

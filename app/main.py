@@ -124,13 +124,20 @@ async def lifespan(application: FastAPI):
         logger.exception("Startup reconciliation failed")
 
     # ------------------------------------------------------------------
-    # Startup: prime psutil CPU baseline
+    # Startup: prime psutil CPU baseline (runs in background thread so it
+    # does not block the server from accepting requests).
     # ------------------------------------------------------------------
     try:
+        import asyncio
         from app.routers.introspection import prime_cpu_sampler
-        prime_cpu_sampler()
+        _prime_task = asyncio.create_task(asyncio.to_thread(prime_cpu_sampler))
+        _prime_task.add_done_callback(
+            lambda t: logger.exception("CPU sampler priming failed", exc_info=t.exception())
+            if not t.cancelled() and t.exception() is not None
+            else None
+        )
     except Exception:
-        logger.exception("CPU sampler priming failed")
+        logger.exception("CPU sampler priming setup failed")
 
     # ------------------------------------------------------------------
     # Background: periodic USB discovery
