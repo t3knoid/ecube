@@ -263,6 +263,7 @@ def custom_openapi():
         license_info=app.license_info,
         tags=app.openapi_tags,
         routes=app.routes,
+        servers=[{"url": settings.api_root_path}] if settings.api_root_path else None,
     )
 
     # Define security schemes (merge, don't overwrite)
