@@ -75,17 +75,13 @@ The three badges at the top of this file reflect the current state of automated 
 - **Security Scan** — static analysis and dependency vulnerability checks. Triggered manually via GitHub Actions (`workflow_dispatch`). See [docs/testing/03-security-scanning.md](docs/testing/03-security-scanning.md) for details.
 - **Schemathesis API Fuzz** — auto-generated requests from the OpenAPI schema to detect schema violations, server errors, and undocumented status codes. Triggered manually via GitHub Actions (`workflow_dispatch`). See the [Schemathesis Local Guide](docs/testing/04-schemathesis-local.md) for running the scan locally.
 
-## QA Test-Case Sync
+## Contributors
 
-The QA test-case spreadsheet (`docs/testing/ecube-qa-test-cases.xlsx`) is generated from the markdown guide (`docs/testing/01-qa-testing-guide-baremetal.md`). A sync script keeps them aligned:
+**Testing** — see [docs/testing/05-automated-test-requirements.md](docs/testing/05-automated-test-requirements.md) for test conventions, fixture patterns, and how to run the backend and frontend suites locally. For manual QA, the bare-metal guide and test-case spreadsheet are in [docs/testing/](docs/testing/).
 
-```bash
-# Check for drift (exits non-zero if out of sync)
-python scripts/sync_qa_test_cases.py --check
+**Development** — the [Development Guide](docs/development/00-development-guide.md) covers local setup, debugging, and Windows-specific notes. Design documents (architecture, data model, REST API, security) are in [docs/design/](docs/design/).
 
-# Regenerate the Excel from the markdown (preserves Status/Tester/Date/Notes)
-python scripts/sync_qa_test_cases.py --sync
-```
+**Documentation** — operational docs (installation, configuration, administration, security) live in [docs/operations/](docs/operations/). Requirements source documents are in [docs/requirements/](docs/requirements/).
 
 ## Documentation
 
