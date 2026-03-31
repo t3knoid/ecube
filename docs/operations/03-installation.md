@@ -187,7 +187,9 @@ Only leave `--allow-insecure-backend` in effect on trusted networks (VPN, privat
 
 ## Database Configuration
 
-> **Applies to:** full install (default) and `--backend-only`. These steps are **skipped entirely** when running `--frontend-only` — the frontend installer does not touch `.env` or the database connection.
+> **Applies to:** full install (default) and `--backend-only`. The PostgreSQL prompts, TCP reachability check, and `DATABASE_URL` assembly are **skipped entirely** when running `--frontend-only` — the frontend installer never touches database credentials or `DATABASE_URL`.
+>
+> **Note on `.env` patching with `--frontend-only`:** When adding a frontend to an existing same-host backend-only install, the installer *does* patch `.env` — but only to set `TRUST_PROXY_HEADERS=true` and `API_ROOT_PATH=/api` so FastAPI serves correct URLs behind nginx. No database settings are changed. See [Frontend Only](#frontend-only) for details.
 
 The installer prompts for the PostgreSQL connection details required to assemble `DATABASE_URL`. You can supply any or all values via CLI flags to reduce or eliminate prompting.
 
