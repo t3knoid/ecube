@@ -89,7 +89,7 @@ sudo ./install.sh
 The installer will:
 
 1. Run pre-flight checks (OS, disk space, ports, Python 3.11).
-2. Create the `ecube` system user and ECUBE role groups.
+2. Create the `ecube` system user.
 3. Set up a Python virtual environment in `/opt/ecube/venv`.
 4. Generate a self-signed TLS certificate.
 5. Write `/opt/ecube/.env` with a random `SECRET_KEY` and a `DATABASE_URL` placeholder.
