@@ -218,7 +218,9 @@ app = FastAPI(
         "url": "https://ecube.local/license",
     },
     openapi_tags=tags_metadata,
-    lifespan=lifespan,    root_path=settings.api_root_path,)
+    lifespan=lifespan,
+    root_path=settings.api_root_path,
+)
 
 # Mount session middleware (cookie or Redis backend).
 mount_session_middleware(app)
