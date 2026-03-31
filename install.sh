@@ -330,7 +330,24 @@ _ensure_ecube_user() {
 # ===========================================================================
 _maybe_download_release() {
   if [[ -z "${VERSION_TAG}" ]]; then
-    return  # use files in the current directory (extracted tarball)
+    # Running from an extracted release package: copy source files into
+    # INSTALL_DIR.  Skip the copy when INSTALL_DIR is the current directory
+    # (e.g., --install-dir set to the package directory itself).
+    local src_dir
+    src_dir="$(pwd)"
+    if [[ "$(realpath "${INSTALL_DIR}" 2>/dev/null || echo "${INSTALL_DIR}")" == \
+          "$(realpath "${src_dir}" 2>/dev/null || echo "${src_dir}")" ]]; then
+      info "INSTALL_DIR is the current directory — no copy needed."
+      return
+    fi
+    info "Copying package contents from ${src_dir} to ${INSTALL_DIR}..."
+    for item in app alembic alembic.ini pyproject.toml README.md LICENSE; do
+      if [[ -e "${src_dir}/${item}" ]]; then
+        run cp -r "${src_dir}/${item}" "${INSTALL_DIR}/"
+      fi
+    done
+    ok "Package contents copied to ${INSTALL_DIR}"
+    return
   fi
 
   local tarball_name="ecube-package-${VERSION_TAG}.tar.gz"
