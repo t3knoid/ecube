@@ -568,6 +568,48 @@ install_frontend() {
     _maybe_download_release
   fi
 
+  # When the frontend is added to an existing backend-only install, the backend
+  # configuration must be updated to reflect the new topology: the systemd unit
+  # must bind to 127.0.0.1 (not 0.0.0.0) and the .env must set
+  # TRUST_PROXY_HEADERS=true and API_ROOT_PATH=/api so that FastAPI renders
+  # Swagger UI and OpenAPI schema URLs correctly behind nginx.
+  local env_file="${INSTALL_DIR}/.env"
+  local unit_file="/etc/systemd/system/ecube.service"
+  if [[ "${INSTALL_BACKEND}" == false && -f "${unit_file}" ]]; then
+    info "Updating existing backend configuration for nginx frontend..."
+
+    # Patch .env — add or overwrite TRUST_PROXY_HEADERS and API_ROOT_PATH.
+    if [[ -f "${env_file}" ]]; then
+      if [[ "${DRY_RUN}" != true ]]; then
+        # Update existing keys in-place, or append if absent.
+        if grep -q "^TRUST_PROXY_HEADERS=" "${env_file}"; then
+          sed -i 's|^TRUST_PROXY_HEADERS=.*|TRUST_PROXY_HEADERS=true|' "${env_file}"
+        else
+          echo "TRUST_PROXY_HEADERS=true" >> "${env_file}"
+        fi
+        if grep -q "^API_ROOT_PATH=" "${env_file}"; then
+          sed -i 's|^API_ROOT_PATH=.*|API_ROOT_PATH=/api|' "${env_file}"
+        else
+          echo "API_ROOT_PATH=/api" >> "${env_file}"
+        fi
+        ok ".env updated (TRUST_PROXY_HEADERS=true, API_ROOT_PATH=/api)"
+      else
+        echo "[DRY-RUN] Would patch ${env_file}: TRUST_PROXY_HEADERS=true, API_ROOT_PATH=/api"
+      fi
+    else
+      warn ".env not found at ${env_file} — skipping env patch (service may not exist yet)."
+    fi
+
+    # Rewrite the systemd unit so uvicorn binds to 127.0.0.1 instead of 0.0.0.0.
+    # _write_systemd_unit reads INSTALL_FRONTEND which is already true here.
+    _write_systemd_unit
+    run systemctl daemon-reload
+    if systemctl is-active --quiet ecube.service 2>/dev/null; then
+      run systemctl restart ecube.service
+      ok "ecube.service restarted with updated bind address (127.0.0.1:${API_PORT})"
+    fi
+  fi
+
   # 1. Install nginx if absent
   if ! command -v nginx &>/dev/null; then
     info "Installing nginx..."
