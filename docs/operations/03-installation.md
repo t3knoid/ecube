@@ -109,7 +109,7 @@ At the end it prints a summary with the UI URL, API URL, and service management 
 | `--backend-only` | — | Install the backend service and systemd unit only |
 | `--frontend-only` | — | Install nginx and the pre-built frontend only |
 | `--install-dir DIR` | `/opt/ecube` | Root installation directory |
-| `--api-port PORT` | `8443` | HTTPS port the backend (uvicorn) binds to |
+| `--api-port PORT` | `8443` | Port the backend (uvicorn) binds to (HTTP when behind nginx, HTTPS in backend-only mode) |
 | `--ui-port PORT` | `443` | HTTPS port nginx listens on |
 | `--backend-host HOST` | `127.0.0.1` | Hostname/IP of the backend; set when the backend is on a separate host |
 | `--hostname HOST` | `$(hostname -f)` | Hostname/IP used as TLS certificate CN and in summary URLs |
@@ -129,7 +129,7 @@ At the end it prints a summary with the UI URL, API URL, and service management 
 sudo ./install.sh
 ```
 
-Installs the backend **and** the nginx-fronted frontend on the same host. uvicorn binds to `127.0.0.1` (loopback only); all external traffic enters through nginx on port `443`.
+Installs the backend **and** the nginx-fronted frontend on the same host. nginx terminates TLS externally on port `443`; uvicorn serves plain HTTP on `127.0.0.1` (loopback only) so there is no TLS hop between nginx and uvicorn.
 
 ### Backend Only
 
@@ -137,7 +137,7 @@ Installs the backend **and** the nginx-fronted frontend on the same host. uvicor
 sudo ./install.sh --backend-only
 ```
 
-Installs the backend service only. uvicorn binds to `0.0.0.0` so the API is directly reachable from the network. No nginx configuration is created. If you later run `--frontend-only` on the same host, the installer will automatically rebind uvicorn to `127.0.0.1` and update `.env`.
+Installs the backend service only. uvicorn terminates TLS itself and binds to `0.0.0.0` so the API is directly reachable from the network. No nginx configuration is created. If you later run `--frontend-only` on the same host, the installer will automatically switch uvicorn to plain HTTP on `127.0.0.1` (nginx takes over TLS termination) and update `.env`.
 
 ### Frontend Only
 
@@ -154,12 +154,12 @@ Installs nginx and deploys the pre-built frontend bundle only.
 **Same-host backend (default — `--backend-host 127.0.0.1`):** When `ecube.service` is already present on this host the installer automatically:
 
 - Patches `.env` to set `TRUST_PROXY_HEADERS=true` and `API_ROOT_PATH=/api` so FastAPI renders Swagger UI and OpenAPI schema URLs correctly behind nginx.
-- Rewrites the systemd unit so uvicorn binds to `127.0.0.1` instead of `0.0.0.0`, removing direct external API access.
+- Rewrites the systemd unit so uvicorn serves plain HTTP on `127.0.0.1` instead of HTTPS on `0.0.0.0`; nginx becomes the sole TLS termination point.
 - Restarts `ecube.service` to apply the changes.
 
 Two successive invocations (`--backend-only` then `--frontend-only`) on the same host are therefore fully supported without any manual reconfiguration.
 
-**Remote backend (`--backend-host HOST`):** nginx proxies `/api/` to `https://<HOST>:<api-port>/`. The local backend service is not touched. Ensure the remote backend's `TRUST_PROXY_HEADERS` and `API_ROOT_PATH` are configured correctly and that its API port is reachable from this host.
+**Remote backend (`--backend-host HOST`):** nginx proxies `/api/` to `https://<HOST>:<api-port>/` with `proxy_ssl_verify off`, because the remote backend may use a self-signed certificate. Only use `--backend-host` on trusted networks (VPN, private subnet, etc.). To enable certificate verification, place the backend's CA certificate at `<install-dir>/certs/backend-ca.pem` and manually update the nginx site config with `proxy_ssl_verify on; proxy_ssl_trusted_certificate <path>;` after installation.
 
 ---
 
