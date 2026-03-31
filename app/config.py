@@ -275,6 +275,14 @@ class Settings(BaseSettings):
     #: ``request.client.host`` to prevent header spoofing on direct connections.
     trust_proxy_headers: bool = False
 
+    #: Path prefix this application is mounted at behind a reverse proxy.
+    #: Set to ``"/api"`` when a proxy strips the ``/api`` prefix before
+    #: forwarding requests (e.g. the bundled nginx config and the bare-metal
+    #: installer).  Leave empty for direct deployments where no prefix is
+    #: stripped.  Controls the ``servers`` entry in the OpenAPI spec so that
+    #: Swagger UI "Try it out" generates correct request paths.
+    api_root_path: str = ""
+
     # ---------------------------------------------------------------------------
     # Webhook callback settings
     # ---------------------------------------------------------------------------

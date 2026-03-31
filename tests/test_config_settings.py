@@ -156,6 +156,19 @@ class TestSettingsDefaults:
             "https://example.com",
         ]
 
+    def test_trust_proxy_headers_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.trust_proxy_headers is False
+
+    def test_api_root_path_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.api_root_path == ""
+
+    def test_api_root_path_from_env(self):
+        with patch.dict("os.environ", {"API_ROOT_PATH": "/api"}):
+            s = Settings(database_url="sqlite://")
+        assert s.api_root_path == "/api"
+
 
 # ---------------------------------------------------------------------------
 # Audit log retention cleanup
