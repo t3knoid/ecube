@@ -158,45 +158,61 @@ _is_valid_host() {
   [[ -n "${val}" && ! "${val}" =~ [^a-zA-Z0-9.\:\-\[\]] ]]
 }
 
+# Verify that a flag's value argument is present and does not look like the
+# next flag.  Uses ${2-} (default-empty) so set -u does not abort first.
+_require_arg() {
+  local flag="$1" val="${2-}"
+  if [[ -z "${val}" || "${val}" == --* ]]; then
+    echo "ERROR: ${flag} requires a non-empty argument." >&2
+    exit 1
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --backend-only)   INSTALL_FRONTEND=false; shift ;;
     --frontend-only)  INSTALL_BACKEND=false;  shift ;;
     --backend-host)
+      _require_arg "$1" "${2-}"
       _validate_host_arg "--backend-host" "$2"
       BACKEND_HOST="$2"; shift 2 ;;
     --allow-insecure-backend)  ALLOW_INSECURE_BACKEND=true;  shift ;;
-    --secure-backend)           ALLOW_INSECURE_BACKEND=false; shift ;;
-    --backend-ca-file)          BACKEND_CA_FILE="$2"; shift 2 ;;
+    --secure-backend)          ALLOW_INSECURE_BACKEND=false; shift ;;
+    --backend-ca-file)
+      _require_arg "$1" "${2-}"
+      BACKEND_CA_FILE="$2"; shift 2 ;;
     --db-host)
+      _require_arg "$1" "${2-}"
       _validate_host_arg "--db-host" "$2"
       DB_HOST="$2"; shift 2 ;;
     --db-port)
+      _require_arg "$1" "${2-}"
       [[ "$2" =~ ^[0-9]+$ ]] || { echo "ERROR: --db-port must be a positive integer." >&2; exit 1; }
       DB_PORT="$2"; shift 2 ;;
     --db-name)
-      if [[ -z "$2" || "$2" =~ [^a-zA-Z0-9_] ]]; then
-        echo "ERROR: --db-name must be non-empty and contain only alphanumerics and underscores." >&2; exit 1
+      _require_arg "$1" "${2-}"
+      if [[ "$2" =~ [^a-zA-Z0-9_] ]]; then
+        echo "ERROR: --db-name must contain only alphanumerics and underscores." >&2; exit 1
       fi
       DB_NAME="$2"; shift 2 ;;
     --db-user)
-      if [[ -z "$2" || "$2" =~ [[:space:]] ]]; then
-        echo "ERROR: --db-user must be non-empty and must not contain whitespace." >&2; exit 1
+      _require_arg "$1" "${2-}"
+      if [[ "$2" =~ [[:space:]] ]]; then
+        echo "ERROR: --db-user must not contain whitespace." >&2; exit 1
       fi
       DB_USER="$2"; shift 2 ;;
     --db-password)
-      if [[ -z "$2" || "$2" =~ [[:space:]] ]]; then
-        echo "ERROR: --db-password must be non-empty and must not contain whitespace." >&2; exit 1
+      _require_arg "$1" "${2-}"
+      if [[ "$2" =~ [[:space:]] ]]; then
+        echo "ERROR: --db-password must not contain whitespace." >&2; exit 1
       fi
       DB_PASS="$2"; shift 2 ;;
     --install-dir)
-      # Reject values that are empty, /, a known system root, contain whitespace
+      _require_arg "$1" "${2-}"
+      # Reject values that are /, a known system root, contain whitespace
       # or newlines, or are not absolute paths.  Any of these could cause
       # accidental rm -rf of critical paths or break systemd unit parsing.
       _idir="$2"
-      if [[ -z "${_idir}" ]]; then
-        echo "ERROR: --install-dir value must not be empty." >&2; exit 1
-      fi
       if [[ "${_idir}" != /* ]]; then
         echo "ERROR: --install-dir must be an absolute path (got '${_idir}')." >&2; exit 1
       fi
@@ -215,17 +231,24 @@ while [[ $# -gt 0 ]]; do
       done
       INSTALL_DIR="${_idir}"; shift 2 ;;
     --api-port)
+      _require_arg "$1" "${2-}"
       [[ "$2" =~ ^[0-9]+$ ]] || { echo "ERROR: --api-port must be a positive integer." >&2; exit 1; }
       API_PORT="$2"; shift 2 ;;
     --ui-port)
+      _require_arg "$1" "${2-}"
       [[ "$2" =~ ^[0-9]+$ ]] || { echo "ERROR: --ui-port must be a positive integer." >&2; exit 1; }
       UI_PORT="$2"; shift 2 ;;
     --hostname)
+      _require_arg "$1" "${2-}"
       _validate_host_arg "--hostname" "$2"
       HOSTNAME_OVERRIDE="$2"; shift 2 ;;
-    --cert-validity)  CERT_VALIDITY="$2"; shift 2 ;;
+    --cert-validity)
+      _require_arg "$1" "${2-}"
+      CERT_VALIDITY="$2"; shift 2 ;;
     --yes|-y)         YES=true;  shift ;;
-    --version)        VERSION_TAG="$2"; shift 2 ;;
+    --version)
+      _require_arg "$1" "${2-}"
+      VERSION_TAG="$2"; shift 2 ;;
     --uninstall)      UNINSTALL=true; shift ;;
     --dry-run)        DRY_RUN=true; shift ;;
     -h|--help)        usage; exit 0 ;;
