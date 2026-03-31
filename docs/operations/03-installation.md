@@ -116,8 +116,9 @@ At the end it prints a summary with the UI URL, API URL, and service management 
 | `--api-port PORT` | `8443` | Port the backend (uvicorn) binds to (HTTP when behind nginx, HTTPS in backend-only mode) |
 | `--ui-port PORT` | `443` | HTTPS port nginx listens on |
 | `--backend-host HOST` | `127.0.0.1` | Hostname/IP of the backend. The default (`127.0.0.1`) assumes the backend runs on the same host and is only valid for same-host deployments. **Must be specified when using `--frontend-only` with a backend on a separate host.** |
-| `--allow-insecure-backend` | on | Disable TLS certificate verification (`proxy_ssl_verify off`) when proxying to a remote backend. **On by default** for quick bring-up — a warning is printed when in effect. Pass `--backend-ca-file` or ensure the backend cert is in the system trust store to use verified HTTPS instead. |
-| `--backend-ca-file FILE` | — | Path to a PEM CA certificate used to verify the remote backend's TLS certificate (`proxy_ssl_trusted_certificate`). Use when the backend has a private CA-signed cert that is not in the system trust store. |
+| `--allow-insecure-backend` | on | Disable TLS certificate verification (`proxy_ssl_verify off`) when proxying to a remote backend. **On by default** for quick bring-up — a warning is printed when in effect. |
+| `--secure-backend` | — | Enable TLS certificate verification against the OS trust store (`proxy_ssl_verify on`). Use when the remote backend has a CA-signed cert already trusted by the system and no custom CA file is needed. Mutually exclusive with `--allow-insecure-backend`. |
+| `--backend-ca-file FILE` | — | Path to a PEM CA certificate used to verify the remote backend's TLS certificate (`proxy_ssl_trusted_certificate`). Use when the backend has a private CA-signed cert that is not in the system trust store. Implies `proxy_ssl_verify on`. |
 | `--db-host HOST` | *(prompted)* | **Backend installs only.** PostgreSQL server hostname or IP address. Must be non-empty and contain only DNS/IP-safe characters. Required in `--yes` mode. Ignored for `--frontend-only`. |
 | `--db-port PORT` | `5432` | **Backend installs only.** PostgreSQL server port. Must be a valid integer between 1 and 65535. Ignored for `--frontend-only`. |
 | `--db-name NAME` | `ecube` | **Backend installs only.** Name of the PostgreSQL database. Must contain only alphanumerics and underscores. Ignored for `--frontend-only`. |
@@ -178,7 +179,7 @@ Two successive invocations (`--backend-only` then `--frontend-only`) on the same
 |----------|---------|
 | Quick start / self-signed cert (default, warning shown) | `sudo ./install.sh --frontend-only --backend-host <host>` |
 | Backend has a private/internal CA cert | `sudo ./install.sh --frontend-only --backend-host <host> --backend-ca-file /path/to/ca.pem` |
-| Backend has a CA-signed cert trusted by the OS | Set `ALLOW_INSECURE_BACKEND=false` before running, or remove `proxy_ssl_verify off` from the generated nginx config |
+| Backend has a CA-signed cert trusted by the OS | `sudo ./install.sh --frontend-only --backend-host <host> --secure-backend` |
 
 Only leave `--allow-insecure-backend` in effect on trusted networks (VPN, private subnet, etc.).
 
