@@ -199,7 +199,11 @@ The `ecube-setup` CLI (`/opt/ecube/venv/bin/ecube-setup`) is an advanced alterna
 
 3. Application files (`app/`, `alembic/`, etc.) are overwritten unconditionally. `.env` is **never overwritten** — existing operator secrets are preserved.
 4. The service is always restarted after an upgrade.
-5. The `ExecStartPre` directive in the systemd unit runs `alembic upgrade head` automatically before uvicorn starts, so schema migrations are applied on every restart.
+5. **Run database migrations** after the service restarts — open the setup wizard in a browser, or run `alembic upgrade head` directly:
+
+   ```bash
+   sudo -u ecube /opt/ecube/venv/bin/alembic --config /opt/ecube/alembic.ini upgrade head
+   ```
 
 ---
 
