@@ -511,7 +511,6 @@ User=ecube
 Group=ecube
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=-${INSTALL_DIR}/.env
-ExecStartPre=${INSTALL_DIR}/venv/bin/alembic upgrade head
 ExecStart=${INSTALL_DIR}/venv/bin/uvicorn \\
   --host ${bind_host} \\
   --port ${API_PORT} \\
