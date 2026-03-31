@@ -73,7 +73,8 @@ VERSION_TAG=""
 INSTALL_BACKEND=true
 INSTALL_FRONTEND=true
 BACKEND_HOST="127.0.0.1"
-ALLOW_INSECURE_BACKEND=false
+ALLOW_INSECURE_BACKEND=true
+BACKEND_CA_FILE=""
 
 GITHUB_OWNER="t3knoid"
 GITHUB_REPO="ecube"
@@ -98,10 +99,14 @@ Options:
   --backend-host HOST    Hostname/IP of the backend   (default: 127.0.0.1)
                          Set this when the backend is on a separate host.
   --allow-insecure-backend
-                         Disable TLS verification when proxying to a remote
-                         backend (proxy_ssl_verify off). Only use on trusted
-                         networks. Required when --backend-host is not 127.0.0.1
-                         and the backend uses a self-signed certificate.
+                         Disable TLS certificate verification (proxy_ssl_verify
+                         off) when proxying to a remote backend. Default: on.
+                         A warning is printed when this is in effect. Use
+                         --backend-ca-file or ensure the backend cert is trusted
+                         by the system store to enable verification instead.
+  --backend-ca-file FILE Path to a PEM CA certificate used to verify the remote
+                         backend's TLS certificate (proxy_ssl_trusted_certificate).
+                         Implies proxy_ssl_verify on. Ignored for loopback backends.
   --hostname HOST        Hostname/IP for TLS cert CN  (default: \$(hostname -f))
   --cert-validity DAYS   Self-signed cert validity    (default: 3650)
   --yes, -y              Non-interactive / unattended mode
@@ -118,6 +123,7 @@ while [[ $# -gt 0 ]]; do
     --frontend-only)  INSTALL_BACKEND=false;  shift ;;
     --backend-host)            BACKEND_HOST="$2"; shift 2 ;;
     --allow-insecure-backend)  ALLOW_INSECURE_BACKEND=true; shift ;;
+    --backend-ca-file)         BACKEND_CA_FILE="$2"; shift 2 ;;
     --install-dir)    INSTALL_DIR="$2";  shift 2 ;;
     --api-port)       API_PORT="$2";     shift 2 ;;
     --ui-port)        UI_PORT="$2";      shift 2 ;;
@@ -766,22 +772,32 @@ EOF_NGINX
 EOF_PROXY
   else
     # Remote backend: proxy over HTTPS.
-    if [[ "${ALLOW_INSECURE_BACKEND}" != true ]]; then
-      error "--backend-host is set to a remote host but TLS verification is enabled."
-      error "If the remote backend uses a self-signed certificate, re-run with --allow-insecure-backend."
-      error "Only use --allow-insecure-backend on trusted networks."
-      exit 1
-    fi
-    # SECURITY: proxy_ssl_verify is off because --allow-insecure-backend was passed.
-    # Only use on trusted networks. To enable verification instead, place the
-    # backend's CA certificate at ${INSTALL_DIR}/certs/backend-ca.pem and replace
-    # proxy_ssl_verify off with:
-    #   proxy_ssl_verify on;
-    #   proxy_ssl_trusted_certificate ${INSTALL_DIR}/certs/backend-ca.pem;
-    cat >> /etc/nginx/sites-available/ecube <<EOF_PROXY
+    if [[ -n "${BACKEND_CA_FILE}" ]]; then
+      # Custom CA certificate supplied — verify against it.
+      cat >> /etc/nginx/sites-available/ecube <<EOF_PROXY
         proxy_pass https://${BACKEND_HOST}:${API_PORT}/;
-        proxy_ssl_verify off; # --allow-insecure-backend passed; trusted-network only
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate ${BACKEND_CA_FILE};
 EOF_PROXY
+    elif [[ "${ALLOW_INSECURE_BACKEND}" == true ]]; then
+      # Default fallback: TLS verification disabled for quick bring-up.
+      # SECURITY WARNING: proxy_ssl_verify is off. The backend certificate is
+      # not validated. Only acceptable on trusted networks (VPN, private subnet).
+      # To enable verification pass --backend-ca-file or ensure the backend cert
+      # is signed by a CA in the system trust store and remove this line.
+      warn "TLS verification is DISABLED for remote backend ${BACKEND_HOST}:${API_PORT} (proxy_ssl_verify off)."
+      warn "This is the default for quick start. Pass --backend-ca-file or use a CA-signed cert to enable verification."
+      cat >> /etc/nginx/sites-available/ecube <<EOF_PROXY
+        proxy_pass https://${BACKEND_HOST}:${API_PORT}/;
+        proxy_ssl_verify off; # default; see --backend-ca-file to enable verification
+EOF_PROXY
+    else
+      # Strict mode: verify using the system trust store.
+      cat >> /etc/nginx/sites-available/ecube <<EOF_PROXY
+        proxy_pass https://${BACKEND_HOST}:${API_PORT}/;
+        proxy_ssl_verify on;
+EOF_PROXY
+    fi
   fi
   cat >> /etc/nginx/sites-available/ecube <<EOF_PROXY2
         proxy_set_header Host \$host;
