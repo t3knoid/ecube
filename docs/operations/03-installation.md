@@ -1,6 +1,6 @@
 # ECUBE Installation Guide
 
-**Version:** 2.0  
+**Version:** 1.0  
 **Last Updated:** March 2026  
 **Audience:** Systems Administrators, IT Staff  
 **Document Type:** Installation Procedures
@@ -60,6 +60,7 @@
 **Operating System:** Ubuntu 20.04 LTS, 22.04 LTS, or later. Debian 11 (Bullseye) and 12 (Bookworm) are also supported with the following caveat: Ubuntu PPAs are not available on Debian; the installer uses the deadsnakes apt repository instead for Python 3.11 bootstrapping (see below).
 
 The installer will:
+
 - Verify Debian/Ubuntu and bail out on unsupported OS.
 - Offer to install `python3.11` if it is absent:
   - **Ubuntu:** adds the `deadsnakes/ppa` Ubuntu PPA (`ppa:deadsnakes/ppa`) via `add-apt-repository`.
@@ -85,6 +86,7 @@ sudo ./install.sh
 ```
 
 The installer will:
+
 1. Run pre-flight checks (OS, disk space, ports, Python 3.11).
 2. Create the `ecube` system user and ECUBE role groups.
 3. Set up a Python virtual environment in `/opt/ecube/venv`.
@@ -101,7 +103,7 @@ At the end it prints a summary with the UI URL, API URL, and service management 
 ## CLI Flags Reference
 
 | Flag | Default | Description |
-|------|---------|-------------|
+| ------ |--------- | ------------- |
 | *(none)* | — | Install both backend and frontend |
 | `--backend-only` | — | Install the backend service and systemd unit only |
 | `--frontend-only` | — | Install nginx and the pre-built frontend only |
@@ -167,11 +169,12 @@ openssl req -x509 -nodes -days <cert-validity> -newkey rsa:2048 \
 
 After installation, open the setup wizard in a browser:
 
-```
+```text
 https://<hostname>:<ui-port>/setup
 ```
 
 The wizard will:
+
 1. Test and provision the PostgreSQL database connection.
 2. Run Alembic migrations.
 3. Create the initial admin user.
@@ -206,12 +209,12 @@ sudo ./install.sh --uninstall
 ```
 
 This will:
+
 1. Stop and disable `ecube.service`.
 2. Remove the nginx ecube site and reload nginx.
 3. Prompt to remove `<install-dir>` and `/var/lib/ecube`.
 4. Prompt to remove the `ecube` system user and group.
-5. Remove ECUBE role groups (`ecube-admin`, `ecube-manager`, `ecube-processor`, `ecube-auditor`).
-6. Optionally remove the deadsnakes repository entry (Ubuntu PPA or Debian apt source) if it was added by the installer.
+5. Optionally remove the deadsnakes repository entry (Ubuntu PPA or Debian apt source) if it was added by the installer.
 
 Use `--yes` to skip all confirmation prompts.
 
