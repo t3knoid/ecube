@@ -109,9 +109,12 @@ Options:
   --allow-insecure-backend
                          Disable TLS certificate verification (proxy_ssl_verify
                          off) when proxying to a remote backend. Default: on.
-                         A warning is printed when this is in effect. Use
-                         --backend-ca-file or ensure the backend cert is trusted
-                         by the system store to enable verification instead.
+                         A warning is printed when this is in effect.
+  --secure-backend       Enable TLS certificate verification against the system
+                         trust store (proxy_ssl_verify on). Use when the remote
+                         backend has a CA-signed cert trusted by the OS and you
+                         want strict verification without supplying a CA file.
+                         Mutually exclusive with --allow-insecure-backend.
   --backend-ca-file FILE Path to a PEM CA certificate used to verify the remote
                          backend's TLS certificate (proxy_ssl_trusted_certificate).
                          Implies proxy_ssl_verify on. Ignored for loopback backends.
@@ -162,8 +165,9 @@ while [[ $# -gt 0 ]]; do
     --backend-host)
       _validate_host_arg "--backend-host" "$2"
       BACKEND_HOST="$2"; shift 2 ;;
-    --allow-insecure-backend)  ALLOW_INSECURE_BACKEND=true; shift ;;
-    --backend-ca-file)         BACKEND_CA_FILE="$2"; shift 2 ;;
+    --allow-insecure-backend)  ALLOW_INSECURE_BACKEND=true;  shift ;;
+    --secure-backend)           ALLOW_INSECURE_BACKEND=false; shift ;;
+    --backend-ca-file)          BACKEND_CA_FILE="$2"; shift 2 ;;
     --db-host)
       _validate_host_arg "--db-host" "$2"
       DB_HOST="$2"; shift 2 ;;
