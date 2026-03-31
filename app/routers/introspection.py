@@ -1,15 +1,15 @@
 import logging
 import os
-import sys
+import traceback
 
 try:
     import psutil as _psutil
     _PSUTIL_AVAILABLE = True
-    _PSUTIL_IMPORT_EXC_INFO: "tuple | None" = None
+    _PSUTIL_IMPORT_TRACEBACK: "str | None" = None
 except Exception:  # pragma: no cover  # ImportError or dynamic-loader / ABI failures
     _psutil = None  # type: ignore[assignment]
     _PSUTIL_AVAILABLE = False
-    _PSUTIL_IMPORT_EXC_INFO = sys.exc_info()
+    _PSUTIL_IMPORT_TRACEBACK = traceback.format_exc()
 
 
 def prime_cpu_sampler() -> None:  # pragma: no cover
@@ -28,8 +28,8 @@ def prime_cpu_sampler() -> None:  # pragma: no cover
     _log = logging.getLogger(__name__)
     if not _PSUTIL_AVAILABLE:
         _log.warning(
-            "psutil could not be imported; system-health metrics will be null.",
-            exc_info=_PSUTIL_IMPORT_EXC_INFO,
+            "psutil could not be imported; system-health metrics will be null.\n%s",
+            _PSUTIL_IMPORT_TRACEBACK,
         )
         return
     try:
