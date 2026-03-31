@@ -247,7 +247,7 @@ preflight() {
     if [[ "${ID}" == "ubuntu" ]]; then
       local prompt_msg="Install python3.11 via the deadsnakes PPA (ppa:deadsnakes/ppa)?"
     else
-      local prompt_msg="Install python3.11 via the deadsnakes apt repository?"
+      local prompt_msg="Install python3.11 from official Debian repositories (backports if needed)?"
     fi
     if _confirm "${prompt_msg}"; then
       run apt-get update -qq
