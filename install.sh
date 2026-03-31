@@ -145,12 +145,41 @@ _validate_host_arg() {
 }
 
 # Validate that a port argument is a number in the range 1–65535.
+# Delegates to _is_valid_port so the rule is defined once.
 _validate_port_arg() {
   local flag="$1" val="$2"
-  if ! [[ "${val}" =~ ^[0-9]+$ && "${val}" -ge 1 && "${val}" -le 65535 ]]; then
+  if ! _is_valid_port "${val}"; then
     echo "ERROR: ${flag} must be a number between 1 and 65535." >&2
     exit 1
   fi
+}
+
+# Pure predicate: returns 0 if val is a valid port number (1–65535), 1 otherwise.
+# No output and no exit — safe to use inside interactive prompt loops.
+_is_valid_port() {
+  local val="$1"
+  [[ "${val}" =~ ^[0-9]+$ && "${val}" -ge 1 && "${val}" -le 65535 ]]
+}
+
+# Pure predicate: returns 0 if val is a valid PostgreSQL database name
+# (alphanumerics and underscores only, non-empty), 1 otherwise.
+_is_valid_db_name() {
+  local val="$1"
+  [[ -n "${val}" && ! "${val}" =~ [^a-zA-Z0-9_] ]]
+}
+
+# Pure predicate: returns 0 if val is a valid PostgreSQL username
+# (non-empty, no whitespace, '/' or '@'), 1 otherwise.
+_is_valid_db_user() {
+  local val="$1"
+  [[ -n "${val}" && ! "${val}" =~ [[:space:]/@] ]]
+}
+
+# Pure predicate: returns 0 if val is an acceptable PostgreSQL password
+# (non-empty, no whitespace), 1 otherwise.
+_is_valid_db_pass() {
+  local val="$1"
+  [[ -n "${val}" && ! "${val}" =~ [[:space:]] ]]
 }
 
 # Pure predicate: returns 0 if val is a valid DNS name or IP address, 1 otherwise.
@@ -209,19 +238,19 @@ while [[ $# -gt 0 ]]; do
       DB_PORT="$2"; shift 2 ;;
     --db-name)
       _require_arg "$1" "${2-}"
-      if [[ "$2" =~ [^a-zA-Z0-9_] ]]; then
+      if ! _is_valid_db_name "$2"; then
         echo "ERROR: --db-name must contain only alphanumerics and underscores." >&2; exit 1
       fi
       DB_NAME="$2"; shift 2 ;;
     --db-user)
       _require_arg "$1" "${2-}"
-      if [[ "$2" =~ [[:space:]/@] ]]; then
+      if ! _is_valid_db_user "$2"; then
         echo "ERROR: --db-user must not contain whitespace, '/' or '@'." >&2; exit 1
       fi
       DB_USER="$2"; shift 2 ;;
     --db-password)
       _require_arg "$1" "${2-}"
-      if [[ "$2" =~ [[:space:]] ]]; then
+      if ! _is_valid_db_pass "$2"; then
         echo "ERROR: --db-password must not contain whitespace." >&2; exit 1
       fi
       DB_PASS="$2"; shift 2 ;;
@@ -587,7 +616,7 @@ _collect_db_config() {
   fi
 
   # ── Port ──────────────────────────────────────────────────────────────────
-  while ! [[ "${DB_PORT}" =~ ^[0-9]+$ && "${DB_PORT}" -ge 1 && "${DB_PORT}" -le 65535 ]]; do
+  while ! _is_valid_port "${DB_PORT}"; do
     if [[ "${YES}" == true ]]; then
       error "--db-port '${DB_PORT}' is not a valid port number."; exit 1
     fi
@@ -596,7 +625,7 @@ _collect_db_config() {
   done
 
   # ── Database name ─────────────────────────────────────────────────────────
-  while [[ -z "${DB_NAME}" || "${DB_NAME}" =~ [^a-zA-Z0-9_] ]]; do
+  while ! _is_valid_db_name "${DB_NAME}"; do
     if [[ "${YES}" == true ]]; then
       error "--db-name '${DB_NAME}' contains invalid characters (alphanumerics and underscores only)."; exit 1
     fi
@@ -611,7 +640,7 @@ _collect_db_config() {
     fi
     while true; do
       read -r -p "$(echo -e "${C_YELLOW}PostgreSQL username:${C_RESET} ")" DB_USER
-      if [[ -z "${DB_USER}" || "${DB_USER}" =~ [[:space:]/@] ]]; then
+      if ! _is_valid_db_user "${DB_USER}"; then
         warn "Invalid username — must be non-empty and must not contain whitespace, '/' or '@'."
       else
         break
@@ -629,7 +658,7 @@ _collect_db_config() {
       read -r -s -p "$(echo -e "${C_YELLOW}PostgreSQL password:${C_RESET} ")" DB_PASS; echo
       if [[ -z "${DB_PASS}" ]]; then
         warn "Password must not be empty."
-      elif [[ "${DB_PASS}" =~ [[:space:]] ]]; then
+      elif ! _is_valid_db_pass "${DB_PASS}"; then
         warn "Password must not contain whitespace."
         DB_PASS=""
       else
@@ -648,7 +677,7 @@ _collect_db_config() {
       exit 1
     fi
     ok "TCP ${DB_HOST}:${DB_PORT} is reachable"
-  elif command -v bash &>/dev/null && (echo '' > "/dev/tcp/${DB_HOST}/${DB_PORT}") 2>/dev/null; then
+  elif timeout 5 bash -c "echo '' > /dev/tcp/${DB_HOST}/${DB_PORT}" 2>/dev/null; then
     ok "TCP ${DB_HOST}:${DB_PORT} is reachable (via /dev/tcp)"
   else
     warn "Neither 'nc' nor /dev/tcp is available — skipping TCP reachability check."
