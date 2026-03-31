@@ -217,14 +217,14 @@ def system_health(
         except Exception:
             pass
 
-    worker_queue_size = 0
+    worker_queue_size: int | None = None
     if db_status == "connected":
         try:
             worker_queue_size = (
                 db.query(ExportJob).filter(ExportJob.status == JobStatus.PENDING).count()
             )
         except Exception:
-            pass
+            pass  # leave None — count is unknown, not zero
 
     cpu_percent: float | None = None
     memory_percent: float | None = None
