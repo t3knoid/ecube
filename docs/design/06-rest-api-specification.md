@@ -1418,7 +1418,7 @@ CPU, memory, disk I/O, worker queue.
   "memory_total_bytes": 8589934592,
   "disk_read_bytes": 1073741824,
   "disk_write_bytes": 536870912,
-  "worker_queue_size": 0
+  "worker_queue_size": 3
 }
 ```
 
@@ -1434,9 +1434,9 @@ CPU, memory, disk I/O, worker queue.
 | `memory_total_bytes` | integer\|null | Total physical memory in bytes |
 | `disk_read_bytes` | integer\|null | Cumulative disk read bytes since boot |
 | `disk_write_bytes` | integer\|null | Cumulative disk write bytes since boot |
-| `worker_queue_size` | integer | Number of jobs in `PENDING` state (queued but not yet running) |
+| `worker_queue_size` | integer\|null | Number of jobs in `PENDING` state; `null` when the database is unreachable or the count query fails |
 
-**Implementation note:** CPU, memory, and disk I/O metrics are collected via `psutil`. All metric fields are `null` when `psutil` is not installed rather than returning a hard error.
+**Implementation note:** CPU, memory, and disk I/O metrics are collected via `psutil`. All metric fields are `null` when `psutil` is not installed rather than returning a hard error. `worker_queue_size` is similarly `null` (rather than `0`) whenever the database is unavailable so that "no queued jobs" and "unknown" are distinguishable by consumers.
 
 **Error responses:**
 
