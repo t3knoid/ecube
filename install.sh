@@ -464,10 +464,45 @@ install_backend() {
   _wait_for_healthy
 }
 
+_patch_env_proxy_keys() {
+  # Idempotently set/update proxy-related keys in an existing .env without
+  # touching secrets (SECRET_KEY, DATABASE_URL, etc.).
+  local env_file="${1}"
+  local trust_val="${2}"   # "true" or "false"
+  local root_path="${3}"   # "/api" or ""
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    echo "[DRY-RUN] Would patch ${env_file}: TRUST_PROXY_HEADERS=${trust_val}, API_ROOT_PATH=${root_path}"
+    return
+  fi
+
+  # sed -i: replace existing key if present, then add if still absent.
+  for key_val in "TRUST_PROXY_HEADERS=${trust_val}" "API_ROOT_PATH=${root_path}"; do
+    local key="${key_val%%=*}"
+    local val="${key_val#*=}"
+    if grep -q "^${key}=" "${env_file}" 2>/dev/null; then
+      # Update in-place (GNU sed; escape val for sed replacement string)
+      local escaped_val
+      escaped_val=$(printf '%s\n' "${val}" | sed 's/[\/&]/\\&/g')
+      sed -i "s|^${key}=.*|${key}=${escaped_val}|" "${env_file}"
+    else
+      # Append
+      printf '\n%s=%s\n' "${key}" "${val}" >> "${env_file}"
+    fi
+  done
+  ok ".env proxy keys patched (TRUST_PROXY_HEADERS=${trust_val}, API_ROOT_PATH=${root_path})"
+}
+
 _write_env_file() {
   local env_file="${INSTALL_DIR}/.env"
   if [[ -f "${env_file}" ]]; then
-    info ".env already exists — not overwriting (preserving operator secrets)."
+    info ".env already exists — preserving operator secrets."
+    # When the topology includes nginx, ensure the proxy-related keys are
+    # correct regardless of how the file was originally created.
+    if [[ "${INSTALL_FRONTEND}" == true ]]; then
+      info "Patching proxy-related keys for full-install topology..."
+      _patch_env_proxy_keys "${env_file}" "true" "/api"
+    fi
     return
   fi
   info "Writing .env file..."
@@ -629,22 +664,7 @@ install_frontend() {
 
     # Patch .env — add or overwrite TRUST_PROXY_HEADERS and API_ROOT_PATH.
     if [[ -f "${env_file}" ]]; then
-      if [[ "${DRY_RUN}" != true ]]; then
-        # Update existing keys in-place, or append if absent.
-        if grep -q "^TRUST_PROXY_HEADERS=" "${env_file}"; then
-          sed -i 's|^TRUST_PROXY_HEADERS=.*|TRUST_PROXY_HEADERS=true|' "${env_file}"
-        else
-          echo "TRUST_PROXY_HEADERS=true" >> "${env_file}"
-        fi
-        if grep -q "^API_ROOT_PATH=" "${env_file}"; then
-          sed -i 's|^API_ROOT_PATH=.*|API_ROOT_PATH=/api|' "${env_file}"
-        else
-          echo "API_ROOT_PATH=/api" >> "${env_file}"
-        fi
-        ok ".env updated (TRUST_PROXY_HEADERS=true, API_ROOT_PATH=/api)"
-      else
-        echo "[DRY-RUN] Would patch ${env_file}: TRUST_PROXY_HEADERS=true, API_ROOT_PATH=/api"
-      fi
+      _patch_env_proxy_keys "${env_file}" "true" "/api"
     else
       warn ".env not found at ${env_file} — skipping env patch (service may not exist yet)."
     fi
