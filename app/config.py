@@ -275,6 +275,34 @@ class Settings(BaseSettings):
     #: ``request.client.host`` to prevent header spoofing on direct connections.
     trust_proxy_headers: bool = False
 
+    #: ASGI root path passed to FastAPI and used as the OpenAPI ``servers``
+    #: base URL.  Set to ``/api`` when a reverse proxy strips the ``/api``
+    #: prefix before forwarding requests to uvicorn.  Leave empty when
+    #: uvicorn is accessed directly.
+    #:
+    #: Valid values: empty string, or an absolute path starting with ``/``
+    #: (e.g. ``/api``).  Trailing slashes and surrounding whitespace are
+    #: stripped automatically.  Full URLs (``https://…``) are rejected.
+    api_root_path: str = ""
+
+    @field_validator("api_root_path", mode="before")
+    @classmethod
+    def _normalise_api_root_path(cls, v: object) -> str:
+        if not isinstance(v, str):
+            raise ValueError("api_root_path must be a string")
+        v = v.strip().rstrip("/")
+        if v == "":
+            return v
+        if "://" in v:
+            raise ValueError(
+                "api_root_path must be a path (e.g. '/api'), not a full URL with scheme/host"
+            )
+        if not v.startswith("/"):
+            raise ValueError(
+                f"api_root_path must start with '/' or be empty, got: {v!r}"
+            )
+        return v
+
     # ---------------------------------------------------------------------------
     # Webhook callback settings
     # ---------------------------------------------------------------------------

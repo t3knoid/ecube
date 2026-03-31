@@ -156,6 +156,39 @@ class TestSettingsDefaults:
             "https://example.com",
         ]
 
+    def test_api_root_path_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.api_root_path == ""
+
+    def test_api_root_path_valid(self):
+        with patch.dict("os.environ", {"API_ROOT_PATH": "/api"}):
+            s = Settings(database_url="sqlite://")
+        assert s.api_root_path == "/api"
+
+    def test_api_root_path_strips_trailing_slash(self):
+        with patch.dict("os.environ", {"API_ROOT_PATH": "/api/"}):
+            s = Settings(database_url="sqlite://")
+        assert s.api_root_path == "/api"
+
+    def test_api_root_path_strips_whitespace(self):
+        with patch.dict("os.environ", {"API_ROOT_PATH": "  /api  "}):
+            s = Settings(database_url="sqlite://")
+        assert s.api_root_path == "/api"
+
+    def test_api_root_path_rejects_missing_leading_slash(self):
+        import pytest
+        from pydantic import ValidationError
+        with patch.dict("os.environ", {"API_ROOT_PATH": "api"}):
+            with pytest.raises(ValidationError, match="must start with '/'"):
+                Settings(database_url="sqlite://")
+
+    def test_api_root_path_rejects_full_url(self):
+        import pytest
+        from pydantic import ValidationError
+        with patch.dict("os.environ", {"API_ROOT_PATH": "https://api.corp.local/api"}):
+            with pytest.raises(ValidationError, match="scheme/host"):
+                Settings(database_url="sqlite://")
+
 
 # ---------------------------------------------------------------------------
 # Audit log retention cleanup
