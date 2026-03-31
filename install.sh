@@ -215,8 +215,8 @@ while [[ $# -gt 0 ]]; do
       DB_NAME="$2"; shift 2 ;;
     --db-user)
       _require_arg "$1" "${2-}"
-      if [[ "$2" =~ [[:space:]] ]]; then
-        echo "ERROR: --db-user must not contain whitespace." >&2; exit 1
+      if [[ "$2" =~ [[:space:]/@] ]]; then
+        echo "ERROR: --db-user must not contain whitespace, '/' or '@'." >&2; exit 1
       fi
       DB_USER="$2"; shift 2 ;;
     --db-password)
