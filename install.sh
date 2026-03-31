@@ -64,7 +64,7 @@ INSTALL_DIR="/opt/ecube"
 API_PORT="8443"
 UI_PORT="443"
 HOSTNAME_OVERRIDE=""
-CERT_VALIDITY="3650"
+CERT_VALIDITY="730"
 YES=false
 UNINSTALL=false
 DRY_RUN=false
@@ -124,7 +124,7 @@ Options:
   --db-user USER         PostgreSQL username                (prompted if omitted)
   --db-password PASS     PostgreSQL password                (prompted if omitted)
   --hostname HOST        Hostname/IP for TLS cert CN  (default: \$(hostname -f))
-  --cert-validity DAYS   Self-signed cert validity    (default: 3650)
+  --cert-validity DAYS   Self-signed cert validity    (default: 730, max: 730 — 2 years)
   --yes, -y              Non-interactive / unattended mode
   --version TAG          Install a specific release tag instead of latest
   --uninstall            Remove ECUBE from this host
@@ -299,6 +299,9 @@ while [[ $# -gt 0 ]]; do
       HOSTNAME_OVERRIDE="$2"; shift 2 ;;
     --cert-validity)
       _require_arg "$1" "${2-}"
+      if [[ ! "$2" =~ ^[0-9]+$ || "$2" -lt 1 || "$2" -gt 730 ]]; then
+        echo "ERROR: --cert-validity must be a whole number between 1 and 730 (days). Maximum is 730 days (2 years)." >&2; exit 1
+      fi
       CERT_VALIDITY="$2"; shift 2 ;;
     --yes|-y)         YES=true;  shift ;;
     --version)
