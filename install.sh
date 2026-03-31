@@ -76,6 +76,14 @@ BACKEND_HOST="127.0.0.1"
 ALLOW_INSECURE_BACKEND=true
 BACKEND_CA_FILE=""
 
+# PostgreSQL connection — populated interactively or via CLI flags
+DB_HOST=""
+DB_PORT="5432"
+DB_NAME="ecube"
+DB_USER=""
+DB_PASS=""
+DATABASE_URL=""   # built by _collect_db_config
+
 GITHUB_OWNER="t3knoid"
 GITHUB_REPO="ecube"
 
@@ -107,6 +115,11 @@ Options:
   --backend-ca-file FILE Path to a PEM CA certificate used to verify the remote
                          backend's TLS certificate (proxy_ssl_trusted_certificate).
                          Implies proxy_ssl_verify on. Ignored for loopback backends.
+  --db-host HOST         PostgreSQL server hostname or IP  (prompted if omitted)
+  --db-port PORT         PostgreSQL server port             (default: 5432)
+  --db-name NAME         PostgreSQL database name           (default: ecube)
+  --db-user USER         PostgreSQL username                (prompted if omitted)
+  --db-password PASS     PostgreSQL password                (prompted if omitted)
   --hostname HOST        Hostname/IP for TLS cert CN  (default: \$(hostname -f))
   --cert-validity DAYS   Self-signed cert validity    (default: 3650)
   --yes, -y              Non-interactive / unattended mode
@@ -144,6 +157,27 @@ while [[ $# -gt 0 ]]; do
       BACKEND_HOST="$2"; shift 2 ;;
     --allow-insecure-backend)  ALLOW_INSECURE_BACKEND=true; shift ;;
     --backend-ca-file)         BACKEND_CA_FILE="$2"; shift 2 ;;
+    --db-host)
+      _validate_host_arg "--db-host" "$2"
+      DB_HOST="$2"; shift 2 ;;
+    --db-port)
+      [[ "$2" =~ ^[0-9]+$ ]] || { echo "ERROR: --db-port must be a positive integer." >&2; exit 1; }
+      DB_PORT="$2"; shift 2 ;;
+    --db-name)
+      if [[ -z "$2" || "$2" =~ [^a-zA-Z0-9_] ]]; then
+        echo "ERROR: --db-name must be non-empty and contain only alphanumerics and underscores." >&2; exit 1
+      fi
+      DB_NAME="$2"; shift 2 ;;
+    --db-user)
+      if [[ -z "$2" || "$2" =~ [[:space:]] ]]; then
+        echo "ERROR: --db-user must be non-empty and must not contain whitespace." >&2; exit 1
+      fi
+      DB_USER="$2"; shift 2 ;;
+    --db-password)
+      if [[ -z "$2" || "$2" =~ [[:space:]] ]]; then
+        echo "ERROR: --db-password must be non-empty and must not contain whitespace." >&2; exit 1
+      fi
+      DB_PASS="$2"; shift 2 ;;
     --install-dir)
       # Reject values that are empty, /, a known system root, contain whitespace
       # or newlines, or are not absolute paths.  Any of these could cause
@@ -473,6 +507,137 @@ _maybe_download_release() {
 }
 
 # ===========================================================================
+# DATABASE CONFIGURATION
+# ===========================================================================
+_validate_db_str() {
+  # Reject values containing whitespace, @, /, or characters that would break
+  # a postgresql:// URL or a psql connection string.
+  local flag="$1" val="$2"
+  if [[ -z "${val}" ]]; then
+    echo "ERROR: ${flag} must not be empty." >&2; exit 1
+  fi
+  if [[ "${val}" =~ [[:space:]/@] ]]; then
+    echo "ERROR: ${flag} value contains invalid characters (whitespace, '/' or '@' not allowed)." >&2; exit 1
+  fi
+}
+
+_collect_db_config() {
+  header "\n── PostgreSQL database configuration ──────────────────────────"
+
+  # ── Hostname ──────────────────────────────────────────────────────────────
+  if [[ -z "${DB_HOST}" ]]; then
+    if [[ "${YES}" == true ]]; then
+      error "--db-host is required in non-interactive (--yes) mode."; exit 1
+    fi
+    while true; do
+      read -r -p "$(echo -e "${C_YELLOW}PostgreSQL host (hostname or IP):${C_RESET} ")" DB_HOST
+      _validate_host_arg "--db-host" "${DB_HOST}" 2>/dev/null && break || true
+      warn "Invalid host — use DNS name or IP address only (no spaces or special characters)."
+    done
+  fi
+
+  # ── Port ──────────────────────────────────────────────────────────────────
+  while ! [[ "${DB_PORT}" =~ ^[0-9]+$ && "${DB_PORT}" -ge 1 && "${DB_PORT}" -le 65535 ]]; do
+    if [[ "${YES}" == true ]]; then
+      error "--db-port '${DB_PORT}' is not a valid port number."; exit 1
+    fi
+    read -r -p "$(echo -e "${C_YELLOW}PostgreSQL port [${DB_PORT}]:${C_RESET} ")" _in
+    DB_PORT="${_in:-${DB_PORT}}"
+  done
+
+  # ── Database name ─────────────────────────────────────────────────────────
+  while [[ -z "${DB_NAME}" || "${DB_NAME}" =~ [^a-zA-Z0-9_] ]]; do
+    if [[ "${YES}" == true ]]; then
+      error "--db-name '${DB_NAME}' contains invalid characters (alphanumerics and underscores only)."; exit 1
+    fi
+    read -r -p "$(echo -e "${C_YELLOW}PostgreSQL database name [ecube]:${C_RESET} ")" _in
+    DB_NAME="${_in:-ecube}"
+  done
+
+  # ── Username ──────────────────────────────────────────────────────────────
+  if [[ -z "${DB_USER}" ]]; then
+    if [[ "${YES}" == true ]]; then
+      error "--db-user is required in non-interactive (--yes) mode."; exit 1
+    fi
+    while true; do
+      read -r -p "$(echo -e "${C_YELLOW}PostgreSQL username:${C_RESET} ")" DB_USER
+      if [[ -z "${DB_USER}" || "${DB_USER}" =~ [[:space:]/@] ]]; then
+        warn "Invalid username — must be non-empty and must not contain whitespace, '/' or '@'."
+      else
+        break
+      fi
+    done
+  fi
+
+  # ── Password ──────────────────────────────────────────────────────────────
+  if [[ -z "${DB_PASS}" ]]; then
+    if [[ "${YES}" == true ]]; then
+      error "--db-password is required in non-interactive (--yes) mode."; exit 1
+    fi
+    while true; do
+      # Read without echo
+      read -r -s -p "$(echo -e "${C_YELLOW}PostgreSQL password:${C_RESET} ")" DB_PASS; echo
+      if [[ -z "${DB_PASS}" ]]; then
+        warn "Password must not be empty."
+      elif [[ "${DB_PASS}" =~ [[:space:]] ]]; then
+        warn "Password must not contain whitespace."
+        DB_PASS=""
+      else
+        break
+      fi
+    done
+  fi
+
+  # ── TCP reachability check ─────────────────────────────────────────────────
+  info "Checking TCP connectivity to ${DB_HOST}:${DB_PORT}..."
+  if [[ "${DRY_RUN}" == true ]]; then
+    echo "[DRY-RUN] Would check TCP ${DB_HOST}:${DB_PORT}"
+  elif command -v nc &>/dev/null; then
+    if ! nc -z -w5 "${DB_HOST}" "${DB_PORT}" 2>/dev/null; then
+      error "Cannot reach PostgreSQL at ${DB_HOST}:${DB_PORT}. Check the host, port, and firewall rules."
+      exit 1
+    fi
+    ok "TCP ${DB_HOST}:${DB_PORT} is reachable"
+  elif command -v bash &>/dev/null && (echo '' > "/dev/tcp/${DB_HOST}/${DB_PORT}") 2>/dev/null; then
+    ok "TCP ${DB_HOST}:${DB_PORT} is reachable (via /dev/tcp)"
+  else
+    warn "Neither 'nc' nor /dev/tcp is available — skipping TCP reachability check."
+  fi
+
+  # ── Credential check (psql) ────────────────────────────────────────────────
+  if [[ "${DRY_RUN}" != true ]] && command -v psql &>/dev/null; then
+    info "Verifying credentials with psql..."
+    if PGPASSWORD="${DB_PASS}" psql \
+        --host="${DB_HOST}" \
+        --port="${DB_PORT}" \
+        --username="${DB_USER}" \
+        --dbname="${DB_NAME}" \
+        --command='SELECT 1;' \
+        &>/dev/null; then
+      ok "PostgreSQL credentials verified"
+    else
+      error "psql could not connect to ${DB_NAME}@${DB_HOST}:${DB_PORT} as '${DB_USER}'."
+      error "Check the username, password, and that the database exists."
+      exit 1
+    fi
+  else
+    [[ "${DRY_RUN}" == true ]] || warn "psql not found — skipping credential verification."
+  fi
+
+  # ── URL-encode the password (percent-encode @ : / space) ──────────────────
+  # bash-only encoding — covers the characters that break a postgresql:// URL.
+  local encoded_pass="${DB_PASS}"
+  encoded_pass="${encoded_pass//'%'/'%25'}"
+  encoded_pass="${encoded_pass//' '/'%20'}"
+  encoded_pass="${encoded_pass//'@'/'%40'}"
+  encoded_pass="${encoded_pass//':'/'%3A'}"
+  encoded_pass="${encoded_pass//'/'/'%2F'}"
+
+  DATABASE_URL="postgresql://${DB_USER}:${encoded_pass}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+  ok "DATABASE_URL configured (password redacted)"
+}
+
+# ===========================================================================
 # BACKEND INSTALLATION
 # ===========================================================================
 install_backend() {
@@ -512,19 +677,22 @@ install_backend() {
   # 6. TLS certificates
   _generate_certs
 
-  # 7. .env file
+  # 7. Database configuration
+  _collect_db_config
+
+  # 8. .env file
   _write_env_file
 
-  # 8. Systemd unit
+  # 9. Systemd unit
   _write_systemd_unit
 
-  # 9. Reload and start
+  # 10. Reload and start
   run systemctl daemon-reload
   run systemctl enable ecube.service
   run systemctl restart ecube.service
   ok "ecube.service started and enabled"
 
-  # 10. Health check
+  # 11. Health check
   _wait_for_healthy
 }
 
@@ -592,7 +760,7 @@ _write_env_file() {
 # Generated by install.sh — edit as needed.
 
 SECRET_KEY=${secret_key}
-DATABASE_URL=postgresql://ecube:CHANGE_ME@localhost/ecube
+DATABASE_URL=${DATABASE_URL}
 
 # Set to true if a reverse proxy (nginx) sits in front of uvicorn.
 TRUST_PROXY_HEADERS=${trust_proxy}
@@ -604,9 +772,9 @@ EOF
     chmod 600 "${env_file}"
     chown ecube:ecube "${env_file}"
   else
-    echo "[DRY-RUN] Would write ${env_file} with SECRET_KEY, DATABASE_URL placeholder, TRUST_PROXY_HEADERS=${trust_proxy}, API_ROOT_PATH=${api_root_path}"
+    echo "[DRY-RUN] Would write ${env_file} with SECRET_KEY, DATABASE_URL=${DATABASE_URL:-<collected>}, TRUST_PROXY_HEADERS=${trust_proxy}, API_ROOT_PATH=${api_root_path}"
   fi
-  ok ".env written (remember to update DATABASE_URL before starting the service)"
+  ok ".env written"
 }
 
 _write_systemd_unit() {

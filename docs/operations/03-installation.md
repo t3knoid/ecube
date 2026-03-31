@@ -20,6 +20,9 @@
   - [Full Install (default)](#full-install-default)
   - [Backend Only](#backend-only)
   - [Frontend Only](#frontend-only)
+- [Database Configuration](#database-configuration)
+  - [Interactive mode (default)](#interactive-mode-default)
+  - [Unattended mode (`--yes`)](#unattended-mode---yes)
 - [TLS Certificates](#tls-certificates)
 - [Post-Install: Setup Wizard](#post-install-setup-wizard)
 - [Upgrade Procedure](#upgrade-procedure)
@@ -92,10 +95,11 @@ The installer will:
 2. Create the `ecube` system user.
 3. Set up a Python virtual environment in `/opt/ecube/venv`.
 4. Generate a self-signed TLS certificate.
-5. Write `/opt/ecube/.env` with a random `SECRET_KEY` and a `DATABASE_URL` placeholder.
-6. Write and start the `ecube.service` systemd unit.
-7. (Full install) Configure nginx to serve the frontend and proxy `/api/` to the backend.
-8. Optionally configure `ufw` firewall rules.
+5. Prompt for PostgreSQL connection details (host, port, database name, username, password), verify TCP reachability, and validate credentials with `psql` if it is available.
+6. Write `/opt/ecube/.env` with a random `SECRET_KEY` and the assembled `DATABASE_URL`.
+7. Write and start the `ecube.service` systemd unit.
+8. (Full install) Configure nginx to serve the frontend and proxy `/api/` to the backend.
+9. Optionally configure `ufw` firewall rules.
 
 At the end it prints a summary with the UI URL, API URL, and service management commands.
 
@@ -111,9 +115,14 @@ At the end it prints a summary with the UI URL, API URL, and service management 
 | `--install-dir DIR` | `/opt/ecube` | Root installation directory |
 | `--api-port PORT` | `8443` | Port the backend (uvicorn) binds to (HTTP when behind nginx, HTTPS in backend-only mode) |
 | `--ui-port PORT` | `443` | HTTPS port nginx listens on |
-| `--backend-host HOST` | `127.0.0.1` | Hostname/IP of the backend; set when the backend is on a separate host |
+| `--backend-host HOST` | `127.0.0.1` | Hostname/IP of the backend. The default (`127.0.0.1`) assumes the backend runs on the same host and is only valid for same-host deployments. **Must be specified when using `--frontend-only` with a backend on a separate host.** |
 | `--allow-insecure-backend` | on | Disable TLS certificate verification (`proxy_ssl_verify off`) when proxying to a remote backend. **On by default** for quick bring-up — a warning is printed when in effect. Pass `--backend-ca-file` or ensure the backend cert is in the system trust store to use verified HTTPS instead. |
 | `--backend-ca-file FILE` | — | Path to a PEM CA certificate used to verify the remote backend's TLS certificate (`proxy_ssl_trusted_certificate`). Use when the backend has a private CA-signed cert that is not in the system trust store. |
+| `--db-host HOST` | *(prompted)* | **Backend installs only.** PostgreSQL server hostname or IP address. Must be non-empty and contain only DNS/IP-safe characters. Required in `--yes` mode. Ignored for `--frontend-only`. |
+| `--db-port PORT` | `5432` | **Backend installs only.** PostgreSQL server port. Must be a valid integer between 1 and 65535. Ignored for `--frontend-only`. |
+| `--db-name NAME` | `ecube` | **Backend installs only.** Name of the PostgreSQL database. Must contain only alphanumerics and underscores. Ignored for `--frontend-only`. |
+| `--db-user USER` | *(prompted)* | **Backend installs only.** PostgreSQL username. Must be non-empty and must not contain whitespace, `/`, or `@`. Required in `--yes` mode. Ignored for `--frontend-only`. |
+| `--db-password PASS` | *(prompted)* | **Backend installs only.** PostgreSQL password. Must be non-empty and must not contain whitespace. Required in `--yes` mode. URL-unsafe characters (`%`, `@`, `:`, `/`, space) are percent-encoded automatically when building `DATABASE_URL`. Ignored for `--frontend-only`. |
 | `--hostname HOST` | `$(hostname -f)` | Hostname/IP used as TLS certificate CN and in summary URLs |
 | `--cert-validity DAYS` | `3650` | Self-signed certificate validity in days |
 | `--yes` / `-y` | off | Non-interactive / unattended mode |
@@ -147,11 +156,13 @@ Installs the backend service only. uvicorn terminates TLS itself and binds to `0
 # Backend on the same host (default):
 sudo ./install.sh --frontend-only
 
-# Backend on a separate host:
+# Backend on a separate host (--backend-host is required):
 sudo ./install.sh --frontend-only --backend-host <backend-ip-or-hostname>
 ```
 
 Installs nginx and deploys the pre-built frontend bundle only.
+
+> **`--backend-host` requirement:** The default value (`127.0.0.1`) is only valid when the backend is running on the same host. When the backend is on a separate machine, `--backend-host` **must** be specified — omitting it will cause nginx to proxy to `127.0.0.1`, which will not reach the remote backend.
 
 **Same-host backend (default — `--backend-host 127.0.0.1`):** When `ecube.service` is already present on this host the installer automatically:
 
@@ -170,6 +181,49 @@ Two successive invocations (`--backend-only` then `--frontend-only`) on the same
 | Backend has a CA-signed cert trusted by the OS | Set `ALLOW_INSECURE_BACKEND=false` before running, or remove `proxy_ssl_verify off` from the generated nginx config |
 
 Only leave `--allow-insecure-backend` in effect on trusted networks (VPN, private subnet, etc.).
+
+---
+
+## Database Configuration
+
+> **Applies to:** full install (default) and `--backend-only`. These steps are **skipped entirely** when running `--frontend-only` — the frontend installer does not touch `.env` or the database connection.
+
+The installer prompts for the PostgreSQL connection details required to assemble `DATABASE_URL`. You can supply any or all values via CLI flags to reduce or eliminate prompting.
+
+### Interactive mode (default)
+
+When `--db-host`, `--db-user`, or `--db-password` are omitted the installer prompts for them:
+
+```
+── PostgreSQL database configuration ──────────────────────────
+PostgreSQL host (hostname or IP): db.example.com
+PostgreSQL port [5432]:
+PostgreSQL database name [ecube]:
+PostgreSQL username: ecube_app
+PostgreSQL password: ****
+```
+
+Each value is validated as it is entered. The installer then:
+
+1. **TCP reachability check** — uses `nc -z` (or `/dev/tcp` as a fallback) to confirm the port is reachable. The install aborts if the check fails.
+2. **Credential verification** — if `psql` is found on `PATH`, it runs `SELECT 1` against the database to verify the username and password. The install aborts if authentication fails.
+3. Percent-encodes URL-unsafe characters (`%`, `@`, `:`, `/`, space) in the password before embedding it in the connection string.
+4. Writes `DATABASE_URL=postgresql://<user>:<encoded-pass>@<host>:<port>/<dbname>` into `.env`.
+
+### Unattended mode (`--yes`)
+
+All five database flags become **required** when `--yes` is passed:
+
+```bash
+sudo ./install.sh --yes \
+  --db-host db.example.com \
+  --db-port 5432 \
+  --db-name ecube \
+  --db-user ecube_app \
+  --db-password 'S3cret!'
+```
+
+The installer exits with an error if any of `--db-host`, `--db-user`, or `--db-password` are missing in `--yes` mode.
 
 ---
 
@@ -199,11 +253,10 @@ https://<hostname>:<ui-port>/setup
 
 The wizard will:
 
-1. Test and provision the PostgreSQL database connection.
-2. Run Alembic migrations.
-3. Create the initial admin user.
+1. Run Alembic migrations.
+2. Create the initial admin user.
 
-> **Note:** `<install-dir>/.env` contains `DATABASE_URL=postgresql://ecube:CHANGE_ME@localhost/ecube` as a placeholder. Update it with your real PostgreSQL credentials **before** completing the setup wizard, or use the wizard's database provisioning form which overwrites it automatically.
+> **Note:** `DATABASE_URL` in `<install-dir>/.env` is written with the credentials you supplied during installation. If you need to point the service at a different database later, edit `.env` and restart `ecube.service`.
 
 The `ecube-setup` CLI (`/opt/ecube/venv/bin/ecube-setup`) is an advanced alternative for headless environments. The setup wizard is the recommended path.
 
