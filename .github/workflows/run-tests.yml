@@ -3,8 +3,8 @@ name: Run Tests
 on:
   workflow_dispatch:
   push:
-    branches: [main, "UI-Phase-*"]
-  pull_request:
+    branches: [main]
+    tags: ["v*"]
 
 # Cancel any in-progress run for the same branch/PR when a new commit is pushed.
 # workflow_dispatch runs are never cancelled.
