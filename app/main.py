@@ -182,10 +182,14 @@ async def lifespan(application: FastAPI):
     # Shutdown
     # ------------------------------------------------------------------
     if prime_task is not None and not prime_task.done():
-        prime_task.cancel()
+        # prime_cpu_sampler runs a short blocking call in a thread.  Cancelling
+        # the Task only cancels the Future wrapper — the underlying thread
+        # continues regardless.  Await with a short timeout instead so we don't
+        # misrepresent the cancellation and give the sampler a chance to finish
+        # cleanly without blocking shutdown for long.
         try:
-            await prime_task
-        except (asyncio.CancelledError, Exception):
+            await asyncio.wait_for(asyncio.shield(prime_task), timeout=2.0)
+        except (asyncio.TimeoutError, Exception):
             pass
 
     if discovery_task is not None:
