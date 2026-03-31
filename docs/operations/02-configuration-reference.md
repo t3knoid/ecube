@@ -210,9 +210,10 @@ Required only when `SESSION_BACKEND=redis`. If Redis is unavailable, ECUBE autom
 
 ## Reverse Proxy / Client IP
 
-| Variable              | Default | Description                                                                                                                                                                                                                                 |
-| --------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TRUST_PROXY_HEADERS` | `false` | When `true`, extract client IP from `X-Forwarded-For` / `X-Real-IP` headers for audit logging. Only enable when ECUBE runs behind a trusted reverse proxy that sets these headers. When `false`, the direct TCP connection address is used. |
+| Variable              | Default   | Description                                                                                                                                                                                                                                 |
+| --------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TRUST_PROXY_HEADERS` | `false`   | When `true`, extract client IP from `X-Forwarded-For` / `X-Real-IP` headers for audit logging. Only enable when ECUBE runs behind a trusted reverse proxy that sets these headers. When `false`, the direct TCP connection address is used. |
+| `API_ROOT_PATH`       | *(empty)* | ASGI root path forwarded to FastAPI and used as the OpenAPI `servers` base URL. Set to `/api` when a reverse proxy strips the `/api` prefix before forwarding to uvicorn (the standard Docker and nginx configuration). Leave empty for direct uvicorn access. **Validation:** must be empty or an absolute path starting with `/` (e.g. `/api`). Trailing slashes and surrounding whitespace are stripped automatically. Full URLs containing a scheme (`https://…`) are rejected with a startup error. |
 
 ---
 
@@ -232,3 +233,15 @@ Required only when `SESSION_BACKEND=redis`. If Redis is unavailable, ECUBE autom
 | ------------------- | --------------------- | ---------------------------------------- |
 | `API_CONTACT_NAME`  | `ECUBE Support`       | Contact name shown in the OpenAPI spec.  |
 | `API_CONTACT_EMAIL` | `support@ecube.local` | Contact email shown in the OpenAPI spec. |
+
+---
+
+## Frontend Build Variables
+
+These variables are consumed by **Vite at build time** (not at runtime). They must be set in the environment where `npm run build` executes — typically a CI step or a custom `Dockerfile` build argument.
+
+| Variable            | Default   | Description                                                                                                                                                                                                                                                                                                                        |
+| ------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `VITE_API_BASE_URL` | *(unset)* | Override the API base URL for cross-origin or two-machine deployments where the API is hosted on a different server. Example: `https://api.corp.local:8443/api`. When unset the frontend resolves the API base as `/api` relative to the page origin, which is correct for standard single-server and Docker deployments. |
+
+> **Note:** If `VITE_API_BASE_URL` is set, ensure the backend's `CORS_ALLOWED_ORIGINS` includes the origin of the frontend server, otherwise preflight requests will be rejected.

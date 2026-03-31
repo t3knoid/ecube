@@ -329,6 +329,44 @@ class TestOpenAPISchema:
         response = client.get("/redoc")
         assert response.status_code == 200
 
+    def test_openapi_servers_absent_without_root_path(self):
+        """No servers entry when api_root_path is empty."""
+        from unittest.mock import patch
+
+        from app.main import app
+
+        app.openapi_schema = None
+        with patch("app.main.settings") as mock_settings:
+            mock_settings.api_root_path = ""
+            mock_settings.api_contact_name = app.contact["name"]
+            mock_settings.api_contact_email = app.contact["email"]
+            schema = app.openapi()
+
+        servers = schema.get("servers")
+        assert not servers, (
+            "OpenAPI schema must not inject a servers entry when api_root_path is empty"
+        )
+        app.openapi_schema = None
+
+    def test_openapi_servers_set_when_root_path_configured(self):
+        """servers[{url}] must match api_root_path when it is set."""
+        from unittest.mock import patch
+
+        from app.main import app
+
+        app.openapi_schema = None
+        with patch("app.main.settings") as mock_settings:
+            mock_settings.api_root_path = "/api"
+            mock_settings.api_contact_name = app.contact["name"]
+            mock_settings.api_contact_email = app.contact["email"]
+            schema = app.openapi()
+
+        servers = schema.get("servers", [])
+        assert any(s.get("url") == "/api" for s in servers), (
+            "OpenAPI schema must include servers[{url: '/api'}] when api_root_path='/api'"
+        )
+        app.openapi_schema = None
+
 
 class TestAuthenticationStructure:
     """Verify endpoints have proper authentication and authorization gating."""
