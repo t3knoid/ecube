@@ -127,15 +127,21 @@ async def lifespan(application: FastAPI):
     # Startup: prime psutil CPU baseline (runs in background thread so it
     # does not block the server from accepting requests).
     # ------------------------------------------------------------------
+    def _log_prime_failure(task: "asyncio.Task[None]") -> None:
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error(
+                "CPU sampler priming failed; cpu_percent will report 0.0 initially",
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
+
     try:
         import asyncio
         from app.routers.introspection import prime_cpu_sampler
         _prime_task = asyncio.create_task(asyncio.to_thread(prime_cpu_sampler))
-        _prime_task.add_done_callback(
-            lambda t: logger.exception("CPU sampler priming failed", exc_info=t.exception())
-            if not t.cancelled() and t.exception() is not None
-            else None
-        )
+        _prime_task.add_done_callback(_log_prime_failure)
     except Exception:
         logger.exception("CPU sampler priming setup failed")
 
