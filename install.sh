@@ -391,6 +391,11 @@ preflight() {
   local parent_dir
   parent_dir="$(dirname "${INSTALL_DIR}")"
   [[ -d "${INSTALL_DIR}" ]] && parent_dir="${INSTALL_DIR}"
+  if [[ ! -d "${parent_dir}" ]]; then
+    error "Parent directory '${parent_dir}' does not exist."
+    error "Create it before running the installer, e.g.: sudo mkdir -p '${parent_dir}'"
+    exit 1
+  fi
   local free_kb
   free_kb=$(df -k "${parent_dir}" | awk 'NR==2 {print $4}')
   if (( free_kb < 2097152 )); then
