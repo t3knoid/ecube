@@ -3,13 +3,13 @@ name: Run Tests
 on:
   workflow_dispatch:
   push:
-    branches: [main, "UI-Phase-*"]
-  pull_request:
+    tags:
+      - "v*"
 
-# Cancel any in-progress run for the same branch/PR when a new commit is pushed.
+# Cancel any in-progress run for the same tag when a new tag is pushed.
 # workflow_dispatch runs are never cancelled.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
