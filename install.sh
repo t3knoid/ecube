@@ -414,7 +414,7 @@ _maybe_download_release() {
 install_backend() {
   header "\n── Backend installation ────────────────────────────────────────"
 
-  # 1. System user, role groups, and USB device access
+  # 1. System user and USB device access
   _ensure_ecube_user
 
   for grp in plugdev dialout; do
