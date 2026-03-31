@@ -42,7 +42,11 @@ def test_system_health_psutil_metrics(client, db):
     assert response.status_code == 200
     data = response.json()
     assert data["cpu_percent"] == 12.5
-    mock_psutil.cpu_percent.assert_called_once_with(interval=None)
+    # Use assert_any_call rather than assert_called_once_with: the background
+    # priming task (asyncio.to_thread(prime_cpu_sampler)) may also call
+    # cpu_percent(interval=1.0) on the same mock if it races with this patch,
+    # so we only assert that the endpoint made its expected non-blocking call.
+    mock_psutil.cpu_percent.assert_any_call(interval=None)
     assert data["memory_percent"] == 42.0
     assert data["memory_used_bytes"] == 2_000_000_000
     assert data["memory_total_bytes"] == 8_000_000_000
