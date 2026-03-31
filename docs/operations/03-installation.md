@@ -9,19 +9,22 @@
 
 ## Table of Contents
 
-1. [Deployment Options](#deployment-options)
-2. [Prerequisites](#prerequisites)
-3. [Quick Start (bare-metal)](#quick-start-bare-metal)
-4. [CLI Flags Reference](#cli-flags-reference)
-5. [Install Modes](#install-modes)
-   - [Full Install (default)](#full-install-default)
-   - [Backend Only](#backend-only)
-   - [Frontend Only](#frontend-only)
-6. [TLS Certificates](#tls-certificates)
-7. [Post-Install: Setup Wizard](#post-install-setup-wizard)
-8. [Upgrade Procedure](#upgrade-procedure)
-9. [Uninstall Procedure](#uninstall-procedure)
-10. [Docker Compose Deployment](#docker-compose-deployment)
+- [Table of Contents](#table-of-contents)
+- [Deployment Options](#deployment-options)
+- [Prerequisites](#prerequisites)
+  - [Hardware Requirements](#hardware-requirements)
+  - [Software Requirements](#software-requirements)
+- [Quick Start (bare-metal)](#quick-start-bare-metal)
+- [CLI Flags Reference](#cli-flags-reference)
+- [Install Modes](#install-modes)
+  - [Full Install (default)](#full-install-default)
+  - [Backend Only](#backend-only)
+  - [Frontend Only](#frontend-only)
+- [TLS Certificates](#tls-certificates)
+- [Post-Install: Setup Wizard](#post-install-setup-wizard)
+- [Upgrade Procedure](#upgrade-procedure)
+- [Uninstall Procedure](#uninstall-procedure)
+- [Docker Compose Deployment](#docker-compose-deployment)
 
 ---
 
@@ -190,9 +193,9 @@ The `ecube-setup` CLI (`/opt/ecube/venv/bin/ecube-setup`) is an advanced alterna
    sudo ./install.sh
    ```
 
-3. The installer detects the existing installation, prompts before overwriting files, and **never overwrites** `.env`.
-4. The service is restarted only if files changed.
-5. `ECUBE_RUN_MIGRATIONS_ON_START=true` in `.env` ensures Alembic migrations run automatically on service restart.
+3. Application files (`app/`, `alembic/`, etc.) are overwritten unconditionally. `.env` is **never overwritten** — existing operator secrets are preserved.
+4. The service is always restarted after an upgrade.
+5. The `ExecStartPre` directive in the systemd unit runs `alembic upgrade head` automatically before uvicorn starts, so schema migrations are applied on every restart.
 
 ---
 
