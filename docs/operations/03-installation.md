@@ -54,11 +54,13 @@
 
 ### Software Requirements
 
-**Operating System:** Ubuntu 20.04 LTS, 22.04 LTS, or later (Debian 11+ also supported).
+**Operating System:** Ubuntu 20.04 LTS, 22.04 LTS, or later. Debian 11 (Bullseye) and 12 (Bookworm) are also supported with the following caveat: Ubuntu PPAs are not available on Debian; the installer uses the deadsnakes apt repository instead for Python 3.11 bootstrapping (see below).
 
 The installer will:
 - Verify Debian/Ubuntu and bail out on unsupported OS.
-- Offer to install `python3.11` via the `deadsnakes` PPA if it is absent.
+- Offer to install `python3.11` if it is absent:
+  - **Ubuntu:** adds the `deadsnakes/ppa` Ubuntu PPA (`ppa:deadsnakes/ppa`) via `add-apt-repository`.
+  - **Debian:** adds the deadsnakes apt repository via the official `setup-repos.sh` script (no PPA involved).
 - Install `nginx` via `apt` if `--frontend-only` or full install is selected and nginx is absent.
 
 **Required commands (must be present before running `install.sh`):**
@@ -206,7 +208,7 @@ This will:
 3. Prompt to remove `<install-dir>` and `/var/lib/ecube`.
 4. Prompt to remove the `ecube` system user and group.
 5. Remove ECUBE role groups (`ecube-admin`, `ecube-manager`, `ecube-processor`, `ecube-auditor`).
-6. Optionally remove the `deadsnakes` PPA if it was added by the installer.
+6. Optionally remove the deadsnakes repository entry (Ubuntu PPA or Debian apt source) if it was added by the installer.
 
 Use `--yes` to skip all confirmation prompts.
 
