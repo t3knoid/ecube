@@ -148,6 +148,13 @@ _validate_host_arg() {
   fi
 }
 
+# Pure predicate: returns 0 if val is a valid DNS name or IP address, 1 otherwise.
+# No output and no exit — safe to use inside interactive prompt loops.
+_is_valid_host() {
+  local val="$1"
+  [[ -n "${val}" && ! "${val}" =~ [^a-zA-Z0-9.\:\-\[\]] ]]
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --backend-only)   INSTALL_FRONTEND=false; shift ;;
@@ -530,7 +537,7 @@ _collect_db_config() {
     fi
     while true; do
       read -r -p "$(echo -e "${C_YELLOW}PostgreSQL host (hostname or IP):${C_RESET} ")" DB_HOST
-      _validate_host_arg "--db-host" "${DB_HOST}" 2>/dev/null && break || true
+      _is_valid_host "${DB_HOST}" && break
       warn "Invalid host — use DNS name or IP address only (no spaces or special characters)."
     done
   fi
