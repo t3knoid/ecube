@@ -342,47 +342,49 @@ preflight() {
     ok "Command found: ip"
   fi
 
-  # Python 3.11
-  if ! command -v python3.11 &>/dev/null; then
-    warn "python3.11 not found."
-    if [[ "${ID}" == "ubuntu" ]]; then
-      local prompt_msg="Install python3.11 via the deadsnakes PPA (ppa:deadsnakes/ppa)?"
-    else
-      local prompt_msg="Install python3.11 from official Debian repositories (backports if needed)?"
-    fi
-    if _confirm "${prompt_msg}"; then
-      run apt-get update -qq
+  # Python 3.11 — only needed for backend installs
+  if [[ "${INSTALL_BACKEND}" == true ]]; then
+    if ! command -v python3.11 &>/dev/null; then
+      warn "python3.11 not found."
       if [[ "${ID}" == "ubuntu" ]]; then
-        # deadsnakes PPA — Ubuntu only
-        run apt-get install -y software-properties-common
-        run add-apt-repository -y ppa:deadsnakes/ppa
+        local prompt_msg="Install python3.11 via the deadsnakes PPA (ppa:deadsnakes/ppa)?"
       else
-        # Debian: install python3.11 from official Debian repos / backports.
-        # Debian 12 (Bookworm) ships python3.11 in main; Debian 11 (Bullseye)
-        # requires bullseye-backports.  No remote script is executed.
-        local codename
-        codename="$(. /etc/os-release && echo "${VERSION_CODENAME}")"
-        if ! apt-cache show python3.11 &>/dev/null; then
-          info "python3.11 not in ${codename} main; enabling ${codename}-backports ..."
-          echo "deb https://deb.debian.org/debian ${codename}-backports main" \
-            | tee /etc/apt/sources.list.d/"${codename}-backports.list" >/dev/null
-          run apt-get update -qq
+        local prompt_msg="Install python3.11 from official Debian repositories (backports if needed)?"
+      fi
+      if _confirm "${prompt_msg}"; then
+        run apt-get update -qq
+        if [[ "${ID}" == "ubuntu" ]]; then
+          # deadsnakes PPA — Ubuntu only
+          run apt-get install -y software-properties-common
+          run add-apt-repository -y ppa:deadsnakes/ppa
+        else
+          # Debian: install python3.11 from official Debian repos / backports.
+          # Debian 12 (Bookworm) ships python3.11 in main; Debian 11 (Bullseye)
+          # requires bullseye-backports.  No remote script is executed.
+          local codename
+          codename="$(. /etc/os-release && echo "${VERSION_CODENAME}")"
           if ! apt-cache show python3.11 &>/dev/null; then
-            error "python3.11 is not available in ${codename} main or ${codename}-backports."
-            error "Please install python3.11 manually or upgrade to Debian 12 (Bookworm)."
-            exit 1
+            info "python3.11 not in ${codename} main; enabling ${codename}-backports ..."
+            echo "deb https://deb.debian.org/debian ${codename}-backports main" \
+              | tee /etc/apt/sources.list.d/"${codename}-backports.list" >/dev/null
+            run apt-get update -qq
+            if ! apt-cache show python3.11 &>/dev/null; then
+              error "python3.11 is not available in ${codename} main or ${codename}-backports."
+              error "Please install python3.11 manually or upgrade to Debian 12 (Bookworm)."
+              exit 1
+            fi
           fi
         fi
+        run apt-get update -qq
+        run apt-get install -y python3.11 python3.11-venv python3.11-distutils
+        ok "python3.11 installed"
+      else
+        error "python3.11 is required. Aborting."
+        exit 1
       fi
-      run apt-get update -qq
-      run apt-get install -y python3.11 python3.11-venv python3.11-distutils
-      ok "python3.11 installed"
     else
-      error "python3.11 is required. Aborting."
-      exit 1
+      ok "python3.11: $(python3.11 --version 2>&1)"
     fi
-  else
-    ok "python3.11: $(python3.11 --version 2>&1)"
   fi
 
   # Port availability
