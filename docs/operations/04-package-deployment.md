@@ -21,7 +21,7 @@
 
 ## Table of Contents (Manual / Advanced Reference)
 
-- [Table of Contents](#table-of-contents)
+- [Table of Contents (Manual / Advanced Reference)](#table-of-contents-manual--advanced-reference)
 - [Create Service Account](#create-service-account)
 - [Download and Extract Release Package](#download-and-extract-release-package)
 - [Set Up Python Virtual Environment](#set-up-python-virtual-environment)
