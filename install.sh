@@ -238,10 +238,22 @@ preflight() {
         run apt-get install -y software-properties-common
         run add-apt-repository -y ppa:deadsnakes/ppa
       else
-        # Debian: add the deadsnakes apt source manually (no PPA support)
-        run apt-get install -y curl gpg
-        run curl -fsSL https://raw.githubusercontent.com/deadsnakes/python3.11/master/debian/setup-repos.sh \
-          | bash
+        # Debian: install python3.11 from official Debian repos / backports.
+        # Debian 12 (Bookworm) ships python3.11 in main; Debian 11 (Bullseye)
+        # requires bullseye-backports.  No remote script is executed.
+        local codename
+        codename="$(. /etc/os-release && echo "${VERSION_CODENAME}")"
+        if ! apt-cache show python3.11 &>/dev/null; then
+          info "python3.11 not in ${codename} main; enabling ${codename}-backports ..."
+          echo "deb https://deb.debian.org/debian ${codename}-backports main" \
+            | tee /etc/apt/sources.list.d/"${codename}-backports.list" >/dev/null
+          run apt-get update -qq
+          if ! apt-cache show python3.11 &>/dev/null; then
+            error "python3.11 is not available in ${codename} main or ${codename}-backports."
+            error "Please install python3.11 manually or upgrade to Debian 12 (Bookworm)."
+            exit 1
+          fi
+        fi
       fi
       run apt-get update -qq
       run apt-get install -y python3.11 python3.11-venv python3.11-distutils
