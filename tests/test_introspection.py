@@ -87,6 +87,28 @@ def test_system_health_worker_queue_size(client, db):
     assert response.json()["worker_queue_size"] >= 1
 
 
+def test_system_health_worker_queue_size_null_on_count_failure(client, db):
+    """worker_queue_size is None when the PENDING count query raises while the DB is still reachable.
+
+    The SELECT 1 connectivity probe uses Session.execute (not Query.count), so patching
+    Query.count to raise simulates a transient query failure without marking the database
+    as unreachable.  The endpoint must leave worker_queue_size as None rather than
+    defaulting to 0 so callers can distinguish "no pending jobs" from "count unknown".
+    """
+    from sqlalchemy.exc import OperationalError
+
+    with patch("sqlalchemy.orm.Query.count", side_effect=OperationalError("", {}, None)):
+        response = client.get("/introspection/system-health")
+
+    assert response.status_code == 200
+    data = response.json()
+    # DB connectivity check still passes — status/database must not be degraded.
+    assert data["status"] == "ok"
+    assert data["database"] == "connected"
+    # count query failed — size must be null, not zero.
+    assert data["worker_queue_size"] is None
+
+
 def test_system_mounts(client, db):
     mock_content = "sysfs /sys sysfs rw,nosuid 0 0\ntmpfs /tmp tmpfs rw 0 0\n"
     with patch("builtins.open", mock_open(read_data=mock_content)):
