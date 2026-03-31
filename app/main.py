@@ -137,10 +137,11 @@ async def lifespan(application: FastAPI):
                 exc_info=(type(exc), exc, exc.__traceback__),
             )
 
+    prime_task: "asyncio.Task[None] | None" = None
     try:
         from app.routers.introspection import prime_cpu_sampler
-        _prime_task = asyncio.create_task(asyncio.to_thread(prime_cpu_sampler))
-        _prime_task.add_done_callback(_log_prime_failure)
+        prime_task = asyncio.create_task(asyncio.to_thread(prime_cpu_sampler))
+        prime_task.add_done_callback(_log_prime_failure)
     except Exception:
         logger.exception("CPU sampler priming setup failed")
 
@@ -180,6 +181,13 @@ async def lifespan(application: FastAPI):
     # ------------------------------------------------------------------
     # Shutdown
     # ------------------------------------------------------------------
+    if prime_task is not None and not prime_task.done():
+        prime_task.cancel()
+        try:
+            await prime_task
+        except (asyncio.CancelledError, Exception):
+            pass
+
     if discovery_task is not None:
         discovery_task.cancel()
         try:
