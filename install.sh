@@ -341,9 +341,10 @@ _maybe_download_release() {
       return
     fi
     info "Copying package contents from ${src_dir} to ${INSTALL_DIR}..."
-    for item in app alembic alembic.ini pyproject.toml README.md LICENSE; do
+    for item in app alembic alembic.ini pyproject.toml README.md LICENSE frontend/dist; do
       if [[ -e "${src_dir}/${item}" ]]; then
-        run cp -r "${src_dir}/${item}" "${INSTALL_DIR}/"
+        run mkdir -p "${INSTALL_DIR}/$(dirname "${item}")"
+        run cp -r "${src_dir}/${item}" "${INSTALL_DIR}/${item}"
       fi
     done
     ok "Package contents copied to ${INSTALL_DIR}"
@@ -540,16 +541,26 @@ install_frontend() {
 
   # 2. Deploy pre-built frontend bundle
   local www_dir="${INSTALL_DIR}/www"
-  local dist_src
-  # Prefer dist/ in the current working directory (inside an extracted package)
-  if [[ -d "$(pwd)/frontend/dist" ]]; then
-    dist_src="$(pwd)/frontend/dist"
-  elif [[ -d "$(pwd)/dist" ]]; then
-    dist_src="$(pwd)/dist"
-  else
-    error "Pre-built frontend dist/ not found. Ensure you are running install.sh from inside the extracted release package."
+  local dist_src=""
+  # Search order:
+  #   1. ${INSTALL_DIR}/frontend/dist  — populated by --version extraction or
+  #                                      when INSTALL_DIR == cwd (package dir)
+  #   2. $(pwd)/frontend/dist          — running from inside an extracted package
+  #   3. $(pwd)/dist                   — legacy / alternative layout
+  for candidate in \
+      "${INSTALL_DIR}/frontend/dist" \
+      "$(pwd)/frontend/dist" \
+      "$(pwd)/dist"; do
+    if [[ -d "${candidate}" ]]; then
+      dist_src="${candidate}"
+      break
+    fi
+  done
+  if [[ -z "${dist_src}" ]]; then
+    error "Pre-built frontend dist/ not found. Checked: ${INSTALL_DIR}/frontend/dist, $(pwd)/frontend/dist, $(pwd)/dist"
     exit 1
   fi
+  info "Using frontend bundle from ${dist_src}"
   run mkdir -p "${www_dir}"
   run cp -r "${dist_src}/." "${www_dir}/"
   # Static files are read by nginx (www-data); root ownership with world-readable
