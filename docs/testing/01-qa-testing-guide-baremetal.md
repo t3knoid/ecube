@@ -51,6 +51,7 @@ sudo apt update && sudo apt upgrade -y
 sudo apt install -y \
   python3.11 \
   python3.11-venv \
+  python3.11-dev \
   python3-pip \
   postgresql \
   postgresql-contrib \
@@ -1130,7 +1131,7 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 | 34 | Provision — .env write failure | `POST /setup/database/provision` after making `.env` read-only (or disk full) | 500, "failed to persist" message; engine not swapped |
 | 35 | Provision — engine reinit failure | `POST /setup/database/provision` while another reinit is in progress (lock contention) | 500, "engine could not be switched" message; `.env` already written |
 
-### 12.11 Startup State Reconciliation
+### 12.12 Startup State Reconciliation
 
 | # | Test | How | Expected |
 |---|------|-----|----------|
@@ -1146,6 +1147,23 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 | 10 | Cross-process lock — only one worker reconciles | Start Uvicorn with `--workers 4`, have a RUNNING job and a MOUNTED (but stale) mount | Exactly one `JOB_RECONCILED` and one `MOUNT_RECONCILED` audit entry; remaining workers log "skipping reconciliation" at INFO level |
 | 11 | Stale lock reclaim | Insert a stale lock row (`locked_at` > 5 minutes ago) via SQL, restart the service | Service reclaims the stale lock, reconciliation runs normally |
 | 12 | Lock released after failure | Disconnect NFS, restart the service, reconnect NFS, restart again | Second restart acquires lock and runs reconciliation; lock table is empty after startup completes |
+
+### 12.13 System Health
+
+`GET /introspection/system-health` requires any authenticated role.
+
+| # | Test | How | Expected |
+|---|------|-----|----------|
+| 1 | Healthy response | `GET /introspection/system-health` with valid token | 200, `status: "ok"`, `database: "connected"` |
+| 2 | CPU metric present | Inspect response body | `cpu_percent` is a number between 0 and 100 |
+| 3 | Memory metrics present | Inspect response body | `memory_percent` is a number; `memory_used_bytes` and `memory_total_bytes` are positive integers; `memory_used_bytes` ≤ `memory_total_bytes` |
+| 4 | Disk I/O metrics present | Inspect response body | `disk_read_bytes` and `disk_write_bytes` are non-negative integers |
+| 5 | Active jobs count | Start an export job, call endpoint | `active_jobs` ≥ 1 |
+| 6 | Worker queue size | Create a PENDING job (created but not started), call endpoint | `worker_queue_size` ≥ 1 |
+| 7 | Worker queue size decrements | Start the pending job, call endpoint again | `worker_queue_size` decreases by 1 (is 0 if no other PENDING jobs exist; job moved to RUNNING) |
+| 8 | Degraded when DB down | Stop PostgreSQL, call endpoint with valid token | 200, `status: "degraded"`, `database: "error"`, `database_error` is non-null |
+| 9 | Unauthenticated rejected | `GET /introspection/system-health` without token | 401 |
+| 10 | Processor role allowed | `GET /introspection/system-health` with processor token | 200 |
 
 ---
 
