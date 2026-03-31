@@ -516,7 +516,9 @@ _write_systemd_unit() {
   [[ "${INSTALL_FRONTEND}" == false ]] && bind_host="0.0.0.0"
 
   if [[ "${DRY_RUN}" != true ]]; then
-    cat > /etc/systemd/system/ecube.service <<EOF
+    if [[ "${INSTALL_FRONTEND}" == false ]]; then
+      # Backend-only: uvicorn terminates TLS itself; reachable directly from the network.
+      cat > /etc/systemd/system/ecube.service <<EOF
 [Unit]
 Description=ECUBE Evidence Export Service
 After=network-online.target
@@ -542,20 +544,51 @@ NoNewPrivileges=true
 [Install]
 WantedBy=multi-user.target
 EOF
+    else
+      # nginx-fronted: uvicorn serves plain HTTP on loopback; TLS terminated at nginx.
+      cat > /etc/systemd/system/ecube.service <<EOF
+[Unit]
+Description=ECUBE Evidence Export Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ecube
+Group=ecube
+WorkingDirectory=${INSTALL_DIR}
+EnvironmentFile=-${INSTALL_DIR}/.env
+ExecStart=${INSTALL_DIR}/venv/bin/uvicorn \\
+  --host ${bind_host} \\
+  --port ${API_PORT} \\
+  app.main:app
+Restart=on-failure
+RestartSec=10
+PrivateTmp=yes
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    fi
   else
-    echo "[DRY-RUN] Would write /etc/systemd/system/ecube.service (bind=${bind_host}:${API_PORT})"
+    local proto; proto="$( [[ "${INSTALL_FRONTEND}" == false ]] && echo https || echo http)"
+    echo "[DRY-RUN] Would write /etc/systemd/system/ecube.service (bind=${proto}://${bind_host}:${API_PORT})"
   fi
   ok "Systemd unit written"
 }
 
 _wait_for_healthy() {
+  # When nginx fronts uvicorn, the backend serves plain HTTP on loopback.
+  local scheme="https"
+  [[ "${INSTALL_FRONTEND}" == true ]] && scheme="http"
   if [[ "${DRY_RUN}" == true ]]; then
-    echo "[DRY-RUN] Would poll https://localhost:${API_PORT}/health for up to 30 s"
+    echo "[DRY-RUN] Would poll ${scheme}://localhost:${API_PORT}/health for up to 30 s"
     return
   fi
   info "Waiting for service health check (up to 30 s)..."
   local i=0
-  until curl -fsk "https://localhost:${API_PORT}/health" &>/dev/null; do
+  until curl -fsk "${scheme}://localhost:${API_PORT}/health" &>/dev/null; do
     sleep 2
     (( i+=2 ))
     if (( i >= 30 )); then
@@ -698,14 +731,32 @@ server {
     # requests to /api/drives, /api/health, etc. reach the backend at
     # /drives, /health, etc. (FastAPI routes are at root level).
     location /api/ {
+EOF_LOCATION
+  if [[ "${BACKEND_HOST}" == "127.0.0.1" ]]; then
+    # Same-host: uvicorn serves plain HTTP on loopback; TLS is terminated here.
+    cat >> /etc/nginx/sites-available/ecube <<EOF_PROXY
+        proxy_pass http://${BACKEND_HOST}:${API_PORT}/;
+EOF_PROXY
+  else
+    # Remote backend: proxy over HTTPS.
+    # SECURITY: proxy_ssl_verify is off because the remote backend may use a
+    # self-signed certificate.  Only use --backend-host on trusted networks.
+    # To enable verification, place the backend's CA certificate at
+    # ${INSTALL_DIR}/certs/backend-ca.pem and replace the lines below with:
+    #   proxy_ssl_verify on;
+    #   proxy_ssl_trusted_certificate ${INSTALL_DIR}/certs/backend-ca.pem;
+    cat >> /etc/nginx/sites-available/ecube <<EOF_PROXY
         proxy_pass https://${BACKEND_HOST}:${API_PORT}/;
-        proxy_ssl_verify off;
+        proxy_ssl_verify off; # trusted-network only — see installer docs
+EOF_PROXY
+  fi
+  cat >> /etc/nginx/sites-available/ecube <<EOF_PROXY2
         proxy_set_header Host \$host;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
 }
-EOF
+EOF_PROXY2
   else
     echo "[DRY-RUN] Would write /etc/nginx/sites-available/ecube (listen ${UI_PORT} → proxy to ${API_PORT})"
   fi
