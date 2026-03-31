@@ -303,6 +303,29 @@ _generate_certs() {
 }
 
 # ===========================================================================
+# ENSURE ECUBE SYSTEM USER AND ROLE GROUPS
+# Called by both install_backend and install_frontend so that chown operations
+# succeed regardless of which component is being installed.
+# ===========================================================================
+_ensure_ecube_user() {
+  if ! id -u ecube &>/dev/null; then
+    info "Creating system user 'ecube'..."
+    run useradd --system --create-home --home-dir "${INSTALL_DIR}" \
+      --shell /usr/sbin/nologin ecube
+    ok "User 'ecube' created"
+  else
+    info "User 'ecube' already exists — skipping."
+  fi
+
+  for grp in ecube-admin ecube-manager ecube-processor ecube-auditor; do
+    if ! getent group "${grp}" &>/dev/null; then
+      run groupadd --system "${grp}"
+      ok "Group '${grp}' created"
+    fi
+  done
+}
+
+# ===========================================================================
 # DOWNLOAD / EXTRACT RELEASE PACKAGE (when --version is given)
 # ===========================================================================
 _maybe_download_release() {
@@ -335,25 +358,9 @@ _maybe_download_release() {
 install_backend() {
   header "\n── Backend installation ────────────────────────────────────────"
 
-  # 1. System user and group
-  if ! id -u ecube &>/dev/null; then
-    info "Creating system user 'ecube'..."
-    run useradd --system --create-home --home-dir "${INSTALL_DIR}" \
-      --shell /usr/sbin/nologin ecube
-    ok "User 'ecube' created"
-  else
-    info "User 'ecube' already exists — skipping."
-  fi
+  # 1. System user, role groups, and USB device access
+  _ensure_ecube_user
 
-  # 2. ECUBE role groups
-  for grp in ecube-admin ecube-manager ecube-processor ecube-auditor; do
-    if ! getent group "${grp}" &>/dev/null; then
-      run groupadd --system "${grp}"
-      ok "Group '${grp}' created"
-    fi
-  done
-
-  # USB device access groups
   for grp in plugdev dialout; do
     if getent group "${grp}" &>/dev/null; then
       run usermod -aG "${grp}" ecube
@@ -502,6 +509,10 @@ _wait_for_healthy() {
 install_frontend() {
   header "\n── Frontend installation ───────────────────────────────────────"
 
+  # Ensure the ecube user exists so that chown operations succeed even in
+  # --frontend-only mode (i.e., when install_backend was not called).
+  _ensure_ecube_user
+
   # 1. Install nginx if absent
   if ! command -v nginx &>/dev/null; then
     info "Installing nginx..."
@@ -524,7 +535,13 @@ install_frontend() {
   fi
   run mkdir -p "${www_dir}"
   run cp -r "${dist_src}/." "${www_dir}/"
-  run chown -R ecube:ecube "${www_dir}"
+  # Static files are read by nginx (www-data); root ownership with world-readable
+  # permissions is correct here — the ecube service account does not need access.
+  if [[ "${DRY_RUN}" != true ]]; then
+    chown -R root:root "${www_dir}"
+    find "${www_dir}" -type d -exec chmod 755 {} +
+    find "${www_dir}" -type f -exec chmod 644 {} +
+  fi
   ok "Frontend files deployed to ${www_dir}"
 
   # 3. TLS certificates (shared with backend if co-installed, or generate fresh)
