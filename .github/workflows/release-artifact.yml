@@ -37,7 +37,7 @@ jobs:
           chmod 755 install.sh
           mkdir -p dist
           tar -czf "dist/${{ steps.meta.outputs.artifact_name }}.tar.gz" \
-            --mode=755 install.sh \
+            install.sh \
             app \
             alembic \
             pyproject.toml \
