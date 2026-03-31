@@ -284,11 +284,13 @@ preflight() {
 _check_port() {
   local port="$1"
   local label="$2"
-  if command -v ss &>/dev/null; then
-    if ss -tlnp 2>/dev/null | grep -qE ":${port}\b"; then
-      error "Port ${port} (${label}) is already in use."
-      exit 1
-    fi
+  if ! command -v ss &>/dev/null; then
+    warn "Port ${port} (${label}): ss not found — cannot verify availability. Install iproute2 to enable port checks."
+    return
+  fi
+  if ss -tlnp 2>/dev/null | grep -qE ":${port}\b"; then
+    error "Port ${port} (${label}) is already in use."
+    exit 1
   fi
   ok "Port ${port} (${label}) is available"
 }
