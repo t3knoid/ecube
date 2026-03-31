@@ -111,6 +111,7 @@ At the end it prints a summary with the UI URL, API URL, and service management 
 | `--install-dir DIR` | `/opt/ecube` | Root installation directory |
 | `--api-port PORT` | `8443` | HTTPS port the backend (uvicorn) binds to |
 | `--ui-port PORT` | `443` | HTTPS port nginx listens on |
+| `--backend-host HOST` | `127.0.0.1` | Hostname/IP of the backend; set when the backend is on a separate host |
 | `--hostname HOST` | `$(hostname -f)` | Hostname/IP used as TLS certificate CN and in summary URLs |
 | `--cert-validity DAYS` | `3650` | Self-signed certificate validity in days |
 | `--yes` / `-y` | off | Non-interactive / unattended mode |
@@ -141,18 +142,24 @@ Installs the backend service only. uvicorn binds to `0.0.0.0` so the API is dire
 ### Frontend Only
 
 ```bash
+# Backend on the same host (default):
 sudo ./install.sh --frontend-only
+
+# Backend on a separate host:
+sudo ./install.sh --frontend-only --backend-host <backend-ip-or-hostname>
 ```
 
-Installs nginx and deploys the pre-built frontend bundle only. Use this when the backend is already installed on the same host or on a separate server.
+Installs nginx and deploys the pre-built frontend bundle only.
 
-When `--frontend-only` detects an existing backend install on the same host (i.e., `/etc/systemd/system/ecube.service` is present), it automatically:
+**Same-host backend (default — `--backend-host 127.0.0.1`):** When `ecube.service` is already present on this host the installer automatically:
 
 - Patches `.env` to set `TRUST_PROXY_HEADERS=true` and `API_ROOT_PATH=/api` so FastAPI renders Swagger UI and OpenAPI schema URLs correctly behind nginx.
 - Rewrites the systemd unit so uvicorn binds to `127.0.0.1` instead of `0.0.0.0`, removing direct external API access.
 - Restarts `ecube.service` to apply the changes.
 
-Two successive invocations (one `--backend-only`, one `--frontend-only`) on the same host are therefore fully supported without any manual reconfiguration.
+Two successive invocations (`--backend-only` then `--frontend-only`) on the same host are therefore fully supported without any manual reconfiguration.
+
+**Remote backend (`--backend-host HOST`):** nginx proxies `/api/` to `https://<HOST>:<api-port>/`. The local backend service is not touched. Ensure the remote backend's `TRUST_PROXY_HEADERS` and `API_ROOT_PATH` are configured correctly and that its API port is reachable from this host.
 
 ---
 

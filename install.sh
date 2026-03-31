@@ -72,6 +72,7 @@ VERSION_TAG=""
 
 INSTALL_BACKEND=true
 INSTALL_FRONTEND=true
+BACKEND_HOST="127.0.0.1"
 
 GITHUB_OWNER="t3knoid"
 GITHUB_REPO="ecube"
@@ -93,6 +94,8 @@ Options:
   --install-dir DIR      Root installation directory  (default: /opt/ecube)
   --api-port PORT        HTTPS port for the backend   (default: 8443)
   --ui-port PORT         HTTPS port for nginx         (default: 443)
+  --backend-host HOST    Hostname/IP of the backend   (default: 127.0.0.1)
+                         Set this when the backend is on a separate host.
   --hostname HOST        Hostname/IP for TLS cert CN  (default: \$(hostname -f))
   --cert-validity DAYS   Self-signed cert validity    (default: 3650)
   --yes, -y              Non-interactive / unattended mode
@@ -107,6 +110,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --backend-only)   INSTALL_FRONTEND=false; shift ;;
     --frontend-only)  INSTALL_BACKEND=false;  shift ;;
+    --backend-host)   BACKEND_HOST="$2"; shift 2 ;;
     --install-dir)    INSTALL_DIR="$2";  shift 2 ;;
     --api-port)       API_PORT="$2";     shift 2 ;;
     --ui-port)        UI_PORT="$2";      shift 2 ;;
@@ -568,14 +572,13 @@ install_frontend() {
     _maybe_download_release
   fi
 
-  # When the frontend is added to an existing backend-only install, the backend
-  # configuration must be updated to reflect the new topology: the systemd unit
-  # must bind to 127.0.0.1 (not 0.0.0.0) and the .env must set
-  # TRUST_PROXY_HEADERS=true and API_ROOT_PATH=/api so that FastAPI renders
-  # Swagger UI and OpenAPI schema URLs correctly behind nginx.
+  # When the frontend is added to an existing same-host backend-only install,
+  # reconfigure the backend for the nginx topology: bind to 127.0.0.1 and set
+  # TRUST_PROXY_HEADERS / API_ROOT_PATH in .env.
+  # Skip this when --backend-host points to a remote host (nothing to reconfigure locally).
   local env_file="${INSTALL_DIR}/.env"
   local unit_file="/etc/systemd/system/ecube.service"
-  if [[ "${INSTALL_BACKEND}" == false && -f "${unit_file}" ]]; then
+  if [[ "${INSTALL_BACKEND}" == false && "${BACKEND_HOST}" == "127.0.0.1" && -f "${unit_file}" ]]; then
     info "Updating existing backend configuration for nginx frontend..."
 
     # Patch .env — add or overwrite TRUST_PROXY_HEADERS and API_ROOT_PATH.
@@ -682,7 +685,7 @@ server {
     # requests to /api/drives, /api/health, etc. reach the backend at
     # /drives, /health, etc. (FastAPI routes are at root level).
     location /api/ {
-        proxy_pass https://127.0.0.1:${API_PORT}/;
+        proxy_pass https://${BACKEND_HOST}:${API_PORT}/;
         proxy_ssl_verify off;
         proxy_set_header Host \$host;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -898,7 +901,7 @@ print_summary() {
     echo -e "  UI:  https://${HOST}:${UI_PORT}"
     echo ""
     echo -e "  Ensure the backend API is reachable at:"
-    echo -e "    https://127.0.0.1:${API_PORT}"
+    echo -e "    https://${BACKEND_HOST}:${API_PORT}"
     echo ""
     echo -e "  Service management:"
     echo -e "    sudo systemctl {start|stop|reload|status} nginx"
