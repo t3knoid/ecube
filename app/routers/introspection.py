@@ -4,7 +4,11 @@ import os
 try:
     import psutil as _psutil
     _PSUTIL_AVAILABLE = True
-except ImportError:  # pragma: no cover
+except Exception:  # pragma: no cover  # ImportError or dynamic-loader / ABI failures
+    logging.getLogger(__name__).warning(
+        "psutil could not be imported; system-health metrics will be null.",
+        exc_info=True,
+    )
     _psutil = None  # type: ignore[assignment]
     _PSUTIL_AVAILABLE = False
 
