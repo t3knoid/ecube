@@ -330,13 +330,6 @@ _ensure_ecube_user() {
   else
     info "User 'ecube' already exists — skipping."
   fi
-
-  for grp in ecube-admin ecube-manager ecube-processor ecube-auditor; do
-    if ! getent group "${grp}" &>/dev/null; then
-      run groupadd --system "${grp}"
-      ok "Group '${grp}' created"
-    fi
-  done
 }
 
 # ===========================================================================
@@ -753,14 +746,6 @@ do_uninstall() {
   if getent group ecube &>/dev/null; then
     run groupdel ecube 2>/dev/null || true
   fi
-
-  # Remove ECUBE role groups
-  for grp in ecube-admin ecube-manager ecube-processor ecube-auditor; do
-    if getent group "${grp}" &>/dev/null; then
-      run groupdel "${grp}"
-      ok "Group '${grp}' removed"
-    fi
-  done
 
   # Optionally remove deadsnakes repository
   if [[ "${ADDED_DEADSNAKES}" == true ]]; then
