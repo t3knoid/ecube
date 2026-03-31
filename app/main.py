@@ -124,6 +124,28 @@ async def lifespan(application: FastAPI):
         logger.exception("Startup reconciliation failed")
 
     # ------------------------------------------------------------------
+    # Startup: prime psutil CPU baseline (runs in background thread so it
+    # does not block the server from accepting requests).
+    # ------------------------------------------------------------------
+    def _log_prime_failure(task: "asyncio.Task[None]") -> None:
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error(
+                "CPU sampler priming failed; cpu_percent will report 0.0 initially",
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
+
+    prime_task: "asyncio.Task[None] | None" = None
+    try:
+        from app.routers.introspection import prime_cpu_sampler
+        prime_task = asyncio.create_task(asyncio.to_thread(prime_cpu_sampler))
+        prime_task.add_done_callback(_log_prime_failure)
+    except Exception:
+        logger.exception("CPU sampler priming setup failed")
+
+    # ------------------------------------------------------------------
     # Background: periodic USB discovery
     # ------------------------------------------------------------------
     discovery_task = None
@@ -159,6 +181,17 @@ async def lifespan(application: FastAPI):
     # ------------------------------------------------------------------
     # Shutdown
     # ------------------------------------------------------------------
+    if prime_task is not None and not prime_task.done():
+        # prime_cpu_sampler runs a short blocking call in a thread.  Cancelling
+        # the Task only cancels the Future wrapper — the underlying thread
+        # continues regardless.  Await with a short timeout instead so we don't
+        # misrepresent the cancellation and give the sampler a chance to finish
+        # cleanly without blocking shutdown for long.
+        try:
+            await asyncio.wait_for(asyncio.shield(prime_task), timeout=2.0)
+        except (asyncio.TimeoutError, Exception):
+            pass
+
     if discovery_task is not None:
         discovery_task.cancel()
         try:
