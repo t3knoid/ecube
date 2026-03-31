@@ -182,7 +182,7 @@ while [[ $# -gt 0 ]]; do
       # Reject values that are empty, /, a known system root, contain whitespace
       # or newlines, or are not absolute paths.  Any of these could cause
       # accidental rm -rf of critical paths or break systemd unit parsing.
-      local _idir="$2"
+      _idir="$2"
       if [[ -z "${_idir}" ]]; then
         echo "ERROR: --install-dir value must not be empty." >&2; exit 1
       fi
@@ -193,11 +193,10 @@ while [[ $# -gt 0 ]]; do
         echo "ERROR: --install-dir must not contain spaces or whitespace (got '${_idir}')." >&2; exit 1
       fi
       # Block /, single-depth paths like /tmp, and common system directories.
-      local _canonical
       _canonical="$(realpath -m "${_idir}" 2>/dev/null || echo "${_idir}")"
-      local _dangerous=("/" "/bin" "/boot" "/dev" "/etc" "/home" "/lib" "/lib64"
-                        "/proc" "/root" "/run" "/sbin" "/srv" "/sys" "/tmp"
-                        "/usr" "/var")
+      _dangerous=("/" "/bin" "/boot" "/dev" "/etc" "/home" "/lib" "/lib64"
+                  "/proc" "/root" "/run" "/sbin" "/srv" "/sys" "/tmp"
+                  "/usr" "/var")
       for _d in "${_dangerous[@]}"; do
         if [[ "${_canonical}" == "${_d}" ]]; then
           echo "ERROR: --install-dir '${_idir}' is a protected system path." >&2; exit 1
