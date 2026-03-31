@@ -182,6 +182,14 @@ _is_valid_db_pass() {
   [[ -n "${val}" && ! "${val}" =~ [[:space:]] ]]
 }
 
+# Full RFC 3986 percent-encoder: encodes every character outside the unreserved
+# set (A-Za-z0-9 - _ . ~) so any valid password produces a valid connection URL.
+# The value is passed via stdin so it never appears in the process argument list.
+_url_encode() {
+  printf '%s' "$1" | python3.11 -c \
+    "import sys, urllib.parse; sys.stdout.write(urllib.parse.quote(sys.stdin.read(), safe=''))"
+}
+
 # Pure predicate: returns 0 if val is a valid DNS name or IP address, 1 otherwise.
 # No output and no exit — safe to use inside interactive prompt loops.
 _is_valid_host() {
@@ -703,14 +711,9 @@ _collect_db_config() {
     [[ "${DRY_RUN}" == true ]] || warn "psql not found — skipping credential verification."
   fi
 
-  # ── URL-encode the password (percent-encode @ : / space) ──────────────────
-  # bash-only encoding — covers the characters that break a postgresql:// URL.
-  local encoded_pass="${DB_PASS}"
-  encoded_pass="${encoded_pass//'%'/'%25'}"
-  encoded_pass="${encoded_pass//' '/'%20'}"
-  encoded_pass="${encoded_pass//'@'/'%40'}"
-  encoded_pass="${encoded_pass//':'/'%3A'}"
-  encoded_pass="${encoded_pass//'/'/'%2F'}"
+  # ── URL-encode the password (full RFC 3986 percent-encoding) ──────────────
+  local encoded_pass
+  encoded_pass=$(_url_encode "${DB_PASS}")
 
   DATABASE_URL="postgresql://${DB_USER}:${encoded_pass}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
   ok "DATABASE_URL configured (password redacted)"
