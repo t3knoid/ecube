@@ -896,6 +896,7 @@ install_backend() {
   # 4. /var/lib/ecube runtime directory
   run mkdir -p /var/lib/ecube
   run chown -R ecube:ecube /var/lib/ecube
+  run chmod 700 /var/lib/ecube
 
   # 5. Python virtual environment
   # Run venv creation and pip installs as the ecube user so all files under
