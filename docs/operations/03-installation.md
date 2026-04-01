@@ -173,7 +173,7 @@ Installs nginx and deploys the pre-built frontend bundle only.
 
 Two successive invocations (`--backend-only` then `--frontend-only`) on the same host are therefore fully supported without any manual reconfiguration.
 
-**Remote backend (`--backend-host HOST`):** nginx proxies `/api/` to `https://<HOST>:<api-port>/`. TLS verification is **disabled by default** (`proxy_ssl_verify off`) for quick bring-up — the installer prints a warning when this is in effect. Three modes are supported:
+**Remote backend (`--backend-host HOST`):** nginx proxies `/api/` to `https://<HOST>:<api-port>/`, stripping the `/api` prefix before requests reach FastAPI. TLS verification is **disabled by default** (`proxy_ssl_verify off`) for quick bring-up — the installer prints a warning when this is in effect. Three modes are supported:
 
 | Scenario | Command |
 |----------|---------|
@@ -182,6 +182,20 @@ Two successive invocations (`--backend-only` then `--frontend-only`) on the same
 | Backend has a CA-signed cert trusted by the OS | `sudo ./install.sh --frontend-only --backend-host <host> --secure-backend` |
 
 Only leave TLS verification disabled (the default) on trusted networks (VPN, private subnet, etc.). Pass `--secure-backend` or `--backend-ca-file` to enable certificate verification in any other environment.
+
+> **Remote backend: required `.env` settings on the backend host.**  
+> Unlike a same-host install (where the installer patches `.env` automatically), when the backend runs on a separate machine you must manually set the following in the backend's `.env` before or after running `--backend-only`:
+>
+> ```env
+> TRUST_PROXY_HEADERS=true
+> API_ROOT_PATH=/api
+> ```
+>
+> Without these settings FastAPI does not know it is mounted at `/api`, so Swagger UI (`/api/docs`), the OpenAPI schema (`/api/openapi.json`), and all "Try it out" request URLs will be incorrect. `TRUST_PROXY_HEADERS=true` is needed so FastAPI reconstructs the correct `https://` scheme and host from the `X-Forwarded-*` headers that nginx injects. After editing `.env`, restart the backend service:
+>
+> ```bash
+> sudo systemctl restart ecube.service
+> ```
 
 ---
 
