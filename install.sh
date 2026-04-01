@@ -1308,16 +1308,25 @@ install_frontend() {
   # 4. nginx site config
   info "Writing nginx site config /etc/nginx/sites-available/ecube..."
   if [[ "${DRY_RUN}" != true ]]; then
-        # server_name takes a bare host — brackets are valid in URL authority
-        # (proxy_pass https://[::1]:...) but not as nginx server_name tokens.
-        local _server_name_host
-        _server_name_host="${HOST#[}"; _server_name_host="${_server_name_host%]}"
+        # nginx server_name does not accept IPv6 literals (colons are invalid
+        # in that directive) and using an IP as server_name is fragile.  When
+        # HOST is any IP literal, emit "server_name _;" (catch-all) so nginx
+        # matches any request arriving on the bound port regardless of the
+        # Host header value — which is the correct behaviour for an IP-bound
+        # listener.  For DNS names, use the bare hostname (brackets stripped).
+        local _bare_host _server_name_directive
+        _bare_host="${HOST#[}"; _bare_host="${_bare_host%]}"
+        if _is_ip "${_bare_host}"; then
+          _server_name_directive="server_name _;"
+        else
+          _server_name_directive="server_name ${_bare_host};"
+        fi
         cat > /etc/nginx/sites-available/ecube <<EOF_NGINX
 server {
     listen ${UI_PORT} ssl;
     listen [::]:${UI_PORT} ssl;
 
-    server_name ${_server_name_host};
+    ${_server_name_directive}
 
     ssl_certificate     ${INSTALL_DIR}/certs/cert.pem;
     ssl_certificate_key ${INSTALL_DIR}/certs/key.pem;
