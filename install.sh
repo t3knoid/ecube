@@ -86,6 +86,7 @@ DB_NAME="ecube"
 DB_USER=""
 DB_PASS=""
 DATABASE_URL=""   # built by _collect_db_config
+_EXPLICIT_DB=false   # set when any --db-* flag is passed explicitly
 
 GITHUB_OWNER="t3knoid"
 GITHUB_REPO="ecube"
@@ -345,29 +346,29 @@ while [[ $# -gt 0 ]]; do
     --db-host)
       _require_arg "$1" "${2-}"
       _validate_host_arg "--db-host" "$2"
-      DB_HOST="$2"; shift 2 ;;
+      DB_HOST="$2"; _EXPLICIT_DB=true; shift 2 ;;
     --db-port)
       _require_arg "$1" "${2-}"
       _validate_port_arg "$1" "$2"
-      DB_PORT="$2"; shift 2 ;;
+      DB_PORT="$2"; _EXPLICIT_DB=true; shift 2 ;;
     --db-name)
       _require_arg "$1" "${2-}"
       if ! _is_valid_db_name "$2"; then
         echo "ERROR: --db-name must contain only alphanumerics and underscores." >&2; exit 1
       fi
-      DB_NAME="$2"; shift 2 ;;
+      DB_NAME="$2"; _EXPLICIT_DB=true; shift 2 ;;
     --db-user)
       _require_arg "$1" "${2-}"
       if ! _is_valid_db_user "$2"; then
         echo "ERROR: --db-user must contain only alphanumerics and underscores." >&2; exit 1
       fi
-      DB_USER="$2"; shift 2 ;;
+      DB_USER="$2"; _EXPLICIT_DB=true; shift 2 ;;
     --db-password)
       _require_arg "$1" "${2-}"
       if ! _is_valid_db_pass "$2"; then
         echo "ERROR: --db-password must not contain whitespace." >&2; exit 1
       fi
-      DB_PASS="$2"; shift 2 ;;
+      DB_PASS="$2"; _EXPLICIT_DB=true; shift 2 ;;
     --install-dir)
       _require_arg "$1" "${2-}"
       _validate_install_dir_arg "$1" "$2"
@@ -982,7 +983,20 @@ install_backend() {
   _generate_certs
 
   # 7. Database configuration
-  _collect_db_config
+  # Skip credential collection when .env already exists and the operator has
+  # not supplied any --db-* flags — the existing DATABASE_URL is preserved as-is.
+  # When --db-* flags ARE given on a re-run, collect and validate the new
+  # credentials; _write_env_file will then patch DATABASE_URL into the
+  # existing file rather than overwriting it.
+  local env_file_exists=false
+  [[ -f "${INSTALL_DIR}/.env" ]] && env_file_exists=true
+
+  if [[ "${env_file_exists}" == true && "${_EXPLICIT_DB}" == false ]]; then
+    info ".env already exists and no --db-* flags supplied — skipping database credential collection."
+    info "Existing DATABASE_URL will be preserved unchanged."
+  else
+    _collect_db_config
+  fi
 
   # 8. .env file
   _write_env_file
@@ -1033,6 +1047,21 @@ _write_env_file() {
   local env_file="${INSTALL_DIR}/.env"
   if [[ -f "${env_file}" ]]; then
     info ".env already exists — preserving operator secrets."
+    # If new DB credentials were collected this run, patch DATABASE_URL so the
+    # operator's intent is honoured without touching SECRET_KEY or other keys.
+    if [[ "${_EXPLICIT_DB}" == true && -n "${DATABASE_URL}" ]]; then
+      info "Updating DATABASE_URL in existing .env with newly supplied credentials..."
+      if [[ "${DRY_RUN}" != true ]]; then
+        if grep -q '^DATABASE_URL=' "${env_file}"; then
+          sed -i "s|^DATABASE_URL=.*|DATABASE_URL=${DATABASE_URL}|" "${env_file}"
+        else
+          echo "DATABASE_URL=${DATABASE_URL}" >> "${env_file}"
+        fi
+      else
+        echo "[DRY-RUN] Would update DATABASE_URL in ${env_file}"
+      fi
+      ok "DATABASE_URL updated in .env"
+    fi
     # When the topology includes nginx, ensure the proxy-related keys are
     # correct regardless of how the file was originally created.
     if [[ "${INSTALL_FRONTEND}" == true ]]; then
