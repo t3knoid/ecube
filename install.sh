@@ -1193,7 +1193,9 @@ install_frontend() {
   if [[ "${INSTALL_BACKEND}" == false && "${BACKEND_HOST}" == "127.0.0.1" && ! -f "${unit_file}" ]]; then
     local _loopback_listening=false
     if command -v ss &>/dev/null; then
-      if ss -tlnp 2>/dev/null | grep -qE "127\.0\.0\.1:${API_PORT}\b|::1:${API_PORT}\b|\*:${API_PORT}\b"; then
+      # Detect any TCP listener on API_PORT on any local address (127.0.0.1, 0.0.0.0, ::1, [::], etc.).
+      # Using ss's sport filter avoids relying on distribution-specific address formatting.
+      if ss -H -ltn "sport = :${API_PORT}" 2>/dev/null | grep -q .; then
         _loopback_listening=true
       fi
     fi
