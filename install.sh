@@ -229,7 +229,7 @@ _validate_ca_file_arg() {
     echo "ERROR: ${flag} must be an absolute path (starting with /)." >&2
     exit 1
   fi
-  if [[ "${val}" =~ [[:space:]]|\'|\"|\\|\;|\{|\}|\| ]]; then
+  if [[ "${val}" =~ [[:space:]\;\{\}\'\"\\|] ]]; then
     echo "ERROR: ${flag} path contains characters not allowed in an nginx config directive (whitespace, ;, {}, quotes, or backslash)." >&2
     exit 1
   fi
