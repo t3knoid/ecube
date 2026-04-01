@@ -207,6 +207,10 @@ Only leave TLS verification disabled (the default) on trusted networks (VPN, pri
 
 The installer prompts for the PostgreSQL connection details required to assemble `DATABASE_URL`. You can supply any or all values via CLI flags to reduce or eliminate prompting.
 
+**Re-runs and upgrades:** If `<install-dir>/.env` already exists and **no** `--db-*` flag is supplied, the installer skips database credential collection entirely and preserves the existing `DATABASE_URL` unchanged. This makes idempotent re-runs and `--yes` upgrades safe — `--db-host`, `--db-user`, and `--db-password` are only required on first install or when explicitly rotating credentials.
+
+To update the database connection on an existing install, supply the new values via `--db-*` flags. The installer will collect and validate the credentials then patch only the `DATABASE_URL` line in `.env`, leaving `SECRET_KEY` and all other settings untouched.
+
 ### Interactive mode (default)
 
 When `--db-host`, `--db-user`, or `--db-password` are omitted the installer prompts for them:
@@ -229,7 +233,7 @@ Each value is validated as it is entered. The installer then:
 
 ### Unattended mode (`--yes`)
 
-Three flags without defaults become **required** when `--yes` is passed: `--db-host`, `--db-user`, and `--db-password`. `--db-port` and `--db-name` are optional — their defaults (`5432` and `ecube`) are used if omitted:
+On a **first install**, three flags without defaults become **required** when `--yes` is passed: `--db-host`, `--db-user`, and `--db-password`. `--db-port` and `--db-name` are optional — their defaults (`5432` and `ecube`) are used if omitted:
 
 ```bash
 sudo ./install.sh --yes \
@@ -240,7 +244,18 @@ sudo ./install.sh --yes \
   --db-password 'S3cret!'
 ```
 
-The installer exits with an error if any of `--db-host`, `--db-user`, or `--db-password` are missing in `--yes` mode.
+On a **re-run or upgrade** where `<install-dir>/.env` already exists, `--db-host`, `--db-user`, and `--db-password` are **not** required — the existing `DATABASE_URL` is preserved automatically. Supply them only if you want to rotate the database credentials:
+
+```bash
+# Upgrade (no DB flags needed — existing credentials are kept):
+sudo ./install.sh --yes
+
+# Upgrade and rotate DB credentials:
+sudo ./install.sh --yes \
+  --db-host new-db.example.com \
+  --db-user new_user \
+  --db-password 'NewP@ss!'
+```
 
 ---
 
