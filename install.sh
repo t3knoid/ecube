@@ -1172,10 +1172,18 @@ EOF_PROXY
     _bh_url=$(_url_host "${BACKEND_HOST}")
     if [[ -n "${BACKEND_CA_FILE}" ]]; then
       # Custom CA certificate supplied — verify against it.
+      # proxy_ssl_server_name on sends SNI in the TLS ClientHello so the backend
+      # can select the right certificate on virtual-host setups. proxy_ssl_name
+      # sets both the SNI value and the hostname used for CN/SAN verification;
+      # this is critical when proxy_pass targets an IP literal. verify_depth 2
+      # allows for one intermediate CA in the chain (nginx default is 1).
       cat >> /etc/nginx/sites-available/ecube <<EOF_PROXY
         proxy_pass https://${_bh_url}:${API_PORT}/;
-        proxy_ssl_verify on;
+        proxy_ssl_verify          on;
         proxy_ssl_trusted_certificate ${BACKEND_CA_FILE};
+        proxy_ssl_server_name     on;
+        proxy_ssl_name            ${BACKEND_HOST};
+        proxy_ssl_verify_depth    2;
 EOF_PROXY
     elif [[ "${ALLOW_INSECURE_BACKEND}" == true ]]; then
       # Default fallback: TLS verification disabled for quick bring-up.
@@ -1191,9 +1199,14 @@ EOF_PROXY
 EOF_PROXY
     else
       # Strict mode: verify using the system trust store.
+      # See CA-file branch above for explanation of proxy_ssl_server_name,
+      # proxy_ssl_name, and proxy_ssl_verify_depth.
       cat >> /etc/nginx/sites-available/ecube <<EOF_PROXY
         proxy_pass https://${_bh_url}:${API_PORT}/;
-        proxy_ssl_verify on;
+        proxy_ssl_verify          on;
+        proxy_ssl_server_name     on;
+        proxy_ssl_name            ${BACKEND_HOST};
+        proxy_ssl_verify_depth    2;
 EOF_PROXY
     fi
   fi
