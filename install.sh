@@ -779,14 +779,17 @@ install_backend() {
   run chown -R ecube:ecube /var/lib/ecube
 
   # 5. Python virtual environment
+  # Run venv creation and pip installs as the ecube user so all files under
+  # ${INSTALL_DIR} are owned by ecube:ecube from the start, and package
+  # install hooks never execute with full root privileges.
   local venv_dir="${INSTALL_DIR}/venv"
   if [[ ! -d "${venv_dir}" ]]; then
     info "Creating Python virtual environment..."
-    run python3.11 -m venv "${venv_dir}"
+    run sudo -u ecube python3.11 -m venv "${venv_dir}"
   fi
   info "Installing Python dependencies..."
-  run "${venv_dir}/bin/pip" install --quiet --upgrade pip setuptools wheel
-  run "${venv_dir}/bin/pip" install --quiet -e "${INSTALL_DIR}"
+  run sudo -u ecube "${venv_dir}/bin/pip" install --quiet --upgrade pip setuptools wheel
+  run sudo -u ecube "${venv_dir}/bin/pip" install --quiet -e "${INSTALL_DIR}"
   ok "Python environment ready at ${venv_dir}"
 
   # 6. TLS certificates
