@@ -588,8 +588,8 @@ preflight() {
           codename="$(. /etc/os-release && echo "${VERSION_CODENAME}")"
           if ! apt-cache show python3.11 &>/dev/null; then
             info "python3.11 not in ${codename} main; enabling ${codename}-backports ..."
-            echo "deb https://deb.debian.org/debian ${codename}-backports main" \
-              | tee /etc/apt/sources.list.d/"${codename}-backports.list" >/dev/null
+            run bash -c "echo 'deb https://deb.debian.org/debian ${codename}-backports main' \
+              | tee /etc/apt/sources.list.d/${codename}-backports.list >/dev/null"
             run apt-get update -qq
             if ! apt-cache show python3.11 &>/dev/null; then
               error "python3.11 is not available in ${codename} main or ${codename}-backports."
