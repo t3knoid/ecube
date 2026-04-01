@@ -95,7 +95,7 @@ The installer will:
 2. Create the `ecube` system user.
 3. Set up a Python virtual environment in `<install-dir>/venv`.
 4. Generate a self-signed TLS certificate.
-5. Prompt for PostgreSQL connection details (host, port, database name, username, password), verify TCP reachability, and validate credentials with `psql` if it is available.
+5. Prompt for PostgreSQL connection details (host, port, database name, username, password) and verify TCP reachability. If `psql` is present it also tests the credentials against the database; if `psql` is absent this step is skipped and no error is raised. The installer never creates the PostgreSQL database or role — these must exist before running the installer for the service to function correctly.
 6. Write `<install-dir>/.env` with a random `SECRET_KEY` and the assembled `DATABASE_URL`.
 7. Write and start the `ecube.service` systemd unit.
 8. (Full install) Configure nginx to serve the frontend and proxy `/api/` to the backend.
