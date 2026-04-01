@@ -1562,14 +1562,21 @@ print_summary() {
   local installed_version
   installed_version="$(_detect_version)"
 
+  # Normalize HOST for URL usage: wrap bare IPv6 literals in brackets.
+  local HOST_URL
+  HOST_URL="${HOST}"
+  if [[ "${HOST_URL}" == *:* && "${HOST_URL}" != [* ]]; then
+    HOST_URL="[${HOST_URL}]"
+  fi
+
   echo ""
   if [[ "${INSTALL_BACKEND}" == true && "${INSTALL_FRONTEND}" == true ]]; then
     echo -e "${C_BOLD}=======================================================${C_RESET}"
     echo -e "${C_GREEN}  ECUBE ${installed_version} installed successfully${C_RESET}"
     echo -e "${C_BOLD}=======================================================${C_RESET}"
-    echo -e "  UI:           https://${HOST}:${UI_PORT}"
-    echo -e "  API:          https://${HOST}:${UI_PORT}/api/"
-    echo -e "  Setup wizard: https://${HOST}:${UI_PORT}/setup"
+    echo -e "  UI:           https://${HOST_URL}:${UI_PORT}"
+    echo -e "  API:          https://${HOST_URL}:${UI_PORT}/api/"
+    echo -e "  Setup wizard: https://${HOST_URL}:${UI_PORT}/setup"
     echo ""
     echo -e "  Complete initial configuration via the Setup Wizard."
     echo -e "  A PostgreSQL database must be reachable at that point."
