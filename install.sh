@@ -1622,7 +1622,56 @@ do_uninstall() {
 
   # Remove ecube group (if separate)
   if getent group ecube &>/dev/null; then
-    run groupdel ecube 2>/dev/null || true
+    if command -v groupdel &>/dev/null; then
+      run groupdel ecube 2>/dev/null || true
+    else
+      warn "groupdel not found — group 'ecube' not removed; remove manually with: groupdel ecube"
+    fi
+  fi
+
+  # Remove ecube-www bridge group (created by install_frontend to give www-data
+  # traversal access to INSTALL_DIR without o+x).  Remove www-data from the
+  # group first so groupdel succeeds, then delete the group.
+  if getent group ecube-www &>/dev/null; then
+    if id -nG www-data 2>/dev/null | grep -qw ecube-www; then
+      if command -v gpasswd &>/dev/null; then
+        run gpasswd -d www-data ecube-www 2>/dev/null || true
+      else
+        warn "gpasswd not found — www-data may still be a member of ecube-www; remove manually with: usermod -G ... www-data"
+      fi
+    fi
+    if command -v groupdel &>/dev/null; then
+      run groupdel ecube-www 2>/dev/null || true
+      ok "Group 'ecube-www' removed"
+    else
+      warn "groupdel not found — group 'ecube-www' not removed; remove manually with: groupdel ecube-www"
+    fi
+  fi
+
+  # Revoke ufw rules that configure_firewall may have added.
+  # A frontend install creates: allow ${UI_PORT}/tcp + deny ${API_PORT}/tcp.
+  # A backend-only install may have created a per-CIDR allow for ${API_PORT}/tcp;
+  # the source CIDR is not persisted here, so we attempt best-effort deletion of
+  # the two known rules and warn the operator if any rule for ${API_PORT} remains.
+  if command -v ufw &>/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
+    if _confirm "Remove ECUBE ufw rules (ports ${UI_PORT}/tcp and ${API_PORT}/tcp)?"; then
+      ufw delete allow "${UI_PORT}/tcp" 2>/dev/null || true
+      ufw delete deny  "${API_PORT}/tcp" 2>/dev/null || true
+      ok "ufw: rules for ${UI_PORT}/tcp and ${API_PORT}/tcp removed (if present)"
+      # A CIDR-scoped allow rule cannot be deleted without the original source
+      # address; alert the operator if any rule for API_PORT is still active.
+      if ufw status 2>/dev/null | grep -q "^${API_PORT}"; then
+        warn "ufw: rule(s) for port ${API_PORT} may still be active — review with: sudo ufw status numbered"
+      fi
+    fi
+  fi
+
+  # Optionally remove the installer log file.
+  if [[ -f "${LOG_FILE}" && "${LOG_FILE}" != "/dev/null" ]]; then
+    if _confirm "Remove installer log ${LOG_FILE}?"; then
+      run rm -f "${LOG_FILE}"
+      ok "${LOG_FILE} removed"
+    fi
   fi
 
   # Optionally remove deadsnakes repository.
