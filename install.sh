@@ -232,10 +232,6 @@ _url_host() {
   fi
 }
 
-# Returns 0 if val is an IPv4 or IPv6 address literal, 1 if it is a DNS name.
-# Surrounding brackets on IPv6 (e.g. [::1]) are stripped before the test.
-# Used by cert generation to decide whether to emit an IP SAN or a DNS SAN
-# for HOST — DNS SANs containing ':' or '[' are invalid per RFC 5280.
 # Pure predicate: returns 0 if val is a loopback address, 1 otherwise.
 # Matches the full 127.0.0.0/8 range, the DNS name "localhost" (case-insensitive),
 # the IPv6 loopback "::1", and the bracketed form "[::1]".
@@ -255,6 +251,10 @@ _is_loopback() {
   return 1
 }
 
+# Pure predicate: returns 0 if val is an IPv4 or IPv6 address literal, 1 if it
+# is a DNS name.  Surrounding brackets on IPv6 (e.g. [::1]) are stripped before
+# the test.  Used by cert generation to decide whether to emit an IP SAN or a
+# DNS SAN for HOST — DNS SANs containing ':' or '[' are invalid per RFC 5280.
 _is_ip() {
   local val="${1#[}"; val="${val%]}"
   # IPv4: four dot-separated groups of digits
