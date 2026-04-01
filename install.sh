@@ -1170,7 +1170,31 @@ install_frontend() {
     fi
   fi
 
-  # 1. Install nginx if absent
+  # Guard: --frontend-only + default BACKEND_HOST (127.0.0.1) with no local backend.
+  # If the unit file does not exist and nothing is listening on the API port,
+  # the generated nginx config will proxy to a dead loopback address.  Fail fast
+  # so the operator is forced to supply --backend-host for a remote backend, or
+  # to install the backend first.
+  if [[ "${INSTALL_BACKEND}" == false && "${BACKEND_HOST}" == "127.0.0.1" && ! -f "${unit_file}" ]]; then
+    local _loopback_listening=false
+    if command -v ss &>/dev/null; then
+      if ss -tlnp 2>/dev/null | grep -qE "127\.0\.0\.1:${API_PORT}\b|::1:${API_PORT}\b|\*:${API_PORT}\b"; then
+        _loopback_listening=true
+      fi
+    fi
+    if [[ "${_loopback_listening}" == false && "${DRY_RUN}" != true ]]; then
+      error "--frontend-only was specified with the default --backend-host (127.0.0.1),"
+      error "but no local ecube.service unit was found and nothing is listening on"
+      error "127.0.0.1:${API_PORT}.  nginx would proxy to a dead address."
+      error ""
+      error "To fix this, choose one of:"
+      error "  1. Install the backend first:    sudo ./install.sh --backend-only ..."
+      error "  2. Specify the remote backend:   sudo ./install.sh --frontend-only --backend-host <host>"
+      exit 1
+    fi
+  fi
+
+
   if ! command -v nginx &>/dev/null; then
     info "Installing nginx..."
     run apt-get update -qq
