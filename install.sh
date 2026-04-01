@@ -217,7 +217,7 @@ _url_host() {
 # Used by cert generation to decide whether to emit an IP SAN or a DNS SAN
 # for HOST — DNS SANs containing ':' or '[' are invalid per RFC 5280.
 _is_ip() {
-  local val="${1#[}"; val="${val%]}"
+  local val="${1#[[}"; val="${val%]]}"
   # IPv4: four dot-separated groups of digits
   [[ "${val}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && return 0
   # IPv6: presence of at least one colon
@@ -600,7 +600,7 @@ _generate_certs() {
   #   * IP literal (IPv4 or IPv6): emit IP SANs only; include HOST_IP as a
   #     second IP SAN (deduplicated when HOST and HOST_IP are the same address).
   #   * DNS name: emit DNS:HOST + IP:HOST_IP (original behaviour).
-  local _bare_host="${HOST#[}"; _bare_host="${_bare_host%]}"
+  local _bare_host="${HOST#[[}"; _bare_host="${_bare_host%]]}"
   local _san
   if _is_ip "${HOST}"; then
     if [[ "${_bare_host}" == "${HOST_IP}" ]]; then
