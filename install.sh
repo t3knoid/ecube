@@ -212,6 +212,19 @@ _url_host() {
   fi
 }
 
+# Returns 0 if val is an IPv4 or IPv6 address literal, 1 if it is a DNS name.
+# Surrounding brackets on IPv6 (e.g. [::1]) are stripped before the test.
+# Used by cert generation to decide whether to emit an IP SAN or a DNS SAN
+# for HOST — DNS SANs containing ':' or '[' are invalid per RFC 5280.
+_is_ip() {
+  local val="${1#[}"; val="${val%]}"
+  # IPv4: four dot-separated groups of digits
+  [[ "${val}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && return 0
+  # IPv6: presence of at least one colon
+  [[ "${val}" == *:* ]] && return 0
+  return 1
+}
+
 # Verify that a flag's value argument is present and does not look like the
 # next flag.  Uses ${2-} (default-empty) so set -u does not abort first.
 _require_arg() {
@@ -580,11 +593,30 @@ _generate_certs() {
   fi
   info "Generating self-signed TLS certificate (CN=${HOST}, validity=${CERT_VALIDITY} days)..."
   run mkdir -p "${cert_dir}"
+  # Build the SubjectAltName extension correctly based on whether HOST is an IP
+  # literal or a DNS name.  A DNS SAN containing ':' or brackets (as produced
+  # by an IPv6 HOST) is invalid per RFC 5280 §4.2.1.6 and is rejected by
+  # modern TLS stacks.
+  #   * IP literal (IPv4 or IPv6): emit IP SANs only; include HOST_IP as a
+  #     second IP SAN (deduplicated when HOST and HOST_IP are the same address).
+  #   * DNS name: emit DNS:HOST + IP:HOST_IP (original behaviour).
+  local _bare_host="${HOST#[}"; _bare_host="${_bare_host%]}"
+  local _san
+  if _is_ip "${HOST}"; then
+    if [[ "${_bare_host}" == "${HOST_IP}" ]]; then
+      _san="IP:${_bare_host}"
+    else
+      _san="IP:${_bare_host},IP:${HOST_IP}"
+    fi
+  else
+    _san="DNS:${HOST},IP:${HOST_IP}"
+  fi
+  info "Certificate SANs: ${_san}"
   run openssl req -x509 -nodes -days "${CERT_VALIDITY}" -newkey rsa:2048 \
     -keyout "${cert_dir}/key.pem" \
     -out    "${cert_dir}/cert.pem" \
     -subj   "/CN=${HOST}" \
-    -addext "subjectAltName=IP:${HOST_IP},DNS:${HOST}" \
+    -addext "subjectAltName=${_san}" \
     2>/dev/null
   if [[ "${DRY_RUN}" != true ]]; then
     chmod 600 "${cert_dir}/key.pem"
