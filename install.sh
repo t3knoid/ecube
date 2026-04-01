@@ -62,6 +62,7 @@ _on_error() {
 # ---------------------------------------------------------------------------
 INSTALL_DIR="/opt/ecube"
 API_PORT="8443"
+_EXPLICIT_API_PORT=false   # set when --api-port is passed explicitly
 UI_PORT="443"
 HOSTNAME_OVERRIDE=""
 CERT_VALIDITY="730"
@@ -312,7 +313,7 @@ while [[ $# -gt 0 ]]; do
     --api-port)
       _require_arg "$1" "${2-}"
       _validate_port_arg "$1" "$2"
-      API_PORT="$2"; shift 2 ;;
+      API_PORT="$2"; _EXPLICIT_API_PORT=true; shift 2 ;;
     --ui-port)
       _require_arg "$1" "${2-}"
       _validate_port_arg "$1" "$2"
@@ -1040,6 +1041,18 @@ install_frontend() {
   local unit_file="/etc/systemd/system/ecube.service"
   if [[ "${INSTALL_BACKEND}" == false && "${BACKEND_HOST}" == "127.0.0.1" && -f "${unit_file}" ]]; then
     info "Updating existing backend configuration for nginx frontend..."
+
+    # Detect the port the existing unit is already listening on.  Preserve it
+    # unless the operator explicitly passed --api-port, so a non-default port
+    # from the original backend-only install is not silently overwritten.
+    if [[ "${_EXPLICIT_API_PORT}" == false ]]; then
+      local _detected_port
+      _detected_port=$(grep -oP -- '--port\s+\K[0-9]+' "${unit_file}" 2>/dev/null | head -1 || true)
+      if [[ -n "${_detected_port}" && "${_detected_port}" != "${API_PORT}" ]]; then
+        info "Detected existing API port ${_detected_port} from unit file — using it (pass --api-port to override)."
+        API_PORT="${_detected_port}"
+      fi
+    fi
 
     # Patch .env — add or overwrite TRUST_PROXY_HEADERS and API_ROOT_PATH.
     if [[ -f "${env_file}" ]]; then
