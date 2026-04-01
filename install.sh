@@ -1395,14 +1395,19 @@ EOF_PROXY
 EOF_PROXY
     else
       # Strict mode: verify using the system trust store.
+      # proxy_ssl_trusted_certificate must be set explicitly — without it nginx
+      # does not know which CA bundle to use and verification will not work as
+      # intended (nginx -t may also fail on some versions).  The Debian/Ubuntu
+      # system CA bundle is always at /etc/ssl/certs/ca-certificates.crt.
       # See CA-file branch above for explanation of proxy_ssl_server_name,
       # proxy_ssl_name, and proxy_ssl_verify_depth.
       cat >> /etc/nginx/sites-available/ecube <<EOF_PROXY
         proxy_pass https://${_bh_url}:${API_PORT}/;
-        proxy_ssl_verify          on;
-        proxy_ssl_server_name     on;
-        proxy_ssl_name            ${_bh_bare};
-        proxy_ssl_verify_depth    2;
+        proxy_ssl_verify                on;
+        proxy_ssl_trusted_certificate   /etc/ssl/certs/ca-certificates.crt;
+        proxy_ssl_server_name           on;
+        proxy_ssl_name                  ${_bh_bare};
+        proxy_ssl_verify_depth          2;
 EOF_PROXY
     fi
   fi
