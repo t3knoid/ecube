@@ -320,8 +320,8 @@ _validate_install_dir_arg() {
   _canonical="$(realpath -m "${val}" 2>/dev/null || echo "${val}")"
   local _d
   local _dangerous=("/" "/bin" "/boot" "/dev" "/etc" "/home" "/lib" "/lib64"
-                    "/proc" "/root" "/run" "/sbin" "/srv" "/sys" "/tmp"
-                    "/usr" "/var")
+                    "/media" "/mnt" "/opt" "/proc" "/root" "/run" "/sbin"
+                    "/srv" "/sys" "/tmp" "/usr" "/var")
   for _d in "${_dangerous[@]}"; do
     if [[ "${_canonical}" == "${_d}" ]]; then
       echo "ERROR: ${flag} '${val}' is a protected system path." >&2; exit 1
