@@ -687,11 +687,14 @@ _maybe_download_release() {
 
   info "Verifying checksum..."
   if [[ "${DRY_RUN}" != true ]]; then
-    # sha256sum -c expects the filename recorded inside the checksum file to match
-    # the tarball on disk.  Rewrite the recorded name to our mktemp path.
-    local recorded_name
-    recorded_name=$(awk '{print $2}' "${tmp_checksum}")
-    sed -i "s|${recorded_name}|${tmp_tarball}|" "${tmp_checksum}"
+    # sha256sum -c expects "<hash>  <path>" where the path matches the file on
+    # disk.  Rather than rewriting the recorded filename in-place with sed
+    # (which treats the pattern as a regex, so '.' in typical release filenames
+    # like "ecube-v1.2.3.tar.gz" can match unintended characters), extract just
+    # the hex digest and construct a fresh verification line ourselves.
+    local recorded_hash
+    recorded_hash=$(awk '{print $1}' "${tmp_checksum}")
+    printf '%s  %s\n' "${recorded_hash}" "${tmp_tarball}" > "${tmp_checksum}"
     sha256sum -c "${tmp_checksum}"
     ok "Checksum verified"
   fi
