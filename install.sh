@@ -187,6 +187,23 @@ _is_valid_db_pass() {
   [[ -n "${val}" && ! "${val}" =~ [[:space:]] ]]
 }
 
+# Pure predicate: returns 0 if val is a valid CIDR block, 1 otherwise.
+# Accepts IPv4 (e.g. 192.168.1.0/24, prefix 0-32) and IPv6
+# (e.g. 2001:db8::/32, prefix 0-128).  Intentionally rejects bare IPs
+# (no prefix length) since ufw requires the /prefix form.
+_is_valid_cidr() {
+  local val="$1"
+  # IPv4 CIDR
+  if [[ "${val}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/([0-9]|[12][0-9]|3[0-2])$ ]]; then
+    return 0
+  fi
+  # IPv6 CIDR — loose check: hex/colon chars followed by /0-128
+  if [[ "${val}" =~ ^[0-9A-Fa-f:]+/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$ ]]; then
+    return 0
+  fi
+  return 1
+}
+
 # Full RFC 3986 percent-encoder: encodes every character outside the unreserved
 # set (A-Za-z0-9 - _ . ~) so any valid password produces a valid connection URL.
 # The value is passed via stdin so it never appears in the process argument list.
@@ -1541,10 +1558,22 @@ configure_firewall() {
     if [[ "${YES}" == true ]]; then
       warn "Skipping ufw API port rule in --yes mode for backend-only install (use ufw manually if needed)."
     else
-      read -r -p "$(echo -e "${C_YELLOW}Enter source CIDR to allow for API port ${API_PORT} (leave blank to skip):${C_RESET} ")" cidr
+      while true; do
+        read -r -p "$(echo -e "${C_YELLOW}Enter source CIDR to allow for API port ${API_PORT} (leave blank to skip):${C_RESET} ")" cidr
+        if [[ -z "${cidr}" ]]; then
+          break
+        elif ! _is_valid_cidr "${cidr}"; then
+          warn "Invalid CIDR '${cidr}' — expected n.n.n.n/prefix (IPv4) or hex::/prefix (IPv6). Leave blank to skip."
+        else
+          break
+        fi
+      done
       if [[ -n "${cidr}" ]]; then
-        run ufw allow from "${cidr}" to any port "${API_PORT}" proto tcp
-        ok "ufw: allowed ${cidr} → port ${API_PORT}/tcp"
+        if run ufw allow from "${cidr}" to any port "${API_PORT}" proto tcp; then
+          ok "ufw: allowed ${cidr} → port ${API_PORT}/tcp"
+        else
+          warn "ufw: failed to add rule for '${cidr}' — firewall not updated. Configure manually: sudo ufw allow from ${cidr} to any port ${API_PORT} proto tcp"
+        fi
       fi
     fi
   fi
