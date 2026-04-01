@@ -385,6 +385,19 @@ run() {
   fi
 }
 
+# Run a command as the ecube user, dropping privileges from root.
+# Prefers runuser(1) (util-linux, always present on Debian/Ubuntu and does not
+# require a sudoers entry) and falls back to sudo -u for environments where
+# runuser is somehow absent.  Dry-run is forwarded via run() so the command is
+# only printed, never executed.
+_run_as_ecube() {
+  if command -v runuser &>/dev/null; then
+    run runuser -u ecube -- "$@"
+  else
+    run sudo -u ecube "$@"
+  fi
+}
+
 # ---------------------------------------------------------------------------
 # Version detection
 # ---------------------------------------------------------------------------
@@ -490,6 +503,19 @@ preflight() {
 
   # Python 3.11 — only needed for backend installs
   if [[ "${INSTALL_BACKEND}" == true ]]; then
+    # Privilege-drop tool: runuser (preferred) or sudo
+    if ! command -v runuser &>/dev/null && ! command -v sudo &>/dev/null; then
+      error "Neither 'runuser' nor 'sudo' was found. One of these is required to"
+      error "run the Python venv/pip steps as the 'ecube' user."
+      error "Install sudo (apt-get install sudo) or ensure util-linux is present."
+      exit 1
+    fi
+    if command -v runuser &>/dev/null; then
+      ok "Privilege-drop tool: runuser"
+    else
+      ok "Privilege-drop tool: sudo (runuser not found)"
+    fi
+
     if ! command -v python3.11 &>/dev/null; then
       warn "python3.11 not found."
       if [[ "${ID}" == "ubuntu" ]]; then
@@ -859,11 +885,11 @@ install_backend() {
   local venv_dir="${INSTALL_DIR}/venv"
   if [[ ! -d "${venv_dir}" ]]; then
     info "Creating Python virtual environment..."
-    run sudo -u ecube python3.11 -m venv "${venv_dir}"
+    _run_as_ecube python3.11 -m venv "${venv_dir}"
   fi
   info "Installing Python dependencies..."
-  run sudo -u ecube "${venv_dir}/bin/pip" install --quiet --upgrade pip setuptools wheel
-  run sudo -u ecube "${venv_dir}/bin/pip" install --quiet -e "${INSTALL_DIR}"
+  _run_as_ecube "${venv_dir}/bin/pip" install --quiet --upgrade pip setuptools wheel
+  _run_as_ecube "${venv_dir}/bin/pip" install --quiet -e "${INSTALL_DIR}"
   ok "Python environment ready at ${venv_dir}"
 
   # 6. TLS certificates
