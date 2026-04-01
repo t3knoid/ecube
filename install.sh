@@ -664,7 +664,11 @@ preflight() {
           fi
         fi
         run apt-get update -qq
-        run apt-get install -y python3.11 python3.11-venv python3.11-distutils
+        run apt-get install -y python3.11 python3.11-venv
+        # Optional: install distutils if provided as an unversioned package.
+        if apt-cache show python3-distutils &>/dev/null; then
+          run apt-get install -y python3-distutils
+        fi
         ok "python3.11 installed"
       else
         error "python3.11 is required. Aborting."
