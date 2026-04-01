@@ -664,11 +664,15 @@ _resolve_host() {
 # ===========================================================================
 _generate_certs() {
   local cert_dir="${INSTALL_DIR}/certs"
+  # Normalise bracketed IPv6 literals once ([2001:db8::1] → 2001:db8::1) so
+  # the bare address is used consistently in the CN, SANs, and log messages.
+  # For DNS names and IPv4, _bare_host == HOST (nothing is stripped).
+  local _bare_host="${HOST#[}"; _bare_host="${_bare_host%]}"
   if [[ -f "${cert_dir}/cert.pem" && -f "${cert_dir}/key.pem" ]]; then
     info "TLS certificates already exist — skipping generation."
     return
   fi
-  info "Generating self-signed TLS certificate (CN=${HOST}, validity=${CERT_VALIDITY} days)..."
+  info "Generating self-signed TLS certificate (CN=${_bare_host}, validity=${CERT_VALIDITY} days)..."
   run mkdir -p "${cert_dir}"
   # Build the SubjectAltName extension correctly based on whether HOST is an IP
   # literal or a DNS name.  A DNS SAN containing ':' or brackets (as produced
@@ -676,23 +680,22 @@ _generate_certs() {
   # modern TLS stacks.
   #   * IP literal (IPv4 or IPv6): emit IP SANs only; include HOST_IP as a
   #     second IP SAN (deduplicated when HOST and HOST_IP are the same address).
-  #   * DNS name: emit DNS:HOST + IP:HOST_IP (original behaviour).
-  local _bare_host="${HOST#[}"; _bare_host="${_bare_host%]}"
+  #   * DNS name: emit DNS:_bare_host + IP:HOST_IP (original behaviour).
   local _san
-  if _is_ip "${HOST}"; then
+  if _is_ip "${_bare_host}"; then
     if [[ "${_bare_host}" == "${HOST_IP}" ]]; then
       _san="IP:${_bare_host}"
     else
       _san="IP:${_bare_host},IP:${HOST_IP}"
     fi
   else
-    _san="DNS:${HOST},IP:${HOST_IP}"
+    _san="DNS:${_bare_host},IP:${HOST_IP}"
   fi
   info "Certificate SANs: ${_san}"
   run openssl req -x509 -nodes -days "${CERT_VALIDITY}" -newkey rsa:2048 \
     -keyout "${cert_dir}/key.pem" \
     -out    "${cert_dir}/cert.pem" \
-    -subj   "/CN=${HOST}" \
+    -subj   "/CN=${_bare_host}" \
     -addext "subjectAltName=${_san}" \
     2>/dev/null
   if [[ "${DRY_RUN}" != true ]]; then
