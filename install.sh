@@ -275,7 +275,9 @@ _require_arg() {
 
 # Validate a file-path argument intended for use inside an nginx config directive.
 # Requires an absolute path and rejects any character that could break a directive
-# (whitespace, newlines, semicolons, braces, quotes, backslashes, null bytes).
+# (whitespace, newlines, semicolons, braces, quotes, backslashes, null bytes,
+# '#' which starts an nginx comment and would silently truncate the directive,
+# and '$' which nginx treats as a variable-expansion sigil).
 # Also verifies the file exists and is readable so the installer fails fast with
 # a clear message rather than letting nginx -t produce a cryptic error later.
 _validate_ca_file_arg() {
@@ -284,8 +286,8 @@ _validate_ca_file_arg() {
     echo "ERROR: ${flag} must be an absolute path (starting with /)." >&2
     exit 1
   fi
-  if [[ "${val}" =~ [[:space:]\;\{\}\'\"\\|] ]]; then
-    echo "ERROR: ${flag} path contains characters not allowed in an nginx config directive (whitespace, ;, {}, quotes, or backslash)." >&2
+  if [[ "${val}" =~ [[:space:]\;\{\}\'\"\\|\#\$] ]]; then
+    echo "ERROR: ${flag} path contains characters not allowed in an nginx config directive (whitespace, ;, {}, quotes, backslash, # or \$)." >&2
     exit 1
   fi
   if [[ ! -f "${val}" ]]; then
