@@ -535,6 +535,12 @@ preflight() {
   if [[ "${INSTALL_FRONTEND}" == true ]]; then
     required_cmds+=("nginx")
   fi
+  # VERSION_TAG triggers _maybe_download_release, which unconditionally uses
+  # mktemp, sha256sum, tar, and awk.  Catch missing tools here rather than
+  # mid-run with a cryptic trap failure.
+  if [[ -n "${VERSION_TAG}" ]]; then
+    required_cmds+=("mktemp" "sha256sum" "tar" "awk")
+  fi
   for cmd in "${required_cmds[@]}"; do
     if ! command -v "${cmd}" &>/dev/null; then
       if [[ "${cmd}" == "nginx" ]]; then
