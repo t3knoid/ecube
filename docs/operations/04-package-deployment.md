@@ -170,7 +170,7 @@ curl -k -X POST https://localhost:8443/setup/database/provision \
   -d '{"host": "localhost", "port": 5432, "admin_username": "postgres", "admin_password": "secret", "app_database": "ecube", "app_username": "ecube", "app_password": "ecube123"}'
 ```
 
-The provision endpoint creates the PostgreSQL user and database and runs Alembic migrations. For manual deployments, it also writes `DATABASE_URL` to `.env` and the running service reconfigures its connection pool in-place — no restart is required. When `install.sh` was used, `DATABASE_URL` is already present in `.env` (written during installation); the provision endpoint in that case only runs migrations.
+The provision endpoint creates or updates the PostgreSQL application user and database, runs Alembic migrations, and (re)writes `DATABASE_URL` in `.env` to point at the provisioned database. This behavior applies both to manual deployments and to installs created with `install.sh`; invoking the endpoint may overwrite an existing `DATABASE_URL` value and change the application user password. In environments where `install.sh` already created the database and wrote `DATABASE_URL`, calling the provision endpoint again with the same `app_database`, `app_username`, and credentials is effectively a migrations-only step (no effective changes beyond the migrations themselves). If you supply different database/user/credential values, the endpoint will attempt to create or alter the role and database and update `.env` accordingly.
 
 ### Option B: Manual Setup (CLI)
 
