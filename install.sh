@@ -744,12 +744,16 @@ _collect_db_config() {
     [[ "${DRY_RUN}" == true ]] || warn "psql not found — skipping credential verification."
   fi
 
-  # ── URL-encode the password (full RFC 3986 percent-encoding) ──────────────
-  local encoded_pass
-  encoded_pass=$(_url_encode "${DB_PASS}")
-
-  DATABASE_URL="postgresql://${DB_USER}:${encoded_pass}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
-  ok "DATABASE_URL configured (password redacted)"
+  # ── URL-encode the password and assemble DATABASE_URL ─────────────────────
+  if [[ "${DRY_RUN}" == true ]]; then
+    DATABASE_URL="postgresql://${DB_USER}:<encoded-password>@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+    ok "DATABASE_URL configured (dry-run placeholder — password not encoded)"
+  else
+    local encoded_pass
+    encoded_pass=$(_url_encode "${DB_PASS}")
+    DATABASE_URL="postgresql://${DB_USER}:${encoded_pass}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+    ok "DATABASE_URL configured (password redacted)"
+  fi
 }
 
 # ===========================================================================
