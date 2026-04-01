@@ -7,7 +7,7 @@
 #
 # Run with --help to see all available options.
 
-set -euo pipefail
+set -Eeuo pipefail
 
 # ---------------------------------------------------------------------------
 # Colour helpers (NO_COLOR / non-TTY aware)
