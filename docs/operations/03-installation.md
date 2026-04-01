@@ -127,7 +127,7 @@ At the end it prints a summary with the UI URL, API URL, and service management 
 | `--hostname HOST` | `$(hostname -f)` | Hostname/IP used as TLS certificate CN and in summary URLs |
 | `--cert-validity DAYS` | `730` | Self-signed certificate validity in days |
 | `--yes` / `-y` | off | Non-interactive / unattended mode |
-| `--version TAG` | *(current package)* | Download and install a specific release tag from GitHub |
+| `--version TAG` | *(current package)* | Download and install a specific release tag from GitHub. Must match `v<major>.<minor>.<patch>` exactly (e.g. `v0.2.0`). Pre-release suffixes, build metadata, and tags without a leading `v` are not accepted. |
 | `--uninstall` | — | Remove all installed ECUBE components |
 | `--dry-run` | — | Print all planned actions without executing them |
 
