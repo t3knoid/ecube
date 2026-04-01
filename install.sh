@@ -642,7 +642,7 @@ preflight() {
           # Debian 12 (Bookworm) ships python3.11 in main; Debian 11 (Bullseye)
           # requires bullseye-backports.  No remote script is executed.
           local codename
-          codename="$(. /etc/os-release && echo "${VERSION_CODENAME}")"
+          codename="$(. /etc/os-release && echo "${VERSION_CODENAME:-}")"
           # Reject anything that isn't a simple Debian codename (lowercase letters,
           # digits, hyphens) before interpolating into a bash -c string and a
           # sources.list.d filename executed as root.
