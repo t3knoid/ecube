@@ -1708,10 +1708,7 @@ print_summary() {
 
   # Normalize HOST for URL usage: wrap bare IPv6 literals in brackets.
   local HOST_URL
-  HOST_URL="${HOST}"
-  if [[ "${HOST_URL}" == *:* && "${HOST_URL}" != [* ]]; then
-    HOST_URL="[${HOST_URL}]"
-  fi
+  HOST_URL="$(_url_host "${HOST}")"
 
   echo ""
   if [[ "${INSTALL_BACKEND}" == true && "${INSTALL_FRONTEND}" == true ]]; then
