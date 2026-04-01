@@ -1301,12 +1301,14 @@ install_frontend() {
   # 4. nginx site config
   info "Writing nginx site config /etc/nginx/sites-available/ecube..."
   if [[ "${DRY_RUN}" != true ]]; then
+        local _server_name_host
+        _server_name_host=$(_url_host "${HOST}")
         cat > /etc/nginx/sites-available/ecube <<EOF_NGINX
 server {
     listen ${UI_PORT} ssl;
     listen [::]:${UI_PORT} ssl;
 
-    server_name ${HOST};
+    server_name ${_server_name_host};
 
     ssl_certificate     ${INSTALL_DIR}/certs/cert.pem;
     ssl_certificate_key ${INSTALL_DIR}/certs/key.pem;
