@@ -171,10 +171,11 @@ _is_valid_db_name() {
 }
 
 # Pure predicate: returns 0 if val is a valid PostgreSQL username
-# (non-empty, no whitespace, '/' or '@'), 1 otherwise.
+# (non-empty, alphanumerics and underscores only — no URL-reserved characters),
+# 1 otherwise.
 _is_valid_db_user() {
   local val="$1"
-  [[ -n "${val}" && ! "${val}" =~ [[:space:]/@] ]]
+  [[ -n "${val}" && ! "${val}" =~ [^a-zA-Z0-9_] ]]
 }
 
 # Pure predicate: returns 0 if val is an acceptable PostgreSQL password
@@ -276,7 +277,7 @@ while [[ $# -gt 0 ]]; do
     --db-user)
       _require_arg "$1" "${2-}"
       if ! _is_valid_db_user "$2"; then
-        echo "ERROR: --db-user must not contain whitespace, '/' or '@'." >&2; exit 1
+        echo "ERROR: --db-user must contain only alphanumerics and underscores." >&2; exit 1
       fi
       DB_USER="$2"; shift 2 ;;
     --db-password)
@@ -703,7 +704,7 @@ _collect_db_config() {
     while true; do
       read -r -p "$(echo -e "${C_YELLOW}PostgreSQL username:${C_RESET} ")" DB_USER
       if ! _is_valid_db_user "${DB_USER}"; then
-        warn "Invalid username — must be non-empty and must not contain whitespace, '/' or '@'."
+        warn "Invalid username — must be non-empty and contain only alphanumerics and underscores."
       else
         break
       fi
@@ -767,12 +768,15 @@ _collect_db_config() {
 
   # ── URL-encode the password and assemble DATABASE_URL ─────────────────────
   if [[ "${DRY_RUN}" == true ]]; then
-    DATABASE_URL="postgresql://${DB_USER}:<encoded-password>@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+    local _db_host_url
+    _db_host_url=$(_url_host "${DB_HOST}")
+    DATABASE_URL="postgresql://${DB_USER}:<encoded-password>@${_db_host_url}:${DB_PORT}/${DB_NAME}"
     ok "DATABASE_URL configured (dry-run placeholder — password not encoded)"
   else
-    local encoded_pass
+    local encoded_pass _db_host_url
     encoded_pass=$(_url_encode "${DB_PASS}")
-    DATABASE_URL="postgresql://${DB_USER}:${encoded_pass}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+    _db_host_url=$(_url_host "${DB_HOST}")
+    DATABASE_URL="postgresql://${DB_USER}:${encoded_pass}@${_db_host_url}:${DB_PORT}/${DB_NAME}"
     ok "DATABASE_URL configured (password redacted)"
   fi
 }
