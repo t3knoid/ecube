@@ -888,10 +888,10 @@ _collect_db_config() {
       exit 1
     fi
     ok "TCP ${DB_HOST}:${DB_PORT} is reachable"
-  elif timeout 5 bash -c "echo '' > /dev/tcp/${DB_HOST_BARE}/${DB_PORT}" 2>/dev/null; then
+  elif command -v timeout &>/dev/null && timeout 5 bash -c "echo '' > /dev/tcp/${DB_HOST_BARE}/${DB_PORT}" 2>/dev/null; then
     ok "TCP ${DB_HOST}:${DB_PORT} is reachable (via /dev/tcp)"
   else
-    warn "Neither 'nc' nor /dev/tcp is available — skipping TCP reachability check."
+    warn "Neither 'nc' nor 'timeout' available — skipping TCP reachability check."
   fi
 
   # ── Credential check (psql) ────────────────────────────────────────────────
