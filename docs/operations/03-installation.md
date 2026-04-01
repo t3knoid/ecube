@@ -125,7 +125,7 @@ At the end it prints a summary with the UI URL, API URL, and service management 
 | `--db-user USER` | *(prompted)* | **Backend installs only.** PostgreSQL username. Must be non-empty and must not contain whitespace, `/`, or `@`. Required in `--yes` mode. Ignored for `--frontend-only`. |
 | `--db-password PASS` | *(prompted)* | **Backend installs only.** PostgreSQL password. Must be non-empty and must not contain whitespace. Required in `--yes` mode. All characters outside the RFC 3986 unreserved set are percent-encoded automatically when building `DATABASE_URL`. Ignored for `--frontend-only`. |
 | `--hostname HOST` | `$(hostname -f)` | Hostname/IP used as TLS certificate CN and in summary URLs |
-| `--cert-validity DAYS` | `3650` | Self-signed certificate validity in days |
+| `--cert-validity DAYS` | `730` | Self-signed certificate validity in days |
 | `--yes` / `-y` | off | Non-interactive / unattended mode |
 | `--version TAG` | *(current package)* | Download and install a specific release tag from GitHub |
 | `--uninstall` | — | Remove all installed ECUBE components |
