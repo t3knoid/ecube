@@ -1058,11 +1058,26 @@ _write_env_file() {
     if [[ "${_EXPLICIT_DB}" == true && -n "${DATABASE_URL}" ]]; then
       info "Updating DATABASE_URL in existing .env with newly supplied credentials..."
       if [[ "${DRY_RUN}" != true ]]; then
-        if grep -q '^DATABASE_URL=' "${env_file}"; then
-          sed -i "s|^DATABASE_URL=.*|DATABASE_URL=${DATABASE_URL}|" "${env_file}"
-        else
-          echo "DATABASE_URL=${DATABASE_URL}" >> "${env_file}"
-        fi
+        # Rewrite via a temp file so DATABASE_URL (which contains the
+        # encoded password) never appears in a subprocess argv.
+        # sed arguments are visible in /proc/<pid>/cmdline to other local
+        # users; printf and the while-read loop are bash builtins and never
+        # spawn a subprocess.
+        local _db_tmp _db_replaced
+        _db_tmp=$(mktemp "${env_file}.XXXXXXXXXX")
+        chmod 600 "${_db_tmp}"
+        _db_replaced=false
+        while IFS= read -r _db_line || [[ -n "${_db_line}" ]]; do
+          if [[ "${_db_line}" == DATABASE_URL=* ]]; then
+            printf 'DATABASE_URL=%s\n' "${DATABASE_URL}"
+            _db_replaced=true
+          else
+            printf '%s\n' "${_db_line}"
+          fi
+        done < "${env_file}" > "${_db_tmp}"
+        [[ "${_db_replaced}" == false ]] && printf '\nDATABASE_URL=%s\n' "${DATABASE_URL}" >> "${_db_tmp}"
+        chown ecube:ecube "${_db_tmp}"
+        mv "${_db_tmp}" "${env_file}"
       else
         echo "[DRY-RUN] Would update DATABASE_URL in ${env_file}"
       fi
