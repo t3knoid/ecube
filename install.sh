@@ -1477,7 +1477,9 @@ print_summary() {
     echo -e "  UI:  https://${HOST}:${UI_PORT}"
     echo ""
     echo -e "  Ensure the backend API is reachable at:"
-    echo -e "    https://$(_url_host "${BACKEND_HOST}"):${API_PORT}"
+    local _summary_bh
+    _summary_bh=$(_url_host "${BACKEND_HOST}")
+    echo -e "    https://${_summary_bh}:${API_PORT}"
     echo ""
     echo -e "  Service management:"
     echo -e "    sudo systemctl {start|stop|reload|status} nginx"
