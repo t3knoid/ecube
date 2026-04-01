@@ -588,8 +588,8 @@ preflight() {
           codename="$(. /etc/os-release && echo "${VERSION_CODENAME}")"
           if ! apt-cache show python3.11 &>/dev/null; then
             info "python3.11 not in ${codename} main; enabling ${codename}-backports ..."
-            echo "deb https://deb.debian.org/debian ${codename}-backports main" \
-              | tee /etc/apt/sources.list.d/"${codename}-backports.list" >/dev/null
+            run bash -c "echo 'deb https://deb.debian.org/debian ${codename}-backports main' \
+              | tee /etc/apt/sources.list.d/${codename}-backports.list >/dev/null"
             run apt-get update -qq
             if ! apt-cache show python3.11 &>/dev/null; then
               error "python3.11 is not available in ${codename} main or ${codename}-backports."
@@ -1306,12 +1306,14 @@ install_frontend() {
   # 4. nginx site config
   info "Writing nginx site config /etc/nginx/sites-available/ecube..."
   if [[ "${DRY_RUN}" != true ]]; then
+        local _server_name_host
+        _server_name_host=$(_url_host "${HOST}")
         cat > /etc/nginx/sites-available/ecube <<EOF_NGINX
 server {
     listen ${UI_PORT} ssl;
     listen [::]:${UI_PORT} ssl;
 
-    server_name ${HOST};
+    server_name ${_server_name_host};
 
     ssl_certificate     ${INSTALL_DIR}/certs/cert.pem;
     ssl_certificate_key ${INSTALL_DIR}/certs/key.pem;
@@ -1567,14 +1569,21 @@ print_summary() {
   local installed_version
   installed_version="$(_detect_version)"
 
+  # Normalize HOST for URL usage: wrap bare IPv6 literals in brackets.
+  local HOST_URL
+  HOST_URL="${HOST}"
+  if [[ "${HOST_URL}" == *:* && "${HOST_URL}" != [* ]]; then
+    HOST_URL="[${HOST_URL}]"
+  fi
+
   echo ""
   if [[ "${INSTALL_BACKEND}" == true && "${INSTALL_FRONTEND}" == true ]]; then
     echo -e "${C_BOLD}=======================================================${C_RESET}"
     echo -e "${C_GREEN}  ECUBE ${installed_version} installed successfully${C_RESET}"
     echo -e "${C_BOLD}=======================================================${C_RESET}"
-    echo -e "  UI:           https://${HOST}:${UI_PORT}"
-    echo -e "  API:          https://${HOST}:${UI_PORT}/api/"
-    echo -e "  Setup wizard: https://${HOST}:${UI_PORT}/setup"
+    echo -e "  UI:           https://${HOST_URL}:${UI_PORT}"
+    echo -e "  API:          https://${HOST_URL}:${UI_PORT}/api/"
+    echo -e "  Setup wizard: https://${HOST_URL}:${UI_PORT}/setup"
     echo ""
     echo -e "  Complete initial configuration via the Setup Wizard."
     echo -e "  A PostgreSQL database must be reachable at that point."
