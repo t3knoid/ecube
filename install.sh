@@ -247,6 +247,34 @@ _validate_ca_file_arg() {
   fi
 }
 
+# Validate a directory path intended for use inside nginx configs and systemd
+# unit files.  Restricts to the safe allowlist [A-Za-z0-9_./-] so characters
+# that break config parsing (;, {}, #, quotes, backslashes, whitespace, etc.)
+# are rejected at argument-parse time.  Also blocks / and common system roots
+# so the installer cannot accidentally clobber critical paths.
+_validate_install_dir_arg() {
+  local flag="$1" val="$2"
+  if [[ "${val}" != /* ]]; then
+    echo "ERROR: ${flag} must be an absolute path (starting with /)." >&2
+    exit 1
+  fi
+  if [[ "${val}" =~ [^A-Za-z0-9_./-] ]]; then
+    echo "ERROR: ${flag} path may only contain letters, digits, '.', '_', '-', and '/' (got '${val}')." >&2
+    exit 1
+  fi
+  local _canonical
+  _canonical="$(realpath -m "${val}" 2>/dev/null || echo "${val}")"
+  local _d
+  local _dangerous=("/" "/bin" "/boot" "/dev" "/etc" "/home" "/lib" "/lib64"
+                    "/proc" "/root" "/run" "/sbin" "/srv" "/sys" "/tmp"
+                    "/usr" "/var")
+  for _d in "${_dangerous[@]}"; do
+    if [[ "${_canonical}" == "${_d}" ]]; then
+      echo "ERROR: ${flag} '${val}' is a protected system path." >&2; exit 1
+    fi
+  done
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --backend-only)   INSTALL_FRONTEND=false; shift ;;
@@ -289,27 +317,8 @@ while [[ $# -gt 0 ]]; do
       DB_PASS="$2"; shift 2 ;;
     --install-dir)
       _require_arg "$1" "${2-}"
-      # Reject values that are /, a known system root, contain whitespace
-      # or newlines, or are not absolute paths.  Any of these could cause
-      # accidental rm -rf of critical paths or break systemd unit parsing.
-      _idir="$2"
-      if [[ "${_idir}" != /* ]]; then
-        echo "ERROR: --install-dir must be an absolute path (got '${_idir}')." >&2; exit 1
-      fi
-      if [[ "${_idir}" =~ [[:space:]] ]]; then
-        echo "ERROR: --install-dir must not contain spaces or whitespace (got '${_idir}')." >&2; exit 1
-      fi
-      # Block /, single-depth paths like /tmp, and common system directories.
-      _canonical="$(realpath -m "${_idir}" 2>/dev/null || echo "${_idir}")"
-      _dangerous=("/" "/bin" "/boot" "/dev" "/etc" "/home" "/lib" "/lib64"
-                  "/proc" "/root" "/run" "/sbin" "/srv" "/sys" "/tmp"
-                  "/usr" "/var")
-      for _d in "${_dangerous[@]}"; do
-        if [[ "${_canonical}" == "${_d}" ]]; then
-          echo "ERROR: --install-dir '${_idir}' is a protected system path." >&2; exit 1
-        fi
-      done
-      INSTALL_DIR="${_idir}"; shift 2 ;;
+      _validate_install_dir_arg "$1" "$2"
+      INSTALL_DIR="$2"; shift 2 ;;
     --api-port)
       _require_arg "$1" "${2-}"
       _validate_port_arg "$1" "$2"
