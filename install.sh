@@ -864,17 +864,22 @@ _collect_db_config() {
     done
   fi
 
+  # Strip surrounding brackets from IPv6 literals — nc, /dev/tcp, psql, and
+  # PGPASSFILE all expect a bare host (no brackets).
+  local DB_HOST_BARE="${DB_HOST#[}"
+  DB_HOST_BARE="${DB_HOST_BARE%]}"
+
   # ── TCP reachability check ─────────────────────────────────────────────────
   info "Checking TCP connectivity to ${DB_HOST}:${DB_PORT}..."
   if [[ "${DRY_RUN}" == true ]]; then
     echo "[DRY-RUN] Would check TCP ${DB_HOST}:${DB_PORT}"
   elif command -v nc &>/dev/null; then
-    if ! nc -z -w5 "${DB_HOST}" "${DB_PORT}" 2>/dev/null; then
+    if ! nc -z -w5 "${DB_HOST_BARE}" "${DB_PORT}" 2>/dev/null; then
       error "Cannot reach PostgreSQL at ${DB_HOST}:${DB_PORT}. Check the host, port, and firewall rules."
       exit 1
     fi
     ok "TCP ${DB_HOST}:${DB_PORT} is reachable"
-  elif timeout 5 bash -c "echo '' > /dev/tcp/${DB_HOST}/${DB_PORT}" 2>/dev/null; then
+  elif timeout 5 bash -c "echo '' > /dev/tcp/${DB_HOST_BARE}/${DB_PORT}" 2>/dev/null; then
     ok "TCP ${DB_HOST}:${DB_PORT} is reachable (via /dev/tcp)"
   else
     warn "Neither 'nc' nor /dev/tcp is available — skipping TCP reachability check."
@@ -887,11 +892,11 @@ _collect_db_config() {
     local pgpass_file
     pgpass_file="$(mktemp)"
     chmod 600 "${pgpass_file}"
-    printf '%s:%s:%s:%s:%s\n' "${DB_HOST}" "${DB_PORT}" "${DB_NAME}" "${DB_USER}" "${DB_PASS}" >"${pgpass_file}"
+    printf '%s:%s:%s:%s:%s\n' "${DB_HOST_BARE}" "${DB_PORT}" "${DB_NAME}" "${DB_USER}" "${DB_PASS}" >"${pgpass_file}"
 
     local psql_status=0
     if PGPASSFILE="${pgpass_file}" psql \
-        --host="${DB_HOST}" \
+        --host="${DB_HOST_BARE}" \
         --port="${DB_PORT}" \
         --username="${DB_USER}" \
         --dbname="${DB_NAME}" \
