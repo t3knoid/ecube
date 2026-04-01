@@ -235,6 +235,25 @@ _url_host() {
 # Surrounding brackets on IPv6 (e.g. [::1]) are stripped before the test.
 # Used by cert generation to decide whether to emit an IP SAN or a DNS SAN
 # for HOST — DNS SANs containing ':' or '[' are invalid per RFC 5280.
+# Pure predicate: returns 0 if val is a loopback address, 1 otherwise.
+# Matches the full 127.0.0.0/8 range, the DNS name "localhost" (case-insensitive),
+# the IPv6 loopback "::1", and the bracketed form "[::1]".
+# Used by the post-parse normalisation step to canonicalise --backend-host so that
+# every downstream same-host comparison (BACKEND_HOST == "127.0.0.1") is reliable.
+_is_loopback() {
+  local val="${1}"
+  # Strip surrounding brackets from IPv6 literals ([::1] → ::1).
+  val="${val#[}"
+  val="${val%]}"
+  # IPv4 loopback: entire 127.0.0.0/8 range.
+  [[ "${val}" =~ ^127\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && return 0
+  # DNS loopback name (case-insensitive).
+  [[ "${val,,}" == "localhost" ]] && return 0
+  # IPv6 loopback.
+  [[ "${val}" == "::1" ]] && return 0
+  return 1
+}
+
 _is_ip() {
   local val="${1#[[}"; val="${val%]]}"
   # IPv4: four dot-separated groups of digits
@@ -394,6 +413,19 @@ fi
 if [[ "${_EXPLICIT_INSECURE}" == true && -n "${BACKEND_CA_FILE}" ]]; then
   error "--allow-insecure-backend and --backend-ca-file are mutually exclusive: supplying a CA file implies verification should be enabled."
   exit 1
+fi
+# ---------------------------------------------------------------------------
+# Post-parse: canonicalise loopback variants of --backend-host to 127.0.0.1
+# ---------------------------------------------------------------------------
+# localhost, ::1, [::1], and the full 127.0.0.0/8 range are all equivalent to
+# 127.0.0.1 for same-host detection.  Normalising here means every downstream
+# comparison ([[ "${BACKEND_HOST}" == "127.0.0.1" ]]) works uniformly without
+# needing to enumerate loopback variants at each call site.
+if _is_loopback "${BACKEND_HOST}"; then
+  if [[ "${BACKEND_HOST}" != "127.0.0.1" ]]; then
+    warn "--backend-host '${BACKEND_HOST}' is a loopback address; treating as same-host (127.0.0.1)."
+  fi
+  BACKEND_HOST="127.0.0.1"
 fi
 # ---------------------------------------------------------------------------
 run() {
