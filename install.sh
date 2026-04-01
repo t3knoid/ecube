@@ -1560,10 +1560,19 @@ print_summary() {
     echo -e "${C_BOLD}=======================================================${C_RESET}"
     echo -e "  UI:  https://${HOST}:${UI_PORT}"
     echo ""
-    echo -e "  Ensure the backend API is reachable at:"
     local _summary_bh
     _summary_bh=$(_url_host "${BACKEND_HOST}")
-    echo -e "    https://${_summary_bh}:${API_PORT}"
+    if [[ "${BACKEND_HOST}" == "127.0.0.1" ]]; then
+      # Same-host topology: the backend was reconfigured to serve plain HTTP on
+      # loopback; nginx is the only TLS termination point and is the component
+      # operators should interact with.  The loopback address is not directly
+      # accessible and the scheme is HTTP, so avoid printing it as an https://
+      # URL which would mislead operators into thinking it is externally reachable.
+      echo -e "  nginx proxies /api/ → http://${_summary_bh}:${API_PORT}/ (loopback, not directly accessible)"
+    else
+      echo -e "  Ensure the backend API is reachable at:"
+      echo -e "    https://${_summary_bh}:${API_PORT}"
+    fi
     echo ""
     echo -e "  Service management:"
     echo -e "    sudo systemctl {start|stop|reload|status} nginx"
