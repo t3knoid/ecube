@@ -722,31 +722,40 @@ _maybe_download_release() {
   local checksum_name="ecube-package-${VERSION_TAG}.sha256"
   local base_url="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/${VERSION_TAG}"
 
+  # In dry-run mode short-circuit the entire download path.  mktemp, curl,
+  # sha256sum, and tar all have real filesystem side-effects; printing the
+  # intended actions is sufficient and keeps dry-run completely side-effect-free.
+  if [[ "${DRY_RUN}" == true ]]; then
+    echo -e "${C_YELLOW}[DRY-RUN]${C_RESET} Would download ${base_url}/${tarball_name}"
+    echo -e "${C_YELLOW}[DRY-RUN]${C_RESET} Would download ${base_url}/${checksum_name}"
+    echo -e "${C_YELLOW}[DRY-RUN]${C_RESET} Would verify sha256 checksum"
+    echo -e "${C_YELLOW}[DRY-RUN]${C_RESET} Would extract ${tarball_name} to ${INSTALL_DIR}"
+    return
+  fi
+
   info "Downloading ECUBE ${VERSION_TAG} from GitHub Releases..."
   # Use mktemp paths so VERSION_TAG is never interpolated into the filesystem.
   local tmp_tarball tmp_checksum
   tmp_tarball=$(mktemp /tmp/ecube-package.XXXXXXXXXX.tar.gz)
   tmp_checksum=$(mktemp /tmp/ecube-package.XXXXXXXXXX.sha256)
-  run curl -fsSL -o "${tmp_tarball}" "${base_url}/${tarball_name}"
-  run curl -fsSL -o "${tmp_checksum}" "${base_url}/${checksum_name}"
+  curl -fsSL -o "${tmp_tarball}" "${base_url}/${tarball_name}"
+  curl -fsSL -o "${tmp_checksum}" "${base_url}/${checksum_name}"
 
   info "Verifying checksum..."
-  if [[ "${DRY_RUN}" != true ]]; then
-    # sha256sum -c expects "<hash>  <path>" where the path matches the file on
-    # disk.  Rather than rewriting the recorded filename in-place with sed
-    # (which treats the pattern as a regex, so '.' in typical release filenames
-    # like "ecube-v1.2.3.tar.gz" can match unintended characters), extract just
-    # the hex digest and construct a fresh verification line ourselves.
-    local recorded_hash
-    recorded_hash=$(awk '{print $1}' "${tmp_checksum}")
-    printf '%s  %s\n' "${recorded_hash}" "${tmp_tarball}" > "${tmp_checksum}"
-    sha256sum -c "${tmp_checksum}"
-    ok "Checksum verified"
-  fi
+  # sha256sum -c expects "<hash>  <path>" where the path matches the file on
+  # disk.  Rather than rewriting the recorded filename in-place with sed
+  # (which treats the pattern as a regex, so '.' in typical release filenames
+  # like "ecube-v1.2.3.tar.gz" can match unintended characters), extract just
+  # the hex digest and construct a fresh verification line ourselves.
+  local recorded_hash
+  recorded_hash=$(awk '{print $1}' "${tmp_checksum}")
+  printf '%s  %s\n' "${recorded_hash}" "${tmp_tarball}" > "${tmp_checksum}"
+  sha256sum -c "${tmp_checksum}"
+  ok "Checksum verified"
 
   info "Extracting package to ${INSTALL_DIR}..."
-  run mkdir -p "${INSTALL_DIR}"
-  run tar -xzf "${tmp_tarball}" -C "${INSTALL_DIR}" --strip-components=1
+  mkdir -p "${INSTALL_DIR}"
+  tar -xzf "${tmp_tarball}" -C "${INSTALL_DIR}" --strip-components=1
   rm -f "${tmp_tarball}" "${tmp_checksum}"
 }
 
