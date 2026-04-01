@@ -1643,15 +1643,25 @@ configure_firewall() {
     return
   fi
 
+  local backend_is_local=false
+  if [[ "${INSTALL_BACKEND}" == true || "${BACKEND_HOST:-}" == "127.0.0.1" || "${BACKEND_HOST:-}" == "localhost" ]]; then
+    backend_is_local=true
+  fi
+
   if [[ "${INSTALL_FRONTEND}" == true ]]; then
     if _confirm "Allow TCP port ${UI_PORT} (UI) through ufw?"; then
       run ufw allow "${UI_PORT}/tcp"
       ok "ufw: allowed ${UI_PORT}/tcp"
     fi
-    # Deny direct API access from external hosts when nginx fronts it
-    if _confirm "Deny external access to API port ${API_PORT} (traffic should go through nginx)?"; then
-      run ufw deny "${API_PORT}/tcp"
-      ok "ufw: denied external access to ${API_PORT}/tcp"
+    # Deny direct API access from external hosts when nginx fronts it,
+    # but only when the backend API is running locally.
+    if [[ "${backend_is_local}" == true ]]; then
+      if _confirm "Deny external access to API port ${API_PORT} (traffic should go through nginx)?"; then
+        run ufw deny "${API_PORT}/tcp"
+        ok "ufw: denied external access to ${API_PORT}/tcp"
+      fi
+    else
+      info "Skipping ufw deny rule for API port ${API_PORT} because backend host appears to be remote (${BACKEND_HOST:-})."
     fi
   elif [[ "${INSTALL_BACKEND}" == true ]]; then
     local cidr=""
