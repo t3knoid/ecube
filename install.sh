@@ -1344,8 +1344,8 @@ EOF_PROXY
     # proxy_ssl_name must be a bare hostname or IP — never a bracketed IPv6
     # literal like [2001:db8::1], which would break SNI / cert verification.
     # Strip surrounding brackets if present; all other values pass through.
-    _bh_bare="${BACKEND_HOST#[[}"
-    _bh_bare="${_bh_bare%]]}"
+    _bh_bare="${BACKEND_HOST#[}"
+    _bh_bare="${_bh_bare%]}"
     if [[ -n "${BACKEND_CA_FILE}" ]]; then
       # Custom CA certificate supplied — verify against it.
       # proxy_ssl_server_name on sends SNI in the TLS ClientHello so the backend
