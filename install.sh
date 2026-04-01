@@ -198,7 +198,26 @@ _url_encode() {
 # No output and no exit — safe to use inside interactive prompt loops.
 _is_valid_host() {
   local val="$1"
-  [[ -n "${val}" && ! "${val}" =~ [^a-zA-Z0-9.\:\-\[\]] ]]
+
+  # Reject empty values immediately.
+  if [[ -z "${val}" ]]; then
+    return 1
+  fi
+
+  # If the value contains IPv6-specific syntax (':' or brackets), require it to look
+  # like an IPv6 literal (optional brackets, hex digits, colons, and dots only).
+  if [[ "${val}" == *[:\[\]]* ]]; then
+    # Accept forms like "2001:db8::1" or "[2001:db8::1]".
+    if [[ "${val}" =~ ^\[[0-9A-Fa-f:.]+\]$ || "${val}" =~ ^[0-9A-Fa-f:.]+$ ]]; then
+      # Must contain at least one ':' to be considered IPv6-like.
+      [[ "${val}" == *:* ]]
+    else
+      return 1
+    fi
+  else
+    # DNS name or IPv4 address: letters, digits, dots, and hyphens only.
+    [[ "${val}" =~ ^[a-zA-Z0-9.-]+$ ]]
+  fi
 }
 
 # Return the host in URL-safe form: raw IPv6 literals (containing ':' but not
