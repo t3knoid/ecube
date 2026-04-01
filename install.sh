@@ -197,6 +197,17 @@ _is_valid_host() {
   [[ -n "${val}" && ! "${val}" =~ [^a-zA-Z0-9.\:\-\[\]] ]]
 }
 
+# Return the host in URL-safe form: raw IPv6 literals (containing ':' but not
+# already bracketed) are wrapped in [...]; all other values pass through unchanged.
+_url_host() {
+  local val="$1"
+  if [[ "${val}" == *:* && "${val}" != \[* ]]; then
+    echo "[${val}]"
+  else
+    echo "${val}"
+  fi
+}
+
 # Verify that a flag's value argument is present and does not look like the
 # next flag.  Uses ${2-} (default-empty) so set -u does not abort first.
 _require_arg() {
@@ -1096,15 +1107,19 @@ server {
 EOF_NGINX
   if [[ "${BACKEND_HOST}" == "127.0.0.1" ]]; then
     # Same-host: uvicorn serves plain HTTP on loopback; TLS is terminated here.
+    local _bh_url
+    _bh_url=$(_url_host "${BACKEND_HOST}")
     cat >> /etc/nginx/sites-available/ecube <<EOF_PROXY
-        proxy_pass http://${BACKEND_HOST}:${API_PORT}/;
+        proxy_pass http://${_bh_url}:${API_PORT}/;
 EOF_PROXY
   else
     # Remote backend: proxy over HTTPS.
+    local _bh_url
+    _bh_url=$(_url_host "${BACKEND_HOST}")
     if [[ -n "${BACKEND_CA_FILE}" ]]; then
       # Custom CA certificate supplied — verify against it.
       cat >> /etc/nginx/sites-available/ecube <<EOF_PROXY
-        proxy_pass https://${BACKEND_HOST}:${API_PORT}/;
+        proxy_pass https://${_bh_url}:${API_PORT}/;
         proxy_ssl_verify on;
         proxy_ssl_trusted_certificate ${BACKEND_CA_FILE};
 EOF_PROXY
@@ -1117,13 +1132,13 @@ EOF_PROXY
       warn "TLS verification is DISABLED for remote backend ${BACKEND_HOST}:${API_PORT} (proxy_ssl_verify off)."
       warn "This is the default for quick start. Pass --backend-ca-file or use a CA-signed cert to enable verification."
       cat >> /etc/nginx/sites-available/ecube <<EOF_PROXY
-        proxy_pass https://${BACKEND_HOST}:${API_PORT}/;
+        proxy_pass https://${_bh_url}:${API_PORT}/;
         proxy_ssl_verify off; # default; see --backend-ca-file to enable verification
 EOF_PROXY
     else
       # Strict mode: verify using the system trust store.
       cat >> /etc/nginx/sites-available/ecube <<EOF_PROXY
-        proxy_pass https://${BACKEND_HOST}:${API_PORT}/;
+        proxy_pass https://${_bh_url}:${API_PORT}/;
         proxy_ssl_verify on;
 EOF_PROXY
     fi
@@ -1355,7 +1370,7 @@ print_summary() {
     echo -e "  UI:  https://${HOST}:${UI_PORT}"
     echo ""
     echo -e "  Ensure the backend API is reachable at:"
-    echo -e "    https://${BACKEND_HOST}:${API_PORT}"
+    echo -e "    https://$(_url_host "${BACKEND_HOST}"):${API_PORT}"
     echo ""
     echo -e "  Service management:"
     echo -e "    sudo systemctl {start|stop|reload|status} nginx"
