@@ -1263,8 +1263,13 @@ EOF_NGINX
 EOF_PROXY
   else
     # Remote backend: proxy over HTTPS.
-    local _bh_url
+    local _bh_url _bh_bare
     _bh_url=$(_url_host "${BACKEND_HOST}")
+    # proxy_ssl_name must be a bare hostname or IP — never a bracketed IPv6
+    # literal like [2001:db8::1], which would break SNI / cert verification.
+    # Strip surrounding brackets if present; all other values pass through.
+    _bh_bare="${BACKEND_HOST#[[}"
+    _bh_bare="${_bh_bare%]]}"
     if [[ -n "${BACKEND_CA_FILE}" ]]; then
       # Custom CA certificate supplied — verify against it.
       # proxy_ssl_server_name on sends SNI in the TLS ClientHello so the backend
@@ -1277,7 +1282,7 @@ EOF_PROXY
         proxy_ssl_verify          on;
         proxy_ssl_trusted_certificate ${BACKEND_CA_FILE};
         proxy_ssl_server_name     on;
-        proxy_ssl_name            ${BACKEND_HOST};
+        proxy_ssl_name            ${_bh_bare};
         proxy_ssl_verify_depth    2;
 EOF_PROXY
     elif [[ "${ALLOW_INSECURE_BACKEND}" == true ]]; then
@@ -1300,7 +1305,7 @@ EOF_PROXY
         proxy_pass https://${_bh_url}:${API_PORT}/;
         proxy_ssl_verify          on;
         proxy_ssl_server_name     on;
-        proxy_ssl_name            ${BACKEND_HOST};
+        proxy_ssl_name            ${_bh_bare};
         proxy_ssl_verify_depth    2;
 EOF_PROXY
     fi
