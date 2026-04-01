@@ -1677,8 +1677,8 @@ print_summary() {
     echo -e "${C_BOLD}=======================================================${C_RESET}"
     echo -e "${C_GREEN}  ECUBE backend ${installed_version} installed successfully${C_RESET}"
     echo -e "${C_BOLD}=======================================================${C_RESET}"
-    echo -e "  API:  https://${HOST}:${API_PORT}"
-    echo -e "  Docs: https://${HOST}:${API_PORT}/docs"
+    echo -e "  API:  https://${HOST_URL}:${API_PORT}"
+    echo -e "  Docs: https://${HOST_URL}:${API_PORT}/docs"
     echo ""
     echo -e "  TIP – restrict API access if this host is network-exposed:"
     echo -e "    sudo ufw allow from <trusted-cidr> to any port ${API_PORT}"
@@ -1697,7 +1697,7 @@ print_summary() {
     echo -e "${C_BOLD}=======================================================${C_RESET}"
     echo -e "${C_GREEN}  ECUBE frontend installed successfully${C_RESET}"
     echo -e "${C_BOLD}=======================================================${C_RESET}"
-    echo -e "  UI:  https://${HOST}:${UI_PORT}"
+    echo -e "  UI:  https://${HOST_URL}:${UI_PORT}"
     echo ""
     local _summary_bh
     _summary_bh=$(_url_host "${BACKEND_HOST}")
