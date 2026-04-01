@@ -130,7 +130,10 @@ Options:
   --hostname HOST        Hostname/IP for TLS cert CN  (default: \$(hostname -f))
   --cert-validity DAYS   Self-signed cert validity    (default: 730, max: 730 — 2 years)
   --yes, -y              Non-interactive / unattended mode
-  --version TAG          Install a specific release tag instead of latest
+  --version TAG          Download and install a specific GitHub release tag.
+                         Must be exact format: v<major>.<minor>.<patch> (e.g. v0.2.0).
+                         Pre-releases, build metadata, and tags without a leading v
+                         are not supported.
   --uninstall            Remove ECUBE from this host
   --dry-run              Print all actions without executing them
   -h, --help             Show this help message
