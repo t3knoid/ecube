@@ -215,7 +215,7 @@ Each value is validated as it is entered. The installer then:
 
 ### Unattended mode (`--yes`)
 
-All five database flags become **required** when `--yes` is passed:
+Three flags without defaults become **required** when `--yes` is passed: `--db-host`, `--db-user`, and `--db-password`. `--db-port` and `--db-name` are optional — their defaults (`5432` and `ecube`) are used if omitted:
 
 ```bash
 sudo ./install.sh --yes \
