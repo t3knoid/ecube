@@ -773,7 +773,20 @@ _generate_certs() {
   if [[ "${DRY_RUN}" != true ]]; then
     chmod 600 "${cert_dir}/key.pem"
     chmod 644 "${cert_dir}/cert.pem"
-    chown -R ecube:ecube "${cert_dir}"
+    # In nginx topologies (frontend-only or full install), nginx is the TLS
+    # terminator and the backend does not need the private key.  Keep the key
+    # root-owned so it is not readable by the 'ecube' service account, while
+    # still allowing nginx (running with a root master) to load it.  In a
+    # backend-only install (no nginx), the ECUBE service terminates TLS and
+    # therefore must be able to read the key.
+    if [[ "${INSTALL_FRONTEND:-false}" == true ]]; then
+      # nginx topology: leave key.pem owned by root:root; only the public
+      # certificate needs to be readable by 'ecube' (if at all).
+      chown ecube:ecube "${cert_dir}/cert.pem"
+    else
+      # backend-only topology: allow the 'ecube' service to terminate TLS.
+      chown ecube:ecube "${cert_dir}/key.pem" "${cert_dir}/cert.pem"
+    fi
   fi
   ok "TLS certificates written to ${cert_dir}"
 }
