@@ -734,6 +734,35 @@ _resolve_host() {
 # ===========================================================================
 # TLS CERTIFICATES
 # ===========================================================================
+_reconcile_cert_permissions() {
+  local cert_dir="$1"
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    if [[ "${INSTALL_FRONTEND:-false}" == true ]]; then
+      echo "[DRY-RUN] Would set ${cert_dir}/key.pem mode 600 owner root:root (nginx TLS terminator)"
+      echo "[DRY-RUN] Would set ${cert_dir}/cert.pem mode 644 owner ecube:ecube"
+    else
+      echo "[DRY-RUN] Would set ${cert_dir}/key.pem mode 600 owner ecube:ecube (backend TLS terminator)"
+      echo "[DRY-RUN] Would set ${cert_dir}/cert.pem mode 644 owner ecube:ecube"
+    fi
+    return
+  fi
+
+  chmod 600 "${cert_dir}/key.pem"
+  chmod 644 "${cert_dir}/cert.pem"
+
+  # Keep ownership aligned with the selected runtime topology so re-running the
+  # installer with different component flags remains safe and idempotent.
+  if [[ "${INSTALL_FRONTEND:-false}" == true ]]; then
+    # nginx terminates TLS: key stays root-owned; cert can be ecube-owned.
+    chown root:root "${cert_dir}/key.pem"
+    chown ecube:ecube "${cert_dir}/cert.pem"
+  else
+    # backend-only: uvicorn terminates TLS and must read both files as ecube.
+    chown ecube:ecube "${cert_dir}/key.pem" "${cert_dir}/cert.pem"
+  fi
+}
+
 _generate_certs() {
   local cert_dir="${INSTALL_DIR}/certs"
   # Normalise bracketed IPv6 literals once ([2001:db8::1] → 2001:db8::1) so
@@ -741,7 +770,8 @@ _generate_certs() {
   # For DNS names and IPv4, _bare_host == HOST (nothing is stripped).
   local _bare_host="${HOST#[}"; _bare_host="${_bare_host%]}"
   if [[ -f "${cert_dir}/cert.pem" && -f "${cert_dir}/key.pem" ]]; then
-    info "TLS certificates already exist — skipping generation."
+    info "TLS certificates already exist — skipping generation and reconciling permissions for current topology."
+    _reconcile_cert_permissions "${cert_dir}"
     return
   fi
   info "Generating self-signed TLS certificate (CN=${_bare_host}, validity=${CERT_VALIDITY} days)..."
@@ -770,24 +800,7 @@ _generate_certs() {
     -subj   "/CN=${_bare_host}" \
     -addext "subjectAltName=${_san}" \
     2>/dev/null
-  if [[ "${DRY_RUN}" != true ]]; then
-    chmod 600 "${cert_dir}/key.pem"
-    chmod 644 "${cert_dir}/cert.pem"
-    # In nginx topologies (frontend-only or full install), nginx is the TLS
-    # terminator and the backend does not need the private key.  Keep the key
-    # root-owned so it is not readable by the 'ecube' service account, while
-    # still allowing nginx (running with a root master) to load it.  In a
-    # backend-only install (no nginx), the ECUBE service terminates TLS and
-    # therefore must be able to read the key.
-    if [[ "${INSTALL_FRONTEND:-false}" == true ]]; then
-      # nginx topology: leave key.pem owned by root:root; only the public
-      # certificate needs to be readable by 'ecube' (if at all).
-      chown ecube:ecube "${cert_dir}/cert.pem"
-    else
-      # backend-only topology: allow the 'ecube' service to terminate TLS.
-      chown ecube:ecube "${cert_dir}/key.pem" "${cert_dir}/cert.pem"
-    fi
-  fi
+  _reconcile_cert_permissions "${cert_dir}"
   ok "TLS certificates written to ${cert_dir}"
 }
 
