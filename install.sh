@@ -1157,6 +1157,11 @@ server {
     # The trailing slash on proxy_pass strips the /api prefix so that
     # requests to /api/drives, /api/health, etc. reach the backend at
     # /drives, /health, etc. (FastAPI routes are at root level).
+    # The exact-match redirect ensures GET /api (no trailing slash) is
+    # normalised to /api/ rather than falling through to the SPA handler.
+    location = /api {
+        return 301 /api/;
+    }
     location /api/ {
 EOF_NGINX
   if [[ "${BACKEND_HOST}" == "127.0.0.1" ]]; then
@@ -1392,7 +1397,7 @@ print_summary() {
     echo -e "${C_GREEN}  ECUBE ${installed_version} installed successfully${C_RESET}"
     echo -e "${C_BOLD}=======================================================${C_RESET}"
     echo -e "  UI:           https://${HOST}:${UI_PORT}"
-    echo -e "  API:          https://${HOST}:${UI_PORT}/api"
+    echo -e "  API:          https://${HOST}:${UI_PORT}/api/"
     echo -e "  Setup wizard: https://${HOST}:${UI_PORT}/setup"
     echo ""
     echo -e "  Complete initial configuration via the Setup Wizard."
