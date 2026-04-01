@@ -267,9 +267,20 @@ The installer generates a self-signed RSA-2048 certificate if `<install-dir>/cer
 openssl req -x509 -nodes -days <cert-validity> -newkey rsa:2048 \
   -keyout <install-dir>/certs/key.pem \
   -out   <install-dir>/certs/cert.pem \
-  -subj  "/CN=<hostname>" \
-  -addext "subjectAltName=IP:<ip>,DNS:<hostname>"
+  -subj  "/CN=<hostname-or-ip>" \
+  -addext "subjectAltName=<computed-san-list>"
 ```
+
+`<computed-san-list>` is built conditionally by the installer:
+
+- If `--hostname` (or detected host) is a **DNS name**: `DNS:<hostname>,IP:<host-ip>`
+- If `--hostname` is an **IP literal** (IPv4 or IPv6): `IP:<hostname-ip>`
+- If `--hostname` is an IP literal and differs from detected `<host-ip>`: `IP:<hostname-ip>,IP:<host-ip>`
+
+Notes:
+
+- IPv6 passed in bracketed form (for example `[2001:db8::10]`) is normalized to the bare address (`2001:db8::10`) for CN/SAN generation.
+- The installer does not emit `DNS:` SAN entries for IP literals (especially important for IPv6), because values containing `:` are not valid DNS SAN names.
 
 **Bring your own certificate:** Place your `cert.pem` and `key.pem` in `<install-dir>/certs/` before running the installer. The installer skips generation if those files already exist.
 
