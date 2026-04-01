@@ -541,6 +541,10 @@ preflight() {
   fi
   local free_kb
   free_kb=$(df -k "${parent_dir}" | awk 'NR==2 {print $4}')
+  if [[ ! "${free_kb}" =~ ^[0-9]+$ ]]; then
+    error "Could not determine free disk space at ${parent_dir} — df/awk returned '${free_kb}'. Is df from coreutils and the filesystem mounted?"
+    exit 1
+  fi
   if (( free_kb < 2097152 )); then
     error "Insufficient disk space at ${parent_dir}: need ≥ 2 GiB, have $(( free_kb / 1024 )) MiB."
     exit 1
@@ -612,6 +616,14 @@ preflight() {
           # requires bullseye-backports.  No remote script is executed.
           local codename
           codename="$(. /etc/os-release && echo "${VERSION_CODENAME}")"
+          # Reject anything that isn't a simple Debian codename (lowercase letters,
+          # digits, hyphens) before interpolating into a bash -c string and a
+          # sources.list.d filename executed as root.
+          if [[ ! "${codename}" =~ ^[a-z][a-z0-9-]*$ ]]; then
+            error "Cannot determine a safe Debian codename from /etc/os-release (got '${codename}')."
+            error "Please add the backports repository manually and re-run."
+            exit 1
+          fi
           if ! apt-cache show python3.11 &>/dev/null; then
             info "python3.11 not in ${codename} main; enabling ${codename}-backports ..."
             run bash -c "echo 'deb https://deb.debian.org/debian ${codename}-backports main' \
@@ -682,6 +694,13 @@ _resolve_host() {
     HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
   fi
   HOST_IP="${HOST_IP:-127.0.0.1}"
+  # Guard: ip/hostname -I can sometimes produce garbage on unusual network
+  # configurations.  If the result isn't a valid IP, fall back to 127.0.0.1
+  # so OpenSSL cert generation never receives a malformed IP SAN value.
+  if ! _is_ip "${HOST_IP}"; then
+    warn "Detected HOST_IP '${HOST_IP}' is not a valid IP address — falling back to 127.0.0.1."
+    HOST_IP="127.0.0.1"
+  fi
   info "Hostname: ${HOST}  IP: ${HOST_IP}"
 }
 
@@ -810,6 +829,15 @@ _maybe_download_release() {
   # the hex digest and construct a fresh verification line ourselves.
   local recorded_hash
   recorded_hash=$(awk '{print $1}' "${tmp_checksum}")
+  # Validate before constructing the verification line: a non-hex or wrong-length
+  # value would embed garbage into the sha256sum input file and produce a
+  # misleading error.  A newline in the value (from a crafted file) could also
+  # inject a second record.
+  if [[ ! "${recorded_hash}" =~ ^[0-9a-fA-F]{64}$ ]]; then
+    error "Downloaded checksum file does not contain a valid SHA-256 digest (got '${recorded_hash}')."
+    rm -f "${tmp_tarball}" "${tmp_checksum}"
+    exit 1
+  fi
   printf '%s  %s\n' "${recorded_hash}" "${tmp_tarball}" > "${tmp_checksum}"
   sha256sum -c "${tmp_checksum}"
   ok "Checksum verified"
@@ -1272,8 +1300,12 @@ install_frontend() {
       local _detected_port
       _detected_port=$(grep -oP -- '--port\s+\K[0-9]+' "${unit_file}" 2>/dev/null | head -1 || true)
       if [[ -n "${_detected_port}" && "${_detected_port}" != "${API_PORT}" ]]; then
-        info "Detected existing API port ${_detected_port} from unit file — using it (pass --api-port to override)."
-        API_PORT="${_detected_port}"
+        if _is_valid_port "${_detected_port}"; then
+          info "Detected existing API port ${_detected_port} from unit file — using it (pass --api-port to override)."
+          API_PORT="${_detected_port}"
+        else
+          warn "Detected port '${_detected_port}' from unit file is not a valid port number (1–65535) — keeping ${API_PORT}."
+        fi
       fi
     fi
 
