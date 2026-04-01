@@ -191,7 +191,7 @@ Only leave TLS verification disabled (the default) on trusted networks (VPN, pri
 > API_ROOT_PATH=/api
 > ```
 >
-> Without these settings FastAPI does not know it is mounted at `/api`, so Swagger UI (`/api/docs`), the OpenAPI schema (`/api/openapi.json`), and all "Try it out" request URLs will be incorrect. `TRUST_PROXY_HEADERS=true` is needed so FastAPI reconstructs the correct `https://` scheme and host from the `X-Forwarded-*` headers that nginx injects. After editing `.env`, restart the backend service:
+> `API_ROOT_PATH=/api` tells FastAPI that the application is mounted behind nginx at `/api`, so Swagger UI (`/api/docs`), the OpenAPI schema (`/api/openapi.json`), and all "Try it out" request URLs are generated with the correct prefix. `TRUST_PROXY_HEADERS=true` controls whether the backend trusts proxy headers (such as `X-Forwarded-For`) from nginx when determining the client IP address, which affects audit logging and any IP-aware features. After editing `.env`, restart the backend service:
 >
 > ```bash
 > sudo systemctl restart ecube.service
