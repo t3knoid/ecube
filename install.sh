@@ -74,6 +74,8 @@ INSTALL_BACKEND=true
 INSTALL_FRONTEND=true
 BACKEND_HOST="127.0.0.1"
 ALLOW_INSECURE_BACKEND=true
+_EXPLICIT_INSECURE=false   # set when --allow-insecure-backend is passed explicitly
+_EXPLICIT_SECURE=false    # set when --secure-backend is passed explicitly
 BACKEND_CA_FILE=""
 
 # PostgreSQL connection — populated interactively or via CLI flags
@@ -251,8 +253,8 @@ while [[ $# -gt 0 ]]; do
       _require_arg "$1" "${2-}"
       _validate_host_arg "--backend-host" "$2"
       BACKEND_HOST="$2"; shift 2 ;;
-    --allow-insecure-backend)  ALLOW_INSECURE_BACKEND=true;  shift ;;
-    --secure-backend)          ALLOW_INSECURE_BACKEND=false; shift ;;
+    --allow-insecure-backend)  ALLOW_INSECURE_BACKEND=true;  _EXPLICIT_INSECURE=true; shift ;;
+    --secure-backend)          ALLOW_INSECURE_BACKEND=false; _EXPLICIT_SECURE=true;  shift ;;
     --backend-ca-file)
       _require_arg "$1" "${2-}"
       _validate_ca_file_arg "$1" "$2"
@@ -340,7 +342,16 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ---------------------------------------------------------------------------
-# Dry-run wrapper
+# Post-parse: reject conflicting TLS backend flag combinations
+# ---------------------------------------------------------------------------
+if [[ "${_EXPLICIT_INSECURE}" == true && "${_EXPLICIT_SECURE}" == true ]]; then
+  error "--allow-insecure-backend and --secure-backend are mutually exclusive."
+  exit 1
+fi
+if [[ "${_EXPLICIT_INSECURE}" == true && -n "${BACKEND_CA_FILE}" ]]; then
+  error "--allow-insecure-backend and --backend-ca-file are mutually exclusive: supplying a CA file implies verification should be enabled."
+  exit 1
+fi
 # ---------------------------------------------------------------------------
 run() {
   if [[ "${DRY_RUN}" == true ]]; then
