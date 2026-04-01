@@ -848,13 +848,28 @@ _collect_db_config() {
   # ── Credential check (psql) ────────────────────────────────────────────────
   if [[ "${DRY_RUN}" != true ]] && command -v psql &>/dev/null; then
     info "Verifying credentials with psql..."
-    if PGPASSWORD="${DB_PASS}" psql \
+    # Use a temporary PGPASSFILE instead of exposing the password via PGPASSWORD.
+    local pgpass_file
+    pgpass_file="$(mktemp)"
+    chmod 600 "${pgpass_file}"
+    printf '%s:%s:%s:%s:%s\n' "${DB_HOST}" "${DB_PORT}" "${DB_NAME}" "${DB_USER}" "${DB_PASS}" >"${pgpass_file}"
+
+    local psql_status=0
+    if PGPASSFILE="${pgpass_file}" psql \
         --host="${DB_HOST}" \
         --port="${DB_PORT}" \
         --username="${DB_USER}" \
         --dbname="${DB_NAME}" \
         --command='SELECT 1;' \
         &>/dev/null; then
+      psql_status=0
+    else
+      psql_status=$?
+    fi
+
+    rm -f "${pgpass_file}"
+
+    if [[ "${psql_status}" -eq 0 ]]; then
       ok "PostgreSQL credentials verified"
     else
       error "psql could not connect to ${DB_NAME}@${DB_HOST}:${DB_PORT} as '${DB_USER}'."
