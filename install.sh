@@ -1308,8 +1308,10 @@ install_frontend() {
   # 4. nginx site config
   info "Writing nginx site config /etc/nginx/sites-available/ecube..."
   if [[ "${DRY_RUN}" != true ]]; then
+        # server_name takes a bare host — brackets are valid in URL authority
+        # (proxy_pass https://[::1]:...) but not as nginx server_name tokens.
         local _server_name_host
-        _server_name_host=$(_url_host "${HOST}")
+        _server_name_host="${HOST#[}"; _server_name_host="${_server_name_host%]}"
         cat > /etc/nginx/sites-available/ecube <<EOF_NGINX
 server {
     listen ${UI_PORT} ssl;
