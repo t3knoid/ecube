@@ -274,10 +274,34 @@ _is_loopback() {
 # DNS SAN for HOST — DNS SANs containing ':' or '[' are invalid per RFC 5280.
 _is_ip() {
   local val="${1#[}"; val="${val%]}"
-  # IPv4: four dot-separated groups of digits
-  [[ "${val}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && return 0
-  # IPv6: presence of at least one colon
-  [[ "${val}" == *:* ]] && return 0
+
+  # IPv4: exactly four dot-separated octets, each 0–255.
+  if [[ "${val}" == *.* && "${val}" != *:* ]]; then
+    local IFS='.'
+    local octets
+    read -r -a octets <<< "${val}"
+    if [[ "${#octets[@]}" -eq 4 ]]; then
+      local o valid_ipv4=1
+      for o in "${octets[@]}"; do
+        # Must be all digits.
+        [[ "${o}" =~ ^[0-9]+$ ]] || { valid_ipv4=0; break; }
+        # Each octet must be within 0–255.
+        if ! (( o >= 0 && o <= 255 )); then
+          valid_ipv4=0
+          break
+        fi
+      done
+      if [[ "${valid_ipv4}" -eq 1 ]]; then
+        return 0
+      fi
+    fi
+  fi
+
+  # IPv6: require at least one colon and only hex digits, colons, and dots
+  # (dots allow IPv4-mapped forms like ::ffff:192.0.2.1).
+  if [[ "${val}" == *:* && "${val}" =~ ^[0-9A-Fa-f:.]+$ ]]; then
+    return 0
+  fi
   return 1
 }
 
