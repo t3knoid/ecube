@@ -122,7 +122,7 @@ At the end it prints a summary with the UI URL, API URL, and service management 
 | `--db-host HOST` | *(prompted)* | **Backend installs only.** PostgreSQL server hostname or IP address. Must be non-empty and contain only DNS/IP-safe characters. Required in `--yes` mode. Ignored for `--frontend-only`. |
 | `--db-port PORT` | `5432` | **Backend installs only.** PostgreSQL server port. Must be a valid integer between 1 and 65535. Ignored for `--frontend-only`. |
 | `--db-name NAME` | `ecube` | **Backend installs only.** Name of the PostgreSQL database. Must contain only alphanumerics and underscores. Ignored for `--frontend-only`. |
-| `--db-user USER` | *(prompted)* | **Backend installs only.** PostgreSQL username. Must be non-empty and must not contain whitespace, `/`, or `@`. Required in `--yes` mode. Ignored for `--frontend-only`. |
+| `--db-user USER` | *(prompted)* | **Backend installs only.** PostgreSQL username. Must be non-empty and must contain only alphanumerics and underscores. Required in `--yes` mode. Ignored for `--frontend-only`. |
 | `--db-password PASS` | *(prompted)* | **Backend installs only.** PostgreSQL password. Must be non-empty and must not contain whitespace. Required in `--yes` mode. All characters outside the RFC 3986 unreserved set are percent-encoded automatically when building `DATABASE_URL`. Ignored for `--frontend-only`. |
 | `--hostname HOST` | `$(hostname -f)` | Hostname/IP used as TLS certificate CN and in summary URLs |
 | `--cert-validity DAYS` | `730` | Self-signed certificate validity in days |
