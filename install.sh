@@ -1533,8 +1533,8 @@ configure_firewall() {
     fi
     # Deny direct API access from external hosts when nginx fronts it
     if _confirm "Deny external access to API port ${API_PORT} (traffic should go through nginx)?"; then
-      run ufw deny "${API_PORT}"
-      ok "ufw: denied external access to ${API_PORT}"
+      run ufw deny "${API_PORT}/tcp"
+      ok "ufw: denied external access to ${API_PORT}/tcp"
     fi
   elif [[ "${INSTALL_BACKEND}" == true ]]; then
     local cidr=""
@@ -1543,8 +1543,8 @@ configure_firewall() {
     else
       read -r -p "$(echo -e "${C_YELLOW}Enter source CIDR to allow for API port ${API_PORT} (leave blank to skip):${C_RESET} ")" cidr
       if [[ -n "${cidr}" ]]; then
-        run ufw allow from "${cidr}" to any port "${API_PORT}"
-        ok "ufw: allowed ${cidr} → port ${API_PORT}"
+        run ufw allow from "${cidr}" to any port "${API_PORT}" proto tcp
+        ok "ufw: allowed ${cidr} → port ${API_PORT}/tcp"
       fi
     fi
   fi
@@ -1696,8 +1696,8 @@ print_summary() {
     echo -e "  Docs: https://${HOST_URL}:${API_PORT}/docs"
     echo ""
     echo -e "  TIP – restrict API access if this host is network-exposed:"
-    echo -e "    sudo ufw allow from <trusted-cidr> to any port ${API_PORT}"
-    echo -e "    sudo ufw deny ${API_PORT}"
+    echo -e "    sudo ufw allow from <trusted-cidr> to any port ${API_PORT} proto tcp"
+    echo -e "    sudo ufw deny ${API_PORT}/tcp"
     echo ""
     echo -e "  Service management:"
     echo -e "    sudo systemctl {start|stop|restart|status} ecube"
