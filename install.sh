@@ -1296,11 +1296,31 @@ install_frontend() {
   fi
   ok "Frontend files deployed to ${www_dir}"
 
-  # ${INSTALL_DIR} is owned ecube:ecube with mode 750, so "other" (e.g. the nginx
-  # www-data user) cannot traverse it to reach ${www_dir}.  Add the execute bit
-  # for "other" — this grants path traversal only; directory listing (read bit)
-  # remains restricted to the ecube group.
-  run chmod o+x "${INSTALL_DIR}"
+  # ${INSTALL_DIR} is owned ecube:ecube with mode 750, so nginx (www-data) cannot
+  # traverse it to reach ${www_dir}.  Rather than granting world execute (o+x),
+  # which exposes all world-readable sub-paths under ${INSTALL_DIR} to every
+  # local user, create a small bridge group ecube-www containing only www-data
+  # and grant that group traverse-only access (--x, no read/listing).
+  #   ecube:ecube-www 710  → ecube owner keeps full rwx; ecube-www (=www-data)
+  #                          gets --x (path traversal only, no listing); others
+  #                          get nothing.
+  if [[ "${DRY_RUN}" != true ]]; then
+    if ! getent group ecube-www &>/dev/null; then
+      groupadd --system ecube-www
+      ok "Created system group 'ecube-www'"
+    else
+      info "Group 'ecube-www' already exists — skipping creation."
+    fi
+    # Add www-data to the bridge group so nginx can traverse ${INSTALL_DIR}.
+    usermod -aG ecube-www www-data
+    ok "Added www-data to group 'ecube-www'"
+    # Re-own and tighten ${INSTALL_DIR}: group becomes ecube-www, mode 710.
+    chown ecube:ecube-www "${INSTALL_DIR}"
+    chmod 710 "${INSTALL_DIR}"
+    ok "Set ${INSTALL_DIR} to ecube:ecube-www 710 (nginx traversal via group, no world execute)"
+  else
+    echo "[DRY-RUN] Would create group 'ecube-www', add www-data to it, and set ${INSTALL_DIR} to ecube:ecube-www 710"
+  fi
 
   # 3. TLS certificates (shared with backend if co-installed, or generate fresh)
   _generate_certs
