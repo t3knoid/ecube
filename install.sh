@@ -1152,12 +1152,23 @@ _write_env_file() {
       fi
       ok "DATABASE_URL updated in .env"
     fi
-    # When the topology includes nginx, ensure the proxy-related keys are
-    # correct regardless of how the file was originally created.
+    # Always reconcile proxy-related keys to the selected topology so that a
+    # re-run with a different component set (e.g. --backend-only after a full
+    # install) doesn't leave stale settings that enable header spoofing or
+    # produce wrong OpenAPI URLs.
+    #   nginx present  → TRUST_PROXY_HEADERS=true,  API_ROOT_PATH=/api
+    #   backend-only   → TRUST_PROXY_HEADERS=false, API_ROOT_PATH=
+    local _proxy_trust _proxy_root
     if [[ "${INSTALL_FRONTEND}" == true ]]; then
-      info "Patching proxy-related keys for full-install topology..."
-      _patch_env_proxy_keys "${env_file}" "true" "/api"
+      _proxy_trust="true"
+      _proxy_root="/api"
+      info "Reconciling proxy keys for nginx topology (TRUST_PROXY_HEADERS=true, API_ROOT_PATH=/api)..."
+    else
+      _proxy_trust="false"
+      _proxy_root=""
+      info "Reconciling proxy keys for backend-only topology (TRUST_PROXY_HEADERS=false, API_ROOT_PATH=)..."
     fi
+    _patch_env_proxy_keys "${env_file}" "${_proxy_trust}" "${_proxy_root}"
     return
   fi
   info "Writing .env file..."
