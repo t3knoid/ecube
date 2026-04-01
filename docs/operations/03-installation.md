@@ -276,7 +276,7 @@ The `ecube-setup` CLI (`/opt/ecube/venv/bin/ecube-setup`) is an advanced alterna
    sudo ./install.sh
    ```
 
-3. Application files (`app/`, `alembic/`, etc.) are overwritten unconditionally. `.env` is **never overwritten** — existing operator secrets are preserved.
+3. Application files (`app/`, `alembic/`, etc.) are **overwritten where present** — the installer copies a fixed list of items from the new release onto the existing installation. Files or directories that existed in the previous release but are no longer shipped are **not removed**; stale content may remain under `INSTALL_DIR` until manually cleaned up or a full uninstall/reinstall is performed. `.env` is **never overwritten** — existing operator secrets are preserved.
 4. The service is always restarted after an upgrade.
 5. **Run database migrations** after the service restarts — open the setup wizard in a browser, or run `alembic upgrade head` directly:
 
