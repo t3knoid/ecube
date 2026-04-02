@@ -826,7 +826,7 @@ _generate_certs() {
     -out    "${cert_dir}/cert.pem" \
     -subj   "/CN=${_bare_host}" \
     -addext "subjectAltName=${_san}" \
-    2>/dev/null
+    2>>"${LOG_FILE}"
   _reconcile_cert_permissions "${cert_dir}"
   ok "TLS certificates written to ${cert_dir}"
 }
