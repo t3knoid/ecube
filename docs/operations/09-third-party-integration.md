@@ -1,4 +1,4 @@
-# 10. Third-Party Integration Guide
+# 09. Third-Party Integration Guide
 
 This document provides guidance for third-party applications that need to programmatically interface with the ECUBE system to submit evidence copy jobs using the existing REST API endpoints.
 
