@@ -145,8 +145,10 @@ EOF
 _validate_host_arg() {
   local flag="$1" val="$2"
   if ! _is_valid_host "${val}"; then
-    echo "ERROR: ${flag} value '${val}' contains invalid characters." >&2
-    echo "       Allowed: alphanumerics, '.', '-', ':', '[', ']' (DNS names and IPv4/IPv6 addresses only)." >&2
+    echo "ERROR: ${flag} value '${val}' is not a valid hostname or IP address." >&2
+    echo "       Accepted forms: DNS name (e.g. host.example.com), IPv4 (e.g. 192.168.1.1)," >&2
+    echo "       bare IPv6 (e.g. 2001:db8::1), or bracketed IPv6 (e.g. [2001:db8::1])." >&2
+    echo "       host:port forms are not accepted — supply the host and port separately." >&2
     exit 1
   fi
 }
@@ -225,20 +227,30 @@ _is_valid_host() {
     return 1
   fi
 
-  # If the value contains IPv6-specific syntax (':' or brackets), require it to look
-  # like an IPv6 literal (optional brackets, hex digits, colons, and dots only).
-  if [[ "${val}" == *[:\[\]]* ]]; then
-    # Accept forms like "2001:db8::1" or "[2001:db8::1]".
-    if [[ "${val}" =~ ^\[[0-9A-Fa-f:.]+\]$ || "${val}" =~ ^[0-9A-Fa-f:.]+$ ]]; then
-      # Must contain at least one ':' to be considered IPv6-like.
-      [[ "${val}" == *:* ]]
-    else
-      return 1
+  # Bracketed IPv6 literal: [<content>]
+  # Strip the brackets and require the interior to look like IPv6 (hex digits,
+  # colons, dots only) and contain at least two colons — the shortest valid IPv6
+  # address ("::" or "::1") always has two.
+  if [[ "${val}" == \[*\] ]]; then
+    local inner="${val:1:${#val}-2}"
+    if [[ "${inner}" =~ ^[0-9A-Fa-f:.]+$ && "${inner}" == *:*:* ]]; then
+      return 0
     fi
-  else
-    # DNS name or IPv4 address: letters, digits, dots, and hyphens only.
-    [[ "${val}" =~ ^[a-zA-Z0-9.-]+$ ]]
+    return 1
   fi
+
+  # Bare IPv6 literal (no brackets): must contain at least two colons.
+  # This rejects "host:port" typos (exactly one colon) while accepting all
+  # valid bare IPv6 forms ("::1", "2001:db8::1", etc.).
+  if [[ "${val}" == *:* ]]; then
+    if [[ "${val}" =~ ^[0-9A-Fa-f:.]+$ && "${val}" == *:*:* ]]; then
+      return 0
+    fi
+    return 1
+  fi
+
+  # DNS name or IPv4 address: letters, digits, dots, and hyphens only.
+  [[ "${val}" =~ ^[a-zA-Z0-9.-]+$ ]]
 }
 
 # Return the host in URL-safe form: raw IPv6 literals (containing ':' but not
