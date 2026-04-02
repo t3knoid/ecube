@@ -1165,6 +1165,10 @@ install_backend() {
       warn ".env exists but DATABASE_URL is missing/empty/unusable — collecting database credentials."
     fi
     _collect_db_config
+    # We obtained explicit database configuration for this run (either via
+    # CLI flags or interactive prompts), so ensure _write_env_file updates
+    # DATABASE_URL instead of preserving a potentially unusable value.
+    _EXPLICIT_DB=true
   fi
 
   # 8. .env file
