@@ -1077,6 +1077,37 @@ _collect_db_config() {
   fi
 }
 
+_env_has_usable_database_url() {
+  local env_file="$1"
+  [[ -f "${env_file}" ]] || return 1
+
+  # Use the last DATABASE_URL assignment in the file (matching dotenv behavior
+  # where later entries override earlier ones).
+  local db_line
+  db_line="$(grep -E '^[[:space:]]*DATABASE_URL=' "${env_file}" 2>/dev/null | tail -1 || true)"
+  [[ -n "${db_line}" ]] || return 1
+
+  local db_value="${db_line#*=}"
+  # Trim leading/trailing whitespace.
+  db_value="${db_value#"${db_value%%[![:space:]]*}"}"
+  db_value="${db_value%"${db_value##*[![:space:]]}"}"
+  # Unwrap matching surrounding quotes if present.
+  if (( ${#db_value} >= 2 )); then
+    local _first_char="${db_value:0:1}"
+    local _last_char="${db_value: -1}"
+    if [[ "${_first_char}" == '"' && "${_last_char}" == '"' ]] ||
+       [[ "${_first_char}" == "'" && "${_last_char}" == "'" ]]; then
+      db_value="${db_value:1:${#db_value}-2}"
+    fi
+  fi
+
+  # Treat blank or obvious placeholders as unusable.
+  [[ -n "${db_value}" ]] || return 1
+  [[ "${db_value}" == "<"*">" ]] && return 1
+
+  return 0
+}
+
 # ===========================================================================
 # BACKEND INSTALLATION
 # ===========================================================================
@@ -1122,18 +1153,17 @@ install_backend() {
   _generate_certs
 
   # 7. Database configuration
-  # Skip credential collection when .env already exists and the operator has
-  # not supplied any --db-* flags — the existing DATABASE_URL is preserved as-is.
-  # When --db-* flags ARE given on a re-run, collect and validate the new
-  # credentials; _write_env_file will then patch DATABASE_URL into the
-  # existing file rather than overwriting it.
-  local env_file_exists=false
-  [[ -f "${INSTALL_DIR}/.env" ]] && env_file_exists=true
-
-  if [[ "${env_file_exists}" == true && "${_EXPLICIT_DB}" == false ]]; then
-    info ".env already exists and no --db-* flags supplied — skipping database credential collection."
+  # Skip credential collection only when .env already has a usable DATABASE_URL
+  # and no --db-* flags were supplied. Otherwise, collect credentials so we
+  # never continue with an empty or placeholder DB connection string.
+  local env_file="${INSTALL_DIR}/.env"
+  if [[ "${_EXPLICIT_DB}" == false ]] && _env_has_usable_database_url "${env_file}"; then
+    info ".env contains a usable DATABASE_URL and no --db-* flags were supplied — skipping database credential collection."
     info "Existing DATABASE_URL will be preserved unchanged."
   else
+    if [[ "${_EXPLICIT_DB}" == false && -f "${env_file}" ]]; then
+      warn ".env exists but DATABASE_URL is missing/empty/unusable — collecting database credentials."
+    fi
     _collect_db_config
   fi
 
