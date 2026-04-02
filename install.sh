@@ -1330,11 +1330,11 @@ User=ecube
 Group=ecube
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=-${INSTALL_DIR}/.env
-ExecStart=${INSTALL_DIR}/venv/bin/uvicorn \\
-  --host ${bind_host} \\
-  --port ${API_PORT} \\
-  --ssl-keyfile=${INSTALL_DIR}/certs/key.pem \\
-  --ssl-certfile=${INSTALL_DIR}/certs/cert.pem \\
+ExecStart=${INSTALL_DIR}/venv/bin/uvicorn \
+  --host ${bind_host} \
+  --port ${API_PORT} \
+  --ssl-keyfile=${INSTALL_DIR}/certs/key.pem \
+  --ssl-certfile=${INSTALL_DIR}/certs/cert.pem \
   app.main:app
 Restart=on-failure
 RestartSec=10
@@ -1358,9 +1358,9 @@ User=ecube
 Group=ecube
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=-${INSTALL_DIR}/.env
-ExecStart=${INSTALL_DIR}/venv/bin/uvicorn \\
-  --host ${bind_host} \\
-  --port ${API_PORT} \\
+ExecStart=${INSTALL_DIR}/venv/bin/uvicorn \
+  --host ${bind_host} \
+  --port ${API_PORT} \
   app.main:app
 Restart=on-failure
 RestartSec=10
