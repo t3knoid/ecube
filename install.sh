@@ -1401,14 +1401,28 @@ install_frontend() {
   # to install the backend first.
   if [[ "${INSTALL_BACKEND}" == false && "${BACKEND_HOST}" == "127.0.0.1" && ! -f "${unit_file}" ]]; then
     local _loopback_listening=false
+    local _probe_skipped=false
+    local _backend_host_bare="${BACKEND_HOST#[}"
+    _backend_host_bare="${_backend_host_bare%]}"
     if command -v ss &>/dev/null; then
       # Detect any TCP listener on API_PORT on any local address (127.0.0.1, 0.0.0.0, ::1, [::], etc.).
       # Using ss's sport filter avoids relying on distribution-specific address formatting.
       if ss -H -ltn "sport = :${API_PORT}" 2>/dev/null | grep -q .; then
         _loopback_listening=true
       fi
+    elif command -v nc &>/dev/null; then
+      # Fallback when iproute2/ss is unavailable: active TCP probe to loopback backend host.
+      if nc -z -w5 "${_backend_host_bare}" "${API_PORT}" 2>/dev/null; then
+        _loopback_listening=true
+      fi
+    elif command -v timeout &>/dev/null && timeout 5 bash -c "echo '' > /dev/tcp/${_backend_host_bare}/${API_PORT}" 2>/dev/null; then
+      # Last-resort fallback matching DB preflight behavior.
+      _loopback_listening=true
+    else
+      warn "Cannot verify local backend listener on ${BACKEND_HOST}:${API_PORT} (missing 'ss', 'nc', and usable /dev/tcp check) — skipping this guard."
+      _probe_skipped=true
     fi
-    if [[ "${_loopback_listening}" == false && "${DRY_RUN}" != true ]]; then
+    if [[ "${_loopback_listening}" == false && "${_probe_skipped}" == false && "${DRY_RUN}" != true ]]; then
       error "--frontend-only was specified with the default --backend-host (127.0.0.1),"
       error "but no local ecube.service unit was found and nothing is listening on"
       error "127.0.0.1:${API_PORT}.  nginx would proxy to a dead address."
