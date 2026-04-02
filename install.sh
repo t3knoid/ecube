@@ -936,7 +936,7 @@ _maybe_download_release() {
 
   info "Extracting package to ${INSTALL_DIR}..."
   mkdir -p "${INSTALL_DIR}"
-  tar -xzf "${tmp_tarball}" -C "${INSTALL_DIR}" --strip-components=1
+  tar -xzf "${tmp_tarball}" -C "${INSTALL_DIR}" --strip-components=1 --no-same-owner --no-same-permissions
   rm -f "${tmp_tarball}" "${tmp_checksum}"
 }
 
