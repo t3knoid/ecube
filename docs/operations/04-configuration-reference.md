@@ -3,7 +3,7 @@
 **Version:** 1.0
 **Last Updated:** March 2026
 **Audience:** Systems Administrators, Operators, IT Staff
-**Source of truth:** `app/config.py` — every setting listed here maps 1-to-1 to a field in the `Settings` class.
+**Source of truth:** `app/config.py` — all ECUBE application settings in this document map 1-to-1 to fields in the `Settings` class. Deployment-only Docker Compose variables are explicitly marked in their own section.
 
 ---
 
@@ -22,6 +22,14 @@ See `.env.example` in the release package for a copy-paste starting point.
 | Variable       | Default                                    | Description                |
 | -------------- | ------------------------------------------ | -------------------------- |
 | `DATABASE_URL` | `postgresql://ecube:ecube@localhost/ecube` | PostgreSQL connection URI. |
+
+---
+
+## Target Platform
+
+| Variable   | Default | Description |
+| ---------- | ------- | ----------- |
+| `PLATFORM` | `linux` | Target platform for infrastructure implementations. Currently only `linux` adapters are implemented. `windows` is reserved for future use and will raise a runtime error if selected. |
 
 ---
 
@@ -80,7 +88,7 @@ Used when `ROLE_RESOLVER=oidc`.
 | `OIDC_CLIENT_ID`                 | *(empty)*                                           | OIDC client ID registered with the identity provider.                  |
 | `OIDC_CLIENT_SECRET`             | *(empty)*                                           | OIDC client secret.                                                    |
 | `OIDC_AUDIENCE`                  | *(empty)*                                           | Expected `aud` claim value. Leave empty to skip audience validation.   |
-| `OIDC_GROUP_CLAIM_NAME`          | `groups`                                            | JWT claim name containing group memberships.                           |
+| `OIDC_GROUP_CLAIM_NAME`          | `groups`                                            | JWT claim name containing group memberships. Some providers use `roles` or another custom claim name; override to match your identity provider. |
 | `OIDC_GROUP_ROLE_MAP`            | `{}`                                                | JSON object mapping OIDC group values to ECUBE role lists.             |
 | `OIDC_ALLOWED_ALGORITHMS`        | `["RS256","RS384","RS512","ES256","ES384","ES512"]` | Allowed JWT signing algorithms (JSON list).                            |
 | `OIDC_DISCOVERY_TIMEOUT_SECONDS` | `10`                                                | Timeout in seconds for fetching the OIDC discovery document.           |
@@ -98,11 +106,15 @@ Used when `ROLE_RESOLVER=oidc`.
 
 ## UI Container (Docker Compose)
 
+These are deployment variables from Docker Compose (not `app/config.py` settings).
+
 | Variable           | Default           | Description                                                                                                         |
 | ------------------ | ----------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `UI_PORT`          | `8443`            | Host port mapped to the `ecube-ui` HTTPS listener (port 443 inside the container).                                  |
 | `ECUBE_CERTS_DIR`  | `./deploy/certs`  | Host directory containing `cert.pem` and `key.pem` for nginx TLS termination. Use `/opt/ecube/certs` in production. |
 | `ECUBE_THEMES_DIR` | `./deploy/themes` | Host directory for optional CSS theme overrides served by nginx. Use `/opt/ecube/themes` in production.             |
+
+For off-the-shelf themes, custom theme creation, default-theme behavior, and logo configuration details, see [11-theme-and-branding-guide.md](11-theme-and-branding-guide.md).
 
 ---
 
@@ -142,6 +154,14 @@ Required only when `SESSION_BACKEND=redis`. If Redis is unavailable, ECUBE autom
 | `AUDIT_LOG_RETENTION_DAYS` | `365`   | Days to retain audit log records. `0` = keep forever.                      |
 | `COPY_JOB_TIMEOUT`         | `3600`  | Seconds before a copy job is marked FAILED with timeout. `0` = no timeout. |
 | `USB_DISCOVERY_INTERVAL`   | `30`    | Seconds between automatic USB discovery sweeps. `0` = disabled.            |
+
+---
+
+## CORS
+
+| Variable               | Default | Description |
+| ---------------------- | ------- | ----------- |
+| `CORS_ALLOWED_ORIGINS` | `[]`    | JSON array of origins allowed for cross-origin requests. Leave empty in same-origin deployments. Example: `["http://localhost:5173"]`. |
 
 ---
 
@@ -187,6 +207,12 @@ Required only when `SESSION_BACKEND=redis`. If Redis is unavailable, ECUBE autom
 | `MOUNT_BINARY_PATH`          | `/bin/mount`           | Path to the `mount` binary.                                    |
 | `SYNC_BINARY_PATH`           | `/bin/sync`            | Path to the `sync` binary.                                     |
 | `UMOUNT_BINARY_PATH`         | `/bin/umount`          | Path to the `umount` binary.                                   |
+| `MOUNTPOINT_BINARY_PATH`     | `/bin/mountpoint`      | Path to the `mountpoint` binary (checks whether a path is currently mounted). |
+| `BLKID_BINARY_PATH`          | `/sbin/blkid`          | Path to the `blkid` binary (primary filesystem type detection). |
+| `LSBLK_BINARY_PATH`          | `/bin/lsblk`           | Path to the `lsblk` binary (filesystem detection fallback). |
+| `MKFS_EXT4_PATH`             | `/sbin/mkfs.ext4`      | Path to the `mkfs.ext4` binary (used when formatting drives to ext4). |
+| `MKFS_EXFAT_PATH`            | `/sbin/mkfs.exfat`     | Path to the `mkfs.exfat` binary (used when formatting drives to exFAT). |
+| `USE_SUDO`                   | `true`                 | Prepends `sudo` to OS user/group management commands. Set `false` when running as root (for example inside Docker containers). |
 | `USERADD_BINARY_PATH`        | `/usr/sbin/useradd`    | Path to `useradd` (must match sudoers whitelist).              |
 | `USERMOD_BINARY_PATH`        | `/usr/sbin/usermod`    | Path to `usermod` (must match sudoers whitelist).              |
 | `USERDEL_BINARY_PATH`        | `/usr/sbin/userdel`    | Path to `userdel` (must match sudoers whitelist).              |
@@ -194,6 +220,7 @@ Required only when `SESSION_BACKEND=redis`. If Redis is unavailable, ECUBE autom
 | `GROUPDEL_BINARY_PATH`       | `/usr/sbin/groupdel`   | Path to `groupdel` (must match sudoers whitelist).             |
 | `CHPASSWD_BINARY_PATH`       | `/usr/sbin/chpasswd`   | Path to `chpasswd` (must match sudoers whitelist).             |
 | `PROCFS_MOUNTS_PATH`         | `/proc/mounts`         | Path to `/proc/mounts` for reading active mounts.              |
+| `PROCFS_DISKSTATS_PATH`      | `/proc/diskstats`      | Path to `/proc/diskstats` for block-device I/O statistics. |
 | `SYSFS_USB_DEVICES_PATH`     | `/sys/bus/usb/devices` | Sysfs USB devices directory.                                   |
 | `SYSFS_BLOCK_PATH`           | `/sys/block`           | Sysfs block devices directory.                                 |
 
@@ -244,5 +271,18 @@ These variables are consumed by **Vite at build time** (not at runtime). They mu
 | -------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `VITE_API_BASE_URL`  | *(unset)* | Override the API base URL for cross-origin or two-machine deployments where the API is hosted on a different server. Example: `https://api.corp.local:8443/api`. When unset the frontend resolves the API base as `/api` relative to the page origin, which is correct for standard single-server and Docker deployments. |
 
-**Note:** If you set `VITE_API_BASE_URL`, ensure the backend's `CORS_ALLOWED_ORIGINS` includes the origin of the frontend server, otherwise preflight requests will be rejected.
+Use this variable only when the frontend cannot reach the API through same-origin `/api` proxying.
 
+Examples:
+
+- Same origin (recommended): UI `https://ecube.example.com` and API path `https://ecube.example.com/api` -> leave `VITE_API_BASE_URL` unset.
+- Different domain: UI `https://portal.example.com` and API `https://api.example.com/api` -> set `VITE_API_BASE_URL=https://api.example.com/api`.
+- Same domain, different port: UI `https://ecube.example.com` and API `https://ecube.example.com:9443/api` -> set `VITE_API_BASE_URL=https://ecube.example.com:9443/api`.
+- Same host and port, different scheme (`http` vs `https`): treat as cross-origin and set `VITE_API_BASE_URL`.
+
+Additional behavior notes:
+
+- `VITE_API_BASE_URL` is embedded at build time. Changing it requires rebuilding the frontend assets.
+- Trailing slashes are normalized by the frontend (`https://api.example.com/api/` becomes `https://api.example.com/api`).
+
+**CORS note:** If you set `VITE_API_BASE_URL`, ensure the backend's `CORS_ALLOWED_ORIGINS` includes the frontend origin (for example `https://portal.example.com`), otherwise browser preflight requests will be rejected.

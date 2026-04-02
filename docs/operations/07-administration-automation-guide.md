@@ -1,4 +1,4 @@
-# ECUBE Administration Guide
+# ECUBE Administration Automation Guide
 
 **Version:** 1.0  
 **Last Updated:** March 2026  
@@ -86,7 +86,7 @@ admin role assignment.
 ### Prerequisites
 
 - The ECUBE service must be running and the database must be provisioned with
-  migrations applied. See [04-package-deployment.md](04-package-deployment.md)or [05-docker-deployment.md](05-docker-deployment.md) for deployment steps.
+  migrations applied. See [02-manual-installation.md](02-manual-installation.md)or [03-docker-deployment.md](03-docker-deployment.md) for deployment steps.
 
 ### Database Provisioning
 
@@ -972,6 +972,19 @@ Optional parameters:
 | `thread_count` | `4` | Parallel copy threads (1–8) |
 | `max_file_retries` | `3` | Maximum retry attempts per failed file |
 | `retry_delay_seconds` | `1` | Delay between retries in seconds |
+| `target_mount_path` | `null` | Alternative target mount path instead of the assigned drive mount path |
+| `callback_url` | `null` | HTTPS URL that receives a job-status callback when the job reaches `COMPLETED` or `FAILED` |
+| `created_by` | `null` | Optional username attribution override for audit/job metadata |
+
+> **Webhook callback details:** For callback payload format, retry behavior, delivery failure handling, and receiver examples, see [09-third-party-integration.md](09-third-party-integration.md#7-webhook-callbacks).
+
+#### callback_url integration note
+
+Use `callback_url` when an external orchestration or case-management system should receive asynchronous completion signals instead of polling `GET /jobs/{id}` continuously.
+
+- `callback_url` must be `https://`.
+- Callbacks are sent when the job reaches a terminal state (`COMPLETED` or `FAILED`).
+- Delivery outcomes are recorded in audit logs (`CALLBACK_SENT`, `CALLBACK_DELIVERY_FAILED`, `CALLBACK_DELIVERY_DROPPED`).
 
 #### Automatic Drive Assignment
 
@@ -1161,7 +1174,7 @@ Compare the hashes of two individual files to verify they are identical.
 Useful for spot-checking specific files across source and destination.
 
 ```bash
-# Requires any authenticated role
+# Requires admin or auditor role
 curl -k -X POST https://localhost:8443/files/compare \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \

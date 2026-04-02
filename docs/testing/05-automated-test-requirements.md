@@ -319,6 +319,8 @@ The API is then reachable at `http://localhost:8000` in addition to `https://loc
 
 ### 5.5 CI strategy
 
+For installer-oriented package artifact generation details (including workflow triggers, tarball contents, and naming contract), see [CI Build and Installer Artifact Contract](../development/03-ci-build-and-installer-artifacts.md).
+
 | Workflow | Trigger | What runs |
 |----------|---------|----------|
 | `run-tests.yml` — backend unit tests | push / PR | pytest unit tests on **Linux, macOS, Windows** matrix (no Docker) |

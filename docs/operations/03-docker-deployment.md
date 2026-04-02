@@ -28,7 +28,15 @@
 ## Overview
 
 Docker Compose is the recommended method for quick testing and evaluation.
-For production bare-metal deployments, see [04-package-deployment.md](04-package-deployment.md).
+For production bare-metal deployments, see [02-manual-installation.md](02-manual-installation.md).
+
+In the Compose deployment, only the HTTPS frontend port is published to the host by default. The FastAPI backend listens on port `8000` inside the `ecube-app` container and is reached externally through the `ecube-ui` nginx reverse proxy:
+
+- Web UI: `https://localhost:${UI_PORT:-8443}/`
+- Setup wizard: `https://localhost:${UI_PORT:-8443}/setup`
+- API endpoints: `https://localhost:${UI_PORT:-8443}/api/...`
+- Swagger UI: `https://localhost:${UI_PORT:-8443}/docs`
+- OpenAPI schema: `https://localhost:${UI_PORT:-8443}/openapi.json`
 
 For Docker-specific USB passthrough setup and detailed architecture, see
 [12-linux-host-deployment-and-usb-passthrough.md](../design/12-linux-host-deployment-and-usb-passthrough.md).
@@ -48,20 +56,23 @@ nano .env
 # Start services
 docker compose -f docker-compose.ecube.yml up -d --build
 
-# Database migrations run automatically on startup via entrypoint.
+# Open the UI / setup wizard (default UI port: 8443)
+# https://localhost:8443/setup
+
+# Database migrations run automatically on startup via the ecube-app entrypoint.
 # If you need to run them manually:
-docker compose -f docker-compose.ecube.yml exec ecube-host alembic upgrade head
+docker compose -f docker-compose.ecube.yml exec ecube-app alembic upgrade head
 
 # Run first-run setup (creates admin user, seeds DB role)
-# Option A: API-based (after service starts)
-curl -X POST http://localhost:8000/setup/initialize \
+# Option A: API-based through the published HTTPS frontend
+curl -k -X POST https://localhost:8443/api/setup/initialize \
   -H "Content-Type: application/json" \
   -d '{"username": "ecube-admin", "password": "s3cret"}'
-# Option B: CLI
-docker compose -f docker-compose.ecube.yml exec ecube-host ecube-setup
+# Option B: Web UI
+# Open https://localhost:8443/setup and complete the setup wizard
 
 # View logs
-docker compose -f docker-compose.ecube.yml logs -f ecube-host
+docker compose -f docker-compose.ecube.yml logs -f ecube-app
 ```
 
 ---
@@ -71,7 +82,7 @@ docker compose -f docker-compose.ecube.yml logs -f ecube-host
 ECUBE reads configuration from environment variables or a `.env` file. For the
 complete list of environment variables, defaults, and descriptions, see:
 
-> **[02-configuration-reference.md](02-configuration-reference.md)**
+> **[04-configuration-reference.md](04-configuration-reference.md)**
 
 Copy the example file and edit as needed:
 
@@ -79,6 +90,8 @@ Copy the example file and edit as needed:
 cp .env.example .env
 nano .env
 ```
+
+`cp .env.example .env` produces a working local/test configuration, including a default `POSTGRES_PASSWORD`. Adjust secrets and ports before using this in any non-lab environment.
 
 ## Setup Wizard Auto-Detection
 
@@ -92,9 +105,7 @@ A contextual hint is displayed below the host field confirming that the Docker C
 SETUP_DOCKER_DB_HOST=my-postgres-service
 ```
 
-See [02-configuration-reference.md](02-configuration-reference.md) for the full list of environment variables.
-
----
+See [04-configuration-reference.md](04-configuration-reference.md) for the full list of environment variables.
 
 ---
 
@@ -110,7 +121,7 @@ docker compose -f docker-compose.ecube.yml up -d --build
 
 ```bash
 docker compose -f docker-compose.ecube.yml ps
-docker compose -f docker-compose.ecube.yml logs -f ecube-host
+docker compose -f docker-compose.ecube.yml logs -f ecube-app
 ```
 
 ### Stop Services
@@ -122,22 +133,18 @@ docker compose -f docker-compose.ecube.yml down
 ### Restart Application
 
 ```bash
-docker compose -f docker-compose.ecube.yml restart ecube-host
+docker compose -f docker-compose.ecube.yml restart ecube-app
 ```
 
 ### Verify API Endpoint
 
 ```bash
-curl http://localhost:8000/introspection/version
+curl -k https://localhost:8443/api/introspection/version
 
-# Expected response (JSON):
-# {"version": "0.1.0", "api_version": "1.0.0"}
+# Returns version metadata as JSON.
 ```
 
-> **Note:** The Docker deployment exposes HTTP on port 8000 without TLS.
-> For production, place a reverse proxy (e.g., Nginx, Caddy) in front to
-> terminate TLS on port 8443. See [04-package-deployment.md](04-package-deployment.md)
-> for the bare-metal deployment with built-in TLS.
+> **Note:** In this Compose deployment, the host-facing entry point is `ecube-ui` on HTTPS port `8443` (or `UI_PORT` if overridden). The backend's port `8000` is intentionally not published to the host. For container-local debugging, run commands inside `ecube-app`, for example `docker compose -f docker-compose.ecube.yml exec ecube-app curl http://localhost:8000/health`.
 
 ---
 
@@ -145,13 +152,13 @@ curl http://localhost:8000/introspection/version
 
 ```bash
 # View logs
-docker compose -f docker-compose.ecube.yml logs ecube-host
+docker compose -f docker-compose.ecube.yml logs ecube-app
 
 # Follow logs in real-time
-docker compose -f docker-compose.ecube.yml logs -f ecube-host
+docker compose -f docker-compose.ecube.yml logs -f ecube-app
 
 # View specific number of lines
-docker compose -f docker-compose.ecube.yml logs -n 100 ecube-host
+docker compose -f docker-compose.ecube.yml logs -n 100 ecube-app
 ```
 
 ---
@@ -159,5 +166,5 @@ docker compose -f docker-compose.ecube.yml logs -n 100 ecube-host
 ## Reference
 
 - **Design document:** [12-linux-host-deployment-and-usb-passthrough.md](../design/12-linux-host-deployment-and-usb-passthrough.md)
-- **Configuration reference:** [02-configuration-reference.md](02-configuration-reference.md)
-- **Administration guide:** [06-administration-guide.md](06-administration-guide.md)
+- **Configuration reference:** [04-configuration-reference.md](04-configuration-reference.md)
+- **Administration automation guide:** [07-administration-automation-guide.md](07-administration-automation-guide.md)

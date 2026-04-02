@@ -90,41 +90,47 @@ ECUBE consists of three components:
 
 The companion documents below provide in-depth procedures for each operational area. Click through to the relevant document for detailed instructions, commands, and examples.
 
-### [02 — Configuration Reference](02-configuration-reference.md)
-
-**Audience:** Systems Administrators, Operators
-
-Complete reference for every ECUBE environment variable, organized by category: database connection, security and authentication (JWT, secret key rotation), local group-to-role mapping, LDAP configuration, OIDC/SSO integration, session management, copy engine tuning, and logging levels. Each variable lists its default value and a description. Maps 1-to-1 with the `Settings` class in `app/config.py`.
-
-### [03 — Installation Guide](03-installation.md)
+### [01 — Installation Guide](01-installation.md)
 
 **Audience:** Systems Administrators, IT Staff
 
 Step-by-step prerequisites and installation procedures. Covers hardware requirements (CPU, RAM, disk, USB hub, network), software requirements (OS, kernel, system packages), and deployment options overview. Use this as your starting point before choosing a deployment method (package or Docker).
 
-### [04 — Package Deployment](04-package-deployment.md)
+### [02 — Manual Installation](02-manual-installation.md)
 
 **Audience:** Systems Administrators, IT Staff
 
-Full procedure for deploying ECUBE as a native systemd service. Covers service account creation, downloading and verifying the release package, Python virtual environment setup, systemd unit file creation, database initialization (API-based and manual), first-run setup (OS groups, admin user, role seeding), enabling and starting the service, configuration, user management, and service lifecycle commands.
+Manual procedure for deploying ECUBE as a native systemd service when `install.sh` cannot be used. Covers requirements, service account creation, package verification/extraction, single-host and enterprise split-host layouts, backend/frontend configuration, firewall hardening, upgrades, and advanced alternate web frontend hosting.
 
-### [05 — Docker Deployment](05-docker-deployment.md)
+### [03 — Docker Deployment](03-docker-deployment.md)
 
 **Audience:** Systems Administrators, IT Staff
 
 Container-based deployment using Docker Compose. Covers quick start, `.env` configuration, starting and stopping containers, log viewing, and references to the USB passthrough design document for Docker-specific hardware access. Recommended for quick testing and evaluation environments.
 
-### [06 — Administration Guide](06-administration-guide.md)
+### [04 — Configuration Reference](04-configuration-reference.md)
 
-**Audience:** Operators, All Users
+**Audience:** Systems Administrators, Operators
 
-Day-to-day usage guide covering the system architecture overview, user management (authentication methods, role assignment, admin APIs for OS user/group management, first-run setup), common operational tasks (adding network mounts, initializing USB drives, creating and starting export jobs, querying audit logs), monitoring and log review, troubleshooting common issues (service startup, memory usage, auth errors, copy job failures, USB detection, setup initialization), backup and recovery procedures, and maintenance tasks (log rotation, audit log cleanup, certificate renewal, database maintenance, software updates).
+Complete reference for every ECUBE environment variable, organized by category: database connection, security and authentication (JWT, secret key rotation), local group-to-role mapping, LDAP configuration, OIDC/SSO integration, session management, copy engine tuning, and logging levels. Each variable lists its default value and a description. Maps 1-to-1 with the `Settings` class in `app/config.py`.
 
-### [07 — Security Best Practices](07-security-best-practices.md)
+### [05 — TLS Certificates and Let's Encrypt](05-tls-certificates-and-letsencrypt.md)
+
+**Audience:** Systems Administrators, Security Engineers
+
+Certificate operations guide for package deployments: self-signed bootstrap certs, Let's Encrypt/certbot issuance, renewal workflow, hostname/IP validation behavior, split-host proxy TLS notes, firewall prerequisites, and key/cert permission guidance.
+
+### [06 — Security Best Practices](06-security-best-practices.md)
 
 **Audience:** Systems Administrators, Security Engineers
 
 Hardening guide covering network isolation, TLS certificate management, credential management and secret rotation, access control policies, file permission lockdown, audit log monitoring and compliance exports, and firewall configuration (UFW rules for HTTPS and PostgreSQL).
+
+### [07 — Administration Automation Guide](07-administration-automation-guide.md)
+
+**Audience:** Systems Administrators, Operators, Automation Engineers
+
+API-driven and script-oriented runbook for administrative operations after deployment. Covers first-run setup, authentication and role management, OS user/group administration via admin APIs, scripted management of mounts, drives, jobs, and audit queries, plus monitoring, troubleshooting, backup/recovery, and routine maintenance tasks.
 
 ### [08 — API Quick Reference](08-api-quick-reference.md)
 
@@ -132,11 +138,23 @@ Hardening guide covering network isolation, TLS certificate management, credenti
 
 Concise endpoint reference for the ECUBE REST API. Covers interactive API documentation (Swagger UI, ReDoc, OpenAPI schema), authentication requirements, and endpoint tables for drives, mounts, jobs, audit, and introspection — each with HTTP method, path, required role, and description. Includes filter parameters and curl examples.
 
-### [09 — User Manual](09-user-manual.md) *(placeholder)*
+### [09 — Third-Party Integration Guide](09-third-party-integration.md)
+
+**Audience:** Developers, Integration Engineers
+
+Guide for external system integration workflows using the ECUBE API: authentication, mount/drive selection, job orchestration, polling, verification, and manifest generation patterns.
+
+### [10 — User Manual](10-user-manual.md)
 
 **Audience:** Processors, Managers, Auditors, All End Users
 
-End-user guide for the ECUBE web interface. Will cover day-to-day workflows performed through the GUI: login, dashboard navigation, drive management, export job creation and monitoring, verification and manifests, audit log browsing, and user settings. Pending frontend integration.
+End-user guide for the ECUBE web interface. Covers installation-orientation for users, first access, login, dashboard navigation, drive and mount workflows, export job creation and monitoring, verification and manifests, audit log browsing, and privileged user/system pages. Current draft includes screenshot placeholders for later UI capture.
+
+### [11 — Theme and Branding Guide](11-theme-and-branding-guide.md)
+
+**Audience:** Systems Administrators, Platform Engineers
+
+Operational guide for UI theming and branding configuration. Covers built-in themes, custom theme creation, manifest registration, deployment mounting with `ECUBE_THEMES_DIR`, default-theme behavior, logo configuration (including supported image formats), and validation checklist.
 
 ---
 
@@ -146,13 +164,16 @@ Use this guide to find the right document for your task:
 
 | Task | Start Here |
 |------|-----------|
-| First-time installation | [03 — Installation Guide](03-installation.md) → then [04 — Package Deployment](04-package-deployment.md) or [05 — Docker Deployment](05-docker-deployment.md) |
-| Configure environment variables | [02 — Configuration Reference](02-configuration-reference.md) |
-| Day-to-day operations (mounts, drives, jobs) | [06 — Administration Guide](06-administration-guide.md) |
-| Harden a production deployment | [07 — Security Best Practices](07-security-best-practices.md) |
+| First-time installation | [01 — Installation Guide](01-installation.md) → then [02 — Manual Installation](02-manual-installation.md) or [03 — Docker Deployment](03-docker-deployment.md) |
+| Configure environment variables | [04 — Configuration Reference](04-configuration-reference.md) |
+| Manage certificates / HTTPS | [05 — TLS Certificates and Let's Encrypt](05-tls-certificates-and-letsencrypt.md) |
+| Day-to-day operations (mounts, drives, jobs) | [07 — Administration Automation Guide](07-administration-automation-guide.md) |
+| Harden a production deployment | [06 — Security Best Practices](06-security-best-practices.md) |
 | Explore the API | [08 — API Quick Reference](08-api-quick-reference.md) or Swagger UI at `/docs` |
-| Troubleshoot issues | [06 — Administration Guide](06-administration-guide.md) § Troubleshooting |
-| Backup and recovery | [06 — Administration Guide](06-administration-guide.md) § Backup and Recovery |
+| Integrate third-party systems | [09 — Third-Party Integration Guide](09-third-party-integration.md) |
+| Manage themes and branding | [11 — Theme and Branding Guide](11-theme-and-branding-guide.md) |
+| Troubleshoot issues | [07 — Administration Automation Guide](07-administration-automation-guide.md) § Troubleshooting |
+| Backup and recovery | [07 — Administration Automation Guide](07-administration-automation-guide.md) § Backup and Recovery |
 
 ---
 
@@ -186,7 +207,3 @@ For architecture decisions, data model details, and full API specifications, see
 - **Service Logs:** `journalctl -u ecube -f`
 - **Database Logs:** PostgreSQL log file (check `postgresql.conf`)
 - **API Errors:** Check response JSON for `code`, `message`, and `trace_id` fields
-
----
-
-**End of Operational Guide**

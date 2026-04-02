@@ -4,7 +4,7 @@
 **Last Updated:** March 2026  
 **Audience:** UI Designers, Developers, QA  
 **Document Type:** Use Case Catalog  
-**Source:** Derived from [06-administration-guide.md](../operations/06-administration-guide.md)
+**Source:** Derived from [07-administration-automation-guide.md](../operations/07-administration-automation-guide.md)
 
 ---
 
@@ -190,7 +190,7 @@ The primary operational workflow combines use cases across groups:
 ## Summary
 
 - **50 use cases** across **8 functional groups**
-- Organized by functional domain (matching the administration guide structure), which maps naturally to UI screens/pages
+- Organized by functional domain (matching the administration automation guide structure), which maps naturally to UI screens/pages
 - Each use case maps to one or more existing API endpoints
 - The setup wizard (Group 1) is a distinct UX flow from the main application
 - Audit log export (UC-7.7) may require a dedicated API endpoint — currently only query/pagination is supported
