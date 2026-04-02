@@ -985,7 +985,7 @@ _collect_db_config() {
   if [[ "${DRY_RUN}" == true ]]; then
     echo "[DRY-RUN] Would check TCP ${DB_HOST}:${DB_PORT}"
   elif command -v nc &>/dev/null; then
-    if ! nc -z -w5 "${DB_HOST_BARE}" "${DB_PORT}" 2>/dev/null; then
+    if ! nc -z -w5 -- "${DB_HOST_BARE}" "${DB_PORT}" 2>/dev/null; then
       error "Cannot reach PostgreSQL at ${DB_HOST}:${DB_PORT}. Check the host, port, and firewall rules."
       exit 1
     fi
