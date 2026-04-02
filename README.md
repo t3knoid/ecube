@@ -28,13 +28,21 @@ cd ecube-package-<version>
 sudo ./install.sh
 ```
 
-The installer handles Python dependencies, TLS certificates, systemd unit configuration, and optional nginx setup. See the [Installation Guide](docs/operations/03-installation.md) for all available options (`--backend-only`, `--frontend-only`, `--api-port`, `--uninstall`, etc.).
+The installer handles Python dependencies, TLS certificates, systemd unit configuration, and optional nginx setup. See the [Installation Guide](docs/operations/01-installation.md) for all available options (`--backend-only`, `--frontend-only`, `--api-port`, `--uninstall`, etc.).
 
 ### Docker Compose
 
 > **Prerequisites:** Docker and Docker Compose must be installed.
 
 ```bash
+# Create environment file (required by docker compose)
+cp .env.example .env
+
+# Required variables (compose will fail fast if POSTGRES_PASSWORD is missing)
+# Update at least POSTGRES_PASSWORD and SECRET_KEY in .env
+sed -i.bak 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ecube/' .env
+sed -i.bak "s/^SECRET_KEY=.*/SECRET_KEY=$(openssl rand -hex 32)/" .env
+
 # Generate self-signed TLS certs for local testing
 mkdir -p deploy/certs deploy/themes
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
@@ -43,7 +51,14 @@ openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -subj "/CN=localhost"
 
 # Start all services (postgres, ecube-app, ecube-ui)
-docker compose -f docker-compose.ecube.yml up -d
+docker compose -f docker-compose.ecube.yml up -d --build
+```
+
+At minimum, ensure `POSTGRES_PASSWORD` is set in `.env`. If you use the sample above, persist values by adding them to `.env`:
+
+```env
+POSTGRES_PASSWORD=ecube
+SECRET_KEY=<your-random-hex-key>
 ```
 
 The UI is available at **https://localhost:8443** and the API at **https://localhost:8443/api**.
@@ -99,11 +114,11 @@ The three badges at the top of this file reflect the current state of automated 
 ## Documentation
 
 - [Operations Guide](docs/operations/00-operational-guide.md)
-  - [Installation](docs/operations/03-installation.md)
-  - [Configuration Reference](docs/operations/02-configuration-reference.md)
-  - [Administration Guide](docs/operations/06-administration-guide.md) — identity providers, logging, user management
+  - [Installation](docs/operations/01-installation.md)
+  - [Configuration Reference](docs/operations/04-configuration-reference.md)
+  - [Administration Automation Guide](docs/operations/07-administration-automation-guide.md) — identity providers, logging, user management
   - [API Quick Reference](docs/operations/08-api-quick-reference.md)
-  - [Security Best Practices](docs/operations/07-security-best-practices.md)
+  - [Security Best Practices](docs/operations/06-security-best-practices.md)
 - [Development Guide](docs/development/00-development-guide.md)
 - [QA Testing Guide (Bare-Metal)](docs/testing/01-qa-testing-guide-baremetal.md)
 - [Schemathesis Local Fuzz Testing](docs/testing/04-schemathesis-local.md)
