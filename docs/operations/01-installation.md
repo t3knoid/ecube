@@ -36,7 +36,7 @@
 | Method | When to use |
 |--------|-------------|
 | **Bare-metal (`install.sh`)** | Dedicated Linux host or VM; no Docker required. |
-| **Docker Compose** | Dev/lab environments or container-native ops. See [05-docker-deployment.md](05-docker-deployment.md). |
+| **Docker Compose** | Dev/lab environments or container-native ops. See [03-docker-deployment.md](03-docker-deployment.md). |
 
 ---
 
@@ -83,6 +83,8 @@ The installer will:
 
 Download a release package from [GitHub Releases](https://github.com/t3knoid/ecube/releases), extract it, and run the installer as root:
 
+For how CI generates release packages and the installer artifact contract (required package names and contents), see [CI Build and Installer Artifact Contract](../development/03-ci-build-and-installer-artifacts.md).
+
 ```bash
 tar -xzf ecube-package-<version>.tar.gz
 cd ecube-package-<version>
@@ -103,6 +105,11 @@ The installer will:
 
 At the end it prints a summary with the UI URL, API URL, and service management commands.
 
+**Immediate next step:** open the ECUBE web UI and complete setup:
+
+- Full install / frontend available: `https://<hostname>:<ui-port>/setup`
+- Backend-only install (no UI on this host): complete setup from a frontend-enabled ECUBE deployment URL (see the Operations guides for split-host deployment)
+
 ---
 
 ## CLI Flags Reference
@@ -119,7 +126,7 @@ At the end it prints a summary with the UI URL, API URL, and service management 
 | `--allow-insecure-backend` | *(default)* | Explicitly select TLS verification disabled (`proxy_ssl_verify off`) when proxying to a remote backend. This is already the default behaviour; the flag is provided for clarity in scripts that also set `--secure-backend` in some code paths. A warning is always printed when verification is off. |
 | `--secure-backend` | — | Enable TLS certificate verification against the OS trust store (`proxy_ssl_verify on`). Use when the remote backend has a CA-signed cert already trusted by the system and no custom CA file is needed. Mutually exclusive with `--allow-insecure-backend`. |
 | `--backend-ca-file FILE` | — | Path to a PEM CA certificate used to verify the remote backend's TLS certificate (`proxy_ssl_trusted_certificate`). Use when the backend has a private CA-signed cert that is not in the system trust store. Implies `proxy_ssl_verify on`. |
-| `--db-host HOST` | *(prompted)* | **Backend installs only.** PostgreSQL server hostname or IP address. Must be non-empty and contain only DNS/IP-safe characters. Required in `--yes` mode. Ignored for `--frontend-only`. |
+| `--db-host HOST` | *(prompted)* | **Backend installs only.** PostgreSQL server hostname or IP address. Host only (no `host:port` form). Required in `--yes` mode. Ignored for `--frontend-only`. |
 | `--db-port PORT` | `5432` | **Backend installs only.** PostgreSQL server port. Must be a valid integer between 1 and 65535. Ignored for `--frontend-only`. |
 | `--db-name NAME` | `ecube` | **Backend installs only.** Name of the PostgreSQL database. Must contain only alphanumerics and underscores. Ignored for `--frontend-only`. |
 | `--db-user USER` | *(prompted)* | **Backend installs only.** PostgreSQL username. Must be non-empty and must contain only alphanumerics and underscores. Required in `--yes` mode. Ignored for `--frontend-only`. |
@@ -207,7 +214,7 @@ Only leave TLS verification disabled (the default) on trusted networks (VPN, pri
 
 The installer prompts for the PostgreSQL connection details required to assemble `DATABASE_URL`. You can supply any or all values via CLI flags to reduce or eliminate prompting.
 
-**Re-runs and upgrades:** If `<install-dir>/.env` already exists and **no** `--db-*` flag is supplied, the installer skips database credential collection entirely and preserves the existing `DATABASE_URL` unchanged. This makes idempotent re-runs and `--yes` upgrades safe — `--db-host`, `--db-user`, and `--db-password` are only required on first install or when explicitly rotating credentials.
+**Re-runs and upgrades:** If `<install-dir>/.env` already exists, **no** `--db-*` flag is supplied, **and** the file contains a usable non-empty `DATABASE_URL`, the installer skips database credential collection and preserves `DATABASE_URL` unchanged. If `.env` exists but `DATABASE_URL` is missing/empty/placeholder-like, the installer collects credentials and updates `DATABASE_URL` so the service is not started with an unusable DB connection string.
 
 To update the database connection on an existing install, supply the new values via `--db-*` flags. The installer will collect and validate the credentials then patch only the `DATABASE_URL` line in `.env`, leaving `SECRET_KEY` and all other settings untouched.
 
@@ -226,7 +233,7 @@ PostgreSQL password: ****
 
 Each value is validated as it is entered. The installer then:
 
-1. **TCP reachability check** — uses `nc -z` (or `/dev/tcp` as a fallback) to confirm the port is reachable. The install aborts if the check fails.
+1. **TCP reachability check** — prefers `nc -z` to confirm the port is reachable (hard-fails on failure). If `nc` is unavailable, it attempts a `/dev/tcp` probe via `timeout`; if that fallback fails, a warning is emitted and the installer continues (no hard failure). If neither probe method is available, the check is skipped with a warning.
 2. **Credential verification** — if `psql` is found on `PATH`, it runs `SELECT 1` against the database to verify the username and password. The install aborts if authentication fails.
 3. Percent-encodes all characters outside the RFC 3986 unreserved set (`A–Z a–z 0–9 - _ . ~`) in the password before embedding it in the connection string. This ensures any valid PostgreSQL password produces a valid connection URL regardless of which reserved characters it contains.
 4. Writes `DATABASE_URL=postgresql://<user>:<encoded-pass>@<host>:<port>/<dbname>` into `.env`.
@@ -244,7 +251,7 @@ sudo ./install.sh --yes \
   --db-password 'S3cret!'
 ```
 
-On a **re-run or upgrade** where `<install-dir>/.env` already exists, `--db-host`, `--db-user`, and `--db-password` are **not** required — the existing `DATABASE_URL` is preserved automatically. Supply them only if you want to rotate the database credentials:
+On a **re-run or upgrade** where `<install-dir>/.env` already exists, `--db-host`, `--db-user`, and `--db-password` are **not** required only when `.env` already contains a usable `DATABASE_URL`. If `DATABASE_URL` is missing/empty/unusable, the installer will prompt (or require flags in `--yes` mode) and update `DATABASE_URL`. Supply `--db-*` flags any time you want to rotate the database credentials:
 
 ```bash
 # Upgrade (no DB flags needed — existing credentials are kept):
@@ -282,13 +289,18 @@ Notes:
 - IPv6 passed in bracketed form (for example `[2001:db8::10]`) is normalized to the bare address (`2001:db8::10`) for CN/SAN generation.
 - The installer does not emit `DNS:` SAN entries for IP literals (especially important for IPv6), because values containing `:` are not valid DNS SAN names.
 
-**Bring your own certificate:** Place your `cert.pem` and `key.pem` in `<install-dir>/certs/` before running the installer. The installer skips generation if those files already exist.
+**Bring your own certificate:** Place your `cert.pem` and `key.pem` in `<install-dir>/certs/` before running the installer. The installer skips certificate generation if those files already exist, but it still reconciles file mode/ownership for the selected topology:
+
+- nginx topology (full install / `--frontend-only`): `key.pem` remains `root:root` with mode `600`; `cert.pem` is `ecube:ecube` with mode `644`
+- backend-only topology: `key.pem` and `cert.pem` are `ecube:ecube` (`600` for key, `644` for cert)
+
+When certificate generation is attempted, OpenSSL stderr is appended to the installer log (`/var/log/ecube-install.log`, or the configured fallback), so generation failures are diagnosable.
 
 ---
 
 ## Post-Install: Setup Wizard
 
-After installation, open the setup wizard in a browser:
+After installation, open the setup wizard in a browser (this is the required next step before normal use):
 
 ```text
 https://<hostname>:<ui-port>/setup
@@ -300,8 +312,6 @@ The wizard will:
 2. Create the initial admin user.
 
 > **Note:** `DATABASE_URL` in `<install-dir>/.env` is written with the credentials you supplied during installation. If you need to point the service at a different database later, edit `.env` and restart `ecube.service`.
-
-The `ecube-setup` CLI (`/opt/ecube/venv/bin/ecube-setup`) is an advanced alternative for headless environments. The setup wizard is the recommended path.
 
 ---
 
@@ -318,11 +328,7 @@ The `ecube-setup` CLI (`/opt/ecube/venv/bin/ecube-setup`) is an advanced alterna
 
 3. Application files (`app/`, `alembic/`, etc.) are **overwritten where present** — the installer copies a fixed list of items from the new release onto the existing installation. Files or directories that existed in the previous release but are no longer shipped are **not removed**; stale content may remain under `INSTALL_DIR` until manually cleaned up or a full uninstall/reinstall is performed. `.env` is **never overwritten** — existing operator secrets are preserved.
 4. The service is always restarted after an upgrade.
-5. **Run database migrations** after the service restarts — open the setup wizard in a browser, or run `alembic upgrade head` directly:
-
-   ```bash
-   sudo -u ecube /opt/ecube/venv/bin/alembic --config /opt/ecube/alembic.ini upgrade head
-   ```
+5. Complete setup after upgrade using the setup wizard (`/setup`) so migrations are applied.
 
 ---
 
@@ -341,9 +347,3 @@ This will:
 5. Optionally remove the deadsnakes PPA entry (Ubuntu only) if it was added by the installer.
 
 Use `--yes` to skip all confirmation prompts.
-
----
-
-## Docker Compose Deployment
-
-See [05-docker-deployment.md](05-docker-deployment.md) for Docker-based setup.
