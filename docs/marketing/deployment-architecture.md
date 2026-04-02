@@ -119,7 +119,7 @@ This profile is built for chain-of-custody scenarios where physical security rep
 Services can run as Docker containers (using `docker-compose.ecube.yml`) or as native systemd services via package deployment. Both approaches are supported:
 
 - **Docker Compose:** Three containers (`ecube-ui`, `ecube-app`, `postgres`) managed with a single compose file.
-- **Package Deployment:** ECUBE installed as a systemd service alongside a local or containerized PostgreSQL instance. See [04-package-deployment.md](operations/04-package-deployment.md).
+- **Package Deployment:** ECUBE installed as a systemd service alongside a local or containerized PostgreSQL instance. See [02-manual-installation.md](operations/02-manual-installation.md).
 
 ### Characteristics
 
@@ -187,7 +187,7 @@ This model is suited to established corporate data centers where infrastructure 
 
 ### Deployment Method
 
-- **Application Host:** Package deployment as a systemd service on bare-metal Linux. See [04-package-deployment.md](operations/04-package-deployment.md).
+- **Application Host:** Package deployment as a systemd service on bare-metal Linux. See [02-manual-installation.md](operations/02-manual-installation.md).
 - **Database Host:** Standard PostgreSQL installation on a hardened VM (or managed database service).
 - **UI Host:** nginx serving the Vue SPA, either as a Docker container or installed directly.
 
@@ -250,7 +250,7 @@ Docker Compose with the provided `docker-compose.ecube.yml`. Bring up the stack 
 docker compose -f docker-compose.ecube.yml up -d --build
 ```
 
-For detailed Docker deployment steps, see [05-docker-deployment.md](operations/05-docker-deployment.md).
+For detailed Docker deployment steps, see [03-docker-deployment.md](operations/03-docker-deployment.md).
 
 ### USB Passthrough
 
@@ -604,7 +604,7 @@ The ECUBE application is identical in all profiles. Only the host topology, netw
 | [design/12-linux-host-deployment-and-usb-passthrough.md](design/12-linux-host-deployment-and-usb-passthrough.md) | Docker USB passthrough setup |
 | [design/13-build-and-deployment.md](design/13-build-and-deployment.md) | Build pipeline, package and Docker deployment paths |
 | [design/15-frontend-architecture.md](design/15-frontend-architecture.md) | UI container topology and nginx configuration |
-| [operations/03-installation.md](operations/03-installation.md) | Prerequisite software and hardware requirements |
-| [operations/04-package-deployment.md](operations/04-package-deployment.md) | Systemd-based package deployment (Profile A/B application host) |
-| [operations/05-docker-deployment.md](operations/05-docker-deployment.md) | Docker Compose deployment (Profile A/C) |
-| [operations/07-security-best-practices.md](operations/07-security-best-practices.md) | TLS, credentials, firewall, and audit log guidelines |
+| [operations/01-installation.md](operations/01-installation.md) | Prerequisite software and hardware requirements |
+| [operations/02-manual-installation.md](operations/02-manual-installation.md) | Systemd-based package deployment (Profile A/B application host) |
+| [operations/03-docker-deployment.md](operations/03-docker-deployment.md) | Docker Compose deployment (Profile A/C) |
+| [operations/06-security-best-practices.md](operations/06-security-best-practices.md) | TLS, credentials, firewall, and audit log guidelines |

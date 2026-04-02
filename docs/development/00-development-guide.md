@@ -68,7 +68,7 @@ Key settings for development:
 | `SECRET_KEY` | (built-in dev default) | JWT signing key; change in production |
 | `ROLE_RESOLVER` | `local` | Uses OS group → role mapping |
 
-See [02 — Configuration Reference](../operations/02-configuration-reference.md) for the full list.
+See [02 — Configuration Reference](../operations/04-configuration-reference.md) for the full list.
 
 ### Pre-Commit Hook (Optional)
 
@@ -349,6 +349,7 @@ When adding new OS-level functionality:
 |--------|-------------|
 | [Windows Development Guide](02-windows-development-guide.md) | Windows-specific setup, Docker, USB passthrough |
 | [Debugging Guide](01-debugging-guide.md) | Command-line and VS Code debugging reference |
+| [CI Build and Installer Artifact Contract](03-ci-build-and-installer-artifacts.md) | GitHub Actions package build flow and installer-required artifact contract |
 | [operations/](../operations/00-operational-guide.md) | Production deployment, configuration, user manual, security hardening |
 | [testing/](../testing/01-qa-testing-guide-baremetal.md) | QA testing guide and test-case spreadsheet |
 | [design/](../design/00-overview.md) | Architecture, data model, API specification, security design |
