@@ -1026,7 +1026,11 @@ _collect_db_config() {
     local pgpass_file
     pgpass_file="$(mktemp)"
     chmod 600 "${pgpass_file}"
-    printf '%s:%s:%s:%s:%s\n' "${DB_HOST_BARE}" "${DB_PORT}" "${DB_NAME}" "${DB_USER}" "${DB_PASS}" >"${pgpass_file}"
+    # Escape ':' and '\' in the password for .pgpass format
+    local escaped_pass
+    escaped_pass="${DB_PASS//\\/\\\\}"
+    escaped_pass="${escaped_pass//:/\\:}"
+    printf '%s:%s:%s:%s:%s\n' "${DB_HOST_BARE}" "${DB_PORT}" "${DB_NAME}" "${DB_USER}" "${escaped_pass}" >"${pgpass_file}"
 
     local psql_status=0
     if PGPASSFILE="${pgpass_file}" psql \
