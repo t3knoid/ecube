@@ -224,3 +224,4 @@ frontend/playwright-report/
 deploy/certs/
 deploy/themes/
 test-results/.last-run.json
+.env.bak
