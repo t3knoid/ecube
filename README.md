@@ -18,8 +18,21 @@ ECUBE is a secure evidence export platform designed to copy eDiscovery data onto
 
 ## Quick Start
 
+### Bare-metal installation (Debian/Ubuntu)
+
+Download a release package, extract it, and run the installer:
+
+```bash
+tar -xzf ecube-package-<version>.tar.gz
+cd ecube-package-<version>
+sudo ./install.sh
+```
+
+The installer handles Python dependencies, TLS certificates, systemd unit configuration, and optional nginx setup. See the [Installation Guide](docs/operations/03-installation.md) for all available options (`--backend-only`, `--frontend-only`, `--api-port`, `--uninstall`, etc.).
+
+### Docker Compose
+
 > **Prerequisites:** Docker and Docker Compose must be installed.
-> See the [Installation Guide](docs/operations/03-installation.md) for full setup instructions.
 
 ```bash
 # Generate self-signed TLS certs for local testing
