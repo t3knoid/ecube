@@ -105,7 +105,7 @@ Key settings for development:
 | `SECRET_KEY` | (built-in dev default) | JWT signing key; change in production |
 | `ROLE_RESOLVER` | `local` | Uses OS group → role mapping |
 
-See the [Configuration Reference](../operations/02-configuration-reference.md) for the full list.
+See the [Configuration Reference](../operations/04-configuration-reference.md) for the full list.
 
 ---
 
@@ -342,7 +342,7 @@ python -m pytest tests/ -v --run-hardware
 | [Development Guide](00-development-guide.md) | Main development guide (Linux-focused) |
 | [Debugging Guide](01-debugging-guide.md) | Detailed debugging reference (cross-platform) |
 | [Operational Guide](../operations/00-operational-guide.md) | Production deployment and operations |
-| [Configuration Reference](../operations/02-configuration-reference.md) | All environment variables and settings |
+| [Configuration Reference](../operations/04-configuration-reference.md) | All environment variables and settings |
 | [QA Testing Guide](../testing/01-qa-testing-guide-baremetal.md) | Manual test procedures |
 
 ---
