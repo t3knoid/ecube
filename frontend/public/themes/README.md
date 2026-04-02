@@ -21,13 +21,30 @@ Two built-in themes ship with the application:
 3. Place the file in `public/themes/` (dev) or volume-mount it into the
    Docker container at `/usr/share/nginx/html/themes/my-company.css`.
 4. Add an entry to `manifest.json` in the same directory:
+
    ```json
    [
-     { "name": "my-company", "label": "My Company" }
+     {
+       "name": "my-company",
+       "label": "My Company",
+       "logo": "my-company-logo.svg",
+       "logoAlt": "My Company"
+     }
    ]
    ```
+
    The `name` must match the CSS filename (without `.css`). The `label` is
-   the human-readable text shown in the theme switcher.
+   the human-readable text shown in the theme switcher. `logo` and `logoAlt`
+   are optional branding fields.
+
+   Logo sizing guidance:
+
+   - Render height target: `32px`
+   - Maximum display width: `150px`
+   - Recommended source size: `160x32` to `320x64`
+   - Preferred format: `SVG`
+   - Supported formats: `SVG`, `PNG`, `GIF` (including animated GIF), `WebP`
+   - Animated GIF logos play using their embedded animation frames
 
    The built-in themes (`default` and `dark`) are always available regardless
    of what the manifest contains. The manifest only needs to list custom

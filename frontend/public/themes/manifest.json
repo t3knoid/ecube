@@ -1,4 +1,10 @@
 [
   { "name": "default", "label": "Light" },
-  { "name": "dark", "label": "Dark" }
+  { "name": "dark", "label": "Dark" },
+  {
+    "name": "teal-corporate",
+    "label": "Teal Corporate",
+    "logo": "teal-corporate-logo.svg",
+    "logoAlt": "Teal Corporate"
+  }
 ]
