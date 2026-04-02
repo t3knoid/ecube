@@ -1412,7 +1412,7 @@ install_frontend() {
       fi
     elif command -v nc &>/dev/null; then
       # Fallback when iproute2/ss is unavailable: active TCP probe to loopback backend host.
-      if nc -z -w5 "${_backend_host_bare}" "${API_PORT}" 2>/dev/null; then
+      if nc -z -w5 -- "${_backend_host_bare}" "${API_PORT}" 2>/dev/null; then
         _loopback_listening=true
       fi
     elif command -v timeout &>/dev/null && timeout 5 bash -c "echo '' > /dev/tcp/${_backend_host_bare}/${API_PORT}" 2>/dev/null; then
