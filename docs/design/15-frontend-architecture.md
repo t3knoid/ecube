@@ -743,7 +743,7 @@ Playwright's engine coverage (Chromium + WebKit) provides automated testing for 
 |-------|--------|-------|
 | **Component library** | Open | Evaluate PrimeVue, Vuetify, or Naive UI vs. hand-built components. Decision deferred to Phase 2 implementation. |
 | **Audit CSV export endpoint** | Open | Use cases mention CSV export (UC-7.7) but the current API only supports JSON. May require a new backend endpoint or client-side CSV generation. |
-| **Logo configuration** | Open | The header has a `[LOGO]` placeholder. Determine how the logo image is supplied — Docker volume mount, theme file, or admin upload. |
+| **Logo configuration** | Implemented | Theme manifest supports logo metadata (`logo`, `logoAlt`) with assets supplied via theme directory mount. |
 | **Real-time upgrades** | Deferred | Polling (3s interval) is the baseline. WebSocket can be added later if multi-user concurrent viewing becomes a requirement. |
 | **PWA / offline support** | Not planned | ECUBE requires network access to the API; offline mode is not applicable. |
 | **Additional locales** | Future | Only `en.json` ships initially. Translation contributions can add new locale files without code changes. |
