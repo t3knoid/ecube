@@ -1,15 +1,27 @@
 # ECUBE Package Deployment
 
-**Version:** 1.0  
+**Version:** 2.0  
 **Last Updated:** March 2026  
 **Audience:** Systems Administrators, IT Staff  
 **Document Type:** Deployment Procedures
 
+> **Note:** The manual steps below are now automated by `install.sh`.  
+> For new deployments, use the installer:
+>
+> ```bash
+> tar -xzf ecube-package-<version>.tar.gz
+> cd ecube-package-<version>
+> sudo ./install.sh
+> ```
+>
+> See [03-installation.md](03-installation.md) for all installer options.  
+> The manual steps are retained below as a reference for advanced or custom deployments.
+
 ---
 
-## Table of Contents
+## Table of Contents (Manual / Advanced Reference)
 
-- [Table of Contents](#table-of-contents)
+- [Table of Contents (Manual / Advanced Reference)](#table-of-contents-manual--advanced-reference)
 - [Create Service Account](#create-service-account)
 - [Download and Extract Release Package](#download-and-extract-release-package)
 - [Set Up Python Virtual Environment](#set-up-python-virtual-environment)
@@ -73,8 +85,10 @@ curl -fsSL -O \
 sha256sum -c "ecube-package-${LATEST_TAG}.sha256"
 
 # Extract and fix ownership so the ecube user can access all files
-tar -xzf "ecube-package-${LATEST_TAG}.tar.gz" -C /opt/ecube/
-chown -R ecube:ecube /opt/ecube
+# --strip-components=1 removes the top-level ecube-package-<version>/ prefix
+# so files land directly under /opt/ecube/ (e.g. /opt/ecube/app/, /opt/ecube/frontend/).
+sudo tar -xzf "ecube-package-${LATEST_TAG}.tar.gz" -C /opt/ecube/ --strip-components=1
+sudo chown -R ecube:ecube /opt/ecube
 ```
 
 ## Set Up Python Virtual Environment
@@ -131,8 +145,9 @@ sudo systemctl daemon-reload
 
 ## Initialize Database
 
-Database setup can be done manually or via the API-based provisioning endpoint.
-Choose **one** option:
+> **Pre-requisite for `install.sh` users:** The installer validates credentials against an already-running PostgreSQL instance — it does not create the database or user. You must complete this step (or an equivalent) **before** running `install.sh`. Once the database and user exist, the installer will collect the connection details interactively and write `DATABASE_URL` to `.env`.
+
+For manual deployments, database setup can be done via the API-based provisioning endpoint or manually. Choose **one** option:
 
 ### Option A: API-Based Database Provisioning (Recommended)
 
@@ -155,9 +170,7 @@ curl -k -X POST https://localhost:8443/setup/database/provision \
   -d '{"host": "localhost", "port": 5432, "admin_username": "postgres", "admin_password": "secret", "app_database": "ecube", "app_username": "ecube", "app_password": "ecube123"}'
 ```
 
-The provision endpoint creates the PostgreSQL user and database, runs Alembic
-migrations, and writes `DATABASE_URL` to `.env`. The running service
-reconfigures its connection pool in-place — no restart is required.
+The provision endpoint creates or updates the PostgreSQL application user and database, runs Alembic migrations, and (re)writes `DATABASE_URL` in `.env` to point at the provisioned database. This behavior applies both to manual deployments and to installs created with `install.sh`; invoking the endpoint may overwrite an existing `DATABASE_URL` value and change the application user password. In environments where `install.sh` already created the database and wrote `DATABASE_URL`, calling the provision endpoint again with the same `app_database`, `app_username`, and credentials is effectively a migrations-only step (no effective changes beyond the migrations themselves). If you supply different database/user/credential values, the endpoint will attempt to create or alter the role and database and update `.env` accordingly.
 
 ### Option B: Manual Setup (CLI)
 
@@ -268,7 +281,11 @@ For the complete list of environment variables, defaults, and descriptions, see:
 
 ### Quick Start
 
-ECUBE reads configuration from environment variables or a `.env` file. All settings have built-in defaults — the `.env` file is **optional**. Create one only to override defaults:
+ECUBE reads configuration from environment variables or a `.env` file. All settings have built-in defaults.
+
+> **`install.sh` users:** `.env` is always created by the installer with a random `SECRET_KEY` and the `DATABASE_URL` you supplied during installation. Edit it only to change a setting after the fact.
+
+For **manual deployments**, `.env` is optional — create one only to override defaults:
 
 ```bash
 # Copy the example file as a starting point
