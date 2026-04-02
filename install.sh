@@ -1034,7 +1034,8 @@ _collect_db_config() {
     local escaped_pass
     escaped_pass="${DB_PASS//\\/\\\\}"
     escaped_pass="${escaped_pass//:/\\:}"
-    printf '%s:%s:%s:%s:%s\n' "${DB_HOST_BARE}" "${DB_PORT}" "${DB_NAME}" "${DB_USER}" "${escaped_pass}" >"${pgpass_file}"
+    # Use '*' as host in .pgpass to avoid issues with IPv6 literals containing ':'
+    printf '%s:%s:%s:%s:%s\n' "*" "${DB_PORT}" "${DB_NAME}" "${DB_USER}" "${escaped_pass}" >"${pgpass_file}"
 
     local psql_status=0
     if PGPASSFILE="${pgpass_file}" psql \
