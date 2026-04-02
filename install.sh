@@ -675,7 +675,30 @@ preflight() {
         exit 1
       fi
     else
-      ok "python3.11: $(python3.11 --version 2>&1)"
+      # python3.11 is present; ensure the 'venv' module is available
+      if python3.11 -m venv --help >/dev/null 2>&1; then
+        ok "python3.11: $(python3.11 --version 2>&1) (venv available)"
+      else
+        warn "python3.11 is installed but the 'venv' module is not available."
+        if [[ "${ID}" == "ubuntu" || "${ID}" == "debian" ]]; then
+          if _confirm "Install python3.11-venv so virtual environments can be created?"; then
+            apt-get update
+            apt-get install -y python3.11-venv
+            if python3.11 -m venv --help >/dev/null 2>&1; then
+              ok "python3.11-venv installed; 'venv' module is now available."
+            else
+              error "python3.11-venv was installed but 'python3.11 -m venv' still fails. Aborting."
+              exit 1
+            fi
+          else
+            error "The 'venv' module for python3.11 is required to continue. Aborting."
+            exit 1
+          fi
+        else
+          error "The 'venv' module for python3.11 is missing. Please install the appropriate package for your distribution (e.g. python3.11-venv on Debian/Ubuntu)."
+          exit 1
+        fi
+      fi
     fi
   fi
 
