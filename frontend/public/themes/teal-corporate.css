@@ -1,0 +1,97 @@
+/*
+ * ECUBE Teal Corporate Theme
+ *
+ * Based on the default token contract with a teal-forward palette.
+ */
+
+:root {
+  /* -- Surface colors -- */
+  --color-bg-primary: #f0f9f8;
+  --color-bg-secondary: #e0f2f1;
+  --color-bg-sidebar: #d0ece9;
+  --color-bg-header: #e0f2f1;
+  --color-bg-footer: #e0f2f1;
+  --color-bg-input: #ffffff;
+  --color-bg-hover: #cbe8e4;
+  --color-bg-selected: #bde7e3;
+
+  /* -- Text colors -- */
+  --color-text-primary: #1f2937;
+  --color-text-secondary: #4b5563;
+  --color-text-inverse: #ffffff;
+  --color-text-link: #0891b2;
+  --color-text-disabled: #94a3b8;
+
+  /* -- Semantic colors -- */
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #06b6d4;
+
+  /* -- Alert / banner surfaces -- */
+  --color-alert-warning-bg: #fff7ed;
+  --color-alert-warning-text: #92400e;
+  --color-alert-warning-border: #f59e0b;
+  --color-alert-danger-bg: #fef2f2;
+  --color-alert-danger-text: #b91c1c;
+  --color-alert-danger-border: #fecaca;
+
+  /* -- Borders & dividers -- */
+  --color-border: #b6ddd8;
+  --color-border-focus: #0d9488;
+  --color-divider: #b6ddd8;
+
+  /* -- Buttons -- */
+  --color-btn-primary-bg: #0d9488;
+  --color-btn-primary-text: #ffffff;
+  --color-btn-primary-hover-bg: #0f766e;
+  --color-btn-danger-bg: #ef4444;
+  --color-btn-danger-text: #ffffff;
+  --color-btn-danger-hover-bg: #dc2626;
+
+  /* -- Role badges -- */
+  --color-badge-admin-bg: #fef2f2;
+  --color-badge-admin-text: #b91c1c;
+  --color-badge-manager-bg: #cffafe;
+  --color-badge-manager-text: #0e7490;
+  --color-badge-processor-bg: #dcfce7;
+  --color-badge-processor-text: #166534;
+  --color-badge-auditor-bg: #fef9c3;
+  --color-badge-auditor-text: #854d0e;
+
+  /* -- Progress bar -- */
+  --color-progress-bar: #0d9488;
+  --color-progress-track: #c8dedb;
+
+  /* -- Typography -- */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    Roboto, Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans',
+    'Helvetica Neue', sans-serif;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-bold: 700;
+
+  /* -- Spacing scale -- */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+
+  /* -- Layout tokens -- */
+  --sidebar-width: 200px;
+  --header-height: 56px;
+  --footer-height: 40px;
+  --border-radius: 4px;
+  --border-radius-lg: 8px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+}
