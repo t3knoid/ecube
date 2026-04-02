@@ -22,14 +22,31 @@ jobs:
           echo "short_sha=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
           echo "artifact_name=ecube-package-${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.0'  # matches engines.node in frontend/package.json (^20.19.0 || >=22.12.0)
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
       - name: Create deployment package
         run: |
+          chmod 755 install.sh
           mkdir -p dist
           tar -czf "dist/${{ steps.meta.outputs.artifact_name }}.tar.gz" \
+            --transform "s|^|${{ steps.meta.outputs.artifact_name }}/|" \
+            install.sh \
             app \
             alembic \
             pyproject.toml \
             alembic.ini \
+            frontend/dist \
             README.md \
             LICENSE
 
