@@ -44,6 +44,11 @@ function simulateError() {
   if (link && link.onerror) link.onerror()
 }
 
+function expectedDefaultLogoAlt() {
+  const title = document.title.trim()
+  return title || 'ECUBE'
+}
+
 describe('Theme Store', () => {
   beforeEach(() => {
     Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true, configurable: true })
@@ -214,7 +219,7 @@ describe('Theme Store', () => {
     store.initialize()
 
     await vi.waitFor(() => expect(store.currentLogo).toContain('themes/acme-logo.svg'))
-    expect(store.currentLogoAlt).toBe('Organization Logo')
+    expect(store.currentLogoAlt).toBe(expectedDefaultLogoAlt())
   })
 
   it('clears logo when switching to a theme without logo metadata', async () => {
@@ -228,7 +233,7 @@ describe('Theme Store', () => {
     await vi.waitFor(() => expect(store.currentLogo).toContain('themes/acme-logo.svg'))
     store.loadTheme('dark')
     expect(store.currentLogo).toBeNull()
-    expect(store.currentLogoAlt).toBe('Organization Logo')
+    expect(store.currentLogoAlt).toBe(expectedDefaultLogoAlt())
   })
 
   it('ignores non-object manifest entries without aborting valid entries', async () => {
@@ -260,7 +265,7 @@ describe('Theme Store', () => {
       { name: 'dark', label: 'Dark' },
     ]))
     expect(store.currentLogo).toBeNull()
-    expect(store.currentLogoAlt).toBe('Organization Logo')
+    expect(store.currentLogoAlt).toBe(expectedDefaultLogoAlt())
   })
 
   it('keeps logo and falls back alt text when logoAlt is invalid', async () => {
@@ -271,7 +276,7 @@ describe('Theme Store', () => {
     store.initialize()
 
     await vi.waitFor(() => expect(store.currentLogo).toContain('themes/acme-logo.svg'))
-    expect(store.currentLogoAlt).toBe('Organization Logo')
+    expect(store.currentLogoAlt).toBe(expectedDefaultLogoAlt())
     expect(store.availableThemes).toEqual([
       { name: 'default', label: 'Light', logo: 'acme-logo.svg' },
       { name: 'dark', labelKey: 'themes.dark' },
