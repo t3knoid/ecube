@@ -256,6 +256,33 @@ describe('Theme Store', () => {
     ]))
   })
 
+  it('ignores manifest entries with whitespace-only labels', async () => {
+    mockFetchManifest([
+      { name: 'default', label: '   ' },
+      { name: 'dark', label: 'Dark' },
+    ])
+    const store = useThemeStore()
+    store.initialize()
+
+    await vi.waitFor(() => expect(store.availableThemes).toEqual([
+      { name: 'default', labelKey: 'themes.light' },
+      { name: 'dark', labelKey: 'themes.dark', label: 'Dark' },
+    ]))
+  })
+
+  it('trims manifest labels before storing', async () => {
+    mockFetchManifest([
+      { name: 'default', label: '  Light  ' },
+    ])
+    const store = useThemeStore()
+    store.initialize()
+
+    await vi.waitFor(() => expect(store.availableThemes).toEqual([
+      { name: 'default', labelKey: 'themes.light', label: 'Light' },
+      { name: 'dark', labelKey: 'themes.dark' },
+    ]))
+  })
+
   it('keeps manifest entries with invalid logo filenames but drops branding', async () => {
     mockFetchManifest([
       { name: 'default', label: 'Light', logo: '../escape.svg', logoAlt: 'Bad' },
