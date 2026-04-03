@@ -154,16 +154,23 @@ async function handleLogin() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-wrap: wrap;
   gap: var(--space-sm);
+  max-width: 100%;
 }
 
 .login-logo-image {
+  display: block;
   width: auto;
+  max-width: 100%;
   height: 84px;
+  object-fit: contain;
+  flex-shrink: 1;
 }
 
 .login-title {
   margin: 0;
+  min-width: 0;
   font-size: var(--font-size-2xl);
   font-weight: var(--font-weight-bold);
   color: var(--color-text-primary);
