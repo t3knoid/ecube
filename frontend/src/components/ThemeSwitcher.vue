@@ -23,7 +23,7 @@ function onThemeChange(event) {
         :key="theme.name"
         :value="theme.name"
       >
-        {{ theme.labelKey ? t(theme.labelKey) : theme.label }}
+        {{ theme.label || (theme.labelKey ? t(theme.labelKey) : theme.name) }}
       </option>
     </select>
   </label>

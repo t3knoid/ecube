@@ -15,8 +15,10 @@ export const useSettingsStore = defineStore('settings', () => {
           auditExportFilename.value = data.auditExportFilename
         }
       }
-    } catch {
-      // ignore corrupt storage
+    } catch (err) {
+      if (import.meta.env.DEV) {
+        console.debug('[settings] corrupt storage, ignoring:', err)
+      }
     }
   }
 
