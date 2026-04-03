@@ -51,6 +51,7 @@ describe('Theme Store', () => {
     localStorageMock.clear()
     vi.clearAllMocks()
     mockFetchManifest()
+    document.title = 'Organization Logo'
     // Remove any injected link elements
     const link = document.getElementById('ecube-theme-stylesheet')
     if (link) link.remove()
@@ -61,6 +62,7 @@ describe('Theme Store', () => {
     globalThis.fetch = originalFetch
     const link = document.getElementById('ecube-theme-stylesheet')
     if (link) link.remove()
+    document.title = ''
   })
 
   it('initializes with default theme', () => {
