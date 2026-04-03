@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { useThemeStore } from '@/stores/theme.js'
@@ -10,7 +10,18 @@ const authStore = useAuthStore()
 const themeStore = useThemeStore()
 
 const now = ref(Date.now())
+const logoLoadFailed = ref(false)
 let timerInterval = null
+
+const showLogoImage = computed(() => Boolean(themeStore.currentLogo) && !logoLoadFailed.value)
+
+watch(
+  () => themeStore.currentLogo,
+  () => {
+    // New logo URL should get a fresh load attempt.
+    logoLoadFailed.value = false
+  },
+)
 
 onMounted(() => {
   timerInterval = setInterval(() => {
@@ -36,19 +47,23 @@ const expiryWarning = computed(() => {
 function handleLogout() {
   authStore.logout()
 }
+
+function handleLogoError() {
+  logoLoadFailed.value = true
+}
 </script>
 
 <template>
   <header class="app-header">
     <div class="header-left">
       <img
-        v-if="themeStore.currentLogo"
+        v-if="showLogoImage"
         :src="themeStore.currentLogo"
         :alt="themeStore.currentLogoAlt"
         class="header-logo-image"
+        @error="handleLogoError"
       />
-      <span v-else class="header-app-name">{{ t('app.name') }}</span>
-      <span v-if="themeStore.currentLogo" class="header-app-name">{{ t('app.name') }}</span>
+      <span class="header-app-name">{{ t('app.name') }}</span>
     </div>
     <div class="header-right">
       <span class="header-username">{{ authStore.username }}</span>
