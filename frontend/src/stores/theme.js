@@ -219,7 +219,7 @@ export const useThemeStore = defineStore('theme', () => {
     style.textContent = DEFAULT_THEME_INLINE_CSS
     currentTheme.value = 'default'
     currentLogo.value = null
-      currentLogoAlt.value = _defaultLogoAlt()
+    currentLogoAlt.value = _defaultLogoAlt()
   }
 
   /**
