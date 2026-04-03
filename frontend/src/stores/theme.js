@@ -7,7 +7,16 @@ const THEME_FALLBACK_STYLE_ID = 'ecube-theme-inline-fallback'
 const VALID_THEME_NAME = /^[a-z0-9][a-z0-9-]*$/
 const VALID_LOGO_FILENAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]*\.(?:svg|png|gif|webp)$/
 const MANIFEST_TIMEOUT_MS = 3000
-const DEFAULT_LOGO_ALT = 'Organization Logo'
+const DEFAULT_LOGO_ALT = (() => {
+  if (typeof document !== 'undefined') {
+    const localizedTitle = document.title.trim()
+    if (localizedTitle) {
+      return localizedTitle
+    }
+  }
+
+  return 'ECUBE'
+})()
 const BUILT_IN_THEMES = [
   { name: 'default', labelKey: 'themes.light' },
   { name: 'dark', labelKey: 'themes.dark' },
