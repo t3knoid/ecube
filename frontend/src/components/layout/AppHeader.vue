@@ -16,9 +16,9 @@ let timerInterval = null
 const showLogoImage = computed(() => Boolean(themeStore.currentLogo) && !logoLoadFailed.value)
 
 watch(
-  () => themeStore.currentLogo,
+  () => [themeStore.currentTheme, themeStore.currentLogo],
   () => {
-    // New logo URL should get a fresh load attempt.
+    // Theme changes or logo URL changes should get a fresh load attempt.
     logoLoadFailed.value = false
   },
 )
