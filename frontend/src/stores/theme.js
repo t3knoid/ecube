@@ -124,14 +124,14 @@ export const useThemeStore = defineStore('theme', () => {
       typeof t.name === 'string' &&
       typeof t.label === 'string' &&
       VALID_THEME_NAME.test(t.name) &&
-      t.label.length > 0
+      t.label.trim().length > 0
     )
   }
 
   function _normalizeEntry(entry) {
     const normalized = {
       name: entry.name,
-      label: entry.label,
+      label: entry.label.trim(),
     }
 
     const hasValidLogo =
