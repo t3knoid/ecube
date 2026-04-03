@@ -111,6 +111,8 @@ export const useThemeStore = defineStore('theme', () => {
 
   function _isValidEntry(t) {
     return (
+      t !== null &&
+      typeof t === 'object' &&
       typeof t.name === 'string' &&
       typeof t.label === 'string' &&
       VALID_THEME_NAME.test(t.name) &&
