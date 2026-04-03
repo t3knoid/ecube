@@ -16,6 +16,33 @@ function _defaultLogoAlt() {
   }
   return 'ECUBE'
 }
+
+/** Returns the trimmed logoAlt string, or '' if absent or whitespace-only. */
+function _trimmedLogoAlt(value) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+/** Constructs a URL for a file under the themes directory. */
+function _themesUrl(filename) {
+  return `${import.meta.env.BASE_URL}themes/${filename}`
+}
+
+/** Wraps a localStorage operation, swallowing errors when storage is unavailable. */
+function _safeStorage(fn) {
+  try {
+    return fn()
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.debug('[theme] localStorage unavailable:', err)
+    }
+  }
+}
+
+/** Returns true if the given value is a syntactically valid logo filename. */
+function _isValidLogoFilename(logo) {
+  return typeof logo === 'string' && VALID_LOGO_FILENAME.test(logo)
+}
+
 const BUILT_IN_THEMES = [
   { name: 'default', labelKey: 'themes.light' },
   { name: 'dark', labelKey: 'themes.dark' },
@@ -134,35 +161,34 @@ export const useThemeStore = defineStore('theme', () => {
       label: entry.label.trim(),
     }
 
-    const hasValidLogo =
-      typeof entry.logo === 'string' &&
-      entry.logo.length > 0 &&
-      VALID_LOGO_FILENAME.test(entry.logo)
+    const hasValidLogo = _isValidLogoFilename(entry.logo)
 
     if (hasValidLogo) {
       normalized.logo = entry.logo
-      if (typeof entry.logoAlt === 'string') {
-        const trimmedLogoAlt = entry.logoAlt.trim()
-        if (trimmedLogoAlt.length > 0) {
-          normalized.logoAlt = trimmedLogoAlt
-        }
+      const trimmedLogoAlt = _trimmedLogoAlt(entry.logoAlt)
+      if (trimmedLogoAlt.length > 0) {
+        normalized.logoAlt = trimmedLogoAlt
       }
     }
 
     return normalized
   }
 
+  function _clearBranding() {
+    currentLogo.value = null
+    currentLogoAlt.value = _defaultLogoAlt()
+  }
+
   function _setBrandingForTheme(themeName) {
     const theme = availableThemes.value.find((t) => t.name === themeName)
-    if (theme && typeof theme.logo === 'string' && VALID_LOGO_FILENAME.test(theme.logo)) {
-      currentLogo.value = `${import.meta.env.BASE_URL}themes/${theme.logo}`
-      const trimmedLogoAlt = typeof theme.logoAlt === 'string' ? theme.logoAlt.trim() : ''
+    if (theme && _isValidLogoFilename(theme.logo)) {
+      currentLogo.value = _themesUrl(theme.logo)
+      const trimmedLogoAlt = _trimmedLogoAlt(theme.logoAlt)
       currentLogoAlt.value = trimmedLogoAlt.length > 0 ? trimmedLogoAlt : _defaultLogoAlt()
       return
     }
 
-    currentLogo.value = null
-    currentLogoAlt.value = _defaultLogoAlt()
+    _clearBranding()
   }
 
   /**
@@ -175,7 +201,7 @@ export const useThemeStore = defineStore('theme', () => {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), MANIFEST_TIMEOUT_MS)
     try {
-      const url = `${import.meta.env.BASE_URL}themes/manifest.json`
+      const url = _themesUrl('manifest.json')
       const resp = await fetch(url, { signal: controller.signal })
       if (!resp.ok) return
       const data = await resp.json()
@@ -192,8 +218,10 @@ export const useThemeStore = defineStore('theme', () => {
         }
         _setBrandingForTheme(currentTheme.value)
       }
-    } catch {
-      // Manifest unavailable — keep built-in list
+    } catch (err) {
+      if (import.meta.env.DEV) {
+        console.debug('[theme] manifest unavailable:', err)
+      }
     } finally {
       clearTimeout(timer)
     }
@@ -219,8 +247,7 @@ export const useThemeStore = defineStore('theme', () => {
     }
     style.textContent = DEFAULT_THEME_INLINE_CSS
     currentTheme.value = 'default'
-    currentLogo.value = null
-    currentLogoAlt.value = _defaultLogoAlt()
+    _clearBranding()
   }
 
   /**
@@ -231,7 +258,7 @@ export const useThemeStore = defineStore('theme', () => {
    */
   function loadTheme(name) {
     if (!VALID_THEME_NAME.test(name)) return
-    const href = `${import.meta.env.BASE_URL}themes/${name}.css`
+    const href = _themesUrl(`${name}.css`)
 
     const oldLink = document.getElementById(THEME_LINK_ID)
 
@@ -255,21 +282,13 @@ export const useThemeStore = defineStore('theme', () => {
       _clearInlineFallbackTheme()
       currentTheme.value = name
       _setBrandingForTheme(name)
-      try {
-        localStorage.setItem(STORAGE_THEME_KEY, name)
-      } catch {
-        // Storage may be unavailable (quota exceeded, privacy mode, etc.)
-      }
+      _safeStorage(() => localStorage.setItem(STORAGE_THEME_KEY, name))
     }
 
     link.onerror = () => {
       if (document.getElementById(THEME_LINK_ID) !== link) return
       // Stylesheet failed to load — clear broken preference and fall back.
-      try {
-        localStorage.removeItem(STORAGE_THEME_KEY)
-      } catch {
-        // Storage may be unavailable
-      }
+      _safeStorage(() => localStorage.removeItem(STORAGE_THEME_KEY))
       if (name !== 'default') {
         loadTheme('default')
         return
@@ -299,12 +318,7 @@ export const useThemeStore = defineStore('theme', () => {
    * changed the theme via the switcher since initialization.
    */
   function initialize() {
-    let saved = null
-    try {
-      saved = localStorage.getItem(STORAGE_THEME_KEY)
-    } catch {
-      // Storage may be unavailable
-    }
+    const saved = _safeStorage(() => localStorage.getItem(STORAGE_THEME_KEY)) ?? null
     const themeName = saved && _isKnownTheme(saved) ? saved : 'default'
     loadTheme(themeName)
 
