@@ -44,6 +44,11 @@ function simulateError() {
   if (link && link.onerror) link.onerror()
 }
 
+function expectedDefaultLogoAlt() {
+  const title = document.title.trim()
+  return title || 'ECUBE'
+}
+
 describe('Theme Store', () => {
   beforeEach(() => {
     Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true, configurable: true })
@@ -51,6 +56,7 @@ describe('Theme Store', () => {
     localStorageMock.clear()
     vi.clearAllMocks()
     mockFetchManifest()
+    document.title = 'Organization Logo'
     // Remove any injected link elements
     const link = document.getElementById('ecube-theme-stylesheet')
     if (link) link.remove()
@@ -61,6 +67,7 @@ describe('Theme Store', () => {
     globalThis.fetch = originalFetch
     const link = document.getElementById('ecube-theme-stylesheet')
     if (link) link.remove()
+    document.title = ''
   })
 
   it('initializes with default theme', () => {
@@ -129,7 +136,11 @@ describe('Theme Store', () => {
     mockFetchManifest(custom)
     const store = useThemeStore()
     store.initialize()
-    await vi.waitFor(() => expect(store.availableThemes).toEqual(custom))
+    await vi.waitFor(() => expect(store.availableThemes).toEqual([
+      { name: 'default', labelKey: 'themes.light', label: 'Light' },
+      { name: 'dark', labelKey: 'themes.dark', label: 'Dark' },
+      { name: 'corporate', label: 'Corporate' },
+    ]))
   })
 
   it('restores saved custom theme after manifest loads', async () => {
@@ -190,5 +201,146 @@ describe('Theme Store', () => {
     // Give the .then() callback a chance to run
     await new Promise((r) => setTimeout(r, 0))
     expect(store.currentTheme).toBe('dark')
+  })
+
+  it('loads logo metadata for the current theme from manifest', async () => {
+    mockFetchManifest([
+      { name: 'default', label: 'Light', logo: 'acme-logo.svg', logoAlt: 'ACME Corp' },
+      { name: 'dark', label: 'Dark' },
+    ])
+    const store = useThemeStore()
+    store.initialize()
+
+    await vi.waitFor(() => expect(store.currentLogo).toContain('themes/acme-logo.svg'))
+    expect(store.currentLogoAlt).toBe('ACME Corp')
+  })
+
+  it('uses default alt text when logoAlt is omitted', async () => {
+    mockFetchManifest([
+      { name: 'default', label: 'Light', logo: 'acme-logo.svg' },
+    ])
+    const store = useThemeStore()
+    store.initialize()
+
+    await vi.waitFor(() => expect(store.currentLogo).toContain('themes/acme-logo.svg'))
+    expect(store.currentLogoAlt).toBe(expectedDefaultLogoAlt())
+  })
+
+  it('clears logo when switching to a theme without logo metadata', async () => {
+    mockFetchManifest([
+      { name: 'default', label: 'Light', logo: 'acme-logo.svg', logoAlt: 'ACME Corp' },
+      { name: 'dark', label: 'Dark' },
+    ])
+    const store = useThemeStore()
+    store.initialize()
+
+    await vi.waitFor(() => expect(store.currentLogo).toContain('themes/acme-logo.svg'))
+    store.loadTheme('dark')
+    expect(store.currentLogo).toBeNull()
+    expect(store.currentLogoAlt).toBe(expectedDefaultLogoAlt())
+  })
+
+  it('ignores non-object manifest entries without aborting valid entries', async () => {
+    mockFetchManifest([
+      null,
+      42,
+      'string-entry',
+      { name: 'default', label: 'Light' },
+    ])
+    const store = useThemeStore()
+    store.initialize()
+
+    await vi.waitFor(() => expect(store.availableThemes).toEqual([
+      { name: 'default', labelKey: 'themes.light', label: 'Light' },
+      { name: 'dark', labelKey: 'themes.dark' },
+    ]))
+  })
+
+  it('ignores manifest entries with whitespace-only labels', async () => {
+    mockFetchManifest([
+      { name: 'default', label: '   ' },
+      { name: 'dark', label: 'Dark' },
+    ])
+    const store = useThemeStore()
+    store.initialize()
+
+    await vi.waitFor(() => expect(store.availableThemes).toEqual([
+      { name: 'default', labelKey: 'themes.light' },
+      { name: 'dark', labelKey: 'themes.dark', label: 'Dark' },
+    ]))
+  })
+
+  it('trims manifest labels before storing', async () => {
+    mockFetchManifest([
+      { name: 'default', label: '  Light  ' },
+    ])
+    const store = useThemeStore()
+    store.initialize()
+
+    await vi.waitFor(() => expect(store.availableThemes).toEqual([
+      { name: 'default', labelKey: 'themes.light', label: 'Light' },
+      { name: 'dark', labelKey: 'themes.dark' },
+    ]))
+  })
+
+  it('keeps manifest entries with invalid logo filenames but drops branding', async () => {
+    mockFetchManifest([
+      { name: 'default', label: 'Light', logo: '../escape.svg', logoAlt: 'Bad' },
+      { name: 'dark', label: 'Dark' },
+    ])
+    const store = useThemeStore()
+    store.initialize()
+
+    await vi.waitFor(() => expect(store.availableThemes).toEqual([
+      { name: 'default', labelKey: 'themes.light', label: 'Light' },
+      { name: 'dark', labelKey: 'themes.dark', label: 'Dark' },
+    ]))
+    expect(store.currentLogo).toBeNull()
+    expect(store.currentLogoAlt).toBe(expectedDefaultLogoAlt())
+  })
+
+  it('keeps logo and falls back alt text when logoAlt is invalid', async () => {
+    mockFetchManifest([
+      { name: 'default', label: 'Light', logo: 'acme-logo.svg', logoAlt: 42 },
+    ])
+    const store = useThemeStore()
+    store.initialize()
+
+    await vi.waitFor(() => expect(store.currentLogo).toContain('themes/acme-logo.svg'))
+    expect(store.currentLogoAlt).toBe(expectedDefaultLogoAlt())
+    expect(store.availableThemes).toEqual([
+      { name: 'default', labelKey: 'themes.light', label: 'Light', logo: 'acme-logo.svg' },
+      { name: 'dark', labelKey: 'themes.dark' },
+    ])
+  })
+
+  it('falls back alt text when logoAlt is whitespace only', async () => {
+    mockFetchManifest([
+      { name: 'default', label: 'Light', logo: 'acme-logo.svg', logoAlt: '   ' },
+    ])
+    const store = useThemeStore()
+    store.initialize()
+
+    await vi.waitFor(() => expect(store.currentLogo).toContain('themes/acme-logo.svg'))
+    expect(store.currentLogoAlt).toBe(expectedDefaultLogoAlt())
+    expect(store.availableThemes).toEqual([
+      { name: 'default', labelKey: 'themes.light', label: 'Light', logo: 'acme-logo.svg' },
+      { name: 'dark', labelKey: 'themes.dark' },
+    ])
+  })
+
+  it('trims logoAlt before storing', async () => {
+    mockFetchManifest([
+      { name: 'default', label: 'Light', logo: 'acme-logo.svg', logoAlt: '  ACME Corp  ' },
+    ])
+    const store = useThemeStore()
+    store.initialize()
+
+    await vi.waitFor(() => expect(store.currentLogo).toContain('themes/acme-logo.svg'))
+    expect(store.currentLogoAlt).toBe('ACME Corp')
+    expect(store.availableThemes).toEqual([
+      { name: 'default', labelKey: 'themes.light', label: 'Light', logo: 'acme-logo.svg', logoAlt: 'ACME Corp' },
+      { name: 'dark', labelKey: 'themes.dark' },
+    ])
   })
 })
