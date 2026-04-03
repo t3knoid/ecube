@@ -2,10 +2,12 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
+import { useThemeStore } from '@/stores/theme.js'
 import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
+const themeStore = useThemeStore()
 
 const now = ref(Date.now())
 let timerInterval = null
@@ -39,7 +41,13 @@ function handleLogout() {
 <template>
   <header class="app-header">
     <div class="header-left">
-      <span class="header-logo">[LOGO]</span>
+      <img
+        v-if="themeStore.currentLogo"
+        :src="themeStore.currentLogo"
+        :alt="themeStore.currentLogoAlt"
+        class="header-logo-image"
+      />
+      <span v-else class="header-logo">[LOGO]</span>
       <span class="header-app-name">{{ t('app.name') }}</span>
     </div>
     <div class="header-right">
@@ -80,13 +88,20 @@ function handleLogout() {
 .header-left {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  gap: var(--space-xs);
 }
 
 .header-logo {
   font-size: var(--font-size-xs);
   color: var(--color-text-primary);
   opacity: 0.9;
+}
+
+.header-logo-image {
+  height: 88px;
+  width: auto;
+  max-width: 440px;
+  object-fit: contain;
 }
 
 .header-app-name {
