@@ -7,16 +7,15 @@ const THEME_FALLBACK_STYLE_ID = 'ecube-theme-inline-fallback'
 const VALID_THEME_NAME = /^[a-z0-9][a-z0-9-]*$/
 const VALID_LOGO_FILENAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]*\.(?:svg|png|gif|webp)$/
 const MANIFEST_TIMEOUT_MS = 3000
-const DEFAULT_LOGO_ALT = (() => {
+function _defaultLogoAlt() {
   if (typeof document !== 'undefined') {
     const localizedTitle = document.title.trim()
     if (localizedTitle) {
       return localizedTitle
     }
   }
-
   return 'ECUBE'
-})()
+}
 const BUILT_IN_THEMES = [
   { name: 'default', labelKey: 'themes.light' },
   { name: 'dark', labelKey: 'themes.dark' },
@@ -115,7 +114,7 @@ const DEFAULT_THEME_INLINE_CSS = `
 export const useThemeStore = defineStore('theme', () => {
   const currentTheme = ref('default')
   const currentLogo = ref(null)
-  const currentLogoAlt = ref(DEFAULT_LOGO_ALT)
+  const currentLogoAlt = ref(_defaultLogoAlt())
   const availableThemes = ref([...BUILT_IN_THEMES])
 
   function _isValidEntry(t) {
@@ -156,12 +155,12 @@ export const useThemeStore = defineStore('theme', () => {
       currentLogo.value = `${import.meta.env.BASE_URL}themes/${theme.logo}`
       currentLogoAlt.value = typeof theme.logoAlt === 'string' && theme.logoAlt.length > 0
         ? theme.logoAlt
-        : DEFAULT_LOGO_ALT
+        : _defaultLogoAlt()
       return
     }
 
     currentLogo.value = null
-    currentLogoAlt.value = DEFAULT_LOGO_ALT
+    currentLogoAlt.value = _defaultLogoAlt()
   }
 
   /**
@@ -218,7 +217,7 @@ export const useThemeStore = defineStore('theme', () => {
     style.textContent = DEFAULT_THEME_INLINE_CSS
     currentTheme.value = 'default'
     currentLogo.value = null
-    currentLogoAlt.value = DEFAULT_LOGO_ALT
+      currentLogoAlt.value = _defaultLogoAlt()
   }
 
   /**
