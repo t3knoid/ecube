@@ -5,7 +5,9 @@ import { STORAGE_THEME_KEY } from '@/constants/storage.js'
 const THEME_LINK_ID = 'ecube-theme-stylesheet'
 const THEME_FALLBACK_STYLE_ID = 'ecube-theme-inline-fallback'
 const VALID_THEME_NAME = /^[a-z0-9][a-z0-9-]*$/
+const VALID_LOGO_FILENAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/
 const MANIFEST_TIMEOUT_MS = 3000
+const DEFAULT_LOGO_ALT = 'Organization Logo'
 const BUILT_IN_THEMES = [
   { name: 'default', labelKey: 'themes.light' },
   { name: 'dark', labelKey: 'themes.dark' },
@@ -91,7 +93,7 @@ const DEFAULT_THEME_INLINE_CSS = `
   --space-2xl: 3rem;
 
   --sidebar-width: 200px;
-  --header-height: 56px;
+  --header-height: 96px;
   --footer-height: 40px;
   --border-radius: 4px;
   --border-radius-lg: 8px;
@@ -103,15 +105,35 @@ const DEFAULT_THEME_INLINE_CSS = `
 
 export const useThemeStore = defineStore('theme', () => {
   const currentTheme = ref('default')
+  const currentLogo = ref(null)
+  const currentLogoAlt = ref(DEFAULT_LOGO_ALT)
   const availableThemes = ref([...BUILT_IN_THEMES])
 
   function _isValidEntry(t) {
+    const hasLogo = typeof t.logo === 'string' && t.logo.length > 0
+    const hasLogoAlt = typeof t.logoAlt === 'string' && t.logoAlt.length > 0
     return (
       typeof t.name === 'string' &&
       typeof t.label === 'string' &&
       VALID_THEME_NAME.test(t.name) &&
-      t.label.length > 0
+      t.label.length > 0 &&
+      (t.logo == null || (hasLogo && VALID_LOGO_FILENAME.test(t.logo))) &&
+      (t.logoAlt == null || hasLogoAlt)
     )
+  }
+
+  function _setBrandingForTheme(themeName) {
+    const theme = availableThemes.value.find((t) => t.name === themeName)
+    if (theme && typeof theme.logo === 'string' && VALID_LOGO_FILENAME.test(theme.logo)) {
+      currentLogo.value = `${import.meta.env.BASE_URL}themes/${theme.logo}`
+      currentLogoAlt.value = typeof theme.logoAlt === 'string' && theme.logoAlt.length > 0
+        ? theme.logoAlt
+        : DEFAULT_LOGO_ALT
+      return
+    }
+
+    currentLogo.value = null
+    currentLogoAlt.value = DEFAULT_LOGO_ALT
   }
 
   /**
@@ -138,6 +160,7 @@ export const useThemeStore = defineStore('theme', () => {
           }
           availableThemes.value = [...merged.values()]
         }
+        _setBrandingForTheme(currentTheme.value)
       }
     } catch {
       // Manifest unavailable — keep built-in list
@@ -166,6 +189,8 @@ export const useThemeStore = defineStore('theme', () => {
     }
     style.textContent = DEFAULT_THEME_INLINE_CSS
     currentTheme.value = 'default'
+    currentLogo.value = null
+    currentLogoAlt.value = DEFAULT_LOGO_ALT
   }
 
   /**
@@ -184,6 +209,7 @@ export const useThemeStore = defineStore('theme', () => {
     // cancelling an in-flight load and an unnecessary network request.
     if (oldLink && oldLink.getAttribute('href') === href) {
       currentTheme.value = name
+      _setBrandingForTheme(name)
       return
     }
 
@@ -198,6 +224,7 @@ export const useThemeStore = defineStore('theme', () => {
       if (document.getElementById(THEME_LINK_ID) !== link) return
       _clearInlineFallbackTheme()
       currentTheme.value = name
+      _setBrandingForTheme(name)
       try {
         localStorage.setItem(STORAGE_THEME_KEY, name)
       } catch {
@@ -232,6 +259,7 @@ export const useThemeStore = defineStore('theme', () => {
     // Commit optimistically so the UI reflects the selection immediately.
     // The onerror handler will revert if the stylesheet fails.
     currentTheme.value = name
+    _setBrandingForTheme(name)
   }
 
   /**
@@ -271,6 +299,8 @@ export const useThemeStore = defineStore('theme', () => {
 
   return {
     currentTheme,
+    currentLogo,
+    currentLogoAlt,
     availableThemes,
     loadTheme,
     initialize,
