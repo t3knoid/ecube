@@ -183,7 +183,8 @@ export const useThemeStore = defineStore('theme', () => {
           // Start with built-ins, then overlay/append manifest entries
           const merged = new Map(BUILT_IN_THEMES.map((t) => [t.name, t]))
           for (const entry of valid) {
-            merged.set(entry.name, entry)
+            const existing = merged.get(entry.name)
+            merged.set(entry.name, existing ? { ...existing, ...entry } : entry)
           }
           availableThemes.value = [...merged.values()]
         }
