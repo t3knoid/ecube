@@ -136,7 +136,11 @@ describe('Theme Store', () => {
     mockFetchManifest(custom)
     const store = useThemeStore()
     store.initialize()
-    await vi.waitFor(() => expect(store.availableThemes).toEqual(custom))
+    await vi.waitFor(() => expect(store.availableThemes).toEqual([
+      { name: 'default', labelKey: 'themes.light', label: 'Light' },
+      { name: 'dark', labelKey: 'themes.dark', label: 'Dark' },
+      { name: 'corporate', label: 'Corporate' },
+    ]))
   })
 
   it('restores saved custom theme after manifest loads', async () => {
@@ -247,7 +251,7 @@ describe('Theme Store', () => {
     store.initialize()
 
     await vi.waitFor(() => expect(store.availableThemes).toEqual([
-      { name: 'default', label: 'Light' },
+      { name: 'default', labelKey: 'themes.light', label: 'Light' },
       { name: 'dark', labelKey: 'themes.dark' },
     ]))
   })
@@ -261,8 +265,8 @@ describe('Theme Store', () => {
     store.initialize()
 
     await vi.waitFor(() => expect(store.availableThemes).toEqual([
-      { name: 'default', label: 'Light' },
-      { name: 'dark', label: 'Dark' },
+      { name: 'default', labelKey: 'themes.light', label: 'Light' },
+      { name: 'dark', labelKey: 'themes.dark', label: 'Dark' },
     ]))
     expect(store.currentLogo).toBeNull()
     expect(store.currentLogoAlt).toBe(expectedDefaultLogoAlt())
@@ -278,7 +282,7 @@ describe('Theme Store', () => {
     await vi.waitFor(() => expect(store.currentLogo).toContain('themes/acme-logo.svg'))
     expect(store.currentLogoAlt).toBe(expectedDefaultLogoAlt())
     expect(store.availableThemes).toEqual([
-      { name: 'default', label: 'Light', logo: 'acme-logo.svg' },
+      { name: 'default', labelKey: 'themes.light', label: 'Light', logo: 'acme-logo.svg' },
       { name: 'dark', labelKey: 'themes.dark' },
     ])
   })
