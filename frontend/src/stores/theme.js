@@ -5,7 +5,7 @@ import { STORAGE_THEME_KEY } from '@/constants/storage.js'
 const THEME_LINK_ID = 'ecube-theme-stylesheet'
 const THEME_FALLBACK_STYLE_ID = 'ecube-theme-inline-fallback'
 const VALID_THEME_NAME = /^[a-z0-9][a-z0-9-]*$/
-const VALID_LOGO_FILENAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/
+const VALID_LOGO_FILENAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]*\.(?:svg|png|gif|webp)$/
 const MANIFEST_TIMEOUT_MS = 3000
 const DEFAULT_LOGO_ALT = 'Organization Logo'
 const BUILT_IN_THEMES = [
