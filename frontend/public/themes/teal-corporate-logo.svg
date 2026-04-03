@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="240" height="48" viewBox="0 0 240 48" role="img" aria-labelledby="title desc">
-  <title id="title">Teal Corporate</title>
-  <desc id="desc">Teal Corporate logo for ECUBE theme testing</desc>
-  <rect x="0" y="0" width="48" height="48" rx="10" fill="#0d9488" />
-  <path d="M14 24h20" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
-  <path d="M24 14v20" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
-  <text x="60" y="31" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="700" fill="#0d9488">Teal Corporate</text>
-</svg>
