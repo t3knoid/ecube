@@ -1,21 +1,36 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
+import { useThemeStore } from '@/stores/theme.js'
 import { EXPIRED_QUERY_KEY, EXPIRED_QUERY_VALUE } from '@/constants/auth.js'
 
 const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
 const authStore = useAuthStore()
+const themeStore = useThemeStore()
 
 const username = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
+const logoLoadFailed = ref(false)
 
 const sessionExpired = computed(() => route.query[EXPIRED_QUERY_KEY] === EXPIRED_QUERY_VALUE)
+const showLogoImage = computed(() => Boolean(themeStore.currentLogo) && !logoLoadFailed.value)
+
+watch(
+  () => themeStore.currentLogo,
+  () => {
+    logoLoadFailed.value = false
+  },
+)
+
+function handleLogoError() {
+  logoLoadFailed.value = true
+}
 
 async function handleLogin() {
   error.value = ''
@@ -56,7 +71,16 @@ async function handleLogin() {
   <div class="login-page">
     <div class="login-card">
       <div class="login-header">
-        <h1 class="login-title">{{ t('app.name') }}</h1>
+        <div class="login-title-row">
+          <img
+            v-if="showLogoImage"
+            :src="themeStore.currentLogo"
+            :alt="themeStore.currentLogoAlt"
+            class="login-logo-image"
+            @error="handleLogoError"
+          />
+          <h1 class="login-title">{{ t('app.name') }}</h1>
+        </div>
         <p class="login-subtitle">{{ t('app.title') }}</p>
       </div>
 
@@ -126,7 +150,27 @@ async function handleLogin() {
   margin-bottom: var(--space-lg);
 }
 
+.login-title-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  max-width: 100%;
+}
+
+.login-logo-image {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: 84px;
+  object-fit: contain;
+  flex-shrink: 1;
+}
+
 .login-title {
+  margin: 0;
+  min-width: 0;
   font-size: var(--font-size-2xl);
   font-weight: var(--font-weight-bold);
   color: var(--color-text-primary);
