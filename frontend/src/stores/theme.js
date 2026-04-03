@@ -194,8 +194,9 @@ export const useThemeStore = defineStore('theme', () => {
   /**
    * Fetch the theme manifest from the server and merge with built-in themes.
    * Built-ins are always present; manifest entries are merged (de-duplicated
-   * by name, with manifest labels taking precedence). Falls back to built-ins
-   * if the manifest is missing or malformed.
+   * by name). For built-in themes a manifest-provided label takes precedence
+   * in the UI; the built-in labelKey is kept as a localised fallback for when
+   * no manifest label is present.
    */
   async function fetchManifest() {
     const controller = new AbortController()
