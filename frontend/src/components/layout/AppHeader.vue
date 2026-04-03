@@ -47,8 +47,8 @@ function handleLogout() {
         :alt="themeStore.currentLogoAlt"
         class="header-logo-image"
       />
-      <span v-else class="header-logo">[LOGO]</span>
-      <span class="header-app-name">{{ t('app.name') }}</span>
+      <span v-else class="header-app-name">{{ t('app.name') }}</span>
+      <span v-if="themeStore.currentLogo" class="header-app-name">{{ t('app.name') }}</span>
     </div>
     <div class="header-right">
       <span class="header-username">{{ authStore.username }}</span>
@@ -89,12 +89,6 @@ function handleLogout() {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
-}
-
-.header-logo {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-primary);
-  opacity: 0.9;
 }
 
 .header-logo-image {
