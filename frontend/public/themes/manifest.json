@@ -1,10 +1,10 @@
 [
-  { "name": "default", "label": "Light" },
-  { "name": "dark", "label": "Dark" },
+  { "name": "default", "label": "Light", "logo": "ecube-logo.png", "logoAlt": "ECUBE" },
+  { "name": "dark", "label": "Dark", "logo": "ecube-logo.png", "logoAlt": "ECUBE" },
   {
     "name": "teal-corporate",
     "label": "Teal Corporate",
-    "logo": "teal-corporate-logo.svg",
-    "logoAlt": "Teal Corporate"
+    "logo": "ecube-logo.png",
+    "logoAlt": "ECUBE"
   }
 ]

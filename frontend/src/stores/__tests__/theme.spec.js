@@ -191,4 +191,58 @@ describe('Theme Store', () => {
     await new Promise((r) => setTimeout(r, 0))
     expect(store.currentTheme).toBe('dark')
   })
+
+  it('loads logo metadata for the current theme from manifest', async () => {
+    mockFetchManifest([
+      { name: 'default', label: 'Light', logo: 'acme-logo.svg', logoAlt: 'ACME Corp' },
+      { name: 'dark', label: 'Dark' },
+    ])
+    const store = useThemeStore()
+    store.initialize()
+
+    await vi.waitFor(() => expect(store.currentLogo).toContain('themes/acme-logo.svg'))
+    expect(store.currentLogoAlt).toBe('ACME Corp')
+  })
+
+  it('uses default alt text when logoAlt is omitted', async () => {
+    mockFetchManifest([
+      { name: 'default', label: 'Light', logo: 'acme-logo.svg' },
+    ])
+    const store = useThemeStore()
+    store.initialize()
+
+    await vi.waitFor(() => expect(store.currentLogo).toContain('themes/acme-logo.svg'))
+    expect(store.currentLogoAlt).toBe('Organization Logo')
+  })
+
+  it('clears logo when switching to a theme without logo metadata', async () => {
+    mockFetchManifest([
+      { name: 'default', label: 'Light', logo: 'acme-logo.svg', logoAlt: 'ACME Corp' },
+      { name: 'dark', label: 'Dark' },
+    ])
+    const store = useThemeStore()
+    store.initialize()
+
+    await vi.waitFor(() => expect(store.currentLogo).toContain('themes/acme-logo.svg'))
+    store.loadTheme('dark')
+    expect(store.currentLogo).toBeNull()
+    expect(store.currentLogoAlt).toBe('Organization Logo')
+  })
+
+  it('ignores manifest entries with invalid logo filenames', async () => {
+    mockFetchManifest([
+      { name: 'default', label: 'Light', logo: '../escape.svg', logoAlt: 'Bad' },
+      { name: 'dark', label: 'Dark' },
+    ])
+    const store = useThemeStore()
+    store.initialize()
+
+    await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalled())
+    expect(store.currentLogo).toBeNull()
+    expect(store.currentLogoAlt).toBe('Organization Logo')
+    expect(store.availableThemes).toEqual([
+      { name: 'default', labelKey: 'themes.light' },
+      { name: 'dark', labelKey: 'themes.dark' },
+    ])
+  })
 })
