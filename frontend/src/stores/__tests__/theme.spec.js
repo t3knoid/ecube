@@ -313,4 +313,34 @@ describe('Theme Store', () => {
       { name: 'dark', labelKey: 'themes.dark' },
     ])
   })
+
+  it('falls back alt text when logoAlt is whitespace only', async () => {
+    mockFetchManifest([
+      { name: 'default', label: 'Light', logo: 'acme-logo.svg', logoAlt: '   ' },
+    ])
+    const store = useThemeStore()
+    store.initialize()
+
+    await vi.waitFor(() => expect(store.currentLogo).toContain('themes/acme-logo.svg'))
+    expect(store.currentLogoAlt).toBe(expectedDefaultLogoAlt())
+    expect(store.availableThemes).toEqual([
+      { name: 'default', labelKey: 'themes.light', label: 'Light', logo: 'acme-logo.svg' },
+      { name: 'dark', labelKey: 'themes.dark' },
+    ])
+  })
+
+  it('trims logoAlt before storing', async () => {
+    mockFetchManifest([
+      { name: 'default', label: 'Light', logo: 'acme-logo.svg', logoAlt: '  ACME Corp  ' },
+    ])
+    const store = useThemeStore()
+    store.initialize()
+
+    await vi.waitFor(() => expect(store.currentLogo).toContain('themes/acme-logo.svg'))
+    expect(store.currentLogoAlt).toBe('ACME Corp')
+    expect(store.availableThemes).toEqual([
+      { name: 'default', labelKey: 'themes.light', label: 'Light', logo: 'acme-logo.svg', logoAlt: 'ACME Corp' },
+      { name: 'dark', labelKey: 'themes.dark' },
+    ])
+  })
 })

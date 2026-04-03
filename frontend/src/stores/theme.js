@@ -141,8 +141,11 @@ export const useThemeStore = defineStore('theme', () => {
 
     if (hasValidLogo) {
       normalized.logo = entry.logo
-      if (typeof entry.logoAlt === 'string' && entry.logoAlt.length > 0) {
-        normalized.logoAlt = entry.logoAlt
+      if (typeof entry.logoAlt === 'string') {
+        const trimmedLogoAlt = entry.logoAlt.trim()
+        if (trimmedLogoAlt.length > 0) {
+          normalized.logoAlt = trimmedLogoAlt
+        }
       }
     }
 
@@ -153,9 +156,8 @@ export const useThemeStore = defineStore('theme', () => {
     const theme = availableThemes.value.find((t) => t.name === themeName)
     if (theme && typeof theme.logo === 'string' && VALID_LOGO_FILENAME.test(theme.logo)) {
       currentLogo.value = `${import.meta.env.BASE_URL}themes/${theme.logo}`
-      currentLogoAlt.value = typeof theme.logoAlt === 'string' && theme.logoAlt.length > 0
-        ? theme.logoAlt
-        : _defaultLogoAlt()
+      const trimmedLogoAlt = typeof theme.logoAlt === 'string' ? theme.logoAlt.trim() : ''
+      currentLogoAlt.value = trimmedLogoAlt.length > 0 ? trimmedLogoAlt : _defaultLogoAlt()
       return
     }
 
