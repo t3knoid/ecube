@@ -242,7 +242,7 @@ describe('Theme Store', () => {
     expect(store.currentLogoAlt).toBe('Organization Logo')
     expect(store.availableThemes).toEqual([
       { name: 'default', labelKey: 'themes.light' },
-      { name: 'dark', labelKey: 'themes.dark' },
+      { name: 'dark', label: 'Dark' },
     ])
   })
 })
