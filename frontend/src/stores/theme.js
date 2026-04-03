@@ -110,16 +110,33 @@ export const useThemeStore = defineStore('theme', () => {
   const availableThemes = ref([...BUILT_IN_THEMES])
 
   function _isValidEntry(t) {
-    const hasLogo = typeof t.logo === 'string' && t.logo.length > 0
-    const hasLogoAlt = typeof t.logoAlt === 'string' && t.logoAlt.length > 0
     return (
       typeof t.name === 'string' &&
       typeof t.label === 'string' &&
       VALID_THEME_NAME.test(t.name) &&
-      t.label.length > 0 &&
-      (t.logo == null || (hasLogo && VALID_LOGO_FILENAME.test(t.logo))) &&
-      (t.logoAlt == null || hasLogoAlt)
+      t.label.length > 0
     )
+  }
+
+  function _normalizeEntry(entry) {
+    const normalized = {
+      name: entry.name,
+      label: entry.label,
+    }
+
+    const hasValidLogo =
+      typeof entry.logo === 'string' &&
+      entry.logo.length > 0 &&
+      VALID_LOGO_FILENAME.test(entry.logo)
+
+    if (hasValidLogo) {
+      normalized.logo = entry.logo
+      if (typeof entry.logoAlt === 'string' && entry.logoAlt.length > 0) {
+        normalized.logoAlt = entry.logoAlt
+      }
+    }
+
+    return normalized
   }
 
   function _setBrandingForTheme(themeName) {
@@ -151,7 +168,7 @@ export const useThemeStore = defineStore('theme', () => {
       if (!resp.ok) return
       const data = await resp.json()
       if (Array.isArray(data)) {
-        const valid = data.filter(_isValidEntry)
+        const valid = data.filter(_isValidEntry).map(_normalizeEntry)
         if (valid.length > 0) {
           // Start with built-ins, then overlay/append manifest entries
           const merged = new Map(BUILT_IN_THEMES.map((t) => [t.name, t]))

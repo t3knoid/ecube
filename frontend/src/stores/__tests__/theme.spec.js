@@ -229,7 +229,7 @@ describe('Theme Store', () => {
     expect(store.currentLogoAlt).toBe('Organization Logo')
   })
 
-  it('ignores manifest entries with invalid logo filenames', async () => {
+  it('keeps manifest entries with invalid logo filenames but drops branding', async () => {
     mockFetchManifest([
       { name: 'default', label: 'Light', logo: '../escape.svg', logoAlt: 'Bad' },
       { name: 'dark', label: 'Dark' },
@@ -237,11 +237,25 @@ describe('Theme Store', () => {
     const store = useThemeStore()
     store.initialize()
 
-    await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalled())
+    await vi.waitFor(() => expect(store.availableThemes).toEqual([
+      { name: 'default', label: 'Light' },
+      { name: 'dark', label: 'Dark' },
+    ]))
     expect(store.currentLogo).toBeNull()
     expect(store.currentLogoAlt).toBe('Organization Logo')
+  })
+
+  it('keeps logo and falls back alt text when logoAlt is invalid', async () => {
+    mockFetchManifest([
+      { name: 'default', label: 'Light', logo: 'acme-logo.svg', logoAlt: 42 },
+    ])
+    const store = useThemeStore()
+    store.initialize()
+
+    await vi.waitFor(() => expect(store.currentLogo).toContain('themes/acme-logo.svg'))
+    expect(store.currentLogoAlt).toBe('Organization Logo')
     expect(store.availableThemes).toEqual([
-      { name: 'default', labelKey: 'themes.light' },
+      { name: 'default', label: 'Light', logo: 'acme-logo.svg' },
       { name: 'dark', labelKey: 'themes.dark' },
     ])
   })
