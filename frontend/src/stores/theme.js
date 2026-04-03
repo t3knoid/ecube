@@ -178,8 +178,6 @@ export const useThemeStore = defineStore('theme', () => {
       if (!resp.ok) return
       const data = await resp.json()
       if (Array.isArray(data)) {
-      
-      
         const valid = data.filter(_isValidEntry).map(_normalizeEntry)
         if (valid.length > 0) {
           // Start with built-ins, then overlay/append manifest entries
