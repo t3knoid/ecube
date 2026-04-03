@@ -255,8 +255,8 @@ describe('Theme Store', () => {
     await vi.waitFor(() => expect(store.currentLogo).toContain('themes/acme-logo.svg'))
     expect(store.currentLogoAlt).toBe('Organization Logo')
     expect(store.availableThemes).toEqual([
-      { name: 'default', label: 'Light', logo: 'acme-logo.svg' },
-      { name: 'dark', labelKey: 'themes.dark' },
+      { name: 'default', label: 'light' },
+      { name: 'dark', label: 'Dark' },
     ])
   })
 })
