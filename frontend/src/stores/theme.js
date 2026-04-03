@@ -5,7 +5,44 @@ import { STORAGE_THEME_KEY } from '@/constants/storage.js'
 const THEME_LINK_ID = 'ecube-theme-stylesheet'
 const THEME_FALLBACK_STYLE_ID = 'ecube-theme-inline-fallback'
 const VALID_THEME_NAME = /^[a-z0-9][a-z0-9-]*$/
+const VALID_LOGO_FILENAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]*\.(?:svg|png|gif|webp)$/
 const MANIFEST_TIMEOUT_MS = 3000
+function _defaultLogoAlt() {
+  if (typeof document !== 'undefined') {
+    const localizedTitle = document.title.trim()
+    if (localizedTitle) {
+      return localizedTitle
+    }
+  }
+  return 'ECUBE'
+}
+
+/** Returns the trimmed logoAlt string, or '' if absent or whitespace-only. */
+function _trimmedLogoAlt(value) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+/** Constructs a URL for a file under the themes directory. */
+function _themesUrl(filename) {
+  return `${import.meta.env.BASE_URL}themes/${filename}`
+}
+
+/** Wraps a localStorage operation, swallowing errors when storage is unavailable. */
+function _safeStorage(fn) {
+  try {
+    return fn()
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.debug('[theme] localStorage unavailable:', err)
+    }
+  }
+}
+
+/** Returns true if the given value is a syntactically valid logo filename. */
+function _isValidLogoFilename(logo) {
+  return typeof logo === 'string' && VALID_LOGO_FILENAME.test(logo)
+}
+
 const BUILT_IN_THEMES = [
   { name: 'default', labelKey: 'themes.light' },
   { name: 'dark', labelKey: 'themes.dark' },
@@ -91,7 +128,7 @@ const DEFAULT_THEME_INLINE_CSS = `
   --space-2xl: 3rem;
 
   --sidebar-width: 200px;
-  --header-height: 56px;
+  --header-height: 96px;
   --footer-height: 40px;
   --border-radius: 4px;
   --border-radius-lg: 8px;
@@ -103,44 +140,89 @@ const DEFAULT_THEME_INLINE_CSS = `
 
 export const useThemeStore = defineStore('theme', () => {
   const currentTheme = ref('default')
+  const currentLogo = ref(null)
+  const currentLogoAlt = ref(_defaultLogoAlt())
   const availableThemes = ref([...BUILT_IN_THEMES])
 
   function _isValidEntry(t) {
     return (
+      t !== null &&
+      typeof t === 'object' &&
       typeof t.name === 'string' &&
       typeof t.label === 'string' &&
       VALID_THEME_NAME.test(t.name) &&
-      t.label.length > 0
+      t.label.trim().length > 0
     )
+  }
+
+  function _normalizeEntry(entry) {
+    const normalized = {
+      name: entry.name,
+      label: entry.label.trim(),
+    }
+
+    const hasValidLogo = _isValidLogoFilename(entry.logo)
+
+    if (hasValidLogo) {
+      normalized.logo = entry.logo
+      const trimmedLogoAlt = _trimmedLogoAlt(entry.logoAlt)
+      if (trimmedLogoAlt.length > 0) {
+        normalized.logoAlt = trimmedLogoAlt
+      }
+    }
+
+    return normalized
+  }
+
+  function _clearBranding() {
+    currentLogo.value = null
+    currentLogoAlt.value = _defaultLogoAlt()
+  }
+
+  function _setBrandingForTheme(themeName) {
+    const theme = availableThemes.value.find((t) => t.name === themeName)
+    if (theme && _isValidLogoFilename(theme.logo)) {
+      currentLogo.value = _themesUrl(theme.logo)
+      const trimmedLogoAlt = _trimmedLogoAlt(theme.logoAlt)
+      currentLogoAlt.value = trimmedLogoAlt.length > 0 ? trimmedLogoAlt : _defaultLogoAlt()
+      return
+    }
+
+    _clearBranding()
   }
 
   /**
    * Fetch the theme manifest from the server and merge with built-in themes.
    * Built-ins are always present; manifest entries are merged (de-duplicated
-   * by name, with manifest labels taking precedence). Falls back to built-ins
-   * if the manifest is missing or malformed.
+   * by name). For built-in themes a manifest-provided label takes precedence
+   * in the UI; the built-in labelKey is kept as a localised fallback for when
+   * no manifest label is present.
    */
   async function fetchManifest() {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), MANIFEST_TIMEOUT_MS)
     try {
-      const url = `${import.meta.env.BASE_URL}themes/manifest.json`
+      const url = _themesUrl('manifest.json')
       const resp = await fetch(url, { signal: controller.signal })
       if (!resp.ok) return
       const data = await resp.json()
       if (Array.isArray(data)) {
-        const valid = data.filter(_isValidEntry)
+        const valid = data.filter(_isValidEntry).map(_normalizeEntry)
         if (valid.length > 0) {
           // Start with built-ins, then overlay/append manifest entries
           const merged = new Map(BUILT_IN_THEMES.map((t) => [t.name, t]))
           for (const entry of valid) {
-            merged.set(entry.name, entry)
+            const existing = merged.get(entry.name)
+            merged.set(entry.name, existing ? { ...existing, ...entry } : entry)
           }
           availableThemes.value = [...merged.values()]
         }
+        _setBrandingForTheme(currentTheme.value)
       }
-    } catch {
-      // Manifest unavailable — keep built-in list
+    } catch (err) {
+      if (import.meta.env.DEV) {
+        console.debug('[theme] manifest unavailable:', err)
+      }
     } finally {
       clearTimeout(timer)
     }
@@ -166,6 +248,7 @@ export const useThemeStore = defineStore('theme', () => {
     }
     style.textContent = DEFAULT_THEME_INLINE_CSS
     currentTheme.value = 'default'
+    _clearBranding()
   }
 
   /**
@@ -176,7 +259,7 @@ export const useThemeStore = defineStore('theme', () => {
    */
   function loadTheme(name) {
     if (!VALID_THEME_NAME.test(name)) return
-    const href = `${import.meta.env.BASE_URL}themes/${name}.css`
+    const href = _themesUrl(`${name}.css`)
 
     const oldLink = document.getElementById(THEME_LINK_ID)
 
@@ -184,6 +267,7 @@ export const useThemeStore = defineStore('theme', () => {
     // cancelling an in-flight load and an unnecessary network request.
     if (oldLink && oldLink.getAttribute('href') === href) {
       currentTheme.value = name
+      _setBrandingForTheme(name)
       return
     }
 
@@ -198,21 +282,14 @@ export const useThemeStore = defineStore('theme', () => {
       if (document.getElementById(THEME_LINK_ID) !== link) return
       _clearInlineFallbackTheme()
       currentTheme.value = name
-      try {
-        localStorage.setItem(STORAGE_THEME_KEY, name)
-      } catch {
-        // Storage may be unavailable (quota exceeded, privacy mode, etc.)
-      }
+      _setBrandingForTheme(name)
+      _safeStorage(() => localStorage.setItem(STORAGE_THEME_KEY, name))
     }
 
     link.onerror = () => {
       if (document.getElementById(THEME_LINK_ID) !== link) return
       // Stylesheet failed to load — clear broken preference and fall back.
-      try {
-        localStorage.removeItem(STORAGE_THEME_KEY)
-      } catch {
-        // Storage may be unavailable
-      }
+      _safeStorage(() => localStorage.removeItem(STORAGE_THEME_KEY))
       if (name !== 'default') {
         loadTheme('default')
         return
@@ -232,6 +309,7 @@ export const useThemeStore = defineStore('theme', () => {
     // Commit optimistically so the UI reflects the selection immediately.
     // The onerror handler will revert if the stylesheet fails.
     currentTheme.value = name
+    _setBrandingForTheme(name)
   }
 
   /**
@@ -241,12 +319,7 @@ export const useThemeStore = defineStore('theme', () => {
    * changed the theme via the switcher since initialization.
    */
   function initialize() {
-    let saved = null
-    try {
-      saved = localStorage.getItem(STORAGE_THEME_KEY)
-    } catch {
-      // Storage may be unavailable
-    }
+    const saved = _safeStorage(() => localStorage.getItem(STORAGE_THEME_KEY)) ?? null
     const themeName = saved && _isKnownTheme(saved) ? saved : 'default'
     loadTheme(themeName)
 
@@ -271,6 +344,8 @@ export const useThemeStore = defineStore('theme', () => {
 
   return {
     currentTheme,
+    currentLogo,
+    currentLogoAlt,
     availableThemes,
     loadTheme,
     initialize,
