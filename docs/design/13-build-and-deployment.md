@@ -58,6 +58,7 @@ Workflow: `.github/workflows/release-artifact.yml`
 
 Trigger:
 
+- `workflow_dispatch` for manual/on-demand draft release creation
 - `push` to `main` when `pyproject.toml` changes creates a **draft** GitHub Release and matching `v<version>` tag
 - `release.published`
 

@@ -27,6 +27,7 @@ File: `.github/workflows/tag-release.yml`
 
 Trigger:
 
+- `workflow_dispatch`
 - `push` to `main` when `pyproject.toml` changes
 
 Output:
@@ -89,6 +90,15 @@ This repository publishes installer assets when a GitHub Release is **published*
 3. Open GitHub: **Releases** and review the newly created draft release for tag `vX.Y.Z`.
 4. Edit the title or release notes if needed.
 5. Click **Publish release**.
+
+### Manual recovery / on-demand run
+
+If the automatic run was skipped or needs to be re-run, you can start `.github/workflows/tag-release.yml` manually from the GitHub Actions UI.
+
+1. Open GitHub: **Actions** → **Tag and Draft Release on Version Bump**.
+2. Click **Run workflow** and choose the branch/ref to run against.
+3. Ensure `pyproject.toml` on that ref contains the intended release version.
+4. Let the workflow create the draft release if the matching `v<version>` tag does not already exist.
 
 Result:
 
