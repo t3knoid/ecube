@@ -1,6 +1,6 @@
 # ECUBE CI Build and Installer Artifact Contract
 
-**Version:** 1.0  
+**Version:** 1.1  
 **Last Updated:** April 2026  
 **Audience:** Developers, Release Engineers  
 **Document Type:** Development Reference
@@ -54,6 +54,73 @@ Output:
 - Files produced:
   - `ecube-package-<release_tag>.tar.gz`
   - `ecube-package-<release_tag>.sha256`
+
+---
+
+## How to Publish a Release
+
+This repository publishes installer assets when a GitHub Release is **published** (not just when a tag is pushed).
+
+### Prerequisites
+
+1. Changes are merged to `main`.
+2. CI is green on `main`.
+3. Release tag follows the expected format: `v<major>.<minor>.<patch>` (example: `v0.3.0`).
+
+### Option A: Publish from GitHub UI (recommended)
+
+1. Open GitHub: **Releases** → **Draft a new release**.
+2. Create/select a tag in the exact `vX.Y.Z` format.
+3. Set title and release notes.
+4. Click **Publish release**.
+
+Result:
+
+- GitHub emits `release.published`.
+- `.github/workflows/release-artifact.yml` runs.
+- It uploads:
+  - `ecube-package-<tag>.tar.gz`
+  - `ecube-package-<tag>.sha256`
+
+### Option B: Publish from Git CLI + GitHub UI
+
+1. Create and push the annotated tag:
+
+```bash
+git tag -a vX.Y.Z -m "Release vX.Y.Z"
+git push origin vX.Y.Z
+```
+
+2. In GitHub Releases, create a new release for that tag and click **Publish release**.
+
+Important:
+
+- Pushing a tag alone does **not** run `release-artifact.yml`.
+- Assets are only generated when the Release is published.
+
+### Post-publish verification checklist
+
+After publishing, verify all of the following on the release page:
+
+1. Assets exist with exact names:
+   - `ecube-package-vX.Y.Z.tar.gz`
+   - `ecube-package-vX.Y.Z.sha256`
+2. `release-artifact.yml` workflow run completed successfully.
+3. Optional smoke check:
+
+```bash
+curl -LO https://github.com/t3knoid/ecube/releases/download/vX.Y.Z/ecube-package-vX.Y.Z.tar.gz
+curl -LO https://github.com/t3knoid/ecube/releases/download/vX.Y.Z/ecube-package-vX.Y.Z.sha256
+sha256sum -c ecube-package-vX.Y.Z.sha256
+```
+
+4. Optional installer contract check:
+
+```bash
+sudo ./install.sh --version vX.Y.Z --yes --db-host <host> --db-user <user> --db-password <pass>
+```
+
+Use a non-production host for installer smoke tests.
 
 ---
 

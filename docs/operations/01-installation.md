@@ -20,6 +20,7 @@
   - [Full Install (default)](#full-install-default)
   - [Backend Only](#backend-only)
   - [Frontend Only](#frontend-only)
+- [Prepare PostgreSQL](#prepare-postgresql)
 - [Database Configuration](#database-configuration)
   - [Interactive mode (default)](#interactive-mode-default)
   - [Unattended mode (`--yes`)](#unattended-mode---yes)
@@ -203,6 +204,49 @@ Only leave TLS verification disabled (the default) on trusted networks (VPN, pri
 > ```bash
 > sudo systemctl restart ecube.service
 > ```
+
+---
+
+## Prepare PostgreSQL
+
+The installer **never** creates the PostgreSQL database or role. Both must exist before you run `install.sh` so the installer can verify the credentials.
+
+Run the following on the PostgreSQL host (or via any client connected to it) as the PostgreSQL superuser (typically `postgres`):
+
+```sql
+-- Create a dedicated role for ECUBE.
+-- Replace 'your-secure-password' with a strong, unique password.
+CREATE USER ecube WITH PASSWORD 'your-secure-password';
+
+-- Create the ECUBE database owned by that role.
+CREATE DATABASE ecube OWNER ecube;
+```
+
+If you prefer to own the database as a superuser and grant access separately:
+
+```sql
+CREATE USER ecube WITH PASSWORD 'your-secure-password';
+CREATE DATABASE ecube;
+GRANT ALL PRIVILEGES ON DATABASE ecube TO ecube;
+```
+
+> **Password requirements:** The password may contain any printable characters. The installer automatically percent-encodes characters outside the RFC 3986 unreserved set when building `DATABASE_URL`, so no manual escaping is required.
+
+To run these commands from a shell on the PostgreSQL host:
+
+```bash
+sudo -u postgres psql -c "CREATE USER ecube WITH PASSWORD 'your-secure-password';"
+sudo -u postgres psql -c "CREATE DATABASE ecube OWNER ecube;"
+```
+
+Verify the role and database were created:
+
+```bash
+sudo -u postgres psql -c "\du ecube"
+sudo -u postgres psql -c "\l ecube"
+```
+
+Once the role and database exist, proceed with [Database Configuration](#database-configuration) below and supply the credentials to `install.sh` when prompted.
 
 ---
 
