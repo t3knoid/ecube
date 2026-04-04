@@ -21,6 +21,21 @@ Use this as the source of truth when changing:
 
 ## Workflows That Build Installer Artifacts
 
+### 0) Tag-and-draft-release workflow
+
+File: `.github/workflows/tag-release.yml`
+
+Trigger:
+
+- `push` to `main` when `pyproject.toml` changes
+
+Output:
+
+- Reads `[project].version` from `pyproject.toml`
+- Derives the release tag as `v<version>`
+- Creates a GitHub Release in **draft** state if that tag does not already exist
+- Skips safely if the matching tag already exists
+
 ### 1) Build artifact workflow (CI/internal artifact)
 
 File: `.github/workflows/build-artifact.yml`
@@ -29,7 +44,6 @@ Trigger:
 
 - `workflow_dispatch`
 - `push` to `main`
-- `push` tags matching `v*`
 
 Output:
 
@@ -38,6 +52,7 @@ Output:
 - Files produced:
   - `ecube-package-<short_sha>.tar.gz`
   - `ecube-package-<short_sha>.sha256`
+- Stamps `pyproject.toml` in the CI workspace with a development build version of the form `<base>.dev+<short_sha>` before packaging; this change is included in the artifact only and is not committed back to the repository
 
 ### 2) Release artifact workflow (public release asset)
 
@@ -59,44 +74,36 @@ Output:
 
 ## How to Publish a Release
 
-This repository publishes installer assets when a GitHub Release is **published** (not just when a tag is pushed).
+This repository publishes installer assets when a GitHub Release is **published**. Release tags are created automatically from the version declared in `pyproject.toml`.
 
 ### Prerequisites
 
 1. Changes are merged to `main`.
 2. CI is green on `main`.
-3. Release tag follows the expected format: `v<major>.<minor>.<patch>` (example: `v0.3.0`).
+3. `pyproject.toml` contains the intended release version under `[project].version` (example: `0.3.0`).
 
-### Option A: Publish from GitHub UI (recommended)
+### Recommended release flow
 
-1. Open GitHub: **Releases** → **Draft a new release**.
-2. Create/select a tag in the exact `vX.Y.Z` format.
-3. Set title and release notes.
-4. Click **Publish release**.
+1. Update `[project].version` in `pyproject.toml` on a branch and merge it to `main`.
+2. Wait for `.github/workflows/tag-release.yml` to run.
+3. Open GitHub: **Releases** and review the newly created draft release for tag `vX.Y.Z`.
+4. Edit the title or release notes if needed.
+5. Click **Publish release**.
 
 Result:
 
+- `.github/workflows/tag-release.yml` has already created the draft release and its `vX.Y.Z` tag.
 - GitHub emits `release.published`.
 - `.github/workflows/release-artifact.yml` runs.
 - It uploads:
   - `ecube-package-<tag>.tar.gz`
   - `ecube-package-<tag>.sha256`
 
-### Option B: Publish from Git CLI + GitHub UI
-
-1. Create and push the annotated tag:
-
-```bash
-git tag -a vX.Y.Z -m "Release vX.Y.Z"
-git push origin vX.Y.Z
-```
-
-2. In GitHub Releases, create a new release for that tag and click **Publish release**.
-
 Important:
 
 - Pushing a tag alone does **not** run `release-artifact.yml`.
 - Assets are only generated when the Release is published.
+- The canonical release version source is `pyproject.toml`; avoid creating release tags manually unless you are recovering from automation failure.
 
 ### Post-publish verification checklist
 
@@ -205,6 +212,7 @@ When editing packaging workflows or installer copy logic, verify all items below
 
 - `docs/operations/01-installation.md`
 - `docs/testing/05-automated-test-requirements.md`
+- `.github/workflows/tag-release.yml`
 - `.github/workflows/build-artifact.yml`
 - `.github/workflows/release-artifact.yml`
 - `install.sh`
