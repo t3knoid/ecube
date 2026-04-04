@@ -731,6 +731,10 @@ preflight() {
 _check_port() {
   local port="$1"
   local label="$2"
+  if [[ "${DRY_RUN}" == true ]]; then
+    echo -e "${C_YELLOW}[DRY-RUN]${C_RESET} Would check port ${port} (${label}) is available"
+    return
+  fi
   if ! command -v ss &>/dev/null; then
     warn "Port ${port} (${label}): ss not found — cannot verify availability. Install iproute2 to enable port checks."
     return
@@ -1269,6 +1273,13 @@ _write_env_file() {
     # Preserve existing proxy-related keys (TRUST_PROXY_HEADERS, API_ROOT_PATH)
     # in an existing .env so operator-provided settings are not silently
     # overwritten on upgrade or installer re-runs.
+    # Exception: when the frontend is being installed (co-install or upgrade
+    # from backend-only), ensure the proxy keys are present and correct so
+    # uvicorn trusts nginx's forwarded headers.  _patch_env_proxy_keys is
+    # idempotent — it only writes each key if it is absent or needs updating.
+    if [[ "${INSTALL_FRONTEND}" == true ]]; then
+      _patch_env_proxy_keys "${env_file}" "true" "/api"
+    fi
     return
   fi
   info "Writing .env file..."
@@ -2018,6 +2029,19 @@ main() {
 
   header "\n${C_BOLD}ECUBE Installer${C_RESET}"
   [[ "${DRY_RUN}" == true ]] && warn "DRY-RUN mode: no changes will be made."
+
+  # Stop running ECUBE services before pre-flight port checks so that a
+  # re-run or upgrade does not fail because the ports are already occupied by
+  # the currently-installed instance.  Services are restarted at the end of
+  # install_backend / install_frontend as normal.
+  if systemctl is-active --quiet ecube.service 2>/dev/null; then
+    info "Stopping ecube.service before pre-flight checks (will be restarted after install)..."
+    run systemctl stop ecube.service
+  fi
+  if [[ "${INSTALL_FRONTEND}" == true ]] && systemctl is-active --quiet nginx 2>/dev/null; then
+    info "Stopping nginx before pre-flight checks (will be restarted after install)..."
+    run systemctl stop nginx
+  fi
 
   preflight
   _resolve_host
