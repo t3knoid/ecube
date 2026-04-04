@@ -3,7 +3,7 @@ name: Publish Release Artifact
 on:
   release:
     types:
-      - published
+      - created
 
 permissions:
   contents: write
