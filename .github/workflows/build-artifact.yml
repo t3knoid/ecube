@@ -5,8 +5,6 @@ on:
   push:
     branches:
       - main
-    tags:
-      - "v*"
 
 jobs:
   package:
@@ -21,6 +19,14 @@ jobs:
         run: |
           echo "short_sha=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
           echo "artifact_name=ecube-package-${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+          # For non-release builds derive a dev version string: read the base
+          # version from pyproject.toml and append the short SHA as local label.
+          base=$(grep '^version = ' pyproject.toml | sed 's/version = "//;s/"//')
+          echo "pkg_version=${base}.dev+${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+
+      - name: Stamp version in pyproject.toml
+        run: |
+          sed -i "s/^version = .*/version = \"${{ steps.meta.outputs.pkg_version }}\"/" pyproject.toml
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
