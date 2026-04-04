@@ -14,6 +14,7 @@ Options:
   --artifact-name NAME   Explicit artifact base name (without extension)
   --tag TAG              Use release-style name: ecube-package-<TAG>
   --sha SHA              Use build-style name:   ecube-package-<SHA8>
+  --build-only           Run build steps but skip tar/sha artifact packaging
   --skip-frontend-build  Skip npm ci/npm run build (use existing frontend/dist)
   -h, --help             Show this help
 
@@ -40,6 +41,7 @@ cd "${REPO_ROOT}"
 
 ARTIFACT_NAME=""
 SKIP_FRONTEND_BUILD=false
+BUILD_ONLY=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -60,6 +62,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-frontend-build)
       SKIP_FRONTEND_BUILD=true
+      shift
+      ;;
+    --build-only)
+      BUILD_ONLY=true
       shift
       ;;
     -h|--help)
@@ -103,6 +109,12 @@ fi
 if [[ ! -d "frontend/dist" ]]; then
   echo "ERROR: frontend/dist not found. Run without --skip-frontend-build or build frontend first." >&2
   exit 1
+fi
+
+if [[ "${BUILD_ONLY}" == true ]]; then
+  echo "==> Build-only mode complete (no packaging requested)"
+  echo "Frontend output: frontend/dist"
+  exit 0
 fi
 
 for path in install.sh app alembic pyproject.toml alembic.ini frontend/dist README.md LICENSE; do
