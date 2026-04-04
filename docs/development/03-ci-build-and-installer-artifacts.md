@@ -1,6 +1,6 @@
 # ECUBE CI Build and Installer Artifact Contract
 
-**Version:** 1.0  
+**Version:** 1.1  
 **Last Updated:** April 2026  
 **Audience:** Developers, Release Engineers  
 **Document Type:** Development Reference
@@ -21,6 +21,21 @@ Use this as the source of truth when changing:
 
 ## Workflows That Build Installer Artifacts
 
+### 0) Tag-and-draft-release workflow
+
+File: `.github/workflows/tag-release.yml`
+
+Trigger:
+
+- `push` to `main` when `pyproject.toml` changes
+
+Output:
+
+- Reads `[project].version` from `pyproject.toml`
+- Derives the release tag as `v<version>`
+- Creates a GitHub Release in **draft** state if that tag does not already exist
+- Skips safely if the matching tag already exists
+
 ### 1) Build artifact workflow (CI/internal artifact)
 
 File: `.github/workflows/build-artifact.yml`
@@ -29,7 +44,6 @@ Trigger:
 
 - `workflow_dispatch`
 - `push` to `main`
-- `push` tags matching `v*`
 
 Output:
 
@@ -38,6 +52,7 @@ Output:
 - Files produced:
   - `ecube-package-<short_sha>.tar.gz`
   - `ecube-package-<short_sha>.sha256`
+- Stamps `pyproject.toml` in the CI workspace with a development build version of the form `<base>.dev+<short_sha>` before packaging; this change is included in the artifact only and is not committed back to the repository
 
 ### 2) Release artifact workflow (public release asset)
 
@@ -54,6 +69,65 @@ Output:
 - Files produced:
   - `ecube-package-<release_tag>.tar.gz`
   - `ecube-package-<release_tag>.sha256`
+
+---
+
+## How to Publish a Release
+
+This repository publishes installer assets when a GitHub Release is **published**. Release tags are created automatically from the version declared in `pyproject.toml`.
+
+### Prerequisites
+
+1. Changes are merged to `main`.
+2. CI is green on `main`.
+3. `pyproject.toml` contains the intended release version under `[project].version` (example: `0.3.0`).
+
+### Recommended release flow
+
+1. Update `[project].version` in `pyproject.toml` on a branch and merge it to `main`.
+2. Wait for `.github/workflows/tag-release.yml` to run.
+3. Open GitHub: **Releases** and review the newly created draft release for tag `vX.Y.Z`.
+4. Edit the title or release notes if needed.
+5. Click **Publish release**.
+
+Result:
+
+- `.github/workflows/tag-release.yml` has already created the draft release and its `vX.Y.Z` tag.
+- GitHub emits `release.published`.
+- `.github/workflows/release-artifact.yml` runs.
+- It uploads:
+  - `ecube-package-<tag>.tar.gz`
+  - `ecube-package-<tag>.sha256`
+
+Important:
+
+- Pushing a tag alone does **not** run `release-artifact.yml`.
+- Assets are only generated when the Release is published.
+- The canonical release version source is `pyproject.toml`; avoid creating release tags manually unless you are recovering from automation failure.
+
+### Post-publish verification checklist
+
+After publishing, verify all of the following on the release page:
+
+1. Assets exist with exact names:
+   - `ecube-package-vX.Y.Z.tar.gz`
+   - `ecube-package-vX.Y.Z.sha256`
+2. `release-artifact.yml` workflow run completed successfully.
+3. Optional smoke check:
+
+```bash
+curl -LO https://github.com/t3knoid/ecube/releases/download/vX.Y.Z/ecube-package-vX.Y.Z.tar.gz
+curl -LO https://github.com/t3knoid/ecube/releases/download/vX.Y.Z/ecube-package-vX.Y.Z.sha256
+sha256sum -c ecube-package-vX.Y.Z.sha256
+```
+
+4. Optional installer contract check:
+
+```bash
+sudo ./install.sh --version vX.Y.Z --yes --db-host <host> --db-user <user> --db-password <pass>
+```
+
+Use a non-production host for installer smoke tests.
 
 ---
 
@@ -138,6 +212,7 @@ When editing packaging workflows or installer copy logic, verify all items below
 
 - `docs/operations/01-installation.md`
 - `docs/testing/05-automated-test-requirements.md`
+- `.github/workflows/tag-release.yml`
 - `.github/workflows/build-artifact.yml`
 - `.github/workflows/release-artifact.yml`
 - `install.sh`
