@@ -27,6 +27,7 @@ File: `.github/workflows/tag-release.yml`
 
 Trigger:
 
+- `workflow_dispatch`
 - `push` to `main` when `pyproject.toml` changes
 
 Output:
@@ -54,17 +55,13 @@ Output:
   - `ecube-package-<short_sha>.sha256`
 - Stamps `pyproject.toml` in the CI workspace with a development build version of the form `<base>.dev+<short_sha>` before packaging; this change is included in the artifact only and is not committed back to the repository
 
-### 2) Release artifact workflow (public release asset)
+### 2) Public release asset publication
 
-File: `.github/workflows/release-artifact.yml`
-
-Trigger:
-
-- `release.published`
+Handled by: `.github/workflows/tag-release.yml`
 
 Output:
 
-- Uploads assets to GitHub Releases
+- Uploads assets directly to the draft GitHub Release it creates
 - Artifact base name: `ecube-package-<release_tag>`
 - Files produced:
   - `ecube-package-<release_tag>.tar.gz`
@@ -90,19 +87,26 @@ This repository publishes installer assets when a GitHub Release is **published*
 4. Edit the title or release notes if needed.
 5. Click **Publish release**.
 
+### Manual recovery / on-demand run
+
+If the automatic run was skipped or needs to be re-run, you can start `.github/workflows/tag-release.yml` manually from the GitHub Actions UI.
+
+1. Open GitHub: **Actions** → **Tag and Draft Release on Version Bump**.
+2. Click **Run workflow** and choose the branch/ref to run against.
+3. Ensure `pyproject.toml` on that ref contains the intended release version.
+4. Let the workflow create the draft release if the matching `v<version>` tag does not already exist.
+
 Result:
 
 - `.github/workflows/tag-release.yml` has already created the draft release and its `vX.Y.Z` tag.
-- GitHub emits `release.published`.
-- `.github/workflows/release-artifact.yml` runs.
 - It uploads:
   - `ecube-package-<tag>.tar.gz`
   - `ecube-package-<tag>.sha256`
 
 Important:
 
-- Pushing a tag alone does **not** run `release-artifact.yml`.
-- Assets are only generated when the Release is published.
+- Pushing a tag alone does **not** build or upload installer assets.
+- Assets are generated when the Release is created (including drafts).
 - The canonical release version source is `pyproject.toml`; avoid creating release tags manually unless you are recovering from automation failure.
 
 ### Post-publish verification checklist
@@ -112,7 +116,7 @@ After publishing, verify all of the following on the release page:
 1. Assets exist with exact names:
    - `ecube-package-vX.Y.Z.tar.gz`
    - `ecube-package-vX.Y.Z.sha256`
-2. `release-artifact.yml` workflow run completed successfully.
+2. `tag-release.yml` workflow run completed successfully.
 3. Optional smoke check:
 
 ```bash
@@ -214,5 +218,4 @@ When editing packaging workflows or installer copy logic, verify all items below
 - `docs/testing/05-automated-test-requirements.md`
 - `.github/workflows/tag-release.yml`
 - `.github/workflows/build-artifact.yml`
-- `.github/workflows/release-artifact.yml`
 - `install.sh`
