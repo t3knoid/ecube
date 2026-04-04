@@ -677,9 +677,12 @@ preflight() {
         fi
         run apt-get update -qq
         run apt-get install -y python3.11 python3.11-venv
-        # Optional: install distutils if provided as an unversioned package.
-        if apt-cache show python3-distutils &>/dev/null; then
-          run apt-get install -y python3-distutils
+        # Optional: install distutils only when apt has an install candidate.
+        # Some newer Debian/Ubuntu releases no longer provide python3-distutils.
+        if apt-cache policy python3-distutils 2>/dev/null | grep -qv 'Candidate: (none)'; then
+          run apt-get install -y python3-distutils || warn "python3-distutils install failed; continuing (optional package)."
+        else
+          info "python3-distutils not available in configured apt repositories; skipping (optional package)."
         fi
         ok "python3.11 installed"
       else
