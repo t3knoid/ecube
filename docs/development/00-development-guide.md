@@ -1,7 +1,7 @@
 # ECUBE Development Guide
 
-**Version:** 1.0  
-**Last Updated:** March 2026  
+**Version:** 1.2  
+**Last Updated:** April 2026  
 **Audience:** Developers, Contributors  
 **Document Type:** Index / Overview
 
@@ -11,20 +11,19 @@
 
 1. [Introduction](#introduction)
 2. [Development Environment Setup](#development-environment-setup)
-3. [Windows Development Setup](#windows-development-setup) *(separate guide)*
-4. [Repository Layout](#repository-layout)
-5. [Running the Application](#running-the-application)
-6. [Database and Migrations](#database-and-migrations)
-7. [Testing](#testing)
-8. [Architecture Overview](#architecture-overview)
-9. [Coding Conventions](#coding-conventions)
-10. [Related Documentation](#related-documentation)
+3. [Repository Layout](#repository-layout)
+4. [Running the Application](#running-the-application)
+5. [Database and Migrations](#database-and-migrations)
+6. [Testing](#testing)
+7. [Architecture Overview](#architecture-overview)
+8. [Coding Conventions](#coding-conventions)
+9. [Related Documentation](#related-documentation)
 
 ---
 
 ## Introduction
 
-This guide is the entry point for developers working on the ECUBE codebase. It covers local setup, project structure, testing practices, and key architectural patterns. For production deployment, see the [Operational Guide](../operations/00-operational-guide.md).
+This guide is the entry point for developers working on the ECUBE codebase on macOS and Linux. It covers local setup, project structure, testing practices, and key architectural patterns. For Windows development (Docker Desktop + WSL2, including usbipd-win), use the dedicated **[Windows Development Guide](02-windows-development-guide.md)**. For production deployment, see the [Operational Guide](../operations/00-operational-guide.md).
 
 ---
 
@@ -53,19 +52,44 @@ pip install -e ".[dev]"
 
 ### Environment Configuration
 
-ECUBE reads settings from environment variables or a `.env` file in the project root. All settings have defaults suitable for local development.
+ECUBE reads settings from environment variables or a `.env` file in the project root.
 
 ```bash
-# Optional: create a .env file to override defaults
+# Create a .env file (required for docker compose workflows)
 cp .env.example .env
+```
+
+For local development, use the platform compose file to run **PostgreSQL only** and run the ECUBE app/UI natively on the host:
+
+- Linux/macOS: `docker-compose.ecube.yml`
+- Windows: `docker-compose.ecube-win.yml`
+
+Set at least:
+
+```env
+POSTGRES_PASSWORD=ecube
+```
+
+Linux/macOS quick setup:
+
+```bash
+sed -i.bak 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ecube/' .env
+```
+
+Windows (pwsh) quick setup:
+
+```powershell
+Copy-Item .env .env.bak
+(Get-Content .env) -replace '^POSTGRES_PASSWORD=.*', 'POSTGRES_PASSWORD=ecube' | Set-Content .env
 ```
 
 Key settings for development:
 
 | Variable | Default | Notes |
 |----------|---------|-------|
-| `DATABASE_URL` | `postgresql://ecube:ecube@localhost/ecube` | Local PostgreSQL connection |
+| `DATABASE_URL` | `postgresql://ecube:ecube@localhost/ecube` | Matches postgres-only run from `docker-compose.ecube.yml` / `docker-compose.ecube-win.yml` |
 | `SECRET_KEY` | (built-in dev default) | JWT signing key; change in production |
+| `POSTGRES_PASSWORD` | (none) | Required by compose postgres service |
 | `ROLE_RESOLVER` | `local` | Uses OS group → role mapping |
 
 See [02 — Configuration Reference](../operations/04-configuration-reference.md) for the full list.
@@ -80,17 +104,11 @@ git config core.hooksPath .githooks
 
 ---
 
-## Windows Development Setup
-
-ECUBE targets Linux for production, but day-to-day development can be done on Windows using Docker Desktop and WSL2. For the complete Windows setup — including WSL2 configuration, USB passthrough with usbipd-win, Docker Compose workflows, and running tests — see the dedicated **[Windows Development Guide](02-windows-development-guide.md)**.
-
----
-
 ## Repository Layout
 
 ```text
-docker-compose.ecube.yml      # Dockerized PostgreSQL for local development
-docker-compose.ecube-win.yml  # Dockerized PostgreSQL for Windows development
+docker-compose.ecube.yml      # Linux/macOS compose file (use `up -d postgres` for local dev DB)
+docker-compose.ecube-win.yml  # Windows compose file (use `up -d postgres` for local dev DB)
 app/
   main.py              # FastAPI application entry point and lifespan
   config.py            # Pydantic Settings class (all env vars)
@@ -141,28 +159,43 @@ docs/
 
 ## Running the Application
 
-The application runs natively on the host for the best development and debugging experience. Docker is used only for PostgreSQL.
+The ECUBE app and UI always run natively on the host. Docker is used only to provide PostgreSQL by starting the `postgres` service from the platform compose file.
+
+Both compose files publish API port `8000` for development convenience if you choose to run the app container, but this is **not** a typical hardened deployment shape. Typical Docker deployments should expose only `8443` through `ecube-ui`.
 
 ### Option A: Dockerized PostgreSQL (Recommended)
 
-Use Docker Compose to run PostgreSQL, then start the application locally with auto-reload:
+Start the PostgreSQL container, then run the app and UI natively:
 
 ```bash
-# Start PostgreSQL
+# Ensure local environment file exists and required postgres password is set
+cp .env.example .env
+sed -i.bak 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ecube/' .env
+
+# Start PostgreSQL only
 docker compose -f docker-compose.ecube.yml up -d postgres
 
 # Apply migrations (from your local venv)
 alembic upgrade head
 
-# Start the dev server with auto-reload
+# Start the backend API with auto-reload (natively)
 uvicorn app.main:app --reload
+
+# In a separate terminal — start the frontend dev server (natively)
+cd frontend && npm ci && npm run dev
 ```
 
-The default `DATABASE_URL` (`postgresql://ecube:ecube@localhost/ecube`) matches the containerized Postgres, so no `.env` change is needed.
+The backend API is available at `http://localhost:8000` and the frontend at `http://localhost:5173`.
+
+Windows command for postgres-only run:
+
+```bash
+docker compose -f docker-compose.ecube-win.yml up -d postgres
+```
 
 ### Option B: Fully Local (No Docker)
 
-If you prefer a system-installed PostgreSQL:
+If you prefer a system-installed PostgreSQL (Linux example):
 
 ```bash
 sudo systemctl start postgresql
@@ -174,6 +207,8 @@ sudo -u postgres psql -c "CREATE DATABASE ecube OWNER ecube;"
 alembic upgrade head
 uvicorn app.main:app --reload
 ```
+
+For macOS, use your PostgreSQL service manager (for example, Homebrew services) and create the same `ecube` user/database before running migrations.
 
 The API is available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
 
@@ -264,24 +299,53 @@ def test_unauthenticated_returns_401(unauthenticated_client):
 
 ### Integration Testing
 
-Integration tests run against a real PostgreSQL database. Start just the Postgres service from the main compose file:
+Integration tests run against a real PostgreSQL database. Use the platform compose file and start only the postgres service:
 
 ```bash
-# Start the integration test database
+# Start the integration test database (Linux/macOS)
 docker compose -f docker-compose.ecube.yml up -d postgres
 
-# Wait for it to be healthy (~5 seconds), then run integration tests
-DATABASE_URL=postgresql://ecube:ecube@localhost/ecube \
-  python -m pytest tests/ -v --run-integration
+# Run integration tests
+INTEGRATION_DATABASE_URL=postgresql://ecube:ecube@localhost:5432/ecube \
+  python -m pytest tests/integration/ -v --run-integration
 
 # Stop the database when done
-docker compose -f docker-compose.ecube.yml down
-
-# Stop and remove data (clean slate for next run)
 docker compose -f docker-compose.ecube.yml down -v
 ```
 
+Windows command for integration DB startup:
+
+```bash
+docker compose -f docker-compose.ecube-win.yml up -d postgres
+```
+
 The integration database container can be left running across test runs. Use `down -v` when you want a completely fresh database.
+
+### Frontend Development and Tests
+
+The frontend is a separate Node-based workspace under `frontend/`.
+
+```bash
+cd frontend
+npm ci
+
+# Local UI dev server
+npm run dev
+
+# Unit tests (Vitest)
+npm run test:unit
+
+# E2E tests (Playwright)
+npm run build
+npm run test:e2e
+```
+
+For first-time Playwright setup, install browser dependencies:
+
+```bash
+cd frontend
+npx playwright install --with-deps chromium webkit
+```
 
 ### API Fuzz Testing (Schemathesis)
 
