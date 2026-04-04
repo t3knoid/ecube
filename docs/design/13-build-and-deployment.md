@@ -60,7 +60,7 @@ Trigger:
 
 - `workflow_dispatch` for manual/on-demand draft release creation
 - `push` to `main` when `pyproject.toml` changes creates a **draft** GitHub Release and matching `v<version>` tag
-- `release.published`
+- `release.created`
 
 Behavior:
 
@@ -73,9 +73,9 @@ Behavior:
 Operational flow:
 
 1. Update `pyproject.toml` with the target version and merge to `main`.
-2. GitHub Actions creates a draft release for tag `v<version>`.
-3. Review the draft release in GitHub and click **Publish release**.
-4. `release-artifact.yml` builds and attaches the installer package assets to that release.
+2. GitHub Actions creates and pushes tag `v<version>`, then creates a draft release for that tag.
+3. `release-artifact.yml` runs on release creation and attaches the installer package assets.
+4. Review the draft release in GitHub and click **Publish release** when ready.
 
 ## 13.3 Package Deployment
 
