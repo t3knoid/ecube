@@ -33,7 +33,80 @@ This guide is the entry point for developers working on the ECUBE codebase on ma
 
 - Python 3.11+
 - PostgreSQL 14+ (for local development; tests use SQLite in-memory)
+- Node.js 20 LTS+
+- npm 10+
 - Git
+
+Quick check:
+
+```bash
+python3.11 --version
+node --version
+npm --version
+git --version
+```
+
+### Install Tooling (If Missing)
+
+If one of the commands above is missing, install the required tools first.
+
+Linux (Ubuntu/Debian):
+
+```bash
+sudo apt-get update
+sudo apt-get install -y curl git python3.11 python3.11-venv postgresql postgresql-contrib
+
+# Install Node.js 20 LTS (includes npm)
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+```
+
+macOS (Homebrew):
+
+```bash
+brew install python@3.11 git node@20
+```
+
+After installation, verify versions again:
+
+```bash
+python3.11 --version
+node --version
+npm --version
+git --version
+psql --version
+```
+
+If you plan to run PostgreSQL via Docker Compose instead of a system service,
+install Docker Engine and Docker Compose plugin, then verify:
+
+```bash
+docker --version
+docker compose version
+```
+
+### Development Tooling Reference
+
+The table below summarizes the core tools used during ECUBE development and what each is used for.
+
+| Tool | Required | Installed Via | Used For |
+|------|----------|---------------|----------|
+| Python 3.11+ | Yes | OS package manager (for example, apt or Homebrew) | Running the FastAPI backend, services, scripts, and tests. |
+| pip (via Python) | Yes | Bundled with Python (`ensurepip`) or OS Python packages | Installing backend dependencies and developer packages (`pip install -e ".[dev]"`). |
+| PostgreSQL 14+ | Yes | OS package manager (for example, apt/Homebrew) or Docker image | Local development database for API runtime and integration testing. |
+| Alembic | Yes | Python package installation via `pip install -e ".[dev]"` | Applying and generating database schema migrations. |
+| Git | Yes | OS package manager (for example, apt/Homebrew) | Source control, branch workflow, and contribution flow. |
+| Node.js 20 LTS+ | Yes (frontend work) | NodeSource/OS package manager or Homebrew | JavaScript runtime for frontend build/test toolchain (Vite, Vitest, Playwright). |
+| npm 10+ | Yes (frontend work) | Bundled with Node.js installation | Installing frontend dependencies and running frontend scripts (`npm ci`, `npm run dev`, `npm run build`). |
+| Docker + Docker Compose | Optional (recommended) | Docker Engine packages + Compose plugin | Running PostgreSQL locally with project compose files instead of system-installed Postgres. |
+| pytest | Yes | Python package installation via `pip install -e ".[dev]"` | Running backend unit and integration test suites. |
+| Uvicorn | Yes | Python package installation via `pip install -e ".[dev]"` | Running the backend API locally in development (`uvicorn app.main:app --reload`). |
+
+Build-focused minimums:
+
+- To build backend source: Python 3.11+, pip, Git
+- To build frontend source (`npm run build`): Node.js 20 LTS+, npm 10+
+- To run full-stack locally with database: PostgreSQL 14+ (or Docker + Compose)
 
 ### Install Dependencies
 
@@ -49,6 +122,16 @@ source .venv/bin/activate
 # Install the project with dev dependencies
 pip install -e ".[dev]"
 ```
+
+What `pip install -e ".[dev]"` installs:
+
+- Python packages from this project and its Python dependency graph (for example: FastAPI stack, SQLAlchemy, Alembic, pytest, Uvicorn).
+- Developer/test Python packages declared in `pyproject.toml` under the `dev` extra.
+
+What it does **not** install:
+
+- System tooling: PostgreSQL server/client, Git, Docker, Node.js, npm.
+- OS packages required by external binaries and services.
 
 ### Environment Configuration
 
