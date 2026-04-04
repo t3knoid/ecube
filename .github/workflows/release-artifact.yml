@@ -15,28 +15,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          # Need full history and ability to push back to main
-          ref: main
 
       - name: Set artifact metadata
         id: meta
         run: |
           echo "artifact_name=ecube-package-${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          # Strip leading 'v' to get a PEP 440 version string (e.g. v0.2.0 → 0.2.0)
-          echo "pkg_version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-
-      - name: Stamp version in pyproject.toml
-        run: |
-          sed -i "s/^version = .*/version = \"${{ steps.meta.outputs.pkg_version }}\"/" pyproject.toml
-
-      - name: Commit version stamp back to main
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add pyproject.toml
-          git commit -m "chore: release ${{ steps.meta.outputs.pkg_version }}" || echo "No changes to commit"
-          git push origin HEAD:main
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
