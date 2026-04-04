@@ -61,7 +61,7 @@ File: `.github/workflows/release-artifact.yml`
 
 Trigger:
 
-- `release.published`
+- `release.created`
 
 Output:
 
@@ -103,7 +103,7 @@ If the automatic run was skipped or needs to be re-run, you can start `.github/w
 Result:
 
 - `.github/workflows/tag-release.yml` has already created the draft release and its `vX.Y.Z` tag.
-- GitHub emits `release.published`.
+- GitHub emits `release.created` when the draft release is created.
 - `.github/workflows/release-artifact.yml` runs.
 - It uploads:
   - `ecube-package-<tag>.tar.gz`
@@ -112,7 +112,7 @@ Result:
 Important:
 
 - Pushing a tag alone does **not** run `release-artifact.yml`.
-- Assets are only generated when the Release is published.
+- Assets are generated when the Release is created (including drafts).
 - The canonical release version source is `pyproject.toml`; avoid creating release tags manually unless you are recovering from automation failure.
 
 ### Post-publish verification checklist
