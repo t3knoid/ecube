@@ -4,7 +4,10 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    tags: ["v*"]
+    paths:
+      - app/**
+      - frontend/**
+      - tests/**
 
 # Cancel any in-progress run for the same branch/PR when a new commit is pushed.
 # workflow_dispatch runs are never cancelled.
