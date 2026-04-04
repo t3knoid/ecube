@@ -137,6 +137,7 @@ At the end it prints a summary with the UI URL, API URL, and service management 
 | `--yes` / `-y` | off | Non-interactive / unattended mode |
 | `--version TAG` | *(current package)* | Download and install a specific release tag from GitHub. Must match `v<major>.<minor>.<patch>` exactly (e.g. `v0.2.0`). Pre-release suffixes, build metadata, and tags without a leading `v` are not accepted. |
 | `--uninstall` | — | Remove all installed ECUBE components |
+| `--drop-database` | — | With `--uninstall`, also attempt to drop the configured application database resolved from `DATABASE_URL` (or explicit `--db-*` flags). Requires sufficient PostgreSQL privileges. |
 | `--dry-run` | — | Print all planned actions without executing them |
 
 ---
@@ -384,12 +385,25 @@ The wizard will:
 sudo ./install.sh --uninstall
 ```
 
+Optional database cleanup during uninstall:
+
+```bash
+sudo ./install.sh --uninstall --drop-database
+```
+
+> **Warning:** Database drop is destructive and irreversible.
+> Before using `--drop-database`, create and verify a backup (for example,
+> a `pg_dump` backup that has been tested with a restore run).
+
 This will:
 
 1. Stop and disable `ecube.service`.
 2. Remove the nginx ecube site and reload nginx.
-3. Prompt to remove `<install-dir>` and `/var/lib/ecube`.
-4. Prompt to remove the `ecube` system user and group.
-5. Optionally remove the deadsnakes PPA entry (Ubuntu only) if it was added by the installer.
+3. Remove `<install-dir>` and `/var/lib/ecube`.
+4. Remove the `ecube` system user and group.
+5. Remove ECUBE-related ufw rules and installer log (if present).
+6. Remove the deadsnakes PPA entry if detected.
+7. When `--drop-database` is provided, attempt to terminate active sessions
+  and drop the configured application database (best-effort).
 
-Use `--yes` to skip all confirmation prompts.
+Use `--yes` to auto-accept the initial uninstall confirmation prompt.
