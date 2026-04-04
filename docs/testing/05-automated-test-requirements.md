@@ -200,15 +200,15 @@ python -m pytest tests/ -v
 Requires a running PostgreSQL instance. Set `INTEGRATION_DATABASE_URL` before running.
 
 ```bash
-export INTEGRATION_DATABASE_URL="postgresql://ecube_test:ecube_test@localhost:5432/ecube_integration"
+export INTEGRATION_DATABASE_URL="postgresql://ecube:ecube@localhost:5432/ecube"
 python -m pytest tests/integration/ -v --run-integration
 ```
 
-Create the test database first if it does not exist:
+If you are using the default platform compose postgres service, the database/user already exist. For manual PostgreSQL setup, create the database first if it does not exist:
 
 ```sql
-CREATE USER ecube_test WITH PASSWORD 'ecube_test';
-CREATE DATABASE ecube_integration OWNER ecube_test;
+CREATE USER ecube WITH PASSWORD 'ecube';
+CREATE DATABASE ecube OWNER ecube;
 ```
 
 ### 4.3 Hardware-in-the-loop (HIL) tests
@@ -259,7 +259,7 @@ python -m pytest tests/ -q
 
 ### 5.1 Why Docker for integration tests
 
-Unit tests run natively on Linux, macOS, and Windows without Docker — they need no external services. Integration tests, however, require PostgreSQL. Rather than requiring each developer to install PostgreSQL locally, a dedicated test compose file provides the database as a container that works identically on all three platforms.
+Unit tests run natively on Linux, macOS, and Windows without Docker — they need no external services. Integration tests, however, require PostgreSQL. Rather than requiring each developer to install PostgreSQL locally, use the platform compose file and start only the `postgres` service.
 
 ```text
 needs Docker?   unit tests     integration tests    hardware tests
@@ -273,49 +273,45 @@ Windows         no             yes (postgres only)  not supported
 
 | File | Purpose | Exposes |
 |------|---------|--------|
-| `docker-compose.ecube.yml` | Production (Linux) — full stack with USB passthrough | UI port only (8443) |
-| `docker-compose.ecube-win.yml` | Production (Windows Docker Desktop) — no USB passthrough | UI port only (8443) |
-| `docker-compose.test.yml` | **Cross-platform test support** — PostgreSQL only | `localhost:5433` |
-| `docker-compose.dev.yml` | Development overlay — exposes API port for direct access | `localhost:8000` (overlay) |
+| `docker-compose.ecube.yml` | Linux/macOS compose file; use `up -d postgres` for dev/integration DB | `localhost:5432` (postgres), `localhost:8000` (API if app container is started) |
+| `docker-compose.ecube-win.yml` | Windows compose file; use `up -d postgres` for dev/integration DB | `localhost:5432` (postgres), `localhost:8000` (API if app container is started) |
 
 ### 5.3 Running integration tests with Docker
 
-**Step 1 — start the test PostgreSQL container (any platform):**
+**Step 1 — start the PostgreSQL container (Linux/macOS):**
 
 ```bash
-docker compose -f docker-compose.test.yml up -d
+docker compose -f docker-compose.ecube.yml up -d postgres
+```
+
+Windows equivalent:
+
+```bash
+docker compose -f docker-compose.ecube-win.yml up -d postgres
 ```
 
 **Step 2 — run integration tests:**
 
 ```bash
-INTEGRATION_DATABASE_URL=postgresql://ecube_test:ecube_test@localhost:5433/ecube_integration \
+INTEGRATION_DATABASE_URL=postgresql://ecube:ecube@localhost:5432/ecube \
   python -m pytest tests/integration/ -v --run-integration
 ```
 
 **Step 3 — tear down (also removes the test data volume):**
 
 ```bash
-docker compose -f docker-compose.test.yml down -v
+docker compose -f docker-compose.ecube.yml down -v
 ```
 
-The `INTEGRATION_DATABASE_URL` defaults to the above value in `tests/integration/conftest.py`, so the environment variable is only needed when overriding.
+On Windows, run `down -v` with `docker-compose.ecube-win.yml` instead.
+
+`tests/integration/conftest.py` defaults to a different connection (`localhost:5433`, `ecube_test`). Set `INTEGRATION_DATABASE_URL` explicitly as shown above when using the platform compose files.
 
 ### 5.4 Exposing the API port for local development
 
-The production compose files intentionally do not publish the FastAPI port (8000) to the host. All traffic is routed through the nginx reverse proxy to prevent `TRUST_PROXY_HEADERS` spoofing. For local development or manual API testing, the `docker-compose.dev.yml` overlay adds the API port:
+Both platform compose files publish FastAPI port `8000` for development convenience when the app container is started. This is not a typical hardened deployment shape.
 
-```bash
-# Linux
-docker compose -f docker-compose.ecube.yml -f docker-compose.dev.yml up
-
-# Windows
-docker compose -f docker-compose.ecube-win.yml -f docker-compose.dev.yml up
-```
-
-The API is then reachable at `http://localhost:8000` in addition to `https://localhost:8443/api/` via the proxy.
-
-> **Never use `docker-compose.dev.yml` in production.** It defeats the proxy trust model described in the compose file comment.
+For production-style Docker deployments, expose only `8443` through `ecube-ui` and avoid direct host exposure of `8000`.
 
 ### 5.5 CI strategy
 
