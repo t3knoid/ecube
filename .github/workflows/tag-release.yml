@@ -32,6 +32,7 @@ jobs:
           fi
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=ecube-package-v${version}" >> "$GITHUB_OUTPUT"
 
       - name: Check if tag already exists
         id: check_tag
@@ -51,8 +52,40 @@ jobs:
           git tag -a "${{ steps.meta.outputs.tag }}" -m "Release ${{ steps.meta.outputs.tag }}"
           git push origin "${{ steps.meta.outputs.tag }}"
 
-      - name: Create draft release
-        if: steps.check_tag.outputs.exists == 'false'
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.0'  # matches engines.node in frontend/package.json (^20.19.0 || >=22.12.0)
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Create deployment package
+        run: |
+          chmod 755 install.sh
+          mkdir -p dist
+          tar -czf "dist/${{ steps.meta.outputs.artifact_name }}.tar.gz" \
+            --transform "s|^|${{ steps.meta.outputs.artifact_name }}/|" \
+            install.sh \
+            app \
+            alembic \
+            pyproject.toml \
+            alembic.ini \
+            frontend/dist \
+            README.md \
+            LICENSE
+
+      - name: Generate checksum
+        run: |
+          cd dist
+          sha256sum "${{ steps.meta.outputs.artifact_name }}.tar.gz" > "${{ steps.meta.outputs.artifact_name }}.sha256"
+
+      - name: Create/update draft release and upload installer assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
@@ -60,3 +93,7 @@ jobs:
           target_commitish: ${{ github.sha }}
           draft: true
           generate_release_notes: true
+          files: |
+            dist/${{ steps.meta.outputs.artifact_name }}.tar.gz
+            dist/${{ steps.meta.outputs.artifact_name }}.sha256
+          overwrite_files: true
