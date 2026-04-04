@@ -20,7 +20,9 @@ ECUBE is a secure evidence export platform designed to copy eDiscovery data onto
 
 ### Bare-metal installation (Debian/Ubuntu)
 
-Download a release package, extract it, and run the installer:
+Download a release package from [GitHub Releases](https://github.com/t3knoid/ecube/releases/latest), extract it, and run the installer as root.
+
+For CI packaging details and installer artifact naming/content requirements, see [CI Build and Installer Artifact Contract](docs/development/03-ci-build-and-installer-artifacts.md).
 
 ```bash
 tar -xzf ecube-package-<version>.tar.gz
@@ -28,64 +30,60 @@ cd ecube-package-<version>
 sudo ./install.sh
 ```
 
-The installer handles Python dependencies, TLS certificates, systemd unit configuration, and optional nginx setup. See the [Installation Guide](docs/operations/01-installation.md) for all available options (`--backend-only`, `--frontend-only`, `--api-port`, `--uninstall`, etc.).
+Before running the installer, ensure PostgreSQL is already installed and running, and that the target database/role exist. The installer does not create the PostgreSQL server, database, or role.
 
-### Docker Compose
+The installer performs pre-flight checks, collects and validates database connection settings, writes `.env` (including `DATABASE_URL` and `SECRET_KEY`), configures `ecube.service`, and (in full install mode) configures nginx.
+
+Immediate next step: open the ECUBE web UI and complete setup at `https://<hostname>:<ui-port>/setup`.
+
+See the [Installation Guide](docs/operations/01-installation.md) for full installer behavior and all options (`--backend-only`, `--frontend-only`, `--api-port`, `--uninstall`, etc.).
+
+### Docker Compose (Development PostgreSQL)
 
 > **Prerequisites:** Docker and Docker Compose must be installed.
 
 ```bash
-# Create environment file (required by docker compose)
+# Create environment file from the working example.
+# .env.example includes required settings for a local full-stack run,
+# including PostgreSQL service variables.
 cp .env.example .env
 
-# Required variables (compose will fail fast if POSTGRES_PASSWORD is missing)
-# Update at least POSTGRES_PASSWORD and SECRET_KEY in .env
+# Optional: set a custom postgres password
 sed -i.bak 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ecube/' .env
-sed -i.bak "s/^SECRET_KEY=.*/SECRET_KEY=$(openssl rand -hex 32)/" .env
+```
 
-# Generate self-signed TLS certs for local testing
-mkdir -p deploy/certs deploy/themes
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout deploy/certs/key.pem \
-  -out deploy/certs/cert.pem \
-  -subj "/CN=localhost"
+```powershell
+# Windows (pwsh) equivalent
+Copy-Item .env .env.bak
+(Get-Content .env) -replace '^POSTGRES_PASSWORD=.*', 'POSTGRES_PASSWORD=ecube' | Set-Content .env
+```
 
-# Start all services (postgres, ecube-app, ecube-ui)
+```bash
+# Linux/macOS: start full stack (postgres, ecube-app, ecube-ui)
 docker compose -f docker-compose.ecube.yml up -d --build
 ```
 
-At minimum, ensure `POSTGRES_PASSWORD` is set in `.env`. If you use the sample above, persist values by adding them to `.env`:
-
-```env
-POSTGRES_PASSWORD=ecube
-SECRET_KEY=<your-random-hex-key>
+```powershell
+# Windows: start full stack (postgres, ecube-app, ecube-ui)
+docker compose -f docker-compose.ecube-win.yml up -d --build
 ```
 
-The UI is available at **https://localhost:8443** and the API at **https://localhost:8443/api**.
+After startup, open the web frontend and complete first-run setup:
 
-To run the backend tests (uses SQLite in-memory — no PostgreSQL needed):
-
-```bash
-# Create and activate a virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install the project and dev dependencies
-pip install -e ".[dev]"
-
-# Run tests
-python -m pytest tests/ -v
-```
+- UI: `https://localhost:8443`
+- Run the Setup Wizard to verify database settings and create the initial admin account.
 
 ## API Documentation
 
-Once running, interactive documentation is available through the nginx reverse proxy at:
+For native development (recommended), interactive API docs are available at:
 
-- **Swagger UI:** `https://localhost:8443/docs`
-- **ReDoc:** `https://localhost:8443/redoc`
-- **OpenAPI Schema:** `https://localhost:8443/openapi.json`
+- **Swagger UI:** `http://localhost:8000/docs`
+- **ReDoc:** `http://localhost:8000/redoc`
+- **OpenAPI Schema:** `http://localhost:8000/openapi.json`
 
-> **Note:** Port 8000 (FastAPI) is not published to the host in the default compose setup — all traffic routes through the nginx proxy on port 8443. To expose port 8000 directly for local development, add the `docker-compose.dev.yml` overlay (see that file for details).
+If you run the full Docker app + UI stack, docs are available through the nginx proxy at `https://localhost:8443/docs`.
+
+> **Note:** In the full-stack compose setup, API port 8000 is published for development convenience. This is not a typical hardened deployment shape; production-style Docker should expose only port 8443 through the nginx UI proxy.
 
 All endpoints (except `/health`, `/docs`, `/redoc`, `/openapi.json`) require authentication via JWT bearer tokens. See the [REST API Specification](docs/design/06-rest-api-specification.md) and [Security & Access Control](docs/design/10-security-and-access-control.md) for details.
 
@@ -105,28 +103,20 @@ The three badges at the top of this file reflect the current state of automated 
 
 ## Contributors
 
-**Testing** — see [docs/testing/05-automated-test-requirements.md](docs/testing/05-automated-test-requirements.md) for test conventions, fixture patterns, and how to run the backend and frontend suites locally. For manual QA, the bare-metal guide and test-case spreadsheet are in [docs/testing/](docs/testing/).
-
-**Development** — the [Development Guide](docs/development/00-development-guide.md) covers local setup, debugging, and Windows-specific notes. Design documents (architecture, data model, REST API, security) are in [docs/design/](docs/design/).
-
-**Documentation** — operational docs (installation, configuration, administration, security) live in [docs/operations/](docs/operations/). Requirements source documents are in [docs/requirements/](docs/requirements/).
+- **Testing** — see [docs/testing/05-automated-test-requirements.md](docs/testing/05-automated-test-requirements.md) for test conventions, fixture patterns, and backend/frontend suite execution. For manual QA procedures and test-case assets, use [docs/testing/](docs/testing/).
+- **Development** — start with [docs/development/00-development-guide.md](docs/development/00-development-guide.md) for local setup and workflow. Windows-specific development guidance is in [docs/development/02-windows-development-guide.md](docs/development/02-windows-development-guide.md).
+- **Documentation** — operational and end-user documentation is in [docs/operations/](docs/operations/). System design and requirement sources are in [docs/design/](docs/design/) and [docs/requirements/](docs/requirements/).
 
 ## Documentation
 
-- [Operations Guide](docs/operations/00-operational-guide.md)
-  - [Installation](docs/operations/01-installation.md)
-  - [Configuration Reference](docs/operations/04-configuration-reference.md)
-  - [Administration Automation Guide](docs/operations/07-administration-automation-guide.md) — identity providers, logging, user management
-  - [API Quick Reference](docs/operations/08-api-quick-reference.md)
-  - [Security Best Practices](docs/operations/06-security-best-practices.md)
-- [Development Guide](docs/development/00-development-guide.md)
-- [QA Testing Guide (Bare-Metal)](docs/testing/01-qa-testing-guide-baremetal.md)
-- [Schemathesis Local Fuzz Testing](docs/testing/04-schemathesis-local.md)
-- [Security Scanning (CI)](docs/testing/03-security-scanning.md)
-- [Requirements Documents](docs/requirements)
-- [Design Documents](docs/design)
-- [Linux Host Deployment & USB Passthrough](docs/design/12-linux-host-deployment-and-usb-passthrough.md)
-- [Build & Deployment (Design)](docs/design/13-build-and-deployment.md)
+- [Operations Guide](docs/operations/00-operational-guide.md) — production deployment and operations index
+- [User Manual](docs/operations/10-user-manual.md) — operator and end-user workflows
+- [Installation](docs/operations/01-installation.md) — bare-metal install and installer options
+- [Configuration Reference](docs/operations/04-configuration-reference.md) — environment variables and runtime settings
+- [API Quick Reference](docs/operations/08-api-quick-reference.md) — high-value endpoints for operators and automation
+- [REST API Specification](docs/design/06-rest-api-specification.md) — endpoint contracts and response behavior
+- [Security and Access Control](docs/design/10-security-and-access-control.md) — roles, trust boundary, and authorization model
+- [Build and Deployment](docs/design/13-build-and-deployment.md) — release artifacts and deployment model
 
 ## License
 
