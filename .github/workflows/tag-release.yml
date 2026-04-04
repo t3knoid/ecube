@@ -1,6 +1,7 @@
 name: Tag and Draft Release on Version Bump
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
