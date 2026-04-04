@@ -370,6 +370,8 @@ The wizard will:
    sudo ./install.sh
    ```
 
+   The installer automatically stops `ecube.service` (and `nginx` for full installs) before running pre-flight checks, so re-running on an active host does not produce a "port already in use" error. Services are restarted at the end of the run.
+
 3. Application files (`app/`, `alembic/`, etc.) are **overwritten where present** — the installer copies a fixed list of items from the new release onto the existing installation. Files or directories that existed in the previous release but are no longer shipped are **not removed**; stale content may remain under `INSTALL_DIR` until manually cleaned up or a full uninstall/reinstall is performed. `.env` is **never overwritten** — existing operator secrets are preserved.
 4. The service is always restarted after an upgrade.
 5. Complete setup after upgrade using the setup wizard (`/setup`) so migrations are applied.
