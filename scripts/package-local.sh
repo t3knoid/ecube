@@ -2,7 +2,7 @@
 # Build the ECUBE deployment artifact locally the same way as GitHub workflows.
 # Mirrors:
 #   .github/workflows/build-artifact.yml
-#   .github/workflows/release-artifact.yml
+#   .github/workflows/tag-release.yml
 
 set -Eeuo pipefail
 
