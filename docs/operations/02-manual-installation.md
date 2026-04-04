@@ -488,6 +488,33 @@ Then complete setup so migrations are applied:
 
 - UI-based flow: open `https://<frontend-hostname>/setup`
 
+### 8.3 Uninstall / cleanup
+
+If the host was installed using the ECUBE installer package, you can run:
+
+```bash
+sudo ./install.sh --uninstall
+```
+
+Optional database cleanup (installer-managed path):
+
+```bash
+sudo ./install.sh --uninstall --drop-database
+```
+
+> **Warning:** `--drop-database` is destructive and irreversible.
+> Before dropping the database, perform and verify a backup (for example, a
+> `pg_dump` backup restored successfully in a test environment).
+
+For strictly manual teardown, remove:
+
+- `ecube.service` systemd unit and reload systemd
+- `/opt/ecube` application files
+- `/var/lib/ecube` runtime directory
+- nginx ECUBE site config/symlinks (if present)
+- ECUBE service user/group and firewall rules (if created for this deployment)
+- PostgreSQL role/database only after verified backup
+
 ---
 
 ## 9. Advanced: Hosting UI with Another Web Frontend
