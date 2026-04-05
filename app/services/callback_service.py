@@ -34,7 +34,7 @@ from app.repositories.audit_repository import AuditRepository
 logger = logging.getLogger(__name__)
 
 _MAX_RETRIES = 4
-_BACKOFF_BASE = 5  # seconds; delays: 1 s, 5 s, 25 s
+_BACKOFF_BASE = 5  # exponential base; delay per retry attempt is 5**attempt seconds
 
 # ---------------------------------------------------------------------------
 # Bounded thread pool for callback delivery
