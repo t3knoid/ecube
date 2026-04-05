@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import ValidationError
 
+from app.config import settings
 from app.models.audit import AuditLog
 from app.schemas.configuration import ConfigurationUpdateRequest
 
@@ -65,7 +66,9 @@ class TestConfigurationEndpoints:
         admin_client,
         db,
     ):
-        resp = admin_client.put("/admin/configuration", json={"log_level": "DEBUG"})
+        target_level = "DEBUG" if settings.log_level != "DEBUG" else "INFO"
+
+        resp = admin_client.put("/admin/configuration", json={"log_level": target_level})
         assert resp.status_code == 200, resp.json()
 
         attempt = (
@@ -85,9 +88,13 @@ class TestConfigurationEndpoints:
         assert updated is not None
         assert attempt.user == "admin-user"
         assert "log_level" in (attempt.details or {}).get("requested_settings", [])
+        assert (attempt.details or {}).get("requested_values", {}).get("log_level") == target_level
         assert updated.user == "admin-user"
         changed_settings = (updated.details or {}).get("changed_settings", [])
         assert isinstance(changed_settings, list)
+        changed_values = (updated.details or {}).get("changed_setting_values", {})
+        if "log_level" in changed_values:
+            assert changed_values["log_level"]["new_value"] == target_level
 
     @patch("app.services.configuration_service.database_service._write_env_settings")
     @patch("app.services.configuration_service.configure_logging")
@@ -127,7 +134,7 @@ class TestConfigurationEndpoints:
     ):
         mock_open.side_effect = PermissionError(13, "Permission denied")
 
-        resp = admin_client.put("/admin/configuration", json={"log_file": "/var/log/ecube/app.log"})
+        resp = admin_client.put("/admin/configuration", json={"log_file": "/var/log/ecube/denied.log"})
         assert resp.status_code == 422, resp.json()
         payload = resp.json()
         message = str(payload.get("detail") or payload.get("message") or "")
