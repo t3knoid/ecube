@@ -99,7 +99,7 @@ def _has_any_admin_with_auto_migrate(repo: UserRoleRepository, db: Session) -> b
             migrations_applied,
         )
     except Exception as migrate_exc:
-        logger.exception("Automatic schema migration failed during /setup/initialize")
+        logger.error("Automatic schema migration failed during /setup/initialize")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=(
@@ -147,7 +147,7 @@ def _is_setup_initialized_by_os_state(admin_usernames: list[str]) -> bool:
         provider = get_os_user_provider()
     except Exception:
         # Fail closed if provider cannot be instantiated.
-        logger.exception("Failed to load OS user provider while evaluating setup state")
+        logger.error("Failed to load OS user provider while evaluating setup state")
         return True
 
     existing_admins: list[str] = []
@@ -160,7 +160,7 @@ def _is_setup_initialized_by_os_state(admin_usernames: list[str]) -> bool:
                 missing_admins.append(username)
         except Exception:
             # Fail closed if OS lookup fails unexpectedly.
-            logger.exception(
+            logger.error(
                 "OS user existence check failed for setup admin '%s'",
                 username,
             )
@@ -330,7 +330,7 @@ def _do_initialize(
         raise
     except Exception:
         lock_released = _release_init_lock(db)
-        logger.exception("Unexpected error during OS setup")
+        logger.error("Unexpected error during OS setup")
         detail = (
             "An unexpected error occurred during system initialization. "
             "OS groups or the admin user may have been partially created. "
@@ -362,7 +362,7 @@ def _do_initialize(
         # initialization lock so that setup can be retried safely.
         db.rollback()
         lock_released = _release_init_lock(db)
-        logger.exception("Failed to seed admin role for %s", body.username)
+        logger.error("Failed to seed admin role for %s", body.username)
         detail = (
             f"OS setup completed successfully (user '{body.username}' was created "
             "and ECUBE groups exist), but writing the admin role to the database "
@@ -390,7 +390,7 @@ def _do_initialize(
             client_ip=client_ip,
         )
     except Exception:
-        logger.exception("Failed to write audit log for SYSTEM_INITIALIZED")
+        logger.error("Failed to write audit log for SYSTEM_INITIALIZED")
 
     return SetupInitializeResponse(
         message="Setup complete",

@@ -15,7 +15,8 @@
     "jobs": "Jobs",
     "audit": "Audit",
     "system": "System",
-    "users": "Users"
+    "users": "Users",
+    "configuration": "Configuration"
   },
   "auth": {
     "login": "Log In",
@@ -240,6 +241,66 @@
   "themes": {
     "light": "Light",
     "dark": "Dark"
+  },
+  "configuration": {
+    "title": "Configuration",
+    "description": "Update selected runtime settings without shell access. Admin role required.",
+    "sections": {
+      "logging": "Logging",
+      "databasePool": "Database Connection Pool"
+    },
+    "fields": {
+      "log_level": {
+        "label": "Log Level",
+        "help": "Controls application log verbosity."
+      },
+      "log_format": {
+        "label": "Log Format",
+        "help": "Use text for human readability or json for structured ingestion."
+      },
+      "log_file": {
+        "label": "Log File Path",
+        "enabledLabel": "Enable file logging",
+        "help": "When unchecked, ECUBE clears LOG_FILE in .env. When checked, ECUBE sets LOG_FILE to the path shown above (default: /var/log/ecube/app.log)."
+      },
+      "log_file_max_bytes": {
+        "label": "Log File Max Bytes"
+      },
+      "log_file_backup_count": {
+        "label": "Log File Backup Count"
+      },
+      "db_pool_size": {
+        "label": "DB Pool Size"
+      },
+      "db_pool_max_overflow": {
+        "label": "DB Pool Max Overflow"
+      },
+      "db_pool_recycle_seconds": {
+        "label": "DB Pool Recycle Seconds",
+        "help": "Changes to this value are applied after service restart."
+      }
+    },
+    "restartRequiredField": "Requires service restart",
+    "pendingRestartTitle": "Restart Required",
+    "pendingRestartBody": "Some configuration changes are pending and require restarting the ECUBE service.",
+    "actions": {
+      "restartService": "Restart Service"
+    },
+    "confirmRestart": {
+      "title": "Restart ECUBE service?",
+      "body": "Some configuration changes require restarting the ECUBE service to take effect. Restart now?"
+    },
+    "errors": {
+      "loadFailed": "Failed to load configuration.",
+      "saveFailed": "Failed to save configuration.",
+      "restartFailed": "Failed to request service restart.",
+      "restartUnavailable": "Service restart is currently unavailable."
+    },
+    "toasts": {
+      "saved": "Configuration saved.",
+      "pendingRestart": "Changes saved. Restart is required for all updates to take effect.",
+      "restartRequested": "Restart request submitted."
+    }
   },
   "common": {
     "errors": {

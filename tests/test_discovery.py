@@ -120,6 +120,16 @@ def test_initial_sync_emits_audit_log(db):
     assert logs[0].details["drives_inserted"] == 0
 
 
+def test_initial_sync_emits_app_log_lines(db, caplog):
+    caplog.set_level("INFO")
+
+    run_discovery_sync(db, actor="admin-user", topology_source=_empty_topology, filesystem_detector=_NULL_DETECTOR)
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("USB_DISCOVERY_SYNC_STARTED actor=admin-user" in message for message in messages)
+    assert any("USB_DISCOVERY_SYNC_COMPLETED actor=admin-user" in message for message in messages)
+
+
 # ---------------------------------------------------------------------------
 # Idempotency — running sync twice should not produce duplicate rows
 # ---------------------------------------------------------------------------
