@@ -96,7 +96,7 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
     except Exception as exc:
         if is_encoding_error(exc):
             raise EncodingError("Mount data contains invalid characters") from exc
-        logger.exception("DB commit failed while creating mount record")
+        logger.error("DB commit failed while creating mount record")
         raise HTTPException(
             status_code=500,
             detail="Database error while creating mount record",
