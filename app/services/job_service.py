@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 
 
 def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client_ip: Optional[str] = None) -> ExportJob:
-    job_repo = JobRepository(db)
     drive_repo = DriveRepository(db)
     audit_repo = AuditRepository(db)
 
@@ -71,7 +70,7 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
                         client_ip=client_ip,
                     )
                 except Exception:
-                    logger.exception("Failed to write audit log for PROJECT_ISOLATION_VIOLATION")
+                    logger.error("Failed to write audit log for PROJECT_ISOLATION_VIOLATION")
                 raise HTTPException(
                     status_code=403,
                     detail="Drive belongs to a different project",
@@ -364,7 +363,7 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
             Manifest(job_id=job_id, manifest_path=manifest_path, format="JSON")
         )
     except Exception:
-        logger.exception("DB commit failed while creating manifest for job %s", job_id)
+        logger.error("DB commit failed while creating manifest for job %s", job_id)
         raise HTTPException(
             status_code=500,
             detail="Database error while creating manifest",
@@ -378,6 +377,6 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
             client_ip=client_ip,
         )
     except Exception:
-        logger.exception("Failed to write audit log for MANIFEST_CREATED")
+        logger.error("Failed to write audit log for MANIFEST_CREATED")
     db.refresh(job)
     return job

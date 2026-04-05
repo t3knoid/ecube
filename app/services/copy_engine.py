@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
-from app.models.jobs import ExportFile, ExportJob, FileStatus, JobStatus
+from app.models.jobs import ExportFile, FileStatus, JobStatus
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.job_repository import FileRepository, JobRepository
 from app.services.callback_service import deliver_callback
@@ -258,7 +258,7 @@ def run_copy_job(job_id: int) -> None:
         try:
             job_repo.save(job)
         except Exception:
-            logger.exception("DB commit failed setting job %s to RUNNING", job_id)
+            logger.error("DB commit failed setting job %s to RUNNING", job_id)
             return
 
         source = Path(job.source_path)
@@ -286,7 +286,7 @@ def run_copy_job(job_id: int) -> None:
             db.commit()
         except Exception:
             db.rollback()
-            logger.exception("DB commit failed resetting file statuses for job %s", job_id)
+            logger.error("DB commit failed resetting file statuses for job %s", job_id)
             return
 
         # Add records for source files not yet tracked.
@@ -373,7 +373,7 @@ def run_copy_job(job_id: int) -> None:
                 try:
                     job_repo.save(job)
                 except Exception:
-                    logger.exception("DB commit failed setting job %s to FAILED (timeout)", job_id)
+                    logger.error("DB commit failed setting job %s to FAILED (timeout)", job_id)
                     try:
                         AuditRepository(db).add(
                             action="JOB_STATUS_PERSIST_FAILED",
@@ -386,7 +386,7 @@ def run_copy_job(job_id: int) -> None:
                             },
                         )
                     except Exception:
-                        logger.exception("Failed to write audit log for JOB_STATUS_PERSIST_FAILED")
+                        logger.error("Failed to write audit log for JOB_STATUS_PERSIST_FAILED")
                 else:
                     try:
                         AuditRepository(db).add(
@@ -398,18 +398,18 @@ def run_copy_job(job_id: int) -> None:
                             },
                         )
                     except Exception:
-                        logger.exception("Failed to write audit log for JOB_TIMEOUT")
+                        logger.error("Failed to write audit log for JOB_TIMEOUT")
                     try:
                         deliver_callback(job)
                     except Exception:
-                        logger.exception("Callback delivery failed for job %s (timeout)", job_id)
+                        logger.error("Callback delivery failed for job %s (timeout)", job_id)
             else:
                 job.status = JobStatus.FAILED if error_count > 0 else JobStatus.COMPLETED
                 job.completed_at = datetime.now(timezone.utc)
                 try:
                     job_repo.save(job)
                 except Exception:
-                    logger.exception("DB commit failed setting final status for job %s", job_id)
+                    logger.error("DB commit failed setting final status for job %s", job_id)
                     try:
                         AuditRepository(db).add(
                             action="JOB_STATUS_PERSIST_FAILED",
@@ -422,7 +422,7 @@ def run_copy_job(job_id: int) -> None:
                             },
                         )
                     except Exception:
-                        logger.exception("Failed to write audit log for JOB_STATUS_PERSIST_FAILED")
+                        logger.error("Failed to write audit log for JOB_STATUS_PERSIST_FAILED")
                 else:
                     audit_action = "JOB_COMPLETED" if job.status == JobStatus.COMPLETED else "JOB_FAILED"
                     try:
@@ -437,11 +437,11 @@ def run_copy_job(job_id: int) -> None:
                             },
                         )
                     except Exception:
-                        logger.exception("Failed to write audit log for %s", audit_action)
+                        logger.error("Failed to write audit log for %s", audit_action)
                     try:
                         deliver_callback(job)
                     except Exception:
-                        logger.exception("Callback delivery failed for job %s (copy)", job_id)
+                        logger.error("Callback delivery failed for job %s (copy)", job_id)
     finally:
         db.close()
 
@@ -488,7 +488,7 @@ def run_verify_job(job_id: int) -> None:
             db.commit()
         except Exception:
             db.rollback()
-            logger.exception("DB commit failed during verification for job %s", job_id)
+            logger.error("DB commit failed during verification for job %s", job_id)
             return
 
         job = job_repo.get(job_id)
@@ -498,7 +498,7 @@ def run_verify_job(job_id: int) -> None:
             try:
                 job_repo.save(job)
             except Exception:
-                logger.exception("DB commit failed setting verification result for job %s", job_id)
+                logger.error("DB commit failed setting verification result for job %s", job_id)
                 try:
                     AuditRepository(db).add(
                         action="JOB_STATUS_PERSIST_FAILED",
@@ -511,7 +511,7 @@ def run_verify_job(job_id: int) -> None:
                         },
                     )
                 except Exception:
-                    logger.exception("Failed to write audit log for JOB_STATUS_PERSIST_FAILED")
+                    logger.error("Failed to write audit log for JOB_STATUS_PERSIST_FAILED")
             else:
                 audit_action = "JOB_VERIFICATION_COMPLETED" if not any_mismatch else "JOB_VERIFICATION_FAILED"
                 try:
@@ -525,10 +525,10 @@ def run_verify_job(job_id: int) -> None:
                         },
                     )
                 except Exception:
-                    logger.exception("Failed to write audit log for %s", audit_action)
+                    logger.error("Failed to write audit log for %s", audit_action)
                 try:
                     deliver_callback(job)
                 except Exception:
-                    logger.exception("Callback delivery failed for job %s (verify)", job_id)
+                    logger.error("Callback delivery failed for job %s (verify)", job_id)
     finally:
         db.close()

@@ -1,7 +1,7 @@
 # ECUBE Debugging Guide
 
 **Version:** 1.0  
-**Last Updated:** March 2026  
+**Last Updated:** April 2026  
 **Audience:** Developers, Contributors  
 **Document Type:** How-To
 
@@ -131,6 +131,12 @@ import logging
 logger = logging.getLogger(__name__)
 logger.debug("drive_id=%s, state=%s", drive.id, drive.state)
 ```
+
+For frontend troubleshooting, ECUBE also emits selected UI navigation traces.
+
+- Browser-side debug messages include `UI_NAVIGATION_ATTEMPT`, `UI_NAVIGATION_CLICK`, `UI_NAVIGATION_REDIRECT`, and `UI_NAVIGATION_COMPLETED`.
+- Selected events are also posted to `POST /telemetry/ui-navigation` and written to the backend service log as `UI_NAVIGATION_TELEMETRY` when `LOG_LEVEL=DEBUG`.
+- These telemetry events are diagnostic only. They do not replace audit logging and are not intended for compliance workflows.
 
 ---
 
