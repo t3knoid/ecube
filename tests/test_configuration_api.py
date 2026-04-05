@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -154,6 +155,86 @@ class TestConfigurationEndpoints:
             settings.log_file = original_values["log_file"]
             settings.log_file_max_bytes = original_values["log_file_max_bytes"]
             settings.log_file_backup_count = original_values["log_file_backup_count"]
+            try:
+                configure_logging()
+            except PermissionError:
+                settings.log_file = None
+                configure_logging()
+
+    @patch("app.services.configuration_service.database_service._write_env_settings")
+    def test_update_configuration_recovers_named_app_loggers(
+        self,
+        _mock_write_env,
+        admin_client,
+        client,
+        tmp_path,
+    ):
+        original_values = {
+            "log_level": settings.log_level,
+            "log_format": settings.log_format,
+            "log_file": settings.log_file,
+            "log_file_max_bytes": settings.log_file_max_bytes,
+            "log_file_backup_count": settings.log_file_backup_count,
+        }
+        tracked_loggers = {
+            name: logging.getLogger(name)
+            for name in ("app.main", "app.logging_config", "app.services.audit_service")
+        }
+        original_logger_state = {
+            name: {
+                "disabled": logger.disabled,
+                "propagate": logger.propagate,
+                "level": logger.level,
+                "handlers": list(logger.handlers),
+            }
+            for name, logger in tracked_loggers.items()
+        }
+
+        settings.log_file = None
+        configure_logging()
+
+        for logger in tracked_loggers.values():
+            logger.disabled = True
+            logger.propagate = False
+            logger.setLevel(logging.ERROR)
+            logger.handlers.clear()
+            logger.addHandler(logging.NullHandler())
+
+        log_path = tmp_path / "recover-named-loggers.log"
+
+        try:
+            resp = admin_client.put("/admin/configuration", json={"log_file": str(log_path)})
+            assert resp.status_code == 200, resp.json()
+
+            error_resp = client.post("/health")
+            assert error_resp.status_code == 405
+
+            for handler in logging.getLogger().handlers:
+                try:
+                    handler.flush()
+                except Exception:
+                    pass
+
+            assert log_path.exists()
+            content = log_path.read_text(encoding="utf-8")
+            assert "Logging configured: level=INFO format=text file=" in content
+            assert "CONFIGURATION_UPDATED" in content
+            assert "405 HTTP_405" in content
+        finally:
+            settings.log_level = original_values["log_level"]
+            settings.log_format = original_values["log_format"]
+            settings.log_file = original_values["log_file"]
+            settings.log_file_max_bytes = original_values["log_file_max_bytes"]
+            settings.log_file_backup_count = original_values["log_file_backup_count"]
+
+            for name, logger in tracked_loggers.items():
+                logger.disabled = original_logger_state[name]["disabled"]
+                logger.propagate = original_logger_state[name]["propagate"]
+                logger.setLevel(original_logger_state[name]["level"])
+                logger.handlers.clear()
+                for handler in original_logger_state[name]["handlers"]:
+                    logger.addHandler(handler)
+
             try:
                 configure_logging()
             except PermissionError:

@@ -347,7 +347,7 @@ def create_user(
             try:
                 _run_sudo([settings.userdel_binary_path, "-r", username])
             except Exception:
-                logger.exception(
+                logger.error(
                     "Failed to clean up OS user '%s' after usermod failure",
                     username,
                 )

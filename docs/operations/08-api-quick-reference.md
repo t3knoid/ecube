@@ -17,6 +17,7 @@
 - [Jobs (`/jobs`)](#jobs-jobs)
 - [Audit (`/audit`)](#audit-audit)
 - [Introspection (`/introspection`)](#introspection-introspection)
+- [Telemetry (`/telemetry`)](#telemetry-telemetry)
 - [Support and Resources](#support-and-resources)
   - [Documentation](#documentation)
   - [Logging and Debugging](#logging-and-debugging)
@@ -149,6 +150,21 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 ---
 
+## Telemetry (`/telemetry`)
+
+| Method | Endpoint | Role | Description |
+| ------ | -------- | ---- | ----------- |
+| POST | `/telemetry/ui-navigation` | admin/manager/processor/auditor | Internal troubleshooting endpoint for selected frontend navigation events |
+
+**Notes:**
+
+- This endpoint is for operational troubleshooting only.
+- It records selected UI navigation events in the application log at `DEBUG` level.
+- It does not create audit-log records and should not be treated as a compliance trail.
+- Typical payload fields include `event_type`, `source`, `destination`, `route_name`, `action`, `label`, and `reason`.
+
+---
+
 ## Support and Resources
 
 ### Documentation
@@ -163,6 +179,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 - **Service Logs:** `journalctl -u ecube -f`
 - **Database Logs:** PostgreSQL log file (check postgresql.conf)
 - **API Errors:** Check response JSON for `code`, `message`, and `trace_id` fields
+- **UI navigation telemetry:** Set `LOG_LEVEL=DEBUG` to see `UI_NAVIGATION_TELEMETRY` lines from the frontend telemetry endpoint in the service log
 
 ### Contacting Support
 
