@@ -81,6 +81,7 @@ def update_configuration(values: Dict[str, Any]) -> Dict[str, Any]:
     changes.
     """
     changed_settings: List[str] = []
+    changed_setting_values: Dict[str, Dict[str, Any]] = {}
     applied_immediately: List[str] = []
     restart_required_settings: List[str] = []
     env_updates: Dict[str, str] = {}
@@ -97,6 +98,10 @@ def update_configuration(values: Dict[str, Any]) -> Dict[str, Any]:
 
         spec = _EDITABLE_FIELDS[key]
         changed_settings.append(key)
+        changed_setting_values[key] = {
+            "old_value": current_value,
+            "new_value": new_value,
+        }
         if spec.requires_restart:
             restart_required_settings.append(key)
         else:
@@ -109,6 +114,7 @@ def update_configuration(values: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "status": "no_changes",
             "changed_settings": [],
+            "changed_setting_values": {},
             "applied_immediately": [],
             "restart_required_settings": [],
             "restart_required": False,
@@ -127,6 +133,7 @@ def update_configuration(values: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "status": "updated",
         "changed_settings": changed_settings,
+        "changed_setting_values": changed_setting_values,
         "applied_immediately": applied_immediately,
         "restart_required_settings": restart_required_settings,
         "restart_required": bool(restart_required_settings),
