@@ -290,6 +290,12 @@
       "title": "Restart ECUBE service?",
       "body": "Some configuration changes require restarting the ECUBE service to take effect. Restart now?"
     },
+    "errors": {
+      "loadFailed": "Failed to load configuration.",
+      "saveFailed": "Failed to save configuration.",
+      "restartFailed": "Failed to request service restart.",
+      "restartUnavailable": "Service restart is currently unavailable."
+    },
     "toasts": {
       "saved": "Configuration saved.",
       "pendingRestart": "Changes saved. Restart is required for all updates to take effect.",
