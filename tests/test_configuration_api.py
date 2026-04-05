@@ -293,3 +293,71 @@ class TestConfigurationEndpoints:
         data = resp.json()
         assert data["status"] == "restart_requested"
         assert data["service"] == "ecube"
+
+    @patch("app.services.configuration_service.configure_logging")
+    @patch("app.services.configuration_service.database_service._write_env_settings")
+    def test_update_configuration_env_write_failure_keeps_runtime_settings_unchanged(
+        self,
+        mock_write_env,
+        mock_configure_logging,
+        admin_client,
+    ):
+        original_log_level = settings.log_level
+        target_level = "DEBUG" if original_log_level != "DEBUG" else "INFO"
+        mock_write_env.side_effect = RuntimeError("disk full")
+
+        resp = admin_client.put("/admin/configuration", json={"log_level": target_level})
+
+        assert resp.status_code == 500
+        assert settings.log_level == original_log_level
+        mock_configure_logging.assert_not_called()
+
+    @patch("app.services.configuration_service._apply_runtime_changes")
+    @patch("app.services.configuration_service.database_service._write_env_settings")
+    def test_update_configuration_runtime_apply_failure_rolls_back_env_and_settings(
+        self,
+        mock_write_env,
+        mock_apply_runtime,
+        admin_client,
+    ):
+        original_log_level = settings.log_level
+        target_level = "DEBUG" if original_log_level != "DEBUG" else "INFO"
+
+        mock_apply_runtime.side_effect = RuntimeError("runtime apply failed")
+
+        resp = admin_client.put("/admin/configuration", json={"log_level": target_level})
+
+        assert resp.status_code == 500
+        assert settings.log_level == original_log_level
+        # First call writes new env values; second call writes rollback values.
+        assert mock_write_env.call_count == 2
+
+    @patch("app.routers.configuration.configuration_service.update_configuration")
+    def test_update_configuration_generic_500_does_not_leak_internal_error(
+        self,
+        mock_update,
+        admin_client,
+    ):
+        mock_update.side_effect = RuntimeError("internal path /tmp/secret")
+
+        resp = admin_client.put("/admin/configuration", json={"log_level": "DEBUG"})
+
+        assert resp.status_code == 500
+        payload = resp.json()
+        assert payload["message"] == "Configuration update failed"
+        assert payload["code"] == "HTTP_500"
+
+    @patch("app.routers.configuration.configuration_service.request_service_restart")
+    def test_restart_generic_500_does_not_leak_internal_error(
+        self,
+        mock_restart,
+        admin_client,
+    ):
+        mock_restart.side_effect = Exception("service detail /var/run")
+
+        resp = admin_client.post("/admin/configuration/restart", json={"confirm": True})
+
+        assert resp.status_code == 500
+        payload = resp.json()
+        assert payload["message"] == "Configuration restart request failed"
+        assert payload["code"] == "HTTP_500"
