@@ -22,6 +22,7 @@ Primary workflows covered in this guide:
 - Managing mount definitions
 - Viewing and exporting audit logs
 - Accessing user and system pages when your role permits it
+- Managing selected runtime configuration settings (admin-only)
 
 ## Scope
 
@@ -127,6 +128,7 @@ Common role effects in the UI:
 
 - The `Audit` page is visible only to roles allowed to inspect audit records.
 - The `Users` page is visible only to roles allowed to manage users.
+- The `Configuration` page is visible only to `admin` users.
 - Action buttons such as formatting or initializing drives may be disabled if your role does not permit them.
 
 > **Screenshot placeholder:** Sidebar navigation with role-specific menu visibility.
@@ -203,6 +205,7 @@ Common navigation items include:
 - `Audit` (role-restricted)
 - `System`
 - `Users` (admin-only or otherwise restricted)
+- `Configuration` (admin-only)
 
 If you do not see a page described in this manual, your role may not include access to it.
 
@@ -550,6 +553,45 @@ Notes:
 If your role does not include access to this page, the navigation item will not appear.
 
 > **Screenshot placeholder:** Users page with role assignment controls and password reset flow.
+
+### 12.2 Configuration Page (Administrator)
+
+**Allowed roles:** `admin`
+
+Use the `Configuration` page to update selected runtime settings from the UI without logging into the host terminal.
+
+What this page is for:
+
+- Adjusting logging behavior (level, format, and file logging options)
+- Adjusting selected database pool settings exposed by the UI
+- Applying safe configuration changes through role-restricted workflows
+
+Basic workflow:
+
+1. Open `Configuration` from the admin navigation area.
+2. Review current values in each section.
+3. Edit one or more fields.
+4. Click `Save`.
+5. Review post-save status: some changes apply immediately, and some changes are marked as pending restart.
+
+Restart-required workflow:
+
+1. If the page indicates that restart is required, review the listed changed settings.
+2. Click `Restart Service` only when you are ready.
+3. Read the confirmation dialog.
+4. Confirm restart to submit the service restart request.
+5. If you select cancel, no restart is triggered and the service keeps running.
+
+Important operational notes:
+
+- Restart actions are never automatic from this page and always require explicit confirmation.
+- Restarting the application service can interrupt active operations. Prefer using a maintenance window or an idle period.
+- If restart submission fails, use the displayed error and contact platform support or perform restart through approved host-level procedures.
+- For field-by-field meaning and defaults, see [04-configuration-reference.md](04-configuration-reference.md).
+
+If your role does not include access to this page, the navigation item will not appear.
+
+> **Screenshot placeholder:** Configuration page showing editable settings, pending-restart warning, and restart confirmation dialog.
 
 ---
 
