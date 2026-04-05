@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 
 
 def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client_ip: Optional[str] = None) -> ExportJob:
-    job_repo = JobRepository(db)
     drive_repo = DriveRepository(db)
     audit_repo = AuditRepository(db)
 
