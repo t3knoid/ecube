@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, StrictBool, StrictInt, model_validator
 
@@ -54,6 +54,7 @@ class ConfigurationUpdateResponse(BaseModel):
 
     status: str = Field(..., description="Update status")
     changed_settings: List[str] = Field(default_factory=list)
+    changed_setting_values: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     applied_immediately: List[str] = Field(default_factory=list)
     restart_required_settings: List[str] = Field(default_factory=list)
     restart_required: bool = Field(...)
