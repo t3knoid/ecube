@@ -24,6 +24,9 @@ Default naming behavior (if no naming option is provided):
 Outputs:
   dist/<artifact_name>.tar.gz
   dist/<artifact_name>.sha256
+
+Build-only output:
+  dist/<artifact_name>/   # Staging directory with packaged contents
 EOF
 }
 
@@ -111,13 +114,7 @@ if [[ ! -d "frontend/dist" ]]; then
   exit 1
 fi
 
-if [[ "${BUILD_ONLY}" == true ]]; then
-  echo "==> Build-only mode complete (no packaging requested)"
-  echo "Frontend output: frontend/dist"
-  exit 0
-fi
-
-for path in install.sh app alembic pyproject.toml alembic.ini frontend/dist README.md LICENSE; do
+for path in install.sh app alembic deploy pyproject.toml alembic.ini frontend/dist README.md LICENSE; do
   if [[ ! -e "${path}" ]]; then
     echo "ERROR: Required packaging path not found: ${path}" >&2
     exit 1
@@ -127,12 +124,26 @@ done
 chmod 755 install.sh
 mkdir -p dist
 
+if [[ "${BUILD_ONLY}" == true ]]; then
+  STAGING_DIR="dist/${ARTIFACT_NAME}"
+  echo "==> Creating build-only staging directory ${STAGING_DIR}"
+  rm -rf "${STAGING_DIR}"
+  mkdir -p "${STAGING_DIR}"
+
+  cp -a install.sh app alembic deploy pyproject.toml alembic.ini frontend/dist README.md LICENSE "${STAGING_DIR}/"
+
+  echo "==> Build-only mode complete (no tar/sha generated)"
+  echo "Staging directory: ${STAGING_DIR}"
+  exit 0
+fi
+
 echo "==> Creating dist/${ARTIFACT_NAME}.tar.gz"
 tar -czf "dist/${ARTIFACT_NAME}.tar.gz" \
   --transform "s|^|${ARTIFACT_NAME}/|" \
   install.sh \
   app \
   alembic \
+  deploy \
   pyproject.toml \
   alembic.ini \
   frontend/dist \

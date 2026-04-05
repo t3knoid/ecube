@@ -78,6 +78,19 @@ tags_metadata = [
 async def lifespan(application: FastAPI):
     logger.info("ECUBE application starting")
 
+    db_runtime_ready = False
+    if not (settings.database_url or "").strip():
+        logger.info("DATABASE_URL is not configured; skipping DB startup tasks")
+    else:
+        try:
+            from app.services import database_service
+
+            db_runtime_ready = database_service.is_database_provisioned()
+            if not db_runtime_ready:
+                logger.info("Database is configured but schema is not provisioned; skipping DB startup tasks")
+        except Exception:
+            logger.exception("Failed to determine database provisioning state during startup")
+
     # ------------------------------------------------------------------
     # Startup: initialise session backend (Redis ping if configured)
     # ------------------------------------------------------------------
@@ -86,7 +99,7 @@ async def lifespan(application: FastAPI):
     # ------------------------------------------------------------------
     # Startup: purge expired audit logs
     # ------------------------------------------------------------------
-    if settings.audit_log_retention_days > 0:
+    if db_runtime_ready and settings.audit_log_retention_days > 0:
         try:
             from app.database import SessionLocal
             from app.services.audit_service import purge_expired_audit_logs
@@ -104,24 +117,25 @@ async def lifespan(application: FastAPI):
     # ------------------------------------------------------------------
     # Startup: reconcile stale mounts, jobs, and USB drives
     # ------------------------------------------------------------------
-    try:
-        from app.database import SessionLocal
-        from app.services.reconciliation_service import run_startup_reconciliation
-        from app.infrastructure import get_mount_provider, get_drive_discovery, get_filesystem_detector, get_os_user_provider
-
-        db = SessionLocal()
+    if db_runtime_ready:
         try:
-            run_startup_reconciliation(
-                db,
-                get_mount_provider(),
-                os_user_provider=get_os_user_provider() if settings.role_resolver == "local" else None,
-                topology_source=get_drive_discovery().discover_topology,
-                filesystem_detector=get_filesystem_detector(),
-            )
-        finally:
-            db.close()
-    except Exception:
-        logger.exception("Startup reconciliation failed")
+            from app.database import SessionLocal
+            from app.services.reconciliation_service import run_startup_reconciliation
+            from app.infrastructure import get_mount_provider, get_drive_discovery, get_filesystem_detector, get_os_user_provider
+
+            db = SessionLocal()
+            try:
+                run_startup_reconciliation(
+                    db,
+                    get_mount_provider(),
+                    os_user_provider=get_os_user_provider() if settings.role_resolver == "local" else None,
+                    topology_source=get_drive_discovery().discover_topology,
+                    filesystem_detector=get_filesystem_detector(),
+                )
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("Startup reconciliation failed")
 
     # ------------------------------------------------------------------
     # Startup: prime psutil CPU baseline (runs in background thread so it
@@ -149,7 +163,7 @@ async def lifespan(application: FastAPI):
     # Background: periodic USB discovery
     # ------------------------------------------------------------------
     discovery_task = None
-    if settings.usb_discovery_interval > 0:
+    if db_runtime_ready and settings.usb_discovery_interval > 0:
         async def _usb_discovery_loop() -> None:
             from app.database import SessionLocal
             from app.services.discovery_service import run_discovery_sync
