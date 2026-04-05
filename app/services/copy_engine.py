@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
-from app.models.jobs import ExportFile, ExportJob, FileStatus, JobStatus
+from app.models.jobs import ExportFile, FileStatus, JobStatus
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.job_repository import FileRepository, JobRepository
 from app.services.callback_service import deliver_callback

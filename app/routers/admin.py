@@ -26,7 +26,7 @@ import os
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -56,7 +56,7 @@ from app.infrastructure import get_os_user_provider
 from app.infrastructure.os_user_protocol import OSUserError, OsUserProvider
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500, R_504
 from app.services.os_user_service import validate_group_name, validate_username
-from app.constants import ECUBE_GROUPNAME_PATTERN, GROUPNAME_PATTERN, USERNAME_PATTERN, ECUBE_GROUP_ROLE_MAP
+from app.constants import ECUBE_GROUPNAME_PATTERN, USERNAME_PATTERN, ECUBE_GROUP_ROLE_MAP
 from app.utils.client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
