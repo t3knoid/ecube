@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, status

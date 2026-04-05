@@ -22,7 +22,7 @@ import socket
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from urllib.parse import urlparse, urlunparse
 
 import httpx
