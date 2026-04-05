@@ -55,7 +55,7 @@ def initialize_drive(
                 client_ip=client_ip,
             )
         except Exception:
-            logger.exception("Failed to write audit log for PROJECT_ISOLATION_VIOLATION")
+            logger.error("Failed to write audit log for PROJECT_ISOLATION_VIOLATION")
         raise HTTPException(
             status_code=403,
             detail=f"Drive is already assigned to project '{drive.current_project_id}'",

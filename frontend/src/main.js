@@ -9,6 +9,7 @@ import i18n from './i18n'
 import { useAuthStore } from './stores/auth.js'
 import { useThemeStore } from './stores/theme.js'
 import { AUTH_RESET_EVENT } from './constants/auth.js'
+import { installNavigationTracing } from './utils/navigationTrace.js'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -32,3 +33,5 @@ themeStore.initialize()
 
 app.use(router)
 app.mount('#app')
+
+installNavigationTracing(router)
