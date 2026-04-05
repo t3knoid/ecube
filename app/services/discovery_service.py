@@ -42,7 +42,7 @@ from typing import Callable, List, Optional
 
 from sqlalchemy.orm import Session
 
-from app.infrastructure.usb_discovery import DiscoveredTopology, discover_usb_topology
+from app.infrastructure.usb_discovery import DiscoveredTopology
 from app.infrastructure import FilesystemDetector
 from app.models.hardware import DriveState, UsbDrive, UsbPort
 from app.repositories.audit_repository import AuditRepository
