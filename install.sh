@@ -1280,6 +1280,11 @@ install_backend() {
   run chown -R ecube:ecube /var/lib/ecube
   run chmod 700 /var/lib/ecube
 
+  # 4b. Application log directory (used when LOG_FILE is enabled).
+  run mkdir -p /var/log/ecube
+  run chown -R ecube:ecube /var/log/ecube
+  run chmod 750 /var/log/ecube
+
   # 5. Python virtual environment
   # Run venv creation and pip installs as the ecube user so all files under
   # ${INSTALL_DIR} are owned by ecube:ecube from the start, and package
