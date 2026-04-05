@@ -1,0 +1,16 @@
+# /etc/pam.d/ecube
+# PAM configuration for the ECUBE service (local and domain user authentication).
+#
+# Tries local users first (pam_unix, sufficient = stop on success), then
+# domain users via SSSD (pam_sss, only attempted if SSSD is installed).
+# Falls back to an unconditional deny so a missing module does not open a hole.
+#
+# This file is installed by the ECUBE installer and should not be edited by hand.
+# To override the PAM service used by ECUBE, set PAM_SERVICE_NAME in /opt/ecube/.env.
+
+auth    sufficient  pam_unix.so nullok
+auth    [success=done ignore=ignore default=die] pam_sss.so use_first_pass
+auth    required    pam_deny.so
+account sufficient  pam_unix.so
+account [success=done ignore=ignore default=die] pam_sss.so
+account required    pam_deny.so

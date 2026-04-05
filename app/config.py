@@ -7,7 +7,9 @@ from pydantic import Field, field_validator, model_validator
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    database_url: str = "postgresql://ecube:ecube@localhost/ecube"
+    # Empty by default on fresh installs. The setup wizard writes this once
+    # database connectivity is configured.
+    database_url: str = ""
 
     #: PostgreSQL hostname suggested to the setup wizard when the application
     #: is detected to be running inside a Docker container.  In a standard
@@ -15,6 +17,12 @@ class Settings(BaseSettings):
     #: Override with ``SETUP_DOCKER_DB_HOST=<name>`` if your Compose service
     #: is named differently.
     setup_docker_db_host: str = "postgres"
+
+    #: PostgreSQL admin username suggested to the setup wizard for the
+    #: database provisioning step. The installer can persist this in `.env`
+    #: (``SETUP_DEFAULT_ADMIN_USERNAME=...``) to keep UI defaults aligned
+    #: with the superuser it created.
+    setup_default_admin_username: str = "ecubeadmin"
     
     #: Target platform for infrastructure implementations.  Factory functions
     #: in ``app.infrastructure`` use this to select concrete Protocol
@@ -229,6 +237,20 @@ class Settings(BaseSettings):
 
     #: Path to the ``chpasswd`` binary (must match sudoers whitelist).
     chpasswd_binary_path: str = "/usr/sbin/chpasswd"
+
+    #: PAM service name used for local credential validation (``/auth/token``)
+    #: via python-pam. Defaults to ``ecube``, a dedicated PAM config installed
+    #: by the ECUBE installer (``/etc/pam.d/ecube``) that handles both local
+    #: users (via pam_unix) and domain users (via pam_sss when SSSD is present).
+    #: Override with ``PAM_SERVICE_NAME=login`` or ``PAM_SERVICE_NAME=sudo`` if
+    #: the dedicated config is not installed.
+    pam_service_name: str = "ecube"
+
+    #: Optional PAM fallback service names attempted in order after
+    #: ``pam_service_name`` if authentication fails.  Empty by default when
+    #: the dedicated ``ecube`` PAM config is used; set to ``["sudo"]`` as a
+    #: workaround on hosts without ``/etc/pam.d/ecube``.
+    pam_fallback_services: List[str] = Field(default=[])
 
     #: Path to ``/proc/mounts`` for reading active mount information.
     procfs_mounts_path: str = "/proc/mounts"

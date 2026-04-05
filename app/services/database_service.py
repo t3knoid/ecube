@@ -86,11 +86,13 @@ def test_connection(
             # e.g. 140009 → 14.9, 160002 → 16.2
             major = version // 10000
             patch = version % 10000
-            return f"{major}.{patch}"
+            version_string = f"{major}.{patch}"
         finally:
             conn.close()
     except psycopg2.OperationalError as exc:
         raise ConnectionError(f"Could not connect to {host}:{port}: {exc}") from exc
+
+    return version_string
 
 
 def provision_database(
@@ -131,6 +133,19 @@ def provision_database(
     try:
         conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
         cur = conn.cursor()
+
+        # Verify the admin user has sufficient privilege to create databases
+        # before attempting any DDL (fail fast with an actionable message).
+        cur.execute(
+            "SELECT rolsuper OR rolcreatedb FROM pg_roles WHERE rolname = current_user"
+        )
+        row = cur.fetchone()
+        if row is None or not row[0]:
+            raise RuntimeError(
+                f"Admin user '{admin_username}' does not have permission to create "
+                "databases. Use a PostgreSQL superuser or a role with CREATEDB "
+                "privilege (e.g. the built-in 'postgres' superuser)."
+            )
 
         # Create user if not exists
         cur.execute(
@@ -175,7 +190,7 @@ def provision_database(
     except psycopg2.Error as exc:
         logger.error("Database provisioning failed: %s", exc)
         raise RuntimeError(
-            "Database provisioning failed during user/database creation"
+            f"Database provisioning failed during user/database creation: {exc}"
         ) from exc
     finally:
         conn.close()
@@ -188,10 +203,10 @@ def provision_database(
     try:
         migrations_applied = _run_migrations(new_url)
     except Exception as exc:
-        logger.error("Alembic migration failed: %s", exc)
+        logger.exception("Alembic migration failed")
         raise RuntimeError(
             "Database and user were created, but schema migration failed. "
-            "Resolve the migration issue and retry provisioning."
+            f"Resolve the migration issue and retry provisioning. Details: {exc}"
         ) from exc
 
     # Step 3: Write DATABASE_URL to .env — only after migrations succeed.
@@ -241,6 +256,16 @@ def is_database_provisioned() -> bool:
     from app.config import settings
 
     return _get_current_revision(settings.database_url) is not None
+
+
+def migrate_configured_database_schema() -> int:
+    """Run Alembic migrations for the currently configured DATABASE_URL.
+
+    Returns the number of pending migrations that were applied.
+    """
+    from app.config import settings
+
+    return _run_migrations(settings.database_url)
 
 
 def _run_migrations(database_url: str) -> int:

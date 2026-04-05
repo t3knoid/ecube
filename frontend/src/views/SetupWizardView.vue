@@ -7,7 +7,7 @@ import {
   getSetupStatus,
   getDatabaseProvisionStatus,
   getSystemInfo,
-  testDatabaseConnection,
+  connectDatabase,
   provisionDatabase,
   initializeSetup,
 } from '@/api/setup.js'
@@ -25,7 +25,7 @@ const provisionNote = ref('')
 const db = ref({
   host: 'localhost',
   port: 5432,
-  admin_username: 'ecube',
+  admin_username: 'ecubeadmin',
   admin_password: '',
   app_database: 'ecube',
   app_username: 'ecube',
@@ -76,12 +76,12 @@ function step3Valid() {
   return !!admin.value.username && !!admin.value.password
 }
 
-async function runConnectionTest() {
+async function runConnectDatabase() {
   if (!step1Valid()) return
   busy.value = true
   error.value = ''
   try {
-    await testDatabaseConnection({
+    await connectDatabase({
       host: db.value.host,
       port: Number(db.value.port),
       admin_username: db.value.admin_username,
@@ -185,6 +185,9 @@ onMounted(async () => {
       if (info?.suggested_db_host) {
         db.value.host = info.suggested_db_host
       }
+      if (info?.suggested_admin_username) {
+        db.value.admin_username = info.suggested_admin_username
+      }
     } catch {
       // Non-fatal; keep localhost default.
     }
@@ -220,7 +223,7 @@ onMounted(async () => {
       <p v-if="error" class="error-banner">{{ error }}</p>
 
       <div v-if="step === 1" class="step-grid">
-        <h2>{{ t('setup.testConnection') }}</h2>
+        <h2>{{ t('setup.connectDatabase') }}</h2>
         <label for="db-host">{{ t('setup.dbHost') }}</label>
         <input id="db-host" v-model="db.host" type="text" />
         <p v-if="inDocker" class="info-hint">{{ t('setup.dockerHostHint') }}</p>
@@ -230,8 +233,8 @@ onMounted(async () => {
         <input id="db-admin-user" v-model="db.admin_username" type="text" />
         <label for="db-admin-pass">{{ t('setup.dbAdminPass') }}</label>
         <input id="db-admin-pass" v-model="db.admin_password" type="password" autocomplete="new-password" />
-        <button class="btn" :disabled="busy || !step1Valid()" @click="runConnectionTest">
-          {{ t('setup.testConnection') }}
+        <button class="btn" :disabled="busy || !step1Valid()" @click="runConnectDatabase">
+          {{ t('setup.connectDatabase') }}
         </button>
         <p v-if="connectionOk" class="ok-text">{{ t('setup.connectionOk') }}</p>
       </div>
