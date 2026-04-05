@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import ValidationError
 
+from app.models.audit import AuditLog
 from app.schemas.configuration import ConfigurationUpdateRequest
 
 
@@ -55,6 +56,39 @@ class TestConfigurationEndpoints:
         mock_write_env.assert_called_once()
         mock_configure_logging.assert_called_once()
 
+    @patch("app.services.configuration_service.database_service._write_env_settings")
+    @patch("app.services.configuration_service.configure_logging")
+    def test_update_configuration_logs_attempt_and_success(
+        self,
+        _mock_configure_logging,
+        _mock_write_env,
+        admin_client,
+        db,
+    ):
+        resp = admin_client.put("/admin/configuration", json={"log_level": "DEBUG"})
+        assert resp.status_code == 200, resp.json()
+
+        attempt = (
+            db.query(AuditLog)
+            .filter(AuditLog.action == "CONFIGURATION_UPDATE_ATTEMPTED")
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+        updated = (
+            db.query(AuditLog)
+            .filter(AuditLog.action == "CONFIGURATION_UPDATED")
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+
+        assert attempt is not None
+        assert updated is not None
+        assert attempt.user == "admin-user"
+        assert "log_level" in (attempt.details or {}).get("requested_settings", [])
+        assert updated.user == "admin-user"
+        changed_settings = (updated.details or {}).get("changed_settings", [])
+        assert isinstance(changed_settings, list)
+
     def test_restart_requires_confirmation(self, admin_client):
         resp = admin_client.post("/admin/configuration/restart", json={"confirm": False})
         assert resp.status_code == 400
@@ -68,6 +102,7 @@ class TestConfigurationEndpoints:
         _mock_makedirs,
         mock_write_env,
         admin_client,
+        db,
     ):
         mock_open.side_effect = PermissionError(13, "Permission denied")
 
@@ -77,6 +112,24 @@ class TestConfigurationEndpoints:
         message = str(payload.get("detail") or payload.get("message") or "")
         assert "Unable to write log file" in message
         mock_write_env.assert_not_called()
+
+        attempt = (
+            db.query(AuditLog)
+            .filter(AuditLog.action == "CONFIGURATION_UPDATE_ATTEMPTED")
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+        rejected = (
+            db.query(AuditLog)
+            .filter(AuditLog.action == "CONFIGURATION_UPDATE_REJECTED")
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+
+        assert attempt is not None
+        assert rejected is not None
+        assert "log_file" in (attempt.details or {}).get("requested_settings", [])
+        assert "Unable to write log file" in str((rejected.details or {}).get("reason", ""))
 
     @patch("app.services.configuration_service.shutil.which", return_value="/usr/bin/systemctl")
     @patch("app.services.configuration_service.subprocess.run")
