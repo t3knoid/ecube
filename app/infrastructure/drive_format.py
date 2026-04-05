@@ -84,5 +84,5 @@ class LinuxDriveFormatter:
                         ):
                             return True
         except OSError:
-            logger.warning("Could not read %s for mount check", settings.procfs_mounts_path)
+            logger.exception("Could not read %s for mount check", settings.procfs_mounts_path)
         return False

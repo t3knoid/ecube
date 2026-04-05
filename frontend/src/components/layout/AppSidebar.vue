@@ -18,6 +18,7 @@ const navItems = computed(() => [
 
 const adminItems = computed(() => [
   { label: t('nav.users'), to: '/users', roles: USERS_ROLES },
+  { label: t('nav.configuration'), to: '/configuration', roles: USERS_ROLES },
 ])
 
 function isVisible(item) {

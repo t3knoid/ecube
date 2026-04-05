@@ -92,9 +92,8 @@ class RedisSessionMiddleware:
                             "starting fresh session",
                         )
             except Exception:
-                logger.warning(
+                logger.exception(
                     "Failed to load session from Redis; starting fresh session",
-                    exc_info=True,
                 )
 
         scope["session"] = dict(initial_data)
@@ -111,10 +110,9 @@ class RedisSessionMiddleware:
                         dict(session), sort_keys=True,
                     )
                 except (TypeError, ValueError):
-                    logger.warning(
+                    logger.exception(
                         "Session contains non-JSON-serializable value; "
                         "skipping persistence",
-                        exc_info=True,
                     )
                     await send(message)
                     return
@@ -143,10 +141,9 @@ class RedisSessionMiddleware:
                         payload = json.dumps(dict(session))
                         await self.redis.setex(key, self.max_age, payload)
                     except Exception:
-                        logger.warning(
+                        logger.exception(
                             "Failed to persist session %s to Redis",
                             sid,
-                            exc_info=True,
                         )
                     else:
                         headers = MutableHeaders(scope=message)
@@ -161,10 +158,9 @@ class RedisSessionMiddleware:
                     try:
                         await self.redis.expire(key, self.max_age)
                     except Exception:
-                        logger.warning(
+                        logger.exception(
                             "Failed to refresh TTL for session %s",
                             session_id,
-                            exc_info=True,
                         )
                     else:
                         headers = MutableHeaders(scope=message)
@@ -232,7 +228,7 @@ async def _try_redis_backend() -> "object | None":
     try:
         import redis.asyncio as aioredis  # optional dependency
     except ImportError:
-        logger.warning(
+        logger.exception(
             "SESSION_BACKEND=redis but the 'redis' package is not installed; "
             "falling back to cookie-based sessions"
         )
@@ -240,7 +236,7 @@ async def _try_redis_backend() -> "object | None":
 
     url = settings.redis_url
     if not url:
-        logger.warning(
+        logger.error(
             "SESSION_BACKEND=redis but REDIS_URL is not set; "
             "falling back to cookie-based sessions"
         )
@@ -265,11 +261,10 @@ async def _try_redis_backend() -> "object | None":
                 await client.aclose()
             except Exception:
                 pass
-        logger.warning(
+        logger.exception(
             "Redis session backend unavailable (url=%s); "
             "falling back to cookie-based sessions",
             safe_url,
-            exc_info=True,
         )
         return None
 
@@ -399,7 +394,5 @@ async def close_session_backend(application: "FastAPI") -> None:
             await redis_client.aclose()
             logger.info("Redis session client closed")
         except Exception:
-            logger.warning(
-                "Failed to close Redis session client", exc_info=True,
-            )
+            logger.exception("Failed to close Redis session client")
         application.state.session_redis_client = None
