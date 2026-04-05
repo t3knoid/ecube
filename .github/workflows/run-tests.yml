@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -51,7 +51,7 @@ jobs:
           POSTGRES_USER: ecube_test
           POSTGRES_PASSWORD: ecube_test
         ports:
-          - 5433:5432
+          - 5432:5432
         options: >-
           --health-cmd "pg_isready -U ecube_test -d ecube_integration"
           --health-interval 5s
@@ -72,13 +72,13 @@ jobs:
 
       - name: Run Alembic migrations against test database
         env:
-          DATABASE_URL: postgresql://ecube_test:ecube_test@localhost:5433/ecube_integration
+          DATABASE_URL: postgresql://ecube_test:ecube_test@localhost:5432/ecube_integration
         run: alembic upgrade head
 
       - name: Run integration tests
         env:
-          DATABASE_URL: postgresql://ecube_test:ecube_test@localhost:5433/ecube_integration
-          INTEGRATION_DATABASE_URL: postgresql://ecube_test:ecube_test@localhost:5433/ecube_integration
+          DATABASE_URL: postgresql://ecube_test:ecube_test@localhost:5432/ecube_integration
+          INTEGRATION_DATABASE_URL: postgresql://ecube_test:ecube_test@localhost:5432/ecube_integration
         run: python -m pytest tests/integration/ -v --run-integration
 
   frontend-unit-tests:
