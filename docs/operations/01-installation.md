@@ -342,14 +342,16 @@ The wizard will:
 ## Uninstall Procedure
 
 ```bash
-sudo ./install.sh --uninstall
+sudo /opt/ecube/install.sh --uninstall
 ```
 
 Optional database cleanup during uninstall:
 
 ```bash
-sudo ./install.sh --uninstall --drop-database
+sudo /opt/ecube/install.sh --uninstall --drop-database
 ```
+
+If ECUBE was installed with a custom `--install-dir`, run the installer from that location instead (for example, `sudo /srv/ecube/install.sh --uninstall`).
 
 > **Warning:** Database drop is destructive and irreversible.
 > Before using `--drop-database`, create and verify a backup (for example,

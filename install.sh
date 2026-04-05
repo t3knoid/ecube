@@ -1070,7 +1070,7 @@ _maybe_download_release() {
       return
     fi
     info "Copying package contents from ${src_dir} to ${INSTALL_DIR}..."
-    for item in app alembic alembic.ini pyproject.toml README.md LICENSE frontend/dist; do
+    for item in install.sh app alembic alembic.ini pyproject.toml README.md LICENSE frontend/dist; do
       if [[ -e "${src_dir}/${item}" ]]; then
         run mkdir -p "${INSTALL_DIR}/$(dirname "${item}")"
         # Remove a pre-existing destination *directory* before copying so that
@@ -1081,6 +1081,9 @@ _maybe_download_release() {
         run cp -r "${src_dir}/${item}" "${INSTALL_DIR}/${item}"
       fi
     done
+    if [[ -f "${INSTALL_DIR}/install.sh" ]]; then
+      run chmod 755 "${INSTALL_DIR}/install.sh"
+    fi
     ok "Package contents copied to ${INSTALL_DIR}"
     return
   fi
@@ -1279,6 +1282,11 @@ install_backend() {
   run mkdir -p /var/lib/ecube
   run chown -R ecube:ecube /var/lib/ecube
   run chmod 700 /var/lib/ecube
+
+  # 4b. Application log directory (used when LOG_FILE is enabled).
+  run mkdir -p /var/log/ecube
+  run chown -R ecube:ecube /var/log/ecube
+  run chmod 750 /var/log/ecube
 
   # 5. Python virtual environment
   # Run venv creation and pip installs as the ecube user so all files under

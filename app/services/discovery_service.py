@@ -42,7 +42,7 @@ from typing import Callable, List, Optional
 
 from sqlalchemy.orm import Session
 
-from app.infrastructure.usb_discovery import DiscoveredTopology, discover_usb_topology
+from app.infrastructure.usb_discovery import DiscoveredTopology
 from app.infrastructure import FilesystemDetector
 from app.models.hardware import DriveState, UsbDrive, UsbPort
 from app.repositories.audit_repository import AuditRepository
@@ -91,6 +91,7 @@ def run_discovery_sync(
     dict
         Summary with counts of hubs, ports, drives inserted/updated/removed.
     """
+    logger.info("USB_DISCOVERY_SYNC_STARTED actor=%s", actor or "system")
     topology = topology_source()
 
     hub_repo = HubRepository(db)
@@ -304,5 +305,15 @@ def run_discovery_sync(
         )
     except Exception:
         logger.exception("Failed to write audit log for USB_DISCOVERY_SYNC")
+
+    logger.info(
+        "USB_DISCOVERY_SYNC_COMPLETED actor=%s hubs_upserted=%d ports_upserted=%d drives_inserted=%d drives_updated=%d drives_removed=%d",
+        actor or "system",
+        summary["hubs_upserted"],
+        summary["ports_upserted"],
+        summary["drives_inserted"],
+        summary["drives_updated"],
+        summary["drives_removed"],
+    )
 
     return summary
