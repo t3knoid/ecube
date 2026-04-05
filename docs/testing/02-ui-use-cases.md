@@ -1,7 +1,7 @@
 # ECUBE UI Use Cases
 
 **Version:** 1.0  
-**Last Updated:** March 2026  
+**Last Updated:** April 2026  
 **Audience:** UI Designers, Developers, QA  
 **Document Type:** Use Case Catalog  
 **Source:** Derived from [07-administration-automation-guide.md](../operations/07-administration-automation-guide.md)
@@ -19,6 +19,7 @@
 - [Group 6: Export Job Workflow](#group-6-export-job-workflow)
 - [Group 7: Audit \& Compliance](#group-7-audit--compliance)
 - [Group 8: System Monitoring \& Introspection](#group-8-system-monitoring--introspection)
+- [Group 9: Runtime Configuration (Admin Only)](#group-9-runtime-configuration-admin-only)
 - [Cross-Cutting UI Concerns](#cross-cutting-ui-concerns)
 - [End-to-End Happy Path Workflow](#end-to-end-happy-path-workflow)
 - [Summary](#summary)
@@ -50,7 +51,7 @@
 | UC-2.4 | Log out / end session | Authenticated user | any |
 | UC-2.5 | Handle expired token (re-authenticate prompt) | Authenticated user | any |
 
-**UI Implication:** Login page with identity provider selector (local vs. OIDC). Session indicator in UI header showing username, role badges, and expiry countdown.
+**UI Implication:** Login page supports credential-based sign-in and session-expiry handling. Session state is enforced by router guards with redirects to `/login` (expired/auth-required) and `/setup` (uninitialized systems).
 
 ---
 
@@ -162,6 +163,21 @@
 
 ---
 
+## Group 9: Runtime Configuration (Admin Only)
+
+| UC# | Use Case | Primary Actor | Roles |
+|-----|----------|---------------|-------|
+| UC-9.1 | View current runtime configuration settings | Admin | admin |
+| UC-9.2 | Update logging settings (`log_level`, `log_format`, log rotation) | Admin | admin |
+| UC-9.3 | Enable/disable file logging and set log file path | Admin | admin |
+| UC-9.4 | Update DB pool hot settings (`db_pool_size`, `db_pool_max_overflow`) | Admin | admin |
+| UC-9.5 | Review restart-required changes after save | Admin | admin |
+| UC-9.6 | Request ECUBE service restart from UI confirmation dialog | Admin | admin |
+
+**UI Implication:** Admin-only `Configuration` page provides editable logging and DB pool fields, localized error handling, and a restart-required panel. Save applies supported changes immediately where possible and lists deferred settings that require service restart.
+
+---
+
 ## Cross-Cutting UI Concerns
 
 | Concern | Description |
@@ -170,6 +186,7 @@
 | **Error handling** | Map 401 → re-login prompt, 403 → "insufficient permissions" message with role hint, 409 → state conflict explanation. |
 | **Project isolation visibility** | Prominently show project binding on drives and jobs. Prevent accidental cross-project operations in the UI flow. |
 | **Real-time updates** | Job progress monitoring via REST polling (baseline). Consider WebSocket upgrade path for live progress. |
+| **Navigation diagnostics** | Router guards and click/route-completion hooks emit debug telemetry (`UI_NAVIGATION_*`) for troubleshooting; this is operational telemetry, not compliance audit data. |
 | **Data redaction** | Credentials never shown in mount list or audit details. Device paths redacted where sensitive. |
 | **Responsive/accessible** | Appliance may be accessed from various devices on the network. |
 
@@ -184,14 +201,15 @@ The primary operational workflow combines use cases across groups:
 3. **Execute export**: UC-6.1 (create job) → UC-6.2 (start) → UC-6.3 (monitor) → UC-6.5 (verify) → UC-6.6 (manifest)
 4. **Eject & hand off**: UC-4.6 (eject drive)
 5. **Audit trail**: UC-7.1–7.7 (review compliance)
+6. **Operational tuning (admin, optional)**: UC-9.1 → UC-9.2/UC-9.4 → UC-9.5 → UC-9.6
 
 ---
 
 ## Summary
 
-- **50 use cases** across **8 functional groups**
+- **71 use cases** across **9 functional groups**
 - Organized by functional domain (matching the administration automation guide structure), which maps naturally to UI screens/pages
 - Each use case maps to one or more existing API endpoints
 - The setup wizard (Group 1) is a distinct UX flow from the main application
-- Audit log export (UC-7.7) may require a dedicated API endpoint — currently only query/pagination is supported
+- Runtime configuration workflows (Group 9) are admin-only and include restart-aware UX for deferred settings
 
