@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -34,6 +35,7 @@ from app.models.system import SystemInitialization
 from app.models.users import UserRole
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.user_role_repository import UserRoleRepository
+from app.services import database_service
 from app.schemas.admin import (
     SetupInitializeRequest,
     SetupInitializeResponse,
@@ -53,9 +55,158 @@ _init_lock = threading.Lock()
 router = APIRouter(prefix="/setup", tags=["setup"], route_class=LocalOnlyRoute)
 
 
+def _get_db_or_none():
+    """Yield a DB session, or ``None`` when DB is not configured yet."""
+    db_module = __import__("app.database", fromlist=["SessionLocal", "is_database_configured"])
+    if not db_module.is_database_configured():
+        yield None
+        return
+
+    try:
+        db = db_module.SessionLocal()
+    except Exception:
+        yield None
+        return
+
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def _is_missing_table_error(exc: ProgrammingError) -> bool:
+    """Return True when *exc* indicates an unmigrated/missing table."""
+    msg = str(exc).lower()
+    return (
+        "relation" in msg and "does not exist" in msg
+    ) or "undefinedtable" in msg
+
+
+def _has_any_admin_with_auto_migrate(repo: UserRoleRepository, db: Session) -> bool:
+    """Return admin-exists status, auto-running migrations when schema is missing."""
+    try:
+        return repo.has_any_admin()
+    except ProgrammingError as exc:
+        db.rollback()
+        if not _is_missing_table_error(exc):
+            raise
+
+    # Missing table likely means first-run schema not migrated yet.
+    try:
+        migrations_applied = database_service.migrate_configured_database_schema()
+        logger.info(
+            "Auto-ran setup migrations during /setup/initialize; applied=%d",
+            migrations_applied,
+        )
+    except Exception as migrate_exc:
+        logger.exception("Automatic schema migration failed during /setup/initialize")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "Database schema is not initialized and automatic migration "
+                f"failed: {migrate_exc}."
+            ),
+        )
+
+    # Retry admin check after migration.
+    try:
+        return repo.has_any_admin()
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "Database migration completed, but setup state could not be "
+                "verified. Please retry setup initialization."
+            ),
+        )
+
+
+def _get_admin_usernames(repo: UserRoleRepository, db: Session) -> list[str]:
+    """Return distinct usernames that have the admin role."""
+    rows = (
+        db.query(UserRole.username)
+        .filter(UserRole.role == "admin")
+        .distinct()
+        .all()
+    )
+    return [row[0] for row in rows]
+
+
+def _is_setup_initialized_by_os_state(admin_usernames: list[str]) -> bool:
+    """Return True when at least one DB admin has a corresponding OS user.
+
+    If admin role rows exist but none of those usernames exist on the host,
+    treat setup as not initialized so the wizard can recover by recreating the
+    OS admin account.
+    """
+    if not admin_usernames:
+        return False
+
+    try:
+        provider = get_os_user_provider()
+    except Exception:
+        # Fail closed if provider cannot be instantiated.
+        logger.exception("Failed to load OS user provider while evaluating setup state")
+        return True
+
+    existing_admins: list[str] = []
+    missing_admins: list[str] = []
+    for username in admin_usernames:
+        try:
+            if provider.user_exists(username):
+                existing_admins.append(username)
+            else:
+                missing_admins.append(username)
+        except Exception:
+            # Fail closed if OS lookup fails unexpectedly.
+            logger.exception(
+                "OS user existence check failed for setup admin '%s'",
+                username,
+            )
+            return True
+
+    if existing_admins:
+        return True
+
+    logger.warning(
+        "Setup recovery mode: admin role rows exist in DB but no matching OS "
+        "admin accounts were found (admins=%s)",
+        missing_admins,
+    )
+    return False
+
+
+def _is_setup_initialized_with_auto_migrate(repo: UserRoleRepository, db: Session) -> bool:
+    """Return setup initialization state with schema auto-migration support."""
+    if not _has_any_admin_with_auto_migrate(repo, db):
+        return False
+    return _is_setup_initialized_by_os_state(_get_admin_usernames(repo, db))
+
+
+def _recover_stale_init_lock(db: Session, admin_usernames: list[str]) -> None:
+    """Delete stale ``system_initialization`` lock row for recoverable setup states."""
+    if not admin_usernames:
+        return
+    deleted = (
+        db.query(SystemInitialization)
+        .filter(SystemInitialization.id == 1)
+        .delete(synchronize_session=False)
+    )
+    if deleted:
+        db.commit()
+        logger.warning(
+            "Recovered stale setup lock row (system_initialization.id=1) for "
+            "admins without OS accounts: %s",
+            admin_usernames,
+        )
+    else:
+        db.rollback()
+
+
 @router.get("/status", response_model=SetupStatusResponse, responses={**R_404, **R_500})
 def get_setup_status(
-    db: Session = Depends(get_db),
+    db: Optional[Session] = Depends(_get_db_or_none),
 ) -> SetupStatusResponse:
     """Check whether the system has been initialized.
 
@@ -65,8 +216,25 @@ def get_setup_status(
     This endpoint is **unauthenticated** — it is safe to call before any
     users exist.
     """
+    if db is None:
+        # First-run install before any database connection has been configured.
+        return SetupStatusResponse(initialized=False)
+
     repo = UserRoleRepository(db)
-    return SetupStatusResponse(initialized=repo.has_any_admin())
+    try:
+        if not repo.has_any_admin():
+            return SetupStatusResponse(initialized=False)
+        return SetupStatusResponse(
+            initialized=_is_setup_initialized_by_os_state(
+                _get_admin_usernames(repo, db),
+            ),
+        )
+    except ProgrammingError as exc:
+        db.rollback()
+        if _is_missing_table_error(exc):
+            # Fresh install before /setup/database/provision has run.
+            return SetupStatusResponse(initialized=False)
+        raise
 
 
 @router.post(
@@ -93,7 +261,9 @@ def initialize_system(
     any admin exists.
     """
     repo = UserRoleRepository(db)
-    if repo.has_any_admin():
+    already_initialized = _is_setup_initialized_with_auto_migrate(repo, db)
+
+    if already_initialized:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="System is already initialized. An admin user exists.",
@@ -106,11 +276,19 @@ def initialize_system(
         )
     try:
         # Re-check under the lock to prevent TOCTOU races.
-        if repo.has_any_admin():
+        already_initialized = _is_setup_initialized_with_auto_migrate(repo, db)
+
+        if already_initialized:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="System is already initialized. An admin user exists.",
             )
+
+        # Recovery path: DB admin role rows can remain after a previous failed
+        # run while the OS account is missing. Clear stale lock row so
+        # /setup/initialize can recreate the OS admin account.
+        _recover_stale_init_lock(db, _get_admin_usernames(repo, db))
+
         return _do_initialize(body, db, client_ip=get_client_ip(request))
     finally:
         _init_lock.release()
@@ -168,7 +346,16 @@ def _do_initialize(
 
     # Step 4: Seed admin role now that OS setup succeeded.
     try:
-        db.add(UserRole(username=body.username, role="admin"))
+        existing_role = (
+            db.query(UserRole)
+            .filter(
+                UserRole.username == body.username,
+                UserRole.role == "admin",
+            )
+            .first()
+        )
+        if existing_role is None:
+            db.add(UserRole(username=body.username, role="admin"))
         db.commit()
     except Exception:
         # If seeding the admin role fails, roll back and release the

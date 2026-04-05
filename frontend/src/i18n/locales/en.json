@@ -217,7 +217,7 @@
   },
   "setup": {
     "stepCounter": "Step {step} of 4",
-    "testConnection": "Test Database Connection",
+    "connectDatabase": "Connect to Database",
     "dbHost": "Database Host",
     "dbPort": "Database Port",
     "dbAdminUser": "DB Admin Username",

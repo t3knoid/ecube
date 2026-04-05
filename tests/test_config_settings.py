@@ -169,6 +169,14 @@ class TestSettingsDefaults:
             s = Settings(database_url="sqlite://")
         assert s.api_root_path == "/api"
 
+    def test_pam_service_name_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.pam_service_name == "ecube"
+
+    def test_pam_fallback_services_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.pam_fallback_services == []
+
 
 # ---------------------------------------------------------------------------
 # Audit log retention cleanup

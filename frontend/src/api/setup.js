@@ -10,7 +10,7 @@ export function initializeSetup(payload) {
   return toData(apiClient.post(`${API_BASE}/setup/initialize`, payload))
 }
 
-export function testDatabaseConnection(payload) {
+export function connectDatabase(payload) {
   return toData(apiClient.post(`${API_BASE}/setup/database/test-connection`, payload))
 }
 

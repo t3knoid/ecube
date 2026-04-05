@@ -7,9 +7,11 @@ All subprocess calls (sudo useradd, groupadd, etc.) and OS database lookups
 from __future__ import annotations
 
 import subprocess
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy.exc import ProgrammingError
 
 from app.config import settings
 from app.models.users import UserRole
@@ -137,11 +139,13 @@ class TestCreateUser:
 
         assert user.username == "testuser"
         assert user.uid == 1000
-        # Should have called sudo useradd, sudo chpasswd, and sudo usermod.
+        # Should have called sudo useradd and sudo chpasswd.
         calls = [c.args[0] for c in mock_subprocess.call_args_list]
-        assert ["sudo", "/usr/sbin/useradd", "-m", "testuser"] in calls
-        assert ["sudo", "/usr/sbin/chpasswd"] in calls
-        assert ["sudo", "/usr/sbin/usermod", "-aG", "ecube-admins", "testuser"] in calls
+        assert ["sudo", "-n", "/usr/sbin/useradd", "-m", "-N", "-g", "ecube-admins", "testuser"] in calls
+        assert ["sudo", "-n", "/usr/sbin/chpasswd"] in calls
+        # Only one requested group => it is used as the primary group, so no
+        # usermod -aG call is required.
+        assert not any("/usr/sbin/usermod" in cmd for cmd in calls)
 
     @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
@@ -196,10 +200,10 @@ class TestCreateUser:
         mock_grp.getgrgid.return_value = _make_grp(name="testuser", gid=1000)
         mock_subprocess.return_value = _ok_result()
 
-        user = create_user("testuser", "s3cret", groups=["ecube-admins"])
+        user = create_user("testuser", "s3cret", groups=["ecube-admins", "ecube-managers"])
 
         calls = [c.args[0] for c in mock_subprocess.call_args_list]
-        assert ["sudo", "/usr/sbin/usermod", "-aG", "ecube-admins", "testuser"] in calls
+        assert ["sudo", "-n", "/usr/sbin/usermod", "-aG", "ecube-managers", "testuser"] in calls
 
     @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
@@ -230,16 +234,16 @@ class TestCreateUser:
         mock_subprocess.side_effect = [
             _ok_result(),       # useradd
             _ok_result(),       # chpasswd
-            _fail_result(stderr="usermod: group 'ecube-admins' does not exist"),  # usermod
+            _fail_result(stderr="usermod: group 'ecube-managers' does not exist"),  # usermod
             _ok_result(),       # userdel (compensation)
         ]
 
         with pytest.raises(OSUserError, match="usermod"):
-            create_user("testuser", "s3cret", groups=["ecube-admins"])
+            create_user("testuser", "s3cret", groups=["ecube-admins", "ecube-managers"])
 
         # Verify userdel was called as compensation.
         calls = [c.args[0] for c in mock_subprocess.call_args_list]
-        assert ["sudo", "/usr/sbin/userdel", "-r", "testuser"] in calls
+        assert ["sudo", "-n", "/usr/sbin/userdel", "-r", "testuser"] in calls
 
 
 class TestDeleteUser:
@@ -258,7 +262,7 @@ class TestDeleteUser:
         delete_user("testuser")
 
         calls = [c.args[0] for c in mock_subprocess.call_args_list]
-        assert ["sudo", "/usr/sbin/userdel", "-r", "testuser"] in calls
+        assert ["sudo", "-n", "/usr/sbin/userdel", "-r", "testuser"] in calls
 
     @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
@@ -303,7 +307,7 @@ class TestResetPassword:
         reset_password("testuser", "newpass")
 
         call = mock_subprocess.call_args_list[-1]
-        assert call.args[0] == ["sudo", "/usr/sbin/chpasswd"]
+        assert call.args[0] == ["sudo", "-n", "/usr/sbin/chpasswd"]
         assert call.kwargs["input"] == "testuser:newpass"
 
     @patch("app.services.os_user_service.grp")
@@ -471,7 +475,7 @@ class TestDeleteGroup:
         delete_group("ecube-oldgroup")
 
         calls = [c.args[0] for c in mock_subprocess.call_args_list]
-        assert ["sudo", "/usr/sbin/groupdel", "ecube-oldgroup"] in calls
+        assert ["sudo", "-n", "/usr/sbin/groupdel", "ecube-oldgroup"] in calls
 
     @patch("app.services.os_user_service.pwd")
     @patch("app.services.os_user_service.grp")
@@ -1061,7 +1065,163 @@ class TestSetupEndpoints:
 
         resp = unauthenticated_client.get("/setup/status")
         assert resp.status_code == 200
+        assert resp.json()["initialized"] is False
+
+    @patch("app.routers.setup.get_os_user_provider")
+    def test_status_initialized_when_admin_os_account_exists(
+        self,
+        mock_get_provider,
+        unauthenticated_client,
+        db,
+    ):
+        db.add(UserRole(username="admin1", role="admin"))
+        db.commit()
+
+        provider = MagicMock()
+        provider.user_exists.return_value = True
+        mock_get_provider.return_value = provider
+
+        resp = unauthenticated_client.get("/setup/status")
+        assert resp.status_code == 200
         assert resp.json()["initialized"] is True
+
+    def test_status_treats_missing_schema_as_not_initialized(self, unauthenticated_client):
+        with patch(
+            "app.routers.setup.UserRoleRepository.has_any_admin",
+            side_effect=ProgrammingError(
+                "SELECT ...",
+                {},
+                Exception('relation "user_roles" does not exist'),
+            ),
+        ):
+            resp = unauthenticated_client.get("/setup/status")
+
+        assert resp.status_code == 200
+        assert resp.json()["initialized"] is False
+
+    @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_initialize_recovers_when_db_admin_exists_but_os_user_missing(
+        self,
+        mock_pwd,
+        mock_grp,
+        mock_subprocess,
+        unauthenticated_client,
+        db,
+    ):
+        """If DB admin role + init row exist but OS admin is missing, setup
+        should allow recovery and recreate the OS admin user."""
+        db.add(UserRole(username="admin1", role="admin"))
+        db.add(
+            SystemInitialization(
+                id=1,
+                initialized_by="admin1",
+                initialized_at=datetime.now(timezone.utc),
+            ),
+        )
+        db.commit()
+
+        mock_grp.getgrnam.side_effect = [
+            KeyError("no such group"),  # ensure: ecube-admins
+            KeyError("no such group"),  # ensure: ecube-auditors
+            KeyError("no such group"),  # ensure: ecube-managers
+            KeyError("no such group"),  # ensure: ecube-processors
+            _make_grp(name="ecube-admins"),  # set_user_groups validation
+        ]
+        mock_grp.getgrall.return_value = []
+        mock_grp.getgrgid.return_value = _make_grp(name="admin1", gid=1000)
+
+        pw = _make_pw(name="admin1")
+        mock_pwd.getpwnam.side_effect = [
+            KeyError("no such user"),  # setup status / init guard OS check
+            KeyError("no such user"),  # second guard re-check OS check
+            KeyError("no such user"),  # create_user -> user_exists
+            pw,                        # final lookup
+            pw,                        # _get_user_groups
+        ]
+        mock_subprocess.return_value = _ok_result()
+
+        resp = unauthenticated_client.post("/setup/initialize", json={
+            "username": "admin1",
+            "password": "s3cret",
+        })
+        assert resp.status_code == 200
+
+        # Existing role row should remain singular (no duplicate inserts).
+        rows = db.query(UserRole).filter(UserRole.username == "admin1", UserRole.role == "admin").all()
+        assert len(rows) == 1
+
+        # Lock row should be present after successful recovery run.
+        init_row = db.query(SystemInitialization).first()
+        assert init_row is not None
+
+    def test_status_not_initialized_when_database_not_configured(self, unauthenticated_client):
+        from app.main import app
+        from app.routers.setup import _get_db_or_none
+
+        def _override():
+            yield None
+
+        app.dependency_overrides[_get_db_or_none] = _override
+        try:
+            resp = unauthenticated_client.get("/setup/status")
+            assert resp.status_code == 200
+            assert resp.json()["initialized"] is False
+        finally:
+            app.dependency_overrides.pop(_get_db_or_none, None)
+
+    def test_initialize_auto_runs_migrations_when_schema_missing(self, unauthenticated_client):
+        with patch(
+            "app.routers.setup.UserRoleRepository.has_any_admin",
+            side_effect=[
+                ProgrammingError(
+                    "SELECT ...",
+                    {},
+                    Exception('relation "user_roles" does not exist'),
+                ),
+                False,
+                False,
+            ],
+        ), patch(
+            "app.routers.setup.database_service.migrate_configured_database_schema",
+            return_value=11,
+        ) as mock_migrate, patch(
+            "app.routers.setup._do_initialize",
+            return_value={
+                "message": "Setup complete",
+                "username": "admin1",
+                "groups_created": [],
+            },
+        ):
+            resp = unauthenticated_client.post("/setup/initialize", json={
+                "username": "admin1",
+                "password": "s3cret",
+            })
+
+        assert resp.status_code == 200
+        mock_migrate.assert_called_once()
+
+    def test_initialize_returns_500_when_auto_migration_fails(self, unauthenticated_client):
+        with patch(
+            "app.routers.setup.UserRoleRepository.has_any_admin",
+            side_effect=ProgrammingError(
+                "SELECT ...",
+                {},
+                Exception('relation "user_roles" does not exist'),
+            ),
+        ), patch(
+            "app.routers.setup.database_service.migrate_configured_database_schema",
+            side_effect=RuntimeError("alembic upgrade head failed"),
+        ):
+            resp = unauthenticated_client.post("/setup/initialize", json={
+                "username": "admin1",
+                "password": "s3cret",
+            })
+
+        assert resp.status_code == 500
+        body = resp.json()
+        assert "automatic migration failed" in body["message"].lower()
 
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
