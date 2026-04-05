@@ -170,6 +170,16 @@ def configure_logging(
     root.setLevel(effective_level)
 
     # Remove any pre-existing handlers (allows safe re-init in tests).
+    # Explicitly close and flush each handler to ensure buffered data is written.
+    for old_handler in root.handlers[:]:  # Copy list to avoid modification during iteration
+        try:
+            old_handler.flush()
+        except Exception:
+            pass  # Some handlers may not support flush
+        try:
+            old_handler.close()
+        except Exception:
+            pass  # Ignore errors during cleanup
     root.handlers.clear()
 
     # Console handler – always active.
@@ -190,6 +200,30 @@ def configure_logging(
         file_handler.setFormatter(formatter)
         root.addHandler(file_handler)
 
+    # Normalize existing application loggers so runtime reconfiguration works
+    # even if the host process or a prior logging config left them disabled,
+    # detached from the root logger, or attached to stale handlers.
+    for name, logger_obj in root.manager.loggerDict.items():
+        if not isinstance(logger_obj, logging.Logger):
+            continue
+        if name != "app" and not name.startswith("app."):
+            continue
+
+        logger_obj.disabled = False
+        logger_obj.propagate = True
+        logger_obj.setLevel(logging.NOTSET)
+
+        for handler in logger_obj.handlers[:]:
+            try:
+                handler.flush()
+            except Exception:
+                pass
+            try:
+                handler.close()
+            except Exception:
+                pass
+        logger_obj.handlers.clear()
+
     # Emit a brief configuration summary at startup.
     startup_logger = logging.getLogger("app.logging_config")
     startup_logger.info(
@@ -198,3 +232,10 @@ def configure_logging(
         effective_format,
         effective_file or "(console only)",
     )
+
+    # Flush all handlers to ensure startup message is written before returning.
+    for handler in root.handlers:
+        try:
+            handler.flush()
+        except Exception:
+            pass  # Some handlers may not support flush

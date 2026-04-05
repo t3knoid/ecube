@@ -72,7 +72,7 @@ def _admins_have_any_os_account(db: Session) -> bool:
     try:
         provider = get_os_user_provider()
     except Exception:
-        logger.exception("Failed to load OS user provider while evaluating setup auth gate")
+        logger.error("Failed to load OS user provider while evaluating setup auth gate")
         return True
 
     missing: list[str] = []
@@ -82,7 +82,7 @@ def _admins_have_any_os_account(db: Session) -> bool:
                 return True
             missing.append(username)
         except Exception:
-            logger.exception(
+            logger.error(
                 "OS user existence check failed for setup admin '%s'",
                 username,
             )
@@ -310,7 +310,7 @@ def test_database_connection(
         else:
             raise RuntimeError("no db session")
     except Exception:
-        logger.info(
+        logger.error(
             "DATABASE_CONNECTION_TEST host=%s port=%s result=ok",
             body.host, body.port,
         )
@@ -417,7 +417,7 @@ def provision_database(
         else:
             raise RuntimeError("no db session")
     except Exception:
-        logger.info(
+        logger.error(
             "DATABASE_PROVISIONED host=%s port=%s database=%s user=%s migrations=%d",
             body.host, body.port, body.app_database, body.app_username,
             migrations_applied,
@@ -563,7 +563,7 @@ def update_database_settings(
             },
         )
     except Exception:
-        logger.info(
+        logger.error(
             "DATABASE_SETTINGS_UPDATED host=%s port=%s database=%s actor=%s",
             result["host"], result["port"], result["database"],
             current_user.username,

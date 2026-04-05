@@ -92,7 +92,7 @@ def _raise_os_error(exc: OSUserError, *, context: str = "OS operation") -> None:
     if "timed out" in lowered:
         raise HTTPException(status_code=504, detail=msg)
 
-    logger.error("%s failed: %s", context, msg, exc_info=True)
+    logger.exception("%s failed: %s", context, msg)
     raise HTTPException(status_code=500, detail=msg)
 
 
@@ -174,7 +174,7 @@ def list_log_files(
             client_ip=get_client_ip(request),
         )
     except Exception:
-        logger.debug("Failed to record log file list access in audit trail", exc_info=True)
+        logger.exception("Failed to record log file list access in audit trail")
 
     return LogFilesResponse(
         log_files=files,
@@ -225,7 +225,7 @@ def download_log_file(
             client_ip=get_client_ip(request),
         )
     except Exception:
-        logger.debug("Failed to record log file download in audit trail", exc_info=True)
+        logger.exception("Failed to record log file download in audit trail")
 
     return FileResponse(
         path=full_path,
@@ -306,7 +306,7 @@ def create_os_user(
         try:
             provider.delete_user(body.username, _skip_managed_check=True)
         except Exception:
-            logger.exception(
+            logger.error(
                 "Failed to clean up OS user '%s' after role validation error",
                 body.username,
             )
@@ -317,11 +317,11 @@ def create_os_user(
         try:
             provider.delete_user(body.username, _skip_managed_check=True)
         except Exception:
-            logger.exception(
+            logger.error(
                 "Failed to clean up OS user '%s' after DB error in set_roles",
                 body.username,
             )
-        logger.exception(
+        logger.error(
             "Failed to assign roles to OS user '%s'", body.username
         )
         raise HTTPException(
@@ -395,7 +395,7 @@ def delete_os_user(
         UserRoleRepository(db).delete_roles(username)
     except Exception:
         db.rollback()
-        logger.exception(
+        logger.error(
             "Failed to delete DB roles for OS user '%s' after OS deletion. "
             "Stale rows may remain in user_roles.",
             username,
