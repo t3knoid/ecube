@@ -89,6 +89,27 @@ class TestConfigurationEndpoints:
         changed_settings = (updated.details or {}).get("changed_settings", [])
         assert isinstance(changed_settings, list)
 
+    @patch("app.services.configuration_service.database_service._write_env_settings")
+    @patch("app.services.configuration_service.configure_logging")
+    @patch("app.services.configuration_service.os.makedirs")
+    @patch("app.services.configuration_service.open", create=True)
+    def test_update_configuration_uses_requested_log_file_payload(
+        self,
+        _mock_open,
+        _mock_makedirs,
+        mock_configure_logging,
+        mock_write_env,
+        admin_client,
+    ):
+        resp = admin_client.put("/admin/configuration", json={"log_file": "/var/log/ecube/app.log"})
+        assert resp.status_code == 200, resp.json()
+        payload = resp.json()
+        assert "log_file" in payload["changed_settings"]
+
+        written = mock_write_env.call_args.args[0]
+        assert written.get("LOG_FILE") == "/var/log/ecube/app.log"
+        mock_configure_logging.assert_called_once()
+
     def test_restart_requires_confirmation(self, admin_client):
         resp = admin_client.post("/admin/configuration/restart", json={"confirm": False})
         assert resp.status_code == 400
@@ -106,7 +127,7 @@ class TestConfigurationEndpoints:
     ):
         mock_open.side_effect = PermissionError(13, "Permission denied")
 
-        resp = admin_client.put("/admin/configuration", json={"log_file": "/var/log/ecube.log"})
+        resp = admin_client.put("/admin/configuration", json={"log_file": "/var/log/ecube/app.log"})
         assert resp.status_code == 422, resp.json()
         payload = resp.json()
         message = str(payload.get("detail") or payload.get("message") or "")
