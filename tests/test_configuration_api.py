@@ -59,6 +59,25 @@ class TestConfigurationEndpoints:
         resp = admin_client.post("/admin/configuration/restart", json={"confirm": False})
         assert resp.status_code == 400
 
+    @patch("app.services.configuration_service.database_service._write_env_settings")
+    @patch("app.services.configuration_service.os.makedirs")
+    @patch("app.services.configuration_service.open", create=True)
+    def test_update_configuration_invalid_log_file_path_returns_422(
+        self,
+        mock_open,
+        _mock_makedirs,
+        mock_write_env,
+        admin_client,
+    ):
+        mock_open.side_effect = PermissionError(13, "Permission denied")
+
+        resp = admin_client.put("/admin/configuration", json={"log_file": "/var/log/ecube.log"})
+        assert resp.status_code == 422, resp.json()
+        payload = resp.json()
+        message = str(payload.get("detail") or payload.get("message") or "")
+        assert "Unable to write log file" in message
+        mock_write_env.assert_not_called()
+
     @patch("app.services.configuration_service.shutil.which", return_value="/usr/bin/systemctl")
     @patch("app.services.configuration_service.subprocess.run")
     def test_restart_success(self, mock_run, _mock_which, admin_client):

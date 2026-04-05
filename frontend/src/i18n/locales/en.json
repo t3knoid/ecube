@@ -260,7 +260,8 @@
       },
       "log_file": {
         "label": "Log File Path",
-        "help": "Leave empty to keep console-only logging."
+        "enabledLabel": "Enable file logging",
+        "help": "When unchecked, ECUBE clears LOG_FILE in .env. When checked, ECUBE sets LOG_FILE to the path shown above (default: /var/log/ecube/app.log)."
       },
       "log_file_max_bytes": {
         "label": "Log File Max Bytes"

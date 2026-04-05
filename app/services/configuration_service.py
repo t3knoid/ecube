@@ -7,6 +7,7 @@ frontend Configuration page and a helper to request service restarts.
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -84,6 +85,8 @@ def update_configuration(values: Dict[str, Any]) -> Dict[str, Any]:
     restart_required_settings: List[str] = []
     env_updates: Dict[str, str] = {}
 
+    pending_values: Dict[str, Any] = {}
+
     for key, new_value_raw in values.items():
         if key not in _EDITABLE_FIELDS:
             continue
@@ -100,7 +103,7 @@ def update_configuration(values: Dict[str, Any]) -> Dict[str, Any]:
             applied_immediately.append(key)
 
         env_updates[spec.env_key] = spec.serializer(new_value)
-        setattr(settings, key, new_value)
+        pending_values[key] = new_value
 
     if not changed_settings:
         return {
@@ -110,6 +113,12 @@ def update_configuration(values: Dict[str, Any]) -> Dict[str, Any]:
             "restart_required_settings": [],
             "restart_required": False,
         }
+
+    if "log_file" in pending_values:
+        _validate_log_file_path(pending_values["log_file"])
+
+    for key, new_value in pending_values.items():
+        setattr(settings, key, new_value)
 
     database_service._write_env_settings(env_updates)
 
@@ -122,6 +131,23 @@ def update_configuration(values: Dict[str, Any]) -> Dict[str, Any]:
         "restart_required_settings": restart_required_settings,
         "restart_required": bool(restart_required_settings),
     }
+
+
+def _validate_log_file_path(value: Any) -> None:
+    normalized = _normalized_value("log_file", value)
+    if normalized is None:
+        return
+
+    path = str(normalized)
+    log_dir = os.path.dirname(path)
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
+
+    try:
+        with open(path, "a", encoding="utf-8"):
+            pass
+    except OSError as exc:
+        raise ValueError(f"Unable to write log file at '{path}': {exc.strerror or str(exc)}") from exc
 
 
 def _apply_runtime_changes(changed_settings: List[str]) -> None:

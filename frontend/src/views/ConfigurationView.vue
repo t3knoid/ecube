@@ -16,6 +16,10 @@ const error = ref('')
 const showRestartConfirm = ref(false)
 const restartPending = ref(false)
 const pendingRestartSettings = ref([])
+const logFileEnabled = ref(false)
+const originalLogFileEnabled = ref(false)
+
+const DEFAULT_LOG_FILE_PATH = '/var/log/ecube/app.log'
 
 const form = ref({
   log_level: 'INFO',
@@ -43,9 +47,7 @@ const fieldOrder = [
 const levelOptions = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
 const formatOptions = ['text', 'json']
 
-const hasChanges = computed(() => {
-  return fieldOrder.some((name) => form.value[name] !== originalForm.value[name])
-})
+const hasChanges = computed(() => Object.keys(buildPatchPayload()).length > 0)
 
 const changedFieldLabels = computed(() => {
   return fieldOrder
@@ -56,30 +58,57 @@ const changedFieldLabels = computed(() => {
 function normalizeForm(data) {
   const next = { ...form.value }
   const list = Array.isArray(data?.settings) ? data.settings : []
+  let backendLogFileValue = ''
   for (const entry of list) {
     if (!entry?.key || !fieldOrder.includes(entry.key)) continue
     const key = entry.key
     let value = entry.value
     if (key === 'log_file') {
       value = value || ''
+      backendLogFileValue = String(value)
     }
     if (typeof form.value[key] === 'number' && value != null) {
       value = Number(value)
     }
     next[key] = value
   }
+
+  const hasBackendLogFile = backendLogFileValue.trim().length > 0
+  logFileEnabled.value = hasBackendLogFile
+  originalLogFileEnabled.value = hasBackendLogFile
+  next.log_file = hasBackendLogFile ? backendLogFileValue : DEFAULT_LOG_FILE_PATH
+
   form.value = next
   originalForm.value = { ...next }
+}
+
+function effectiveLogFileValue(currentEnabled, currentValue) {
+  if (!currentEnabled) return ''
+  const trimmed = String(currentValue || '').trim()
+  return trimmed || DEFAULT_LOG_FILE_PATH
 }
 
 function buildPatchPayload() {
   const payload = {}
   for (const key of fieldOrder) {
+    if (key === 'log_file') {
+      const currentLogFile = effectiveLogFileValue(logFileEnabled.value, form.value.log_file)
+      const originalLogFile = effectiveLogFileValue(originalLogFileEnabled.value, originalForm.value.log_file)
+      if (currentLogFile !== originalLogFile) {
+        payload.log_file = currentLogFile
+      }
+      continue
+    }
     if (form.value[key] !== originalForm.value[key]) {
       payload[key] = form.value[key]
     }
   }
   return payload
+}
+
+function resetForm() {
+  form.value = { ...originalForm.value }
+  logFileEnabled.value = originalLogFileEnabled.value
 }
 
 async function loadConfiguration() {
@@ -103,7 +132,9 @@ async function saveConfiguration() {
   error.value = ''
   try {
     const result = await updateConfiguration(payload)
+    form.value.log_file = effectiveLogFileValue(logFileEnabled.value, form.value.log_file) || DEFAULT_LOG_FILE_PATH
     originalForm.value = { ...form.value }
+    originalLogFileEnabled.value = logFileEnabled.value
 
     pendingRestartSettings.value = result.restart_required_settings || []
     restartPending.value = !!result.restart_required
@@ -167,7 +198,11 @@ onMounted(loadConfiguration)
       <p class="field-help">{{ t('configuration.fields.log_format.help') }}</p>
 
       <label for="cfg-log-file">{{ t('configuration.fields.log_file.label') }}</label>
-      <input id="cfg-log-file" v-model="form.log_file" type="text" />
+      <label class="checkbox-row" for="cfg-log-file-enabled">
+        <input id="cfg-log-file-enabled" v-model="logFileEnabled" type="checkbox" />
+        <span>{{ t('configuration.fields.log_file.enabledLabel') }}</span>
+      </label>
+      <input id="cfg-log-file" v-model="form.log_file" type="text" :disabled="!logFileEnabled" />
       <p class="field-help">{{ t('configuration.fields.log_file.help') }}</p>
 
       <label for="cfg-log-max-bytes">{{ t('configuration.fields.log_file_max_bytes.label') }}</label>
@@ -204,7 +239,7 @@ onMounted(loadConfiguration)
     </article>
 
     <footer class="action-row">
-      <button class="btn" :disabled="saving || !hasChanges" @click="form = { ...originalForm }">
+      <button class="btn" :disabled="saving || !hasChanges" @click="resetForm">
         {{ t('common.actions.cancel') }}
       </button>
       <button class="btn btn-primary" :disabled="saving || !hasChanges" @click="saveConfiguration">
@@ -259,6 +294,12 @@ onMounted(loadConfiguration)
   display: flex;
   gap: var(--space-sm);
   justify-content: flex-end;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
 }
 
 input,
