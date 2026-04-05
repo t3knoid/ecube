@@ -50,6 +50,11 @@ def update_configuration(
     values = {key: getattr(body, key) for key in body.model_fields_set}
     try:
         result = configuration_service.update_configuration(values)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        )
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
