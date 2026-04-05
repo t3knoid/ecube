@@ -288,7 +288,7 @@ def _do_deliver(
         parsed = urlparse(url)
         hostname = parsed.hostname or ""
     except Exception:
-        logger.warning("Malformed callback_url for job %s", job_id)
+        logger.exception("Malformed callback_url for job %s", job_id)
         try:
             audit_repo.add(
                 action="CALLBACK_DELIVERY_FAILED",

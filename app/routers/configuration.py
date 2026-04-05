@@ -63,7 +63,7 @@ def update_configuration(
             },
         )
     except Exception:
-        logger.warning(
+        logger.error(
             "CONFIGURATION_UPDATE_ATTEMPTED actor=%s requested=%s",
             current_user.username,
             requested_settings,
@@ -85,7 +85,7 @@ def update_configuration(
                 },
             )
         except Exception:
-            logger.warning(
+            logger.error(
                 "CONFIGURATION_UPDATE_REJECTED actor=%s requested=%s reason=%s",
                 current_user.username,
                 requested_settings,
@@ -133,7 +133,7 @@ def update_configuration(
             },
         )
     except Exception:
-        logger.warning(
+        logger.error(
             "CONFIGURATION_UPDATED actor=%s changed=%s",
             current_user.username,
             result["changed_settings"],
@@ -170,6 +170,6 @@ def restart_application_service(
             metadata={"service": result["service"], "confirmed": True},
         )
     except Exception:
-        logger.warning("CONFIGURATION_RESTART_REQUESTED actor=%s", current_user.username)
+        logger.error("CONFIGURATION_RESTART_REQUESTED actor=%s", current_user.username)
 
     return ConfigurationRestartResponse(**result)

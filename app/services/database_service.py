@@ -203,7 +203,7 @@ def provision_database(
     try:
         migrations_applied = _run_migrations(new_url)
     except Exception as exc:
-        logger.exception("Alembic migration failed")
+        logger.error("Alembic migration failed")
         raise RuntimeError(
             "Database and user were created, but schema migration failed. "
             f"Resolve the migration issue and retry provisioning. Details: {exc}"
@@ -434,7 +434,7 @@ def get_database_status() -> Dict[str, Any]:
         finally:
             conn.close()
     except Exception:
-        logger.debug("Database status check failed", exc_info=True)
+        logger.exception("Database status check failed")
 
     return result
 
@@ -632,4 +632,4 @@ def _reinitialize_engine(
     try:
         old_engine.dispose()
     except Exception:
-        logger.debug("Failed to dispose old engine", exc_info=True)
+        logger.exception("Failed to dispose old engine")
