@@ -44,6 +44,14 @@ from app.infrastructure.os_user_protocol import (  # noqa: F401 – re-export
     OsUserProvider,
 )
 
+__all__ = [
+    "OSGroup",
+    "OSUser",
+    "OSUserError",
+    "OsUserProvider",
+    "LinuxOsUserProvider",
+]
+
 logger = logging.getLogger(__name__)
 
 # Default subprocess timeout (seconds).
