@@ -17,8 +17,29 @@ import app.models  # noqa: F401 - registers all models with Base
 target_metadata = Base.metadata
 
 
+def _resolve_sqlalchemy_url() -> str:
+    """Resolve migration database URL with explicit Alembic override precedence.
+
+    During setup provisioning we inject ``sqlalchemy.url`` directly into the
+    Alembic config object. That value must take precedence over ``settings``
+    because ``settings.database_url`` can be intentionally empty before
+    provisioning completes.
+    """
+    configured_url = config.get_main_option("sqlalchemy.url")
+    if configured_url:
+        return configured_url
+
+    if settings.database_url:
+        return settings.database_url
+
+    raise RuntimeError(
+        "No database URL configured for Alembic migrations. "
+        "Set sqlalchemy.url or DATABASE_URL before running migrations."
+    )
+
+
 def run_migrations_offline() -> None:
-    url = settings.database_url
+    url = _resolve_sqlalchemy_url()
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -32,7 +53,7 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = settings.database_url
+    configuration["sqlalchemy.url"] = _resolve_sqlalchemy_url()
     connectable = engine_from_config(
         configuration,
         prefix="sqlalchemy.",

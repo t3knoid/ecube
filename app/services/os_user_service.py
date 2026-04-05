@@ -112,7 +112,7 @@ def _run_sudo(
 
     Raises :class:`OSUserError` on non-zero exit when *check* is True.
     """
-    full_cmd = ["sudo"] + cmd if settings.use_sudo else cmd
+    full_cmd = ["sudo", "-n"] + cmd if settings.use_sudo else cmd
     # Never log stdin_data (may contain passwords).
     logger.debug("Running: %s", " ".join(full_cmd))
     try:
@@ -129,6 +129,17 @@ def _run_sudo(
 
     if check and result.returncode != 0:
         stderr = result.stderr.strip()
+        if settings.use_sudo and (
+            "a terminal is required" in stderr.lower()
+            or "a password is required" in stderr.lower()
+            or "no tty present" in stderr.lower()
+        ):
+            raise OSUserError(
+                "Sudo is not configured for non-interactive use by the ecube service account. "
+                "Install /etc/sudoers.d/ecube-user-mgmt with NOPASSWD rules for "
+                "useradd/usermod/userdel/groupadd/groupdel/chpasswd.",
+                returncode=result.returncode,
+            )
         raise OSUserError(
             f"Command failed (exit {result.returncode}): {stderr}",
             returncode=result.returncode,
@@ -309,17 +320,29 @@ def create_user(
             "remains manageable through the API."
         )
 
-    # Create user with home directory.
-    _run_sudo([settings.useradd_binary_path, "-m", username])
+    # Create user with home directory and an explicit ECUBE-managed primary
+    # group. This avoids failures when a same-name group already exists on the
+    # host (e.g. username "admin" with pre-existing group "admin").
+    primary_group = next((g for g in groups or [] if g.startswith(ECUBE_GROUP_PREFIX)), None)
+    if primary_group is None:
+        raise ValueError(
+            "At least one group starting with '"
+            f"{ECUBE_GROUP_PREFIX}' is required so the account "
+            "remains manageable through the API."
+        )
+
+    _run_sudo([settings.useradd_binary_path, "-m", "-N", "-g", primary_group, username])
 
     # Set password via stdin (never on command line).
     _run_sudo([settings.chpasswd_binary_path], stdin_data=f"{username}:{password}")
 
-    # Add to requested groups.  If usermod fails, delete the newly created
-    # user so the caller never sees a partial account.
-    if groups:
+    # Add requested supplementary groups (excluding the primary group).
+    # If usermod fails, delete the newly created user so the caller never
+    # sees a partial account.
+    supplemental_groups = [g for g in (groups or []) if g != primary_group]
+    if supplemental_groups:
         try:
-            _run_sudo([settings.usermod_binary_path, "-aG", ",".join(groups), username])
+            _run_sudo([settings.usermod_binary_path, "-aG", ",".join(supplemental_groups), username])
         except OSUserError:
             try:
                 _run_sudo([settings.userdel_binary_path, "-r", username])

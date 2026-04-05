@@ -27,6 +27,7 @@ from app.database import get_db
 from app.exceptions import AuthorizationError, DatabaseStatusUnknownError
 from app.routing import LocalOnlyRoute
 from app.repositories.user_role_repository import UserRoleRepository
+from app.models.users import UserRole
 from app.schemas.database import (
     DatabaseProvisionRequest,
     DatabaseProvisionResponse,
@@ -42,6 +43,7 @@ from app.utils.docker import is_running_in_docker
 from app.config import settings
 from app.services import database_service
 from app.services.audit_service import log_and_audit
+from app.infrastructure import get_os_user_provider
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500, R_503
 
 logger = logging.getLogger(__name__)
@@ -52,13 +54,66 @@ _ADMIN_ONLY = require_roles("admin")
 _bearer_scheme = HTTPBearer(auto_error=False)
 
 
+def _admins_have_any_os_account(db: Session) -> bool:
+    """Return True if any DB admin role has a corresponding OS account.
+
+    Fail closed (True) when OS provider checks fail unexpectedly.
+    """
+    rows = (
+        db.query(UserRole.username)
+        .filter(UserRole.role == "admin")
+        .distinct()
+        .all()
+    )
+    admin_usernames = [row[0] for row in rows]
+    if not admin_usernames:
+        return False
+
+    try:
+        provider = get_os_user_provider()
+    except Exception:
+        logger.exception("Failed to load OS user provider while evaluating setup auth gate")
+        return True
+
+    missing: list[str] = []
+    for username in admin_usernames:
+        try:
+            if provider.user_exists(username):
+                return True
+            missing.append(username)
+        except Exception:
+            logger.exception(
+                "OS user existence check failed for setup admin '%s'",
+                username,
+            )
+            return True
+
+    logger.warning(
+        "Database setup recovery mode: admin role rows exist but no matching "
+        "OS admin accounts were found (admins=%s)",
+        missing,
+    )
+    return False
+
+
+def _database_is_configured() -> bool:
+    """Return True when DATABASE_URL has been configured and DB session is usable."""
+    db_module = __import__("app.database", fromlist=["is_database_configured"])
+    return bool(db_module.is_database_configured())
+
+
 def _get_db_or_none():
     """Yield a DB session, or ``None`` when the database is unreachable.
 
     Used by provisioning endpoints where the database may not exist yet.
     """
+    db_module = __import__("app.database", fromlist=["SessionLocal"])
+    if not _database_is_configured():
+        yield None
+        return
+
     try:
-        db = __import__("app.database", fromlist=["SessionLocal"]).SessionLocal()
+        db = db_module.SessionLocal()
     except Exception:
         yield None
         return
@@ -88,6 +143,10 @@ def _require_admin_or_initial_setup(
     admin JWT is presented, the request proceeds even without DB connectivity
     (the JWT is self-contained).
     """
+    if not _database_is_configured():
+        # Fresh install path: no DATABASE_URL configured yet.
+        return None
+
     # --- Try to determine initialization state from the database ---
     db_checked = False
     has_admin = False
@@ -134,6 +193,23 @@ def _require_admin_or_initial_setup(
 
     # --- DB unreachable or admin exists: require authentication ---
     if db_checked and has_admin:
+        # Recovery mode: if DB contains admin roles but none of those users
+        # exist on the host, keep setup endpoints in initial-setup mode so
+        # the wizard can recreate the OS admin account.
+        if db is not None and not _admins_have_any_os_account(db):
+            if credentials is None:
+                return None
+
+            # If a token is provided, accept it when valid/admin so callers
+            # can still perform admin-only recovery actions (e.g. force=true).
+            try:
+                current_user = get_current_user(request, credentials, db)
+            except Exception:
+                return None
+            if any(r == "admin" for r in current_user.roles):
+                return current_user
+            return None
+
         # System is initialized — must have a valid admin JWT
         if credentials is None:
             raise HTTPException(
@@ -216,6 +292,11 @@ def test_database_connection(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
         )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        )
 
     # Best-effort audit (may fail if DB doesn't exist yet)
     try:
@@ -259,13 +340,22 @@ def provision_database(
     Returns ``409 Conflict`` if the database has already been provisioned,
     unless ``force`` is set to ``true`` in the request body (admin-only).
     """
+    logger.info(
+        "DATABASE_PROVISION_REQUEST host=%s port=%s app_database=%s app_username=%s force=%s",
+        body.host,
+        body.port,
+        body.app_database,
+        body.app_username,
+        body.force,
+    )
+
     if body.force and current_user is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="The 'force' option requires an authenticated admin user.",
         )
 
-    if not body.force:
+    if not body.force and _database_is_configured():
         try:
             already_provisioned = database_service.is_database_provisioned()
         except DatabaseStatusUnknownError:
@@ -333,6 +423,18 @@ def provision_database(
             migrations_applied,
         )
 
+    # Always emit an operator-visible success line, even when audit logging
+    # succeeds, so journalctl clearly shows provisioning completion details.
+    logger.info(
+        "DATABASE_PROVISION_RESULT status=provisioned host=%s port=%s database=%s user=%s migrations=%d force=%s",
+        body.host,
+        body.port,
+        body.app_database,
+        body.app_username,
+        migrations_applied,
+        body.force,
+    )
+
     return DatabaseProvisionResponse(
         status="provisioned",
         database=body.app_database,
@@ -357,6 +459,7 @@ def get_system_info() -> SystemInfoResponse:
     return SystemInfoResponse(
         in_docker=in_docker,
         suggested_db_host=settings.setup_docker_db_host if in_docker else "localhost",
+        suggested_admin_username=settings.setup_default_admin_username,
     )
 
 
@@ -375,6 +478,10 @@ def get_database_provision_status(
     endpoint accepts unauthenticated requests. Once the system is initialized,
     a valid admin JWT is required.
     """
+    if not _database_is_configured():
+        logger.info("DATABASE_PROVISION_STATUS configured=false provisioned=false")
+        return DatabaseProvisionStatusResponse(provisioned=False)
+
     try:
         provisioned = database_service.is_database_provisioned()
     except DatabaseStatusUnknownError:
@@ -385,6 +492,11 @@ def get_database_provision_status(
                 "The database may be temporarily unreachable."
             ),
         )
+
+    logger.info(
+        "DATABASE_PROVISION_STATUS configured=true provisioned=%s",
+        provisioned,
+    )
 
     return DatabaseProvisionStatusResponse(provisioned=provisioned)
 

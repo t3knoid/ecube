@@ -308,3 +308,72 @@ def test_get_user_groups_handles_unknown_user():
         groups = get_user_groups("nonexistent")
 
     assert groups == []
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="requires POSIX pwd/grp modules")
+def test_linux_pam_authenticator_uses_configured_service_and_fallback(monkeypatch):
+    """Authenticator should try configured PAM service then fallback."""
+    from app.services.pam_service import LinuxPamAuthenticator
+
+    class _PamObj:
+        def __init__(self):
+            self.code = 0
+            self.reason = ""
+            self.calls = []
+
+        def authenticate(self, username, password, service="login"):
+            self.calls.append((username, password, service))
+            if service == "login":
+                self.code = 7
+                self.reason = "Authentication failure"
+                return False
+            if service == "sudo":
+                self.code = 0
+                self.reason = "Success"
+                return True
+            return False
+
+    pam_obj = _PamObj()
+
+    class _PamModule:
+        def pam(self):
+            return pam_obj
+
+    monkeypatch.setitem(sys.modules, "pam", _PamModule())
+    monkeypatch.setattr(settings, "pam_service_name", "ecube")
+    monkeypatch.setattr(settings, "pam_fallback_services", ["sudo"])
+
+    auth = LinuxPamAuthenticator()
+    assert auth.authenticate("admin", "secret") is True
+    assert pam_obj.calls == [
+        ("admin", "secret", "ecube"),
+        ("admin", "secret", "sudo"),
+    ]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="requires POSIX pwd/grp modules")
+def test_linux_pam_authenticator_deduplicates_service_chain(monkeypatch):
+    """Duplicate fallback services should be called only once."""
+    from app.services.pam_service import LinuxPamAuthenticator
+
+    class _PamObj:
+        def __init__(self):
+            self.calls = []
+
+        def authenticate(self, username, password, service="login"):
+            self.calls.append(service)
+            return False
+
+    pam_obj = _PamObj()
+
+    class _PamModule:
+        def pam(self):
+            return pam_obj
+
+    monkeypatch.setitem(sys.modules, "pam", _PamModule())
+    monkeypatch.setattr(settings, "pam_service_name", "ecube")
+    monkeypatch.setattr(settings, "pam_fallback_services", ["ecube", "sudo", "sudo"])
+
+    auth = LinuxPamAuthenticator()
+    assert auth.authenticate("admin", "secret") is False
+    assert pam_obj.calls == ["ecube", "sudo"]

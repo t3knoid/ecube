@@ -131,6 +131,9 @@ class SystemInfoResponse(BaseModel):
 
     in_docker: bool = Field(..., description="Whether the server process runs inside a Docker container")
     suggested_db_host: str = Field(..., description="Recommended PostgreSQL hostname for this runtime environment")
+    suggested_admin_username: str = Field(
+        ..., description="Recommended PostgreSQL admin username for provisioning"
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 # ECUBE Installation Guide
 
 **Version:** 1.0  
-**Last Updated:** March 2026  
+**Last Updated:** April 2026  
 **Audience:** Systems Administrators, IT Staff  
 **Document Type:** Installation Procedures
 
@@ -96,15 +96,19 @@ The installer will:
 
 1. Run pre-flight checks (OS, disk space, ports, Python 3.11).
 2. Create the `ecube` system user.
-3. Set up a Python virtual environment in `<install-dir>/venv`.
-4. Generate a self-signed TLS certificate.
-5. Prompt for PostgreSQL connection details (host, port, database name, username, password) and verify TCP reachability. If `psql` is present it also tests the credentials against the database; if `psql` is absent this step is skipped and no error is raised. The installer never creates the PostgreSQL database or role — these must exist before running the installer for the service to function correctly.
-6. Write `<install-dir>/.env` with a random `SECRET_KEY` and the assembled `DATABASE_URL`.
-7. Write and start the `ecube.service` systemd unit.
-8. (Full install) Configure nginx to serve the frontend and proxy `/api/` to the backend.
-9. Optionally configure `ufw` firewall rules.
+3. Install `/etc/sudoers.d/ecube-user-mgmt` with narrowly scoped `NOPASSWD` rules so setup endpoints can create required OS groups/users without interactive sudo prompts.
+4. Install `/etc/pam.d/ecube` PAM configuration for local and domain user authentication (detects SSSD at install time and creates appropriate config variant).
+5. Set up a Python virtual environment in `<install-dir>/venv`.
+6. Generate a self-signed TLS certificate.
+7. Write `<install-dir>/.env` with a random `SECRET_KEY`, `SETUP_DEFAULT_ADMIN_USERNAME=ecubeadmin`, and runtime defaults. `DATABASE_URL` is left empty and configured later via the setup wizard.
+8. Write and start the `ecube.service` systemd unit.
+9. (Full install) Configure nginx to serve the frontend and proxy `/api/` to the backend.
+10. Optionally configure `ufw` firewall rules.
 
 At the end it prints a summary with the UI URL, API URL, and service management commands.
+When PostgreSQL is available locally, the installer also creates (or updates)
+a PostgreSQL superuser for setup-wizard database provisioning and prints those
+credentials in the summary.
 
 **Immediate next step:** open the ECUBE web UI and complete setup:
 
@@ -127,17 +131,14 @@ At the end it prints a summary with the UI URL, API URL, and service management 
 | `--allow-insecure-backend` | *(default)* | Explicitly select TLS verification disabled (`proxy_ssl_verify off`) when proxying to a remote backend. This is already the default behaviour; the flag is provided for clarity in scripts that also set `--secure-backend` in some code paths. A warning is always printed when verification is off. |
 | `--secure-backend` | — | Enable TLS certificate verification against the OS trust store (`proxy_ssl_verify on`). Use when the remote backend has a CA-signed cert already trusted by the system and no custom CA file is needed. Mutually exclusive with `--allow-insecure-backend`. |
 | `--backend-ca-file FILE` | — | Path to a PEM CA certificate used to verify the remote backend's TLS certificate (`proxy_ssl_trusted_certificate`). Use when the backend has a private CA-signed cert that is not in the system trust store. Implies `proxy_ssl_verify on`. |
-| `--db-host HOST` | *(prompted)* | **Backend installs only.** PostgreSQL server hostname or IP address. Host only (no `host:port` form). Required in `--yes` mode. Ignored for `--frontend-only`. |
-| `--db-port PORT` | `5432` | **Backend installs only.** PostgreSQL server port. Must be a valid integer between 1 and 65535. Ignored for `--frontend-only`. |
-| `--db-name NAME` | `ecube` | **Backend installs only.** Name of the PostgreSQL database. Must contain only alphanumerics and underscores. Ignored for `--frontend-only`. |
-| `--db-user USER` | *(prompted)* | **Backend installs only.** PostgreSQL username. Must be non-empty and must contain only alphanumerics and underscores. Required in `--yes` mode. Ignored for `--frontend-only`. |
-| `--db-password PASS` | *(prompted)* | **Backend installs only.** PostgreSQL password. Must be non-empty and must not contain whitespace. Required in `--yes` mode. All characters outside the RFC 3986 unreserved set are percent-encoded automatically when building `DATABASE_URL`. Ignored for `--frontend-only`. |
+| `--pg-superuser-name NAME` | `ecubeadmin` | PostgreSQL superuser name to create/update during install for use in setup wizard provisioning. Skips prompt when supplied. |
+| `--pg-superuser-pass PASS` | — | PostgreSQL superuser password to set during install. Skips prompt when supplied. Must be non-empty and contain no whitespace. |
 | `--hostname HOST` | `$(hostname -f)` | Hostname/IP used as TLS certificate CN and in summary URLs |
 | `--cert-validity DAYS` | `730` | Self-signed certificate validity in days |
 | `--yes` / `-y` | off | Non-interactive / unattended mode |
 | `--version TAG` | *(current package)* | Download and install a specific release tag from GitHub. Must match `v<major>.<minor>.<patch>` exactly (e.g. `v0.2.0`). Pre-release suffixes, build metadata, and tags without a leading `v` are not accepted. |
 | `--uninstall` | — | Remove all installed ECUBE components |
-| `--drop-database` | — | With `--uninstall`, also attempt to drop the configured application database resolved from `DATABASE_URL` (or explicit `--db-*` flags). Requires sufficient PostgreSQL privileges. |
+| `--drop-database` | — | With `--uninstall`, also attempt to drop the configured application database resolved from `DATABASE_URL` in `<install-dir>/.env`. Requires sufficient PostgreSQL privileges. |
 | `--dry-run` | — | Print all planned actions without executing them |
 
 ---
@@ -158,7 +159,7 @@ Installs the backend **and** the nginx-fronted frontend on the same host. nginx 
 sudo ./install.sh --backend-only
 ```
 
-Installs the backend service only. uvicorn terminates TLS itself and binds to `0.0.0.0` so the API is directly reachable from the network. No nginx configuration is created. If you later run `--frontend-only` on the same host, the installer will automatically switch uvicorn to plain HTTP on `127.0.0.1` (nginx takes over TLS termination) and update `.env`.
+Installs the backend service only. uvicorn terminates TLS itself and binds to `0.0.0.0` so the API is directly reachable from the network. No nginx configuration is created. If you later run `--frontend-only` on the same host, the installer will automatically switch uvicorn to plain HTTP on `127.0.0.1` (nginx takes over TLS termination), patch `.env`, and preserve the existing backend API port unless `--api-port` is passed explicitly.
 
 ### Frontend Only
 
@@ -181,6 +182,8 @@ Installs nginx and deploys the pre-built frontend bundle only.
 - Restarts `ecube.service` to apply the changes.
 
 Two successive invocations (`--backend-only` then `--frontend-only`) on the same host are therefore fully supported without any manual reconfiguration.
+
+If `--frontend-only` is used with the default `--backend-host 127.0.0.1`, but no local backend service exists/listens on `--api-port`, the installer fails fast with guidance to either install the backend first or pass `--backend-host <remote-host>`.
 
 **Remote backend (`--backend-host HOST`):** nginx proxies `/api/` to `https://<HOST>:<api-port>/`, stripping the `/api` prefix before requests reach FastAPI. TLS verification is **disabled by default** (`proxy_ssl_verify off`) for quick bring-up — the installer prints a warning when this is in effect. Three modes are supported:
 
@@ -210,104 +213,50 @@ Only leave TLS verification disabled (the default) on trusted networks (VPN, pri
 
 ## Prepare PostgreSQL
 
-The installer **never** creates the PostgreSQL database or role. Both must exist before you run `install.sh` so the installer can verify the credentials.
+Before running the setup wizard, ensure PostgreSQL is installed, running, and
+reachable from the ECUBE host.
 
-Run the following on the PostgreSQL host (or via any client connected to it) as the PostgreSQL superuser (typically `postgres`):
+In current installer flow, `install.sh` creates (or updates) a PostgreSQL
+superuser for setup-wizard provisioning and prints its credentials in the
+install summary. The setup wizard then uses those admin credentials to:
 
-```sql
--- Create a dedicated role for ECUBE.
--- Replace 'your-secure-password' with a strong, unique password.
-CREATE USER ecube WITH PASSWORD 'your-secure-password';
+1. Create/update the ECUBE application role.
+2. Create the ECUBE application database.
+3. Run Alembic migrations.
 
--- Create the ECUBE database owned by that role.
-CREATE DATABASE ecube OWNER ecube;
-```
-
-If you prefer to own the database as a superuser and grant access separately:
-
-```sql
-CREATE USER ecube WITH PASSWORD 'your-secure-password';
-CREATE DATABASE ecube;
-GRANT ALL PRIVILEGES ON DATABASE ecube TO ecube;
-```
-
-> **Password requirements:** The password may contain any printable characters. The installer automatically percent-encodes characters outside the RFC 3986 unreserved set when building `DATABASE_URL`, so no manual escaping is required.
-
-To run these commands from a shell on the PostgreSQL host:
+You can pre-seed the installer and avoid interactive prompts:
 
 ```bash
-sudo -u postgres psql -c "CREATE USER ecube WITH PASSWORD 'your-secure-password';"
-sudo -u postgres psql -c "CREATE DATABASE ecube OWNER ecube;"
+sudo ./install.sh \
+  --pg-superuser-name ecubeadmin \
+  --pg-superuser-pass '<strong-password>'
 ```
 
-Verify the role and database were created:
-
-```bash
-sudo -u postgres psql -c "\du ecube"
-sudo -u postgres psql -c "\l ecube"
-```
-
-Once the role and database exist, proceed with [Database Configuration](#database-configuration) below and supply the credentials to `install.sh` when prompted.
+If local PostgreSQL access via `sudo -u postgres psql` is not available,
+create a PostgreSQL superuser manually and enter those credentials in the
+setup wizard's database provisioning screen.
 
 ---
 
 ## Database Configuration
 
-> **Applies to:** full install (default) and `--backend-only`. The PostgreSQL prompts, TCP reachability check, and `DATABASE_URL` assembly are **skipped entirely** when running `--frontend-only` — the frontend installer never touches database credentials or `DATABASE_URL`.
->
-> **Note on `.env` patching with `--frontend-only`:** When adding a frontend to an existing same-host backend-only install, the installer *does* patch `.env` — but only to set `TRUST_PROXY_HEADERS=true` and `API_ROOT_PATH=/api` so FastAPI serves correct URLs behind nginx. No database settings are changed. See [Frontend Only](#frontend-only) for details.
+Database configuration is performed in the web setup wizard, not by `install.sh`.
 
-The installer prompts for the PostgreSQL connection details required to assemble `DATABASE_URL`. You can supply any or all values via CLI flags to reduce or eliminate prompting.
+During installation:
 
-**Re-runs and upgrades:** If `<install-dir>/.env` already exists, **no** `--db-*` flag is supplied, **and** the file contains a usable non-empty `DATABASE_URL`, the installer skips database credential collection and preserves `DATABASE_URL` unchanged. If `.env` exists but `DATABASE_URL` is missing/empty/placeholder-like, the installer collects credentials and updates `DATABASE_URL` so the service is not started with an unusable DB connection string.
+1. `.env` is created (or preserved) with `DATABASE_URL` left untouched by the installer.
+2. `ecube.service` starts without installer-managed database credential prompts.
+3. The setup wizard (`/setup`) is the required next step to configure database
+  connection/provisioning and apply schema migrations.
 
-To update the database connection on an existing install, supply the new values via `--db-*` flags. The installer will collect and validate the credentials then patch only the `DATABASE_URL` line in `.env`, leaving `SECRET_KEY` and all other settings untouched.
+Notes:
 
-### Interactive mode (default)
-
-When `--db-host`, `--db-user`, or `--db-password` are omitted the installer prompts for them:
-
-```
-── PostgreSQL database configuration ──────────────────────────
-PostgreSQL host (hostname or IP): db.example.com
-PostgreSQL port [5432]:
-PostgreSQL database name [ecube]:
-PostgreSQL username: ecube_app
-PostgreSQL password: ****
-```
-
-Each value is validated as it is entered. The installer then:
-
-1. **TCP reachability check** — prefers `nc -z` to confirm the port is reachable (hard-fails on failure). If `nc` is unavailable, it attempts a `/dev/tcp` probe via `timeout`; if that fallback fails, a warning is emitted and the installer continues (no hard failure). If neither probe method is available, the check is skipped with a warning.
-2. **Credential verification** — if `psql` is found on `PATH`, it runs `SELECT 1` against the database to verify the username and password. The install aborts if authentication fails.
-3. Percent-encodes all characters outside the RFC 3986 unreserved set (`A–Z a–z 0–9 - _ . ~`) in the password before embedding it in the connection string. This ensures any valid PostgreSQL password produces a valid connection URL regardless of which reserved characters it contains.
-4. Writes `DATABASE_URL=postgresql://<user>:<encoded-pass>@<host>:<port>/<dbname>` into `.env`.
-
-### Unattended mode (`--yes`)
-
-On a **first install**, three flags without defaults become **required** when `--yes` is passed: `--db-host`, `--db-user`, and `--db-password`. `--db-port` and `--db-name` are optional — their defaults (`5432` and `ecube`) are used if omitted:
-
-```bash
-sudo ./install.sh --yes \
-  --db-host db.example.com \
-  --db-port 5432 \
-  --db-name ecube \
-  --db-user ecube_app \
-  --db-password 'S3cret!'
-```
-
-On a **re-run or upgrade** where `<install-dir>/.env` already exists, `--db-host`, `--db-user`, and `--db-password` are **not** required only when `.env` already contains a usable `DATABASE_URL`. If `DATABASE_URL` is missing/empty/unusable, the installer will prompt (or require flags in `--yes` mode) and update `DATABASE_URL`. Supply `--db-*` flags any time you want to rotate the database credentials:
-
-```bash
-# Upgrade (no DB flags needed — existing credentials are kept):
-sudo ./install.sh --yes
-
-# Upgrade and rotate DB credentials:
-sudo ./install.sh --yes \
-  --db-host new-db.example.com \
-  --db-user new_user \
-  --db-password 'NewP@ss!'
-```
+1. On first install, open `https://<hostname>:<ui-port>/setup` and complete the
+  database provisioning/configuration step.
+2. On upgrades/re-runs, the installer preserves existing `.env`; it does not
+  rotate or overwrite `DATABASE_URL`.
+3. Only `--pg-superuser-name` and `--pg-superuser-pass` configure
+  database-related installer behavior.
 
 ---
 
@@ -353,10 +302,21 @@ https://<hostname>:<ui-port>/setup
 
 The wizard will:
 
-1. Run Alembic migrations.
-2. Create the initial admin user.
+1. Connect to PostgreSQL with admin credentials.
+2. Provision the ECUBE role/database and run migrations.
+3. Create the initial admin user.
 
-> **Note:** `DATABASE_URL` in `<install-dir>/.env` is written with the credentials you supplied during installation. If you need to point the service at a different database later, edit `.env` and restart `ecube.service`.
+> **Troubleshooting (admin step skipped):** If setup appears to skip admin creation or briefly flashes an error, verify OS account state and setup state:
+>
+> ```bash
+> getent passwd <admin-username> || echo "OS user missing"
+> sudo -u postgres psql -d postgres -c "SELECT username, role FROM user_roles WHERE role='admin';"
+> sudo -u postgres psql -d postgres -c "SELECT * FROM system_initialization;"
+> ```
+>
+> Current ECUBE builds auto-recover this mismatch: if an admin role exists in the DB but the OS account is missing, setup remains available and recreates the OS admin account on the next `/setup/initialize` run.
+
+> **Note:** `DATABASE_URL` in `<install-dir>/.env` is configured by the setup wizard (not by `install.sh`). If you need to point the service at a different database later, use setup/admin workflows or edit `.env` and restart `ecube.service`.
 
 ---
 
@@ -397,13 +357,15 @@ sudo ./install.sh --uninstall --drop-database
 
 This will:
 
-1. Stop and disable `ecube.service`.
+1. Stop and disable `ecube*.service` units discovered on the host.
 2. Remove the nginx ecube site and reload nginx.
 3. Remove `<install-dir>` and `/var/lib/ecube`.
-4. Remove the `ecube` system user and group.
-5. Remove ECUBE-related ufw rules and installer log (if present).
-6. Remove the deadsnakes PPA entry if detected.
-7. When `--drop-database` is provided, attempt to terminate active sessions
+4. Remove the `ecube` system user/group and the `ecube-www` bridge group (if present).
+5. Remove `/etc/sudoers.d/ecube-user-mgmt`.
+6. Remove `/etc/pam.d/ecube` PAM configuration.
+7. Remove ECUBE-related ufw rules and installer log (if present).
+8. Remove the deadsnakes PPA entry if detected.
+9. When `--drop-database` is provided, attempt to terminate active sessions
   and drop the configured application database (best-effort).
 
 Use `--yes` to auto-accept the initial uninstall confirmation prompt.
