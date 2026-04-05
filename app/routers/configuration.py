@@ -48,14 +48,66 @@ def update_configuration(
     current_user: CurrentUser = Depends(_ADMIN_ONLY),
 ) -> ConfigurationUpdateResponse:
     values = {key: getattr(body, key) for key in body.model_fields_set}
+    requested_settings = sorted(values.keys())
+
+    try:
+        log_and_audit(
+            db,
+            action="CONFIGURATION_UPDATE_ATTEMPTED",
+            actor_id=current_user.username,
+            metadata={"requested_settings": requested_settings},
+        )
+    except Exception:
+        logger.info(
+            "CONFIGURATION_UPDATE_ATTEMPTED actor=%s requested=%s",
+            current_user.username,
+            requested_settings,
+        )
+
     try:
         result = configuration_service.update_configuration(values)
     except ValueError as exc:
+        try:
+            log_and_audit(
+                db,
+                action="CONFIGURATION_UPDATE_REJECTED",
+                actor_id=current_user.username,
+                level=logging.WARNING,
+                metadata={
+                    "requested_settings": requested_settings,
+                    "reason": str(exc),
+                },
+            )
+        except Exception:
+            logger.warning(
+                "CONFIGURATION_UPDATE_REJECTED actor=%s requested=%s reason=%s",
+                current_user.username,
+                requested_settings,
+                str(exc),
+            )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         )
     except Exception as exc:
+        try:
+            log_and_audit(
+                db,
+                action="CONFIGURATION_UPDATE_FAILED",
+                actor_id=current_user.username,
+                level=logging.ERROR,
+                metadata={
+                    "requested_settings": requested_settings,
+                    "reason": str(exc),
+                },
+            )
+        except Exception:
+            logger.error(
+                "CONFIGURATION_UPDATE_FAILED actor=%s requested=%s reason=%s",
+                current_user.username,
+                requested_settings,
+                str(exc),
+            )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
