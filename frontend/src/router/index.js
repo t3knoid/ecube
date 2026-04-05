@@ -66,6 +66,12 @@ const routes = [
         meta: { roles: USERS_ROLES },
       },
       {
+        path: 'configuration',
+        name: 'configuration',
+        component: () => import('@/views/ConfigurationView.vue'),
+        meta: { roles: USERS_ROLES },
+      },
+      {
         path: 'system',
         name: 'system',
         component: () => import('@/views/SystemView.vue'),
