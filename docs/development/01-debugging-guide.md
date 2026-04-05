@@ -1,7 +1,7 @@
 # ECUBE Debugging Guide
 
 **Version:** 1.0  
-**Last Updated:** March 2026  
+**Last Updated:** April 2026  
 **Audience:** Developers, Contributors  
 **Document Type:** How-To
 
