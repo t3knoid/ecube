@@ -18,7 +18,7 @@ from app.config import settings
 from app.exceptions import AuthenticationError, AuthorizationError, ConflictError, ECUBEException
 from app.utils.sanitize import is_encoding_error
 from app.logging_config import configure_logging
-from app.routers import admin, audit, auth, database_setup, drives, files, introspection, jobs, mounts, setup, users
+from app.routers import admin, audit, auth, configuration, database_setup, drives, files, introspection, jobs, mounts, setup, users
 from app.schemas.errors import ErrorResponse
 from app.schemas.introspection import HealthResponse, VersionResponse
 from app.session import close_session_backend, init_session_backend, mount_session_middleware
@@ -338,6 +338,7 @@ app.include_router(files.router, dependencies=[Depends(get_current_user)])
 app.include_router(introspection.router, dependencies=[Depends(get_current_user)])
 app.include_router(audit.router, dependencies=[Depends(get_current_user)])
 app.include_router(admin.router, dependencies=[Depends(get_current_user)])
+app.include_router(configuration.router, dependencies=[Depends(get_current_user)])
 app.include_router(users.router, dependencies=[Depends(get_current_user)])
 
 
