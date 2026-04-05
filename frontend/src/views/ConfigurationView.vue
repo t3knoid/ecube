@@ -55,6 +55,43 @@ const changedFieldLabels = computed(() => {
     .map((key) => t(`configuration.fields.${key}.label`))
 })
 
+function getConfigurationErrorMessage(err, operation) {
+  if (!err?.response) {
+    return t('common.errors.networkError')
+  }
+
+  const status = Number(err.response?.status || 0)
+  const code = String(err.response?.data?.code || '')
+
+  if (code === 'HTTP_400' || status === 400) {
+    return t('common.errors.invalidRequest')
+  }
+
+  if (code === 'HTTP_403' || status === 403) {
+    return t('common.errors.insufficientPermissions')
+  }
+
+  if (code === 'HTTP_409' || status === 409) {
+    return t('common.errors.requestConflict')
+  }
+
+  if (code === 'HTTP_422' || status === 422) {
+    return t('common.errors.validationFailed')
+  }
+
+  if (code === 'HTTP_503' || status === 503) {
+    return operation === 'restart'
+      ? t('configuration.errors.restartUnavailable')
+      : t(`configuration.errors.${operation}Failed`)
+  }
+
+  if ((code.startsWith('HTTP_5') && code !== 'HTTP_503') || (status >= 500 && status < 600)) {
+    return t(`configuration.errors.${operation}Failed`)
+  }
+
+  return t(`configuration.errors.${operation}Failed`)
+}
+
 function normalizeForm(data) {
   const next = { ...form.value }
   const list = Array.isArray(data?.settings) ? data.settings : []
@@ -118,7 +155,7 @@ async function loadConfiguration() {
     const response = await getConfiguration()
     normalizeForm(response)
   } catch (err) {
-    error.value = String(err?.response?.data?.detail || err?.response?.data?.message || t('common.errors.requestConflict'))
+    error.value = getConfigurationErrorMessage(err, 'load')
   } finally {
     loading.value = false
   }
@@ -146,7 +183,7 @@ async function saveConfiguration() {
       toast.warning(t('configuration.toasts.pendingRestart'))
     }
   } catch (err) {
-    error.value = String(err?.response?.data?.detail || err?.response?.data?.message || t('common.errors.requestConflict'))
+    error.value = getConfigurationErrorMessage(err, 'save')
   } finally {
     saving.value = false
   }
@@ -162,7 +199,7 @@ async function confirmRestart() {
     showRestartConfirm.value = false
     toast.success(t('configuration.toasts.restartRequested'))
   } catch (err) {
-    error.value = String(err?.response?.data?.detail || err?.response?.data?.message || t('common.errors.serverErrorGeneric'))
+    error.value = getConfigurationErrorMessage(err, 'restart')
   } finally {
     restarting.value = false
   }
