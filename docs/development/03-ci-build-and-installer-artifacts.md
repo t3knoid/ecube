@@ -128,7 +128,9 @@ sha256sum -c ecube-package-vX.Y.Z.sha256
 4. Optional installer contract check:
 
 ```bash
-sudo ./install.sh --version vX.Y.Z --yes --db-host <host> --db-user <user> --db-password <pass>
+sudo ./install.sh --version vX.Y.Z --yes \
+  --pg-superuser-name <pg-superuser> \
+  --pg-superuser-pass <pg-superuser-password>
 ```
 
 Use a non-production host for installer smoke tests.

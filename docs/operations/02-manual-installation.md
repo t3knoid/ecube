@@ -7,6 +7,9 @@
 
 > This guide is the manual equivalent of what `install.sh` automates in [01-installation.md](01-installation.md).  
 > Use it when you must deploy without the installer, need custom host layout, or need stricter enterprise controls.
+>
+> **Important:** In installer-driven deployments, `install.sh` now creates/updates a PostgreSQL superuser for setup and database provisioning is performed in the web setup wizard (`/setup`).
+> This manual guide also documents an explicit operator-managed alternative where `DATABASE_URL` is written directly in `.env`.
 
 ---
 
@@ -175,6 +178,60 @@ sudo chmod 750 /opt/ecube
 sudo chmod 700 /var/lib/ecube
 ```
 
+Install the sudoers policy required for setup-time OS user/group management:
+
+```bash
+sudo install -d -m 0755 /etc/sudoers.d
+sudo tee /etc/sudoers.d/ecube-user-mgmt > /dev/null <<'EOF_SUDOERS'
+# /etc/sudoers.d/ecube-user-mgmt
+# Narrowly scoped privilege escalation for the ECUBE service account.
+ecube ALL=(root) NOPASSWD: /usr/sbin/useradd, /usr/sbin/usermod, /usr/sbin/userdel, /usr/sbin/groupadd, /usr/sbin/groupdel, /usr/sbin/chpasswd
+EOF_SUDOERS
+sudo chmod 0440 /etc/sudoers.d/ecube-user-mgmt
+sudo visudo -cf /etc/sudoers.d/ecube-user-mgmt
+```
+
+Install the PAM configuration for local and domain user authentication:
+
+```bash
+sudo install -d -m 0755 /etc/pam.d
+
+# If SSSD is present on the host, install the full config with domain support
+if command -v sssd &>/dev/null || [[ -f /lib/security/pam_sss.so || -f /lib/x86_64-linux-gnu/security/pam_sss.so ]]; then
+  sudo tee /etc/pam.d/ecube > /dev/null <<'EOF_PAM'
+# /etc/pam.d/ecube
+# PAM configuration for the ECUBE service (local and domain user authentication).
+#
+# Tries local users first (pam_unix, sufficient = stop on success), then
+# domain users via SSSD (pam_sss, only attempted if SSSD is installed).
+# Falls back to an unconditional deny so a missing module does not open a hole.
+
+auth    sufficient  pam_unix.so nullok
+auth    [success=done ignore=ignore default=die] pam_sss.so use_first_pass
+auth    required    pam_deny.so
+account sufficient  pam_unix.so
+account [success=done ignore=ignore default=die] pam_sss.so
+account required    pam_deny.so
+EOF_PAM
+  echo "PAM config installed with SSSD support: /etc/pam.d/ecube"
+else
+  # SSSD not present — install a local-only variant
+  sudo tee /etc/pam.d/ecube > /dev/null <<'EOF_PAM'
+# /etc/pam.d/ecube
+# Local-only PAM configuration (SSSD not detected at install time).
+# Re-run setup steps after installing SSSD to enable domain user authentication.
+
+auth    sufficient  pam_unix.so nullok
+auth    required    pam_deny.so
+account sufficient  pam_unix.so
+account required    pam_deny.so
+EOF_PAM
+  echo "PAM config installed (local users only): /etc/pam.d/ecube"
+fi
+
+sudo chmod 0644 /etc/pam.d/ecube
+```
+
 ### 5.3 Extract package
 
 ```bash
@@ -183,13 +240,21 @@ sudo tar -xzf "/tmp/ecube-package-${LATEST_TAG}.tar.gz" -C /opt/ecube --strip-co
 sudo chown -R ecube:ecube /opt/ecube
 ```
 
-### 5.4 Prepare PostgreSQL
+### 5.4 Prepare PostgreSQL (Installer-equivalent wizard flow)
+
+To mirror current `install.sh` behavior, create a PostgreSQL superuser for the
+setup wizard and let the wizard create the ECUBE app role/database.
 
 ```bash
 sudo -u postgres psql <<'SQL'
-CREATE ROLE ecube LOGIN PASSWORD 'change-me-strong';
-CREATE DATABASE ecube OWNER ecube;
+CREATE ROLE ecubeadmin WITH SUPERUSER LOGIN PASSWORD 'change-me-strong';
 SQL
+```
+
+If the role already exists:
+
+```bash
+sudo -u postgres psql -c "ALTER ROLE ecubeadmin WITH SUPERUSER LOGIN PASSWORD 'change-me-strong';"
 ```
 
 ### 5.5 Build backend runtime
@@ -202,10 +267,13 @@ sudo -u ecube /opt/ecube/venv/bin/pip install -e /opt/ecube
 
 ### 5.6 Write backend `.env`
 
+Installer-equivalent path (wizard-managed DB provisioning):
+
 ```bash
 sudo tee /opt/ecube/.env > /dev/null <<'EOF_ENV'
 SECRET_KEY=replace-with-random-hex
-DATABASE_URL=postgresql://ecube:change-me-strong@localhost:5432/ecube
+DATABASE_URL=
+SETUP_DEFAULT_ADMIN_USERNAME=ecubeadmin
 TRUST_PROXY_HEADERS=true
 API_ROOT_PATH=/api
 EOF_ENV
@@ -213,6 +281,24 @@ EOF_ENV
 sudo chown ecube:ecube /opt/ecube/.env
 sudo chmod 600 /opt/ecube/.env
 ```
+
+Alternative manual path (operator-managed DB connection):
+
+```bash
+sudo tee /opt/ecube/.env > /dev/null <<'EOF_ENV'
+SECRET_KEY=replace-with-random-hex
+DATABASE_URL=postgresql://ecube:change-me-strong@localhost:5432/ecube
+SETUP_DEFAULT_ADMIN_USERNAME=ecubeadmin
+TRUST_PROXY_HEADERS=true
+API_ROOT_PATH=/api
+EOF_ENV
+
+sudo chown ecube:ecube /opt/ecube/.env
+sudo chmod 600 /opt/ecube/.env
+```
+
+After service start, open `/setup` and enter the PostgreSQL superuser
+credentials (for example, `ecubeadmin`) in the database provisioning step.
 
 ### 5.7 Generate certificates (nginx TLS terminator)
 
@@ -226,17 +312,27 @@ Use this only for lab/testing or temporary bring-up. For production, use a
 public/enterprise CA-signed certificate (recommended), such as Let's Encrypt.
 
 ```bash
+HOST_NAME="$(hostname -f)"
+HOST_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+if [[ -z "$HOST_IP" ]]; then HOST_IP="127.0.0.1"; fi
+
 sudo mkdir -p /opt/ecube/certs
-sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+sudo openssl req -x509 -nodes -days 730 -newkey rsa:2048 \
   -keyout /opt/ecube/certs/key.pem \
   -out /opt/ecube/certs/cert.pem \
-  -subj "/CN=$(hostname -f)"
+  -subj "/CN=${HOST_NAME}" \
+  -addext "subjectAltName=DNS:${HOST_NAME},IP:${HOST_IP}"
 
 sudo chown root:root /opt/ecube/certs/key.pem
 sudo chmod 600 /opt/ecube/certs/key.pem
 sudo chown ecube:ecube /opt/ecube/certs/cert.pem
 sudo chmod 644 /opt/ecube/certs/cert.pem
 ```
+
+Notes:
+
+- This mirrors installer defaults (`--cert-validity 730`).
+- If you use an IP literal for host identity (especially IPv6), use IP SAN entries instead of `DNS:` SAN entries.
 
 ### 5.8 Create backend systemd unit (HTTP loopback behind nginx)
 
@@ -260,7 +356,8 @@ ExecStart=/opt/ecube/venv/bin/uvicorn \
 Restart=on-failure
 RestartSec=10
 PrivateTmp=yes
-NoNewPrivileges=true
+# Required for setup endpoints that invoke tightly scoped sudoers commands.
+NoNewPrivileges=false
 
 [Install]
 WantedBy=multi-user.target
@@ -279,6 +376,13 @@ sudo cp -r /opt/ecube/frontend/dist/. /opt/ecube/www/
 sudo chown -R root:root /opt/ecube/www
 sudo find /opt/ecube/www -type d -exec chmod 755 {} +
 sudo find /opt/ecube/www -type f -exec chmod 644 {} +
+
+# Match installer behavior: let nginx traverse /opt/ecube without granting
+# world execute on the whole install tree.
+sudo groupadd --system ecube-www 2>/dev/null || true
+sudo usermod -aG ecube-www www-data
+sudo chown ecube:ecube-www /opt/ecube
+sudo chmod 710 /opt/ecube
 ```
 
 ```bash
@@ -342,6 +446,16 @@ After the service and nginx validate successfully, open the web UI and complete 
 https://<frontend-hostname>/setup
 ```
 
+Operator troubleshooting note (admin step skipped): if setup flashes past admin creation, check whether an admin DB role exists without a matching OS user:
+
+```bash
+getent passwd <admin-username> || echo "OS user missing"
+sudo -u postgres psql -d postgres -c "SELECT username, role FROM user_roles WHERE role='admin';"
+sudo -u postgres psql -d postgres -c "SELECT * FROM system_initialization;"
+```
+
+Current ECUBE builds recover this automatically: when DB admin rows exist but the OS admin account is missing, setup stays available and recreates the OS user on the next `/setup/initialize` run.
+
 If this host is backend-only and does not serve the UI, complete setup from a frontend-enabled ECUBE deployment URL.
 
 ---
@@ -365,7 +479,8 @@ CREATE DATABASE ecube OWNER ecube;
 
 Follow sections 5.1 to 5.6 with these differences:
 
-- `DATABASE_URL` points to DB host.
+- For manual DB configuration: set `DATABASE_URL` to the DB host.
+- For wizard-managed DB configuration: leave `DATABASE_URL=` blank and configure it in `/setup` from a frontend-enabled host.
 - backend serves HTTPS directly (no local nginx).
 - backend `.env` includes:
   - `TRUST_PROXY_HEADERS=true`
@@ -509,6 +624,8 @@ sudo ./install.sh --uninstall --drop-database
 For strictly manual teardown, remove:
 
 - `ecube.service` systemd unit and reload systemd
+- `/etc/sudoers.d/ecube-user-mgmt` sudoers policy (if installed)
+- `/etc/pam.d/ecube` PAM configuration (if installed)
 - `/opt/ecube` application files
 - `/var/lib/ecube` runtime directory
 - nginx ECUBE site config/symlinks (if present)

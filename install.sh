@@ -70,6 +70,7 @@ YES=false
 UNINSTALL=false
 DRY_RUN=false
 VERSION_TAG=""
+DROP_DATABASE=false
 
 INSTALL_BACKEND=true
 INSTALL_FRONTEND=true
@@ -79,14 +80,11 @@ _EXPLICIT_INSECURE=false   # set when --allow-insecure-backend is passed explici
 _EXPLICIT_SECURE=false    # set when --secure-backend is passed explicitly
 BACKEND_CA_FILE=""
 
-# PostgreSQL connection — populated interactively or via CLI flags
-DB_HOST=""
-DB_PORT="5432"
-DB_NAME="ecube"
-DB_USER=""
-DB_PASS=""
-DATABASE_URL=""   # built by _collect_db_config
-_EXPLICIT_DB=false   # set when any --db-* flag is passed explicitly
+# Credentials for the PostgreSQL superuser created during installation.
+# Populated by _provision_pg_superuser and printed in the post-install summary
+# so the operator knows what to enter in the setup wizard.
+PG_SUPERUSER_NAME=""
+PG_SUPERUSER_PASS=""
 
 GITHUB_OWNER="t3knoid"
 GITHUB_REPO="ecube"
@@ -122,11 +120,14 @@ Options:
   --backend-ca-file FILE Path to a PEM CA certificate used to verify the remote
                          backend's TLS certificate (proxy_ssl_trusted_certificate).
                          Implies proxy_ssl_verify on. Ignored for loopback backends.
-  --db-host HOST         PostgreSQL server hostname or IP  (prompted if omitted)
-  --db-port PORT         PostgreSQL server port             (default: 5432)
-  --db-name NAME         PostgreSQL database name           (default: ecube)
-  --db-user USER         PostgreSQL username                (prompted if omitted)
-  --db-password PASS     PostgreSQL password                (prompted if omitted)
+  --pg-superuser-name NAME
+                         Name for the PostgreSQL superuser created during
+                         installation (default: ecubeadmin). Skips the
+                         interactive prompt when supplied.
+  --pg-superuser-pass PASS
+                         Password for the PostgreSQL superuser. Skips the
+                         interactive prompt when supplied. Must be non-empty
+                         and contain no whitespace.
   --hostname HOST        Hostname/IP for TLS cert CN  (default: \$(hostname -f))
   --cert-validity DAYS   Self-signed cert validity    (default: 730, max: 730 — 2 years)
   --yes, -y              Non-interactive / unattended mode
@@ -135,9 +136,133 @@ Options:
                          Pre-releases, build metadata, and tags without a leading v
                          are not supported.
   --uninstall            Remove ECUBE from this host
+  --drop-database        With --uninstall, also drop the configured application
+                         database (best-effort; requires sufficient DB privileges)
   --dry-run              Print all actions without executing them
   -h, --help             Show this help message
 EOF
+}
+
+_extract_database_url_from_env() {
+  local env_file="$1"
+  [[ -f "${env_file}" ]] || return 1
+
+  local db_line
+  db_line="$(grep -E '^[[:space:]]*DATABASE_URL=' "${env_file}" 2>/dev/null | tail -1 || true)"
+  [[ -n "${db_line}" ]] || return 1
+
+  local db_value="${db_line#*=}"
+  db_value="${db_value#"${db_value%%[![:space:]]*}"}"
+  db_value="${db_value%"${db_value##*[![:space:]]}"}"
+  if (( ${#db_value} >= 2 )); then
+    local _first_char="${db_value:0:1}"
+    local _last_char="${db_value: -1}"
+    if [[ "${_first_char}" == '"' && "${_last_char}" == '"' ]] ||
+       [[ "${_first_char}" == "'" && "${_last_char}" == "'" ]]; then
+      db_value="${db_value:1:${#db_value}-2}"
+    fi
+  fi
+  [[ -n "${db_value}" ]] || return 1
+  [[ "${db_value}" == "<"*">" ]] && return 1
+
+  printf '%s' "${db_value}"
+  return 0
+}
+
+_cleanup_application_database() {
+  local db_url=""
+  local env_file="${INSTALL_DIR}/.env"
+
+  # Cleanup target is derived strictly from DATABASE_URL in .env.
+  db_url="$(_extract_database_url_from_env "${env_file}" || true)"
+
+  if [[ -z "${db_url}" ]]; then
+    warn "Database cleanup skipped: no usable DATABASE_URL found in ${env_file}."
+    return 0
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    echo "[DRY-RUN] Would drop application database from DATABASE_URL configured for uninstall"
+    return 0
+  fi
+
+  if ! command -v psql &>/dev/null; then
+    warn "Database cleanup skipped: psql not found."
+    return 0
+  fi
+
+  local py_bin
+  if command -v python3.11 &>/dev/null; then
+    py_bin="python3.11"
+  elif command -v python3 &>/dev/null; then
+    py_bin="python3"
+  else
+    warn "Database cleanup skipped: python3 is required to parse DATABASE_URL safely."
+    return 0
+  fi
+
+  local parsed admin_url target_db
+  parsed="$(${py_bin} - <<'PY' "${db_url}"
+import sys
+from urllib.parse import urlparse, urlunparse
+
+url = sys.argv[1]
+u = urlparse(url)
+db_name = (u.path or "/").lstrip("/")
+if not db_name:
+    raise SystemExit(1)
+
+admin = u._replace(path="/postgres", params="", query="", fragment="")
+print(urlunparse(admin))
+print(db_name)
+PY
+)" || {
+    warn "Database cleanup skipped: failed to parse DATABASE_URL."
+    return 0
+  }
+
+  admin_url="$(printf '%s\n' "${parsed}" | sed -n '1p')"
+  target_db="$(printf '%s\n' "${parsed}" | sed -n '2p')"
+  if [[ -z "${admin_url}" || -z "${target_db}" ]]; then
+    warn "Database cleanup skipped: parsed connection details were incomplete."
+    return 0
+  fi
+
+  # Never drop PostgreSQL maintenance/system databases by default. During the
+  # new setup flow, DATABASE_URL may temporarily point at /postgres before
+  # the application database is provisioned.
+  if [[ "${target_db}" == "postgres" || "${target_db}" == "template0" || "${target_db}" == "template1" ]]; then
+    warn "Database cleanup skipped: DATABASE_URL points to maintenance database '${target_db}'."
+    return 0
+  fi
+
+  info "Attempting database cleanup for '${target_db}'..."
+
+  # Best-effort terminate existing sessions. This may fail for non-superusers;
+  # still continue to DROP so cleanup can succeed when no active sessions exist.
+  if ! psql "${admin_url}" -v ON_ERROR_STOP=1 -v db_name="${target_db}" \
+      -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = :'db_name' AND pid <> pg_backend_pid();" \
+      >/dev/null 2>&1; then
+    warn "Could not terminate active sessions for '${target_db}' (continuing with drop attempt)."
+  fi
+
+  local _drop_out
+  if ! _drop_out="$(psql "${admin_url}" -v ON_ERROR_STOP=1 \
+      -c "DROP DATABASE IF EXISTS \"${target_db//\"/\"\"}\";" 2>&1)"; then
+    # If sessions are still attached, retry with FORCE for PostgreSQL 13+.
+    if printf '%s' "${_drop_out}" | grep -qi "being accessed by other users"; then
+      if ! _drop_out="$(psql "${admin_url}" -v ON_ERROR_STOP=1 \
+          -c "DROP DATABASE IF EXISTS \"${target_db//\"/\"\"}\" WITH (FORCE);" 2>&1)"; then
+        warn "Database cleanup failed for '${target_db}': ${_drop_out}"
+        return 0
+      fi
+    else
+      warn "Database cleanup failed for '${target_db}': ${_drop_out}"
+      return 0
+    fi
+  fi
+
+  ok "Database '${target_db}' dropped"
 }
 
 # Validate that a hostname/IP argument contains only DNS- and IP-safe characters.
@@ -399,32 +524,18 @@ while [[ $# -gt 0 ]]; do
       _require_arg "$1" "${2-}"
       _validate_ca_file_arg "$1" "$2"
       BACKEND_CA_FILE="$2"; shift 2 ;;
-    --db-host)
-      _require_arg "$1" "${2-}"
-      _validate_host_arg "--db-host" "$2"
-      DB_HOST="$2"; _EXPLICIT_DB=true; shift 2 ;;
-    --db-port)
-      _require_arg "$1" "${2-}"
-      _validate_port_arg "$1" "$2"
-      DB_PORT="$2"; _EXPLICIT_DB=true; shift 2 ;;
-    --db-name)
-      _require_arg "$1" "${2-}"
-      if ! _is_valid_db_name "$2"; then
-        echo "ERROR: --db-name must contain only alphanumerics and underscores." >&2; exit 1
-      fi
-      DB_NAME="$2"; _EXPLICIT_DB=true; shift 2 ;;
-    --db-user)
+    --pg-superuser-name)
       _require_arg "$1" "${2-}"
       if ! _is_valid_db_user "$2"; then
-        echo "ERROR: --db-user must contain only alphanumerics and underscores." >&2; exit 1
+        echo "ERROR: --pg-superuser-name must contain only alphanumerics and underscores." >&2; exit 1
       fi
-      DB_USER="$2"; _EXPLICIT_DB=true; shift 2 ;;
-    --db-password)
+      PG_SUPERUSER_NAME="$2"; shift 2 ;;
+    --pg-superuser-pass)
       _require_arg "$1" "${2-}"
       if ! _is_valid_db_pass "$2"; then
-        echo "ERROR: --db-password must not contain whitespace." >&2; exit 1
+        echo "ERROR: --pg-superuser-pass must be non-empty and contain no whitespace." >&2; exit 1
       fi
-      DB_PASS="$2"; _EXPLICIT_DB=true; shift 2 ;;
+      PG_SUPERUSER_PASS="$2"; shift 2 ;;
     --install-dir)
       _require_arg "$1" "${2-}"
       _validate_install_dir_arg "$1" "$2"
@@ -456,6 +567,7 @@ while [[ $# -gt 0 ]]; do
       fi
       VERSION_TAG="$2"; shift 2 ;;
     --uninstall)      UNINSTALL=true; shift ;;
+    --drop-database)  DROP_DATABASE=true; shift ;;
     --dry-run)        DRY_RUN=true; shift ;;
     -h|--help)        usage; exit 0 ;;
     *) error "Unknown option: $1"; usage; exit 1 ;;
@@ -866,6 +978,82 @@ _ensure_ecube_user() {
   fi
 }
 
+# ==========================================================================
+# INSTALL SUDOERS POLICY FOR OS USER/GROUP MANAGEMENT
+# Required so the ecube service account can run narrowly-scoped user/group
+# commands non-interactively from API setup endpoints.
+# ==========================================================================
+_install_os_user_mgmt_sudoers() {
+  local sudoers_file="/etc/sudoers.d/ecube-user-mgmt"
+  local sudoers_tmp="${sudoers_file}.tmp"
+
+  info "Installing sudoers policy for ECUBE OS user/group management..."
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    echo "[DRY-RUN] Would write ${sudoers_file} with NOPASSWD rules for user/group management binaries"
+    return
+  fi
+
+  mkdir -p /etc/sudoers.d
+  cat > "${sudoers_tmp}" <<'EOF_SUDOERS'
+# /etc/sudoers.d/ecube-user-mgmt
+# Narrowly scoped privilege escalation for the ECUBE service account.
+ecube ALL=(root) NOPASSWD: /usr/sbin/useradd, /usr/sbin/usermod, /usr/sbin/userdel, /usr/sbin/groupadd, /usr/sbin/groupdel, /usr/sbin/chpasswd
+EOF_SUDOERS
+  chmod 0440 "${sudoers_tmp}"
+  chown root:root "${sudoers_tmp}"
+
+  # Validate before activating. If visudo is missing, keep the generated file
+  # (static content) but warn the operator.
+  if command -v visudo &>/dev/null; then
+    if ! visudo -cf "${sudoers_tmp}" >/dev/null; then
+      rm -f "${sudoers_tmp}"
+      error "Generated sudoers policy failed validation: ${sudoers_tmp}"
+      exit 1
+    fi
+  else
+    warn "visudo not found — unable to validate ${sudoers_tmp}; installing static policy file."
+  fi
+
+  mv -f "${sudoers_tmp}" "${sudoers_file}"
+  ok "Sudoers policy installed: ${sudoers_file}"
+}
+
+_install_pam_config() {
+  local pam_dest="/etc/pam.d/ecube"
+  local pam_src="$(pwd)/deploy/ecube-pam"
+
+  info "Installing ECUBE PAM configuration..."
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    echo "[DRY-RUN] Would install ${pam_src} → ${pam_dest}"
+    return
+  fi
+
+  if [[ ! -f "${pam_src}" ]]; then
+    warn "PAM config source not found: ${pam_src} — skipping PAM installation."
+    return
+  fi
+
+  # Only install pam_sss line if SSSD is actually present on the host
+  if command -v sssd &>/dev/null || [[ -f /lib/security/pam_sss.so || -f /lib/x86_64-linux-gnu/security/pam_sss.so ]]; then
+    install -m 0644 -o root -g root "${pam_src}" "${pam_dest}"
+    ok "PAM config installed with SSSD support: ${pam_dest}"
+  else
+    # SSSD not present — install a local-only (pam_unix) variant
+    install -m 0644 -o root -g root /dev/stdin "${pam_dest}" <<'EOF_PAM'
+# /etc/pam.d/ecube
+# Local-only PAM configuration (SSSD not detected at install time).
+# Re-run the installer after installing SSSD to enable domain user authentication.
+auth    sufficient  pam_unix.so nullok
+auth    required    pam_deny.so
+account sufficient  pam_unix.so
+account required    pam_deny.so
+EOF_PAM
+    ok "PAM config installed (local users only): ${pam_dest}"
+  fi
+}
+
 # ===========================================================================
 # DOWNLOAD / EXTRACT RELEASE PACKAGE (when --version is given)
 # ===========================================================================
@@ -948,184 +1136,113 @@ _maybe_download_release() {
 }
 
 # ===========================================================================
-# DATABASE CONFIGURATION
+# POSTGRESQL SUPERUSER PROVISIONING
 # ===========================================================================
-_collect_db_config() {
-  header "\n── PostgreSQL database configuration ──────────────────────────"
+# Creates a dedicated PostgreSQL superuser that the operator will enter in the
+# ECUBE setup wizard database provisioning screen.  Runs as root using
+# "sudo -u postgres psql" — PostgreSQL must be installed and running locally.
+#
+# Populates the global PG_SUPERUSER_NAME and PG_SUPERUSER_PASS variables so
+# the post-install summary can display them.
+# ===========================================================================
+_provision_pg_superuser() {
+  header "\n── PostgreSQL superuser setup ──────────────────────────────────"
 
-  # ── Hostname ──────────────────────────────────────────────────────────────
-  if [[ -z "${DB_HOST}" ]]; then
-    if [[ "${YES}" == true ]]; then
-      error "--db-host is required in non-interactive (--yes) mode."; exit 1
-    fi
-    while true; do
-      read -r -p "$(echo -e "${C_YELLOW}PostgreSQL host (hostname or IP):${C_RESET} ")" DB_HOST
-      _is_valid_host "${DB_HOST}" && break
-      warn "Invalid host — use DNS name or IP address only (no spaces or special characters)."
-    done
+  # Verify psql is available.
+  if ! command -v psql &>/dev/null; then
+    warn "psql not found — skipping PostgreSQL superuser creation."
+    warn "Install postgresql-client and re-run, or create the superuser manually."
+    return
   fi
 
-  # ── Port ──────────────────────────────────────────────────────────────────
-  while ! _is_valid_port "${DB_PORT}"; do
-    if [[ "${YES}" == true ]]; then
-      error "--db-port '${DB_PORT}' is not a valid port number."; exit 1
+  # Verify the local postgres unix socket is reachable.
+  if [[ "${DRY_RUN}" != true ]]; then
+    if ! sudo -u postgres psql -c "SELECT 1" &>/dev/null 2>&1; then
+      warn "Cannot reach local PostgreSQL via unix socket."
+      warn "Ensure postgresql is installed and running, then create a superuser manually."
+      warn "The setup wizard requires a superuser (or a role with CREATEDB privilege)."
+      return
     fi
-    read -r -p "$(echo -e "${C_YELLOW}PostgreSQL port [${DB_PORT}]:${C_RESET} ")" _in
-    DB_PORT="${_in:-${DB_PORT}}"
-  done
+  fi
 
-  # ── Database name ─────────────────────────────────────────────────────────
-  while ! _is_valid_db_name "${DB_NAME}"; do
-    if [[ "${YES}" == true ]]; then
-      error "--db-name '${DB_NAME}' contains invalid characters (alphanumerics and underscores only)."; exit 1
-    fi
-    read -r -p "$(echo -e "${C_YELLOW}PostgreSQL database name [ecube]:${C_RESET} ")" _in
-    DB_NAME="${_in:-ecube}"
-  done
-
-  # ── Username ──────────────────────────────────────────────────────────────
-  if [[ -z "${DB_USER}" ]]; then
-    if [[ "${YES}" == true ]]; then
-      error "--db-user is required in non-interactive (--yes) mode."; exit 1
-    fi
-    while true; do
-      read -r -p "$(echo -e "${C_YELLOW}PostgreSQL username:${C_RESET} ")" DB_USER
-      if ! _is_valid_db_user "${DB_USER}"; then
-        warn "Invalid username — must be non-empty and contain only alphanumerics and underscores."
-      else
-        break
+  # Superuser name — use command-line value if provided, otherwise prompt.
+  local su_name="${PG_SUPERUSER_NAME}"
+  if [[ -z "${su_name}" ]]; then
+    while ! _is_valid_db_user "${su_name}"; do
+      if [[ -n "${su_name}" ]]; then
+        error "Username must be non-empty and contain only alphanumerics and underscores."
       fi
+      read -r -p "$(echo -e "${C_YELLOW}PostgreSQL superuser name to create [ecubeadmin]:${C_RESET} ")" su_name
+      su_name="${su_name:-ecubeadmin}"
     done
+  else
+    info "Using --pg-superuser-name: ${su_name}"
   fi
 
-  # ── Password ──────────────────────────────────────────────────────────────
-  if [[ -z "${DB_PASS}" ]]; then
-    if [[ "${YES}" == true ]]; then
-      error "--db-password is required in non-interactive (--yes) mode."; exit 1
-    fi
+  # Superuser password — use command-line value if provided, otherwise prompt.
+  local su_pass="${PG_SUPERUSER_PASS}"
+  if [[ -z "${su_pass}" ]]; then
+    local su_pass2="x"
     while true; do
-      # Read without echo
-      read -r -s -p "$(echo -e "${C_YELLOW}PostgreSQL password:${C_RESET} ")" DB_PASS; echo
-      if [[ -z "${DB_PASS}" ]]; then
-        warn "Password must not be empty."
-      elif ! _is_valid_db_pass "${DB_PASS}"; then
-        warn "Password must not contain whitespace."
-        DB_PASS=""
-      else
-        break
+      read -r -s -p "$(echo -e "${C_YELLOW}Password for '${su_name}':${C_RESET} ")" su_pass; echo
+      if ! _is_valid_db_pass "${su_pass}"; then
+        error "Password must be non-empty and contain no whitespace."
+        su_pass=""
+        continue
       fi
+      read -r -s -p "$(echo -e "${C_YELLOW}Confirm password:${C_RESET} ")" su_pass2; echo
+      if [[ "${su_pass}" != "${su_pass2}" ]]; then
+        error "Passwords do not match. Try again."
+        continue
+      fi
+      break
     done
+  else
+    info "Using --pg-superuser-pass: <provided>"
   fi
 
-  # Strip surrounding brackets from IPv6 literals — nc, /dev/tcp, psql, and
-  # PGPASSFILE all expect a bare host (no brackets).
-  local DB_HOST_BARE="${DB_HOST#[}"
-  DB_HOST_BARE="${DB_HOST_BARE%]}"
-
-  # ── TCP reachability check ─────────────────────────────────────────────────
-  info "Checking TCP connectivity to ${DB_HOST}:${DB_PORT}..."
   if [[ "${DRY_RUN}" == true ]]; then
-    echo "[DRY-RUN] Would check TCP ${DB_HOST}:${DB_PORT}"
-  elif command -v nc &>/dev/null; then
-    if ! nc -z -w5 -- "${DB_HOST_BARE}" "${DB_PORT}" 2>/dev/null; then
-      error "Cannot reach PostgreSQL at ${DB_HOST}:${DB_PORT}. Check the host, port, and firewall rules."
-      exit 1
-    fi
-    ok "TCP ${DB_HOST}:${DB_PORT} is reachable"
-  elif command -v timeout &>/dev/null; then
-    if timeout 5 bash -c "echo '' > /dev/tcp/${DB_HOST_BARE}/${DB_PORT}" 2>/dev/null; then
-      ok "TCP ${DB_HOST}:${DB_PORT} is reachable (via /dev/tcp)"
-    else
-      warn "TCP reachability check via /dev/tcp and 'timeout' failed — host may be unreachable, blocked by a firewall, or /dev/tcp may be unsupported. Skipping strict TCP reachability enforcement."
-    fi
+    echo "[DRY-RUN] Would create PostgreSQL superuser '${su_name}'"
+    PG_SUPERUSER_NAME="${su_name}"
+    PG_SUPERUSER_PASS="<provided>"
+    return
+  fi
+
+  # Create or update the superuser role.
+  # SUPERUSER implies CREATEDB/CREATEROLE — sufficient for the setup wizard.
+  local escaped_pass
+  escaped_pass="${su_pass//\'/\'\'}"    # escape single-quotes for SQL literal
+
+  if sudo -u postgres psql -tAc \
+        "SELECT 1 FROM pg_roles WHERE rolname = '${su_name}'" 2>/dev/null \
+        | grep -q 1; then
+    # Role exists — ensure it has superuser and update the password.
+    sudo -u postgres psql -c \
+      "ALTER ROLE \"${su_name}\" WITH SUPERUSER LOGIN PASSWORD '${escaped_pass}';" \
+      &>/dev/null
+    ok "Updated existing PostgreSQL role '${su_name}' (SUPERUSER LOGIN)"
   else
-    warn "Neither 'nc' nor 'timeout' available — skipping TCP reachability check."
+    sudo -u postgres psql -c \
+      "CREATE ROLE \"${su_name}\" WITH SUPERUSER LOGIN PASSWORD '${escaped_pass}';" \
+      &>/dev/null
+    ok "Created PostgreSQL superuser '${su_name}'"
   fi
 
-  # ── Credential check (psql) ────────────────────────────────────────────────
-  if [[ "${DRY_RUN}" != true ]] && command -v psql &>/dev/null; then
-    info "Verifying credentials with psql..."
-    # Use a temporary PGPASSFILE instead of exposing the password via PGPASSWORD.
-    local pgpass_file
-    pgpass_file="$(mktemp)"
-    chmod 600 "${pgpass_file}"
-    # Escape ':' and '\' in the password for .pgpass format
-    local escaped_pass
-    escaped_pass="${DB_PASS//\\/\\\\}"
-    escaped_pass="${escaped_pass//:/\\:}"
-    # Use '*' as host in .pgpass to avoid issues with IPv6 literals containing ':'
-    printf '%s:%s:%s:%s:%s\n' "*" "${DB_PORT}" "${DB_NAME}" "${DB_USER}" "${escaped_pass}" >"${pgpass_file}"
+  PG_SUPERUSER_NAME="${su_name}"
+  PG_SUPERUSER_PASS="${su_pass}"
 
-    local psql_status=0
-    if PGPASSFILE="${pgpass_file}" psql \
-        --host="${DB_HOST_BARE}" \
-        --port="${DB_PORT}" \
-        --username="${DB_USER}" \
-        --dbname="${DB_NAME}" \
-        --command='SELECT 1;' \
-        &>/dev/null; then
-      psql_status=0
+  # Keep setup wizard default admin username aligned with the superuser
+  # created by install.sh.
+  local env_file="${INSTALL_DIR}/.env"
+  if [[ -f "${env_file}" ]]; then
+    if grep -qE '^SETUP_DEFAULT_ADMIN_USERNAME=' "${env_file}"; then
+      sed -i "s|^SETUP_DEFAULT_ADMIN_USERNAME=.*|SETUP_DEFAULT_ADMIN_USERNAME=${su_name}|" "${env_file}"
     else
-      psql_status=$?
+      printf '\nSETUP_DEFAULT_ADMIN_USERNAME=%s\n' "${su_name}" >> "${env_file}"
     fi
-
-    rm -f "${pgpass_file}"
-
-    if [[ "${psql_status}" -eq 0 ]]; then
-      ok "PostgreSQL credentials verified"
-    else
-      error "psql could not connect to ${DB_NAME}@${DB_HOST}:${DB_PORT} as '${DB_USER}'."
-      error "Check the username, password, and that the database exists."
-      exit 1
-    fi
-  else
-    [[ "${DRY_RUN}" == true ]] || warn "psql not found — skipping credential verification."
+    chown ecube:ecube "${env_file}" 2>/dev/null || true
+    chmod 600 "${env_file}" 2>/dev/null || true
   fi
-
-  # ── URL-encode the password and assemble DATABASE_URL ─────────────────────
-  if [[ "${DRY_RUN}" == true ]]; then
-    local _db_host_url
-    _db_host_url=$(_url_host "${DB_HOST}")
-    DATABASE_URL="postgresql://${DB_USER}:<encoded-password>@${_db_host_url}:${DB_PORT}/${DB_NAME}"
-    ok "DATABASE_URL configured (dry-run placeholder — password not encoded)"
-  else
-    local encoded_pass _db_host_url
-    encoded_pass=$(_url_encode "${DB_PASS}")
-    _db_host_url=$(_url_host "${DB_HOST}")
-    DATABASE_URL="postgresql://${DB_USER}:${encoded_pass}@${_db_host_url}:${DB_PORT}/${DB_NAME}"
-    ok "DATABASE_URL configured (password redacted)"
-  fi
-}
-
-_env_has_usable_database_url() {
-  local env_file="$1"
-  [[ -f "${env_file}" ]] || return 1
-
-  # Use the last DATABASE_URL assignment in the file (matching dotenv behavior
-  # where later entries override earlier ones).
-  local db_line
-  db_line="$(grep -E '^[[:space:]]*DATABASE_URL=' "${env_file}" 2>/dev/null | tail -1 || true)"
-  [[ -n "${db_line}" ]] || return 1
-
-  local db_value="${db_line#*=}"
-  # Trim leading/trailing whitespace.
-  db_value="${db_value#"${db_value%%[![:space:]]*}"}"
-  db_value="${db_value%"${db_value##*[![:space:]]}"}"
-  # Unwrap matching surrounding quotes if present.
-  if (( ${#db_value} >= 2 )); then
-    local _first_char="${db_value:0:1}"
-    local _last_char="${db_value: -1}"
-    if [[ "${_first_char}" == '"' && "${_last_char}" == '"' ]] ||
-       [[ "${_first_char}" == "'" && "${_last_char}" == "'" ]]; then
-      db_value="${db_value:1:${#db_value}-2}"
-    fi
-  fi
-
-  # Treat blank or obvious placeholders as unusable.
-  [[ -n "${db_value}" ]] || return 1
-  [[ "${db_value}" == "<"*">" ]] && return 1
-
-  return 0
 }
 
 # ===========================================================================
@@ -1136,6 +1253,12 @@ install_backend() {
 
   # 1. System user and USB device access
   _ensure_ecube_user
+
+  # Ensure setup endpoints can manage OS users/groups without interactive sudo.
+  _install_os_user_mgmt_sudoers
+
+  # Install the dedicated PAM config so both local and domain users can authenticate.
+  _install_pam_config
 
   for grp in plugdev dialout; do
     if getent group "${grp}" &>/dev/null; then
@@ -1172,39 +1295,23 @@ install_backend() {
   # 6. TLS certificates
   _generate_certs
 
-  # 7. Database configuration
-  # Skip credential collection only when .env already has a usable DATABASE_URL
-  # and no --db-* flags were supplied. Otherwise, collect credentials so we
-  # never continue with an empty or placeholder DB connection string.
-  local env_file="${INSTALL_DIR}/.env"
-  if [[ "${_EXPLICIT_DB}" == false ]] && _env_has_usable_database_url "${env_file}"; then
-    info ".env contains a usable DATABASE_URL and no --db-* flags were supplied — skipping database credential collection."
-    info "Existing DATABASE_URL will be preserved unchanged."
-  else
-    if [[ "${_EXPLICIT_DB}" == false && -f "${env_file}" ]]; then
-      warn ".env exists but DATABASE_URL is missing/empty/unusable — collecting database credentials."
-    fi
-    _collect_db_config
-    # We obtained explicit database configuration for this run (either via
-    # CLI flags or interactive prompts), so ensure _write_env_file updates
-    # DATABASE_URL instead of preserving a potentially unusable value.
-    _EXPLICIT_DB=true
-  fi
-
-  # 8. .env file
+  # 7. .env file
   _write_env_file
 
-  # 9. Systemd unit
+  # 8. Systemd unit
   _write_systemd_unit
 
-  # 10. Reload and start
+  # 9. Reload and start
   run systemctl daemon-reload
   run systemctl enable ecube.service
   run systemctl restart ecube.service
   ok "ecube.service started and enabled"
 
-  # 11. Health check
+  # 10. Health check
   _wait_for_healthy
+
+  # 11. Create a PostgreSQL superuser for use in the setup wizard.
+  _provision_pg_superuser
 }
 
 _patch_env_proxy_keys() {
@@ -1240,36 +1347,7 @@ _write_env_file() {
   local env_file="${INSTALL_DIR}/.env"
   if [[ -f "${env_file}" ]]; then
     info ".env already exists — preserving operator secrets."
-    # If new DB credentials were collected this run, patch DATABASE_URL so the
-    # operator's intent is honoured without touching SECRET_KEY or other keys.
-    if [[ "${_EXPLICIT_DB}" == true && -n "${DATABASE_URL}" ]]; then
-      info "Updating DATABASE_URL in existing .env with newly supplied credentials..."
-      if [[ "${DRY_RUN}" != true ]]; then
-        # Rewrite via a temp file so DATABASE_URL (which contains the
-        # encoded password) never appears in a subprocess argv.
-        # sed arguments are visible in /proc/<pid>/cmdline to other local
-        # users; printf and the while-read loop are bash builtins and never
-        # spawn a subprocess.
-        local _db_tmp _db_replaced
-        _db_tmp=$(mktemp "${env_file}.XXXXXXXXXX")
-        chmod 600 "${_db_tmp}"
-        _db_replaced=false
-        while IFS= read -r _db_line || [[ -n "${_db_line}" ]]; do
-          if [[ "${_db_line}" == DATABASE_URL=* ]]; then
-            printf 'DATABASE_URL=%s\n' "${DATABASE_URL}"
-            _db_replaced=true
-          else
-            printf '%s\n' "${_db_line}"
-          fi
-        done < "${env_file}" > "${_db_tmp}"
-        [[ "${_db_replaced}" == false ]] && printf '\nDATABASE_URL=%s\n' "${DATABASE_URL}" >> "${_db_tmp}"
-        chown ecube:ecube "${_db_tmp}"
-        mv "${_db_tmp}" "${env_file}"
-      else
-        echo "[DRY-RUN] Would update DATABASE_URL in ${env_file}"
-      fi
-      ok "DATABASE_URL updated in .env"
-    fi
+    info "DATABASE_URL is managed by the setup wizard and is not modified by install.sh."
     # Preserve existing proxy-related keys (TRUST_PROXY_HEADERS, API_ROOT_PATH)
     # in an existing .env so operator-provided settings are not silently
     # overwritten on upgrade or installer re-runs.
@@ -1305,7 +1383,8 @@ _write_env_file() {
 # Generated by install.sh — edit as needed.
 
 SECRET_KEY=${secret_key}
-DATABASE_URL=${DATABASE_URL}
+DATABASE_URL=
+SETUP_DEFAULT_ADMIN_USERNAME=ecubeadmin
 
 # Set to true if a reverse proxy (nginx) sits in front of uvicorn.
 TRUST_PROXY_HEADERS=${trust_proxy}
@@ -1317,7 +1396,7 @@ EOF
     chmod 600 "${env_file}"
     chown ecube:ecube "${env_file}"
   else
-    echo "[DRY-RUN] Would write ${env_file} with SECRET_KEY, DATABASE_URL=${DATABASE_URL:-<collected>}, TRUST_PROXY_HEADERS=${trust_proxy}, API_ROOT_PATH=${api_root_path}"
+    echo "[DRY-RUN] Would write ${env_file} with SECRET_KEY, DATABASE_URL=<set later by setup wizard>, TRUST_PROXY_HEADERS=${trust_proxy}, API_ROOT_PATH=${api_root_path}"
   fi
   ok ".env written"
 }
@@ -1351,7 +1430,9 @@ ExecStart=${INSTALL_DIR}/venv/bin/uvicorn \
 Restart=on-failure
 RestartSec=10
 PrivateTmp=yes
-NoNewPrivileges=true
+# ECUBE setup endpoints use tightly scoped sudoers rules for OS user/group
+# management. NoNewPrivileges must be disabled so sudo can elevate.
+NoNewPrivileges=false
 
 [Install]
 WantedBy=multi-user.target
@@ -1377,7 +1458,9 @@ ExecStart=${INSTALL_DIR}/venv/bin/uvicorn \
 Restart=on-failure
 RestartSec=10
 PrivateTmp=yes
-NoNewPrivileges=true
+# ECUBE setup endpoints use tightly scoped sudoers rules for OS user/group
+# management. NoNewPrivileges must be disabled so sudo can elevate.
+NoNewPrivileges=false
 
 [Install]
 WantedBy=multi-user.target
@@ -1804,17 +1887,53 @@ do_uninstall() {
     exit 0
   fi
 
-  # Stop and disable backend service
-  if systemctl is-active --quiet ecube.service 2>/dev/null; then
-    run systemctl stop ecube.service
+  # Smart service shutdown: stop/disable any ECUBE-related systemd units
+  # before uninstalling files so no process continues running from removed
+  # paths.
+  local ecube_units=()
+  if command -v systemctl &>/dev/null; then
+    while IFS= read -r _unit; do
+      [[ -n "${_unit}" ]] && ecube_units+=("${_unit}")
+    done < <(systemctl list-unit-files "ecube*.service" --no-legend 2>/dev/null | awk '{print $1}' || true)
   fi
-  if systemctl is-enabled --quiet ecube.service 2>/dev/null; then
-    run systemctl disable ecube.service
+
+  if [[ ${#ecube_units[@]} -eq 0 ]]; then
+    # Fallback for older/minimal systemctl outputs.
+    ecube_units=("ecube.service")
   fi
+
+  for _unit in "${ecube_units[@]}"; do
+    if systemctl list-unit-files "${_unit}" --no-legend 2>/dev/null | grep -q "${_unit}"; then
+      if systemctl is-active --quiet "${_unit}" 2>/dev/null; then
+        run systemctl stop "${_unit}" || true
+      fi
+      if systemctl is-enabled --quiet "${_unit}" 2>/dev/null; then
+        run systemctl disable "${_unit}" || true
+      fi
+    fi
+  done
+
   if [[ -f /etc/systemd/system/ecube.service ]]; then
     run rm /etc/systemd/system/ecube.service
     run systemctl daemon-reload
     ok "ecube.service removed"
+  fi
+
+  # Remove ECUBE sudoers policy used by setup OS user/group management.
+  if [[ -f /etc/sudoers.d/ecube-user-mgmt ]]; then
+    run rm -f /etc/sudoers.d/ecube-user-mgmt
+    ok "/etc/sudoers.d/ecube-user-mgmt removed"
+  fi
+
+  # Remove ECUBE PAM configuration.
+  if [[ -f /etc/pam.d/ecube ]]; then
+    run rm -f /etc/pam.d/ecube
+    ok "/etc/pam.d/ecube removed"
+  fi
+
+  # Optionally clean up application database before removing install files.
+  if [[ "${DROP_DATABASE}" == true ]]; then
+    _cleanup_application_database
   fi
 
   # Remove nginx ecube site
@@ -1829,26 +1948,20 @@ do_uninstall() {
 
   # Remove install directory
   if [[ -d "${INSTALL_DIR}" ]]; then
-    if _confirm "Remove ${INSTALL_DIR}?"; then
-      run rm -rf "${INSTALL_DIR}"
-      ok "${INSTALL_DIR} removed"
-    fi
+    run rm -rf "${INSTALL_DIR}"
+    ok "${INSTALL_DIR} removed"
   fi
 
   # Remove /var/lib/ecube
   if [[ -d /var/lib/ecube ]]; then
-    if _confirm "Remove /var/lib/ecube (runtime data)?"; then
-      run rm -rf /var/lib/ecube
-      ok "/var/lib/ecube removed"
-    fi
+    run rm -rf /var/lib/ecube
+    ok "/var/lib/ecube removed"
   fi
 
   # Remove ecube system user
   if id -u ecube &>/dev/null; then
-    if _confirm "Remove system user 'ecube'?"; then
-      run userdel ecube
-      ok "User 'ecube' removed"
-    fi
+    run userdel ecube
+    ok "User 'ecube' removed"
   fi
 
   # Remove ecube group (if separate)
@@ -1885,24 +1998,20 @@ do_uninstall() {
   # the source CIDR is not persisted here, so we attempt best-effort deletion of
   # the two known rules and warn the operator if any rule for ${API_PORT} remains.
   if command -v ufw &>/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
-    if _confirm "Remove ECUBE ufw rules (ports ${UI_PORT}/tcp and ${API_PORT}/tcp)?"; then
-      ufw delete allow "${UI_PORT}/tcp" 2>/dev/null || true
-      ufw delete deny  "${API_PORT}/tcp" 2>/dev/null || true
-      ok "ufw: rules for ${UI_PORT}/tcp and ${API_PORT}/tcp removed (if present)"
-      # A CIDR-scoped allow rule cannot be deleted without the original source
-      # address; alert the operator if any rule for API_PORT is still active.
-      if ufw status 2>/dev/null | grep -q "^${API_PORT}"; then
-        warn "ufw: rule(s) for port ${API_PORT} may still be active — review with: sudo ufw status numbered"
-      fi
+    ufw delete allow "${UI_PORT}/tcp" 2>/dev/null || true
+    ufw delete deny  "${API_PORT}/tcp" 2>/dev/null || true
+    ok "ufw: rules for ${UI_PORT}/tcp and ${API_PORT}/tcp removed (if present)"
+    # A CIDR-scoped allow rule cannot be deleted without the original source
+    # address; alert the operator if any rule for API_PORT is still active.
+    if ufw status 2>/dev/null | grep -q "^${API_PORT}"; then
+      warn "ufw: rule(s) for port ${API_PORT} may still be active — review with: sudo ufw status numbered"
     fi
   fi
 
-  # Optionally remove the installer log file.
+  # Remove installer log file if present.
   if [[ -f "${LOG_FILE}" && "${LOG_FILE}" != "/dev/null" ]]; then
-    if _confirm "Remove installer log ${LOG_FILE}?"; then
-      run rm -f "${LOG_FILE}"
-      ok "${LOG_FILE} removed"
-    fi
+    run rm -f "${LOG_FILE}"
+    ok "${LOG_FILE} removed"
   fi
 
   # Optionally remove deadsnakes repository.
@@ -1915,15 +2024,13 @@ do_uninstall() {
     (command -v apt-cache &>/dev/null && apt-cache policy 2>/dev/null | grep -q deadsnakes)
   }
   if _deadsnakes_present; then
-    if _confirm "Remove the deadsnakes repository entry (detected in apt sources)?"; then
-      if [[ "${ID:-}" == "ubuntu" ]]; then
-        run add-apt-repository -y --remove ppa:deadsnakes/ppa
-      else
-        run rm -f /etc/apt/sources.list.d/deadsnakes*.list \
-                  /etc/apt/trusted.gpg.d/deadsnakes*.gpg \
-                  /etc/apt/keyrings/deadsnakes*.gpg
-        run apt-get update -qq
-      fi
+    if [[ "${ID:-}" == "ubuntu" ]]; then
+      run add-apt-repository -y --remove ppa:deadsnakes/ppa
+    else
+      run rm -f /etc/apt/sources.list.d/deadsnakes*.list \
+                /etc/apt/trusted.gpg.d/deadsnakes*.gpg \
+                /etc/apt/keyrings/deadsnakes*.gpg
+      run apt-get update -qq
     fi
   fi
 
@@ -1951,8 +2058,19 @@ print_summary() {
     echo -e "  Setup wizard: https://${HOST_URL}:${UI_PORT}/setup"
     echo ""
     echo -e "  Complete initial configuration via the Setup Wizard."
-    echo -e "  A PostgreSQL database must be reachable at that point."
     echo ""
+    if [[ -n "${PG_SUPERUSER_NAME}" ]]; then
+      echo -e "  Database provisioning — enter these in the setup wizard:"
+      echo -e "    Host:     localhost"
+      echo -e "    Port:     5432"
+      echo -e "    Admin username: ${PG_SUPERUSER_NAME}"
+      echo -e "    Admin password: ${PG_SUPERUSER_PASS}"
+      echo ""
+    else
+      echo -e "  A PostgreSQL superuser (CREATEDB privilege) is required in the"
+      echo -e "  setup wizard database provisioning screen."
+      echo ""
+    fi
     echo -e "  Service management:"
     echo -e "    sudo systemctl start   ecube"
     echo -e "    sudo systemctl stop    ecube"
@@ -1972,6 +2090,14 @@ print_summary() {
     echo -e "  API:  https://${HOST_URL}:${API_PORT}"
     echo -e "  Docs: https://${HOST_URL}:${API_PORT}/docs"
     echo ""
+    if [[ -n "${PG_SUPERUSER_NAME}" ]]; then
+      echo -e "  Database provisioning — enter these in the setup wizard:"
+      echo -e "    Host:     localhost"
+      echo -e "    Port:     5432"
+      echo -e "    Admin username: ${PG_SUPERUSER_NAME}"
+      echo -e "    Admin password: ${PG_SUPERUSER_PASS}"
+      echo ""
+    fi
     echo -e "  TIP – restrict API access if this host is network-exposed:"
     echo -e "    sudo ufw allow from <trusted-cidr> to any port ${API_PORT} proto tcp"
     echo -e "    sudo ufw deny ${API_PORT}/tcp"

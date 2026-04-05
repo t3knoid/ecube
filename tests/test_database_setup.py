@@ -227,9 +227,10 @@ class TestTestConnectionEndpoint:
         assert resp.status_code == 503
         assert "Connection refused" in resp.json()["message"]
 
+    @patch("app.routers.database_setup._admins_have_any_os_account", return_value=True)
     @patch("app.services.database_service.test_connection")
     def test_test_connection_requires_admin_after_setup(
-        self, mock_test, unauthenticated_client, db
+        self, mock_test, _mock_admin_os_state, unauthenticated_client, db
     ):
         """Once an admin exists, unauthenticated requests should fail."""
         mock_test.return_value = "14.9"
@@ -247,6 +248,33 @@ class TestTestConnectionEndpoint:
         )
 
         assert resp.status_code == 401
+
+    @patch("app.routers.database_setup._admins_have_any_os_account", return_value=False)
+    @patch("app.services.database_service.test_connection")
+    def test_test_connection_allows_recovery_when_admin_role_exists_but_os_user_missing(
+        self,
+        mock_test,
+        _mock_admin_os_state,
+        unauthenticated_client,
+        db,
+    ):
+        """If admin role rows exist but no matching OS admin account exists,
+        keep setup endpoints in initial-setup mode for recovery."""
+        mock_test.return_value = "14.9"
+        db.add(UserRole(username="admin-user", role="admin"))
+        db.commit()
+
+        resp = unauthenticated_client.post(
+            "/setup/database/test-connection",
+            json={
+                "host": "localhost",
+                "port": 5432,
+                "admin_username": "postgres",
+                "admin_password": "secret",
+            },
+        )
+
+        assert resp.status_code == 200
 
     @patch("app.services.database_service.test_connection")
     def test_test_connection_admin_after_setup(
@@ -270,9 +298,10 @@ class TestTestConnectionEndpoint:
         assert resp.status_code == 200
         assert resp.json()["server_version"] == "15.2"
 
+    @patch("app.routers.database_setup._admins_have_any_os_account", return_value=True)
     @patch("app.services.database_service.test_connection")
     def test_test_connection_non_admin_denied(
-        self, mock_test, client, db
+        self, mock_test, _mock_admin_os_state, client, db
     ):
         """Non-admin users should be denied after setup."""
         mock_test.return_value = "14.9"
@@ -367,9 +396,10 @@ class TestProvisionEndpoint:
         assert resp.status_code == 500
         assert "migration failed" in resp.json()["message"]
 
+    @patch("app.routers.database_setup._admins_have_any_os_account", return_value=True)
     @patch("app.services.database_service.provision_database")
     def test_provision_requires_admin_after_setup(
-        self, mock_provision, unauthenticated_client, db
+        self, mock_provision, _mock_admin_os_state, unauthenticated_client, db
     ):
         """Unauthenticated provision should fail once admin exists."""
         mock_provision.return_value = 4
@@ -432,6 +462,7 @@ class TestSystemInfoEndpoint:
         assert resp.json() == {
             "in_docker": False,
             "suggested_db_host": "localhost",
+            "suggested_admin_username": "ecubeadmin",
         }
         mock_is_running_in_docker.assert_called_once_with()
 
@@ -449,6 +480,7 @@ class TestSystemInfoEndpoint:
         assert resp.json() == {
             "in_docker": True,
             "suggested_db_host": "postgres-service",
+            "suggested_admin_username": "ecubeadmin",
         }
         mock_is_running_in_docker.assert_called_once_with()
 
@@ -464,6 +496,7 @@ class TestSystemInfoEndpoint:
         assert resp.status_code == 200
         assert resp.json()["in_docker"] is False
         assert resp.json()["suggested_db_host"] == "localhost"
+        assert resp.json()["suggested_admin_username"] == "ecubeadmin"
         mock_is_running_in_docker.assert_called_once_with()
 
     @patch("app.services.database_service.is_database_provisioned", return_value=True)
@@ -544,6 +577,9 @@ class TestSystemInfoEndpoint:
         from app.exceptions import DatabaseStatusUnknownError
 
         with patch(
+            "app.routers.database_setup._database_is_configured",
+            return_value=True,
+        ), patch(
             "app.services.database_service.is_database_provisioned",
             side_effect=DatabaseStatusUnknownError(),
         ):
@@ -562,6 +598,30 @@ class TestSystemInfoEndpoint:
 
         assert resp.status_code == 503
         assert "provisioning state" in resp.json()["message"].lower()
+
+    @patch("app.services.database_service.provision_database", return_value=2)
+    @patch("app.services.database_service.is_database_provisioned")
+    @patch("app.routers.database_setup._database_is_configured", return_value=False)
+    def test_provision_skips_state_check_when_db_not_configured(
+        self, _mock_configured, mock_is_provisioned, mock_provision, unauthenticated_client
+    ):
+        """POST /provision should proceed without state probe when DB URL is unset."""
+        resp = unauthenticated_client.post(
+            "/setup/database/provision",
+            json={
+                "host": "localhost",
+                "port": 5432,
+                "admin_username": "postgres",
+                "admin_password": "secret",
+                "app_database": "ecube",
+                "app_username": "ecube",
+                "app_password": "ecube123",
+            },
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "provisioned"
+        mock_is_provisioned.assert_not_called()
 
     def test_provision_unexpected_error_is_not_swallowed(
         self, unauthenticated_client
@@ -667,9 +727,10 @@ class TestProvisionStatusEndpoint:
         assert resp.json() == {"provisioned": False}
         mock_provisioned.assert_called_once_with()
 
+    @patch("app.routers.database_setup._admins_have_any_os_account", return_value=True)
     @patch("app.services.database_service.is_database_provisioned", return_value=True)
     def test_provision_status_requires_admin_after_setup(
-        self, mock_provisioned, unauthenticated_client, db
+        self, mock_provisioned, _mock_admin_os_state, unauthenticated_client, db
     ):
         db.add(UserRole(username="admin-user", role="admin"))
         db.commit()
@@ -685,6 +746,9 @@ class TestProvisionStatusEndpoint:
         from app.exceptions import DatabaseStatusUnknownError
 
         with patch(
+            "app.routers.database_setup._database_is_configured",
+            return_value=True,
+        ), patch(
             "app.services.database_service.is_database_provisioned",
             side_effect=DatabaseStatusUnknownError(),
         ):
@@ -692,6 +756,17 @@ class TestProvisionStatusEndpoint:
 
         assert resp.status_code == 503
         assert "provisioning state" in resp.json()["message"].lower()
+
+    @patch("app.services.database_service.is_database_provisioned")
+    @patch("app.routers.database_setup._database_is_configured", return_value=False)
+    def test_provision_status_false_when_db_not_configured(
+        self, _mock_configured, mock_is_provisioned, unauthenticated_client
+    ):
+        resp = unauthenticated_client.get("/setup/database/provision-status")
+
+        assert resp.status_code == 200
+        assert resp.json() == {"provisioned": False}
+        mock_is_provisioned.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -1005,8 +1080,10 @@ class TestFailClosedBehavior:
 class TestDatabaseService:
     """Unit tests for database_service functions."""
 
+    @patch("app.services.database_service._reinitialize_engine")
+    @patch("app.services.database_service._write_env_setting")
     @patch("app.services.database_service.psycopg2")
-    def test_test_connection_success(self, mock_psycopg2):
+    def test_test_connection_success(self, mock_psycopg2, mock_write_env, mock_reinit):
         mock_conn = MagicMock()
         mock_conn.server_version = 140009
         mock_psycopg2.connect.return_value = mock_conn
@@ -1017,6 +1094,8 @@ class TestDatabaseService:
 
         assert result == "14.9"
         mock_conn.close.assert_called_once()
+        mock_write_env.assert_not_called()
+        mock_reinit.assert_not_called()
 
     @patch("app.services.database_service.psycopg2")
     def test_test_connection_failure(self, mock_psycopg2):
@@ -1177,10 +1256,12 @@ class TestDatabaseService:
 
         mock_conn = MagicMock()
         mock_cur = MagicMock()
-        mock_cur.fetchone.return_value = None  # user/db don't exist yet
+        # 1) admin privilege check, 2) user existence, 3) database existence
+        mock_cur.fetchone.side_effect = [(True,), None, None]
         mock_conn.cursor.return_value = mock_cur
         mock_psycopg2.connect.return_value = mock_conn
         mock_psycopg2.OperationalError = Exception
+        mock_psycopg2.Error = Exception
         mock_psycopg2.sql = __import__("psycopg2").sql
 
         original_url = settings.database_url
@@ -1277,10 +1358,11 @@ class TestDatabaseService:
 
         mock_conn = MagicMock()
         mock_cur = MagicMock()
-        mock_cur.fetchone.return_value = None
+        mock_cur.fetchone.side_effect = [(True,), None, None]
         mock_conn.cursor.return_value = mock_cur
         mock_psycopg2.connect.return_value = mock_conn
         mock_psycopg2.OperationalError = Exception
+        mock_psycopg2.Error = Exception
         mock_psycopg2.sql = __import__("psycopg2").sql
 
         with pytest.raises(RuntimeError, match="migration failed"):
@@ -1304,10 +1386,11 @@ class TestDatabaseService:
 
         mock_conn = MagicMock()
         mock_cur = MagicMock()
-        mock_cur.fetchone.return_value = None
+        mock_cur.fetchone.side_effect = [(True,), None, None]
         mock_conn.cursor.return_value = mock_cur
         mock_psycopg2.connect.return_value = mock_conn
         mock_psycopg2.OperationalError = Exception
+        mock_psycopg2.Error = Exception
         mock_psycopg2.sql = __import__("psycopg2").sql
 
         with pytest.raises(RuntimeError, match="failed to persist"):
@@ -1331,10 +1414,11 @@ class TestDatabaseService:
 
         mock_conn = MagicMock()
         mock_cur = MagicMock()
-        mock_cur.fetchone.return_value = None
+        mock_cur.fetchone.side_effect = [(True,), None, None]
         mock_conn.cursor.return_value = mock_cur
         mock_psycopg2.connect.return_value = mock_conn
         mock_psycopg2.OperationalError = Exception
+        mock_psycopg2.Error = Exception
         mock_psycopg2.sql = __import__("psycopg2").sql
 
         with pytest.raises(RuntimeError, match="engine could not be switched"):

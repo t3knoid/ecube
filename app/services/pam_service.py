@@ -20,6 +20,8 @@ except ImportError:  # pragma: no cover – Linux-only stdlib modules
     pwd = None  # type: ignore[assignment]
 from typing import List
 
+from app.config import settings
+
 # Re-export so existing ``from app.services.pam_service import PamAuthenticator``
 # keeps working.
 from app.infrastructure.pam_protocol import PamAuthenticator  # noqa: F401 – re-export
@@ -50,7 +52,26 @@ class LinuxPamAuthenticator:
                             # lazy import avoids import-time failure on non-Linux platforms
 
         p = _pam.pam()
-        return bool(p.authenticate(username, password))
+
+        # Try the configured PAM service first; then optional fallbacks.
+        service_chain: list[str] = [settings.pam_service_name]
+        for svc in settings.pam_fallback_services:
+            if svc not in service_chain:
+                service_chain.append(svc)
+
+        for service in service_chain:
+            ok = bool(p.authenticate(username, password, service=service))
+            if ok:
+                return True
+            logger.warning(
+                "PAM authentication failed for user '%s' via service '%s' (code=%s, reason=%s)",
+                username,
+                service,
+                getattr(p, "code", "unknown"),
+                getattr(p, "reason", "unknown"),
+            )
+
+        return False
 
     def get_user_groups(self, username: str) -> List[str]:
         return get_user_groups(username)
