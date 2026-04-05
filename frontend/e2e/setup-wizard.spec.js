@@ -3,17 +3,30 @@ import { routeJson } from './helpers/app.js'
 import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
 
 test('setup wizard full step flow on uninitialized system', async ({ page }) => {
-  await routeJson(page, '**/api/setup/status', { initialized: false })
-  await routeJson(page, '**/api/setup/database/system-info', { in_docker: false, suggested_db_host: 'localhost' })
-  await routeJson(page, '**/api/setup/database/provision-status', { provisioned: false })
-  await routeJson(page, '**/api/setup/database/test-connection', { ok: true })
-  await routeJson(page, '**/api/setup/database/provision', { ok: true })
-  await routeJson(page, '**/api/setup/initialize', { ok: true })
+  const setupMocks = [
+    ['**/api/setup/status', { initialized: false }],
+    ['**/setup/status', { initialized: false }],
+    ['**/api/setup/database/system-info', { in_docker: false, suggested_db_host: 'localhost' }],
+    ['**/setup/database/system-info', { in_docker: false, suggested_db_host: 'localhost' }],
+    ['**/api/setup/database/provision-status', { provisioned: false }],
+    ['**/setup/database/provision-status', { provisioned: false }],
+    ['**/api/setup/database/test-connection', { ok: true }],
+    ['**/setup/database/test-connection', { ok: true }],
+    ['**/api/setup/database/provision', { ok: true }],
+    ['**/setup/database/provision', { ok: true }],
+    ['**/api/setup/initialize', { ok: true }],
+    ['**/setup/initialize', { ok: true }],
+    ['**/api/telemetry/ui-navigation', { ok: true }],
+    ['**/telemetry/ui-navigation', { ok: true }],
+  ]
+  for (const [pattern, body] of setupMocks) {
+    await routeJson(page, pattern, body)
+  }
 
   await page.goto('/setup')
 
   await page.getByLabel('DB Admin Password').fill('testpassword')
-  await page.getByRole('button', { name: 'Test Database Connection' }).click()
+  await page.getByRole('button', { name: /connect to database|test database connection/i }).click()
   await expect(page.getByText('Database connection succeeded.')).toBeVisible()
   await page.getByRole('button', { name: 'Next' }).click()
 
