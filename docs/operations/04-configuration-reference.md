@@ -268,6 +268,31 @@ Operational notes:
 | `DB_POOL_MAX_OVERFLOW`    | `10`    | Maximum overflow connections above pool size.                  |
 | `DB_POOL_RECYCLE_SECONDS` | `-1`    | Seconds after which a connection is recycled. `-1` = disabled. |
 
+These settings control SQLAlchemy connection pooling behavior for API requests that need database access.
+
+Effective maximum concurrent checked-out connections is `DB_POOL_SIZE + DB_POOL_MAX_OVERFLOW`.
+
+Per-setting impact and tuning guidance:
+
+| Setting | Increase value: typical effect | Decrease value: typical effect | When an administrator should modify it |
+| ------- | ------------------------------ | ------------------------------ | -------------------------------------- |
+| `DB_POOL_SIZE` | More warm (already-open) connections, usually lower connection-acquisition latency during steady load, higher baseline memory and DB connection usage. | Lower baseline memory and DB connection usage, but greater chance of waiting for a free connection during bursty traffic. | Increase when normal concurrent API traffic is consistently above current pool capacity. Decrease on small systems or when PostgreSQL `max_connections` is tight and ECUBE should use fewer reserved connections. |
+| `DB_POOL_MAX_OVERFLOW` | Allows larger short bursts above the steady pool size, reducing queueing latency during spikes, but can create sudden load on PostgreSQL and increase peak memory usage. | Caps burst concurrency to protect PostgreSQL and reduce peak resource use, but requests are more likely to wait under spikes. | Increase when short traffic spikes cause connection-pool contention. Decrease when the database becomes unstable during bursts or when you need stricter connection caps. |
+| `DB_POOL_RECYCLE_SECONDS` | Higher value (or `-1`) means fewer reconnects and lower reconnect overhead, but idle/stale connections may survive longer in environments with network idle timeouts. | Lower value forces more frequent reconnects, which can prevent stale-connection errors after NAT/LB/firewall idle drops, but adds reconnect overhead and can slightly increase tail latency. | Set a finite value when your infrastructure drops long-idle TCP connections (load balancers, firewalls, NAT gateways). Leave `-1` when stale-connection issues are not observed. |
+
+Practical tuning workflow:
+
+1. Keep defaults unless you observe pool contention or stale-connection failures.
+2. If requests queue during normal load, raise `DB_POOL_SIZE` gradually (for example by 2-5) and monitor API latency plus PostgreSQL connection counts.
+3. If contention occurs only during short spikes, adjust `DB_POOL_MAX_OVERFLOW` before making large steady-state `DB_POOL_SIZE` increases.
+4. If you see intermittent failures after idle periods, set `DB_POOL_RECYCLE_SECONDS` to a value lower than your network idle timeout.
+
+Operational notes:
+
+- Every open connection consumes resources in both ECUBE and PostgreSQL, so larger pools trade memory for lower wait time.
+- Changes in `.env` take effect after restarting the ECUBE application process.
+- Coordinate pool sizing with PostgreSQL `max_connections` and other applications sharing the same database server.
+
 ---
 
 ## OpenAPI Metadata
