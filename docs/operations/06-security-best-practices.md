@@ -138,6 +138,39 @@ Additional guidance:
 - Enable audit logging for all operations (enabled by default)
 - Review audit logs regularly through the API or approved database access paths.
 
+### 4.1 SSH Hardening For Backend Hosts
+
+- Restrict SSH to management networks, bastion hosts, or VPN-only paths.
+- Use dedicated host-admin accounts for OS administration.
+- Do not assume members of `ecube-admins`, `ecube-managers`, `ecube-processors`, or `ecube-auditors` should automatically have shell access to the backend host.
+
+For dedicated ECUBE hosts, consider explicitly denying SSH for ECUBE role groups so application users cannot log into the backend OS directly:
+
+```sshconfig
+# /etc/ssh/sshd_config.d/ecube-hardening.conf
+DenyGroups ecube-admins ecube-managers ecube-processors ecube-auditors
+```
+
+Operational guidance:
+
+- Apply this only when you have separate host-admin accounts that are not members of ECUBE role groups.
+- Validate configuration before reload:
+
+```bash
+sudo sshd -t
+```
+
+- Reload SSH only after validation succeeds:
+
+```bash
+sudo systemctl reload ssh
+```
+
+- Prefer an `sshd_config.d` drop-in over editing the base sshd config file.
+- On LDAP/SSSD/domain-managed hosts, verify group resolution carefully before using `DenyGroups`, because directory-backed group membership may be broader than expected.
+
+If operators require SSH access and ECUBE access on the same account, do not use `DenyGroups`; instead restrict SSH by source network, VPN, bastion, or `AllowGroups`/`AllowUsers` rules that reflect the host administration model.
+
 ## 5. File Permissions
 
 ```bash
