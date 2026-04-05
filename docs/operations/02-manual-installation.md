@@ -619,14 +619,16 @@ Then complete setup so migrations are applied:
 If the host was installed using the ECUBE installer package, you can run:
 
 ```bash
-sudo ./install.sh --uninstall
+sudo /opt/ecube/install.sh --uninstall
 ```
 
 Optional database cleanup (installer-managed path):
 
 ```bash
-sudo ./install.sh --uninstall --drop-database
+sudo /opt/ecube/install.sh --uninstall --drop-database
 ```
+
+If the original install used a custom `--install-dir`, run the script from that directory (for example, `sudo /srv/ecube/install.sh --uninstall`).
 
 > **Warning:** `--drop-database` is destructive and irreversible.
 > Before dropping the database, perform and verify a backup (for example, a
