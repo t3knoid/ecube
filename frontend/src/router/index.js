@@ -93,6 +93,21 @@ const router = createRouter({
 
 let systemInitialized = false
 
+function emitRedirectTelemetry({ reason, source, destination, routeName }) {
+  logger.debug('UI_NAVIGATION_REDIRECT', {
+    reason,
+    to: source,
+    redirect_to: destination,
+  })
+  void postUiNavigationTelemetry({
+    event_type: 'UI_NAVIGATION_REDIRECT',
+    reason,
+    source,
+    destination,
+    route_name: routeName,
+  })
+}
+
 router.beforeEach(async (to) => {
   const authStore = useAuthStore()
 
@@ -117,17 +132,11 @@ router.beforeEach(async (to) => {
   // Redirect to setup if system not initialized
   if (!systemInitialized && to.name !== 'setup') {
     const currentTarget = to?.fullPath || to?.path || '(unknown)'
-    logger.debug('UI_NAVIGATION_REDIRECT', {
-      reason: 'system_not_initialized',
-      to: currentTarget,
-      redirect_to: '/setup',
-    })
-    void postUiNavigationTelemetry({
-      event_type: 'UI_NAVIGATION_REDIRECT',
+    emitRedirectTelemetry({
       reason: 'system_not_initialized',
       source: currentTarget,
       destination: '/setup',
-      route_name: 'setup',
+      routeName: 'setup',
     })
     return { name: 'setup' }
   }
@@ -135,17 +144,11 @@ router.beforeEach(async (to) => {
   // Redirect away from setup if system is already initialized
   if (systemInitialized && to.name === 'setup') {
     const destination = authStore.isAuthenticated ? '/' : '/login'
-    logger.debug('UI_NAVIGATION_REDIRECT', {
-      reason: 'setup_already_initialized',
-      to: '/setup',
-      redirect_to: destination,
-    })
-    void postUiNavigationTelemetry({
-      event_type: 'UI_NAVIGATION_REDIRECT',
+    emitRedirectTelemetry({
       reason: 'setup_already_initialized',
       source: '/setup',
       destination,
-      route_name: authStore.isAuthenticated ? 'dashboard' : 'login',
+      routeName: authStore.isAuthenticated ? 'dashboard' : 'login',
     })
     return authStore.isAuthenticated ? { name: 'dashboard' } : { name: 'login' }
   }
@@ -168,17 +171,11 @@ router.beforeEach(async (to) => {
       authStore.clearAuth()
     }
     const requestedPath = to?.fullPath || to?.path || '(unknown)'
-    logger.debug('UI_NAVIGATION_REDIRECT', {
-      reason: wasExpired ? 'token_expired' : 'authentication_required',
-      to: requestedPath,
-      redirect_to: '/login',
-    })
-    void postUiNavigationTelemetry({
-      event_type: 'UI_NAVIGATION_REDIRECT',
+    emitRedirectTelemetry({
       reason: wasExpired ? 'token_expired' : 'authentication_required',
       source: requestedPath,
       destination: '/login',
-      route_name: 'login',
+      routeName: 'login',
     })
     return { name: 'login', query: wasExpired ? { [EXPIRED_QUERY_KEY]: EXPIRED_QUERY_VALUE } : {} }
   }
@@ -187,17 +184,11 @@ router.beforeEach(async (to) => {
   const requiredRoles = to.meta.roles
   if (requiredRoles && !authStore.hasAnyRole(requiredRoles)) {
     const requestedPath = to?.fullPath || to?.path || '(unknown)'
-    logger.debug('UI_NAVIGATION_REDIRECT', {
-      reason: 'insufficient_roles',
-      to: requestedPath,
-      redirect_to: '/',
-    })
-    void postUiNavigationTelemetry({
-      event_type: 'UI_NAVIGATION_REDIRECT',
+    emitRedirectTelemetry({
       reason: 'insufficient_roles',
       source: requestedPath,
       destination: '/',
-      route_name: 'dashboard',
+      routeName: 'dashboard',
     })
     return { name: 'dashboard' }
   }
