@@ -90,7 +90,7 @@ jobs:
             --phases coverage,fuzzing \
             2>&1 | tee schemathesis-output.txt
           ST_EXIT=${PIPESTATUS[0]}
-          echo "st_exit=$ST_EXIT" >> "$GITHUB_ENV"
+          echo "SCHEMATHESIS_EXIT=$ST_EXIT" >> "$GITHUB_ENV"
           # Exit 0 = clean, exit 1 = test findings (warn only).
           # Any other code = invocation/runtime error → fail immediately.
           if [ "$ST_EXIT" -ne 0 ] && [ "$ST_EXIT" -ne 1 ]; then
@@ -110,10 +110,11 @@ jobs:
       - name: Schemathesis pass/fail check
         if: success()
         run: |
-          if ! grep -qE '(Completed|passed|Total)' schemathesis-output.txt; then
-            echo "::error::Schemathesis output does not indicate a completed scan — review the report artifact"
-            exit 1
-          fi
-          if [ "$st_exit" = "1" ]; then
+          if [ "${SCHEMATHESIS_EXIT:-}" = "1" ]; then
             echo "::warning::Schemathesis found issues (exit code 1) — review the report artifact"
+          elif [ "${SCHEMATHESIS_EXIT:-}" = "0" ]; then
+            echo "Schemathesis completed with no findings."
+          else
+            echo "::error::Schemathesis exit code not captured; review run logs and artifact"
+            exit 1
           fi
