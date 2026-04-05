@@ -54,6 +54,14 @@ function _resolveDestination(router, destination) {
   return destination
 }
 
+function _isTrackableNavigation(destination, current) {
+  if (!destination || destination === 'same-page-action') return false
+  if (_isExternalHref(destination)) return false
+  if (!destination.startsWith('/')) return false
+  if (destination === current) return false
+  return true
+}
+
 export function installNavigationTracing(router) {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return () => {}
@@ -68,6 +76,10 @@ export function installNavigationTracing(router) {
     const rawDestination = _extractDestination(target)
     const destination = _resolveDestination(router, rawDestination)
     const current = window.location.pathname + window.location.search + window.location.hash
+
+    if (!_isTrackableNavigation(destination, current)) {
+      return
+    }
 
     logger.debug('UI_NAVIGATION_CLICK', {
       action,

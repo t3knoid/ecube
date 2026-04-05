@@ -115,9 +115,14 @@ def update_configuration(
                 requested_settings,
                 str(exc),
             )
+        logger.exception(
+            "CONFIGURATION_UPDATE_UNHANDLED actor=%s requested=%s",
+            current_user.username,
+            requested_settings,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(exc),
+            detail="Configuration update failed",
         )
 
     try:
@@ -158,8 +163,15 @@ def restart_application_service(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+    except Exception:
+        logger.exception(
+            "CONFIGURATION_RESTART_UNHANDLED actor=%s",
+            current_user.username,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Configuration restart request failed",
+        )
 
     try:
         log_and_audit(
