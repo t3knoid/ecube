@@ -186,6 +186,22 @@ Required only when `SESSION_BACKEND=redis`. If Redis is unavailable, ECUBE autom
 | `LOG_FILE_MAX_BYTES`    | `10485760` | Maximum log file size in bytes before rotation (default 10 MB). |
 | `LOG_FILE_BACKUP_COUNT` | `5`        | Number of rotated backup log files to keep.                     |
 
+To enable writing logs to disk, set `LOG_FILE` to an absolute path in your `.env` file (or export it as an environment variable). When `LOG_FILE` is set, ECUBE writes logs to both stdout and the file, rotating the file when it reaches `LOG_FILE_MAX_BYTES`.
+
+Example:
+
+```dotenv
+LOG_FILE=/var/log/ecube/app.log
+LOG_FILE_MAX_BYTES=10485760
+LOG_FILE_BACKUP_COUNT=5
+```
+
+Operational notes:
+
+- Ensure the ECUBE service account can create/write the target directory and files (for example `/var/log/ecube`).
+- Keep `LOG_FORMAT` consistent with your ingestion pipeline (`text` for local troubleshooting, `json` for SIEM/centralized parsing).
+- Leave `LOG_FILE` empty to disable file logging and keep console-only output.
+
 ---
 
 ## Copy Engine Tuning
@@ -237,8 +253,8 @@ Required only when `SESSION_BACKEND=redis`. If Redis is unavailable, ECUBE autom
 
 ## Reverse Proxy / Client IP
 
-| Variable              | Default | Description                                                                                                                                                                                                                                 |
-| --------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Variable  | Default | Description |
+| --------- | ------- | ----------- |
 | `TRUST_PROXY_HEADERS` | `false` | When `true`, extract client IP from `X-Forwarded-For` / `X-Real-IP` headers for audit logging. Only enable when ECUBE runs behind a trusted reverse proxy that sets these headers. When `false`, the direct TCP connection address is used. |
 | `API_ROOT_PATH`       | *(empty)* | ASGI root path passed to FastAPI. Set to `/api` when a reverse proxy strips the `/api` prefix before forwarding requests to uvicorn (the standard Docker and nginx configuration). This ensures Swagger UI generates correct server URLs when accessed through the proxy. Leave empty when uvicorn is accessed directly. |
 
