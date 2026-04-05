@@ -11,6 +11,20 @@ vi.mock('@/api/telemetry.js', () => ({
   postUiNavigationTelemetry,
 }))
 
+function createRouterStub() {
+  const afterEachHandlers = []
+  const stopAfterEach = vi.fn()
+  const router = {
+    resolve: vi.fn((destination) => ({ fullPath: destination })),
+    afterEach: vi.fn((handler) => {
+      afterEachHandlers.push(handler)
+      return stopAfterEach
+    }),
+  }
+
+  return { router, afterEachHandlers, stopAfterEach }
+}
+
 describe('installNavigationTracing', () => {
   beforeEach(() => {
     vi.resetModules()
@@ -22,14 +36,7 @@ describe('installNavigationTracing', () => {
   })
 
   it('posts telemetry for internal navigation clicks', async () => {
-    const afterEachHandlers = []
-    const router = {
-      resolve: vi.fn((destination) => ({ fullPath: destination })),
-      afterEach: vi.fn((handler) => {
-        afterEachHandlers.push(handler)
-        return vi.fn()
-      }),
-    }
+    const { router } = createRouterStub()
 
     const { installNavigationTracing } = await import('@/utils/navigationTrace.js')
     const stop = installNavigationTracing(router)
@@ -59,10 +66,7 @@ describe('installNavigationTracing', () => {
   })
 
   it('ignores same-page actions and external links', async () => {
-    const router = {
-      resolve: vi.fn((destination) => ({ fullPath: destination })),
-      afterEach: vi.fn(() => vi.fn()),
-    }
+    const { router } = createRouterStub()
 
     const { installNavigationTracing } = await import('@/utils/navigationTrace.js')
     const stop = installNavigationTracing(router)
@@ -90,15 +94,7 @@ describe('installNavigationTracing', () => {
   })
 
   it('posts telemetry for completed route navigation', async () => {
-    const afterEachHandlers = []
-    const stopAfterEach = vi.fn()
-    const router = {
-      resolve: vi.fn((destination) => ({ fullPath: destination })),
-      afterEach: vi.fn((handler) => {
-        afterEachHandlers.push(handler)
-        return stopAfterEach
-      }),
-    }
+    const { router, afterEachHandlers, stopAfterEach } = createRouterStub()
 
     const { installNavigationTracing } = await import('@/utils/navigationTrace.js')
     const stop = installNavigationTracing(router)
