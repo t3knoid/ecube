@@ -176,7 +176,18 @@ sudo mkdir -p /opt/ecube /var/lib/ecube
 sudo chown -R ecube:ecube /opt/ecube /var/lib/ecube
 sudo chmod 750 /opt/ecube
 sudo chmod 700 /var/lib/ecube
+
+# Optional hardware groups when present on the host
+getent group plugdev >/dev/null && sudo usermod -aG plugdev ecube
+getent group dialout >/dev/null && sudo usermod -aG dialout ecube
+
+# Required on some hardened hosts for reliable local PAM password checks
+getent group shadow >/dev/null && sudo usermod -aG shadow ecube
 ```
+
+The `shadow` group membership allows the non-root `ecube` service process to
+perform local PAM (`pam_unix`) authentication consistently on hosts where
+helper privilege transitions are restricted by host security policy.
 
 Install the sudoers policy required for setup-time OS user/group management:
 

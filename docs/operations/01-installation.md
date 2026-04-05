@@ -95,7 +95,7 @@ sudo ./install.sh
 The installer will:
 
 1. Run pre-flight checks (OS, disk space, ports, Python 3.11).
-2. Create the `ecube` system user.
+2. Create the `ecube` system user and add it to required host groups (`plugdev`, `dialout`, and `shadow` when present).
 3. Install `/etc/sudoers.d/ecube-user-mgmt` with narrowly scoped `NOPASSWD` rules so setup endpoints can create required OS groups/users without interactive sudo prompts.
 4. Install `/etc/pam.d/ecube` PAM configuration for local and domain user authentication (detects SSSD at install time and creates appropriate config variant).
 5. Set up a Python virtual environment in `<install-dir>/venv`.

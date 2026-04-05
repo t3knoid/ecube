@@ -1260,7 +1260,9 @@ install_backend() {
   # Install the dedicated PAM config so both local and domain users can authenticate.
   _install_pam_config
 
-  for grp in plugdev dialout; do
+  # 'shadow' membership allows PAM local password checks to work on hardened
+  # hosts where unix_chkpwd helper privilege transitions are restricted.
+  for grp in plugdev dialout shadow; do
     if getent group "${grp}" &>/dev/null; then
       run usermod -aG "${grp}" ecube
       ok "Added ecube to group '${grp}'"
