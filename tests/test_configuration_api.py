@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.config import settings
+from app.logging_config import configure_logging
 from app.models.audit import AuditLog
 from app.schemas.configuration import ConfigurationUpdateRequest
 
@@ -116,6 +117,48 @@ class TestConfigurationEndpoints:
         written = mock_write_env.call_args.args[0]
         assert written.get("LOG_FILE") == "/var/log/ecube/app.log"
         mock_configure_logging.assert_called_once()
+
+    @patch("app.services.configuration_service.database_service._write_env_settings")
+    def test_update_configuration_first_log_file_write_logs_immediately(
+        self,
+        _mock_write_env,
+        admin_client,
+        tmp_path,
+    ):
+        original_values = {
+            "log_level": settings.log_level,
+            "log_format": settings.log_format,
+            "log_file": settings.log_file,
+            "log_file_max_bytes": settings.log_file_max_bytes,
+            "log_file_backup_count": settings.log_file_backup_count,
+        }
+
+        settings.log_file = None
+        configure_logging()
+
+        log_path = tmp_path / "first-set.log"
+
+        try:
+            resp = admin_client.put("/admin/configuration", json={"log_file": str(log_path)})
+            assert resp.status_code == 200, resp.json()
+            payload = resp.json()
+            assert "log_file" in payload["changed_settings"]
+
+            assert log_path.exists()
+            content = log_path.read_text(encoding="utf-8")
+            assert "CONFIGURATION_LOGGING_REINITIALIZED" in content
+            assert "CONFIGURATION_UPDATED" in content
+        finally:
+            settings.log_level = original_values["log_level"]
+            settings.log_format = original_values["log_format"]
+            settings.log_file = original_values["log_file"]
+            settings.log_file_max_bytes = original_values["log_file_max_bytes"]
+            settings.log_file_backup_count = original_values["log_file_backup_count"]
+            try:
+                configure_logging()
+            except PermissionError:
+                settings.log_file = None
+                configure_logging()
 
     def test_restart_requires_confirmation(self, admin_client):
         resp = admin_client.post("/admin/configuration/restart", json={"confirm": False})
