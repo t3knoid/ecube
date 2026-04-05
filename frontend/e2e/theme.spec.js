@@ -4,8 +4,35 @@ import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
 
 async function mockCoreApis(page) {
   await routeJson(page, '**/api/drives', [{ id: 1, current_state: 'AVAILABLE', device_identifier: '/dev/sdb', filesystem_type: 'ext4', capacity_bytes: 1000 }])
+  await routeJson(page, '**/api/mounts', [])
+  await routeJson(page, '**/api/users', { users: [{ username: 'frank', roles: ['admin'] }] })
+  await routeJson(page, '**/api/admin/os-users', { users: [{ uid: 1001, username: 'frank', groups: ['ecube-admin'] }] })
   await routeJson(page, '**/api/jobs**', [{ id: 55, project_id: 'PRJ', status: 'RUNNING', copied_bytes: 20, total_bytes: 100 }])
   await routeJson(page, '**/api/audit**', [{ id: 1, user: 'frank', action: 'LOGIN', timestamp: '2026-03-29T00:00:00Z', details: {} }])
+  await routeJson(page, '**/api/introspection/system-health', {
+    status: 'ok',
+    database: 'ok',
+    active_jobs: 1,
+    cpu_percent: 12.5,
+    memory_percent: 40.2,
+    memory_used_bytes: 2147483648,
+    memory_total_bytes: 4294967296,
+    disk_read_bytes: 1024,
+    disk_write_bytes: 2048,
+    worker_queue_size: 0,
+  })
+  await routeJson(page, '**/api/admin/configuration', {
+    settings: [
+      { key: 'log_level', value: 'INFO', requires_restart: false },
+      { key: 'log_format', value: 'text', requires_restart: false },
+      { key: 'log_file', value: '/var/log/ecube/app.log', requires_restart: false },
+      { key: 'log_file_max_bytes', value: 10485760, requires_restart: false },
+      { key: 'log_file_backup_count', value: 5, requires_restart: false },
+      { key: 'db_pool_size', value: 5, requires_restart: false },
+      { key: 'db_pool_max_overflow', value: 10, requires_restart: false },
+      { key: 'db_pool_recycle_seconds', value: -1, requires_restart: true },
+    ],
+  })
   await routeJson(page, '**/api/jobs/55', { id: 55, project_id: 'PRJ', evidence_number: 'EV', status: 'RUNNING', copied_bytes: 20, total_bytes: 100 })
   await routeJson(page, '**/api/jobs/55/files', { files: [] })
   await routeJson(page, '**/api/introspection/jobs/55/debug', { files: [] })
@@ -45,6 +72,10 @@ test('visual regression snapshots for key screens in default and dark themes', a
     { path: '/login', name: 'login' },
     { path: '/', name: 'dashboard' },
     { path: '/drives', name: 'drives' },
+    { path: '/mounts', name: 'mounts' },
+    { path: '/users', name: 'users' },
+    { path: '/system', name: 'system' },
+    { path: '/configuration', name: 'configuration' },
     { path: '/jobs/55', name: 'job-detail' },
     { path: '/audit', name: 'audit' },
   ]

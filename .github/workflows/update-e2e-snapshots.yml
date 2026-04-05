@@ -43,7 +43,7 @@ jobs:
       # exit non-zero so the commit step always runs even if unrelated tests
       # fail (e.g. non-snapshot assertions). The snapshot files are what matter.
       - name: Regenerate E2E snapshots
-        run: npx playwright test --update-snapshots
+        run: npx playwright test --update-snapshots --reporter=line
         continue-on-error: true
 
       - name: Commit updated snapshots
@@ -51,7 +51,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add frontend/e2e/theme.spec.js-snapshots/
+          git add frontend/e2e/*.spec.js-snapshots/ 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "No snapshot changes to commit."
           else

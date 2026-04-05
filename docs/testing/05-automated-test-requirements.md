@@ -2,6 +2,7 @@
 
 **Audience:** Developers, Contributors  
 **Scope:** Backend unit tests, backend integration tests, hardware-in-the-loop (HIL) tests, frontend unit tests, frontend E2E tests
+**Last Updated:** April 2026
 
 ---
 
@@ -53,6 +54,7 @@ tests/
   test_authorization.py            # Role-based access control (all roles × endpoints)
   test_callback.py                 # Async callback URL notifications
   test_client_ip.py                # Client IP extraction
+  test_configuration_api.py        # Admin configuration API
   test_concurrency.py              # Thread-safe progress updates in copy engine
   test_config_settings.py          # Configuration loading and validation
   test_copy_engine.py              # File copy worker (hash, progress, threading)
@@ -79,6 +81,7 @@ tests/
   test_role_resolver.py            # Role resolver factory
   test_session_management.py       # Session storage (cookie / Redis)
   test_thread_count_validation.py  # thread_count input validation
+  test_ui_telemetry.py             # Frontend UI telemetry ingestion
   test_unicode_sanitization.py     # SafeStr / StrictSafeStr input sanitization
   test_user_roles.py               # DB-backed user-role assignments
   integration/
@@ -111,6 +114,9 @@ frontend/
       __tests__/
         usePolling.spec.js         # Periodic refresh composable
         useRoleGuard.spec.js       # Role-based navigation guard
+    utils/
+      __tests__/
+        navigationTrace.spec.js    # Navigation tracing and telemetry filters
     stores/
       __tests__/
         auth.spec.js               # Pinia auth store
@@ -201,6 +207,13 @@ Requires a running PostgreSQL instance. Set `INTEGRATION_DATABASE_URL` before ru
 
 ```bash
 export INTEGRATION_DATABASE_URL="postgresql://ecube:ecube@localhost:5432/ecube"
+python -m pytest tests/integration/ -v --run-integration
+```
+
+CI-equivalent local run (matches `run-tests.yml` service defaults):
+
+```bash
+export INTEGRATION_DATABASE_URL="postgresql://ecube_test:ecube_test@localhost:5433/ecube_integration"
 python -m pytest tests/integration/ -v --run-integration
 ```
 
@@ -305,7 +318,7 @@ docker compose -f docker-compose.ecube.yml down -v
 
 On Windows, run `down -v` with `docker-compose.ecube-win.yml` instead.
 
-`tests/integration/conftest.py` defaults to a different connection (`localhost:5433`, `ecube_test`). Set `INTEGRATION_DATABASE_URL` explicitly as shown above when using the platform compose files.
+`tests/integration/conftest.py` defaults to `postgresql://ecube_test:ecube_test@localhost:5433/ecube_integration`. Set `INTEGRATION_DATABASE_URL` explicitly as shown above when using the platform compose files or when matching CI locally.
 
 ### 5.4 Exposing the API port for local development
 
@@ -560,10 +573,11 @@ finally:
 | DB-backed user roles | `test_user_roles.py` |
 | Session management (cookie/Redis) | `test_session_management.py` |
 | Input sanitization | `test_unicode_sanitization.py` |
-| Configuration | `test_config_settings.py` |
+| Configuration (settings + admin API) | `test_config_settings.py`, `test_configuration_api.py` |
 | Logging | `test_logging.py` |
 | Migrations | `test_migrations.py` |
 | Database provisioning API | `test_database_setup.py` |
+| UI telemetry ingestion | `test_ui_telemetry.py` |
 | Startup reconciliation | `test_reconciliation.py` |
 | Repository layer | `test_repositories.py` |
 | Exception handlers | `test_exception_handlers.py`, `test_db_exception_handling.py` |
