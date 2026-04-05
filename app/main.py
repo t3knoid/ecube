@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from starlette.routing import Match
+from starlette.routing import BaseRoute, Match
 
 from app.auth import get_current_user
 from app import API_VERSION, __version__
@@ -373,10 +373,12 @@ def _compute_allowed_methods(request: Request) -> str:
     """Compute the Allow header value for a 405 Method Not Allowed response."""
     methods: set[str] = set()
     for route in app.routes:
-        if hasattr(route, "methods"):
-            match, _ = route.matches(request.scope)
-            if match != Match.NONE:
-                methods.update(route.methods)
+        if not isinstance(route, BaseRoute):
+            continue
+        match, _ = route.matches(request.scope)
+        route_methods = getattr(route, "methods", None)
+        if match != Match.NONE and route_methods:
+            methods.update(route_methods)
     return ", ".join(sorted(methods))
 
 

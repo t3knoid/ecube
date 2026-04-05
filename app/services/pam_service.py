@@ -26,6 +26,12 @@ from app.config import settings
 # keeps working.
 from app.infrastructure.pam_protocol import PamAuthenticator  # noqa: F401 – re-export
 
+__all__ = [
+    "PamAuthenticator",
+    "LinuxPamAuthenticator",
+    "get_user_groups",
+]
+
 logger = logging.getLogger(__name__)
 
 
