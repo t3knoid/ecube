@@ -49,16 +49,21 @@ def update_configuration(
 ) -> ConfigurationUpdateResponse:
     values = {key: getattr(body, key) for key in body.model_fields_set}
     requested_settings = sorted(values.keys())
+    requested_values = {key: values[key] for key in requested_settings}
 
     try:
         log_and_audit(
             db,
             action="CONFIGURATION_UPDATE_ATTEMPTED",
             actor_id=current_user.username,
-            metadata={"requested_settings": requested_settings},
+            level=logging.WARNING,
+            metadata={
+                "requested_settings": requested_settings,
+                "requested_values": requested_values,
+            },
         )
     except Exception:
-        logger.info(
+        logger.warning(
             "CONFIGURATION_UPDATE_ATTEMPTED actor=%s requested=%s",
             current_user.username,
             requested_settings,
@@ -75,6 +80,7 @@ def update_configuration(
                 level=logging.WARNING,
                 metadata={
                     "requested_settings": requested_settings,
+                    "requested_values": requested_values,
                     "reason": str(exc),
                 },
             )
@@ -98,6 +104,7 @@ def update_configuration(
                 level=logging.ERROR,
                 metadata={
                     "requested_settings": requested_settings,
+                    "requested_values": requested_values,
                     "reason": str(exc),
                 },
             )
@@ -118,13 +125,15 @@ def update_configuration(
             db,
             action="CONFIGURATION_UPDATED",
             actor_id=current_user.username,
+            level=logging.WARNING,
             metadata={
                 "changed_settings": result["changed_settings"],
+                "changed_setting_values": result["changed_setting_values"],
                 "restart_required_settings": result["restart_required_settings"],
             },
         )
     except Exception:
-        logger.info(
+        logger.warning(
             "CONFIGURATION_UPDATED actor=%s changed=%s",
             current_user.username,
             result["changed_settings"],
@@ -157,9 +166,10 @@ def restart_application_service(
             db,
             action="CONFIGURATION_RESTART_REQUESTED",
             actor_id=current_user.username,
+            level=logging.WARNING,
             metadata={"service": result["service"], "confirmed": True},
         )
     except Exception:
-        logger.info("CONFIGURATION_RESTART_REQUESTED actor=%s", current_user.username)
+        logger.warning("CONFIGURATION_RESTART_REQUESTED actor=%s", current_user.username)
 
     return ConfigurationRestartResponse(**result)
