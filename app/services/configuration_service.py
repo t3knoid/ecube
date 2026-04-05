@@ -169,6 +169,14 @@ def _apply_runtime_changes(changed_settings: List[str]) -> None:
 
     if any(name in log_fields for name in changed_settings):
         configure_logging()
+        changed_log_fields = sorted(name for name in changed_settings if name in log_fields)
+        logger.warning(
+            "CONFIGURATION_LOGGING_REINITIALIZED changed_log_fields=%s log_level=%s log_format=%s log_file=%s",
+            changed_log_fields,
+            settings.log_level,
+            settings.log_format,
+            settings.log_file,
+        )
 
     if any(name in db_pool_hot_fields for name in changed_settings):
         if (settings.database_url or "").strip():
