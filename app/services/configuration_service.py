@@ -85,8 +85,10 @@ def update_configuration(values: Dict[str, Any]) -> Dict[str, Any]:
     applied_immediately: List[str] = []
     restart_required_settings: List[str] = []
     env_updates: Dict[str, str] = {}
+    rollback_env_updates: Dict[str, str] = {}
 
     pending_values: Dict[str, Any] = {}
+    old_values: Dict[str, Any] = {}
 
     for key, new_value_raw in values.items():
         if key not in _EDITABLE_FIELDS:
@@ -97,6 +99,7 @@ def update_configuration(values: Dict[str, Any]) -> Dict[str, Any]:
             continue
 
         spec = _EDITABLE_FIELDS[key]
+        old_values[key] = current_value
         changed_settings.append(key)
         changed_setting_values[key] = {
             "old_value": current_value,
@@ -108,6 +111,7 @@ def update_configuration(values: Dict[str, Any]) -> Dict[str, Any]:
             applied_immediately.append(key)
 
         env_updates[spec.env_key] = spec.serializer(new_value)
+        rollback_env_updates[spec.env_key] = spec.serializer(current_value)
         pending_values[key] = new_value
 
     if not changed_settings:
@@ -123,12 +127,30 @@ def update_configuration(values: Dict[str, Any]) -> Dict[str, Any]:
     if "log_file" in pending_values:
         _validate_log_file_path(pending_values["log_file"])
 
-    for key, new_value in pending_values.items():
-        setattr(settings, key, new_value)
-
     database_service._write_env_settings(env_updates)
 
-    _apply_runtime_changes(changed_settings)
+    try:
+        for key, new_value in pending_values.items():
+            setattr(settings, key, new_value)
+
+        _apply_runtime_changes(changed_settings)
+    except Exception:
+        # Restore in-memory settings and env values when runtime apply fails,
+        # so configuration state does not diverge across process memory and disk.
+        for key, old_value in old_values.items():
+            setattr(settings, key, old_value)
+
+        try:
+            database_service._write_env_settings(rollback_env_updates)
+        except Exception:
+            logger.exception("Failed to roll back .env settings after configuration apply failure")
+
+        try:
+            _apply_runtime_changes(list(old_values.keys()))
+        except Exception:
+            logger.exception("Failed to restore runtime configuration after apply failure")
+
+        raise
 
     return {
         "status": "updated",
