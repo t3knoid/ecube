@@ -88,7 +88,7 @@ def set_user_roles(
         )
     except Exception:
         db.rollback()
-        logger.exception("Failed to set roles for user '%s'", username)
+        logger.error("Failed to set roles for user '%s'", username)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update role assignments. Please retry.",
@@ -129,7 +129,7 @@ def delete_user_roles(
         repo.delete_roles(username)
     except Exception:
         db.rollback()
-        logger.exception("Failed to delete roles for user '%s'", username)
+        logger.error("Failed to delete roles for user '%s'", username)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to remove role assignments. Please retry.",

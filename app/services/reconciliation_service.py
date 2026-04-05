@@ -265,7 +265,7 @@ def reconcile_jobs(db: Session) -> Dict[str, int]:
             db.commit()
         except Exception:
             db.rollback()
-            logger.exception("DB commit failed during job reconciliation")
+            logger.error("DB commit failed during job reconciliation")
             raise
 
     # Best-effort audit — failures are logged but must not roll back
@@ -285,7 +285,7 @@ def reconcile_jobs(db: Session) -> Dict[str, int]:
         except Exception:
             db.rollback()
             db.expire_all()
-            logger.exception(
+            logger.error(
                 "Failed to write audit logs for JOB_RECONCILED",
             )
 

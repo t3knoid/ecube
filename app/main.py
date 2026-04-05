@@ -4,13 +4,13 @@ import traceback
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from starlette.routing import Match
+from starlette.routing import BaseRoute, Match
 
 from app.auth import get_current_user
 from app import API_VERSION, __version__
@@ -18,7 +18,7 @@ from app.config import settings
 from app.exceptions import AuthenticationError, AuthorizationError, ConflictError, ECUBEException
 from app.utils.sanitize import is_encoding_error
 from app.logging_config import configure_logging
-from app.routers import admin, audit, auth, database_setup, drives, files, introspection, jobs, mounts, setup, users
+from app.routers import admin, audit, auth, configuration, database_setup, drives, files, introspection, jobs, mounts, setup, telemetry, users
 from app.schemas.errors import ErrorResponse
 from app.schemas.introspection import HealthResponse, VersionResponse
 from app.session import close_session_backend, init_session_backend, mount_session_middleware
@@ -250,6 +250,24 @@ if settings.cors_allowed_origins:
     )
 
 
+@app.middleware("http")
+async def fallback_status_logging(request: Request, call_next):
+    """Log 405 and 413 responses that bypass exception handlers.
+
+    Some 405 responses are produced directly by Starlette routing and do not
+    always traverse our ``StarletteHTTPException`` handler. Similarly, 413
+    (Payload Too Large) responses may come from Uvicorn's ASGI request limits.
+    Add fallback log lines for observability.
+    """
+    response = await call_next(request)
+    if "X-Trace-Id" not in response.headers:
+        if response.status_code == 405:
+            logger.info("405 HTTP_405 path=%s method=%s", request.url.path, request.method)
+        elif response.status_code == 413:
+            logger.warning("413 PAYLOAD_TOO_LARGE path=%s method=%s", request.url.path, request.method)
+    return response
+
+
 @app.get("/health", response_model=HealthResponse)
 def health():
     return {"status": "ok"}
@@ -338,22 +356,29 @@ app.include_router(files.router, dependencies=[Depends(get_current_user)])
 app.include_router(introspection.router, dependencies=[Depends(get_current_user)])
 app.include_router(audit.router, dependencies=[Depends(get_current_user)])
 app.include_router(admin.router, dependencies=[Depends(get_current_user)])
+app.include_router(configuration.router, dependencies=[Depends(get_current_user)])
+app.include_router(telemetry.router, dependencies=[Depends(get_current_user)])
 app.include_router(users.router, dependencies=[Depends(get_current_user)])
 
 
 def _error_response(status_code: int, code: str, message: str, trace_id: str) -> JSONResponse:
     body = ErrorResponse(code=code, message=message, trace_id=trace_id)
-    return JSONResponse(status_code=status_code, content=body.model_dump())
+    response = JSONResponse(status_code=status_code, content=body.model_dump())
+    # Surface trace IDs in headers so middleware can avoid duplicate fallback logs.
+    response.headers["X-Trace-Id"] = trace_id
+    return response
 
 
 def _compute_allowed_methods(request: Request) -> str:
     """Compute the Allow header value for a 405 Method Not Allowed response."""
     methods: set[str] = set()
     for route in app.routes:
-        if hasattr(route, "methods"):
-            match, _ = route.matches(request.scope)
-            if match != Match.NONE:
-                methods.update(route.methods)
+        if not isinstance(route, BaseRoute):
+            continue
+        match, _ = route.matches(request.scope)
+        route_methods = getattr(route, "methods", None)
+        if match != Match.NONE and route_methods:
+            methods.update(route_methods)
     return ", ".join(sorted(methods))
 
 
@@ -427,11 +452,13 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
         403: "FORBIDDEN",
         404: "NOT_FOUND",
         409: "CONFLICT",
+        413: "PAYLOAD_TOO_LARGE",
     }
     code = code_map.get(exc.status_code, f"HTTP_{exc.status_code}")
     detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
     trace_id = str(uuid.uuid4())
-    logger.info("%d %s trace_id=%s path=%s", exc.status_code, code, trace_id, request.url.path)
+    log_level = logging.WARNING if exc.status_code == 413 else logging.INFO
+    logger.log(log_level, "%d %s trace_id=%s path=%s", exc.status_code, code, trace_id, request.url.path)
     if exc.status_code == 401:
         _try_log_auth_failure(request, reason=detail, trace_id=trace_id)
     response = _error_response(exc.status_code, code, detail, trace_id)

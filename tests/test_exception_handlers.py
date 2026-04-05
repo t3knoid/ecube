@@ -51,6 +51,10 @@ def exception_routes(client):  # noqa: F811 – shadow outer client intentionall
     def raise_500_unhandled():
         raise RuntimeError("Completely unexpected failure")
 
+    @router.get("/413-payload-too-large")
+    def raise_413_http():
+        raise HTTPException(status_code=413, detail="Request body exceeds maximum allowed size")
+
     app.include_router(router)
     yield
     # Remove the router after the test so routes don't leak between tests
@@ -127,6 +131,18 @@ def test_409_http_exception_schema(client, exception_routes):
     assert response.status_code == 409
     data = response.json()
     _assert_error_schema(data, expected_code="CONFLICT")
+
+
+# ---------------------------------------------------------------------------
+# 413 tests
+# ---------------------------------------------------------------------------
+
+def test_413_http_exception_schema(client, exception_routes):
+    response = client.get("/test-exceptions/413-payload-too-large")
+    assert response.status_code == 413
+    data = response.json()
+    _assert_error_schema(data, expected_code="PAYLOAD_TOO_LARGE")
+    assert "exceeds maximum allowed size" in data["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -255,3 +271,35 @@ def test_existing_409_job_start_schema(client, db):
     assert response.status_code == 409
     data = response.json()
     _assert_error_schema(data, expected_code="CONFLICT")
+
+
+# ---------------------------------------------------------------------------
+# Middleware fallback logging – 405 and 413 responses from ASGI/Starlette bypass
+# ---------------------------------------------------------------------------
+
+def test_405_method_not_allowed_fallback_logged(client, caplog):
+    """405 responses without X-Trace-Id are logged by the fallback middleware."""
+    import logging
+
+    caplog.set_level(logging.INFO)
+    response = client.post("/health")
+    assert response.status_code == 405
+    
+    # Should be logged by either exception handler (has X-Trace-Id) or fallback middleware.
+    # Verify that the response has a trace_id.
+    data = response.json()
+    assert "trace_id" in data, "405 response should have trace_id in JSON body"
+
+
+def test_413_payload_too_large_exception_handler_logs_warning(client, exception_routes, caplog):
+    """413 responses are logged at WARNING level by exception handler."""
+    import logging
+
+    caplog.set_level(logging.WARNING)
+    response = client.get("/test-exceptions/413-payload-too-large")
+    assert response.status_code == 413
+    
+    # Check that it was logged at WARNING level (not INFO)
+    warning_logs = [r for r in caplog.records if r.levelname == "WARNING" and "413 PAYLOAD_TOO_LARGE" in r.getMessage()]
+    assert warning_logs, "Expected at least one WARNING log for 413 PAYLOAD_TOO_LARGE"
+

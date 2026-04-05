@@ -22,7 +22,7 @@ import socket
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from urllib.parse import urlparse, urlunparse
 
 import httpx
@@ -34,7 +34,7 @@ from app.repositories.audit_repository import AuditRepository
 logger = logging.getLogger(__name__)
 
 _MAX_RETRIES = 4
-_BACKOFF_BASE = 5  # seconds; delays: 1 s, 5 s, 25 s
+_BACKOFF_BASE = 5  # exponential base; delay per retry attempt is 5**attempt seconds
 
 # ---------------------------------------------------------------------------
 # Bounded thread pool for callback delivery
@@ -288,7 +288,7 @@ def _do_deliver(
         parsed = urlparse(url)
         hostname = parsed.hostname or ""
     except Exception:
-        logger.warning("Malformed callback_url for job %s", job_id)
+        logger.exception("Malformed callback_url for job %s", job_id)
         try:
             audit_repo.add(
                 action="CALLBACK_DELIVERY_FAILED",

@@ -26,6 +26,12 @@ from app.config import settings
 # keeps working.
 from app.infrastructure.pam_protocol import PamAuthenticator  # noqa: F401 – re-export
 
+__all__ = [
+    "PamAuthenticator",
+    "LinuxPamAuthenticator",
+    "get_user_groups",
+]
+
 logger = logging.getLogger(__name__)
 
 
@@ -88,7 +94,7 @@ def get_user_groups(username: str) -> List[str]:
     try:
         pw = pwd.getpwnam(username)
     except KeyError:
-        logger.warning(
+        logger.error(
             "OS user %s not found in passwd database",
             username,
         )

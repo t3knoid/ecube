@@ -4,6 +4,8 @@ import { getSetupStatus } from '@/api/setup.js'
 import { AUDIT_ROLES, USERS_ROLES } from '@/constants/roles.js'
 import { EXPIRED_QUERY_KEY, EXPIRED_QUERY_VALUE } from '@/constants/auth.js'
 import AppShell from '@/components/layout/AppShell.vue'
+import { logger } from '@/utils/logger.js'
+import { postUiNavigationTelemetry } from '@/api/telemetry.js'
 
 const routes = [
   {
@@ -66,6 +68,12 @@ const routes = [
         meta: { roles: USERS_ROLES },
       },
       {
+        path: 'configuration',
+        name: 'configuration',
+        component: () => import('@/views/ConfigurationView.vue'),
+        meta: { roles: USERS_ROLES },
+      },
+      {
         path: 'system',
         name: 'system',
         component: () => import('@/views/SystemView.vue'),
@@ -85,8 +93,28 @@ const router = createRouter({
 
 let systemInitialized = false
 
+function emitRedirectTelemetry({ reason, source, destination, routeName }) {
+  logger.debug('UI_NAVIGATION_REDIRECT', {
+    reason,
+    to: source,
+    redirect_to: destination,
+  })
+  void postUiNavigationTelemetry({
+    event_type: 'UI_NAVIGATION_REDIRECT',
+    reason,
+    source,
+    destination,
+    route_name: routeName,
+  })
+}
+
 router.beforeEach(async (to) => {
   const authStore = useAuthStore()
+
+  logger.debug('UI_NAVIGATION_ATTEMPT', {
+    to: to?.fullPath || to?.path || '(unknown)',
+    route_name: to?.name || '(unnamed)',
+  })
 
   // Re-check setup status on every navigation until the system is initialized.
   // Once initialized it cannot revert, so we stop polling.
@@ -103,11 +131,25 @@ router.beforeEach(async (to) => {
 
   // Redirect to setup if system not initialized
   if (!systemInitialized && to.name !== 'setup') {
+    const currentTarget = to?.fullPath || to?.path || '(unknown)'
+    emitRedirectTelemetry({
+      reason: 'system_not_initialized',
+      source: currentTarget,
+      destination: '/setup',
+      routeName: 'setup',
+    })
     return { name: 'setup' }
   }
 
   // Redirect away from setup if system is already initialized
   if (systemInitialized && to.name === 'setup') {
+    const destination = authStore.isAuthenticated ? '/' : '/login'
+    emitRedirectTelemetry({
+      reason: 'setup_already_initialized',
+      source: '/setup',
+      destination,
+      routeName: authStore.isAuthenticated ? 'dashboard' : 'login',
+    })
     return authStore.isAuthenticated ? { name: 'dashboard' } : { name: 'login' }
   }
 
@@ -128,12 +170,26 @@ router.beforeEach(async (to) => {
       // Not an expiry — just unauthenticated; ensure storage is clean
       authStore.clearAuth()
     }
+    const requestedPath = to?.fullPath || to?.path || '(unknown)'
+    emitRedirectTelemetry({
+      reason: wasExpired ? 'token_expired' : 'authentication_required',
+      source: requestedPath,
+      destination: '/login',
+      routeName: 'login',
+    })
     return { name: 'login', query: wasExpired ? { [EXPIRED_QUERY_KEY]: EXPIRED_QUERY_VALUE } : {} }
   }
 
   // Role-based guard
   const requiredRoles = to.meta.roles
   if (requiredRoles && !authStore.hasAnyRole(requiredRoles)) {
+    const requestedPath = to?.fullPath || to?.path || '(unknown)'
+    emitRedirectTelemetry({
+      reason: 'insufficient_roles',
+      source: requestedPath,
+      destination: '/',
+      routeName: 'dashboard',
+    })
     return { name: 'dashboard' }
   }
 
