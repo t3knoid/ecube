@@ -1,7 +1,7 @@
 # ECUBE API Quick Reference
 
 **Version:** 1.0  
-**Last Updated:** March 2026  
+**Last Updated:** April 2026  
 **Audience:** Developers, Operators, IT Staff  
 **Document Type:** API Reference
 
