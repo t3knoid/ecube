@@ -1,8 +1,8 @@
 # 15. Frontend Architecture — Design
 
 **Version:** 1.0
-**Last Updated:** March 2026
-**Status:** Planning
+**Last Updated:** April 2026
+**Status:** Implemented (Living Document)
 
 ---
 
@@ -241,12 +241,12 @@ Token is stored in `sessionStorage` (not `localStorage`) so it does not persist 
 | Property | Type | Description |
 |----------|------|-------------|
 | `currentTheme` | `string` | Active theme name (e.g. `"default"`, `"dark"`) |
-| `availableThemes` | `string[]` | Discovered theme names from `/themes/` |
+| `availableThemes` | `string[]` | Discovered theme definitions exposed to the theme selector |
 
 | Action | Description |
 |--------|-------------|
-| `loadTheme(name)` | Fetch `/themes/{name}.css`, inject as `<link>` element, persist choice to `localStorage` |
-| `initialize()` | Load saved preference from `localStorage` or fall back to `"default"` |
+| `loadTheme(name)` | Apply theme stylesheet, update branding metadata, persist choice |
+| `initialize()` | Restore saved preference and establish safe fallback behavior |
 
 See [Section 7](#7-theme--styling-system) for the theme CSS contract.
 
@@ -318,111 +318,49 @@ Used by `JobDetailView` and `DashboardView` for live progress display.
 
 ### 7.1 Design Approach
 
-Themes are implemented entirely with CSS custom properties (CSS variables). A theme file defines a complete set of design tokens. The application CSS references these tokens exclusively — never hardcoded colors, fonts, or spacing values.
+The frontend theme system is based on CSS custom properties and a small runtime store that selects a stylesheet plus optional branding metadata. Components consume design tokens rather than hardcoded presentation values so that the selected theme can restyle the application shell and views without component-specific branching.
 
-Users can create custom themes by copying a built-in theme file and modifying the values. No build step is required.
+Architecturally, theming is a presentation-layer concern only:
+
+- Theme selection lives in the frontend store.
+- Theme assets are static files served by the UI layer.
+- No backend theme API is required for the current model.
+- Missing or invalid theme assets must degrade to a readable default presentation.
 
 ### 7.2 CSS Custom Properties Contract
 
-Theme files must define the following tokens:
+Themes define the design-token contract used by application styles. At a minimum, the contract covers:
 
-```css
-:root {
-  /* ── Surface Colors ── */
-  --color-bg-primary:        /* Main page background */
-  --color-bg-secondary:      /* Cards, panels */
-  --color-bg-sidebar:        /* Sidebar background */
-  --color-bg-header:         /* Header bar background */
-  --color-bg-footer:         /* Footer bar background */
-  --color-bg-input:          /* Input field background */
-  --color-bg-hover:          /* Hover state for interactive elements */
-  --color-bg-selected:       /* Selected/active state */
+- surface colors,
+- text and semantic colors,
+- borders and focus states,
+- button, badge, and progress styles,
+- typography tokens,
+- spacing tokens, and
+- layout primitives such as header, footer, and sidebar dimensions.
 
-  /* ── Text Colors ── */
-  --color-text-primary:      /* Main body text */
-  --color-text-secondary:    /* Muted/secondary text */
-  --color-text-inverse:      /* Text on dark backgrounds */
-  --color-text-link:         /* Hyperlinks */
-  --color-text-disabled:     /* Disabled controls */
-
-  /* ── Semantic Colors ── */
-  --color-success:           /* COMPLETED, AVAILABLE, healthy */
-  --color-warning:           /* IN_USE, warnings, pending */
-  --color-danger:            /* FAILED, errors, destructive actions */
-  --color-info:              /* Informational highlights */
-
-  /* ── Border & Dividers ── */
-  --color-border:            /* Default border color */
-  --color-border-focus:      /* Focused input border */
-  --color-divider:           /* Section dividers */
-
-  /* ── Component-Specific ── */
-  --color-btn-primary-bg:    /* Primary button background */
-  --color-btn-primary-text:  /* Primary button text */
-  --color-btn-danger-bg:     /* Danger button background */
-  --color-btn-danger-text:   /* Danger button text */
-  --color-badge-admin:       /* Admin role badge */
-  --color-badge-manager:     /* Manager role badge */
-  --color-badge-processor:   /* Processor role badge */
-  --color-badge-auditor:     /* Auditor role badge */
-  --color-progress-bar:      /* Progress bar fill */
-  --color-progress-track:    /* Progress bar background track */
-
-  /* ── Typography ── */
-  --font-family:             /* Base font stack */
-  --font-size-xs:            /* 0.75rem */
-  --font-size-sm:            /* 0.875rem */
-  --font-size-base:          /* 1rem */
-  --font-size-lg:            /* 1.125rem */
-  --font-size-xl:            /* 1.5rem */
-  --font-size-2xl:           /* 2rem */
-  --font-weight-normal:      /* 400 */
-  --font-weight-medium:      /* 500 */
-  --font-weight-bold:        /* 700 */
-
-  /* ── Spacing ── */
-  --space-xs:                /* 0.25rem */
-  --space-sm:                /* 0.5rem */
-  --space-md:                /* 1rem */
-  --space-lg:                /* 1.5rem */
-  --space-xl:                /* 2rem */
-  --space-2xl:               /* 3rem */
-
-  /* ── Layout ── */
-  --sidebar-width:           /* Collapsed/expanded sidebar width */
-  --header-height:           /* Header bar height */
-  --footer-height:           /* Footer bar height */
-  --border-radius:           /* Default border radius */
-  --border-radius-lg:        /* Larger radius for cards/modals */
-  --shadow-sm:               /* Subtle shadow */
-  --shadow-md:               /* Medium shadow for cards */
-  --shadow-lg:               /* Large shadow for modals */
-}
-```
+The exhaustive token reference and authoring guidance belong in operations documentation, not in this architecture document.
 
 ### 7.3 Built-in Themes
 
-**Default (Light):** Corporate blue palette. Light backgrounds, dark text, blue accents.
+The baseline product ships with two built-in themes:
 
-**Dark:** Dark backgrounds, light text, muted blue accents. Reduced visual brightness for extended use.
+- `default`: primary light theme.
+- `dark`: alternate dark theme.
 
-### 7.4 Custom Theme Creation
+These provide a stable contract for the theme store, visual regression tests, and operator-supplied custom themes.
 
-Users create custom themes by:
+### 7.4 Runtime Responsibilities
 
-1. Copy `public/themes/default.css` to `public/themes/<custom-name>.css`
-2. Modify the CSS variable values
-3. Rebuild the Docker image (or volume-mount the themes directory)
-4. Select the new theme from the UI theme switcher
+The theme subsystem is responsible for:
 
-A `public/themes/README.md` documents the process and describes each token.
+- resolving the selected theme,
+- loading the corresponding stylesheet,
+- exposing available theme choices to the UI,
+- coordinating optional logo metadata with the selected theme, and
+- falling back safely when theme assets are unavailable.
 
-### 7.5 Theme Loading Mechanism
-
-1. On app startup, the theme store reads the user's preference from `localStorage`
-2. A `<link rel="stylesheet">` is injected into `<head>` pointing to `/themes/<name>.css`
-3. When switching themes, the old `<link>` is replaced with the new one
-4. The transition is instantaneous since CSS custom properties cascade immediately
+Operational theme authoring, deployment, and customization procedures are documented in [docs/operations/11-theme-and-branding-guide.md](../operations/11-theme-and-branding-guide.md).
 
 ---
 
@@ -484,7 +422,7 @@ Vue I18n 9.x provides the localization infrastructure. All user-visible strings 
 | Component | Purpose | Wireframe Reference |
 |-----------|---------|-------------------|
 | `AppShell.vue` | Authenticated layout wrapper (header + sidebar + content + footer) | Global Layout |
-| `AppHeader.vue` | Logo placeholder, app name, username/role display, token timer, logout button | Header bar |
+| `AppHeader.vue` | Theme-managed logo image, app name, username/role display, token timer, logout button | Header bar |
 | `AppSidebar.vue` | Navigation links filtered by user role | Sidebar navigation |
 | `AppFooter.vue` | App version, DB connection indicator, active job count | Footer status bar |
 
@@ -626,7 +564,7 @@ Actions are hidden (not just disabled) when the user's role cannot perform them.
 
 ### 11.2 nginx Configuration
 
-Key nginx behaviors:
+At the architectural level, the frontend web tier is responsible for:
 
 | Request Path | Action |
 |-------------|--------|
@@ -635,44 +573,19 @@ Key nginx behaviors:
 | `/themes/*.css` | Serve from `/usr/share/nginx/html/themes/` |
 | `/*` (everything else) | Serve SPA; fall back to `index.html` for client-side routing |
 
-TLS termination at nginx using certificates mounted from the host.
+This separation keeps static asset serving and browser-facing TLS concerns out of the FastAPI runtime.
 
-### 11.3 Docker Compose Additions
+### 11.3 Deployment Shape
 
-New service `ecube-ui` to be added to both `docker-compose.ecube.yml` and `docker-compose.ecube-win.yml`:
-
-```yaml
-ecube-ui:
-  build:
-    context: ./frontend
-    dockerfile: Dockerfile
-  ports:
-    - "${UI_PORT:-8443}:443"
-  volumes:
-    - ${ECUBE_CERTS_DIR:-./deploy/certs}:/etc/nginx/certs:ro          # TLS certificates
-    - ${ECUBE_THEMES_DIR:-./deploy/themes}:/usr/share/nginx/html/themes:ro  # Custom themes (optional)
-  depends_on:
-    - ecube-app
-```
-
-Volume paths default to project-relative `./deploy/` for local development. For production, set `ECUBE_CERTS_DIR=/opt/ecube/certs` and `ECUBE_THEMES_DIR=/opt/ecube/themes` via environment or `.env` file.
+The frontend is packaged as a separate UI service that depends on the backend API service and optionally consumes mounted certificate and theme assets from deployment-managed paths.
 
 ### 11.4 Dockerfile (Multi-Stage)
 
-```
-Stage 1 (build):   node:20-alpine → npm ci → npm run build → dist/
-Stage 2 (runtime): nginx:alpine → copy dist/ + nginx.conf → expose 443
-```
+The UI image uses a multi-stage build so dependency-heavy frontend compilation remains separate from the lean nginx runtime image.
 
 ### 11.5 Backend CORS Requirement
 
-**Prerequisite:** The FastAPI backend must add CORS middleware to allow requests from the nginx container's origin. This requires:
-
-1. Add `CORS_ALLOWED_ORIGINS` setting to `app/config.py`
-2. Add `CORSMiddleware` to `app/main.py` with configurable allowed origins
-3. Default: `[]` (disabled). For local development, set `CORS_ALLOWED_ORIGINS='["http://localhost:5173"]'`
-
-> **Note:** If nginx proxies all API requests (frontend calls `/api/*` on the same origin), CORS may not be strictly necessary. However, it should be configured for flexibility (e.g. Swagger UI on a different port, development setups).
+When the frontend and API are not presented through a single browser origin, the backend must support an explicit CORS policy. In same-origin reverse-proxy deployments, this concern is largely absorbed by the proxy layer.
 
 ---
 
@@ -689,25 +602,13 @@ Stage 2 (runtime): nginx:alpine → copy dist/ + nginx.conf → expose 443
 | **useRoleGuard composable** | Role checking against various user configurations |
 | **Common components** | StatusBadge renders correct colors; ProgressBar computes percentage; ConfirmDialog emits events |
 
-Unit tests mock the API layer (no real HTTP calls). Run with `npm run test:unit`.
+Unit tests should isolate presentation and state-management concerns from live backend dependencies.
 
 ### 12.2 End-to-End Tests (Playwright)
 
-Playwright runs tests against a real backend (or mock API server). Tests target Chromium, WebKit, and Firefox engines to cover the supported browser matrix.
+End-to-end tests validate complete user flows against a real backend or a controlled mock backend, with emphasis on auth, routing, role-gated actions, and theme-sensitive rendering.
 
-| Test Suite | Scope |
-|-----------|-------|
-| `login.spec.js` | Login success, login failure, session expiry redirect |
-| `dashboard.spec.js` | Dashboard loads with summary cards; polls for updates |
-| `drives.spec.js` | Drive list renders; format/initialize/eject flow (admin role) |
-| `jobs.spec.js` | Create job → start → monitor progress → verify → manifest |
-| `mounts.spec.js` | Add mount, test connection, remove mount |
-| `audit.spec.js` | Filter audit logs, export CSV |
-| `users.spec.js` | List users, assign roles, create user (admin role) |
-| `theme.spec.js` | Switch between default and dark theme; verify CSS properties change |
-| `role-gating.spec.js` | Verify hidden actions for processor/auditor roles |
-
-Run with `npx playwright test`. CI runs all three browser engines.
+Representative end-to-end coverage areas include login, dashboard refresh behavior, drive and job workflows, audit visibility, user administration, role gating, and theme switching.
 
 ### 12.3 Accessibility Testing
 
@@ -720,6 +621,8 @@ Run with `npx playwright test`. CI runs all three browser engines.
 - Use Playwright's screenshot comparison (`toHaveScreenshot()`) for theme consistency
 - Capture baseline screenshots for both default and dark themes
 - Flag visual differences on PR builds
+
+Detailed test invocation, file organization, and CI execution procedures belong in testing documentation rather than this architecture document.
 
 ---
 
@@ -743,7 +646,6 @@ Playwright's engine coverage (Chromium + WebKit) provides automated testing for 
 |-------|--------|-------|
 | **Component library** | Open | Evaluate PrimeVue, Vuetify, or Naive UI vs. hand-built components. Decision deferred to Phase 2 implementation. |
 | **Audit CSV export endpoint** | Open | Use cases mention CSV export (UC-7.7) but the current API only supports JSON. May require a new backend endpoint or client-side CSV generation. |
-| **Logo configuration** | Implemented | Theme manifest supports logo metadata (`logo`, `logoAlt`) with assets supplied via theme directory mount. |
 | **Real-time upgrades** | Deferred | Polling (3s interval) is the baseline. WebSocket can be added later if multi-user concurrent viewing becomes a requirement. |
 | **PWA / offline support** | Not planned | ECUBE requires network access to the API; offline mode is not applicable. |
 | **Additional locales** | Future | Only `en.json` ships initially. Translation contributions can add new locale files without code changes. |

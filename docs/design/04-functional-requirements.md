@@ -7,65 +7,30 @@
 
 ### 4.1.1 Filesystem Detection Design
 
-- On each discovery cycle (insertion or periodic refresh), probe the drive's filesystem type through the `FilesystemDetector` interface.
-- The interface contract:
-
-  ```python
-  class FilesystemDetector(Protocol):
-      def detect(self, device_path: str) -> str:
-          """Return the canonical filesystem label for the given block device.
-
-          Returns one of:
-          - A recognized filesystem name (e.g. 'ext4', 'exfat', 'ntfs', 'fat32', 'xfs').
-          - 'unformatted' when no filesystem signature is found.
-          - 'unknown' when the detection command fails.
-          """
-          ...
-  ```
-
-- **Linux reference implementation:** Use `blkid -o value -s TYPE <device>` as the primary detection tool; fall back to `lsblk --json` if `blkid` returns no result.
+- On each discovery cycle (insertion or periodic refresh), probe the drive's filesystem type through the platform abstraction layer.
 - Map detection results to canonical values:
   - Recognized filesystems: `ext4`, `exfat`, `ntfs`, `fat32`, `xfs` (and others as reported by the OS tool).
   - No filesystem signature found: `unformatted`.
   - Detection command failed (I/O error, permission denied): `unknown`.
-- Store the result in `usb_drives.filesystem_type`.
-- Update the field whenever a drive is reformatted or re-detected.
+- Persist the detected value as part of drive state.
+- Update the value whenever a drive is reformatted or re-detected.
 
 ### 4.1.2 Drive Formatting Design
 
 - Provide an API endpoint (`POST /drives/{id}/format`) to format a drive.
 - **Supported filesystem types:** `ext4`, `exfat`.
-- The formatting operation is executed through the `DriveFormatter` interface.
-- The interface contract:
-
-  ```python
-  class DriveFormatter(Protocol):
-      def format(self, device_path: str, filesystem_type: str) -> None:
-          """Format the block device with the specified filesystem.
-
-          Raises RuntimeError with a descriptive message on failure.
-          Implementations must validate the device path before executing
-          any destructive operation.
-          """
-          ...
-
-      def is_mounted(self, device_path: str) -> bool:
-          """Return True if the device (or any of its partitions) is currently mounted."""
-          ...
-  ```
-
-- **Linux reference implementation:** `mkfs.ext4`, `mkfs.exfat`; mount check via `/proc/mounts`.
+- The formatting operation is executed through the platform abstraction layer.
 - **Preconditions (enforced by the service layer before calling the interface):**
   - Drive must be in `AVAILABLE` state (reject with `409` if not).
-  - Drive must not be currently mounted — checked via `DriveFormatter.is_mounted()` (reject with `409` if mounted).
+  - Drive must not be currently mounted (reject with `409` if mounted).
   - Drive must have a valid `filesystem_path` (reject with `400` if missing).
 - **Formatting procedure:**
   1. Validate preconditions (state, mount status, device path).
-  2. Call `DriveFormatter.format(device_path, filesystem_type)`. Implementations use absolute binary paths from settings to prevent PATH manipulation.
-  3. On success: update `usb_drives.filesystem_type` to the new value, audit-log `DRIVE_FORMATTED`.
+  2. Invoke the formatter for the requested filesystem type.
+  3. On success: update the persisted filesystem classification to the new value, audit-log `DRIVE_FORMATTED`.
   4. On failure: do not change drive state, audit-log `DRIVE_FORMAT_FAILED` with error details.
 - **Security:**
-  - Device path must pass validation (e.g. `_DEVICE_PATH_RE`) before any destructive operation — enforced within each concrete implementation.
+  - Device path must be validated before any destructive operation.
   - Formatting commands run with bounded timeouts.
   - Only `admin` and `manager` roles may format drives.
 
@@ -102,9 +67,7 @@ to a single project and rejecting any write from a different project.
 
 ### Storage
 
-The binding is stored in the `usb_drives` database table in the
-`current_project_id` column (a nullable string). When a drive has no
-project binding the column is `NULL`.
+The binding is persisted as part of the drive's authoritative state. A drive with no active project binding remains unassigned.
 
 ### Binding Lifecycle
 
@@ -114,8 +77,7 @@ project binding the column is `NULL`.
    with HTTP 409.
 2. **Initialize** — `POST /drives/{id}/initialize` accepts a `project_id`
    in the request body. The service:
-   - Acquires a row-level lock on the drive (`SELECT … FOR UPDATE NOWAIT`)
-     to prevent concurrent mutations.
+   - Acquires an exclusive lock on the drive record to prevent concurrent mutations.
    - Checks `current_project_id`: if already set **and** different from
      the requested project, the request is denied with HTTP 403 and a
      `PROJECT_ISOLATION_VIOLATION` audit event is recorded (including
@@ -132,7 +94,7 @@ project binding the column is `NULL`.
 
 ### Concurrency
 
-Row-level locking (`FOR UPDATE NOWAIT`) ensures that two concurrent
+Exclusive record locking ensures that two concurrent
 initialize or format requests for the same drive are serialized. If a
 lock cannot be acquired immediately, the request fails with HTTP 409
 rather than waiting.
@@ -233,21 +195,10 @@ The callback body is a JSON object containing:
 
 ## 4.10 USB Discovery and State Refresh Design
 
-- Service reads sysfs topology (`/sys/bus/usb/devices`) and returns dataclass-based snapshot.
-- Hub and Port records are upserted (identified by stable `system_identifier` and `system_path` keys).
-- **Hardware enrichment:** During discovery, the service reads additional sysfs
-  attributes for each hub and port device:
-  - `idVendor` → `vendor_id` (hubs and ports)
-  - `idProduct` → `product_id` (hubs and ports)
-  - `speed` → `speed` (ports only, in Mbps)
-  These fields are updated on every sync cycle when present in sysfs; `NULL`
-  values in sysfs do not overwrite previously stored values. Empty sysfs
-  attribute files (zero-length or whitespace-only) are normalized to `None`
-  by the discovery adapter and therefore also do not overwrite stored values.
-- **Label preservation:** Admin-assigned labels (`location_hint` on hubs,
-  `friendly_label` on ports) are never overwritten by the discovery sync.
-  Labels can only be changed through the admin API
-  (`PATCH /admin/hubs/{hub_id}`, `PATCH /admin/ports/{port_id}/label`).
+- Service reads host USB topology through the platform abstraction layer and produces a normalized snapshot for persistence.
+- Hub and port records are upserted using stable hardware identity keys.
+- **Hardware enrichment:** Discovery should capture vendor, product, and negotiated-speed metadata when available, without erasing previously known values with empty readings.
+- **Label preservation:** Admin-assigned hub and port labels are never overwritten by discovery.
 - Drive state transitions follow FSM rules: `EMPTY → AVAILABLE` on reconnection, `AVAILABLE → EMPTY` on removal (unless `IN_USE` — project isolation preserved).
 - **Port enablement filtering:** Each USB port has an `enabled` flag (default `false`). Discovery uses this flag to gate drive availability:
   - A newly discovered drive on a **disabled** port is inserted in `EMPTY` state (not `AVAILABLE`).
@@ -255,15 +206,10 @@ The callback body is a JSON object containing:
   - An `AVAILABLE` drive whose port is subsequently **disabled** is demoted to `EMPTY` on the next discovery sync.
   - Drives with no associated port (`port_id = NULL`) are treated as **disabled** — they remain in `EMPTY` state.
   - Drives already in `IN_USE` state are **never** changed by the enablement filter — project isolation takes priority.
-  - Admins and managers toggle port enablement via `PATCH /admin/ports/{port_id}`. The change takes effect on the next discovery sync.
+  - Port enablement changes take effect on the next discovery sync.
 - Refresh operation is fully idempotent: running multiple times without hardware changes produces no mutations.
-- **Concurrency safety:** `usb_ports.system_path` carries a database-level
-  unique constraint. If two concurrent discovery syncs both attempt to insert
-  the same port, the second insert raises an `IntegrityError` which is caught,
-  rolled back, and retried as an update against the already-committed row.
-  The same mechanism applies to `usb_hubs.system_identifier`. This ensures
-  discovery remains idempotent under multi-worker deployments.
-- **Operational note:** When a port is discovered but its parent hub is not present in the topology snapshot, a placeholder hub is automatically created with a default name. This prevents foreign-key violations in case of sysfs race conditions or partial enumeration. The placeholder hub name can be manually updated via hub management API when the hub is fully enumerated.
+- **Concurrency safety:** Discovery must remain idempotent under multi-worker execution and tolerate concurrent upsert attempts against the same hardware identities.
+- **Partial-topology tolerance:** If a port is observed before its parent hub is fully enumerated, discovery must still preserve referential consistency and recover cleanly on later syncs.
 - Every sync emits a `USB_DISCOVERY_SYNC` audit log with actor and summary counts (hubs_upserted, ports_upserted, drives_inserted, drives_updated, drives_removed).
 
 ## 4.11 Startup State Reconciliation
@@ -272,11 +218,11 @@ After a service restart or host reboot, in-memory OS state (active mounts, runni
 
 ### Cross-Process Lock
 
-In multi-worker deployments (e.g. multiple Uvicorn workers), only one worker must run reconciliation.  A single-row `reconciliation_lock` guard table (constrained by `CHECK (id = 1)`) prevents concurrent execution.  The first worker to insert the row acquires the lock; others detect the existing row and skip reconciliation.  A stale-lock timeout (default 5 minutes) ensures a crashed worker does not block future startups — the next worker reclaims the lock automatically.  The lock row is deleted after reconciliation completes (success or failure).
+In multi-worker deployments, only one worker must run reconciliation. A cross-process guard prevents concurrent execution, allows non-owning workers to skip reconciliation safely, and supports stale-lock recovery so a crashed worker does not block future startups.
 
 ### Execution Order
 
-Reconciliation runs during the FastAPI lifespan startup, **after** audit log cleanup and **before** the periodic USB discovery loop.  Once the cross-process lock is acquired, the three passes execute in fixed order:
+Reconciliation runs during application startup, before the service begins normal steady-state discovery behavior. Once the cross-process lock is acquired, the three passes execute in fixed order:
 
 1. **Mounts** — verify OS mount state
 2. **Jobs** — fail interrupted jobs
@@ -285,7 +231,7 @@ Reconciliation runs during the FastAPI lifespan startup, **after** audit log cle
 ### 4.11.1 Mount Reconciliation
 
 - Query all `network_mounts` rows with `status = MOUNTED`.
-- For each, call `MountProvider.check_mounted(local_mount_point)`:
+- For each, query the mount provider for actual OS mount state:
   - Returns `True` → mount is still active; no status change.  `last_checked_at` is updated.
   - Returns `False` → mount is no longer active; transition to `UNMOUNTED`.
   - Returns `None` (OS error) → transition to `ERROR`.
@@ -302,7 +248,7 @@ Reconciliation runs during the FastAPI lifespan startup, **after** audit log cle
 
 ### 4.11.3 Drive Reconciliation
 
-- Delegates to `run_discovery_sync()` (see § 4.10) with `actor="system"`.
+- Delegates to the normal discovery refresh path (see § 4.10) with `actor="system"`.
 - This re-reads the USB topology and applies the standard drive FSM transitions (EMPTY ↔ AVAILABLE, IN_USE preserved).
 - Drives that are no longer physically present and were `AVAILABLE` are transitioned to `EMPTY`.
 
@@ -316,4 +262,4 @@ All three passes are fully idempotent — running them multiple times without un
 
 ### Multi-Worker Safety
 
-The cross-process lock guarantees that exactly one worker runs reconciliation per startup cycle.  Workers that fail to acquire the lock return immediately with a `{"skipped": True}` result and log a message at INFO level.  This eliminates the risk of duplicate `MOUNT_RECONCILED` / `JOB_RECONCILED` audit rows and last-writer-wins `completed_at` races on jobs.
+The cross-process lock guarantees that exactly one worker runs reconciliation per startup cycle. Workers that do not acquire the lock skip reconciliation, which prevents duplicate correction audit events and conflicting writes during startup.

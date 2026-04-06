@@ -1,6 +1,8 @@
-# 9. Summary of Key Guarantees — Design
+# 9. Architectural Invariants — Design
 
 ## Guaranteed by Design
+
+This document is a synthesis layer for the design set. It consolidates the cross-cutting guarantees that emerge from the architecture, functional rules, security model, and deployment assumptions without redefining those subjects in full.
 
 - Project isolation is enforced at drive initialization and copy authorization.
 - Multi-threaded copying is controlled by bounded worker pools and tracked state.
