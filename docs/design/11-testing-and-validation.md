@@ -1,340 +1,87 @@
 # 11. Testing and Validation
 
-This document defines how to run automated tests for ECUBE using `pytest`, including unit tests, integration tests, and hardware-in-the-loop validation.
+This document defines the quality strategy for ECUBE and the categories of validation needed to support a system that combines API behavior, database state, OS integration, and hardware-aware workflows.
 
-## 11.1 Test Scope
+Operational instructions for invoking tests belong in `docs/testing/` and repository tooling, not in the design set.
 
-### Unit Tests
+## 11.1 Testing Objectives
 
-Unit tests validate API routes and service behavior in isolation.
+The ECUBE test strategy exists to prove four things:
 
-- Database: SQLite in-memory with `StaticPool`.
-- External/system calls: mocked where applicable.
-- Speed: fast; suitable for local rapid iteration and CI default runs.
+- business rules are enforced consistently,
+- security boundaries fail closed,
+- infrastructure-dependent behaviors remain predictable, and
+- recovery behavior is safe after partial failure or restart.
 
-Current unit tests live in `tests/`.
+Because ECUBE spans database state, host OS integration, and USB hardware discovery, a single test layer is insufficient.
 
-### Integration Tests
+## 11.2 Validation Layers
 
-Integration tests validate behavior against real infrastructure components.
+### Unit Validation
 
-- Database: PostgreSQL test database.
-- Migrations: applied with Alembic before execution.
-- Optional system integrations: mount tooling, filesystem, and introspection dependencies.
+Unit tests provide fast feedback on route handlers, service logic, schema validation, authorization checks, and state transitions.
 
-Integration tests live in `tests/integration/` and are gated by `--run-integration`.
+Design expectations:
 
-### Hardware HIL Tests
+- external dependencies are mocked or simulated,
+- SQLite in-memory is used for fast repository and route validation where appropriate,
+- unit coverage should exercise failure handling as aggressively as happy paths.
 
-Hardware-in-the-loop tests validate behavior with a physical USB hub and devices.
+### Integration Validation
 
-- Tests are in `tests/hardware/`.
-- Execution requires `--run-hardware`.
+Integration tests validate interactions across real infrastructure boundaries that unit tests intentionally abstract away.
 
-## 11.2 Prerequisites
+This includes:
 
-### Common Requirements
+- PostgreSQL behavior and migration compatibility,
+- transaction and concurrency semantics,
+- repository behavior under real locking and constraint rules,
+- startup and reconciliation flows that depend on database-backed coordination.
 
-- Python `3.11+`
-- Virtual environment activated
-- Development dependencies installed
+### Hardware-in-the-Loop Validation
 
-Install dependencies:
+Hardware-in-the-loop validation exists because parts of the ECUBE domain depend on physical USB topology, host discovery behavior, and privileged device access that cannot be fully trusted when mocked.
 
-```bash
-pip install -e ".[dev]"
-```
+These tests validate:
 
-### Unit Test Requirements
+- USB discovery against real hubs and devices,
+- port and hub metadata behavior,
+- end-to-end drive lifecycle flows under real hardware conditions.
 
-- No PostgreSQL required.
-- No mount/hardware privileges required.
+## 11.3 Risk-Focused Coverage Areas
 
-### Integration Test Requirements
+The most important design-level coverage areas are:
 
-- PostgreSQL instance available and reachable.
-- `DATABASE_URL` (or `INTEGRATION_DATABASE_URL`) set to integration DB.
-- Schema migrated with Alembic.
+- **Drive eject safety:** partition discovery, mount parsing, nested unmount ordering, encrypted volume handling, and partial failure behavior.
+- **Filesystem detection and formatting:** supported filesystem recognition, unformatted-drive detection, precondition enforcement, and audit behavior around formatting failures.
+- **OS user and group management:** namespace isolation, compensation on partial failure, password validation, and local-only endpoint gating.
+- **Role resolution and OIDC:** deny-by-default semantics, provider-specific group mapping, token validation, and error translation.
+- **Initialization and reconciliation:** first-run setup guards, stale lock reclaim, idempotent startup correction, and recovery from interrupted work.
+- **Concurrency behavior:** conflict detection and correct surfacing of lock contention or uniqueness violations.
 
-## 11.3 Running Unit Tests
+## 11.4 Quality Principles
 
-Run all unit tests:
+The test architecture should follow these principles:
 
-```bash
-python -m pytest tests -q
-```
+- **Layer fidelity:** test each behavior at the lowest useful layer, then confirm critical cross-boundary flows with integration or HIL coverage.
+- **Fail-closed verification:** authentication, authorization, and setup/database guardrails must be tested primarily through negative cases.
+- **Portability:** default automated test coverage should not depend on special hardware or privileged host configuration.
+- **Idempotence awareness:** reconciliation and discovery tests should confirm repeat runs do not create unintended state changes.
+- **Auditability:** security-relevant and state-correcting operations should be validated not only for outcome but also for emitted audit records.
 
-Run a single module:
+## 11.5 Acceptance Expectations
 
-```bash
-python -m pytest tests/test_jobs.py -q
-```
+At the design level, ECUBE is considered adequately validated when:
 
-Run by keyword:
+- unit validation covers the core domain and security rules,
+- integration validation confirms real database and migration behavior,
+- hardware-aware features have a separate HIL path for physical verification,
+- concurrency and restart recovery behavior are explicitly tested,
+- critical failure modes are exercised and shown to degrade safely.
 
-```bash
-python -m pytest tests -q -k "mount or job"
-```
+## 11.6 Related Documents
 
-### Drive Eject Unit Tests
-
-The `tests/test_drive_eject.py` module validates the `/proc/mounts` parsing, device discovery, and unmount sequencing logic used by `prepare_eject`. This is the core of the filesystem-level safety:
-
-**Test Coverage:**
-
-- **Partition discovery:** Traditional (`sdb1`, `sdb2`), NVMe (`nvme0n1p1`), and MMC (`mmcblk0p1`) naming schemes.
-- **Escape sequence handling:** Validates that mount points with spaces, tabs, and other POSIX escape sequences from `/proc/mounts` are properly decoded before being passed to `umount`.
-- **Device-mapper (encrypted) support:** 
-  - Validates `/dev/mapper/*` device symlink resolution to `/dev/dm-N` nodes via `os.path.realpath()`
-  - Validates parent device discovery via `/sys/block/dm-N/slaves/` sysfs interface
-  - Tests LUKS-encrypted volumes, LVM logical volumes, and direct dm-device paths
-  - Confirms that mapper devices backed by a different device are correctly excluded
-- **Safe unmount ordering:** Validates that nested mount points (e.g., `/media/usb` and `/media/usb/sub`) are unmounted in reverse depth order to prevent "target is busy" errors.
-- **Error handling:** Validates graceful handling of `/proc/mounts` read failures, missing sysfs paths, and unmount failures.
-
-Run drive eject tests:
-
-```bash
-python -m pytest tests/test_drive_eject.py -q
-```
-
-### Filesystem Detection & Drive Formatting Tests
-
-Tests for filesystem type detection and drive formatting should cover:
-
-**Filesystem Detection:**
-
-- **`blkid` happy path:** Mock `blkid -o value -s TYPE` returning known types (`ext4`, `exfat`, `ntfs`, `fat32`, `xfs`) and verify the parsed value is stored correctly.
-- **Unformatted drive:** Mock `blkid` returning empty output (no filesystem signature) and verify the result is `unformatted`.
-- **Detection failure:** Mock `blkid` subprocess failure (non-zero exit, timeout, OSError) and verify the result is `unknown`.
-- **Discovery integration:** Verify that a discovery cycle updates `usb_drives.filesystem_type` for newly inserted drives.
-
-**Drive Formatting:**
-
-- **Happy path:** Mock `mkfs.ext4` or `mkfs.exfat` succeeding and verify the drive's `filesystem_type` is updated and `DRIVE_FORMATTED` audit event is emitted.
-- **Unsupported type:** Request format with an unsupported filesystem type and verify `400` response.
-- **Precondition enforcement:** Verify `409` when drive is not in `AVAILABLE` state, when drive is currently mounted, or when drive is in `IN_USE` state.
-- **Missing device path:** Verify `400` when the drive has no `filesystem_path`.
-- **Format failure:** Mock `mkfs` failing and verify the drive state is unchanged, `DRIVE_FORMAT_FAILED` is audit-logged, and `500` is returned.
-- **Device path validation:** Verify that invalid device paths (e.g., path traversal) are rejected before any subprocess is spawned.
-- **Role enforcement:** Verify that `processor` and `auditor` roles receive `403`.
-
-### OS User & Group Management Tests
-
-The `tests/test_os_user_management.py` module validates the OS user and group management service layer and admin API endpoints.
-
-**Test Coverage:**
-
-- **Service layer:** `useradd`, `userdel`, `groupadd`, `groupdel`, `chpasswd`, and `usermod` subprocess calls are mocked and verified.
-- **Group namespace enforcement:** Group create/delete rejects names without the `ecube-` prefix.
-- **ECUBE-managed user guard:** Mutative user operations reject users who are not members of any `ecube-*` group.
-- **Atomicity and compensation:** User creation validates groups before `useradd`; `usermod` failures trigger compensating `userdel`. Failed DB role seeding triggers compensating OS user deletion.
-- **Password validation:** Rejects passwords containing newlines, carriage returns, and colons (chpasswd injection prevention).
-- **Admin router endpoints:** All nine OS management endpoints tested via `TestClient`, including auth/role gating.
-- **Non-local mode gating:** Verifies all OS endpoints return `404` when `role_resolver != "local"` (`LocalOnlyRoute`).
-- **First-run setup wizard:** Setup initialization, recovery for pre-existing users (including users not yet in `ecube-*` groups), and cross-process locking.
-- **Startup reconciliation lock:** Cross-process lock acquisition, stale lock reclaim, orchestrator skip-when-locked, and lock release on success/failure.
-- **Audit logging:** Verifies structured audit records for all OS operations.
-
-Run OS user and group management tests:
-
-```bash
-python -m pytest tests/test_os_user_management.py -v
-```
-
-### Role Resolution and OIDC Tests
-
-The `tests/test_role_resolver.py` and `tests/test_oidc_service.py` modules validate identity provider integration.
-
-#### Role Resolver Tests
-
-Coverage includes:
-
-- **LocalGroupRoleResolver**: maps local OS/app groups to ECUBE roles
-- **LdapGroupRoleResolver**: maps LDAP group DNs to ECUBE roles
-- **OidcGroupRoleResolver**: maps OIDC provider group claims to ECUBE roles
-- **Deny-by-default semantics**: unmapped groups contribute no roles
-- **Deduplication**: multiple groups mapping to overlapping roles are deduplicated
-- **Factory pattern**: `get_role_resolver()` selects the correct provider based on `settings.role_resolver`
-
-Run role resolver tests:
-
-```bash
-python -m pytest tests/test_role_resolver.py -v
-```
-
-#### OIDC Service Tests
-
-Coverage includes:
-
-- **Token validation**: RSA-256/384/512 and EC-256/384/512 signature verification
-- **Expiration checking**: strict enforcement of `exp` claim
-- **Audience validation**: optional `aud` claim validation when `OIDC_AUDIENCE` is configured
-- **JWKS discovery and caching**: fetches from provider discovery URL; caches for process lifetime
-- **Discovery failures**: network errors, malformed discovery documents, missing JWKS URI
-- **Group claim extraction**: custom claim names (e.g., `org_groups` instead of `groups`)
-- **Error handling**: proper error propagation (`OidcTokenError` → HTTP 401)
-
-Tests use mocked RSA keypairs and don't require access to actual OIDC providers.
-
-Run OIDC tests:
-
-```bash
-python -m pytest tests/test_oidc_service.py -v
-```
-
-#### Integration Tests for OIDC
-
-Integration tests validate the end-to-end flow of OIDC token validation and role resolution within the authentication layer (`get_current_user()`).
-
-- **Token with valid groups** → roles correctly resolved
-- **Token without groups** → empty roles (deny-by-default)
-- **Mixed mapped/unmapped groups** → only mapped groups contribute roles
-- **Validation failures** → HTTP 401 with appropriate error message
-- **Fallback to sub/email** → when `preferred_username` is absent
-
-Run OIDC integration tests:
-
-```bash
-python -m pytest tests/test_role_resolver.py::TestGetCurrentUserWithOidcResolver -v
-```
-
-Run specific device-mapper tests:
-
-```bash
-python -m pytest tests/test_drive_eject.py::TestResolveMapperDevice -q
-```
-
-## 11.4 Integration Test Setup
-
-Use a dedicated PostgreSQL database for integration tests.
-
-### Option A: Local Docker Compose (recommended)
-
-Start just the PostgreSQL service:
-
-```bash
-docker compose -f docker-compose.ecube.yml up -d postgres
-```
-
-Set integration environment variables.
-
-```bash
-export DATABASE_URL="postgresql://ecube:ecube@localhost/ecube"
-```
-
-Apply migrations:
-
-```bash
-alembic upgrade head
-```
-
-Run integration tests:
-
-```bash
-python -m pytest tests/integration -q --run-integration
-```
-
-Run integration tests with live stdout/stderr output:
-
-```bash
-python -m pytest tests/integration -q -s --run-integration
-```
-
-Shutdown when done:
-
-```bash
-docker compose -f docker-compose.ecube.yml down
-```
-
-## 11.5 PostgreSQL Concurrency Scaffold
-
-The repository includes a real row-lock contention scaffold:
-
-- `tests/integration/test_concurrency_scaffold_integration.py`
-
-What it validates:
-
-- Session A acquires `FOR UPDATE` lock on a row.
-- Session B attempts `FOR UPDATE NOWAIT` on the same row.
-- Application-level conflict handling is surfaced correctly.
-
-Run only this scaffold:
-
-```bash
-python -m pytest tests/integration/test_concurrency_scaffold_integration.py -q --run-integration
-```
-
-Run full integration suite including scaffold:
-
-```bash
-python -m pytest tests/integration -q --run-integration
-```
-
-Note: this scaffold requires PostgreSQL and auto-skips on non-PostgreSQL backends.
-
-## 11.6 Local Debug Workflow (Integration)
-
-1. Start local PostgreSQL:
-
-   ```bash
-   docker compose -f docker-compose.ecube.yml up -d postgres
-   ```
-
-2. Set integration environment variables.
-3. Apply migrations: `alembic upgrade head`.
-4. Run a focused integration test:
-
-   ```bash
-   python -m pytest tests/integration/test_smoke_integration.py -q --run-integration -s
-   ```
-
-## 11.7 Suggested CI Test Sequence
-
-1. Install dependencies: `pip install -e ".[dev]"`.
-2. Run unit tests: `python -m pytest tests -q`.
-3. If integration infrastructure is available:
-
-   ```bash
-   alembic upgrade head
-   python -m pytest tests/integration -q --run-integration
-   ```
-
-## 11.8 API Fuzz Testing (Schemathesis)
-
-Schemathesis reads the OpenAPI schema and auto-generates randomised requests to detect schema violations, undocumented status codes, and server errors. It runs both in CI (`.github/workflows/schemathesis-fuzz.yml`) and locally via a helper script:
-
-```bash
-./scripts/run_schemathesis.sh
-```
-
-The script starts the Docker stack, generates an admin JWT, runs the scan, and tears down containers automatically. Results are saved to `schemathesis-output.txt`.
-
-For full setup details see the [Schemathesis Local Guide](../testing/04-schemathesis-local.md).
-
-## 11.9 Integration Use-Case Coverage Matrix
-
-- Authentication and access: `tests/integration/test_auth_use_cases_integration.py`
-- Drive management: `tests/integration/test_drives_use_cases_integration.py`
-- Mount management: `tests/integration/test_mounts_use_cases_integration.py`
-- Job lifecycle: `tests/integration/test_jobs_use_cases_integration.py`
-- Introspection: `tests/integration/test_introspection_use_cases_integration.py`
-- Baseline smoke: `tests/integration/test_smoke_integration.py`
-
-## 11.10 Hardware HIL Testing
-
-Hardware test skeleton:
-
-- `tests/hardware/test_usb_hub_hil.py`
-
-Run explicitly:
-
-```bash
-python -m pytest tests/hardware/test_usb_hub_hil.py -s --run-hardware
-```
-
-Guidance:
-
-- Use disposable media only.
-- Keep host USB environment stable during execution.
-- Run on dedicated hardware for CI-style execution.
+- `docs/design/04-functional-requirements.md`
+- `docs/design/05-data-model.md`
+- `docs/design/10-security-and-access-control.md`
+- `docs/testing/`

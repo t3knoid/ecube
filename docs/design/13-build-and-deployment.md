@@ -1,392 +1,121 @@
 # 13. Build and Deployment
 
-This document is the canonical reference for ECUBE build and deployment workflows.
+This document defines the ECUBE build outputs, supported deployment models, and the architectural considerations that shape how the system is packaged and operated.
 
-It covers:
+Procedural installation, release handling, and environment-specific runbooks belong in operations documentation.
 
-- CI packaging to GitHub Releases (`.tar.gz` + checksum).
-- Package deployment on Linux hosts (no Docker runtime).
-- Docker image build details.
-- Docker Compose deployment for Linux host + PostgreSQL.
+## 13.1 Design Goals
 
-## Deployment Paths
+The build and deployment design exists to satisfy these goals:
 
-ECUBE supports two runtime deployment paths. Choose exactly one for a target environment.
+- support both host-managed and containerized runtime models,
+- produce repeatable artifacts from a single source tree,
+- keep runtime dependencies explicit,
+- preserve security-sensitive configuration outside source control,
+- allow infrastructure teams to choose a deployment style without changing application behavior.
 
-- **Path A — Package deployment:** use the release `.tar.gz` artifact and run ECUBE as a system service on Linux.
-- **Path B — Docker deployment:** run ECUBE in containers using Docker image + Docker Compose.
+## 13.2 Supported Deployment Models
 
-These paths are alternatives, not sequential steps.
+ECUBE supports two primary deployment models.
 
-Use this quick rule:
+### Package-Based Deployment
 
-- If your environment standard is host-level services (`systemd`, local Python runtime), use **Path A**.
-- If your environment standard is container orchestration/Compose, use **Path B**.
+In the package-based model, ECUBE runs as a host-managed Python application under Linux service management.
 
-## 13.1 Build Outputs
+This model is appropriate when:
 
-ECUBE supports two primary deployment outputs:
+- the environment standardizes on host services rather than containers,
+- operators want direct host-level service control,
+- local integration with OS facilities is preferred over container orchestration.
 
-1. **Release package artifact** (recommended for package deployments without Docker runtime)
-   - `ecube-package-<release-tag>.tar.gz`
-   - `ecube-package-<release-tag>.sha256`
-2. **Docker runtime image** for containerized deployment.
+### Container-Based Deployment
 
-## 13.2 Dependencies
+In the container-based model, ECUBE runs as one or more containers with PostgreSQL and, when applicable, a separate UI container.
 
-### Python Packages
+This model is appropriate when:
 
-ECUBE now requires `PyJWT[crypto]` for OIDC support (RSA/EC signature verification for OIDC tokens).
+- the environment standardizes on container operations,
+- runtime isolation and image-based delivery are preferred,
+- infrastructure teams want deployment behavior expressed through container topology.
 
-This is automatically installed via:
+These models are alternatives, not sequential phases.
 
-```bash
-pip install -e ".[dev]"
-```
+## 13.3 Build Outputs
 
-If deploying from a pre-built package or in an environment without `pyproject.toml`, ensure cryptographic support is installed:
+The build system produces two architectural artifact types:
 
-```bash
-pip install "PyJWT[crypto]>=2.7.0"
-```
+1. a versioned release package suitable for package-based installation,
+2. a container runtime image suitable for container-based deployment.
 
-## 13.3 CI Release Packaging (GitHub Releases)
+The package artifact supports traditional host-managed service deployment.
+The container image supports Compose or similar container orchestration workflows.
 
-Release creation workflow: `.github/workflows/tag-release.yml`
+## 13.4 Release Architecture
 
-Trigger:
+Release packaging is version-driven and tied to the project version declared in source control.
 
-- `workflow_dispatch` for manual/on-demand draft release creation
-- `push` to `main` when `pyproject.toml` changes creates a **draft** GitHub Release and matching `v<version>` tag
+Design expectations:
 
-Behavior:
+- release version is derived from project metadata rather than ad hoc tagging,
+- published assets are immutable and checksum-verifiable,
+- release contents include application code, migrations, and metadata needed for runtime installation.
 
-- Uses `[project].version` from `pyproject.toml` as the source of truth for the release version
-- Packages `app/`, `alembic/`, `pyproject.toml`, `alembic.ini`, `README.md`, `LICENSE`.
-- Creates release assets:
-  - `ecube-package-<release-tag>.tar.gz`
-  - `ecube-package-<release-tag>.sha256`
+## 13.5 Runtime Dependency Model
 
-Operational flow:
+At deployment time, ECUBE depends on:
 
-1. Update `pyproject.toml` with the target version and merge to `main`.
-2. GitHub Actions creates and pushes tag `v<version>`, then creates a draft release for that tag.
-3. `tag-release.yml` builds and attaches the installer package assets.
-4. Review the draft release in GitHub and click **Publish release** when ready.
+- Python runtime and application dependencies,
+- PostgreSQL for persistent state,
+- OS-level utilities required by the trusted system layer,
+- optional frontend and reverse-proxy runtime when the web UI is deployed.
 
-## 13.3 Package Deployment
+Cryptographic JWT validation support is a required part of the dependency model because OIDC token verification depends on asymmetric signature algorithms.
 
-### Prerequisites
+## 13.6 Container Topology Considerations
 
-```bash
-sudo apt update
-sudo apt install -y python3.11 python3.11-venv python3-pip postgresql postgresql-contrib nfs-common cifs-utils usbutils udev
-```
+In the container deployment model, the system is logically split into:
 
-### Provision service account and target directory
+- API/runtime container,
+- PostgreSQL database container,
+- optional UI container for static asset serving and reverse proxying,
+- optional Redis container when server-side session storage is selected.
 
-```bash
-sudo useradd --system --create-home --shell /bin/bash ecube
-sudo mkdir -p /opt/ecube
-sudo chown -R ecube:ecube /opt/ecube
-```
+This separation preserves the trust boundary between the UI and the hardware-aware system layer while allowing the UI to remain a conventional web workload.
 
-### Download latest public release package (curl)
+## 13.7 Configuration Boundaries
 
-```bash
-export GITHUB_OWNER="t3knoid"
-export GITHUB_REPO="ecube"
-mkdir -p /tmp/ecube-release
+Build-time and deployment-time concerns are intentionally separated.
 
-LATEST_TAG=$(curl -fsSL \
-  -H "Accept: application/vnd.github+json" \
-  "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest" \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'])")
-
-ASSET_JSON=$(curl -fsSL \
-  -H "Accept: application/vnd.github+json" \
-  "https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tags/${LATEST_TAG}")
-
-PACKAGE_URL=$(printf "%s" "$ASSET_JSON" | python3 -c "import sys,json; a=json.load(sys.stdin)['assets']; print(next(x['browser_download_url'] for x in a if x['name'].endswith('.tar.gz')))" )
-CHECKSUM_URL=$(printf "%s" "$ASSET_JSON" | python3 -c "import sys,json; a=json.load(sys.stdin)['assets']; print(next(x['browser_download_url'] for x in a if x['name'].endswith('.sha256')))" )
-
-curl -fL "${PACKAGE_URL}" -o /tmp/ecube-release/ecube-package.tar.gz
-curl -fL "${CHECKSUM_URL}" -o /tmp/ecube-release/ecube-package.sha256
-cd /tmp/ecube-release
-sha256sum -c ecube-package.sha256
-```
-
-### Extract and install Python dependencies
-
-```bash
-sudo -u ecube tar -xzf /tmp/ecube-release/ecube-package.tar.gz -C /opt/ecube
-cd /opt/ecube
-sudo -u ecube python3.11 -m venv .venv
-sudo -u ecube ./.venv/bin/pip install --upgrade pip setuptools wheel
-sudo -u ecube ./.venv/bin/pip install -e ".[dev]"
-```
+- Build artifacts contain application code and declared runtime dependencies.
+- Deployment configuration supplies environment-specific values such as database connectivity, certificates, secrets, session settings, and theme asset locations.
+- Sensitive values are expected to come from deployment environment configuration rather than being embedded in artifacts.
 
-### Configure PostgreSQL and app environment
+## 13.8 Session Architecture
 
-```sql
-CREATE USER ecube WITH PASSWORD 'ecube';
-CREATE DATABASE ecube OWNER ecube;
-GRANT ALL PRIVILEGES ON DATABASE ecube TO ecube;
-```
+ECUBE supports two session models for the web layer:
 
-Create `/opt/ecube/.env`:
+- **cookie-backed sessions:** simplest default model with no additional infrastructure dependency,
+- **Redis-backed sessions:** server-side session storage for deployments that prefer centralized session state.
 
-```env
-DATABASE_URL=postgresql://ecube:ecube@localhost/ecube
-SECRET_KEY=change-me-in-production
-ALGORITHM=HS256
-```
-
-### Apply schema migrations
+Design expectations for the session subsystem:
 
-```bash
-cd /opt/ecube
-sudo -u ecube ./.venv/bin/alembic upgrade head
-```
+- secure cookie attributes remain enforced,
+- fallback behavior remains safe if Redis is unavailable,
+- session identifiers are validated and not trusted blindly,
+- session persistence strategy does not weaken the authentication boundary.
 
-### Create and start systemd service
-
-`/etc/systemd/system/ecube.service`:
+## 13.9 Security and Maintenance Posture
 
-```ini
-[Unit]
-Description=ECUBE API Service
-After=network.target postgresql.service
-Wants=postgresql.service
-
-[Service]
-Type=simple
-User=ecube
-Group=ecube
-WorkingDirectory=/opt/ecube
-EnvironmentFile=-/opt/ecube/.env
-ExecStart=/opt/ecube/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
-Restart=always
-RestartSec=5
+The build and deployment design assumes:
 
-[Install]
-WantedBy=multi-user.target
-```
+- runtime images and host packages require ongoing patch maintenance,
+- release artifacts should be auditable and checksum-verifiable,
+- privileged runtime capabilities must be justified by hardware-facing requirements,
+- deployment defaults should avoid insecure production assumptions.
 
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable ecube
-sudo systemctl start ecube
-sudo systemctl status ecube
-curl http://localhost:8000/health
-```
+## 13.10 Related Documents
 
-### Package deployment update process
-
-```bash
-sudo -u ecube tar -xzf /tmp/ecube-release/ecube-package.tar.gz -C /opt/ecube
-cd /opt/ecube
-sudo -u ecube ./.venv/bin/pip install -e ".[dev]"
-sudo -u ecube ./.venv/bin/alembic upgrade head
-sudo systemctl restart ecube
-```
-
-## 13.4 Docker Image Build
-
-Container runtime Dockerfile: `deploy/ecube-host/Dockerfile`
-
-### Build behavior
-
-1. Uses a pinned Python base image.
-2. Installs required Linux tooling (mount/NFS/SMB/USB/udev).
-3. Copies ECUBE source and migration files into image.
-4. Installs app and dependencies using `pip install -e ".[dev]"`.
-5. Runs `uvicorn app.main:app` on container start.
-
-### Build locally
-
-```bash
-docker build -f deploy/ecube-host/Dockerfile -t ecube-host:local .
-```
-
-### Rebuild with refreshed upstream layers
-
-```bash
-docker build --pull --no-cache -f deploy/ecube-host/Dockerfile -t ecube-host:local .
-```
-
-## 13.5 Docker Compose Deployment (Linux Host)
-
-Compose file: `docker-compose.ecube.yml`
-
-### Services
-
-- `ecube-app` — FastAPI backend (privileged, USB access)
-- `ecube-ui` — Nginx reverse proxy serving the Vue SPA over HTTPS
-- `postgres` — PostgreSQL database
-
-### Environment Variables
-
-The following variables can be set in a `.env` file or exported before running `docker compose`:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `UI_PORT` | `8443` | Host port for the `ecube-ui` HTTPS listener. |
-| `ECUBE_CERTS_DIR` | `./deploy/certs` | Host path to TLS certificate directory (must contain `cert.pem` and `key.pem`). Production: `/opt/ecube/certs`. |
-| `ECUBE_THEMES_DIR` | `./deploy/themes` | Host path to optional CSS theme overrides. Production: `/opt/ecube/themes`. |
-| `POSTGRES_HOST_PORT` | `5432` | Host port for PostgreSQL. |
-| `SECRET_KEY` | *(insecure default)* | JWT signing key — **must** be changed in production. |
-| `POSTGRES_USER` | **no default** | PostgreSQL username. **Required** in the release compose — the stack will not start without it. |
-| `POSTGRES_PASSWORD` | **no default** | PostgreSQL password. **Required** in the release compose — the stack will not start without it. |
-| `POSTGRES_DB` | **no default** | PostgreSQL database name. **Required** in the release compose — the stack will not start without it. |
-
-> **Note:** `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB` have no insecure defaults in the production release compose. They must be set in the `.env` file or the environment before running `docker compose up`. The `DATABASE_URL` inside `ecube-app` is constructed from these values automatically.
-
-### Start
-
-```bash
-# Local development (uses ./deploy/ defaults)
-mkdir -p deploy/certs deploy/themes
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout deploy/certs/key.pem -out deploy/certs/cert.pem -subj "/CN=localhost"
-docker compose -f docker-compose.ecube.yml up -d --build
-```
-
-```bash
-# Production (Linux host with system paths)
-export ECUBE_CERTS_DIR=/opt/ecube/certs
-export ECUBE_THEMES_DIR=/opt/ecube/themes
-docker compose -f docker-compose.ecube.yml up -d --build
-```
-
-Migrations are applied automatically when `ecube-host` starts (entrypoint waits for DB then runs `alembic upgrade head`).
-
-Optional manual migration command (only if `ECUBE_RUN_MIGRATIONS_ON_START=false`):
-
-```bash
-docker compose -f docker-compose.ecube.yml exec ecube-host alembic upgrade head
-```
-
-### Validate
-
-```bash
-docker compose -f docker-compose.ecube.yml ps
-curl http://localhost:8000/health
-```
-
-### Stop
-
-```bash
-docker compose -f docker-compose.ecube.yml down
-```
-
-## 13.6 USB Passthrough in VM-Based Deployments
-
-For USB hub/device passthrough guidance (physical host → VM → container), see:
-
-- `docs/design/12-linux-host-deployment-and-usb-passthrough.md`
-
-## 13.7 Session and Cookie Configuration
-
-ECUBE supports configurable session management with two storage backends.
-
-### Backend selection
-
-| Value | Description |
-|-------|-------------|
-| `cookie` (default) | Signed browser cookies via Starlette `SessionMiddleware`. No external dependencies. |
-| `redis` | Session data stored server-side in Redis; only a session-id cookie is sent to the browser. Requires the `redis` Python package. |
-
-Set `SESSION_BACKEND` in your `.env` or environment to choose a backend.
-
-### Cookie settings
-
-| Environment Variable | Default | Description |
-|----------------------|---------|-------------|
-| `SESSION_COOKIE_NAME` | `ecube_session` | Name of the session cookie. |
-| `SESSION_COOKIE_EXPIRATION_SECONDS` | `3600` | Cookie lifetime in seconds. Use `86400` for 24 hours. |
-| `SESSION_COOKIE_DOMAIN` | *(unset)* | Domain scope. Leave empty for the browser's default rules. |
-| `SESSION_COOKIE_SECURE` | `true` | Send cookie only over HTTPS. Set `false` for local dev. **Must be `true` when `SESSION_COOKIE_SAMESITE=none`.** |
-| `SESSION_COOKIE_SAMESITE` | `lax` | Values: `strict`, `lax`, `none`. |
-
-> **Note:** The `HttpOnly` flag is always enabled on session cookies and cannot be disabled.
-
-### Redis configuration (optional)
-
-Required only when `SESSION_BACKEND=redis`:
-
-| Environment Variable | Default | Description |
-|----------------------|---------|-------------|
-| `REDIS_URL` | *(unset)* | Redis connection URL, e.g. `redis://localhost:6379/0`. |
-| `REDIS_CONNECTION_TIMEOUT` | `5` | Timeout in seconds for establishing a connection. |
-| `REDIS_SOCKET_KEEPALIVE` | `true` | TCP keepalive on the Redis socket. |
-
-### Graceful fallback
-
-If `SESSION_BACKEND=redis` but Redis is unreachable (or the `redis` package is not installed), ECUBE logs a warning and automatically falls back to cookie-based sessions. The application continues to function normally.
-
-### Redis backend security properties
-
-- **Session fixation protection** — When a session-id cookie is presented but no
-  corresponding key exists in Redis (e.g., an attacker pre-set the cookie), the
-  middleware discards the cookie value and generates a fresh random session ID on
-  first write. Existing Redis data is never reused unless the key is present.
-- **Session-id format validation** — Cookie values are validated against the
-  expected `secrets.token_urlsafe` alphabet (`[A-Za-z0-9_-]{22,128}`) before
-  Redis lookup. Malformed values (path-traversal attempts, shell metacharacters,
-  etc.) are silently rejected.
-- **No orphan cookies** — The `Set-Cookie` header is only emitted when the
-  session payload has been successfully persisted to Redis. If `redis.setex()`
-  or serialisation fails, no cookie is issued, preventing clients from holding a
-  session-id with no server-side data.
-- **Async Redis I/O** — All Redis operations (`get`, `setex`, `delete`) use the
-  `redis.asyncio` client and are `await`ed, keeping the ASGI event loop
-  responsive under load.
-
-### Example `.env` — cookie backend (default)
-
-```env
-SESSION_BACKEND=cookie
-SESSION_COOKIE_NAME=ecube_session
-SESSION_COOKIE_EXPIRATION_SECONDS=3600
-SESSION_COOKIE_SECURE=true
-SESSION_COOKIE_SAMESITE=lax
-```
-
-### Example `.env` — Redis backend
-
-```env
-SESSION_BACKEND=redis
-REDIS_URL=redis://localhost:6379/0
-REDIS_CONNECTION_TIMEOUT=5
-REDIS_SOCKET_KEEPALIVE=true
-SESSION_COOKIE_NAME=ecube_session
-SESSION_COOKIE_EXPIRATION_SECONDS=86400
-SESSION_COOKIE_SECURE=true
-```
-
-### Redis deployment
-
-**Docker Compose** — add a `redis` service alongside `ecube-host` and `postgres`:
-
-```yaml
-services:
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-volumes:
-  redis_data:
-```
-
-**Systemd (package deployment)** — install Redis from your distribution package manager:
-
-```bash
-sudo apt install -y redis-server
-sudo systemctl enable redis-server
-sudo systemctl start redis-server
-```
-
-Then set `REDIS_URL=redis://localhost:6379/0` in `/opt/ecube/.env`.
+- `docs/design/03-system-architecture.md`
+- `docs/design/12-runtime-environment-and-usb-visibility.md`
+- `docs/design/15-frontend-architecture.md`
+- `docs/operations/`
