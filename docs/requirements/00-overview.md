@@ -16,14 +16,18 @@ This dual-layer organization ensures requirements remain stable and platform-ind
 3. `04-functional-requirements.md` — System behaviors, state transitions, and concurrency guarantees
 4. `05-data-model.md` — Persistence schema, tables, fields, and integrity constraints
 5. `06-rest-api-specification.md` — API endpoint contracts, role matrix, and response semantics
-6. `10-security-and-access-control.md` — Identity model, role definitions, and authorization matrix
+6. `07-compliance-and-evidence-handling.md` — Compliance baseline, chain-of-custody, integrity, retention, and incident response requirements
+7. `08-operational-readiness.md` — Health checks, metrics, logging, alerting, and production readiness gate requirements
+8. `09-production-support-and-resilience.md` — Troubleshooting, backup and restore, upgrade safety, patching, secrets rotation, and disaster recovery requirements
+9. `10-security-and-access-control.md` — Identity model, role definitions, and authorization matrix
 
 ## Reading Path
 
 1. Start with `01` and `02` to understand scope and hardware context.
 2. Read `04` for functional behaviors and workflows.
 3. Consult `05` and `06` for schema and API contract details.
-4. Review `10` for role model and access control requirements.
+4. Review `07`, `08`, and `09` for compliance, readiness, and production support requirements.
+5. Review `10` for role model and access control requirements.
 
 ## Cross-Reference to Design
 
@@ -34,4 +38,4 @@ For implementation details, architecture decisions, and platform-specific patter
 - Design `08–10` — Language/framework choices, architectural invariants, and security implementation
 - Design `11–16` — Quality, runtime environment, build/deployment, and frontend architecture
 
-Every requirements document has a corresponding design document with the same number, providing the implementation perspective.
+Requirements documents map to one or more design documents that provide implementation perspective; in many cases the mapping is by matching document number.
