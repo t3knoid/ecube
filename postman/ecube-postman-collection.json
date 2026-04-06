@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "ecube-api-collection",
 		"name": "ECUBE API",
-		"description": "Evidence Copying & USB Based Export — Full API Collection.\n\nSet the `base_url` variable (default: http://localhost:8000) and authenticate via the Auth > Login request to populate the `token` variable automatically.\n\n**Prerequisites:** The ECUBE OS groups (`ecube-admins`, `ecube-managers`, `ecube-processors`, `ecube-auditors`) must exist on the host before running the Admin — OS Users / OS Groups folders. Run `/setup/initialize` first, or create them manually (`sudo groupadd ecube-admins` etc.). If groups are missing, those requests will return 422 (Unprocessable Entity).",
+		"description": "Evidence Copying & USB Based Export \u2014 Full API Collection.\n\nSet the `base_url` variable (default: http://localhost:8000) and authenticate via the Auth > Login request to populate the `token` variable automatically.\n\n**Prerequisites:** The ECUBE OS groups (`ecube-admins`, `ecube-managers`, `ecube-processors`, `ecube-auditors`) must exist on the host before running the Admin \u2014 OS Users / OS Groups folders. Run `/setup/initialize` first, or create them manually (`sudo groupadd ecube-admins` etc.). If groups are missing, those requests will return 422 (Unprocessable Entity).",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"event": [
@@ -50,6 +50,51 @@
 			"key": "token",
 			"value": "",
 			"type": "string"
+		},
+		{
+			"key": "drive_id",
+			"value": "1",
+			"type": "string"
+		},
+		{
+			"key": "mount_id",
+			"value": "1",
+			"type": "string"
+		},
+		{
+			"key": "job_id",
+			"value": "1",
+			"type": "string"
+		},
+		{
+			"key": "file_id",
+			"value": "1",
+			"type": "string"
+		},
+		{
+			"key": "port_id",
+			"value": "1",
+			"type": "string"
+		},
+		{
+			"key": "hub_id",
+			"value": "1",
+			"type": "string"
+		},
+		{
+			"key": "username",
+			"value": "newuser",
+			"type": "string"
+		},
+		{
+			"key": "group_name",
+			"value": "ecube-custom",
+			"type": "string"
+		},
+		{
+			"key": "filename",
+			"value": "ecube.log",
+			"type": "string"
 		}
 	],
 	"item": [
@@ -72,13 +117,19 @@
 						}
 					],
 					"request": {
-						"auth": { "type": "noauth" },
+						"auth": {
+							"type": "noauth"
+						},
 						"method": "GET",
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/health",
-							"host": ["{{base_url}}"],
-							"path": ["health"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health"
+							]
 						},
 						"description": "Returns 200 OK for readiness/liveness probes."
 					}
@@ -99,13 +150,20 @@
 						}
 					],
 					"request": {
-						"auth": { "type": "noauth" },
+						"auth": {
+							"type": "noauth"
+						},
 						"method": "GET",
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/introspection/version",
-							"host": ["{{base_url}}"],
-							"path": ["introspection", "version"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"introspection",
+								"version"
+							]
 						},
 						"description": "Returns application and API version. No auth required."
 					}
@@ -125,7 +183,7 @@
 									"// When a token is already injected (CI via --env-var), skip login assertions.",
 									"// pm.variables.get checks all scopes: environment, collection, and global.",
 									"if (pm.variables.get('token')) {",
-									"    pm.test('Login skipped — token already injected', function () {",
+									"    pm.test('Login skipped \u2014 token already injected', function () {",
 									"        pm.expect(true).to.be.true;",
 									"    });",
 									"} else {",
@@ -145,10 +203,15 @@
 						}
 					],
 					"request": {
-						"auth": { "type": "noauth" },
+						"auth": {
+							"type": "noauth"
+						},
 						"method": "POST",
 						"header": [
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
@@ -156,8 +219,13 @@
 						},
 						"url": {
 							"raw": "{{base_url}}/auth/token",
-							"host": ["{{base_url}}"],
-							"path": ["auth", "token"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"token"
+							]
 						},
 						"description": "Authenticate with OS credentials. Returns a signed JWT Bearer token.\nThe token is automatically saved to the collection `token` variable."
 					}
@@ -170,13 +238,20 @@
 				{
 					"name": "Get Setup Status",
 					"request": {
-						"auth": { "type": "noauth" },
+						"auth": {
+							"type": "noauth"
+						},
 						"method": "GET",
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/setup/status",
-							"host": ["{{base_url}}"],
-							"path": ["setup", "status"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"setup",
+								"status"
+							]
 						},
 						"description": "Check if system has been initialized with an admin user."
 					}
@@ -184,10 +259,15 @@
 				{
 					"name": "Initialize System",
 					"request": {
-						"auth": { "type": "noauth" },
+						"auth": {
+							"type": "noauth"
+						},
 						"method": "POST",
 						"header": [
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
@@ -195,8 +275,13 @@
 						},
 						"url": {
 							"raw": "{{base_url}}/setup/initialize",
-							"host": ["{{base_url}}"],
-							"path": ["setup", "initialize"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"setup",
+								"initialize"
+							]
 						},
 						"description": "Create OS groups, admin user, and seed DB with admin role. Returns 409 if already initialized."
 					}
@@ -211,7 +296,10 @@
 					"request": {
 						"method": "POST",
 						"header": [
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
@@ -219,8 +307,14 @@
 						},
 						"url": {
 							"raw": "{{base_url}}/setup/database/test-connection",
-							"host": ["{{base_url}}"],
-							"path": ["setup", "database", "test-connection"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"setup",
+								"database",
+								"test-connection"
+							]
 						},
 						"description": "Test PostgreSQL connectivity. Unauthenticated during initial setup; admin-required after initialization."
 					}
@@ -230,7 +324,10 @@
 					"request": {
 						"method": "POST",
 						"header": [
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
@@ -238,8 +335,14 @@
 						},
 						"url": {
 							"raw": "{{base_url}}/setup/database/provision",
-							"host": ["{{base_url}}"],
-							"path": ["setup", "database", "provision"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"setup",
+								"database",
+								"provision"
+							]
 						},
 						"description": "Create app user/database and run Alembic migrations. Returns 409 if already provisioned."
 					}
@@ -251,8 +354,14 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/setup/database/status",
-							"host": ["{{base_url}}"],
-							"path": ["setup", "database", "status"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"setup",
+								"database",
+								"status"
+							]
 						},
 						"description": "Verify current database state and connectivity. Requires admin role."
 					}
@@ -262,7 +371,10 @@
 					"request": {
 						"method": "PUT",
 						"header": [
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
@@ -270,10 +382,54 @@
 						},
 						"url": {
 							"raw": "{{base_url}}/setup/database/settings",
-							"host": ["{{base_url}}"],
-							"path": ["setup", "database", "settings"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"setup",
+								"database",
+								"settings"
+							]
 						},
 						"description": "Update database configuration. Requires admin role."
+					}
+				},
+				{
+					"name": "Get DB Provision Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/setup/database/provision-status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"setup",
+								"database",
+								"provision-status"
+							]
+						},
+						"description": "Report whether the application database is already provisioned."
+					}
+				},
+				{
+					"name": "Get DB System Info",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/setup/database/system-info",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"setup",
+								"database",
+								"system-info"
+							]
+						},
+						"description": "Runtime hints for setup wizard defaults and host context."
 					}
 				}
 			]
@@ -305,10 +461,19 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/drives",
-							"host": ["{{base_url}}"],
-							"path": ["drives"],
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"drives"
+							],
 							"query": [
-								{ "key": "project_id", "value": "", "disabled": true, "description": "Filter drives by project ID" }
+								{
+									"key": "project_id",
+									"value": "",
+									"disabled": true,
+									"description": "Filter drives by project ID"
+								}
 							]
 						},
 						"description": "List all USB drives with state and project bindings. Optional project_id filter. Roles: admin, manager, processor, auditor."
@@ -321,8 +486,13 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/drives/refresh",
-							"host": ["{{base_url}}"],
-							"path": ["drives", "refresh"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"drives",
+								"refresh"
+							]
 						},
 						"description": "Trigger USB discovery sync, update topology, and recompute drive states. Roles: admin, manager."
 					}
@@ -332,16 +502,25 @@
 					"request": {
 						"method": "POST",
 						"header": [
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"project_id\": \"PROJECT-001\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/drives/:drive_id/initialize",
-							"host": ["{{base_url}}"],
-							"path": ["drives", ":drive_id", "initialize"],
+							"raw": "{{base_url}}/drives/{{drive_id}}/initialize",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"drives",
+								"{{drive_id}}",
+								"initialize"
+							],
 							"variable": [
 								{
 									"key": "drive_id",
@@ -358,16 +537,25 @@
 					"request": {
 						"method": "POST",
 						"header": [
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"filesystem_type\": \"exfat\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/drives/:drive_id/format",
-							"host": ["{{base_url}}"],
-							"path": ["drives", ":drive_id", "format"],
+							"raw": "{{base_url}}/drives/{{drive_id}}/format",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"drives",
+								"{{drive_id}}",
+								"format"
+							],
 							"variable": [
 								{
 									"key": "drive_id",
@@ -385,9 +573,15 @@
 						"method": "POST",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/drives/:drive_id/prepare-eject",
-							"host": ["{{base_url}}"],
-							"path": ["drives", ":drive_id", "prepare-eject"],
+							"raw": "{{base_url}}/drives/{{drive_id}}/prepare-eject",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"drives",
+								"{{drive_id}}",
+								"prepare-eject"
+							],
 							"variable": [
 								{
 									"key": "drive_id",
@@ -424,8 +618,12 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/mounts",
-							"host": ["{{base_url}}"],
-							"path": ["mounts"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mounts"
+							]
 						},
 						"description": "List all registered network mounts and connectivity status. Roles: admin, manager, processor, auditor."
 					}
@@ -435,7 +633,10 @@
 					"request": {
 						"method": "POST",
 						"header": [
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
@@ -443,8 +644,12 @@
 						},
 						"url": {
 							"raw": "{{base_url}}/mounts",
-							"host": ["{{base_url}}"],
-							"path": ["mounts"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mounts"
+							]
 						},
 						"description": "Register a new network mount (SMB/NFS). Required fields: type (SMB or NFS), remote_path, local_mount_point. Optional: username, password, credentials_file. Roles: admin, manager."
 					}
@@ -455,9 +660,14 @@
 						"method": "DELETE",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/mounts/:mount_id",
-							"host": ["{{base_url}}"],
-							"path": ["mounts", ":mount_id"],
+							"raw": "{{base_url}}/mounts/{{mount_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mounts",
+								"{{mount_id}}"
+							],
 							"variable": [
 								{
 									"key": "mount_id",
@@ -476,8 +686,13 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/mounts/validate",
-							"host": ["{{base_url}}"],
-							"path": ["mounts", "validate"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mounts",
+								"validate"
+							]
 						},
 						"description": "Test connectivity for all mounts and update status. Roles: admin, manager."
 					}
@@ -488,9 +703,15 @@
 						"method": "POST",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/mounts/:mount_id/validate",
-							"host": ["{{base_url}}"],
-							"path": ["mounts", ":mount_id", "validate"],
+							"raw": "{{base_url}}/mounts/{{mount_id}}/validate",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mounts",
+								"{{mount_id}}",
+								"validate"
+							],
 							"variable": [
 								{
 									"key": "mount_id",
@@ -512,7 +733,10 @@
 					"request": {
 						"method": "POST",
 						"header": [
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
@@ -520,8 +744,12 @@
 						},
 						"url": {
 							"raw": "{{base_url}}/jobs",
-							"host": ["{{base_url}}"],
-							"path": ["jobs"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs"
+							]
 						},
 						"description": "Create an export job with an explicit drive_id. The drive must be AVAILABLE and its current_project_id must match or be null. If the drive is currently unbound, it is automatically bound to the requested project. Starts in PENDING state. Optional callback_url (HTTPS only) receives a POST when the job reaches COMPLETED or FAILED. Roles: admin, manager, processor."
 					}
@@ -531,7 +759,10 @@
 					"request": {
 						"method": "POST",
 						"header": [
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
@@ -539,10 +770,14 @@
 						},
 						"url": {
 							"raw": "{{base_url}}/jobs",
-							"host": ["{{base_url}}"],
-							"path": ["jobs"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs"
+							]
 						},
-						"description": "Create an export job without drive_id to auto-assign a drive. If exactly one AVAILABLE drive is bound to the project, it is selected (409 if the drive is temporarily unavailable — retry). If none are bound, an unbound AVAILABLE drive is used and the project is assigned to it. Returns 409 if multiple project-bound drives exist (specify drive_id) or if no usable drive can be acquired for the requested project. Optional callback_url (HTTPS only) receives a POST when the job reaches COMPLETED or FAILED. Roles: admin, manager, processor."
+						"description": "Create an export job without drive_id to auto-assign a drive. If exactly one AVAILABLE drive is bound to the project, it is selected (409 if the drive is temporarily unavailable \u2014 retry). If none are bound, an unbound AVAILABLE drive is used and the project is assigned to it. Returns 409 if multiple project-bound drives exist (specify drive_id) or if no usable drive can be acquired for the requested project. Optional callback_url (HTTPS only) receives a POST when the job reaches COMPLETED or FAILED. Roles: admin, manager, processor."
 					}
 				},
 				{
@@ -551,9 +786,14 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/jobs/:job_id",
-							"host": ["{{base_url}}"],
-							"path": ["jobs", ":job_id"],
+							"raw": "{{base_url}}/jobs/{{job_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}"
+							],
 							"variable": [
 								{
 									"key": "job_id",
@@ -570,16 +810,25 @@
 					"request": {
 						"method": "POST",
 						"header": [
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"thread_count\": 4\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/jobs/:job_id/start",
-							"host": ["{{base_url}}"],
-							"path": ["jobs", ":job_id", "start"],
+							"raw": "{{base_url}}/jobs/{{job_id}}/start",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}",
+								"start"
+							],
 							"variable": [
 								{
 									"key": "job_id",
@@ -597,9 +846,15 @@
 						"method": "POST",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/jobs/:job_id/verify",
-							"host": ["{{base_url}}"],
-							"path": ["jobs", ":job_id", "verify"],
+							"raw": "{{base_url}}/jobs/{{job_id}}/verify",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}",
+								"verify"
+							],
 							"variable": [
 								{
 									"key": "job_id",
@@ -608,7 +863,7 @@
 								}
 							]
 						},
-						"description": "Verify copied data integrity (hash comparison). State: VERIFYING → COMPLETED or FAILED. Response includes files_succeeded, files_failed, and error_summary. Roles: admin, manager, processor."
+						"description": "Verify copied data integrity (hash comparison). State: VERIFYING \u2192 COMPLETED or FAILED. Response includes files_succeeded, files_failed, and error_summary. Roles: admin, manager, processor."
 					}
 				},
 				{
@@ -617,9 +872,15 @@
 						"method": "POST",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/jobs/:job_id/manifest",
-							"host": ["{{base_url}}"],
-							"path": ["jobs", ":job_id", "manifest"],
+							"raw": "{{base_url}}/jobs/{{job_id}}/manifest",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}",
+								"manifest"
+							],
 							"variable": [
 								{
 									"key": "job_id",
@@ -629,6 +890,32 @@
 							]
 						},
 						"description": "Generate JSON manifest on USB drive with file hashes and copy metadata. Response includes full job state with enriched fields. Roles: admin, manager, processor."
+					}
+				},
+				{
+					"name": "Get Job Files",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}/files",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}",
+								"files"
+							],
+							"variable": [
+								{
+									"key": "job_id",
+									"value": "{{job_id}}",
+									"description": "ID of the job"
+								}
+							]
+						},
+						"description": "Retrieve file rows and copy/verify status for a specific export job."
 					}
 				}
 			]
@@ -642,9 +929,15 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/files/:file_id/hashes",
-							"host": ["{{base_url}}"],
-							"path": ["files", ":file_id", "hashes"],
+							"raw": "{{base_url}}/files/{{file_id}}/hashes",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"files",
+								"{{file_id}}",
+								"hashes"
+							],
 							"variable": [
 								{
 									"key": "file_id",
@@ -661,7 +954,10 @@
 					"request": {
 						"method": "POST",
 						"header": [
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
@@ -669,8 +965,13 @@
 						},
 						"url": {
 							"raw": "{{base_url}}/files/compare",
-							"host": ["{{base_url}}"],
-							"path": ["files", "compare"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"files",
+								"compare"
+							]
 						},
 						"description": "Compare two files by hash, size, and relative path. Roles: admin, auditor."
 					}
@@ -687,8 +988,13 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/introspection/drives",
-							"host": ["{{base_url}}"],
-							"path": ["introspection", "drives"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"introspection",
+								"drives"
+							]
 						},
 						"description": "Inventory of USB drives: IDs, capacity, state, project bindings. Roles: all authenticated."
 					}
@@ -700,8 +1006,14 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/introspection/usb/topology",
-							"host": ["{{base_url}}"],
-							"path": ["introspection", "usb", "topology"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"introspection",
+								"usb",
+								"topology"
+							]
 						},
 						"description": "Introspect USB hubs/ports from sysfs. Roles: all authenticated."
 					}
@@ -713,8 +1025,13 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/introspection/block-devices",
-							"host": ["{{base_url}}"],
-							"path": ["introspection", "block-devices"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"introspection",
+								"block-devices"
+							]
 						},
 						"description": "List kernel block devices (disks, partitions). Roles: all authenticated."
 					}
@@ -726,8 +1043,13 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/introspection/mounts",
-							"host": ["{{base_url}}"],
-							"path": ["introspection", "mounts"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"introspection",
+								"mounts"
+							]
 						},
 						"description": "List mounted filesystems with types and options (sensitive keys redacted). Roles: all authenticated."
 					}
@@ -739,8 +1061,13 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/introspection/system-health",
-							"host": ["{{base_url}}"],
-							"path": ["introspection", "system-health"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"introspection",
+								"system-health"
+							]
 						},
 						"description": "Check database and job engine health. Roles: all authenticated."
 					}
@@ -751,9 +1078,16 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/introspection/jobs/:job_id/debug",
-							"host": ["{{base_url}}"],
-							"path": ["introspection", "jobs", ":job_id", "debug"],
+							"raw": "{{base_url}}/introspection/jobs/{{job_id}}/debug",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"introspection",
+								"jobs",
+								"{{job_id}}",
+								"debug"
+							],
 							"variable": [
 								{
 									"key": "job_id",
@@ -790,16 +1124,55 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/audit",
-							"host": ["{{base_url}}"],
-							"path": ["audit"],
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"audit"
+							],
 							"query": [
-								{ "key": "user", "value": "", "disabled": true, "description": "Filter by username" },
-								{ "key": "action", "value": "", "disabled": true, "description": "Filter by action type" },
-								{ "key": "job_id", "value": "", "disabled": true, "description": "Filter by job ID" },
-								{ "key": "since", "value": "", "disabled": true, "description": "ISO 8601 datetime (e.g. 2026-01-01T00:00:00Z)" },
-								{ "key": "until", "value": "", "disabled": true, "description": "ISO 8601 datetime" },
-								{ "key": "limit", "value": "50", "disabled": true, "description": "Max records to return" },
-								{ "key": "offset", "value": "0", "disabled": true, "description": "Pagination offset" }
+								{
+									"key": "user",
+									"value": "",
+									"disabled": true,
+									"description": "Filter by username"
+								},
+								{
+									"key": "action",
+									"value": "",
+									"disabled": true,
+									"description": "Filter by action type"
+								},
+								{
+									"key": "job_id",
+									"value": "",
+									"disabled": true,
+									"description": "Filter by job ID"
+								},
+								{
+									"key": "since",
+									"value": "",
+									"disabled": true,
+									"description": "ISO 8601 datetime (e.g. 2026-01-01T00:00:00Z)"
+								},
+								{
+									"key": "until",
+									"value": "",
+									"disabled": true,
+									"description": "ISO 8601 datetime"
+								},
+								{
+									"key": "limit",
+									"value": "50",
+									"disabled": true,
+									"description": "Max records to return"
+								},
+								{
+									"key": "offset",
+									"value": "0",
+									"disabled": true,
+									"description": "Pagination offset"
+								}
 							]
 						},
 						"description": "Return audit logs with optional filters. Immutable, append-only records. Roles: admin, manager, auditor."
@@ -808,7 +1181,7 @@
 			]
 		},
 		{
-			"name": "Admin — Logs",
+			"name": "Admin \u2014 Logs",
 			"item": [
 				{
 					"name": "List Log Files",
@@ -817,8 +1190,13 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/admin/logs",
-							"host": ["{{base_url}}"],
-							"path": ["admin", "logs"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"logs"
+							]
 						},
 						"description": "List available log files with metadata (size, timestamps). Any authenticated user."
 					}
@@ -829,9 +1207,15 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/admin/logs/:filename",
-							"host": ["{{base_url}}"],
-							"path": ["admin", "logs", ":filename"],
+							"raw": "{{base_url}}/admin/logs/{{filename}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"logs",
+								"{{filename}}"
+							],
 							"variable": [
 								{
 									"key": "filename",
@@ -846,7 +1230,7 @@
 			]
 		},
 		{
-			"name": "Admin — Ports",
+			"name": "Admin \u2014 Ports",
 			"item": [
 				{
 					"name": "List Ports",
@@ -855,8 +1239,13 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/admin/ports",
-							"host": ["{{base_url}}"],
-							"path": ["admin", "ports"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"ports"
+							]
 						},
 						"description": "List all USB ports with their enabled state. Requires admin or manager role."
 					}
@@ -866,16 +1255,25 @@
 					"request": {
 						"method": "PATCH",
 						"header": [
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"enabled\": true\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/admin/ports/:port_id",
-							"host": ["{{base_url}}"],
-							"path": ["admin", "ports", ":port_id"],
+							"raw": "{{base_url}}/admin/ports/{{port_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"ports",
+								"{{port_id}}"
+							],
 							"variable": [
 								{
 									"key": "port_id",
@@ -892,16 +1290,26 @@
 					"request": {
 						"method": "PATCH",
 						"header": [
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"friendly_label\": \"Bay 1 - Top\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/admin/ports/:port_id/label",
-							"host": ["{{base_url}}"],
-							"path": ["admin", "ports", ":port_id", "label"],
+							"raw": "{{base_url}}/admin/ports/{{port_id}}/label",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"ports",
+								"{{port_id}}",
+								"label"
+							],
 							"variable": [
 								{
 									"key": "port_id",
@@ -916,7 +1324,7 @@
 			]
 		},
 		{
-			"name": "Admin — Hubs",
+			"name": "Admin \u2014 Hubs",
 			"item": [
 				{
 					"name": "List Hubs",
@@ -925,8 +1333,13 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/admin/hubs",
-							"host": ["{{base_url}}"],
-							"path": ["admin", "hubs"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"hubs"
+							]
 						},
 						"description": "List all USB hubs with enriched hardware metadata. Requires admin or manager role."
 					}
@@ -936,16 +1349,25 @@
 					"request": {
 						"method": "PATCH",
 						"header": [
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"location_hint\": \"Server Room - Rack A\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/admin/hubs/:hub_id",
-							"host": ["{{base_url}}"],
-							"path": ["admin", "hubs", ":hub_id"],
+							"raw": "{{base_url}}/admin/hubs/{{hub_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"hubs",
+								"{{hub_id}}"
+							],
 							"variable": [
 								{
 									"key": "hub_id",
@@ -960,7 +1382,7 @@
 			]
 		},
 		{
-			"name": "Admin — OS Users",
+			"name": "Admin \u2014 OS Users",
 			"item": [
 				{
 					"name": "List OS Users",
@@ -969,8 +1391,13 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/admin/os-users",
-							"host": ["{{base_url}}"],
-							"path": ["admin", "os-users"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"os-users"
+							]
 						},
 						"description": "List OS users (ECUBE-relevant groups only). Role: admin."
 					}
@@ -980,7 +1407,10 @@
 					"request": {
 						"method": "POST",
 						"header": [
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
@@ -988,8 +1418,13 @@
 						},
 						"url": {
 							"raw": "{{base_url}}/admin/os-users",
-							"host": ["{{base_url}}"],
-							"path": ["admin", "os-users"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"os-users"
+							]
 						},
 						"description": "Create OS user, set password, add to groups, and optionally assign ECUBE roles. Role: admin."
 					}
@@ -1000,9 +1435,15 @@
 						"method": "DELETE",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/admin/os-users/:username",
-							"host": ["{{base_url}}"],
-							"path": ["admin", "os-users", ":username"],
+							"raw": "{{base_url}}/admin/os-users/{{username}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"os-users",
+								"{{username}}"
+							],
 							"variable": [
 								{
 									"key": "username",
@@ -1019,16 +1460,26 @@
 					"request": {
 						"method": "PUT",
 						"header": [
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"password\": \"newSecurePassword456\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/admin/os-users/:username/password",
-							"host": ["{{base_url}}"],
-							"path": ["admin", "os-users", ":username", "password"],
+							"raw": "{{base_url}}/admin/os-users/{{username}}/password",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"os-users",
+								"{{username}}",
+								"password"
+							],
 							"variable": [
 								{
 									"key": "username",
@@ -1045,16 +1496,26 @@
 					"request": {
 						"method": "PUT",
 						"header": [
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"groups\": [\"ecube-managers\", \"ecube-processors\"]\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/admin/os-users/:username/groups",
-							"host": ["{{base_url}}"],
-							"path": ["admin", "os-users", ":username", "groups"],
+							"raw": "{{base_url}}/admin/os-users/{{username}}/groups",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"os-users",
+								"{{username}}",
+								"groups"
+							],
 							"variable": [
 								{
 									"key": "username",
@@ -1071,16 +1532,26 @@
 					"request": {
 						"method": "POST",
 						"header": [
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"groups\": [\"ecube-auditors\"]\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/admin/os-users/:username/groups",
-							"host": ["{{base_url}}"],
-							"path": ["admin", "os-users", ":username", "groups"],
+							"raw": "{{base_url}}/admin/os-users/{{username}}/groups",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"os-users",
+								"{{username}}",
+								"groups"
+							],
 							"variable": [
 								{
 									"key": "username",
@@ -1095,7 +1566,7 @@
 			]
 		},
 		{
-			"name": "Admin — OS Groups",
+			"name": "Admin \u2014 OS Groups",
 			"item": [
 				{
 					"name": "List OS Groups",
@@ -1104,8 +1575,13 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/admin/os-groups",
-							"host": ["{{base_url}}"],
-							"path": ["admin", "os-groups"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"os-groups"
+							]
 						},
 						"description": "List OS groups (ECUBE-relevant names only). Role: admin."
 					}
@@ -1115,7 +1591,10 @@
 					"request": {
 						"method": "POST",
 						"header": [
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
@@ -1123,8 +1602,13 @@
 						},
 						"url": {
 							"raw": "{{base_url}}/admin/os-groups",
-							"host": ["{{base_url}}"],
-							"path": ["admin", "os-groups"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"os-groups"
+							]
 						},
 						"description": "Create OS group on host system. Role: admin."
 					}
@@ -1135,9 +1619,15 @@
 						"method": "DELETE",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/admin/os-groups/:name",
-							"host": ["{{base_url}}"],
-							"path": ["admin", "os-groups", ":name"],
+							"raw": "{{base_url}}/admin/os-groups/{{name}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"os-groups",
+								"{{name}}"
+							],
 							"variable": [
 								{
 									"key": "name",
@@ -1161,8 +1651,12 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/users",
-							"host": ["{{base_url}}"],
-							"path": ["users"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users"
+							]
 						},
 						"description": "List all users with ECUBE role assignments. Role: admin."
 					}
@@ -1173,9 +1667,15 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/users/:username/roles",
-							"host": ["{{base_url}}"],
-							"path": ["users", ":username", "roles"],
+							"raw": "{{base_url}}/users/{{username}}/roles",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"{{username}}",
+								"roles"
+							],
 							"variable": [
 								{
 									"key": "username",
@@ -1192,16 +1692,25 @@
 					"request": {
 						"method": "PUT",
 						"header": [
-							{ "key": "Content-Type", "value": "application/json" }
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n  \"roles\": [\"manager\", \"processor\"]\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/users/:username/roles",
-							"host": ["{{base_url}}"],
-							"path": ["users", ":username", "roles"],
+							"raw": "{{base_url}}/users/{{username}}/roles",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"{{username}}",
+								"roles"
+							],
 							"variable": [
 								{
 									"key": "username",
@@ -1219,9 +1728,15 @@
 						"method": "DELETE",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/users/:username/roles",
-							"host": ["{{base_url}}"],
-							"path": ["users", ":username", "roles"],
+							"raw": "{{base_url}}/users/{{username}}/roles",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"{{username}}",
+								"roles"
+							],
 							"variable": [
 								{
 									"key": "username",
@@ -1231,6 +1746,116 @@
 							]
 						},
 						"description": "Remove all role assignments for a user. Role: admin."
+					}
+				}
+			]
+		},
+		{
+			"name": "Admin \u2014 Configuration",
+			"item": [
+				{
+					"name": "Get Configuration",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/configuration",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"configuration"
+							]
+						},
+						"description": "Read effective runtime configuration values. Role: admin."
+					}
+				},
+				{
+					"name": "Update Configuration",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"log_level\": \"INFO\",\n  \"log_format\": \"text\",\n  \"db_pool_size\": 10\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/configuration",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"configuration"
+							]
+						},
+						"description": "Update one or more runtime configuration fields. Role: admin."
+					}
+				},
+				{
+					"name": "Restart Application Service",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"confirm\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/configuration/restart",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"configuration",
+								"restart"
+							]
+						},
+						"description": "Restart the ECUBE app service after configuration changes. Role: admin."
+					}
+				}
+			]
+		},
+		{
+			"name": "Telemetry",
+			"item": [
+				{
+					"name": "Ingest UI Navigation Telemetry",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"event_type\": \"UI_NAVIGATION_CLICK\",\n  \"action\": \"button\",\n  \"label\": \"Open Setup\",\n  \"source\": \"/\",\n  \"destination\": \"/setup\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/telemetry/ui-navigation",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"telemetry",
+								"ui-navigation"
+							]
+						},
+						"description": "Ingest frontend navigation telemetry events for troubleshooting."
 					}
 				}
 			]
