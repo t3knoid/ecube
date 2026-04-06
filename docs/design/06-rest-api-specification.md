@@ -85,7 +85,6 @@ Authenticate with OS credentials and receive a signed JWT.
 ### 1.3 Authentication Mechanism
 
 - All endpoints except `/health`, `/auth/token`, `/setup/status`, `/setup/initialize`, and `/introspection/version` require a bearer token.
-- `/setup/database/test-connection` and `/setup/database/provision` accept an **optional** bearer token: unauthenticated during initial setup (no admin exists), `admin` role required after.
 - `/setup/database/test-connection`, `/setup/database/provision`, and `/setup/database/provision-status` accept an **optional** bearer token: unauthenticated during initial setup (no admin exists), `admin` role required after.
 - `/setup/database/system-info` is always public — no bearer token is required or checked at any point.
 - Token includes:
@@ -1111,7 +1110,7 @@ Perform first-run system initialization: create OS groups, create admin user, se
 
 - `409 Conflict` — System already initialized, or initialization is in progress by another worker. If a previous attempt failed and left the lock row stuck, the response detail includes manual remediation steps.
 - `422 Unprocessable Entity` — Invalid username, empty password, or password containing unsafe characters (newlines, colons)
-- `500 Internal Server Error` — OS group/user creation or DB role seeding failed. The response detail describes what succeeded, what failed, and whether the initialization lock was released for a safe retry. See the Operational Guide troubleshooting section for resolution steps.
+- `500 Internal Server Error` — OS group/user creation or DB role seeding failed. The response detail describes what succeeded, what failed, and whether the initialization lock was released for a safe retry.
 
 **Cross-process guard:** Uses a `system_initialization` single-row table with a uniqueness constraint to ensure only one worker can complete initialization, even in multi-worker deployments.
 

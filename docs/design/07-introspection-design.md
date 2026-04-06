@@ -1,8 +1,8 @@
-# 7. Low-Level Introspection API — Design
+# 7. Introspection Design — Design
 
 ## Design Goal
 
-Expose diagnostic information without bypassing security boundaries or mutating system state.
+This document defines the design intent for ECUBE introspection capabilities as a companion to the REST API specification. It focuses on diagnostic scope, safety boundaries, and read-only behavior rather than the full endpoint contract.
 
 ## Endpoint Design
 
@@ -12,7 +12,7 @@ Expose diagnostic information without bypassing security boundaries or mutating 
 - `GET /introspection/system-health`: aggregate CPU/memory/disk and queue depth.
 - `GET /introspection/jobs/{id}/debug`: expose worker states, retries, and pending queue details.
 
-## Operational Guardrails
+## Design Guardrails
 
 - Read-only responses only.
 - Restrict to authorized administrative roles.
