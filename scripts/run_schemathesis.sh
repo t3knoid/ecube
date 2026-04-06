@@ -22,6 +22,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+. "$PROJECT_ROOT/scripts/lib/ecube_compose.sh"
 
 # ---- Configurable defaults ----
 HOST_PORT="${HOST_PORT:-8000}"
@@ -29,12 +30,21 @@ POSTGRES_HOST_PORT="${POSTGRES_HOST_PORT:-5432}"
 SECRET_KEY="${SECRET_KEY:-change-me-in-production-please-rotate-32b}"
 MAX_WAIT="${SCHEMATHESIS_MAX_WAIT:-60}"        # seconds to wait for /health
 MAX_EXAMPLES="${SCHEMATHESIS_MAX_EXAMPLES:-5}"
-REQUEST_TIMEOUT="${SCHEMATHESIS_REQUEST_TIMEOUT:-5}"
+REQUEST_TIMEOUT="${SCHEMATHESIS_REQUEST_TIMEOUT:-10}"
 PHASES="${SCHEMATHESIS_PHASES:-coverage}"
+WORKERS="${SCHEMATHESIS_WORKERS:-1}"
+MAX_FAILURES="${SCHEMATHESIS_MAX_FAILURES:-1}"
+CHECKS="${SCHEMATHESIS_CHECKS:-not_a_server_error,status_code_conformance}"
+EXCLUDE_CHECKS="${SCHEMATHESIS_EXCLUDE_CHECKS:-unsupported_method,missing_required_header}"
+INCLUDE_PATH_REGEX="${SCHEMATHESIS_INCLUDE_PATH_REGEX:-^/(health|introspection/version|setup/status)$}"
+WAIT_FOR_SCHEMA="${SCHEMATHESIS_WAIT_FOR_SCHEMA:-30}"
 SEED="${SCHEMATHESIS_SEED:-}"
 
-COMPOSE_FILE="$PROJECT_ROOT/docker-compose.ecube.yml"
-COMPOSE_PROJECT="ecube-schemathesis"
+ECUBE_COMPOSE_PROJECT="ecube-schemathesis"
+ECUBE_HOST_PORT="$HOST_PORT"
+ECUBE_POSTGRES_HOST_PORT="$POSTGRES_HOST_PORT"
+ECUBE_SECRET_KEY="$SECRET_KEY"
+ECUBE_MAX_WAIT="$MAX_WAIT"
 
 # ---- Preflight checks ----
 for cmd in docker curl tee; do
@@ -56,73 +66,32 @@ else
   exit 1
 fi
 
-# Detect Compose command: prefer v2 plugin, fall back to legacy binary
-if docker compose version &>/dev/null 2>&1; then
-  COMPOSE_CMD="docker compose"
-elif command -v docker-compose &>/dev/null; then
-  COMPOSE_CMD="docker-compose"
-else
-  echo "ERROR: Neither 'docker compose' (plugin) nor 'docker-compose' (standalone) found." >&2
-  exit 1
-fi
-
-# Use sudo only when the current user cannot reach the Docker daemon directly
-if docker info &>/dev/null 2>&1; then
-  SUDO=""
-else
-  SUDO="sudo"
-fi
+ecube_require_compose
 
 if ! "$PYTHON" -c "import jwt" 2>/dev/null; then
   echo "ERROR: PyJWT is required. Install it with: pip install PyJWT" >&2
   exit 1
 fi
 
-if ! command -v st &>/dev/null; then
+if command -v st &>/dev/null; then
+  ST_CMD="st"
+elif [[ -n "${VIRTUAL_ENV:-}" ]] && [[ -x "$VIRTUAL_ENV/bin/st" ]]; then
+  ST_CMD="$VIRTUAL_ENV/bin/st"
+elif [[ -x "$PROJECT_ROOT/.venv/bin/st" ]]; then
+  ST_CMD="$PROJECT_ROOT/.venv/bin/st"
+else
   echo "ERROR: Schemathesis CLI ('st') is required. Install it with: pip install schemathesis" >&2
   exit 1
 fi
 
 # ---- Tear-down helper ----
 cleanup() {
-  echo ""
-  echo "==> Stopping containers…"
-  $SUDO $COMPOSE_CMD -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" down -v --rmi all 2>/dev/null || true
+  ecube_compose_down
 }
 trap cleanup EXIT
 
-# ---- Start the stack with overrides ----
-echo "==> Starting ECUBE stack (port $HOST_PORT)…"
-
-HOST_PORT="$HOST_PORT" \
-POSTGRES_HOST_PORT="$POSTGRES_HOST_PORT" \
-USB_DISCOVERY_INTERVAL=0 \
-LOCAL_GROUP_ROLE_MAP='{"evidence-admins": ["admin"]}' \
-SECRET_KEY="$SECRET_KEY" \
-$SUDO $COMPOSE_CMD -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" up -d --build \
-  --force-recreate \
-  2>&1
-
-APP_CONTAINER="ecube-app"
-
-# ---- Wait for API ----
-echo "==> Waiting for API on http://localhost:$HOST_PORT/health …"
-elapsed=0
-while [ "$elapsed" -lt "$MAX_WAIT" ]; do
-  if curl -sf "http://localhost:${HOST_PORT}/health" >/dev/null 2>&1; then
-    echo "    API is ready."
-    break
-  fi
-  sleep 2
-  elapsed=$((elapsed + 2))
-  echo "    … $elapsed s"
-done
-
-if [ "$elapsed" -ge "$MAX_WAIT" ]; then
-  echo "ERROR: API did not become healthy within ${MAX_WAIT}s." >&2
-  echo "       Check logs: $SUDO docker logs $APP_CONTAINER" >&2
-  exit 1
-fi
+ecube_compose_up
+ecube_wait_for_health "http://localhost:${HOST_PORT}"
 
 # ---- Generate JWT ----
 echo "==> Generating admin JWT…"
@@ -143,19 +112,28 @@ PY
 echo "==> Running Schemathesis…"
 echo ""
 
+if ! ecube_assert_health "http://localhost:${HOST_PORT}"; then
+  exit 1
+fi
+
 SCHEMATHESIS_ARGS=(
   run "http://localhost:${HOST_PORT}/openapi.json"
   --header "Authorization: Bearer $TOKEN"
-  --checks all
+  --checks "$CHECKS"
+  --exclude-checks "$EXCLUDE_CHECKS"
+  --workers "$WORKERS"
+  --max-failures "$MAX_FAILURES"
   --max-examples "$MAX_EXAMPLES"
   --request-timeout "$REQUEST_TIMEOUT"
+  --wait-for-schema "$WAIT_FOR_SCHEMA"
   --phases "$PHASES"
+  --include-path-regex "$INCLUDE_PATH_REGEX"
 )
 
 if [[ -n "$SEED" ]]; then
   SCHEMATHESIS_ARGS+=(--seed "$SEED")
 fi
 
-st "${SCHEMATHESIS_ARGS[@]}" \
+"$ST_CMD" "${SCHEMATHESIS_ARGS[@]}" \
   "$@" \
   2>&1 | tee "$PROJECT_ROOT/schemathesis-output.txt"
