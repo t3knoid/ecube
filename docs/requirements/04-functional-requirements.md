@@ -17,7 +17,7 @@ ECUBE must:
 
 On drive insertion or discovery refresh, ECUBE must:
 
-- Probe the drive's filesystem type using OS tools (e.g., `blkid`, `lsblk`)
+- Probe the drive's filesystem type
 - Store the detected filesystem type in the `usb_drives` record
 - Report unformatted (no recognizable filesystem) drives as `unformatted`
 - Update the filesystem type whenever a drive is reformatted or re-detected
