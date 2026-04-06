@@ -28,6 +28,7 @@ jobs:
         timeout-minutes: 20
         env:
           SECRET_KEY: ci-test-secret-key-do-not-use-in-production
+          POSTGRES_PASSWORD: ecube
           HOST_PORT: 8000
           POSTGRES_HOST_PORT: 5432
           BASE_URL: http://localhost:8000
