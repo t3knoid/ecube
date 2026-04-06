@@ -1,0 +1,47 @@
+name: DBML Schema Sync Check
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - app/models/**
+      - alembic/versions/**
+      - scripts/generate_dbml_schema.py
+      - docs/database/ecube-schema.dbml
+      - pyproject.toml
+  push:
+    branches: [main]
+    paths:
+      - app/models/**
+      - alembic/versions/**
+      - scripts/generate_dbml_schema.py
+      - docs/database/ecube-schema.dbml
+      - pyproject.toml
+
+jobs:
+  dbml-sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Regenerate DBML from SQLAlchemy models
+        run: python scripts/generate_dbml_schema.py --output docs/database/ecube-schema.dbml
+
+      - name: Check for DBML drift
+        run: |
+          if ! git diff --exit-code -- docs/database/ecube-schema.dbml; then
+            echo "DBML schema is out of date."
+            echo "Run: python scripts/generate_dbml_schema.py --output docs/database/ecube-schema.dbml"
+            echo "Then commit the updated docs/database/ecube-schema.dbml file."
+            exit 1
+          fi
