@@ -1,0 +1,177 @@
+Project ECUBE {
+  database_type: "PostgreSQL"
+  Note: "ECUBE core operational schema (generated from SQLAlchemy metadata)"
+}
+
+Enum job_status {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  VERIFYING
+}
+
+Enum mount_type {
+  NFS
+  SMB
+}
+
+Enum mount_status {
+  MOUNTED
+  UNMOUNTED
+  ERROR
+}
+
+Enum ecube_role {
+  admin
+  manager
+  processor
+  auditor
+}
+
+Enum file_status {
+  PENDING
+  COPYING
+  DONE
+  ERROR
+  RETRYING
+}
+
+Enum drive_state {
+  EMPTY
+  AVAILABLE
+  IN_USE
+}
+
+Table export_jobs {
+  id int [pk, not null]
+  project_id varchar [not null]
+  evidence_number varchar [not null]
+  source_path varchar [not null]
+  target_mount_path varchar
+  status job_status [default: 'PENDING']
+  total_bytes bigint [default: 0]
+  copied_bytes bigint [default: 0]
+  file_count int [default: 0]
+  thread_count int [default: 4]
+  max_file_retries int [default: 3]
+  retry_delay_seconds int [default: 1]
+  started_at timestamptz
+  completed_at timestamptz
+  created_by varchar
+  started_by varchar
+  client_ip varchar(45)
+  callback_url varchar
+  created_at timestamptz
+}
+
+Table network_mounts {
+  id int [pk, not null]
+  type mount_type [not null]
+  remote_path varchar [not null]
+  local_mount_point varchar [not null, unique]
+  status mount_status [default: 'UNMOUNTED']
+  last_checked_at timestamptz
+}
+
+Table reconciliation_lock {
+  id int [pk, not null, default: 1]
+  locked_by varchar [not null]
+  locked_at timestamptz [not null]
+}
+
+Table system_initialization {
+  id int [pk, not null, default: 1]
+  initialized_by varchar [not null]
+  initialized_at timestamptz [not null]
+}
+
+Table usb_hubs {
+  id int [pk, not null]
+  name varchar [not null]
+  system_identifier varchar [not null, unique]
+  location_hint varchar
+  vendor_id varchar
+  product_id varchar
+}
+
+Table user_roles {
+  id int [pk, not null]
+  username varchar [not null]
+  role ecube_role [not null]
+
+  indexes {
+    (username, role) [unique, name: 'uq_user_role']
+    username [name: 'ix_user_roles_username']
+  }
+}
+
+Table audit_logs {
+  id int [pk, not null]
+  timestamp timestamptz
+  user varchar
+  action varchar [not null]
+  job_id int
+  details json
+  client_ip varchar(45)
+}
+
+Table export_files {
+  id int [pk, not null]
+  job_id int [not null]
+  relative_path varchar [not null]
+  size_bytes bigint
+  checksum varchar
+  status file_status [default: 'PENDING']
+  error_message text
+  retry_attempts int [default: 0]
+}
+
+Table manifests {
+  id int [pk, not null]
+  job_id int [not null]
+  manifest_path varchar
+  format varchar [default: 'JSON']
+  created_at timestamptz
+}
+
+Table usb_ports {
+  id int [pk, not null]
+  hub_id int [not null]
+  port_number int [not null]
+  system_path varchar [not null, unique]
+  friendly_label varchar
+  enabled boolean [not null, default: false]
+  vendor_id varchar
+  product_id varchar
+  speed varchar
+}
+
+Table usb_drives {
+  id int [pk, not null]
+  port_id int
+  device_identifier varchar [not null, unique]
+  filesystem_path varchar
+  capacity_bytes bigint
+  encryption_status varchar
+  filesystem_type varchar
+  current_state drive_state [default: 'AVAILABLE']
+  current_project_id varchar
+  last_seen_at timestamptz
+}
+
+Table drive_assignments {
+  id int [pk, not null]
+  drive_id int [not null]
+  job_id int [not null]
+  assigned_at timestamptz
+  released_at timestamptz
+}
+
+Ref: audit_logs.job_id > export_jobs.id
+Ref: drive_assignments.drive_id > usb_drives.id
+Ref: drive_assignments.job_id > export_jobs.id
+Ref: export_files.job_id > export_jobs.id
+Ref: manifests.job_id > export_jobs.id
+Ref: usb_drives.port_id > usb_ports.id
+Ref: usb_ports.hub_id > usb_hubs.id
