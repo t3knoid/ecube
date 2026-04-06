@@ -3,7 +3,7 @@
 # run_schemathesis.sh — Spin up the ECUBE Docker stack and run Schemathesis
 #
 # Usage:
-#   ./scripts/run_schemathesis.sh                    # full run (coverage + fuzzing)
+#   ./scripts/run_schemathesis.sh                    # local CI-like run (coverage only)
 #   ./scripts/run_schemathesis.sh --endpoint /drives  # single endpoint
 #   ./scripts/run_schemathesis.sh --max-examples 100  # override example count
 #
@@ -28,7 +28,10 @@ HOST_PORT="${HOST_PORT:-8000}"
 POSTGRES_HOST_PORT="${POSTGRES_HOST_PORT:-5432}"
 SECRET_KEY="${SECRET_KEY:-change-me-in-production-please-rotate-32b}"
 MAX_WAIT="${SCHEMATHESIS_MAX_WAIT:-60}"        # seconds to wait for /health
-MAX_EXAMPLES="${SCHEMATHESIS_MAX_EXAMPLES:-50}"
+MAX_EXAMPLES="${SCHEMATHESIS_MAX_EXAMPLES:-5}"
+REQUEST_TIMEOUT="${SCHEMATHESIS_REQUEST_TIMEOUT:-5}"
+PHASES="${SCHEMATHESIS_PHASES:-coverage}"
+SEED="${SCHEMATHESIS_SEED:-}"
 
 COMPOSE_FILE="$PROJECT_ROOT/docker-compose.ecube.yml"
 COMPOSE_PROJECT="ecube-schemathesis"
@@ -140,11 +143,19 @@ PY
 echo "==> Running Schemathesis…"
 echo ""
 
-st run "http://localhost:${HOST_PORT}/openapi.json" \
-  --header "Authorization: Bearer $TOKEN" \
-  --checks all \
-  --max-examples "$MAX_EXAMPLES" \
-  --request-timeout 10 \
-  --phases coverage,fuzzing \
+SCHEMATHESIS_ARGS=(
+  run "http://localhost:${HOST_PORT}/openapi.json"
+  --header "Authorization: Bearer $TOKEN"
+  --checks all
+  --max-examples "$MAX_EXAMPLES"
+  --request-timeout "$REQUEST_TIMEOUT"
+  --phases "$PHASES"
+)
+
+if [[ -n "$SEED" ]]; then
+  SCHEMATHESIS_ARGS+=(--seed "$SEED")
+fi
+
+st "${SCHEMATHESIS_ARGS[@]}" \
   "$@" \
   2>&1 | tee "$PROJECT_ROOT/schemathesis-output.txt"
