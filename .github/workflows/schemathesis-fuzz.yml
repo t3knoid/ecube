@@ -87,7 +87,6 @@ jobs:
             --checks all \
             --max-examples 5 \
             --request-timeout 5 \
-            --hypothesis-timeout 1000 \
             --phases coverage \
             2>&1 | tee schemathesis-output.txt
           ST_EXIT=${PIPESTATUS[0]}
