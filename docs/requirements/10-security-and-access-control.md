@@ -6,14 +6,14 @@ ECUBE must:
 
 - Authenticate users against a configurable identity provider
 - Resolve roles for each authenticated user
-- Support identity modes including local OS users and optional LDAP
+- Support identity modes including local OS users, LDAP, and OIDC
 - Enforce role-based access control on all endpoints
 
 ## Roles
 
 ECUBE defines four roles:
 
-### Administrator
+### Admin
 
 - Full access to all ECUBE operations and APIs.
 
