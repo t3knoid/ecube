@@ -79,6 +79,8 @@ At the design level, ECUBE is considered adequately validated when:
 - concurrency and restart recovery behavior are explicitly tested,
 - critical failure modes are exercised and shown to degrade safely.
 
+Operational readiness validation should explicitly cover health signaling, readiness gating under dependency failure, metrics and telemetry correctness, structured logging correlation, and alert-triggering behavior under realistic fault conditions.
+
 ## 11.6 Related Documents
 
 - `docs/design/04-functional-requirements.md`
