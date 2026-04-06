@@ -1,9 +1,20 @@
 # ECUBE Theme and Branding Guide
 
-**Version:** 1.2
-**Last Updated:** April 2026
+**Version:** 1.2  
+**Last Updated:** April 2026  
 **Audience:** Systems Administrators, Platform Engineers, UI Maintainers
-**Document Type:** Operations Guide
+
+---
+
+## Table of Contents
+
+1. [Purpose](#purpose)
+2. [Built-in Themes](#built-in-themes)
+3. [Custom Theme Creation](#custom-theme-creation)
+4. [Theme Deployment](#theme-deployment)
+5. [Theme Selection and Defaults](#theme-selection-and-defaults)
+6. [Logo and Branding](#logo-and-branding)
+7. [Validation Checklist](#validation-checklist)
 
 ---
 
@@ -19,7 +30,7 @@ This guide explains how to:
 This document complements:
 
 - [04-configuration-reference.md](04-configuration-reference.md) for environment and deployment variables
-- [10-user-manual.md](10-user-manual.md) for end-user theme switching
+- [13-user-manual.md](13-user-manual.md) for end-user theme switching
 
 
 ## 1. Built-in Themes
