@@ -22,7 +22,77 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-. "$PROJECT_ROOT/scripts/lib/ecube_compose.sh"
+
+ECUBE_HELPER_PATH="$PROJECT_ROOT/scripts/lib/ecube_compose.sh"
+if [[ -f "$ECUBE_HELPER_PATH" ]]; then
+  . "$ECUBE_HELPER_PATH"
+else
+  echo "WARNING: $ECUBE_HELPER_PATH not found. Using built-in compose helper fallback." >&2
+
+  ecube_require_compose() {
+    ECUBE_COMPOSE_FILE="${ECUBE_COMPOSE_FILE:-$PROJECT_ROOT/docker-compose.ecube.yml}"
+    if [[ ! -f "$ECUBE_COMPOSE_FILE" ]]; then
+      echo "ERROR: Compose file not found at $ECUBE_COMPOSE_FILE" >&2
+      exit 1
+    fi
+    if docker compose version &>/dev/null 2>&1; then
+      ECUBE_COMPOSE_CMD="docker compose"
+    elif command -v docker-compose &>/dev/null; then
+      ECUBE_COMPOSE_CMD="docker-compose"
+    else
+      echo "ERROR: Neither 'docker compose' nor 'docker-compose' found." >&2
+      exit 1
+    fi
+    if docker info &>/dev/null 2>&1; then
+      ECUBE_SUDO=""
+    else
+      ECUBE_SUDO="sudo"
+    fi
+  }
+
+  ecube_compose_down() {
+    echo ""
+    echo "==> Stopping containers…"
+    $ECUBE_SUDO $ECUBE_COMPOSE_CMD -p "$ECUBE_COMPOSE_PROJECT" -f "$ECUBE_COMPOSE_FILE" down -v --rmi all 2>/dev/null || true
+  }
+
+  ecube_compose_up() {
+    echo "==> Starting ECUBE stack (port $ECUBE_HOST_PORT)…"
+    HOST_PORT="$ECUBE_HOST_PORT" \
+    POSTGRES_HOST_PORT="$ECUBE_POSTGRES_HOST_PORT" \
+    USB_DISCOVERY_INTERVAL=0 \
+    LOCAL_GROUP_ROLE_MAP='{"evidence-admins": ["admin"]}' \
+    SECRET_KEY="$ECUBE_SECRET_KEY" \
+    $ECUBE_SUDO $ECUBE_COMPOSE_CMD -p "$ECUBE_COMPOSE_PROJECT" -f "$ECUBE_COMPOSE_FILE" up -d --build \
+      --force-recreate \
+      2>&1
+  }
+
+  ecube_wait_for_health() {
+    local base_url="$1"
+    local elapsed=0
+    echo "==> Waiting for API on $base_url/health …"
+    while [ "$elapsed" -lt "$ECUBE_MAX_WAIT" ]; do
+      if curl -sf "$base_url/health" >/dev/null 2>&1; then
+        echo "    API is ready."
+        return 0
+      fi
+      sleep 2
+      elapsed=$((elapsed + 2))
+      echo "    … $elapsed s"
+    done
+    echo "ERROR: API did not become healthy within ${ECUBE_MAX_WAIT}s." >&2
+    return 1
+  }
+
+  ecube_assert_health() {
+    local base_url="$1"
+    if ! curl -sS -m 3 "$base_url/health" >/dev/null; then
+      echo "ERROR: API is not reachable at $base_url (health check failed)." >&2
+      return 1
+    fi
+  }
+fi
 
 # ---- Configurable defaults ----
 HOST_PORT="${HOST_PORT:-8000}"
