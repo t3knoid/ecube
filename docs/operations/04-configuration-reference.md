@@ -1,9 +1,26 @@
 # ECUBE Configuration Reference
 
-**Version:** 1.0
-**Last Updated:** March 2026
+**Version:** 1.0  
+**Last Updated:** March 2026  
 **Audience:** Systems Administrators, Operators, IT Staff
-**Source of truth:** `app/config.py` — all ECUBE application settings in this document map 1-to-1 to fields in the `Settings` class. Deployment-only Docker Compose variables are explicitly marked in their own section.
+
+> **Source of truth:** `app/config.py` — all ECUBE application settings in this document map 1-to-1 to fields in the `Settings` class. Deployment-only Docker Compose variables are explicitly marked in their own section.
+
+---
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Database](#database)
+3. [Target Platform](#target-platform)
+4. [Security and Authentication](#security-and-authentication)
+5. [Local Group-to-Role Mapping](#local-group-to-role-mapping)
+6. [LDAP Configuration](#ldap-configuration)
+7. [OIDC/SSO Integration](#oidcsso-integration)
+8. [Session Management](#session-management)
+9. [Copy Engine](#copy-engine)
+10. [Logging](#logging)
+11. [Docker Compose Deployment Variables](#docker-compose-deployment-variables)
 
 ---
 

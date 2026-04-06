@@ -1,8 +1,24 @@
-# 09. Third-Party Integration Guide
+# ECUBE Third-Party Integration Guide
 
-This document provides guidance for third-party applications that need to programmatically interface with the ECUBE system to submit evidence copy jobs using the existing REST API endpoints.
+**Version:** 1.0  
+**Last Updated:** April 2026  
+**Audience:** Developers, Integration Engineers
 
-## 1. Overview
+---
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Minimum Required Information](#minimum-required-information)
+3. [Integration Workflow Steps](#integration-workflow-steps)
+4. [API Endpoint Details](#api-endpoint-details)
+5. [Error Handling and Retry Logic](#error-handling-and-retry-logic)
+6. [Webhook Callbacks](#webhook-callbacks)
+7. [Example Integration](#example-integration)
+
+---
+
+## Overview
 
 ECUBE exposes a REST API that external systems (case management platforms, eDiscovery tools, automation scripts) can call to submit copy jobs. The workflow involves calling a series of endpoints in sequence:
 
