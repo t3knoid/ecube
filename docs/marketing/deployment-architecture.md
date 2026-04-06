@@ -261,7 +261,7 @@ When running on a VM, USB devices must be passed from the physical host to the V
 
 If the host is bare-metal, only the second hop applies (Docker handles device access directly).
 
-For full USB passthrough setup, see [12-linux-host-deployment-and-usb-passthrough.md](design/12-linux-host-deployment-and-usb-passthrough.md).
+For full USB passthrough setup, see [12-runtime-environment-and-usb-visibility.md](design/12-runtime-environment-and-usb-visibility.md).
 
 ### Characteristics
 
@@ -601,7 +601,7 @@ The ECUBE application is identical in all profiles. Only the host topology, netw
 |---|---|
 | [design/03-system-architecture.md](design/03-system-architecture.md) | Component view, platform abstraction, security design |
 | [design/10-security-and-access-control.md](design/10-security-and-access-control.md) | Role model, authorization matrix, authentication flows |
-| [design/12-linux-host-deployment-and-usb-passthrough.md](design/12-linux-host-deployment-and-usb-passthrough.md) | Docker USB passthrough setup |
+| [design/12-runtime-environment-and-usb-visibility.md](design/12-runtime-environment-and-usb-visibility.md) | Runtime environment and USB visibility |
 | [design/13-build-and-deployment.md](design/13-build-and-deployment.md) | Build pipeline, package and Docker deployment paths |
 | [design/15-frontend-architecture.md](design/15-frontend-architecture.md) | UI container topology and nginx configuration |
 | [operations/01-installation.md](operations/01-installation.md) | Prerequisite software and hardware requirements |
