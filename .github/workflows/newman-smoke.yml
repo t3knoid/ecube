@@ -1,0 +1,36 @@
+name: Newman API Smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  newman-smoke:
+    name: Newman Smoke (Postman Collection)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install JWT dependency
+        run: |
+          pip install PyJWT
+
+      - name: Run Newman smoke script
+        timeout-minutes: 20
+        env:
+          SECRET_KEY: ci-test-secret-key-do-not-use-in-production
+          HOST_PORT: 8000
+          POSTGRES_HOST_PORT: 5432
+          BASE_URL: http://localhost:8000
+          NEWMAN_MAX_WAIT: 90
+        run: |
+          bash ./scripts/run_newman_smoke.sh
