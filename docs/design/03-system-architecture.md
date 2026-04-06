@@ -67,8 +67,11 @@ The FastAPI lifespan context manager executes the following steps during applica
 
 Reconciliation runs in fixed order (mounts → jobs → drives) with per-pass error isolation, so a failure in one pass does not block the others.  The lock is released in a `finally` block regardless of success or failure.
 
+The startup and steady-state architecture must support operational readiness objectives by providing clear liveness/readiness signaling, dependency-aware startup behavior, and observable recovery semantics for mounts, jobs, and USB discovery.
+
 ## Security Design
 
 - DB reachable only from system-layer network segment.
 - Hardware access scoped to system-layer process user/group.
 - API endpoints validate project ownership and allowed transitions.
+- Authentication and access control are enforced at the system-layer API boundary so role-gated authorization decisions are centralized and consistently auditable.
