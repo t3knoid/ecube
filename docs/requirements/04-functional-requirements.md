@@ -48,8 +48,8 @@ A job includes:
 
 - Source path (local, NFS, SMB)
 - Evidence number
-- Project ID
-- Assigned drive
+- `project_id`
+- `drive_id`
 - Thread count for copy engine
 - File list and checksums
 - Copy progress
