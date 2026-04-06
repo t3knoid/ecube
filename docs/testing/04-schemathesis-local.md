@@ -7,34 +7,31 @@
 
 ## Overview
 
-[Schemathesis](https://schemathesis.readthedocs.io/) reads the ECUBE OpenAPI schema and auto-generates randomised requests to find server errors, schema violations, content-type mismatches, and status-code contradictions. The CI workflow (`.github/workflows/schemathesis-fuzz.yml`) runs this automatically, but you can also run the same scan on your local machine for faster feedback during development.
+[Schemathesis](https://schemathesis.readthedocs.io/) reads the ECUBE OpenAPI schema and auto-generates requests to find server errors, schema violations, and status-code contradictions. The CI workflow (`.github/workflows/schemathesis-fuzz.yml`) runs this automatically.
 
-This guide uses the standard **`docker-compose.ecube.yml`** stack (API server + PostgreSQL) so no local services are needed. A helper script (`scripts/run_schemathesis.sh`) automates the full workflow. The API is exposed on **port 8000** by default (override with `HOST_PORT`).
+For local development, `scripts/run_schemathesis.sh` is the recommended entrypoint. It now uses a **smoke profile by default** (fast and stable):
+
+- Starts/stops the ECUBE Docker Compose stack automatically.
+- Waits for `/health` before testing.
+- Generates an admin JWT automatically.
+- Runs coverage with conservative checks and path filtering.
+
+Use this profile for pre-commit validation. Use explicit overrides when you need broader coverage.
 
 ---
 
 ## Quick Start (Recommended)
 
-The all-in-one script handles everything — building containers, waiting for health,
-generating a JWT, running Schemathesis, and tearing down afterwards:
+The all-in-one script handles container startup, health checks, JWT generation,
+Schemathesis execution, and teardown:
 
 ```bash
 # Ensure host-side tools are installed
 source .venv/bin/activate
 pip install schemathesis PyJWT
 
-# Run the full scan
+# Run the default smoke scan
 ./scripts/run_schemathesis.sh
-```
-
-Extra arguments are forwarded to `st run`:
-
-```bash
-# Target a single endpoint
-./scripts/run_schemathesis.sh --endpoint "/drives"
-
-# Override example count
-./scripts/run_schemathesis.sh --max-examples 100
 ```
 
 ### Environment Variables
@@ -45,7 +42,16 @@ Extra arguments are forwarded to `st run`:
 | `POSTGRES_HOST_PORT` | `5432` | Host port for PostgreSQL; override to avoid conflicts with a local instance |
 | `SECRET_KEY` | `change-me-in-production-…` | Must match the app's key |
 | `SCHEMATHESIS_MAX_WAIT` | `60` | Seconds to wait for `/health` |
-| `SCHEMATHESIS_MAX_EXAMPLES` | `50` | Default `--max-examples` value |
+| `SCHEMATHESIS_MAX_EXAMPLES` | `5` | Default `--max-examples` value |
+| `SCHEMATHESIS_REQUEST_TIMEOUT` | `10` | Request timeout in seconds |
+| `SCHEMATHESIS_PHASES` | `coverage` | Test phases |
+| `SCHEMATHESIS_WORKERS` | `1` | Concurrent workers |
+| `SCHEMATHESIS_MAX_FAILURES` | `1` | Stop after first failure |
+| `SCHEMATHESIS_CHECKS` | `not_a_server_error,status_code_conformance` | Enabled checks |
+| `SCHEMATHESIS_EXCLUDE_CHECKS` | `unsupported_method,missing_required_header` | Disabled checks |
+| `SCHEMATHESIS_INCLUDE_PATH_REGEX` | `^/(health\|introspection/version\|setup/status)$` | Path filter for smoke profile |
+| `SCHEMATHESIS_WAIT_FOR_SCHEMA` | `30` | Seconds to wait for OpenAPI schema |
+| `SCHEMATHESIS_SEED` | *(unset)* | Optional deterministic seed |
 
 Results are saved to `schemathesis-output.txt` in the project root. Containers are
 automatically torn down when the script exits (including on errors).
@@ -66,109 +72,20 @@ automatically torn down when the script exits (including on errors).
 
 ---
 
-## Manual Step-by-Step
+## Expanding Beyond Smoke
 
-If you prefer to run each step individually (e.g. for debugging), follow the
-sections below.
-
-### Step 1 — Install Schemathesis
+The script forwards extra arguments directly to `st run`, so you can widen scope:
 
 ```bash
-source .venv/bin/activate
-pip install schemathesis PyJWT
+# More examples
+SCHEMATHESIS_MAX_EXAMPLES=25 ./scripts/run_schemathesis.sh
+
+# Broader path scope
+SCHEMATHESIS_INCLUDE_PATH_REGEX='^/(drives|mounts|jobs|introspection)/' ./scripts/run_schemathesis.sh
+
+# Reproducible run
+SCHEMATHESIS_SEED=12345 ./scripts/run_schemathesis.sh
 ```
-
-### Step 2 — Start the Containers
-
-The `docker-compose.ecube.yml` uses `${VAR:-default}` interpolation for
-`HOST_PORT`, `POSTGRES_HOST_PORT`, `SECRET_KEY`, `LOCAL_GROUP_ROLE_MAP`, and
-`USB_DISCOVERY_INTERVAL`, so you can override them via shell environment
-variables:
-
-```bash
-HOST_PORT=8000 \
-USB_DISCOVERY_INTERVAL=0 \
-LOCAL_GROUP_ROLE_MAP='{"evidence-admins": ["admin"]}' \
-SECRET_KEY="${SECRET_KEY:-change-me-in-production-please-rotate-32b}" \
-docker compose -p ecube-schemathesis -f docker-compose.ecube.yml up -d --build --force-recreate
-```
-
-Wait for the API to be ready:
-
-```bash
-for i in $(seq 1 30); do
-  curl -sf http://localhost:8000/health && break
-  echo "Waiting for API… attempt $i/30"
-  sleep 2
-done
-```
-
-### Step 3 — Generate an Admin JWT
-
-```bash
-export SECRET_KEY="${SECRET_KEY:-change-me-in-production-please-rotate-32b}"
-
-TOKEN=$(python - <<'PY'
-import jwt, time, os
-payload = {
-    "sub": "dev-admin",
-    "username": "dev-admin",
-    "groups": ["evidence-admins"],
-    "roles": ["admin"],
-    "exp": int(time.time()) + 3600,
-}
-print(jwt.encode(payload, os.environ["SECRET_KEY"], algorithm="HS256"))
-PY
-)
-
-echo "Token: $TOKEN"
-```
-
-> **Tip:** The token is valid for 1 hour. The `SECRET_KEY` must match the value
-> passed to the container. The default above matches the built-in development
-> default in `app/config.py`.
-
-### Step 4 — Run Schemathesis
-
-#### Basic Run
-
-```bash
-st run http://localhost:8000/openapi.json \
-  --header "Authorization: Bearer $TOKEN" \
-  --checks all \
-  --max-examples 50 \
-  --request-timeout 10
-```
-
-#### Full Run (Matching CI)
-
-```bash
-st run http://localhost:8000/openapi.json \
-  --header "Authorization: Bearer $TOKEN" \
-  --checks all \
-  --max-examples 50 \
-  --request-timeout 10 \
-  --phases coverage,fuzzing \
-  2>&1 | tee schemathesis-output.txt
-```
-
-#### Targeting a Single Endpoint
-
-```bash
-st run http://localhost:8000/openapi.json \
-  --header "Authorization: Bearer $TOKEN" \
-  --checks all \
-  --max-examples 50 \
-  --endpoint "/drives"
-```
-
-### Step 5 — Tear Down
-
-```bash
-docker compose -p ecube-schemathesis -f docker-compose.ecube.yml down -v
-```
-
-Omit `-v` if you want to keep the database state between runs.
 
 ---
 
@@ -198,3 +115,4 @@ Schemathesis prints a summary at the end of each run. Look for:
 | Build fails | Docker not running or missing Dockerfile | Ensure Docker daemon is running and `deploy/ecube-host/Dockerfile` exists |
 | Port 8000 in use | Another service on that port | Stop the conflicting service or set `HOST_PORT` to a different port (the script passes it through to the Compose port mapping) |
 | `password authentication failed` | Database container unhealthy | Run `docker compose -p ecube-schemathesis -f docker-compose.ecube.yml logs postgres` to diagnose |
+| Runs are too slow or noisy | Scope/checks too broad for local smoke | Keep default smoke profile, then widen with env vars incrementally |

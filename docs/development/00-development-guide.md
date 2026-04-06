@@ -440,6 +440,16 @@ Schemathesis reads the OpenAPI schema and auto-generates randomised requests to 
 
 Results are saved to `schemathesis-output.txt` in the project root. See the [Schemathesis Local Guide](../testing/04-schemathesis-local.md) for manual steps, environment variables, and troubleshooting.
 
+### API Smoke Testing (Newman)
+
+For a lightweight API smoke check based on the synced Postman collection:
+
+```bash
+./scripts/run_newman_smoke.sh
+```
+
+The script starts/stops the ECUBE Docker stack, waits for health, generates a token, and runs a curated smoke subset. See the [Newman Local Guide](../testing/06-newman-local.md) for options and troubleshooting.
+
 ### QA Test-Case Sync
 
 The QA test-case spreadsheet in `docs/testing/` is generated from the markdown guide. After editing test cases:

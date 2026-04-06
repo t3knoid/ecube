@@ -156,8 +156,9 @@ In addition to static analysis and dependency scanning, ECUBE provides an API te
 |---------|-------|
 | Target | `http://localhost:8000/openapi.json` |
 | Auth | Admin JWT via `--header` |
-| Max examples per endpoint | 50 |
-| Request timeout | 10 seconds |
+| Max examples per endpoint | 5 |
+| Request timeout | 5 seconds |
+| Phases | Coverage |
 | Report | CLI output (`schemathesis-output.txt`) |
 | Failure threshold | Warns on issues (non-blocking) |
 | Artifact retention | 30 days |
@@ -171,6 +172,8 @@ The recommended approach uses the all-in-one script that handles containers, JWT
 ```
 
 For manual step-by-step instructions and environment variable overrides, see the [Schemathesis Local Guide](04-schemathesis-local.md).
+
+For lightweight Postman/Newman local smoke validation, see the [Newman Local Guide](06-newman-local.md).
 
 ---
 
