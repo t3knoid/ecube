@@ -3,7 +3,6 @@
 **Version:** 1.0  
 **Last Updated:** March 2026  
 **Audience:** Systems Administrators, Operators, IT Staff, QA Personnel  
-**Document Type:** Index / Overview
 
 ---
 
@@ -126,35 +125,53 @@ Certificate operations guide for package deployments: self-signed bootstrap cert
 
 Hardening guide covering network isolation, TLS certificate management, credential management and secret rotation, access control policies, file permission lockdown, audit log monitoring and compliance exports, and firewall configuration (UFW rules for HTTPS and PostgreSQL).
 
-### [07 — Administration Automation Guide](07-administration-automation-guide.md)
+### [09 — Administration Automation Guide](09-administration-automation-guide.md)
 
 **Audience:** Systems Administrators, Operators, Automation Engineers
 
 API-driven and script-oriented runbook for administrative operations after deployment. Covers first-run setup, authentication and role management, OS user/group administration via admin APIs, scripted management of mounts, drives, jobs, and audit queries, plus monitoring, troubleshooting, backup/recovery, and routine maintenance tasks.
 
-### [08 — API Quick Reference](08-api-quick-reference.md)
+### [11 — API Quick Reference](11-api-quick-reference.md)
 
 **Audience:** Developers, Operators
 
 Concise endpoint reference for the ECUBE REST API. Covers interactive API documentation (Swagger UI, ReDoc, OpenAPI schema), authentication requirements, and endpoint tables for drives, mounts, jobs, audit, and introspection — each with HTTP method, path, required role, and description. Includes filter parameters and curl examples.
 
-### [09 — Third-Party Integration Guide](09-third-party-integration.md)
+### [12 — Third-Party Integration Guide](12-third-party-integration.md)
 
 **Audience:** Developers, Integration Engineers
 
 Guide for external system integration workflows using the ECUBE API: authentication, mount/drive selection, job orchestration, polling, verification, and manifest generation patterns.
 
-### [10 — User Manual](10-user-manual.md)
+### [13 — User Manual](13-user-manual.md)
 
 **Audience:** Processors, Managers, Auditors, All End Users
 
 End-user guide for the ECUBE web interface. Covers installation-orientation for users, first access, login, dashboard navigation, drive and mount workflows, export job creation and monitoring, verification and manifests, audit log browsing, and privileged user/system pages. Current draft includes screenshot placeholders for later UI capture.
 
-### [11 — Theme and Branding Guide](11-theme-and-branding-guide.md)
+### [14 — Theme and Branding Guide](14-theme-and-branding-guide.md)
 
 **Audience:** Systems Administrators, Platform Engineers
 
 Operational guide for UI theming and branding configuration. Covers built-in themes, custom theme creation, manifest registration, deployment mounting with `ECUBE_THEMES_DIR`, default-theme behavior, logo configuration (including supported image formats), and validation checklist.
+
+### [08 — Operational Readiness](08-operational-readiness.md)
+
+**Audience:** Operations Engineers, DevOps, Support Teams, Security Officers
+
+Comprehensive guide for production readiness covering health checks and readiness probes, metrics collection (Prometheus), log aggregation, alerting setup, performance baselines, and pre-deployment readiness checklist. Specifies deployment verification steps, SLI targets, and configuration environment variables for a production-ready ECUBE instance.
+
+### [07 — Compliance and Evidence Handling](07-compliance-and-evidence-handling.md)
+
+**Audience:** Legal Teams, Compliance Officers, Evidence Managers, IT Security, Operations
+
+Compliance and regulatory guidance for evidence handling, including mappings to FRCP, HIPAA, GDPR, GLBA and other jurisdictional requirements. Covers chain-of-custody procedures, forensic hashing, evidence integrity preservation, data retention and security, audit and accountability requirements, and incident response/breach notification procedures. **Critical for legal admissibility and audit defensibility.**
+
+### [10 — Production Support Procedures](10-production-support-procedures.md)
+
+**Audience:** Operations Engineers, Database Administrators, Support Teams, On-Call Engineers
+
+Operational runbook for production support covering troubleshooting procedures for common failure modes (service startup, memory usage, job failures, network mounts, API latency), database backup and recovery strategies, application upgrade and migration procedures, security patching and vulnerability management, secrets and key rotation, and disaster recovery scenarios.
 
 ---
 
@@ -167,13 +184,15 @@ Use this guide to find the right document for your task:
 | First-time installation | [01 — Installation Guide](01-installation.md) → then [02 — Manual Installation](02-manual-installation.md) or [03 — Docker Deployment](03-docker-deployment.md) |
 | Configure environment variables | [04 — Configuration Reference](04-configuration-reference.md) |
 | Manage certificates / HTTPS | [05 — TLS Certificates and Let's Encrypt](05-tls-certificates-and-letsencrypt.md) |
-| Day-to-day operations (mounts, drives, jobs) | [07 — Administration Automation Guide](07-administration-automation-guide.md) |
+| Day-to-day operations (mounts, drives, jobs) | [09 — Administration Automation Guide](09-administration-automation-guide.md) |
 | Harden a production deployment | [06 — Security Best Practices](06-security-best-practices.md) |
-| Explore the API | [08 — API Quick Reference](08-api-quick-reference.md) or Swagger UI at `/docs` |
-| Integrate third-party systems | [09 — Third-Party Integration Guide](09-third-party-integration.md) |
-| Manage themes and branding | [11 — Theme and Branding Guide](11-theme-and-branding-guide.md) |
-| Troubleshoot issues | [07 — Administration Automation Guide](07-administration-automation-guide.md) § Troubleshooting |
-| Backup and recovery | [07 — Administration Automation Guide](07-administration-automation-guide.md) § Backup and Recovery |
+| Explore the API | [11 — API Quick Reference](11-api-quick-reference.md) or Swagger UI at `/docs` |
+| Integrate third-party systems | [12 — Third-Party Integration Guide](12-third-party-integration.md) |
+| Manage themes and branding | [14 — Theme and Branding Guide](14-theme-and-branding-guide.md) |
+| **Prepare for production deployment** | **[08 — Operational Readiness](08-operational-readiness.md)** (health checks, metrics, alerting, readiness checklist) |
+| **Ensure compliance & evidence handling** | **[07 — Compliance and Evidence Handling](07-compliance-and-evidence-handling.md)** (FRCP, HIPAA, GDPR, chain-of-custody, audit requirements) |
+| **Troubleshoot issues & support procedures** | **[10 — Production Support Procedures](10-production-support-procedures.md)** (troubleshooting, backup/recovery, upgrade, patching, key rotation) |
+| Monitor and maintain service | [08 — Operational Readiness](08-operational-readiness.md) § Monitoring & Alerting + [10 — Production Support Procedures](10-production-support-procedures.md) § Troubleshooting |
 
 ---
 
@@ -196,7 +215,7 @@ For architecture decisions, data model details, and full API specifications, see
 | `05-data-model.md` | Table design and integrity constraints |
 | `06-rest-api-specification.md` | Full API endpoint definitions with schemas |
 | `10-security-and-access-control.md` | Role model, authorization matrix, `require_roles` pattern |
-| `12-linux-host-deployment-and-usb-passthrough.md` | Docker USB passthrough architecture |
+| `12-runtime-environment-and-usb-visibility.md` | Runtime environment and USB visibility architecture |
 
 ---
 

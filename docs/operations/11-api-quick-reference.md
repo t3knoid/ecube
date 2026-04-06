@@ -2,27 +2,21 @@
 
 **Version:** 1.0  
 **Last Updated:** April 2026  
-**Audience:** Developers, Operators, IT Staff  
-**Document Type:** API Reference
+**Audience:** Developers, Operators, IT Staff
 
 ---
 
 ## Table of Contents
 
-- [Table of Contents](#table-of-contents)
-- [Interactive API Documentation](#interactive-api-documentation)
-- [Authentication](#authentication)
-- [Drives (`/drives`)](#drives-drives)
-- [Mounts (`/mounts`)](#mounts-mounts)
-- [Jobs (`/jobs`)](#jobs-jobs)
-- [Audit (`/audit`)](#audit-audit)
-- [Introspection (`/introspection`)](#introspection-introspection)
-- [Telemetry (`/telemetry`)](#telemetry-telemetry)
-- [Support and Resources](#support-and-resources)
-  - [Documentation](#documentation)
-  - [Logging and Debugging](#logging-and-debugging)
-  - [Contacting Support](#contacting-support)
-  - [Quick Command Reference](#quick-command-reference)
+1. [Interactive API Documentation](#interactive-api-documentation)
+2. [Authentication](#authentication)
+3. [Drives (`/drives`)](#drivesdrives)
+4. [Mounts (`/mounts`)](#mountsmounts)
+5. [Jobs (`/jobs`)](#jobsjobs)
+6. [Audit (`/audit`)](#auditaudit)
+7. [Introspection (`/introspection`)](#introspectionintrospection)
+8. [Telemetry (`/telemetry`)](#telemetrytelemetry)
+9. [Support and Resources](#support-and-resources)
 
 ---
 

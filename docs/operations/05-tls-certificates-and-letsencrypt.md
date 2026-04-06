@@ -1,28 +1,26 @@
-# 05. TLS Certificates and Let's Encrypt
+# ECUBE TLS Certificates and Let's Encrypt
 
 **Version:** 1.0  
 **Last Updated:** April 2026  
-**Audience:** Systems Administrators, Security Engineers  
-**Document Type:** Security / Operations Procedures
+**Audience:** Systems Administrators, Security Engineers
 
 ---
 
 ## Table of Contents
 
-- [Table of Contents](#table-of-contents)
-- [5.1 Scope](#51-scope)
-- [5.2 Certificate Strategy](#52-certificate-strategy)
-- [5.3 Hostname, IP, and TLS Name Matching](#53-hostname-ip-and-tls-name-matching)
-- [5.4 Self-Signed Certificate (Bootstrap/Lab)](#54-self-signed-certificate-bootstraplab)
-- [5.5 Let's Encrypt with Certbot (Recommended for Public Deployments)](#55-lets-encrypt-with-certbot-recommended-for-public-deployments)
-- [5.6 Renewal and Monitoring](#56-renewal-and-monitoring)
-- [5.7 Split-Host Notes (Frontend and Backend on Separate Hosts)](#57-split-host-notes-frontend-and-backend-on-separate-hosts)
-- [5.8 Firewall Requirements for ACME and TLS](#58-firewall-requirements-for-acme-and-tls)
-- [5.9 File Ownership and Permissions](#59-file-ownership-and-permissions)
+1. [Scope](#scope)
+2. [Certificate Strategy](#certificate-strategy)
+3. [Hostname, IP, and TLS Name Matching](#hostname-ip-and-tls-name-matching)
+4. [Self-Signed Certificate (Bootstrap/Lab)](#self-signed-certificate-bootstraplab)
+5. [Let's Encrypt with Certbot](#lets-encrypt-with-certbot)
+6. [Renewal and Monitoring](#renewal-and-monitoring)
+7. [Split-Host Notes](#split-host-notes)
+8. [Firewall Requirements](#firewall-requirements)
+9. [File Ownership and Permissions](#file-ownership-and-permissions)
 
 ---
 
-## 5.1 Scope
+## Scope
 
 This document covers TLS certificate operations for ECUBE package deployments:
 

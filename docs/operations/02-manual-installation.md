@@ -2,29 +2,23 @@
 
 **Version:** 3.0  
 **Last Updated:** April 2026  
-**Audience:** Systems Administrators, Platform Engineers  
-**Document Type:** Manual Deployment Procedures
+**Audience:** Systems Administrators, Platform Engineers
 
-> This guide is the manual equivalent of what `install.sh` automates in [01-installation.md](01-installation.md).  
-> Use it when you must deploy without the installer, need custom host layout, or need stricter enterprise controls.
->
-> **Important:** In installer-driven deployments, `install.sh` now creates/updates a PostgreSQL superuser for setup and database provisioning is performed in the web setup wizard (`/setup`).
-> This manual guide also documents an explicit operator-managed alternative where `DATABASE_URL` is written directly in `.env`.
+> This guide is the manual equivalent of what `install.sh` automates in [01-installation.md](01-installation.md). Use it when you must deploy without the installer, need custom host layout, or need stricter enterprise controls.
 
 ---
 
 ## Table of Contents
 
-- [Table of Contents](#table-of-contents)
-- [1. Scope and Source of Truth](#1-scope-and-source-of-truth)
-- [2. Requirements](#2-requirements)
-- [3. Deployment Topologies](#3-deployment-topologies)
-- [4. Package Contents and Verification](#4-package-contents-and-verification)
-- [5. Single-Host Manual Deployment (DB + Backend + Frontend)](#5-single-host-manual-deployment-db--backend--frontend)
-- [6. Enterprise Split-Host Deployment (DB, Backend, Frontend on Separate Hosts)](#6-enterprise-split-host-deployment-db-backend-frontend-on-separate-hosts)
-- [7. Host Firewall Hardening](#7-host-firewall-hardening)
-- [8. Operations and Upgrades](#8-operations-and-upgrades)
-- [9. Advanced: Hosting UI with Another Web Frontend](#9-advanced-hosting-ui-with-another-web-frontend)
+1. [Scope and Source of Truth](#scope-and-source-of-truth)
+2. [Requirements](#requirements)
+3. [Deployment Topologies](#deployment-topologies)
+4. [Package Contents and Verification](#package-contents-and-verification)
+5. [Single-Host Manual Deployment](#single-host-manual-deployment)
+6. [Enterprise Split-Host Deployment](#enterprise-split-host-deployment)
+7. [Host Firewall Hardening](#host-firewall-hardening)
+8. [Operations and Upgrades](#operations-and-upgrades)
+9. [Advanced: Hosting UI with Another Web Frontend](#advanced-hosting-ui-with-another-web-frontend)
 
 ---
 
