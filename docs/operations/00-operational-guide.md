@@ -173,6 +173,12 @@ Compliance and regulatory guidance for evidence handling, including mappings to 
 
 Operational runbook for production support covering troubleshooting procedures for common failure modes (service startup, memory usage, job failures, network mounts, API latency), database backup and recovery strategies, application upgrade and migration procedures, security patching and vulnerability management, secrets and key rotation, and disaster recovery scenarios.
 
+### [15 — DBA Data Model Reference](15-dba-data-model-reference.md)
+
+**Audience:** Database Administrators, SQL Support Engineers, Data Governance Teams
+
+Standalone schema reference focused on DBA workflows and SQL support. Includes conceptual, logical, and physical data models, table/object descriptions, integrity constraints, workflow visualizations, and a concise DBML companion file (`docs/database/ecube-schema.dbml`).
+
 ---
 
 ## Getting Started
@@ -192,6 +198,7 @@ Use this guide to find the right document for your task:
 | **Prepare for production deployment** | **[08 — Operational Readiness](08-operational-readiness.md)** (health checks, metrics, alerting, readiness checklist) |
 | **Ensure compliance & evidence handling** | **[07 — Compliance and Evidence Handling](07-compliance-and-evidence-handling.md)** (FRCP, HIPAA, GDPR, chain-of-custody, audit requirements) |
 | **Troubleshoot issues & support procedures** | **[10 — Production Support Procedures](10-production-support-procedures.md)** (troubleshooting, backup/recovery, upgrade, patching, key rotation) |
+| **DBA schema and object reference** | **[15 — DBA Data Model Reference](15-dba-data-model-reference.md)** (conceptual/logical/physical model, workflow diagrams, DBML) |
 | Monitor and maintain service | [08 — Operational Readiness](08-operational-readiness.md) § Monitoring & Alerting + [10 — Production Support Procedures](10-production-support-procedures.md) § Troubleshooting |
 
 ---
