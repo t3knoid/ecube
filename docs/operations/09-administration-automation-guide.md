@@ -2,8 +2,7 @@
 
 **Version:** 1.0  
 **Last Updated:** March 2026  
-**Audience:** Systems Administrators, Operators, IT Staff  
-**Document Type:** Operational Procedures
+**Audience:** Systems Administrators, Operators, IT Staff
 
 ---
 

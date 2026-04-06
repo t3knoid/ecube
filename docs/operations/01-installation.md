@@ -2,32 +2,25 @@
 
 **Version:** 1.0  
 **Last Updated:** April 2026  
-**Audience:** Systems Administrators, IT Staff  
-**Document Type:** Installation Procedures
+**Audience:** Systems Administrators, IT Staff
 
 ---
 
 ## Table of Contents
 
-- [Table of Contents](#table-of-contents)
-- [Deployment Options](#deployment-options)
-- [Prerequisites](#prerequisites)
-  - [Hardware Requirements](#hardware-requirements)
-  - [Software Requirements](#software-requirements)
-- [Quick Start (bare-metal)](#quick-start-bare-metal)
-- [CLI Flags Reference](#cli-flags-reference)
-- [Install Modes](#install-modes)
-  - [Full Install (default)](#full-install-default)
-  - [Backend Only](#backend-only)
-  - [Frontend Only](#frontend-only)
-- [Prepare PostgreSQL](#prepare-postgresql)
-- [Database Configuration](#database-configuration)
-  - [Interactive mode (default)](#interactive-mode-default)
-  - [Unattended mode (`--yes`)](#unattended-mode---yes)
-- [TLS Certificates](#tls-certificates)
-- [Post-Install: Setup Wizard](#post-install-setup-wizard)
-- [Upgrade Procedure](#upgrade-procedure)
-- [Uninstall Procedure](#uninstall-procedure)
+1. [Deployment Options](#deployment-options)
+2. [Prerequisites](#prerequisites)
+3. [Quick Start (bare-metal)](#quick-start-bare-metal)
+4. [CLI Flags Reference](#cli-flags-reference)
+5. [Install Modes](#install-modes)
+6. [Prepare PostgreSQL](#prepare-postgresql)
+7. [Database Configuration](#database-configuration)
+8. [TLS Certificates](#tls-certificates)
+9. [Post-Install: Setup Wizard](#post-install-setup-wizard)
+10. [Upgrade Procedure](#upgrade-procedure)
+11. [Uninstall Procedure](#uninstall-procedure)
+
+---
 - [Docker Compose Deployment](#docker-compose-deployment)
 
 ---
