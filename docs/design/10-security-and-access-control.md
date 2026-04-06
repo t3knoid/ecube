@@ -5,6 +5,7 @@
 - Centralize authentication and authorization in the ECUBE System Layer.
 - Support a common role model across local and LDAP identity modes.
 - Enforce least privilege at endpoint and service boundaries.
+- Maintain a security and access control design posture where authentication, role resolution, authorization enforcement, and denial auditing remain fail-closed by default.
 
 ## Identity Source Design
 
