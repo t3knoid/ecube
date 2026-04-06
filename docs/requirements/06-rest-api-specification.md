@@ -4,35 +4,41 @@
 
 ### 1.1 Identity Sources
 
-ECUBE supports two identity modes:
+ECUBE supports three identity modes.
 
-- **Local mode (default)**
-  - Uses Linux system users and groups (`/etc/passwd`, `/etc/group`).
-  - Group membership determines ECUBE roles.
-
-- **LDAP mode (optional)**
-  - Uses LDAP bind for authentication.
-  - LDAP group membership maps to ECUBE roles.
+- Local mode (default): users authenticate with host OS credentials through PAM; roles are resolved from `user_roles` first, then mapped from OS groups.
+- LDAP mode (optional): users authenticate through PAM backed by LDAP/SSSD; LDAP-backed group memberships map to ECUBE roles.
+- OIDC mode (optional): bearer tokens are validated against the configured identity provider and mapped to ECUBE roles from configured group claims.
 
 ### 1.2 Authentication Mechanism
 
-- API uses **token-based authentication** (JWT or signed session token).
-- Token includes:
-  - `username`
-  - `roles` (resolved from local groups or LDAP groups)
-  - `issued_at`
-  - `expires_at`
+- API uses bearer authentication with signed JWTs.
+- Tokens carry at minimum `sub`, `username`, `groups`, `roles`, `iat`, and `exp` claims.
+- Token lifetime is configurable (`TOKEN_EXPIRE_MINUTES`).
+- Role enforcement must occur for every authenticated endpoint at the API boundary.
 
-### 1.3 User Context
+### 1.3 Login Endpoint Behavior
 
-Every request resolves to:
+`POST /auth/token` is the local/LDAP login endpoint.
 
-```json
-{
-  "username": "frank",
-  "roles": ["manager", "auditor"]
-}
-```
+- In local and LDAP modes, valid credentials return a signed bearer token.
+- In OIDC mode, this endpoint is not available for local login and returns `404 Not Found`.
+
+### 1.4 Public and Conditional Authentication Endpoints
+
+The following endpoints are intentionally unauthenticated or conditionally authenticated.
+
+- Always public: `GET /health`, `GET /health/live`, `GET /health/ready`, `GET /introspection/version`, `GET /setup/status`, `GET /setup/database/system-info`.
+- Deployment-controlled public access: `GET /metrics` may be public or restricted by deployment policy.
+- Conditional admin gate (unauthenticated during initial setup, admin-required after initialization): `POST /setup/database/test-connection`, `POST /setup/database/provision`, `GET /setup/database/provision-status`.
+- Admin-only after initialization: `GET /setup/database/status`, `PUT /setup/database/settings`.
+
+### 1.5 Authorization Semantics
+
+- Missing, invalid, or expired token: `401 Unauthorized`.
+- Authenticated user lacking required role: `403 Forbidden`.
+- Validation failures for path/query/body: `422 Unprocessable Entity`.
+- Security-relevant denials and failures must be audit-logged.
 
 ---
 
@@ -40,267 +46,164 @@ Every request resolves to:
 
 ### 2.1 Role Definitions
 
-- **Administrator**
-  - Full access to all ECUBE operations.
-- **Manager**
-  - Initialize drives.
-  - Assign drives to projects.
-  - Prepare drives for eject.
-  - Manage mounts.
-  - View jobs, drives, logs.
-- **Processor**
-  - Create jobs.
-  - Start copy operations.
-  - View job and drive status.
-- **Auditor**
-  - Read audit logs.
-  - View job and file metadata.
-  - Compute file hashes (MD5/SHA‑256).
-  - Perform file comparisons.
-  - No write operations.
+- Admin: full access to ECUBE operations and configuration.
+- Manager: mount and drive lifecycle operations, operational oversight.
+- Processor: create and run jobs, monitor job and drive status.
+- Auditor: read audit metadata and integrity operations (hash/compare), no write operations to jobs, drives, or mounts.
 
 ### 2.2 Authorization Matrix
 
 | API Area / Operation | Admin | Manager | Processor | Auditor |
 | -------------------- | :---: | :-----: | :-------: | :-----: |
+| Manage user roles (`/users/*/roles`) | ✔ | ✖ | ✖ | ✖ |
+| Manage OS users/groups (`/admin/os-*`) | ✔ | ✖ | ✖ | ✖ |
 | Add/remove mounts | ✔ | ✔ | ✖ | ✖ |
+| Validate mounts | ✔ | ✔ | ✖ | ✖ |
 | List mounts | ✔ | ✔ | ✔ | ✔ |
-| Initialize drives | ✔ | ✔ | ✖ | ✖ |
-| Prepare drives for eject | ✔ | ✔ | ✖ | ✖ |
+| Initialize/format/prepare-eject drives | ✔ | ✔ | ✖ | ✖ |
 | List drives | ✔ | ✔ | ✔ | ✔ |
-| Create jobs | ✔ | ✔ | ✔ | ✖ |
-| Start copy jobs | ✔ | ✔ | ✔ | ✖ |
-| View job status | ✔ | ✔ | ✔ | ✔ |
-| Regenerate manifest | ✔ | ✔ | ✔ | ✖ |
-| Verify job | ✔ | ✔ | ✔ | ✖ |
+| Trigger drive refresh discovery | ✔ | ✔ | ✖ | ✖ |
+| Create/start/verify/manifest jobs | ✔ | ✔ | ✔ | ✖ |
+| View jobs and job files | ✔ | ✔ | ✔ | ✔ |
 | Read audit logs | ✔ | ✔ | ✖ | ✔ |
-| Introspection (read-only) | ✔ | ✔ | ✔ | ✔ |
 | File hash/compare | ✔ | ✖ | ✖ | ✔ |
+| Introspection system endpoints | ✔ | ✔ | ✔ | ✔ |
+| Introspection job debug | ✔ | ✖ | ✖ | ✔ |
+| Admin configuration endpoints | ✔ | ✖ | ✖ | ✖ |
+| Telemetry ingestion endpoint | ✔ | ✔ | ✔ | ✔ |
+| Log file list/download endpoints | ✔ | ✔ | ✔ | ✔ |
 
 ---
 
-## 3. Updated REST API Endpoints with Security Requirements
+## 3. Standard Error Response Requirements
 
-Each endpoint now includes **required roles**.
+All error responses must conform to a standardized `ErrorResponse` schema.
 
----
+```json
+{
+  "code": "CONFLICT",
+  "message": "Drive is not in IN_USE state",
+  "trace_id": "abc123"
+}
+```
 
-## 3.1 Mount Management
-
-### `POST /mounts`
-
-Add NFS/SMB mount.
-
-**Roles:** `admin`, `manager`
-
-### `DELETE /mounts/{id}`
-
-Unmount and remove mount.
-
-**Roles:** `admin`, `manager`
-
-### `GET /mounts`
-
-List all mounts.
-
-**Roles:** `admin`, `manager`, `processor`, `auditor`
+Minimum error coverage by authenticated endpoint family must include applicable combinations of `400`, `401`, `403`, `404`, `409`, `422`, `500`, `503`, and `504`.
 
 ---
 
-## 3.2 Drive Management
+## 4. Endpoint Families and Required Roles
 
-### `GET /drives`
+### 4.1 Health and Version
 
-List all drives with state and project assignment.
+- `GET /health` (public): service liveness/status endpoint.
+- `GET /health/live` (public): lightweight process liveness endpoint.
+- `GET /health/ready` (public): readiness endpoint with dependency checks.
+- `GET /metrics` (public or deployment-restricted): Prometheus-compatible metrics endpoint.
+- `GET /introspection/version` (public): API/application version endpoint.
 
-**Query parameters:**
+### 4.2 Authentication
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `project_id` | string | No | When provided, return only drives bound to this project. When omitted, return all drives. |
+- `POST /auth/token` (public in local/LDAP modes): issue JWT bearer token.
 
-**Roles:** `admin`, `manager`, `processor`, `auditor`
+### 4.3 Setup and Database Provisioning
 
-### `POST /drives/{id}/initialize`
+- `GET /setup/status` (public): initialization status.
+- `POST /setup/initialize` (public, first-run guarded): initial admin/bootstrap flow.
+- `GET /setup/database/system-info` (public): setup hints for DB host defaults.
+- `POST /setup/database/test-connection` (conditional admin gate): test PostgreSQL connectivity.
+- `POST /setup/database/provision` (conditional admin gate): create app DB/user and run migrations.
+- `GET /setup/database/provision-status` (conditional admin gate): report DB provisioned state.
+- `GET /setup/database/status` (`admin`): DB health/migration status.
+- `PUT /setup/database/settings` (`admin`): update DB settings.
 
-Initialize drive for a project.
+### 4.4 Mount Management
 
-Enforces project isolation.
+- `POST /mounts` (`admin`, `manager`): add mount.
+- `GET /mounts` (all roles): list mounts.
+- `POST /mounts/validate` (`admin`, `manager`): validate all mounts.
+- `POST /mounts/{mount_id}/validate` (`admin`, `manager`): validate one mount.
+- `DELETE /mounts/{mount_id}` (`admin`, `manager`): remove mount.
 
-**Roles:** `admin`, `manager`
+### 4.5 Drive Management
 
-### `POST /drives/{id}/format`
+- `GET /drives` (all roles): list drives.
+- `POST /drives/{drive_id}/initialize` (`admin`, `manager`): bind drive to project.
+- `POST /drives/{drive_id}/format` (`admin`, `manager`): format drive (`ext4`, `exfat`).
+- `POST /drives/{drive_id}/prepare-eject` (`admin`, `manager`): safe eject preparation.
+- `POST /drives/{drive_id}/finalize` (`admin`, `manager`): finalize drive for export completion and safe handoff.
+- `POST /drives/refresh` (`admin`, `manager`): trigger discovery sync.
 
-Format a drive with the specified filesystem type.
+### 4.6 Job Management
 
-**Precondition:** Drive must be in `AVAILABLE` state and not mounted.
+- `POST /jobs` (`admin`, `manager`, `processor`): create job.
+- `GET /jobs/{job_id}` (all roles): job status and metadata.
+- `GET /jobs/{job_id}/files` (all roles): operator-safe per-file status.
+- `POST /jobs/{job_id}/start` (`admin`, `manager`, `processor`): start copy job.
+- `POST /jobs/{job_id}/verify` (`admin`, `manager`, `processor`): verify copy.
+- `POST /jobs/{job_id}/manifest` (`admin`, `manager`, `processor`): generate manifest.
 
-**Body:** `{ "filesystem_type": "ext4" }`
+### 4.7 Audit and File Integrity
 
-- Supported types: `ext4`, `exfat`
-- Returns `200` with updated drive record on success
-- Returns `409` Conflict if drive is not in `AVAILABLE` state
-- Returns `400` if the filesystem type is unsupported
-- Returns `500` if the format operation fails
+- `GET /audit` (`admin`, `manager`, `auditor`): list audit logs with filters.
+- `GET /audit/chain-of-custody` (`admin`, `manager`, `auditor`): export chain-of-custody timeline for a job.
+  Query parameter: `job_id` (required)
+- `GET /files/{file_id}/hashes` (`admin`, `auditor`): file hash endpoint.
+- `POST /files/compare` (`admin`, `auditor`): compare files by integrity metadata.
 
-**Audit events:**
-- `DRIVE_FORMATTED`: Success; includes `drive_id`, `filesystem_type`
-- `DRIVE_FORMAT_FAILED`: Failure; includes `drive_id`, `filesystem_type`, `error`
+### 4.8 Introspection
 
-**Roles:** `admin`, `manager`
+- `GET /introspection/drives` (all roles): diagnostic drive inventory.
+- `GET /introspection/usb/topology` (all roles): USB topology diagnostics.
+- `GET /introspection/block-devices` (all roles): block device diagnostics.
+- `GET /introspection/mounts` (all roles): mount diagnostics.
+- `GET /introspection/system-health` (all roles): system health diagnostics.
+- `GET /introspection/jobs/{job_id}/debug` (`admin`, `auditor`): deep job debug details.
 
-### `POST /drives/{id}/prepare-eject`
+### 4.9 User Role Administration
 
-Prepare drive for safe eject: flush filesystem writes, unmount all partitions, and transition to AVAILABLE.
+- `GET /users` (`admin`): list users and role assignments.
+- `GET /users/{username}/roles` (`admin`): read user roles.
+- `PUT /users/{username}/roles` (`admin`): replace user role set.
+- `DELETE /users/{username}/roles` (`admin`): remove role assignments.
 
-**Precondition:** Drive must be in `IN_USE` state (required for this operation to proceed).
+### 4.10 Admin Operations
 
-Performs the following steps in sequence:
-1. Validates drive is in `IN_USE` state at request start
-2. Issues `sync(1)` to flush all pending filesystem writes to block devices
-3. Identifies and unmounts all partitions and mount points for the device (discovers partitions via `/proc/mounts`; supports traditional sdb1/sdb2, NVMe nvme0n1p1, and MMC mmcblk0p1 naming schemes)
-4. Re-validates that drive state and device path have not changed (see race condition protection below)
-5. On success: transitions drive from `IN_USE` → `AVAILABLE`, logs `DRIVE_EJECT_PREPARED`
-6. On failure: drive remains `IN_USE`, logs `DRIVE_EJECT_FAILED` with error details
+- `GET /admin/logs` (all authenticated roles): list available log files.
+- `GET /admin/logs/{filename}` (all authenticated roles): download log file.
+- `GET /admin/ports` (`admin`, `manager`): list ports.
+- `PATCH /admin/ports/{port_id}` (`admin`, `manager`): update port state.
+- `PATCH /admin/ports/{port_id}/label` (`admin`, `manager`): update port label.
+- `GET /admin/hubs` (`admin`, `manager`): list hubs.
+- `PATCH /admin/hubs/{hub_id}` (`admin`, `manager`): update hub metadata.
+- `POST /admin/os-users` (`admin`): create OS user.
+- `GET /admin/os-users` (`admin`): list OS users.
+- `DELETE /admin/os-users/{username}` (`admin`): delete OS user.
+- `PUT /admin/os-users/{username}/password` (`admin`): reset OS user password.
+- `PUT /admin/os-users/{username}/groups` (`admin`): replace OS group membership.
+- `POST /admin/os-users/{username}/groups` (`admin`): add OS group membership.
+- `POST /admin/os-groups` (`admin`): create OS group.
+- `GET /admin/os-groups` (`admin`): list OS groups.
+- `DELETE /admin/os-groups/{name}` (`admin`): delete OS group.
 
-**Behavior:**
-- Returns `200` with updated drive state on success
-- Returns `409` Conflict if drive is not in `IN_USE` state (precondition violation)
-- Returns `409` Conflict if drive state changed during operation (detected race condition; operation aborted)
-- Returns `409` Conflict if device path changed during operation (e.g., via concurrent discovery refresh; operation aborted to avoid stale OS operations)
-- Returns `500` if sync or unmount operations fail (drive state unchanged, stays `IN_USE`)
-- If device is not mounted, returns `200` immediately (no-op is success)
-- If device has multiple partitions mounted, unmounts all; returns `500` only if any unmount fails
+### 4.11 Runtime Configuration
 
-**Race Condition Protection:**
-The endpoint captures the drive state and device path at the start, performs potentially slow OS operations without holding the database lock (to avoid contention), then re-acquires the lock to validate preconditions before committing the state transition. If another request or discovery process changes the drive's state or device path, this operation fails with 409 Conflict, ensuring audit consistency and preventing operations against stale or unintended device paths.
+- `GET /admin/configuration` (`admin`): retrieve editable runtime configuration.
+- `PUT /admin/configuration` (`admin`): update runtime configuration values.
+- `POST /admin/configuration/restart` (`admin`): request service restart after config changes.
 
-**Audit events:**
-- `DRIVE_EJECT_PREPARED`: Drive successfully prepared for eject; includes `drive_id`, `filesystem_path`, `flush_ok`, `unmount_ok`
-- `DRIVE_EJECT_FAILED`: Sync or unmount failed; includes `drive_id`, `filesystem_path`, `flush_ok`, `flush_error`, `unmount_ok`, `unmount_error`
+### 4.12 Frontend Telemetry Ingestion
 
-**Roles:** `admin`, `manager`
-
----
-
-## 3.3 Job Management
-
-### `POST /jobs`
-
-Create a new job.
-
-**Roles:** `admin`, `manager`, `processor`
-
-### `POST /jobs/{id}/start`
-
-Start job with thread count.
-
-**Roles:** `admin`, `manager`, `processor`
-
-### `GET /jobs/{id}`
-
-Return job status and progress.
-
-**Roles:** `admin`, `manager`, `processor`, `auditor`
-
-### `POST /jobs/{id}/verify`
-
-Re-verify checksums.
-
-**Roles:** `admin`, `manager`, `processor`
-
-### `POST /jobs/{id}/manifest`
-
-Regenerate manifest.
-
-**Roles:** `admin`, `manager`, `processor`
+- `POST /telemetry/ui-navigation` (all roles): ingest UI navigation telemetry events for diagnostics.
 
 ---
 
-## 3.4 Audit Log Access
+## 5. Operational and Security Requirements for API Behavior
 
-### `GET /audit`
-
-Return audit logs with filters.
-
-**Roles:** `admin`, `manager`, `auditor`
-
----
-
-## 3.5 File Audit Operations
-
-### `GET /files/{file_id}/hashes`
-
-Compute MD5/SHA‑256 for a file.
-
-**Roles:** `admin`, `auditor`
-
-### `POST /files/compare`
-
-Compare two files by hash/size/path.
-
-**Roles:** `admin`, `auditor`
+- Security-relevant events must be audit-logged, including authentication outcomes, authorization denials, and privileged mutations.
+- Role enforcement must be explicit in route dependencies and must fail closed.
+- Path/query/body validation must reject malformed values with `422`.
+- Administrative endpoints that mutate OS resources must remain local-only when deployment mode requires local host guarantees.
+- API contracts and OpenAPI documentation must remain synchronized for endpoint paths, roles, and response semantics.
 
 ---
 
-## 3.6 Introspection API (Read‑Only)
-
-### `GET /introspection/usb/topology`
-
-USB hub/port/device mapping.
-
-**Roles:** `admin`, `manager`, `processor`, `auditor`
-
-### `GET /introspection/block-devices`
-
-Block device metadata.
-
-**Roles:** `admin`, `manager`, `processor`, `auditor`
-
-### `GET /introspection/mounts`
-
-Mounted filesystems.
-
-**Roles:** `admin`, `manager`, `processor`, `auditor`
-
-### `GET /introspection/system-health`
-
-CPU, memory, disk I/O, worker queue.
-
-**Roles:** `admin`, `manager`, `processor`, `auditor`
-
-### `GET /introspection/jobs/{id}/debug`
-
-Internal worker state.
-
-**Roles:** `admin`, `manager`, `processor`, `auditor`
-
----
-
-## 4. Error Handling for Security
-
-### 4.1 Unauthorized (401)
-
-Returned when:
-
-- Token missing
-- Token invalid
-- Token expired
-
-### 4.2 Forbidden (403)
-
-Returned when:
-
-- User lacks required role
-- User attempts cross‑project access
-- User attempts restricted operation (for example, processor initializing drive)
-
-### 4.3 Audit Logging
-
-Every security‑relevant event is logged:
-
-- Authentication success/failure
-- Role resolution
-- Access denied events
-- Drive initialization attempts
-- File hash/compare operations
