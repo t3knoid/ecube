@@ -2,26 +2,19 @@
 
 **Version:** 1.0  
 **Last Updated:** March 2026  
-**Audience:** Systems Administrators, IT Staff  
-**Document Type:** Deployment Procedures
+**Audience:** Systems Administrators, IT Staff
 
 ---
 
 ## Table of Contents
 
-- [Table of Contents](#table-of-contents)
-- [Overview](#overview)
-- [Quick Start](#quick-start)
-- [Configuration](#configuration)
-- [Setup Wizard Auto-Detection](#setup-wizard-auto-detection)
-- [Starting and Stopping](#starting-and-stopping)
-  - [Start Services](#start-services)
-  - [Check Status](#check-status)
-  - [Stop Services](#stop-services)
-  - [Restart Application](#restart-application)
-  - [Verify API Endpoint](#verify-api-endpoint)
-- [Logs](#logs)
-- [Reference](#reference)
+1. [Overview](#overview)
+2. [Quick Start](#quick-start)
+3. [Configuration](#configuration)
+4. [Setup Wizard Auto-Detection](#setup-wizard-auto-detection)
+5. [Starting and Stopping](#starting-and-stopping)
+6. [Logs](#logs)
+7. [Reference](#reference)
 
 ---
 
@@ -39,7 +32,7 @@ In the Compose deployment, only the HTTPS frontend port is published to the host
 - OpenAPI schema: `https://localhost:${UI_PORT:-8443}/openapi.json`
 
 For Docker-specific USB passthrough setup and detailed architecture, see
-[12-linux-host-deployment-and-usb-passthrough.md](../design/12-linux-host-deployment-and-usb-passthrough.md).
+[12-runtime-environment-and-usb-visibility.md](../design/12-runtime-environment-and-usb-visibility.md).
 
 ---
 
@@ -165,6 +158,6 @@ docker compose -f docker-compose.ecube.yml logs -n 100 ecube-app
 
 ## Reference
 
-- **Design document:** [12-linux-host-deployment-and-usb-passthrough.md](../design/12-linux-host-deployment-and-usb-passthrough.md)
+- **Design document:** [12-runtime-environment-and-usb-visibility.md](../design/12-runtime-environment-and-usb-visibility.md)
 - **Configuration reference:** [04-configuration-reference.md](04-configuration-reference.md)
 - **Administration automation guide:** [07-administration-automation-guide.md](07-administration-automation-guide.md)

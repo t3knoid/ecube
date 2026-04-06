@@ -1,10 +1,22 @@
 # ECUBE User Manual
 
-**Version:** 0.5 Draft
-**Last Updated:** April 2026
+**Version:** 0.5 Draft  
+**Last Updated:** April 2026  
 **Audience:** Processors, Managers, Auditors, Administrators, End Users
-**Document Type:** End-User Guide
-**Status:** Draft — screenshots pending
+
+---
+
+## Table of Contents
+
+1. [Purpose](#purpose)
+2. [Scope](#scope)
+3. [Getting Started](#getting-started)
+4. [Dashboard and Navigation](#dashboard-and-navigation)
+5. [Managing Export Jobs](#managing-export-jobs)
+6. [Mounts and Drives](#mounts-and-drives)
+7. [Audit Logs](#audit-logs)
+8. [Verification and Manifests](#verification-and-manifests)
+9. [Advanced Features](#advanced-features)
 
 ---
 

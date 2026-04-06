@@ -2,16 +2,13 @@
 
 **Version:** 1.0  
 **Last Updated:** March 2026  
-**Audience:** Systems Administrators, Security Engineers  
-**Document Type:** Security Guidelines
+**Audience:** Systems Administrators, Security Engineers
 
 ---
 
 ## Table of Contents
 
 1. [Network Isolation](#1-network-isolation)
-  1. [Network Ports Reference](#11-network-ports-reference)
-  2. [PostgreSQL and Reverse Proxy Best Practices](#12-postgresql-and-reverse-proxy-best-practices)
 2. [Certificate Management](#2-certificate-management)
 3. [Credential Management](#3-credential-management)
 4. [Access Control](#4-access-control)
