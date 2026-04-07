@@ -52,10 +52,20 @@ from app.repositories.hardware_repository import HubRepository, PortRepository
 logger = logging.getLogger(__name__)
 
 
-def _default_topology_source() -> DiscoveredTopology:
-    """Lazy import to route through the platform-selected provider."""
+def discover_usb_topology() -> DiscoveredTopology:
+    """Return the current USB topology from the platform discovery provider.
+
+    This thin wrapper exists as a stable seam for tests that monkeypatch the
+    discovery source at module scope.
+    """
     from app.infrastructure import get_drive_discovery
+
     return get_drive_discovery().discover_topology()
+
+
+def _default_topology_source() -> DiscoveredTopology:
+    """Default topology provider used by ``run_discovery_sync``."""
+    return discover_usb_topology()
 
 
 def run_discovery_sync(
