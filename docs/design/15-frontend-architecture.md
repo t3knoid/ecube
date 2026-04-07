@@ -50,7 +50,7 @@ This document defines the architecture for the ECUBE web frontend — a Vue 3 si
 | Document | Relationship |
 |----------|-------------|
 | [14-ui-wireframes.md](14-ui-wireframes.md) | Screen layouts and visual structure this architecture implements |
-| [02-ui-use-cases.md](../testing/02-ui-use-cases.md) | 47 use cases across 8 groups that define functional requirements |
+| [04-ui-use-cases.md](../testing/04-ui-use-cases.md) | 47 use cases across 8 groups that define functional requirements |
 | [06-rest-api-specification.md](06-rest-api-specification.md) | API contract the frontend consumes |
 | [10-security-and-access-control.md](10-security-and-access-control.md) | Role model and authorization matrix |
 | [03-system-architecture.md](03-system-architecture.md) | Overall system architecture and trust boundary |

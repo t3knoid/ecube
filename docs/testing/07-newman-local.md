@@ -1,7 +1,7 @@
 # ECUBE — Running Newman Smoke Tests Locally
 
 **Audience:** Developers, QA  
-**See also:** [Schemathesis Local Guide](04-schemathesis-local.md), [Security Scanning](03-security-scanning.md)
+**See also:** [Schemathesis Local Guide](06-schemathesis-local.md), [Security Scanning](05-security-scanning.md)
 
 ---
 
