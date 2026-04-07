@@ -11,7 +11,8 @@ async function waitForStablePaint(page) {
 }
 
 async function mockTelemetry(page) {
-  await routeJson(page, '**/api/ui/telemetry', { ok: true })
+  await routeJson(page, '**/api/telemetry/ui-navigation', { ok: true })
+  await routeJson(page, '**/telemetry/ui-navigation', { ok: true })
 }
 
 async function mockSetupApis(page) {
