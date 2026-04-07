@@ -152,7 +152,7 @@ Common role effects in the UI:
 - The `Configuration` page is visible only to `admin` users.
 - Action buttons such as formatting or initializing drives may be disabled if your role does not permit them.
 
-> **Screenshot placeholder:** Sidebar navigation with role-specific menu visibility.
+![Role-based navigation visibility (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/dashboard-default-chromium-linux.png)
 
 ---
 
@@ -175,7 +175,7 @@ The setup wizard walks through:
 
 If you are not responsible for installation, stop here and contact the administrator who owns the deployment.
 
-> **Screenshot placeholder:** Setup wizard showing the four-step first-run flow.
+![Setup wizard (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/setup-default-chromium-linux.png)
 
 ### 4.2 Login
 
@@ -230,7 +230,7 @@ Common navigation items include:
 
 If you do not see a page described in this manual, your role may not include access to it.
 
-> **Screenshot placeholder:** Main application shell with header, sidebar, and content area labeled.
+![Application shell overview (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/dashboard-default-chromium-linux.png)
 
 ### 5.1 Theme Selection (Light/Dark/Custom)
 
@@ -388,7 +388,7 @@ Use `Test` or `Test All` to verify that configured source mounts are reachable a
 
 Remove a mount only if it is no longer needed. If existing workflows depend on it, removing the definition can interrupt job creation or repeatability.
 
-> **Screenshot placeholder:** Mounts page showing mount list and add-mount dialog.
+![Mounts page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/mounts-default-chromium-linux.png)
 
 ---
 
@@ -445,7 +445,7 @@ Before creating a job, confirm:
 
 Open a job to view details and perform follow-up actions.
 
-> **Screenshot placeholder:** Jobs list with filters and the four-step create-job wizard.
+![Jobs list and create wizard (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/jobs-list-default-chromium-linux.png)
 
 ---
 
@@ -573,7 +573,7 @@ Notes:
 
 If your role does not include access to this page, the navigation item will not appear.
 
-> **Screenshot placeholder:** Users page with role assignment controls and password reset flow.
+![Users page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/users-default-chromium-linux.png)
 
 ### 12.2 Configuration Page (Administrator)
 
@@ -612,7 +612,7 @@ Important operational notes:
 
 If your role does not include access to this page, the navigation item will not appear.
 
-> **Screenshot placeholder:** Configuration page showing editable settings, pending-restart warning, and restart confirmation dialog.
+![Configuration page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/configuration-default-chromium-linux.png)
 
 ---
 
@@ -632,7 +632,7 @@ This page is useful when:
 
 End users who only perform evidence exports may rarely need this page. Administrators and support personnel are more likely to use it during troubleshooting.
 
-> **Screenshot placeholder:** System page with tabs for health, devices, mounts, logs, and job debug.
+![System page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/system-default-chromium-linux.png)
 
 ---
 
