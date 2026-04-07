@@ -9,7 +9,7 @@
 
 [Schemathesis](https://schemathesis.readthedocs.io/) reads the ECUBE OpenAPI schema and auto-generates requests to find server errors, schema violations, and status-code contradictions. The CI workflow (`.github/workflows/schemathesis-fuzz.yml`) runs this automatically.
 
-For local development, `scripts/run_schemathesis.sh` is the recommended entrypoint. It now uses a **smoke profile by default** (fast and stable):
+For local development, `scripts/run_schemathesis.sh` is the recommended entrypoint. It uses a **smoke profile by default** (fast and stable):
 
 - Starts/stops the ECUBE Docker Compose stack automatically.
 - Waits for `/health` before testing.
