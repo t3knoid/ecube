@@ -56,6 +56,7 @@ def _log_configuration_event(
 def get_configuration(
     _: CurrentUser = Depends(_ADMIN_ONLY),
 ) -> ConfigurationGetResponse:
+    """Return the current runtime configuration values for admin users."""
     return ConfigurationGetResponse(settings=configuration_service.get_configuration_fields())
 
 
@@ -69,6 +70,11 @@ def update_configuration(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_ONLY),
 ) -> ConfigurationUpdateResponse:
+    """Apply supported runtime/admin configuration updates.
+
+    Returns changed settings and whether a service restart is required for any
+    of the requested updates.
+    """
     values = {key: getattr(body, key) for key in body.model_fields_set}
     requested_settings = sorted(values.keys())
     requested_values = {key: values[key] for key in requested_settings}
@@ -150,13 +156,14 @@ def update_configuration(
 @router.post(
     "/restart",
     response_model=ConfigurationRestartResponse,
-    responses={**R_400, **R_401, **R_403, **R_500, **R_503},
+    responses={**R_400, **R_401, **R_403, **R_422, **R_500, **R_503},
 )
 def restart_application_service(
     body: ConfigurationRestartRequest,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_ONLY),
 ) -> ConfigurationRestartResponse:
+    """Request an application service restart after explicit confirmation."""
     try:
         result = configuration_service.request_service_restart(confirm=body.confirm)
     except ValueError as exc:
