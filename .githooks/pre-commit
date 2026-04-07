@@ -9,7 +9,7 @@
 
 set -euo pipefail
 
-MD_FILE="docs/testing/01-qa-testing-guide-baremetal.md"
+MD_FILE="docs/testing/03-qa-testing-guide-baremetal.md"
 XLSX_FILE="docs/testing/ecube-qa-test-cases.xlsx"
 
 # Only run when either file is staged

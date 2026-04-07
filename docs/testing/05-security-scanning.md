@@ -171,9 +171,9 @@ The recommended approach uses the all-in-one script that handles containers, JWT
 ./scripts/run_schemathesis.sh
 ```
 
-For manual step-by-step instructions and environment variable overrides, see the [Schemathesis Local Guide](04-schemathesis-local.md).
+For manual step-by-step instructions and environment variable overrides, see the [Schemathesis Local Guide](06-schemathesis-local.md).
 
-For lightweight Postman/Newman local smoke validation, see the [Newman Local Guide](06-newman-local.md).
+For lightweight Postman/Newman local smoke validation, see the [Newman Local Guide](07-newman-local.md).
 
 ---
 

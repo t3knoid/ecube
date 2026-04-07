@@ -4,7 +4,7 @@
 **Last Updated:** March 2026  
 **Audience:** UI Designers, Developers, QA  
 **Document Type:** Wireframe Reference  
-**Source:** Derived from [02-ui-use-cases.md](../testing/02-ui-use-cases.md)
+**Source:** Derived from [04-ui-use-cases.md](../testing/04-ui-use-cases.md)
 
 ---
 

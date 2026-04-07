@@ -1,7 +1,7 @@
 # ECUBE — Running Schemathesis Locally
 
 **Audience:** Developers, QA  
-**See also:** [Security Scanning](03-security-scanning.md) (CI workflow reference)
+**See also:** [Security Scanning](05-security-scanning.md) (CI workflow reference)
 
 ---
 
