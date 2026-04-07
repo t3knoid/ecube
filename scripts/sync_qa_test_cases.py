@@ -8,7 +8,7 @@ Usage:
     # Update the Excel to match the markdown (preserves Status/Tester/Date/Notes)
     python scripts/sync_qa_test_cases.py --sync
 
-Source of truth: docs/testing/01-qa-testing-guide-baremetal.md
+Source of truth: docs/testing/03-qa-testing-guide-baremetal.md
 Target:          docs/testing/ecube-qa-test-cases.xlsx
 """
 
@@ -35,7 +35,7 @@ except ImportError:
 # Paths (relative to repo root)
 # ---------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).resolve().parent.parent
-MD_PATH = REPO_ROOT / "docs" / "testing" / "01-qa-testing-guide-baremetal.md"
+MD_PATH = REPO_ROOT / "docs" / "testing" / "03-qa-testing-guide-baremetal.md"
 XLSX_PATH = REPO_ROOT / "docs" / "testing" / "ecube-qa-test-cases.xlsx"
 
 # ---------------------------------------------------------------------------
