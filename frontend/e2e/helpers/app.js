@@ -29,6 +29,11 @@ export async function stubFooterApis(page) {
   await routeJson(page, '**/api/introspection/version', { version: 'test' })
 }
 
+export async function stubTelemetryApis(page) {
+  await routeJson(page, '**/api/telemetry/ui-navigation', { ok: true })
+  await routeJson(page, '**/telemetry/ui-navigation', { ok: true })
+}
+
 export async function injectAuthToken(page, roles = ['admin']) {
   const exp = Math.floor(Date.now() / 1000) + 3600
   const jwt = makeToken({ sub: 'frank', roles, groups: [], exp })
@@ -40,5 +45,6 @@ export async function injectAuthToken(page, roles = ['admin']) {
 export async function setupAuthenticatedPage(page, roles = ['admin']) {
   await stubSetupStatus(page, true)
   await stubFooterApis(page)
+  await stubTelemetryApis(page)
   await injectAuthToken(page, roles)
 }
