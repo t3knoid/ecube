@@ -9,12 +9,16 @@
 ## Table of Contents
 
 1. [Purpose](#purpose)
-2. [Built-in Themes](#built-in-themes)
-3. [Custom Theme Creation](#custom-theme-creation)
-4. [Theme Deployment](#theme-deployment)
-5. [Theme Selection and Defaults](#theme-selection-and-defaults)
-6. [Logo and Branding](#logo-and-branding)
-7. [Validation Checklist](#validation-checklist)
+2. [Built-in Themes](#1-built-in-themes)
+3. [How Theme Loading Works](#2-how-theme-loading-works)
+4. [Create a Custom Theme](#3-create-a-custom-theme)
+5. [CSS Properties Reference Table](#4-css-properties-reference-table)
+6. [Setting the Deployment Default Theme](#5-setting-the-deployment-default-theme)
+7. [Off-the-Shelf Theme Availability](#6-off-the-shelf-theme-availability)
+8. [Logo and Branding](#7-logo-and-branding)
+9. [Validation Checklist](#8-validation-checklist)
+10. [Troubleshooting Logo Issues](#9-troubleshooting-logo-issues)
+11. [Related Files and References](#10-related-files-and-references)
 
 ---
 
