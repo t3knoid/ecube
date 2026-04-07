@@ -217,7 +217,7 @@ When editing packaging workflows or installer copy logic, verify all items below
 ## Related Documents
 
 - `docs/operations/01-installation.md`
-- `docs/testing/05-automated-test-requirements.md`
+- `docs/testing/01-automated-test-requirements.md`
 - `.github/workflows/tag-release.yml`
 - `.github/workflows/build-artifact.yml`
 - `install.sh`

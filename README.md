@@ -98,14 +98,14 @@ Build and deployment guidance (release artifacts, package deployment, Docker ima
 
 The four badges at the top of this file reflect the current state of automated CI workflows:
 
-- **Tests** — four test suites run on every push: backend unit tests (pytest, SQLite in-memory, cross-platform), backend integration tests (pytest against a live PostgreSQL instance), frontend unit tests (Vitest with coverage), and frontend end-to-end tests (Playwright). See [docs/testing/05-automated-test-requirements.md](docs/testing/05-automated-test-requirements.md) for test conventions.
-- **Security Scan** — static analysis and dependency vulnerability checks. Triggered manually via GitHub Actions (`workflow_dispatch`). See [docs/testing/03-security-scanning.md](docs/testing/03-security-scanning.md) for details.
-- **Schemathesis API Fuzz** — auto-generated requests from the OpenAPI schema to detect schema violations, server errors, and undocumented status codes. Triggered manually via GitHub Actions (`workflow_dispatch`). See the [Schemathesis Local Guide](docs/testing/04-schemathesis-local.md) for running the scan locally.
-- **Newman API Smoke** — Postman collection-based API smoke validation. Triggered manually via GitHub Actions (`workflow_dispatch`). See the [Newman Local Guide](docs/testing/06-newman-local.md) for local usage.
+- **Tests** — four test suites run on every push: backend unit tests (pytest, SQLite in-memory, cross-platform), backend integration tests (pytest against a live PostgreSQL instance), frontend unit tests (Vitest with coverage), and frontend end-to-end tests (Playwright). See [docs/testing/01-automated-test-requirements.md](docs/testing/01-automated-test-requirements.md) for test conventions.
+- **Security Scan** — static analysis and dependency vulnerability checks. Triggered manually via GitHub Actions (`workflow_dispatch`). See [docs/testing/05-security-scanning.md](docs/testing/05-security-scanning.md) for details.
+- **Schemathesis API Fuzz** — auto-generated requests from the OpenAPI schema to detect schema violations, server errors, and undocumented status codes. Triggered manually via GitHub Actions (`workflow_dispatch`). See the [Schemathesis Local Guide](docs/testing/06-schemathesis-local.md) for running the scan locally.
+- **Newman API Smoke** — Postman collection-based API smoke validation. Triggered manually via GitHub Actions (`workflow_dispatch`). See the [Newman Local Guide](docs/testing/07-newman-local.md) for local usage.
 
 ## Contributors
 
-- **Testing** — see [docs/testing/05-automated-test-requirements.md](docs/testing/05-automated-test-requirements.md) for test conventions, fixture patterns, and backend/frontend suite execution. For manual QA procedures and test-case assets, use [docs/testing/](docs/testing/).
+- **Testing** — see [docs/testing/01-automated-test-requirements.md](docs/testing/01-automated-test-requirements.md) for test conventions, fixture patterns, and backend/frontend suite execution. For manual QA procedures and test-case assets, use [docs/testing/](docs/testing/).
 - **Development** — start with [docs/development/00-development-guide.md](docs/development/00-development-guide.md) for local setup and workflow. Windows-specific development guidance is in [docs/development/02-windows-development-guide.md](docs/development/02-windows-development-guide.md).
 - **Documentation** — operational and end-user documentation is in [docs/operations/](docs/operations/). System design and requirement sources are in [docs/design/](docs/design/) and [docs/requirements/](docs/requirements/).
 

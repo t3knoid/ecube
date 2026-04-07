@@ -438,7 +438,7 @@ Schemathesis reads the OpenAPI schema and auto-generates randomised requests to 
 ./scripts/run_schemathesis.sh
 ```
 
-Results are saved to `schemathesis-output.txt` in the project root. See the [Schemathesis Local Guide](../testing/04-schemathesis-local.md) for manual steps, environment variables, and troubleshooting.
+Results are saved to `schemathesis-output.txt` in the project root. See the [Schemathesis Local Guide](../testing/06-schemathesis-local.md) for manual steps, environment variables, and troubleshooting.
 
 ### API Smoke Testing (Newman)
 
@@ -448,7 +448,7 @@ For a lightweight API smoke check based on the synced Postman collection:
 ./scripts/run_newman_smoke.sh
 ```
 
-The script starts/stops the ECUBE Docker stack, waits for health, generates a token, and runs a curated smoke subset. See the [Newman Local Guide](../testing/06-newman-local.md) for options and troubleshooting.
+The script starts/stops the ECUBE Docker stack, waits for health, generates a token, and runs a curated smoke subset. See the [Newman Local Guide](../testing/07-newman-local.md) for options and troubleshooting.
 
 ### QA Test-Case Sync
 
@@ -458,7 +458,7 @@ The QA test-case spreadsheet in `docs/testing/` is generated from the markdown g
 python scripts/sync_qa_test_cases.py --sync
 ```
 
-See the [QA Testing Guide](../testing/01-qa-testing-guide-baremetal.md) for manual test procedures.
+See the [QA Testing Guide](../testing/03-qa-testing-guide-baremetal.md) for manual test procedures.
 
 ---
 
@@ -508,7 +508,7 @@ When adding new OS-level functionality:
 | [Debugging Guide](01-debugging-guide.md) | Command-line and VS Code debugging reference |
 | [CI Build and Installer Artifact Contract](03-ci-build-and-installer-artifacts.md) | GitHub Actions package build flow and installer-required artifact contract |
 | [operations/](../operations/00-operational-guide.md) | Production deployment, configuration, user manual, security hardening |
-| [testing/](../testing/01-qa-testing-guide-baremetal.md) | QA testing guide and test-case spreadsheet |
+| [testing/](../testing/03-qa-testing-guide-baremetal.md) | QA testing guide and test-case spreadsheet |
 | [design/](../design/00-overview.md) | Architecture, data model, API specification, security design |
 | [requirements/](../requirements/00-overview.md) | Requirements documents |
 
