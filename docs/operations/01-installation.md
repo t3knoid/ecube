@@ -21,9 +21,6 @@
 11. [Uninstall Procedure](#uninstall-procedure)
 
 ---
-- [Docker Compose Deployment](#docker-compose-deployment)
-
----
 
 ## Deployment Options
 
