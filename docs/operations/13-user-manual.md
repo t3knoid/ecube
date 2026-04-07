@@ -53,8 +53,8 @@ For those topics, use the companion guides:
 - [01-installation.md](01-installation.md) for packaged installation options
 - [02-manual-installation.md](02-manual-installation.md) for native/manual deployment
 - [03-docker-deployment.md](03-docker-deployment.md) for Docker Compose deployment
-- [07-administration-automation-guide.md](07-administration-automation-guide.md) for administrative and API-driven tasks
-- [08-api-quick-reference.md](08-api-quick-reference.md) for direct API usage
+- [09-administration-automation-guide.md](09-administration-automation-guide.md) for administrative and API-driven tasks
+- [11-api-quick-reference.md](11-api-quick-reference.md) for direct API usage
 
 ---
 
@@ -253,7 +253,7 @@ Important default-theme note:
 - The web UI currently does not provide an administrator control to set a system-wide default theme for all users.
 - Platform administrators can still influence the deployment default by controlling which CSS is served as `default.css` in the mounted themes directory.
 
-For deployment-side theme and branding management, see [11-theme-and-branding-guide.md](11-theme-and-branding-guide.md) and [04-configuration-reference.md](04-configuration-reference.md) (`ECUBE_THEMES_DIR`).
+For deployment-side theme and branding management, see [14-theme-and-branding-guide.md](14-theme-and-branding-guide.md) and [04-configuration-reference.md](04-configuration-reference.md) (`ECUBE_THEMES_DIR`).
 
 ---
 
