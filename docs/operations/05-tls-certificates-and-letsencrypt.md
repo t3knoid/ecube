@@ -9,14 +9,14 @@
 ## Table of Contents
 
 1. [Scope](#scope)
-2. [Certificate Strategy](#certificate-strategy)
-3. [Hostname, IP, and TLS Name Matching](#hostname-ip-and-tls-name-matching)
-4. [Self-Signed Certificate (Bootstrap/Lab)](#self-signed-certificate-bootstraplab)
-5. [Let's Encrypt with Certbot](#lets-encrypt-with-certbot)
-6. [Renewal and Monitoring](#renewal-and-monitoring)
-7. [Split-Host Notes](#split-host-notes)
-8. [Firewall Requirements](#firewall-requirements)
-9. [File Ownership and Permissions](#file-ownership-and-permissions)
+2. [Certificate Strategy](#52-certificate-strategy)
+3. [Hostname, IP, and TLS Name Matching](#53-hostname-ip-and-tls-name-matching)
+4. [Self-Signed Certificate (Bootstrap/Lab)](#54-self-signed-certificate-bootstraplab)
+5. [Let's Encrypt with Certbot](#55-lets-encrypt-with-certbot-recommended-for-public-deployments)
+6. [Renewal and Monitoring](#56-renewal-and-monitoring)
+7. [Split-Host Notes](#57-split-host-notes-frontend-and-backend-on-separate-hosts)
+8. [Firewall Requirements](#58-firewall-requirements-for-acme-and-tls)
+9. [File Ownership and Permissions](#59-file-ownership-and-permissions)
 
 ---
 
