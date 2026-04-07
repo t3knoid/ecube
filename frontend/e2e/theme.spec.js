@@ -2,6 +2,24 @@ import { test, expect } from '@playwright/test'
 import { setupAuthenticatedPage, routeJson } from './helpers/app.js'
 import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
 
+async function disableMotion(page) {
+  await page.addStyleTag({ content: '*, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; }' })
+}
+
+async function waitForStablePaint(page) {
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+}
+
+async function mockTelemetry(page) {
+  await routeJson(page, '**/api/ui/telemetry', { ok: true })
+}
+
+async function mockSetupApis(page) {
+  await routeJson(page, '**/api/setup/status', { initialized: false })
+  await routeJson(page, '**/api/setup/database/provision-status', { provisioned: false })
+  await routeJson(page, '**/api/setup/database/system-info', { in_docker: false, suggested_db_host: 'localhost' })
+}
+
 async function mockCoreApis(page) {
   await routeJson(page, '**/api/drives', [{ id: 1, current_state: 'AVAILABLE', device_identifier: '/dev/sdb', filesystem_type: 'ext4', capacity_bytes: 1000 }])
   await routeJson(page, '**/api/mounts', [])
@@ -38,17 +56,23 @@ async function mockCoreApis(page) {
   await routeJson(page, '**/api/introspection/jobs/55/debug', { files: [] })
 }
 
+async function openCreateJobWizard(page) {
+  await page.goto('/jobs')
+  await page.getByRole('button', { name: /create/i }).click()
+  await expect(page.locator('.dialog-panel')).toBeVisible()
+}
+
 test('theme switch changes css variables', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
+  await mockTelemetry(page)
   await mockCoreApis(page)
 
   await page.goto('/')
 
   const before = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--color-bg-primary').trim())
 
-  // Disable CSS transitions so the theme change is instant (avoids mid-transition color values
-  // during the a11y scan when body color animates over 0.5 s in base.css).
-  await page.addStyleTag({ content: '*, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; }' })
+  // Disable transitions to avoid sampling colors mid-animation.
+  await disableMotion(page)
   await page.locator('.theme-select').selectOption('dark')
 
   // Wait for dark theme CSS to fully settle (all variables must reflect dark values)
@@ -56,16 +80,32 @@ test('theme switch changes css variables', async ({ page }) => {
     (lightBgPrimary) => getComputedStyle(document.documentElement).getPropertyValue('--color-bg-primary').trim() !== lightBgPrimary,
     before,
   )
-  // Allow two paint cycles so all cascaded variables fully propagate (webkit needs this)
-  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+  // Allow two paint cycles so cascaded variables fully propagate.
+  await waitForStablePaint(page)
 
   const after = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--color-bg-primary').trim())
   expect(before).not.toBe(after)
   await expectNoCriticalA11yViolations(page)
 })
 
+test('visual regression snapshots for setup screen in default and dark themes', async ({ page }) => {
+  await mockTelemetry(page)
+  await mockSetupApis(page)
+
+  await page.goto('/setup')
+  await expect(page.locator('.setup-card')).toBeVisible()
+  await expect(page).toHaveScreenshot('setup-default.png')
+
+  await disableMotion(page)
+  await page.locator('.theme-select').selectOption('dark')
+  await page.waitForFunction(() => localStorage.getItem('ecube_theme') === 'dark')
+  await waitForStablePaint(page)
+  await expect(page).toHaveScreenshot('setup-dark.png')
+})
+
 test('visual regression snapshots for key screens in default and dark themes', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
+  await mockTelemetry(page)
   await mockCoreApis(page)
 
   const shots = [
@@ -76,20 +116,25 @@ test('visual regression snapshots for key screens in default and dark themes', a
     { path: '/users', name: 'users' },
     { path: '/system', name: 'system' },
     { path: '/configuration', name: 'configuration' },
+    { path: '/jobs', name: 'jobs-list' },
     { path: '/jobs/55', name: 'job-detail' },
     { path: '/audit', name: 'audit' },
   ]
 
   for (const shot of shots) {
-    await page.goto(shot.path)
+    if (shot.name === 'jobs-list') {
+      await openCreateJobWizard(page)
+    } else {
+      await page.goto(shot.path)
+    }
+    await waitForStablePaint(page)
     await expect(page).toHaveScreenshot(`${shot.name}-default.png`)
   }
 
   await page.goto('/')
 
-  // Disable CSS transitions so the theme change is instant (avoids mid-transition colour values
-  // that cause a11y color-contrast failures and incorrect screenshots).
-  await page.addStyleTag({ content: '*, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; }' })
+  // Disable transitions so screenshots are stable across theme changes.
+  await disableMotion(page)
   await page.locator('.theme-select').selectOption('dark')
 
   // Wait for localStorage to be written — this confirms the dark.css onload has fired and
@@ -103,15 +148,19 @@ test('visual regression snapshots for key screens in default and dark themes', a
   )
 
   for (const shot of shots) {
-    await page.goto(shot.path)
+    if (shot.name === 'jobs-list') {
+      await openCreateJobWizard(page)
+    } else {
+      await page.goto(shot.path)
+    }
     // After each navigation the app re-reads localStorage ('dark') and reloads dark.css;
     // wait until --color-bg-primary matches the known dark value before screenshotting.
     await page.waitForFunction(
       (darkBg) => getComputedStyle(document.documentElement).getPropertyValue('--color-bg-primary').trim() === darkBg,
       darkBgPrimary,
     )
-    // Double RAF: ensures all cascaded CSS variable updates are rendered (webkit needs two frames)
-    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+    // Double RAF ensures all cascaded CSS variable updates are rendered.
+    await waitForStablePaint(page)
     await expect(page).toHaveScreenshot(`${shot.name}-dark.png`)
   }
 
