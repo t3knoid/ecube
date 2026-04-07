@@ -10,6 +10,15 @@ async function waitForStablePaint(page) {
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
 }
 
+async function persistThemeForNextNavigation(page, themeName) {
+  await page.addInitScript(({ name }) => {
+    localStorage.setItem('ecube_theme', name)
+  }, { name: themeName })
+  await page.evaluate((name) => {
+    localStorage.setItem('ecube_theme', name)
+  }, themeName)
+}
+
 async function mockTelemetry(page) {
   await routeJson(page, '**/api/telemetry/ui-navigation', { ok: true })
   await routeJson(page, '**/telemetry/ui-navigation', { ok: true })
@@ -95,11 +104,24 @@ test('visual regression snapshots for setup screen in default and dark themes', 
 
   await page.goto('/setup')
   await expect(page.locator('.setup-card')).toBeVisible()
+  const defaultBgPrimary = await page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue('--color-bg-primary').trim()
+  )
   await expect(page).toHaveScreenshot('setup-default.png')
 
   await disableMotion(page)
-  await page.locator('.theme-select').selectOption('dark')
+  await persistThemeForNextNavigation(page, 'dark')
+  await page.goto('/setup')
+  await expect(page.locator('.setup-card')).toBeVisible()
   await page.waitForFunction(() => localStorage.getItem('ecube_theme') === 'dark')
+  await page.waitForFunction(
+    (lightBgPrimary) => getComputedStyle(document.documentElement).getPropertyValue('--color-bg-primary').trim() !== lightBgPrimary,
+    defaultBgPrimary,
+  )
+  await page.waitForFunction(() => {
+    const link = document.getElementById('ecube-theme-stylesheet')
+    return Boolean(link && String(link.getAttribute('href') || '').includes('dark.css'))
+  })
   await waitForStablePaint(page)
   await expect(page).toHaveScreenshot('setup-dark.png')
 })
