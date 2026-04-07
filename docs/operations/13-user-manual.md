@@ -25,7 +25,6 @@
 15. [System](#13-system)
 16. [Common Tasks](#14-common-tasks)
 17. [Troubleshooting](#15-troubleshooting)
-18. [Screenshot Plan](#16-screenshot-plan)
 
 ---
 
@@ -827,25 +826,3 @@ Common causes:
 
 ---
 
-## 16. Screenshot Plan
-
-Automatic screenshot generation is possible in a later revision by using a seeded ECUBE environment together with browser automation such as Playwright. It is not included in this document revision because reliable captures need stable sample data, fixed role-specific accounts, and a controlled deployment URL.
-
-Recommended screenshot set:
-
-1. Setup wizard
-2. Login page
-3. Main application shell
-4. Dashboard overview
-5. Drives list and drive detail page
-6. Mounts list and add-mount dialog
-7. Jobs list and create-job wizard
-8. Job detail page with verification controls
-9. Audit page with filters and CSV export
-10. Users page and System page for privileged roles
-
-When adding screenshots later:
-
-- Remove the placeholder callouts in the relevant sections
-- Use consistent theme, browser zoom, and sample data
-- Avoid exposing real credentials, hostnames, or evidence identifiers
