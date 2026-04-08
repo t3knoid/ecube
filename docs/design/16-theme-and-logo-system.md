@@ -1,8 +1,11 @@
 # 16. Theme and Logo System Design
 
-This document describes how ECUBE theme and logo behavior is implemented in the frontend layer. It is written for engineers, implementers, maintainers, and technical reviewers who need runtime flow, metadata structure, validation behavior, and subsystem boundaries.
-
-This document intentionally includes theme metadata structure, runtime resolution flow, persistence behavior, asset-safety validation, and component integration points. It intentionally excludes business justification, user stories, and product-level rationale except where needed to explain a concrete design decision.
+| Field | Value |
+|---|---|
+| Title | Theme and Logo System Design |
+| Purpose | Describes how ECUBE theme and logo behavior is implemented in the frontend, including metadata structure, runtime flow, validation, and subsystem boundaries. |
+| Updated on | 04/08/26 |
+| Audience | Engineers, implementers, maintainers, and technical reviewers. |
 
 ## Modeling Approach
 
@@ -104,13 +107,13 @@ Representative end-to-end assertions:
 - Logo updates when theme changes.
 - Missing or invalid logo asset falls back without breaking UI navigation.
 
-## Related Documents
-
-- `docs/requirements/16-theme-and-logo-system-requirements.md`
-- `docs/design/14-ui-wireframes.md`
-- `docs/design/15-frontend-architecture.md`
-- `docs/operations/11-theme-and-branding-guide.md`
-
 ## Implementation Anchor Points
 
 Implementation is anchored in frontend theme-state management, shared layout rendering, and login-shell branding surfaces. File-level references belong in code-level implementation documentation and source navigation.
+
+## References
+
+- [docs/requirements/16-theme-and-logo-system-requirements.md](../requirements/16-theme-and-logo-system-requirements.md)
+- [docs/design/14-ui-wireframes.md](14-ui-wireframes.md)
+- [docs/design/15-frontend-architecture.md](15-frontend-architecture.md)
+- [docs/operations/11-theme-and-branding-guide.md](../operations/11-theme-and-branding-guide.md)
