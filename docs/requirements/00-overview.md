@@ -15,7 +15,7 @@ This dual-layer organization ensures requirements remain stable and platform-ind
 2. `02-hardware-requirements.md` — Physical host and USB hardware requirements
 3. `04-functional-requirements.md` — System behaviors, state transitions, and concurrency guarantees
 4. `05-data-model.md` — Persistence schema, tables, fields, and integrity constraints
-5. `06-rest-api-specification.md` — API endpoint contracts, role matrix, and response semantics
+5. `06-rest-api-requirements.md` — API behavior requirements, role expectations, constraints, and acceptance criteria
 6. `07-compliance-and-evidence-handling.md` — Compliance baseline, chain-of-custody, integrity, retention, and incident response requirements
 7. `08-operational-readiness.md` — Health checks, metrics, logging, alerting, and production readiness gate requirements
 8. `09-production-support-and-resilience.md` — Troubleshooting, backup and restore, upgrade safety, patching, secrets rotation, and disaster recovery requirements
