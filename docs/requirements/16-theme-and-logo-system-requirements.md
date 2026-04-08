@@ -1,8 +1,11 @@
 # 16. Theme and Logo System Requirements
 
-This document defines what the ECUBE theme and logo subsystem must represent and how it must behave from a product, compliance, and operational perspective. It is written primarily for stakeholders, auditors, product managers, and reviewers.
-
-This document intentionally excludes implementation details such as CSS architecture, manifest schema formats, storage structures, component-level rendering logic, or framework-specific implementation patterns. Those design details are documented in [../design/16-theme-and-logo-system.md](../design/16-theme-and-logo-system.md).
+| Field | Value |
+|---|---|
+| Title | Theme and Logo System Requirements |
+| Purpose | Defines what the ECUBE theme and logo subsystem must represent and how it must behave from product, compliance, and operational perspectives. |
+| Updated on | 04/08/26 |
+| Audience | Stakeholders, auditors, product managers, reviewers, and QA teams. |
 
 ## 16.1 Audience and Scope
 
@@ -184,3 +187,8 @@ Acceptance criteria:
 
 - Automated and/or documented test coverage demonstrates normal and degraded-path behavior.
 - Known failure modes (invalid metadata, missing assets, bad logo references) do not regress core usability.
+
+## References
+
+- [docs/design/16-theme-and-logo-system.md](../design/16-theme-and-logo-system.md)
+- [docs/operations/11-theme-and-branding-guide.md](../operations/11-theme-and-branding-guide.md)
