@@ -142,6 +142,7 @@ Integration notes:
 
 ## References
 
+- [docs/requirements/17-turnkey-appliance-requirements.md](../requirements/17-turnkey-appliance-requirements.md)
 - [docs/design/02-hardware-design.md](02-hardware-design.md)
 - [docs/design/03-system-architecture.md](03-system-architecture.md)
 - [docs/requirements/02-hardware-requirements.md](../requirements/02-hardware-requirements.md)

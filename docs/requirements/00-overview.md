@@ -28,6 +28,7 @@ This dual-layer organization ensures requirements remain stable and platform-ind
 8. `09-production-support-and-resilience.md` — Troubleshooting, backup and restore, upgrade safety, patching, secrets rotation, and disaster recovery requirements
 9. `10-security-and-access-control.md` — Identity model, role definitions, and authorization matrix
 10. `16-theme-and-logo-system-requirements.md` — Theme and logo behavior requirements, constraints, lifecycle, and acceptance criteria
+11. `17-turnkey-appliance-requirements.md` — Turnkey appliance tier requirements for capacity, isolation, performance, operability, and lifecycle governance
 
 ## Reading Path
 
@@ -37,6 +38,7 @@ This dual-layer organization ensures requirements remain stable and platform-ind
 4. Review `07`, `08`, and `09` for compliance, readiness, and production support requirements.
 5. Review `10` for role model and access control requirements.
 6. Review `16` for frontend theming and branding behavior requirements.
+7. Review `17` for turnkey appliance tier and production-hardware outcome requirements.
 
 ## Cross-Reference to Design
 
@@ -45,7 +47,7 @@ For implementation details, architecture decisions, and platform-specific patter
 - Design `01–03` — Purpose, hardware assumptions, and trust boundary architecture
 - Design `04–07` — Behavioral design, data modeling approach, API implementation, and introspection safety
 - Design `08–10` — Language/framework choices, architectural invariants, and security implementation
-- Design `11–16` — Quality, runtime environment, build/deployment, and frontend architecture
+- Design `11–17` — Quality, runtime environment, build/deployment, frontend architecture, and turnkey appliance design
 
 Requirements documents map to one or more design documents that provide implementation perspective; in many cases the mapping is by matching document number.
 
