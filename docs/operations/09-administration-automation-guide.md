@@ -979,7 +979,7 @@ Optional parameters:
 
 #### callback_url integration note
 
-Use `callback_url` when an external orchestration or case-management system should receive asynchronous completion signals instead of polling `GET /jobs/{id}` continuously.
+Use `callback_url` when an external orchestration or case-management system should receive asynchronous completion signals instead of polling `GET /jobs/{job_id}` continuously.
 
 - `callback_url` must be `https://`.
 - Callbacks are sent when the job reaches a terminal state (`COMPLETED` or `FAILED`).
@@ -1110,7 +1110,7 @@ curl -k -X POST https://localhost:8443/jobs/1/start \
 
 Response: returns the job object with `status: "RUNNING"`.
 
-> **Note:** The copy runs as a background task. Poll `GET /jobs/{id}` to
+> **Note:** The copy runs as a background task. Poll `GET /jobs/{job_id}` to
 > monitor progress. Per-file status (`PENDING`, `COPYING`, `DONE`, `ERROR`,
 > `RETRYING`) is tracked in the `export_files` table.
 
@@ -1127,7 +1127,7 @@ curl -k -X POST https://localhost:8443/jobs/1/verify \
 
 > **Note:** Verification runs as a background task (`VERIFYING` state).
 > On success the job transitions to `COMPLETED`; on failure it transitions
-> to `FAILED`. Poll `GET /jobs/{id}` for the final result.
+> to `FAILED`. Poll `GET /jobs/{job_id}` for the final result.
 
 ### Generate Manifest
 
@@ -1208,13 +1208,13 @@ Example response:
 A complete evidence export follows this sequence:
 
 1. **Mount source** — add a network mount pointing to the evidence share
-2. **Enable ports** — enable the USB ports you want to use (`PATCH /admin/ports/{id}`)
+2. **Enable ports** — enable the USB ports you want to use (`PATCH /admin/ports/{port_id}`)
 3. **Prepare drive** — discover, format, and initialize a USB drive for the project
 3. **Create job** — `POST /jobs` with project ID, evidence number, source path, and drive ID
-4. **Start copy** — `POST /jobs/{id}/start`
-5. **Monitor progress** — poll `GET /jobs/{id}` until `status` is `COMPLETED` or `FAILED`
-6. **Verify** — `POST /jobs/{id}/verify` to confirm data integrity
-7. **Generate manifest** — `POST /jobs/{id}/manifest` for chain-of-custody records
+4. **Start copy** — `POST /jobs/{job_id}/start`
+5. **Monitor progress** — poll `GET /jobs/{job_id}` until `status` is `COMPLETED` or `FAILED`
+6. **Verify** — `POST /jobs/{job_id}/verify` to confirm data integrity
+7. **Generate manifest** — `POST /jobs/{job_id}/manifest` for chain-of-custody records
 8. **Eject drive** — `POST /drives/{drive_id}/prepare-eject` for safe removal
 
 ---
@@ -1750,7 +1750,7 @@ curl -k -H "Authorization: Bearer $JWT_TOKEN" \
   "https://localhost:8443/audit?action=MOUNT_RECONCILED"
 ```
 
-Verify current status with `POST /mounts/{id}/validate`, then re-create the mount via `POST /mounts` if it needs to be re-established.
+Verify current status with `POST /mounts/{mount_id}/validate`, then re-create the mount via `POST /mounts` if it needs to be re-established.
 
 ### Service Won't Start
 

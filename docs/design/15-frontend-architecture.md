@@ -282,19 +282,19 @@ Each module exports thin wrapper functions around Axios calls. Modules map 1:1 t
 | `auth.js` | `POST /auth/token` | LoginView, auth store |
 | `setup.js` | `GET /setup/status`, `POST /setup/initialize`, `POST /setup/database/test-connection`, `POST /setup/database/provision`, `GET /setup/database/provision-status`, `GET /setup/database/system-info`, `GET /setup/database/status`, `PUT /setup/database/settings` | SetupWizardView |
 | `drives.js` | `GET /drives`, `POST /drives/{drive_id}/initialize`, `POST /drives/{drive_id}/format`, `POST /drives/{drive_id}/prepare-eject` | DrivesView, DriveDetailView, DashboardView |
-| `mounts.js` | `GET /mounts`, `POST /mounts`, `DELETE /mounts/{id}` | MountsView |
-| `jobs.js` | `POST /jobs`, `POST /jobs/{id}/start`, `GET /jobs/{id}`, `POST /jobs/{id}/verify`, `POST /jobs/{id}/manifest` | JobsView, JobDetailView, DashboardView |
+| `mounts.js` | `GET /mounts`, `POST /mounts`, `DELETE /mounts/{mount_id}` | MountsView |
+| `jobs.js` | `POST /jobs`, `POST /jobs/{job_id}/start`, `GET /jobs/{job_id}`, `POST /jobs/{job_id}/verify`, `POST /jobs/{job_id}/manifest` | JobsView, JobDetailView, DashboardView |
 | `audit.js` | `GET /audit` | AuditView |
 | `files.js` | `GET /files/{file_id}/hashes`, `POST /files/compare` | JobDetailView (hash viewer, file compare) |
 | `users.js` | `GET /users`, `GET /users/{username}/roles`, `PUT /users/{username}/roles`, `DELETE /users/{username}/roles` | UsersView |
 | `admin.js` | `POST /admin/os-users`, `GET /admin/os-users`, `DELETE /admin/os-users/{username}`, `PUT /admin/os-users/{username}/password`, `PUT /admin/os-users/{username}/groups`, `POST /admin/os-users/{username}/groups`, `GET /admin/os-groups` | UsersView (single users/roles editor) |
-| `introspection.js` | `GET /introspection/usb/topology`, `GET /introspection/block-devices`, `GET /introspection/mounts`, `GET /introspection/system-health`, `GET /introspection/jobs/{id}/debug` | SystemView, DashboardView, AppFooter |
+| `introspection.js` | `GET /introspection/usb/topology`, `GET /introspection/block-devices`, `GET /introspection/mounts`, `GET /introspection/system-health`, `GET /introspection/jobs/{job_id}/debug` | SystemView, DashboardView, AppFooter |
 
 ### 6.3 Job Progress Polling
 
 Job progress is tracked via HTTP polling rather than WebSocket. Rationale:
 
-- **Zero backend changes** — `GET /jobs/{id}` already returns `copied_bytes`, file statuses, and job state
+- **Zero backend changes** — `GET /jobs/{job_id}` already returns `copied_bytes`, file statuses, and job state
 - **ECUBE is a single-operator appliance** — polling load is negligible
 - **Copy jobs run for minutes to hours** — sub-second latency provides no practical benefit
 - **Simpler infrastructure** — no WebSocket upgrade in nginx, no Redis pub/sub channel
