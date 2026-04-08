@@ -390,7 +390,7 @@ After ECUBE completes a copy job, the destination USB drive should be write-prot
 
 ### Evidence Segregation
 
-**Project Isolation:** ECUBE enforces strict project isolation (see [docs/requirements/04-functional-requirements.md](../requirements/04-functional-requirements.md#project-isolation) and [docs/design/04-functional-requirements.md](../design/04-functional-requirements.md#project-isolation)). A single USB drive cannot contain evidence from multiple cases/projects.
+**Project Isolation:** ECUBE enforces strict project isolation (see [docs/requirements/04-functional-requirements.md](../requirements/04-functional-requirements.md#project-isolation) and [docs/design/04-functional-design.md](../design/04-functional-design.md#project-isolation)). A single USB drive cannot contain evidence from multiple cases/projects.
 
 **Implications:**
 - Each USB drive is bound to one project_id at initialization.
@@ -670,7 +670,7 @@ Before deploying ECUBE to production, complete the following compliance tasks:
 ## Related Documents
 
 - [docs/requirements/04-functional-requirements.md](../requirements/04-functional-requirements.md) — Project isolation, audit logging requirements
-- [docs/design/04-functional-requirements.md](../design/04-functional-requirements.md) — Audit implementation, race condition handling
+- [docs/design/04-functional-design.md](../design/04-functional-design.md) — Audit implementation, race condition handling
 - [docs/design/10-security-and-access-control.md](../design/10-security-and-access-control.md) — Identity, RBAC, authentication implementation
 - [01-operational-readiness.md](01-operational-readiness.md) — Health checks, monitoring, alerting
 - [production-support-procedures.md](production-support-procedures.md) — Backup/recovery, upgrade, patching, troubleshooting

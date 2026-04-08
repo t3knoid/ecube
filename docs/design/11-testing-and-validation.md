@@ -83,7 +83,7 @@ Operational readiness validation should explicitly cover health signaling, readi
 
 ## 11.6 Related Documents
 
-- `docs/design/04-functional-requirements.md`
+- `docs/design/04-functional-design.md`
 - `docs/design/05-data-model.md`
 - `docs/design/10-security-and-access-control.md`
 - `docs/testing/`
