@@ -1215,7 +1215,7 @@ A complete evidence export follows this sequence:
 5. **Monitor progress** — poll `GET /jobs/{id}` until `status` is `COMPLETED` or `FAILED`
 6. **Verify** — `POST /jobs/{id}/verify` to confirm data integrity
 7. **Generate manifest** — `POST /jobs/{id}/manifest` for chain-of-custody records
-8. **Eject drive** — `POST /drives/{id}/prepare-eject` for safe removal
+8. **Eject drive** — `POST /drives/{drive_id}/prepare-eject` for safe removal
 
 ---
 

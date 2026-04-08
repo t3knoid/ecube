@@ -249,7 +249,7 @@ List all drives with state and project assignment.
 - `403 Forbidden` — Insufficient role
 - `422 Unprocessable Entity` — Invalid query parameter (e.g. malformed Unicode)
 
-### `POST /drives/{id}/initialize`
+### `POST /drives/{drive_id}/initialize`
 
 Initialize drive for a project.
 
@@ -263,7 +263,7 @@ Enforces project isolation.
 - `403 Forbidden` — Insufficient role
 - `422 Unprocessable Entity` — Invalid request body (e.g. malformed Unicode in project_id)
 
-### `POST /drives/{id}/format`
+### `POST /drives/{drive_id}/format`
 
 Format a drive with a specified filesystem type.
 
@@ -310,7 +310,7 @@ Performs the following steps:
 - `409 Conflict` — Drive not in `AVAILABLE` state or currently mounted
 - `500 Internal Server Error` — Format command (`mkfs`) failed
 
-### `POST /drives/{id}/prepare-eject`
+### `POST /drives/{drive_id}/prepare-eject`
 
 Prepare drive for safe eject: flush filesystem writes, unmount all partitions and encrypted volumes, and transition to AVAILABLE.
 

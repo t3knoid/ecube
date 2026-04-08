@@ -281,7 +281,7 @@ Each module exports thin wrapper functions around Axios calls. Modules map 1:1 t
 |--------|------------------|---------|
 | `auth.js` | `POST /auth/token` | LoginView, auth store |
 | `setup.js` | `GET /setup/status`, `POST /setup/initialize`, `POST /setup/database/test-connection`, `POST /setup/database/provision`, `GET /setup/database/provision-status`, `GET /setup/database/system-info`, `GET /setup/database/status`, `PUT /setup/database/settings` | SetupWizardView |
-| `drives.js` | `GET /drives`, `POST /drives/{id}/initialize`, `POST /drives/{id}/format`, `POST /drives/{id}/prepare-eject` | DrivesView, DriveDetailView, DashboardView |
+| `drives.js` | `GET /drives`, `POST /drives/{drive_id}/initialize`, `POST /drives/{drive_id}/format`, `POST /drives/{drive_id}/prepare-eject` | DrivesView, DriveDetailView, DashboardView |
 | `mounts.js` | `GET /mounts`, `POST /mounts`, `DELETE /mounts/{id}` | MountsView |
 | `jobs.js` | `POST /jobs`, `POST /jobs/{id}/start`, `GET /jobs/{id}`, `POST /jobs/{id}/verify`, `POST /jobs/{id}/manifest` | JobsView, JobDetailView, DashboardView |
 | `audit.js` | `GET /audit` | AuditView |

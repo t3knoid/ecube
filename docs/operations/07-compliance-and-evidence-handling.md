@@ -386,7 +386,7 @@ After ECUBE completes a copy job, the destination USB drive should be write-prot
 3. Store in secure facility with access controls.
 
 **ECUBE Support (Future):**
-- An admin endpoint may be added to "finalize" a drive after copy, preventing further writes: `POST /drives/{id}/finalize` (not yet implemented).
+- An admin endpoint may be added to "finalize" a drive after copy, preventing further writes: `POST /drives/{drive_id}/finalize` (not yet implemented).
 
 ### Evidence Segregation
 
