@@ -1,198 +1,259 @@
 # 4. Functional Requirements
 
-## 4.1 Drive Lifecycle Management
+This document defines what ECUBE must do at the functional level. It is written primarily for stakeholders, auditors, product managers, and reviewers who need to understand required behavior, constraints, and acceptance criteria.
+
+This document intentionally excludes implementation details such as endpoints, algorithms, internal flows, locking strategies, data structures, and schema design. Those design details are documented in [../design/04-functional-design.md](../design/04-functional-design.md).
+
+## 4.1 Audience and Scope
+
+### 4.1.1 Primary Audience
+
+- Stakeholders validating functional capability coverage.
+- Auditors verifying policy enforcement and traceability.
+- Product managers reviewing expected behavior and acceptance criteria.
+- QA and test authors deriving scenario coverage from normative requirements.
+
+### 4.1.2 Scope
+
+- Define required functional behavior for drive lifecycle, project isolation, job handling, copy operations, mounts, manifests, auditability, and discovery behavior.
+- Define operational constraints and policy rules that implementations must satisfy.
+- Define acceptance criteria that allow reviewers to determine whether the product behavior is compliant.
+
+### 4.1.3 Explicit Exclusions
+
+- API route definitions, HTTP verbs, and URL design.
+- Internal service boundaries and module structure.
+- Algorithms, OS command sequencing, or concurrency-control implementation details.
+- Concrete request and response schemas.
+
+## 4.2 Drive Lifecycle Requirements
 
 ECUBE must:
 
-- Detect drive insertion/removal
-- Determine drive state
-- Persist drive state as a finite-state machine
-- Detect filesystem type (ext4, exFAT, NTFS, FAT32, or unformatted/unknown)
-- Format unformatted or incorrectly formatted drives on demand
-- Initialize drive for a job
-- Assign drive to a job
-- Prepare drive for eject (flush + unmount)
-- Finalize a drive for custody handoff / export completion
-- Allow an explicitly audited reopen of a finalized drive when additional data must be exported
-- Track drive usage history
+- Detect drive insertion and removal.
+- Determine and persist the current lifecycle state of each managed drive.
+- Detect and retain the current filesystem classification for each managed drive.
+- Support operator-initiated formatting when policy and lifecycle state allow it.
+- Support drive initialization for a project-bound workflow.
+- Support safe operational removal of a drive without implying export completion.
+- Support explicit drive finalization when export handling is complete.
+- Support an explicitly audited reopen of a finalized drive when additional export work is required.
+- Preserve sufficient drive history to support audit and operational review.
 
-Drive states must include:
+Managed drive states must include:
 
 - `EMPTY`
 - `AVAILABLE`
 - `IN_USE`
 - `FINALIZED`
 
-State intent:
+State constraints:
 
-- `AVAILABLE` means writable and eligible for initialization or job assignment.
-- `FINALIZED` means logically sealed against additional writes until explicitly reopened.
+- `AVAILABLE` means the drive is eligible for initialization or assignment.
+- `IN_USE` means the drive is actively participating in a write-capable workflow.
+- `FINALIZED` means the drive is logically sealed against further writes until explicitly reopened.
+- Illegal lifecycle transitions must be rejected.
 
-Legal transitions must include:
+### 4.2.1 Filesystem Detection Requirements
 
-- `EMPTY → AVAILABLE`
-- `AVAILABLE → IN_USE`
-- `IN_USE → AVAILABLE`
-- `IN_USE → FINALIZED`
-- `AVAILABLE → FINALIZED`
-- `FINALIZED → AVAILABLE`
-- `AVAILABLE → EMPTY`
+On insertion and rediscovery, ECUBE must:
 
-Illegal transitions must be rejected with `409 Conflict`.
+- Detect the drive filesystem type when possible.
+- Record the current filesystem classification as part of the drive’s visible state.
+- Distinguish recognizable filesystems from unformatted or unknown media.
+- Refresh the classification after formatting or rediscovery.
 
-### 4.1.1 Filesystem Detection
+Acceptance criteria:
 
-On drive insertion or discovery refresh, ECUBE must:
+- A newly inserted or rediscovered drive exposes a current filesystem classification.
+- A reformatted drive exposes the updated classification after successful completion.
 
-- Probe the drive's filesystem type
-- Store the detected filesystem type in the `usb_drives` record
-- Report unformatted (no recognizable filesystem) drives as `unformatted`
-- Update the filesystem type whenever a drive is reformatted or re-detected
+### 4.2.2 Drive Formatting Requirements
 
-### 4.1.2 Drive Formatting
+Formatting behavior must satisfy all of the following:
 
-ECUBE must provide an API to format a drive with a specified filesystem:
+- Formatting is only permitted from an eligible writable lifecycle state.
+- Formatting is rejected when the drive is not safe to format.
+- Only supported filesystem targets are accepted.
+- Successful formatting updates the exposed filesystem classification.
+- Successful and failed formatting attempts are audit-logged with actor, drive, and outcome context.
 
-- Supported filesystem types: `ext4`, `exfat`
-- Formatting must only be allowed on drives in `AVAILABLE` state
-- The drive must not be mounted before formatting begins
-- After successful formatting, the `filesystem_type` field must be updated
-- All format operations must be audit-logged with actor, drive, and filesystem type
-- Format failures must be audit-logged with error details
+Acceptance criteria:
 
-### 4.1.3 Prepare-Eject, Finalize, and Reopen
+- An ineligible drive cannot be formatted.
+- An unsupported filesystem target is rejected.
+- Successful formatting changes the reported filesystem classification.
 
-ECUBE must distinguish between operational safe removal and custody finalization:
+### 4.2.3 Prepare-Eject, Finalize, and Reopen Requirements
 
-- `prepare-eject` must flush writes, unmount the drive, and transition the drive from `IN_USE` to `AVAILABLE`
-- `prepare-eject` must not imply export completion or write protection
-- `prepare-eject` must not clear the drive's `current_project_id`
+ECUBE must distinguish operational safe removal from custody finalization.
 
-ECUBE must provide a finalization capability with the following requirements:
+Prepare-eject requirements:
 
-- Finalization must be a separate operation from prepare-eject
-- Finalization must transition the drive to `FINALIZED`
-- Finalization must only be allowed for project-bound drives
-- Finalization must reject requests while copy/verify/manifest work is still active for the drive
-- If finalization begins from `IN_USE`, ECUBE must perform the same safe-eject behavior required by prepare-eject before committing the `FINALIZED` state
-- Finalization must record audit data including actor, drive, project, and finalization metadata
-- Finalized drives must not be eligible for new job creation, auto-assignment, implicit return to `IN_USE`, formatting, or reinitialization
+- Safe-removal preparation must flush pending writes and leave the drive in a removable, non-writing state.
+- Safe-removal preparation must not imply export completion or write sealing.
+- Safe-removal preparation must not clear project binding.
 
-ECUBE must provide a reopen/unfinalize capability with the following requirements:
+Finalization requirements:
 
-- Reopen must only be allowed when the drive is in `FINALIZED` state
-- Reopen must require elevated privileges
-- Reopen must require an explicit operator-provided reason
-- Reopen must transition the drive from `FINALIZED` to `AVAILABLE`
-- Reopen must preserve `current_project_id` by default
-- Reopen must emit a dedicated audit event recording actor, reason, drive, and project context
-- Reopen must never occur implicitly during discovery, initialization, or job creation
+- Finalization must be a distinct capability from safe-removal preparation.
+- Finalization must transition the drive to `FINALIZED`.
+- Finalization must only be allowed for project-bound drives.
+- Finalization must be rejected while active work still depends on the drive.
+- If the drive is not already safely removable, finalization must include the behavior required to make it safely removable before the finalized state is committed.
+- Finalization must produce dedicated audit evidence including actor, drive, project, and finalization context.
+- Finalized drives must not become eligible for new writes, reinitialization, formatting, or implicit return to active use.
 
-## 4.2 Project Isolation (Critical Requirement)
+Reopen requirements:
+
+- Reopen is only allowed from `FINALIZED`.
+- Reopen requires elevated privilege.
+- Reopen requires an explicit operator-provided reason.
+- Reopen returns the drive to an eligible non-finalized state without implicitly changing its project binding.
+- Reopen produces dedicated audit evidence including actor, reason, drive, and project context.
+- Reopen must never occur implicitly as a side effect of unrelated operations.
+
+Acceptance criteria:
+
+- Safe-removal preparation and finalization remain behaviorally distinct.
+- A finalized drive cannot accept additional export work until explicitly reopened.
+- Reopen without a reason or sufficient privilege is rejected.
+
+## 4.3 Project Isolation Requirements
 
 To prevent evidence contamination:
 
-- Each drive is assigned a `project_id` upon initialization
-- A drive cannot accept files from a different project
-- ECUBE must block the operation and log an audit event if attempted
-- UI must display the project associated with each `IN_USE` drive
-- Finalization must not clear project binding
-- A finalized drive must remain bound to its project until explicitly reopened or reset
+- Each writable drive workflow must be bound to a single project context.
+- A drive must not accept writes for a different project than the one to which it is currently bound.
+- Cross-project write attempts must be blocked before data movement begins.
+- Each denial must produce audit evidence.
+- The active project association of in-use and finalized drives must remain visible to operators.
+- Finalization must not clear project binding.
+- A finalized drive must remain project-bound until explicitly reopened or reset by an authorized lifecycle action.
 
-## 4.3 Job Management
+Acceptance criteria:
 
-A job includes:
+- A drive already bound to one project cannot be used for a different project without the required lifecycle change.
+- Cross-project write attempts leave no partial copied data attributable to the rejected action.
 
-- Source path (local, NFS, SMB)
-- Evidence number
-- `project_id`
-- `drive_id`
-- Thread count for copy engine
-- File list and checksums
-- Copy progress
-- Manifest generation
+## 4.4 Job Management Requirements
 
-Job and drive assignment rules must additionally enforce:
+ECUBE must support job workflows that include:
 
-- Only `AVAILABLE` drives may be assigned to new jobs
-- `FINALIZED` drives must be excluded from auto-assignment and explicit job targeting
-- Additional data export to a finalized drive must require an explicit reopen operation first
+- Source selection from supported storage sources.
+- Evidence and project attribution.
+- Drive assignment.
+- Copy progress tracking.
+- Per-file outcome visibility.
+- Verification behavior.
+- Manifest generation.
 
-## 4.4 Multi-threaded Copy Engine
+Assignment constraints:
 
-ECUBE must support:
+- Only drives in an eligible writable state may be assigned to new work.
+- Finalized drives must be excluded from new assignment until explicitly reopened.
+- Additional export to a finalized drive must require an explicit reopen first.
 
-- Multi-threaded copying (user-configurable thread count)
-- Behavior similar to Windows robocopy `/MT:n`
-- Resume-on-error behavior
-- Per-file status tracking
-- Checksum verification
+Acceptance criteria:
 
-### 4.4.1 Linux robocopy equivalent
+- Authorized users can create, start, monitor, and complete job workflows.
+- Invalid job or drive state combinations are rejected.
+- Job history preserves attribution and progress visibility needed for operations and audit.
 
-If a Linux robocopy-like tool exists (for example, `rclone` or `rsync` with parallelization), ECUBE may use it.
+## 4.5 Copy Engine Requirements
 
-If not, ECUBE must implement:
+ECUBE must support copy behavior with all of the following characteristics:
 
-- Thread pool
-- Chunked file copying
-- Queue-based file distribution
-- Retry logic
-- Atomic status updates
+- Parallelized copying with operator-configurable concurrency limits.
+- Resume-oriented behavior when recoverable file-level failures occur.
+- Per-file status tracking.
+- Integrity verification of copied data.
+- Reliable progress reporting throughout execution.
 
-## 4.5 Network Mount Support
+Constraints:
 
-ECUBE must support:
+- Copy status updates must remain consistent under concurrent work.
+- File failures must not erase successful-file history.
+- Verification outcomes must remain attributable to the corresponding job and drive context.
 
-- NFS mounts
-- SMB/CIFS mounts
+Acceptance criteria:
 
-### 4.5.1 Mount API
+- A partially failing copy job exposes both successful and failed file outcomes.
+- Progress visibility remains available while work is ongoing.
+- Verification results can be reviewed after copy completion.
 
-- Add mount
-- Remove mount
-- List mounts
-- Validate mount accessibility
+## 4.6 Network Mount Requirements
 
-### 4.5.2 Mount lifecycle
+ECUBE must support managed source access for at least:
 
-- ECUBE System Layer mounts the share
-- Validates read access
-- Exposes mount in job creation UI
-- Unmounts when no longer needed
+- NFS
+- SMB/CIFS
 
-## 4.6 Manifest Generation
+Mount-related behavior must include:
 
-Manifest includes:
+- Registration of usable mount sources.
+- Removal of mount sources.
+- Visibility into configured mount sources.
+- Validation of mount accessibility before operational use.
 
-- Evidence number
-- Project metadata
-- Source path
-- File list with checksums
-- Total size
-- Timestamp
+Acceptance criteria:
 
-## 4.7 Audit Logging
+- Operators can determine whether a configured mount is usable before starting a job.
+- Invalid or unavailable mounts are surfaced explicitly rather than silently ignored.
 
-Every operation must be logged:
+## 4.7 Manifest Requirements
 
-- Drive initialization
-- Drive prepare-eject success/failure
-- Drive finalization
-- Drive reopen/unfinalize
-- Job creation
-- Copy start/stop
-- File copy events
-- Manifest creation
-- Mount operations
-- Project isolation violations
+ECUBE must generate a manifest suitable for export review and audit.
 
-## 4.8 Discovery and Reconciliation Behavior
+Manifest content must include at least:
 
-Discovery and refresh behavior must preserve protected drive states:
+- Evidence identifier or equivalent case reference.
+- Project-related metadata.
+- Source context.
+- File-level integrity information.
+- Aggregate size or volume summary.
+- Generation timestamp.
 
-- Reconnecting drives may transition `EMPTY → AVAILABLE`
-- `AVAILABLE` drives may transition to `EMPTY` when removed or when policy disables their port
-- `IN_USE` drives must not be demoted by discovery refresh while project isolation is active
-- `FINALIZED` drives must not be demoted or implicitly reopened by discovery refresh
-- A finalized drive that is physically removed and later reinserted must remain `FINALIZED` until an explicit reopen occurs
+Acceptance criteria:
+
+- A completed export can be accompanied by a manifest containing the required audit-relevant content.
+- Manifest regeneration, when permitted, produces auditable output.
+
+## 4.8 Audit Logging Requirements
+
+The system must emit audit records for security-relevant and operationally significant events, including at minimum:
+
+- Drive initialization.
+- Drive safe-removal preparation success and failure.
+- Drive finalization.
+- Drive reopen or unfinalize.
+- Job creation and job state changes.
+- Copy execution outcomes.
+- Manifest generation.
+- Mount administration and validation outcomes.
+- Project isolation violations.
+
+Constraints:
+
+- Audit evidence must include enough context to identify actor, target, action, and outcome.
+- Audit logging must cover both successful privileged actions and policy denials.
+
+Acceptance criteria:
+
+- Reviewers can trace major operational and policy events through the audit record.
+- A denied cross-project action produces explicit audit evidence.
+
+## 4.9 Discovery and Reconciliation Requirements
+
+Discovery and refresh behavior must preserve protected drive states and policy guarantees:
+
+- Reconnected eligible drives may return to an available state when policy permits.
+- Removed drives may leave the available set when no longer present or when policy disables their port.
+- In-use drives must not be demoted by discovery while project isolation remains active.
+- Finalized drives must not be demoted or implicitly reopened by discovery or reconciliation.
+- A finalized drive that is removed and later reinserted must remain finalized until an explicit reopen occurs.
+
+Acceptance criteria:
+
+- Discovery refresh does not silently defeat project isolation.
+- Discovery refresh does not silently convert a finalized drive back into a writable drive.

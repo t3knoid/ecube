@@ -1,5 +1,9 @@
 # 4. Functional Design
 
+This document describes how ECUBE functional behavior is implemented. It is written for engineers, implementers, maintainers, and technical reviewers who need endpoint structure, flows, algorithms, state handling, and data-oriented design detail.
+
+This document intentionally includes lifecycle flows, endpoint responsibilities, state transitions, algorithms, validation order, and implementation-oriented constraints. It intentionally excludes business justification, user stories, and product-level rationale except where a brief note is necessary to explain a resulting design choice.
+
 ## 4.1 Drive Lifecycle Management
 
 - Implement a finite-state machine for drive states and legal transitions.
@@ -92,7 +96,7 @@ Illegal transitions should be rejected with `409 Conflict`.
 ### 4.2.2 Drive Finalization Design
 
 - Provide an API endpoint (`POST /drives/{drive_id}/finalize`) to mark a drive as export-complete and logically sealed.
-- Finalization is intended for custody handoff/compliance workflows after copy, verification, and manifest generation are complete.
+- Finalization is exposed as an explicit sealed-state transition after copy-oriented work is complete.
 - Recommended allowed starting states:
   - `IN_USE` — perform safe-eject operations as part of finalization, then transition to `FINALIZED`.
   - `AVAILABLE` — permit finalization if the drive is already safely unmounted/prepared and remains project-bound to the intended export.
@@ -100,7 +104,7 @@ Illegal transitions should be rejected with `409 Conflict`.
   - Drive must be bound to a project (`current_project_id` is not `NULL`).
   - No active copy/verify/manifest job may still be operating against the drive.
   - If a job is associated with the drive, it should be in a terminal successful state before finalization is accepted.
-  - If manifests are part of the deployment's compliance workflow, manifest generation should already be complete.
+  - If manifest completion is part of the deployment policy, manifest generation should already be complete.
 - Finalization procedure:
   1. Validate state and project binding.
   2. Validate no active job is still using the drive.
@@ -136,10 +140,9 @@ Illegal transitions should be rejected with `409 Conflict`.
   - Operators may then assign/start an additional job and later finalize the drive again.
 - Reopen must never happen implicitly as a side effect of discovery, job creation, or initialize.
 
-## 4.3 Project Isolation Design (Critical)
+## 4.3 Project Isolation Design
 
-Project isolation prevents evidence contamination by binding each USB drive
-to a single project and rejecting any write from a different project.
+Project isolation binds each USB drive to a single project and rejects any write from a different project.
 
 ### Storage
 
