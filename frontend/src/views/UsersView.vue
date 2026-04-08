@@ -13,6 +13,7 @@ import Pagination from '@/components/common/Pagination.vue'
 const { t } = useI18n()
 
 const roles = ['admin', 'manager', 'processor', 'auditor']
+const hiddenServiceAccounts = new Set(['www-data'])
 
 const loading = ref(false)
 const saving = ref(false)
@@ -81,7 +82,8 @@ async function loadAll() {
     const roleMap = new Map(
       roleUsers.map((row) => [row.username, normalizeRoleSelection(row.roles || [])]),
     )
-    const rawOsUsers = osUserResult.value.users || []
+    const rawOsUsers = (osUserResult.value.users || [])
+      .filter((row) => !hiddenServiceAccounts.has(row.username))
     osUsers.value = rawOsUsers.map((row) => {
       const roles = roleMap.get(row.username) || []
       return { ...row, roles, savedRoles: [...roles] }
