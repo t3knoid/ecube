@@ -444,20 +444,20 @@ curl -sk https://localhost:8443/drives \
 curl -sk https://localhost:8443/drives \
   -H "Authorization: Bearer $TOKEN" | jq '.[].filesystem_type'
 
-# Format a drive (replace {id}) — required before initialization if unformatted
-curl -sk -X POST https://localhost:8443/drives/{id}/format \
+# Format a drive (replace {drive_id}) — required before initialization if unformatted
+curl -sk -X POST https://localhost:8443/drives/{drive_id}/format \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"filesystem_type": "ext4"}' | jq
 
-# Initialize a drive for a project (replace {id})
-curl -sk -X POST https://localhost:8443/drives/{id}/initialize \
+# Initialize a drive for a project (replace {drive_id})
+curl -sk -X POST https://localhost:8443/drives/{drive_id}/initialize \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"project_id": "PROJ-QA-001"}' | jq
 
 # Prepare drive for safe physical removal
-curl -sk -X POST https://localhost:8443/drives/{id}/prepare-eject \
+curl -sk -X POST https://localhost:8443/drives/{drive_id}/prepare-eject \
   -H "Authorization: Bearer $TOKEN" | jq
 ```
 
@@ -805,8 +805,8 @@ curl -sk -X POST https://localhost:8443/setup/database/test-connection \
 | 2 | Garbage token | Add header `Authorization: Bearer not.a.real.token` | 401, `UNAUTHORIZED` |
 | 3 | Expired token | Generate token with `'exp': int(time.time()) - 60` | 401, `UNAUTHORIZED` |
 | 4 | Processor adds mount | `POST /mounts` with processor token | 403, `FORBIDDEN` |
-| 5 | Processor initializes drive | `POST /drives/{id}/initialize` with processor token | 403, `FORBIDDEN` |
-| 6 | Processor formats drive | `POST /drives/{id}/format` with processor token | 403, `FORBIDDEN` |
+| 5 | Processor initializes drive | `POST /drives/{drive_id}/initialize` with processor token | 403, `FORBIDDEN` |
+| 6 | Processor formats drive | `POST /drives/{drive_id}/format` with processor token | 403, `FORBIDDEN` |
 | 7 | Processor reads audit | `GET /audit` with processor token | 403, `FORBIDDEN` |
 | 8 | Auditor reads audit | `GET /audit` with auditor token | 200 |
 | 9 | Processor creates job | `POST /jobs` with processor token | 200 |
@@ -964,10 +964,10 @@ Walk through the complete data export lifecycle:
 4. **List drives** — `GET /drives` — and note the drive ID and `filesystem_type`.
 
 4b. **Format the drive (if needed)** — If `filesystem_type` is `unformatted`, `unknown`, or `null`:
-    `POST /drives/{id}/format` with `{"filesystem_type": "ext4"}`.
+  `POST /drives/{drive_id}/format` with `{"filesystem_type": "ext4"}`.
     Confirm `filesystem_type` → `ext4` in the response.
 
-5. **Initialize the drive** — `POST /drives/{id}/initialize` with `project_id: "PROJ-E2E"`.
+5. **Initialize the drive** — `POST /drives/{drive_id}/initialize` with `project_id: "PROJ-E2E"`.
 
 6. **Create a job** — `POST /jobs` with `source_path` pointing to the test files.
 
@@ -979,7 +979,7 @@ Walk through the complete data export lifecycle:
 
 10. **Generate manifest** — `POST /jobs/{id}/manifest`.
 
-11. **Prepare eject** — `POST /drives/{id}/prepare-eject` — drive returns to `AVAILABLE`.
+11. **Prepare eject** — `POST /drives/{drive_id}/prepare-eject` — drive returns to `AVAILABLE`.
 
 12. **Physically remove the drive** and verify data on another computer.
     Compare file checksums against the values recorded in step 1:
@@ -1001,8 +1001,8 @@ Walk through the complete data export lifecycle:
 | 4 | Start an already-running job | 409, `CONFLICT` |
 | 5 | All error responses | JSON body includes `code`, `message`, and `trace_id` |
 | 6 | `POST /drives/999/format` with `{"filesystem_type": "ext4"}` | 404, `NOT_FOUND` |
-| 7 | `POST /drives/{id}/format` with `{"filesystem_type": "ntfs"}` | 422, validation error |
-| 8 | `POST /drives/{id}/format` with empty body | 422 |
+| 7 | `POST /drives/{drive_id}/format` with `{"filesystem_type": "ntfs"}` | 422, validation error |
+| 8 | `POST /drives/{drive_id}/format` with empty body | 422 |
 
 ### 12.8 User Role Management
 
