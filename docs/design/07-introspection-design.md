@@ -2,7 +2,7 @@
 
 ## Design Goal
 
-This document defines the design intent for ECUBE introspection capabilities as a companion to the REST API specification. It focuses on diagnostic scope, safety boundaries, and read-only behavior rather than the full endpoint contract.
+This document defines the design intent for ECUBE introspection capabilities as a companion to the REST API design. It focuses on diagnostic scope, safety boundaries, and read-only behavior rather than the full endpoint contract.
 
 ## Endpoint Design
 
