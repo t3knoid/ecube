@@ -73,4 +73,4 @@ A deployment satisfies this requirements document only when all statements below
 ## 8.10 Traceability
 
 Primary operational reference: [docs/operations/08-operational-readiness.md](../operations/08-operational-readiness.md).
-Related requirements: [docs/requirements/04-functional-requirements.md](04-functional-requirements.md), [docs/requirements/06-rest-api-specification.md](06-rest-api-specification.md), and [docs/requirements/10-security-and-access-control.md](10-security-and-access-control.md).
+Related requirements: [docs/requirements/04-functional-requirements.md](04-functional-requirements.md), [docs/requirements/06-rest-api-requirements.md](06-rest-api-requirements.md), and [docs/requirements/10-security-and-access-control.md](10-security-and-access-control.md).
