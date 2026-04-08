@@ -1,6 +1,7 @@
 # ecube
 
 [![Tests](https://github.com/t3knoid/ecube/actions/workflows/run-tests.yml/badge.svg)](https://github.com/t3knoid/ecube/actions/workflows/run-tests.yml)
+[![Docker Build](https://github.com/t3knoid/ecube/actions/workflows/docker-build.yml/badge.svg)](https://github.com/t3knoid/ecube/actions/workflows/docker-build.yml)
 [![Security Scan](https://github.com/t3knoid/ecube/actions/workflows/security-scan.yml/badge.svg)](https://github.com/t3knoid/ecube/actions/workflows/security-scan.yml)
 [![Schemathesis API Fuzz](https://github.com/t3knoid/ecube/actions/workflows/schemathesis-fuzz.yml/badge.svg)](https://github.com/t3knoid/ecube/actions/workflows/schemathesis-fuzz.yml)
 [![Newman API Smoke](https://github.com/t3knoid/ecube/actions/workflows/newman-smoke.yml/badge.svg)](https://github.com/t3knoid/ecube/actions/workflows/newman-smoke.yml)
@@ -73,6 +74,29 @@ After startup, open the web frontend and complete first-run setup:
 
 - UI: `https://localhost:8443`
 - Run the Setup Wizard to verify database settings and create the initial admin account.
+
+### Docker Compose (Pre-built release images)
+
+ECUBE release images are published to GitHub Container Registry (GHCR):
+
+- `ghcr.io/t3knoid/ecube-app`
+- `ghcr.io/t3knoid/ecube-ui`
+
+For each published GitHub Release, both images are tagged with the release version (for example `v0.2.0`) and with `latest`.
+
+The easiest production-like path is to download the release `docker-compose.yml` asset from [GitHub Releases](https://github.com/t3knoid/ecube/releases/latest), place it in an empty deployment directory with your `.env` file, and start the stack:
+
+```bash
+docker compose -f docker-compose.yml pull
+docker compose -f docker-compose.yml up -d
+```
+
+If you want to pull specific tags manually:
+
+```bash
+docker pull ghcr.io/t3knoid/ecube-app:v0.2.0
+docker pull ghcr.io/t3knoid/ecube-ui:v0.2.0
+```
 
 ## API Documentation
 
