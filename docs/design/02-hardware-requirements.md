@@ -1,5 +1,12 @@
 # 2. Hardware Requirements — Design
 
+| Field | Value |
+|---|---|
+| Title | Hardware Requirements |
+| Purpose | Describes how ECUBE hardware topology, USB hub and port mapping, drive detection, and Linux integration are designed. |
+| Updated on | 04/08/26 |
+| Audience | Engineers, implementers, maintainers, and technical reviewers. |
+
 ## 2.1 Copy Machine Design
 
 - Primary target platform is Linux; all OS-specific operations are accessed through abstract interfaces (see §3 Platform Abstraction Layer) so alternative platform implementations can be added without modifying the service layer.
@@ -32,3 +39,7 @@
 - Detection failures (permission errors, I/O errors) are labelled `unknown`.
 - Store the result in `usb_drives.filesystem_type` on each discovery cycle.
 - The interface returns a canonical string; mapping OS-specific tool output to canonical values is the responsibility of each concrete implementation.
+
+## References
+
+- [docs/requirements/02-hardware-requirements.md](../requirements/02-hardware-requirements.md)

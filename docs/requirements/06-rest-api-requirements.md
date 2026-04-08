@@ -1,8 +1,11 @@
 # 6. REST API Requirements
 
-This document defines the normative API requirements for ECUBE. It captures required behavior, constraints, role expectations, and acceptance criteria for the system-layer API. It is written for stakeholders, auditors, product managers, and reviewers who need to understand what the API must provide and how compliance is judged.
-
-This document intentionally excludes URL paths, HTTP verbs, request and response models, algorithm details, and implementation flow. Those design and implementation details are documented in [../design/06-rest-api-design.md](../design/06-rest-api-design.md).
+| Field | Value |
+|---|---|
+| Title | REST API Requirements |
+| Purpose | Defines normative API behavior, role expectations, constraints, and acceptance criteria for the ECUBE system-layer API. |
+| Updated on | 04/08/26 |
+| Audience | Stakeholders, auditors, product managers, reviewers, and QA teams. |
 
 ## 1. Audience and Scope
 
@@ -253,4 +256,8 @@ Acceptance criteria:
 - Reviewers can determine whether an implementation is compliant without relying on route-level design details.
 - Auditors can map each privileged capability area to observable control and audit evidence.
 - Product review can confirm feature coverage from this document without consulting schemas or endpoint listings.
+
+## References
+
+- [docs/design/06-rest-api-design.md](../design/06-rest-api-design.md)
 

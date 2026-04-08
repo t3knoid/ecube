@@ -1,10 +1,11 @@
 # ECUBE Administration Automation Guide
 
-**Version:** 1.0  
-**Last Updated:** March 2026  
-**Audience:** Systems Administrators, Operators, IT Staff
-
----
+| Field | Value |
+|---|---|
+| Title | Administration Automation Guide |
+| Purpose | Provides step-by-step administrative workflows for ECUBE system setup, user management, and operational automation. |
+| Updated on | 04/08/26 |
+| Audience | Systems administrators, operators, IT staff. |
 
 ## Table of Contents
 
@@ -2208,3 +2209,8 @@ sudo -u ecube /opt/ecube/venv/bin/alembic upgrade head
 # Restart service
 sudo systemctl restart ecube
 ```
+
+## References
+
+- [docs/operations/00-operational-guide.md](00-operational-guide.md)
+- [docs/operations/04-configuration-reference.md](04-configuration-reference.md)

@@ -1,5 +1,12 @@
 # 7. Compliance and Evidence Handling Requirements
 
+| Field | Value |
+|---|---|
+| Title | Compliance and Evidence Handling Requirements |
+| Purpose | Defines normative compliance, chain-of-custody, evidence integrity, retention, and incident-response requirements for ECUBE legal evidence exports. |
+| Updated on | 04/08/26 |
+| Audience | Stakeholders, auditors, compliance officers, legal teams, and QA teams. |
+
 ## 7.1 Purpose
 
 This document defines normative compliance, chain-of-custody, evidence integrity, retention, and incident-response requirements for ECUBE operations handling legal evidence exports.
@@ -77,3 +84,8 @@ A deployment satisfies this requirements document only when all statements below
 
 Primary operational reference: [docs/operations/07-compliance-and-evidence-handling.md](../operations/07-compliance-and-evidence-handling.md).
 Related requirements: [docs/requirements/04-functional-requirements.md](04-functional-requirements.md) and [docs/requirements/10-security-and-access-control.md](10-security-and-access-control.md).
+
+## References
+
+- [docs/design/04-functional-design.md](../design/04-functional-design.md)
+- [docs/operations/07-compliance-and-evidence-handling.md](../operations/07-compliance-and-evidence-handling.md)

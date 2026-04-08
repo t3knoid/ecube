@@ -1,10 +1,11 @@
 # ECUBE TLS Certificates and Let's Encrypt
 
-**Version:** 1.0  
-**Last Updated:** April 2026  
-**Audience:** Systems Administrators, Security Engineers
-
----
+| Field | Value |
+|---|---|
+| Title | TLS Certificates and Let's Encrypt |
+| Purpose | Explains the ECUBE TLS certificate strategy, including self-signed certificate setup and Let's Encrypt automation for HTTPS. |
+| Updated on | 04/08/26 |
+| Audience | Systems administrators, security engineers. |
 
 ## Table of Contents
 
@@ -206,3 +207,7 @@ Recommended patterns:
   - cert: `ecube:ecube`, mode `644`
 
 After permission changes, validate and restart/reload affected services.
+
+## References
+
+- [docs/operations/06-security-best-practices.md](06-security-best-practices.md)

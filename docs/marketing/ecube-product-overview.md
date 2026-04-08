@@ -1,8 +1,11 @@
 # ECUBE — Secure Evidence Export Appliance
 
-> **Evidence Copying & USB Based Export** — Purpose-built for eDiscovery teams that need auditable, tamper-evident data exports to encrypted USB drives.
-
----
+| Field | Value |
+|---|---|
+| Title | ECUBE Secure Evidence Export Appliance |
+| Purpose | Provides a product overview of ECUBE covering its capabilities, use cases, and value proposition for eDiscovery teams. |
+| Updated on | 04/08/26 |
+| Audience | Legal teams, IT decision-makers, compliance officers, evaluators. |
 
 ## What Is ECUBE?
 
@@ -117,3 +120,7 @@ Source Share (NFS/SMB)
 ---
 
 <p align="center"><em>ECUBE — Because evidence integrity is not optional.</em></p>
+
+## References
+
+- [docs/operations/00-operational-guide.md](../operations/00-operational-guide.md)

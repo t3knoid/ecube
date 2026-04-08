@@ -1,12 +1,11 @@
 # ECUBE Manual Installation
 
-**Version:** 3.0  
-**Last Updated:** April 2026  
-**Audience:** Systems Administrators, Platform Engineers
-
-> This guide is the manual equivalent of what `install.sh` automates in [01-installation.md](01-installation.md). Use it when you must deploy without the installer, need custom host layout, or need stricter enterprise controls.
-
----
+| Field | Value |
+|---|---|
+| Title | ECUBE Manual Installation |
+| Purpose | Documents the manual deployment steps for ECUBE on a bare-metal Linux host without using the automated installer. |
+| Updated on | 04/08/26 |
+| Audience | Systems administrators, platform engineers. |
 
 ## Table of Contents
 
@@ -664,3 +663,8 @@ Validation checklist:
 - OpenAPI works at `https://<ui-host>/api/docs`
 - API schema loads from `https://<ui-host>/api/openapi.json`
 - "Try it out" in Swagger uses `/api/...` URLs (not backend-internal paths)
+
+## References
+
+- [docs/operations/01-installation.md](01-installation.md)
+- [docs/operations/04-configuration-reference.md](04-configuration-reference.md)

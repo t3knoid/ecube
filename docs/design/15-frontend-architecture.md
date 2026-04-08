@@ -1,10 +1,11 @@
 # 15. Frontend Architecture — Design
 
-**Version:** 1.0
-**Last Updated:** April 2026
-**Status:** Implemented (Living Document)
-
----
+| Field | Value |
+|---|---|
+| Title | Frontend Architecture |
+| Purpose | Describes the ECUBE frontend technology stack, component architecture, state management, routing, and testing strategy. |
+| Updated on | 04/08/26 |
+| Audience | Engineers, implementers, frontend developers, and technical reviewers. |
 
 ## Table of Contents
 
@@ -649,3 +650,9 @@ Playwright's engine coverage (Chromium + WebKit) provides automated testing for 
 | **Real-time upgrades** | Deferred | Polling (3s interval) is the baseline. WebSocket can be added later if multi-user concurrent viewing becomes a requirement. |
 | **PWA / offline support** | Not planned | ECUBE requires network access to the API; offline mode is not applicable. |
 | **Additional locales** | Future | Only `en.json` ships initially. Translation contributions can add new locale files without code changes. |
+
+## References
+
+- [docs/design/14-ui-wireframes.md](14-ui-wireframes.md)
+- [docs/design/16-theme-and-logo-system.md](16-theme-and-logo-system.md)
+- [docs/testing/01-automated-test-requirements.md](../testing/01-automated-test-requirements.md)

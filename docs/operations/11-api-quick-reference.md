@@ -1,10 +1,11 @@
 # ECUBE API Quick Reference
 
-**Version:** 1.0  
-**Last Updated:** April 2026  
-**Audience:** Developers, Operators, IT Staff
-
----
+| Field | Value |
+|---|---|
+| Title | API Quick Reference |
+| Purpose | Provides a quick-reference guide to ECUBE API endpoints, authentication, and common request examples for operators and developers. |
+| Updated on | 04/08/26 |
+| Audience | Developers, operators, IT staff. |
 
 ## Table of Contents
 
@@ -200,3 +201,7 @@ curl -k https://localhost:8443/introspection/version
 curl -k -H "Authorization: Bearer $TOKEN" \
   https://localhost:8443/audit?limit=50
 ```
+
+## References
+
+- [docs/design/06-rest-api-design.md](../design/06-rest-api-design.md)

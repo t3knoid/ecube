@@ -1,10 +1,11 @@
 # ECUBE Design Documents
 
-## Design Set Overview
-
-- **Version:** 1.1 (aligned to the current implementation-oriented design set)
-- **Date:** April 2026
-- **Purpose:** Define the architecture, behavioral rules, interfaces, constraints, and UX concepts that shape ECUBE without turning the design set into an operations runbook.
+| Field | Value |
+|---|---|
+| Title | ECUBE Design Documents Overview |
+| Purpose | Provides an organized index, reading guide, and design principles for the ECUBE design document set. |
+| Updated on | 04/08/26 |
+| Audience | Engineers, implementers, maintainers, and technical reviewers. |
 
 ## How the Design Set Is Organized
 
@@ -59,3 +60,7 @@ For most readers, the most efficient path is:
 - Fault-tolerant recovery after interruption or restart.
 - Clear separation between architecture, behavior, data shape, and operations.
 - Observable hardware and job internals without bypassing the system layer.
+
+## References
+
+- [docs/requirements/00-overview.md](../requirements/00-overview.md)

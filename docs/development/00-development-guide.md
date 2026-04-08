@@ -1,11 +1,11 @@
 # ECUBE Development Guide
 
-**Version:** 1.2  
-**Last Updated:** April 2026  
-**Audience:** Developers, Contributors  
-**Document Type:** Index / Overview
-
----
+| Field | Value |
+|---|---|
+| Title | ECUBE Development Guide |
+| Purpose | Provides an overview and index for developer setup, debugging, CI workflows, and contribution procedures. |
+| Updated on | 04/08/26 |
+| Audience | Developers, contributors. |
 
 ## Table of Contents
 
@@ -515,3 +515,9 @@ When adding new OS-level functionality:
 ---
 
 **End of Development Guide**
+
+## References
+
+- [docs/development/01-debugging-guide.md](01-debugging-guide.md)
+- [docs/development/02-windows-development-guide.md](02-windows-development-guide.md)
+- [docs/development/03-ci-build-and-installer-artifacts.md](03-ci-build-and-installer-artifacts.md)
