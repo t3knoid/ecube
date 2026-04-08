@@ -424,8 +424,8 @@ Accessible from the Drive Management screen via a "Manage Ports" button. Visible
 
 **Behavior:**
 - **Vendor**, **Prod.**, **Speed** columns are read-only, auto-populated from sysfs during discovery
-- **Label** column is inline-editable; clicking the ✏ icon opens a text field. Saving calls `PATCH /admin/ports/{id}/label` with `{"friendly_label": "..."}`
-- Each **Enable** toggle calls `PATCH /admin/ports/{id}` with `{"enabled": true/false}`
+- **Label** column is inline-editable; clicking the ✏ icon opens a text field. Saving calls `PATCH /admin/ports/{port_id}/label` with `{"friendly_label": "..."}`
+- Each **Enable** toggle calls `PATCH /admin/ports/{port_id}` with `{"enabled": true/false}`
 - Toggle state reflects the current `enabled` value from `GET /admin/ports`
 - Success shows a brief toast notification ("Port 1 enabled" / "Port 2 disabled" / "Port 1 label updated")
 - The "Refresh Drives" button calls `POST /drives/refresh` to immediately apply enablement changes
@@ -459,7 +459,7 @@ Accessible from the Drive Management screen via a "Manage Hubs" button. Visible 
 
 **Behavior:**
 - **Vendor** and **Prod.** columns are read-only, auto-populated from sysfs `idVendor`/`idProduct`
-- **Location Hint** is inline-editable; clicking the ✏ icon opens a text field. Saving calls `PATCH /admin/hubs/{id}` with `{"location_hint": "..."}`
+- **Location Hint** is inline-editable; clicking the ✏ icon opens a text field. Saving calls `PATCH /admin/hubs/{hub_id}` with `{"location_hint": "..."}`
 - Hub data is fetched from `GET /admin/hubs`
 - Success shows a toast notification ("Hub 1 location updated")
 - Hidden for processor and auditor roles (API returns 403)

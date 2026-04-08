@@ -426,8 +426,8 @@ curl -sk -X POST https://localhost:8443/mounts \
 curl -sk https://localhost:8443/mounts \
   -H "Authorization: Bearer $TOKEN" | jq
 
-# Remove a mount (replace {id})
-curl -sk -X DELETE https://localhost:8443/mounts/{id} \
+# Remove a mount (replace {mount_id})
+curl -sk -X DELETE https://localhost:8443/mounts/{mount_id} \
   -H "Authorization: Bearer $TOKEN" | jq
 ```
 
@@ -546,26 +546,26 @@ curl -sk -X POST https://localhost:8443/jobs \
     "thread_count": 4
   }' | jq
 
-# Start the job (replace {id})
-curl -sk -X POST https://localhost:8443/jobs/{id}/start \
+# Start the job (replace {job_id})
+curl -sk -X POST https://localhost:8443/jobs/{job_id}/start \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{}' | jq
 
 # Poll job status
-curl -sk https://localhost:8443/jobs/{id} \
+curl -sk https://localhost:8443/jobs/{job_id} \
   -H "Authorization: Bearer $TOKEN" | jq
 
 # List file-level status rows (operator-safe)
-curl -sk https://localhost:8443/jobs/{id}/files \
+curl -sk https://localhost:8443/jobs/{job_id}/files \
   -H "Authorization: Bearer $TOKEN" | jq
 
 # Verify checksums after completion
-curl -sk -X POST https://localhost:8443/jobs/{id}/verify \
+curl -sk -X POST https://localhost:8443/jobs/{job_id}/verify \
   -H "Authorization: Bearer $TOKEN" | jq
 
 # Generate manifest
-curl -sk -X POST https://localhost:8443/jobs/{id}/manifest \
+curl -sk -X POST https://localhost:8443/jobs/{job_id}/manifest \
   -H "Authorization: Bearer $TOKEN" | jq
 ```
 
@@ -810,7 +810,7 @@ curl -sk -X POST https://localhost:8443/setup/database/test-connection \
 | 7 | Processor reads audit | `GET /audit` with processor token | 403, `FORBIDDEN` |
 | 8 | Auditor reads audit | `GET /audit` with auditor token | 200 |
 | 9 | Processor creates job | `POST /jobs` with processor token | 200 |
-| 10 | All four roles read job files | `GET /jobs/{id}/files` with admin/manager/processor/auditor tokens | 200 for each role |
+| 10 | All four roles read job files | `GET /jobs/{job_id}/files` with admin/manager/processor/auditor tokens | 200 for each role |
 | 11 | All error responses have `trace_id` | Inspect any 4xx/5xx JSON body | `trace_id` field present |
 
 ### 12.3 Project Isolation
@@ -870,10 +870,10 @@ curl -sk -X POST https://localhost:8443/setup/database/test-connection \
 | 2 | List ports — manager | `GET /admin/ports` with manager token | 200 |
 | 3 | List ports — processor denied | `GET /admin/ports` with processor token | 403, `FORBIDDEN` |
 | 4 | List ports — unauthenticated | `GET /admin/ports` without token | 401, `UNAUTHORIZED` |
-| 5 | Enable a port | `PATCH /admin/ports/{id}` with `{"enabled": true}` | 200, port returned with `enabled: true` |
-| 6 | Disable a port | `PATCH /admin/ports/{id}` with `{"enabled": false}` | 200, port returned with `enabled: false` |
-| 7 | Enable port — manager | `PATCH /admin/ports/{id}` with manager token | 200 |
-| 8 | Enable port — processor denied | `PATCH /admin/ports/{id}` with processor token | 403, `FORBIDDEN` |
+| 5 | Enable a port | `PATCH /admin/ports/{port_id}` with `{"enabled": true}` | 200, port returned with `enabled: true` |
+| 6 | Disable a port | `PATCH /admin/ports/{port_id}` with `{"enabled": false}` | 200, port returned with `enabled: false` |
+| 7 | Enable port — manager | `PATCH /admin/ports/{port_id}` with manager token | 200 |
+| 8 | Enable port — processor denied | `PATCH /admin/ports/{port_id}` with processor token | 403, `FORBIDDEN` |
 | 9 | Enable non-existent port | `PATCH /admin/ports/99999` with `{"enabled": true}` | 404, `NOT_FOUND` |
 | 10 | Ports default to disabled | Discover a new port, then `GET /admin/ports` | New port has `enabled: false` |
 | 11 | Drive on disabled port stays EMPTY | Plug in drive on disabled port, run `POST /drives/refresh` | `GET /drives` shows drive in `EMPTY` state |
@@ -892,15 +892,15 @@ curl -sk -X POST https://localhost:8443/setup/database/test-connection \
 | 2 | List hubs — manager | `GET /admin/hubs` with manager token | 200 |
 | 3 | List hubs — processor denied | `GET /admin/hubs` with processor token | 403, `FORBIDDEN` |
 | 4 | List hubs — unauthenticated | `GET /admin/hubs` without token | 401, `UNAUTHORIZED` |
-| 5 | Set hub location hint | `PATCH /admin/hubs/{id}` with `{"location_hint": "back-left rack"}` | 200, hub returned with `location_hint: "back-left rack"` |
-| 6 | Set hub location hint — manager | `PATCH /admin/hubs/{id}` with manager token | 200 |
-| 7 | Set hub location hint — processor denied | `PATCH /admin/hubs/{id}` with processor token | 403, `FORBIDDEN` |
+| 5 | Set hub location hint | `PATCH /admin/hubs/{hub_id}` with `{"location_hint": "back-left rack"}` | 200, hub returned with `location_hint: "back-left rack"` |
+| 6 | Set hub location hint — manager | `PATCH /admin/hubs/{hub_id}` with manager token | 200 |
+| 7 | Set hub location hint — processor denied | `PATCH /admin/hubs/{hub_id}` with processor token | 403, `FORBIDDEN` |
 | 8 | Set hub location hint — not found | `PATCH /admin/hubs/99999` | 404, `NOT_FOUND` |
 | 9 | HUB_LABEL_UPDATED audit log | `GET /audit?action=HUB_LABEL_UPDATED` after setting a hub label | Audit entry with `hub_id`, `system_identifier`, `field`, `old_value`, `new_value`, `path` |
-| 10 | Set port friendly label | `PATCH /admin/ports/{id}/label` with `{"friendly_label": "Bay 3"}` | 200, port returned with `friendly_label: "Bay 3"` |
-| 11 | Set port friendly label — manager | `PATCH /admin/ports/{id}/label` with manager token | 200 |
-| 12 | Set port friendly label — processor denied | `PATCH /admin/ports/{id}/label` with processor token | 403, `FORBIDDEN` |
-| 13 | Set port friendly label — not found | `PATCH /admin/ports/{id}/label` for non-existent port | 404, `NOT_FOUND` |
+| 10 | Set port friendly label | `PATCH /admin/ports/{port_id}/label` with `{"friendly_label": "Bay 3"}` | 200, port returned with `friendly_label: "Bay 3"` |
+| 11 | Set port friendly label — manager | `PATCH /admin/ports/{port_id}/label` with manager token | 200 |
+| 12 | Set port friendly label — processor denied | `PATCH /admin/ports/{port_id}/label` with processor token | 403, `FORBIDDEN` |
+| 13 | Set port friendly label — not found | `PATCH /admin/ports/{port_id}/label` for non-existent port | 404, `NOT_FOUND` |
 | 14 | PORT_LABEL_UPDATED audit log | `GET /audit?action=PORT_LABEL_UPDATED` after setting a port label | Audit entry with `port_id`, `system_path`, `field`, `old_value`, `new_value`, `path` |
 | 15 | Port listing includes enriched fields | `GET /admin/ports` after discovery | Port objects include `vendor_id`, `product_id`, `speed` fields |
 | 16 | Labels survive discovery resync | Set hub `location_hint` and port `friendly_label`, then `POST /drives/refresh` | Labels remain unchanged after resync |
@@ -971,13 +971,13 @@ Walk through the complete data export lifecycle:
 
 6. **Create a job** — `POST /jobs` with `source_path` pointing to the test files.
 
-7. **Start the job** — `POST /jobs/{id}/start`.
+7. **Start the job** — `POST /jobs/{job_id}/start`.
 
-8. **Poll status** — `GET /jobs/{id}` — until `status` becomes `COMPLETED`.
+8. **Poll status** — `GET /jobs/{job_id}` — until `status` becomes `COMPLETED`.
 
-9. **Verify checksums** — `POST /jobs/{id}/verify` — confirm all files pass.
+9. **Verify checksums** — `POST /jobs/{job_id}/verify` — confirm all files pass.
 
-10. **Generate manifest** — `POST /jobs/{id}/manifest`.
+10. **Generate manifest** — `POST /jobs/{job_id}/manifest`.
 
 11. **Prepare eject** — `POST /drives/{drive_id}/prepare-eject` — drive returns to `AVAILABLE`.
 

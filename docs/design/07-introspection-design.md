@@ -10,7 +10,7 @@ This document defines the design intent for ECUBE introspection capabilities as 
 - `GET /introspection/block-devices`: include capacity, fs type, mount state, encryption indicators.
 - `GET /introspection/mounts`: report active mount table and ECUBE-managed entries.
 - `GET /introspection/system-health`: aggregate CPU/memory/disk and queue depth.
-- `GET /introspection/jobs/{id}/debug`: expose worker states, retries, and pending queue details.
+- `GET /introspection/jobs/{job_id}/debug`: expose worker states, retries, and pending queue details.
 
 ## Design Guardrails
 
