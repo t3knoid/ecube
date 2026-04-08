@@ -6,7 +6,12 @@ test('users list, role assignment, and create os user', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
   const roleUsers = { users: [{ username: 'alba', roles: ['processor'] }] }
-  const osUsers = { users: [{ username: 'alba', uid: 1001, gid: 1001, home: '/home/alba', shell: '/bin/bash', groups: ['ecube-processors'] }] }
+  const osUsers = {
+    users: [
+      { username: 'alba', uid: 1001, gid: 1001, home: '/home/alba', shell: '/bin/bash', groups: ['ecube-processors'] },
+      { username: 'www-data', uid: 33, gid: 33, home: '/var/www', shell: '/usr/sbin/nologin', groups: ['ecube-admins'] },
+    ],
+  }
 
   await page.route('**/api/users', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(roleUsers) })
@@ -27,6 +32,8 @@ test('users list, role assignment, and create os user', async ({ page }) => {
   })
 
   await page.goto('/users')
+
+  await expect(page.getByRole('row').filter({ hasText: 'www-data' })).toHaveCount(0)
 
   const row = page.getByRole('row').filter({ hasText: 'alba' })
   await row.getByRole('checkbox', { name: 'Manager' }).check()
