@@ -623,7 +623,7 @@ Create a new job.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `callback_url` | string or null | `null` | HTTPS URL to receive a POST callback on job completion or failure. HTTP URLs are rejected (422). See [§ 4.8 Webhook Callback Delivery](04-functional-requirements.md#48-webhook-callback-delivery) for payload format, retry policy, and SSRF protection. |
+| `callback_url` | string or null | `null` | HTTPS URL to receive a POST callback on job completion or failure. HTTP URLs are rejected (422). See [§ 4.8 Webhook Callback Delivery](04-functional-design.md#48-webhook-callback-delivery) for payload format, retry policy, and SSRF protection. |
 
 **Error responses:**
 
@@ -1345,7 +1345,7 @@ ECUBE performs **startup state reconciliation** during application startup (insi
 
 API clients should be aware that after a service restart, previously `RUNNING` jobs may appear as `FAILED` and previously `MOUNTED` mounts may appear as `UNMOUNTED` or `ERROR`. The audit log contains the corresponding `MOUNT_RECONCILED` and `JOB_RECONCILED` records explaining the transitions.
 
-See [§ 4.11 Startup State Reconciliation](04-functional-requirements.md#411-startup-state-reconciliation) for the full specification.
+See [§ 4.11 Startup State Reconciliation](04-functional-design.md#411-startup-state-reconciliation) for the full specification.
 
 ---
 
