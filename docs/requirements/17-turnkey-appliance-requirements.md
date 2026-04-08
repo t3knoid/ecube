@@ -92,6 +92,7 @@ Turnkey appliances shall be buildable, serviceable, and operable as controlled p
 The appliance shall:
 
 - Use hardware classes suitable for appliance-grade continuous operation.
+- Place operator-facing I/O ports on the front of the case for direct access during removable-media workflows.
 - Support observability sufficient for diagnosing thermal, I/O, and media-state degradation.
 - Support controlled startup and restart behavior that preserves authoritative media-state understanding.
 - Support replacement of failed field components without invalidating historical evidence records.
