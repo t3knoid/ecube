@@ -119,7 +119,7 @@ All design details live under `docs/design/`:
 - `03-system-architecture.md` — component view and interaction pattern
 - `04-functional-design.md` — drive FSM, project isolation, copy engine, audit
 - `05-data-model.md` — table design notes and integrity constraints
-- `06-rest-api-specification.md` — all endpoints with required roles and error responses
+- `06-rest-api-requirements.md` — normative API behavior, role expectations, constraints, and acceptance criteria
 - `10-security-and-access-control.md` — role model, authorization matrix, `require_roles` pattern
 
 ## Coding Conventions

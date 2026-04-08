@@ -1,6 +1,12 @@
-# 6. REST API Specification — Design
+# 6. REST API Design
 
-**OpenAPI Documentation:** This API specification is also available interactively via OpenAPI (Swagger) when the ECUBE API server is running:
+This document describes how the ECUBE API works: route structure, authentication and authorization model, payload and response shapes, endpoint behavior, operational flows, and implementation-oriented constraints. It is the design-side companion to [../requirements/06-rest-api-requirements.md](../requirements/06-rest-api-requirements.md), which captures the normative requirement set.
+
+Audience: engineers, implementers, maintainers, and reviewers working on the API implementation.
+
+This document intentionally includes endpoints, request and response schemas, state-dependent behavior, and implementation-oriented flow details. It intentionally excludes business justification, user stories, and product-level rationale except where needed to explain the resulting API contract.
+
+**OpenAPI Documentation:** This API contract is also available interactively via OpenAPI (Swagger) when the ECUBE API server is running:
 
 - **Swagger UI:** `http://localhost:8000/docs`
 - **ReDoc:** `http://localhost:8000/redoc`
@@ -8,7 +14,7 @@
 
 For the complete role model and policy context, see [10-security-and-access-control.md](10-security-and-access-control.md).
 
-## 1. API Authentication
+## 1. Authentication Design
 
 ### 1.1 Identity Sources
 
@@ -79,10 +85,10 @@ Authenticate with OS credentials and receive a signed JWT.
 **Security notes:**
 
 - Passwords are never logged or stored by ECUBE.
-- The ECUBE service account must have PAM access on the host.
+- The local/LDAP authentication design assumes the ECUBE service account has PAM access on the host.
 - For LDAP authentication, configure PAM on the host to use SSSD or pam_ldap.
 
-### 1.3 Authentication Mechanism
+### 1.3 Authentication Model
 
 - All endpoints except `/health`, `/auth/token`, `/setup/status`, `/setup/initialize`, and `/introspection/version` require a bearer token.
 - `/setup/database/test-connection`, `/setup/database/provision`, and `/setup/database/provision-status` accept an **optional** bearer token: unauthenticated during initial setup (no admin exists), `admin` role required after.
@@ -108,7 +114,7 @@ Every authenticated request resolves to:
 
 ---
 
-## 2. ECUBE Security Roles
+## 2. Role Design
 
 ### 2.1 Role Definitions
 
@@ -155,9 +161,9 @@ Every authenticated request resolves to:
 
 ---
 
-## 3. Updated REST API Endpoints with Security Requirements
+## 3. REST API Endpoint Design
 
-Each endpoint now includes **required roles** and **error responses**.
+Each endpoint section documents the designed route shape, access model, response contract, and notable behavior.
 
 ### Standardized Error Response Format
 
@@ -181,7 +187,7 @@ The Pydantic schema for this payload is `ErrorResponse` in `app/schemas/errors.p
 
 ### Common Error Codes
 
-All authenticated endpoints (except `/health`, `/auth/token`, `/setup/status`, `/setup/initialize`, and `/introspection/version`) return these error codes when applicable:
+For authenticated endpoints (except `/health`, `/auth/token`, `/setup/status`, `/setup/initialize`, and `/introspection/version`), these error codes are part of the designed error surface when applicable:
 
 - `401 Unauthorized` — Missing, invalid, or expired authentication token
 - `403 Forbidden` — Authenticated user lacks the required role
@@ -775,7 +781,7 @@ Compare two files by hash/size/path.
 
 All user role management endpoints require the `admin` role. These endpoints manage authorization (role assignments) only — they do not create or delete OS/LDAP user accounts.
 
-The `{username}` path parameter must match the POSIX username pattern: `^[a-z_][a-z0-9_-]{0,31}$` (lowercase letter or underscore start, 1–32 characters, lowercase alphanumeric/hyphen/underscore only). Requests with non-matching values are rejected with `422 Unprocessable Entity`.
+The `{username}` path parameter is constrained to the POSIX username pattern: `^[a-z_][a-z0-9_-]{0,31}$` (lowercase letter or underscore start, 1–32 characters, lowercase alphanumeric/hyphen/underscore only). Non-matching values are rejected with `422 Unprocessable Entity`.
 
 ### `GET /users`
 
@@ -892,10 +898,10 @@ Remove all role assignments for a user. The user will fall back to OS group-base
 
 All endpoints require `admin` role and are only available when `role_resolver = "local"` (returns `404` otherwise).
 
-Path parameter constraints:
+Path parameter constraints in this API design:
 
-- `{username}` must match the POSIX username pattern: `^[a-z_][a-z0-9_-]{0,31}$`
-- `{name}` (group name) must match the same pattern: `^[a-z_][a-z0-9_-]{0,31}$`
+- `{username}` matches the POSIX username pattern: `^[a-z_][a-z0-9_-]{0,31}$`
+- `{name}` (group name) matches the same pattern: `^[a-z_][a-z0-9_-]{0,31}$`
 
 Requests with non-matching values are rejected with `422 Unprocessable Entity` at the framework level (before reaching service logic). These patterns are declared in the OpenAPI schema.
 
@@ -1018,7 +1024,7 @@ Add supplementary groups to an OS user without removing existing memberships.
 
 ### `POST /admin/os-groups`
 
-Create an OS group. The group name **must** start with the `ecube-` prefix.
+Create an OS group. In this API design, accepted group names start with the `ecube-` prefix.
 
 **Roles:** `admin`
 
@@ -1050,7 +1056,7 @@ List OS groups filtered to the `ecube-` prefix.
 
 ### `DELETE /admin/os-groups/{name}`
 
-Delete an OS group. The group name **must** start with the `ecube-` prefix.
+Delete an OS group. In this API design, accepted group names start with the `ecube-` prefix.
 
 **Roles:** `admin`
 
@@ -1081,7 +1087,7 @@ These endpoints are **unauthenticated** and guarded by a first-run check.
 
 Check whether the system has been initialized.
 
-**Authentication:** None required.
+**Authentication:** Public.
 
 **Response (200 OK):**
 
@@ -1093,7 +1099,7 @@ Check whether the system has been initialized.
 
 Perform first-run system initialization: create OS groups, create admin user, set password, seed DB role, and mark system as initialized.
 
-**Authentication:** None required. Can only succeed once.
+**Authentication:** Public. This flow is designed to succeed only once.
 
 **Request body:**
 
@@ -1235,7 +1241,7 @@ Report whether the application database has already been provisioned.
 - `403 Forbidden` — Non-admin role (after setup)
 - `503 Service Unavailable` — Database unreachable and no valid admin JWT provided (fail-closed)
 
-**Use:** The setup wizard calls this on load to disable the Provision button when the database is already provisioned, preventing accidental re-provisioning.
+**Consumer behavior:** The setup wizard can call this on load to disable the Provision button when the database is already provisioned, preventing accidental re-provisioning.
 
 #### `GET /setup/database/system-info`
 
@@ -1254,7 +1260,7 @@ Return runtime environment hints for the setup wizard.
 | `in_docker` | `boolean` | Whether the server process is running inside a Docker container |
 | `suggested_db_host` | `string` | Recommended PostgreSQL hostname to pre-fill in the setup wizard (`"postgres"` in Docker, `"localhost"` otherwise; overridable via `SETUP_DOCKER_DB_HOST`) |
 
-**Use:** The setup wizard fetches this on load to pre-fill the database host field.  When `in_docker` is `true`, a contextual hint is displayed below the host input reminding the operator to use the Docker Compose service name.
+**Consumer behavior:** The setup wizard can fetch this on load to pre-fill the database host field. When `in_docker` is `true`, a contextual hint is displayed below the host input reminding the operator to use the Docker Compose service name.
 
 #### `GET /setup/database/status`
 

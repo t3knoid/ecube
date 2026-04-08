@@ -110,7 +110,7 @@ If you run the full Docker app + UI stack, docs are available through the nginx 
 
 > **Note:** In the full-stack compose setup, API port 8000 is published for development convenience. This is not a typical hardened deployment shape; production-style Docker should expose only port 8443 through the nginx UI proxy.
 
-All endpoints (except `/health`, `/docs`, `/redoc`, `/openapi.json`) require authentication via JWT bearer tokens. See the [REST API Specification](docs/design/06-rest-api-specification.md) and [Security & Access Control](docs/design/10-security-and-access-control.md) for details.
+All endpoints (except `/health`, `/docs`, `/redoc`, `/openapi.json`) require authentication via JWT bearer tokens. See the [REST API Design](docs/design/06-rest-api-design.md) and [Security & Access Control](docs/design/10-security-and-access-control.md) for details.
 
 A [Postman collection](postman/ecube-postman-collection.json) is also available for testing and exploring the API.
 
@@ -141,7 +141,7 @@ The five badges at the top of this file reflect the current state of automated C
 - [Installation](docs/operations/01-installation.md) — bare-metal install and installer options
 - [Configuration Reference](docs/operations/04-configuration-reference.md) — environment variables and runtime settings
 - [API Quick Reference](docs/operations/08-api-quick-reference.md) — high-value endpoints for operators and automation
-- [REST API Specification](docs/design/06-rest-api-specification.md) — endpoint contracts and response behavior
+- [REST API Design](docs/design/06-rest-api-design.md) — endpoint contracts and response behavior
 - [Security and Access Control](docs/design/10-security-and-access-control.md) — roles, trust boundary, and authorization model
 - [Build and Deployment](docs/design/13-build-and-deployment.md) — release artifacts and deployment model
 

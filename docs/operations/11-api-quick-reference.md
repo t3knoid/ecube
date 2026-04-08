@@ -164,7 +164,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 ### Documentation
 
 - **Design Docs:** `docs/design/` — Technical design and architecture
-- **API Spec:** `docs/design/06-rest-api-specification.md` — Detailed API endpoints
+- **API Spec:** `docs/design/06-rest-api-design.md` — Detailed API endpoints
 - **Security:** `docs/design/10-security-and-access-control.md` — Authentication, RBAC
 - **Configuration:** [04-configuration-reference.md](04-configuration-reference.md) — All environment variables
 
