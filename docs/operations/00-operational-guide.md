@@ -218,7 +218,7 @@ For architecture decisions, data model details, and full API specifications, see
 | Document | Description |
 |----------|-------------|
 | `03-system-architecture.md` | Component view and interaction patterns |
-| `04-functional-requirements.md` | Drive FSM, project isolation, copy engine, audit |
+| `04-functional-design.md` | Drive FSM, project isolation, copy engine, audit |
 | `05-data-model.md` | Table design and integrity constraints |
 | `06-rest-api-specification.md` | Full API endpoint definitions with schemas |
 | `10-security-and-access-control.md` | Role model, authorization matrix, `require_roles` pattern |

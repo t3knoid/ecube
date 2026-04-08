@@ -117,7 +117,7 @@ Use the `require_roles(*roles)` decorator pattern (see `docs/design/10-security-
 All design details live under `docs/design/`:
 
 - `03-system-architecture.md` — component view and interaction pattern
-- `04-functional-requirements.md` — drive FSM, project isolation, copy engine, audit
+- `04-functional-design.md` — drive FSM, project isolation, copy engine, audit
 - `05-data-model.md` — table design notes and integrity constraints
 - `06-rest-api-specification.md` — all endpoints with required roles and error responses
 - `10-security-and-access-control.md` — role model, authorization matrix, `require_roles` pattern
