@@ -220,7 +220,7 @@ For architecture decisions, data model details, and full API specifications, see
 | `03-system-architecture.md` | Component view and interaction patterns |
 | `04-functional-design.md` | Drive FSM, project isolation, copy engine, audit |
 | `05-data-model.md` | Table design and integrity constraints |
-| `06-rest-api-specification.md` | Full API endpoint definitions with schemas |
+| `06-rest-api-requirements.md` | Normative API behavior, constraints, role expectations, and acceptance criteria |
 | `10-security-and-access-control.md` | Role model, authorization matrix, `require_roles` pattern |
 | `12-runtime-environment-and-usb-visibility.md` | Runtime environment and USB visibility architecture |
 
