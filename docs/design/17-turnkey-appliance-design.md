@@ -26,7 +26,7 @@
 
 ### 17.1.3 Explicit Exclusions
 
-- Business justification, commercial pricing, and GTM positioning.
+- Commercial pricing and GTM positioning.
 - User stories and product planning narratives.
 - Software feature behavior not tied to appliance hardware design.
 
@@ -34,14 +34,15 @@
 
 | Tier | USB Export Ports | Motherboard / CPU | Max ECC RAM | PCIe | USB Subsystem | Storage | Networking | Chassis and Power |
 |---|---:|---|---|---|---|---|---|---|
-| ECUBE-4 | 4 | Appliance-grade, low-power, high-reliability board; prefer soldered CPU | 16GB UDIMM | 1 x x4 | 1x StarTech PEXUSB3S44V low-profile card | OS SSD (industrial class, size TBD) + internal storage for logs/manifests/job metadata | Standard gigabit NIC (appliance-grade reliability) | Standard ATX PS2 PSU, flexible fan orientation, quiet/reliable thermal profile |
-| ECUBE-8 | 8 | Appliance-grade, low-power, high-reliability board | 64GB UDIMM | 1 x x4 | 2x StarTech PEXUSB3S44V low-profile cards | OS SSD (industrial class, size TBD) + internal storage for logs/manifests/job metadata | Standard gigabit NIC (appliance-grade reliability) | Standard ATX PS2 PSU, flexible fan orientation, quiet/reliable thermal profile |
-| ECUBE-12 | 12 | Appliance-grade, low-power, high-reliability board | 128GB RDIMM | 1 x x16 (riser -> 3 cards) | 3x StarTech PEXUSB3S44V low-profile cards | OS SSD (industrial class, size TBD) + internal storage for logs/manifests/job metadata | Standard gigabit NIC (appliance-grade reliability) | Standard ATX PS2 PSU, flexible fan orientation, quiet/reliable thermal profile |
+| ECUBE-4 | 4 | Appliance-grade, low-power, high-reliability board; prefer soldered CPU | 16GB UDIMM | 1 x x4 | 1x StarTech PEXUSB3S44V low-profile card | OS SSD (industrial class, size TBD) + internal storage for logs/manifests/job metadata | 10GbE recommended; 1GbE minimum supported | Standard ATX PS2 PSU, flexible fan orientation, quiet/reliable thermal profile |
+| ECUBE-8 | 8 | Appliance-grade, low-power, high-reliability board | 64GB UDIMM | 1 x x4 | 2x StarTech PEXUSB3S44V low-profile cards | OS SSD (industrial class, size TBD) + internal storage for logs/manifests/job metadata | 10GbE recommended; 1GbE minimum supported | Standard ATX PS2 PSU, flexible fan orientation, quiet/reliable thermal profile |
+| ECUBE-12 | 12 | Appliance-grade, low-power, high-reliability board | 128GB RDIMM | 1 x x16 (riser -> 3 cards) | 3x StarTech PEXUSB3S44V low-profile cards | OS SSD (industrial class, size TBD) + internal storage for logs/manifests/job metadata | 10GbE recommended; 1GbE minimum supported | Standard ATX PS2 PSU, flexible fan orientation, quiet/reliable thermal profile |
 
 Notes:
 
 - PCIe wording intentionally mirrors the embedded board and CPU reference matrix for consistency.
 - Each PEXUSB3S44V card contributes four USB 3.0 ports; controller-level separation is treated as an intended isolation boundary that must be validated during QA.
+- 10GbE is recommended for optimal network performance during concurrent ingest and export workflows; 1GbE remains the minimum supported network baseline.
 
 ### 17.2.1 Embedded Board and CPU Reference Matrix
 
@@ -66,8 +67,9 @@ Integration notes:
 
 ### 17.3.2 Memory Design
 
-- ECUBE-4 and ECUBE-8 use 16GB ECC UDIMM as baseline.
-- ECUBE-12 uses 32GB ECC RDIMM baseline for higher concurrency and metadata pressure.
+- ECUBE-4 uses 16GB ECC UDIMM baseline.
+- ECUBE-8 uses 64GB ECC UDIMM baseline.
+- ECUBE-12 uses 128GB ECC RDIMM baseline for higher concurrency and metadata pressure.
 - Establish memory qualification tests for temperature, sustained I/O pressure, and long-run stability.
 
 ### 17.3.3 Storage Design
@@ -75,6 +77,21 @@ Integration notes:
 - Separate OS boot storage from operational metadata persistence responsibilities.
 - Use industrial or appliance-appropriate SSD classes for OS reliability.
 - Define minimum write-endurance requirements for metadata and audit-related local storage workloads.
+
+### 17.3.4 Networking Design
+
+- Recommend 10GbE NIC capability for all tiers to reduce network ingest bottlenecks and improve end-to-end job completion time.
+- Support 1GbE as a minimum compatibility baseline for constrained deployments.
+- Prioritize NIC and driver combinations with stable Linux support and low packet-loss behavior under sustained throughput.
+
+## 17.3.5 Hardware Choice Justification
+
+- Appliance-grade board and CPU classes are chosen for long-run stability, predictable firmware behavior, and supportable lifecycle management.
+- ECC memory is chosen to reduce risk of silent memory corruption in long-running, evidence-sensitive workflows.
+- Multi-controller USB topology is chosen to improve port-level fault containment and concurrent I/O behavior.
+- Industrial SSD classes are chosen for endurance and reliability of OS and operational metadata workloads.
+- 10GbE recommendation is chosen to avoid network-side throughput bottlenecks when multiple export workflows run concurrently.
+- ATX PS2 power and controlled thermal design are chosen to preserve stable operation during sustained copy and verify load.
 
 ## 17.4 PCIe and USB Topology Design
 
