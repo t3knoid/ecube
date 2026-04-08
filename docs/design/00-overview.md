@@ -18,7 +18,7 @@ The design documents are grouped by role so readers can move from high-level int
 
 ### Domain Behavior and Interfaces
 
-4. `04-functional-requirements.md` — system behavior, state transitions, concurrency expectations, and recovery rules.
+4. `04-functional-design.md` — system behavior, state transitions, concurrency expectations, and recovery rules.
 5. `05-data-model.md` — persistence model, integrity constraints, and current schema shape.
 6. `06-rest-api-specification.md` — endpoint contract, roles, responses, and request/response semantics.
 7. `07-introspection-design.md` — scope and safety model for diagnostic and introspection capabilities.

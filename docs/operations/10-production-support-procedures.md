@@ -1049,5 +1049,5 @@ curl -X POST http://localhost:8000/jobs \
 
 - [01-operational-readiness.md](01-operational-readiness.md) — Health checks, metrics, alerting
 - [02-compliance-and-evidence-handling.md](02-compliance-and-evidence-handling.md) — Chain-of-custody, regulations, incidents
-- [docs/design/04-functional-requirements.md](../design/04-functional-requirements.md) — System behavior, recovery procedures
+- [docs/design/04-functional-design.md](../design/04-functional-design.md) — System behavior, recovery procedures
 - [docs/design/13-build-and-deployment.md](../design/13-build-and-deployment.md) — Deployment models, configurations

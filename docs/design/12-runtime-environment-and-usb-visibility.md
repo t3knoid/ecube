@@ -72,6 +72,6 @@ These concerns are part of the deployment architecture, even though the exact op
 ## 12.7 Related Documents
 
 - `docs/design/03-system-architecture.md`
-- `docs/design/04-functional-requirements.md`
+- `docs/design/04-functional-design.md`
 - `docs/design/13-build-and-deployment.md`
 - `docs/operations/`

@@ -80,7 +80,7 @@ The application must expose an HTTP `GET /health/ready` endpoint that returns `2
 - Validates critical dependencies: PostgreSQL connectivity, filesystem mounts, USB discovery subsystem.
 - Fails fast (< 1 second) if any dependency fails.
 - Returned `503 Service Unavailable` if not ready.
-- During startup, the service may return `503` until initialization completes (§ [docs/design/04-functional-requirements.md](../design/04-functional-requirements.md#startup-initialization) Startup Reconciliation).
+- During startup, the service may return `503` until initialization completes (§ [docs/design/04-functional-design.md](../design/04-functional-design.md#startup-initialization) Startup Reconciliation).
 
 ### Startup Initialization Timeout
 
@@ -460,7 +460,7 @@ Before moving ECUBE to production, verify:
 ## Related Documents
 
 - [docs/requirements/04-functional-requirements.md](../requirements/04-functional-requirements.md) — Functional requirements and system behaviors
-- [docs/design/04-functional-requirements.md](../design/04-functional-requirements.md) — Implementation patterns for recovery and reconciliation
+- [docs/design/04-functional-design.md](../design/04-functional-design.md) — Implementation patterns for recovery and reconciliation
 - [docs/design/11-testing-and-validation.md](../design/11-testing-and-validation.md) — Testing strategy and validation approach
 - [production-support-procedures.md](production-support-procedures.md) — Troubleshooting, upgrade, backup, and patching
 - [compliance-and-evidence-handling.md](compliance-and-evidence-handling.md) — Compliance mappings and chain-of-custody requirements
