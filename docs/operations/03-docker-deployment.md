@@ -10,11 +10,12 @@
 
 1. [Overview](#overview)
 2. [Quick Start](#quick-start)
-3. [Configuration](#configuration)
-4. [Setup Wizard Auto-Detection](#setup-wizard-auto-detection)
-5. [Starting and Stopping](#starting-and-stopping)
-6. [Logs](#logs)
-7. [Reference](#reference)
+3. [Using Pre-built Release Images](#using-pre-built-release-images)
+4. [Configuration](#configuration)
+5. [Setup Wizard Auto-Detection](#setup-wizard-auto-detection)
+6. [Starting and Stopping](#starting-and-stopping)
+7. [Logs](#logs)
+8. [Reference](#reference)
 
 ---
 
@@ -67,6 +68,43 @@ curl -k -X POST https://localhost:8443/api/setup/initialize \
 # View logs
 docker compose -f docker-compose.ecube.yml logs -f ecube-app
 ```
+
+---
+
+## Using Pre-built Release Images
+
+If you do not want to build from source, use the release compose artifact and published GHCR images.
+
+Image repositories:
+
+- `ghcr.io/t3knoid/ecube-app`
+- `ghcr.io/t3knoid/ecube-ui`
+
+For each published release, images are pushed with:
+
+- Version tag: `vX.Y.Z` (example: `v0.2.0`)
+- Floating tag: `latest`
+
+Recommended workflow:
+
+1. Download the `docker-compose.yml` asset from [GitHub Releases](https://github.com/t3knoid/ecube/releases/latest).
+2. Place it in your deployment directory.
+3. Create/edit your `.env` file (see [04-configuration-reference.md](04-configuration-reference.md)).
+4. Pull and start:
+
+```bash
+docker compose -f docker-compose.yml pull
+docker compose -f docker-compose.yml up -d
+```
+
+Optional manual image pull:
+
+```bash
+docker pull ghcr.io/t3knoid/ecube-app:v0.2.0
+docker pull ghcr.io/t3knoid/ecube-ui:v0.2.0
+```
+
+The release `docker-compose.yml` references pre-built images directly and is intended for environments where source checkout and local image build are not required.
 
 ---
 
