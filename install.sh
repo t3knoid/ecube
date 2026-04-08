@@ -1021,7 +1021,9 @@ EOF_SUDOERS
 
 _install_pam_config() {
   local pam_dest="/etc/pam.d/ecube"
-  local pam_src="$(pwd)/deploy/ecube-pam"
+  local script_dir
+  script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+  local pam_src="${script_dir}/deploy/ecube-pam"
 
   info "Installing ECUBE PAM configuration..."
 
