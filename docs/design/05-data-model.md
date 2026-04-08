@@ -1,5 +1,9 @@
 # 5. Data Model — Design
 
+This document describes how ECUBE data is structured. It is written for engineers, implementers, maintainers, and technical reviewers who need schema shape, storage structure, data types, indexes, validation rules, and relationship design.
+
+This document intentionally includes schema structure, physical storage choices, constraints, indexes, validation-oriented notes, and implementation-facing lifecycle representation. It intentionally excludes business justification, user stories, and product-level rationale except where a brief note is necessary to explain a concrete design choice.
+
 ## Modeling Approach
 
 - Use normalized relational tables for core entities.
