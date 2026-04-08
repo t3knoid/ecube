@@ -330,8 +330,8 @@ The following SLIs are recommended for ECUBE:
 |----------|-----|-----|-----|
 | `GET /drives` | 50 ms | 200 ms | 500 ms |
 | `POST /jobs` | 100 ms | 300 ms | 800 ms |
-| `POST /jobs/{id}/start` | 150 ms | 400 ms | 1000 ms |
-| `GET /jobs/{id}` | 50 ms | 150 ms | 400 ms |
+| `POST /jobs/{job_id}/start` | 150 ms | 400 ms | 1000 ms |
+| `GET /jobs/{job_id}` | 50 ms | 150 ms | 400 ms |
 | `GET /audit` (1000 records) | 200 ms | 600 ms | 1500 ms |
 
 #### Database Metrics

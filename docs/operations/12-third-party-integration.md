@@ -754,7 +754,7 @@ Write-Host "  Drive:    $driveId"
 
 ## 7. Webhook Callbacks
 
-Instead of polling `GET /jobs/{id}` until a job reaches a terminal state, you can
+Instead of polling `GET /jobs/{job_id}` until a job reaches a terminal state, you can
 supply a `callback_url` when creating a job. ECUBE will `POST` a JSON payload to
 that URL whenever the job completes or fails.
 

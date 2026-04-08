@@ -146,7 +146,7 @@ Every authenticated request resolves to:
 | Create jobs | ✔ | ✔ | ✔ | ✖ |
 | Start copy jobs | ✔ | ✔ | ✔ | ✖ |
 | View job status | ✔ | ✔ | ✔ | ✔ |
-| View job file status rows (`GET /jobs/{id}/files`) | ✔ | ✔ | ✔ | ✔ |
+| View job file status rows (`GET /jobs/{job_id}/files`) | ✔ | ✔ | ✔ | ✔ |
 | Regenerate manifest | ✔ | ✔ | ✔ | ✖ |
 | Verify job | ✔ | ✔ | ✔ | ✖ |
 | Read audit logs | ✔ | ✔ | ✖ | ✔ |
@@ -204,7 +204,7 @@ Add NFS/SMB mount.
 - `401 Unauthorized` — Missing/invalid token
 - `403 Forbidden` — Insufficient role
 
-### `DELETE /mounts/{id}`
+### `DELETE /mounts/{mount_id}`
 
 Unmount and remove mount.
 
@@ -634,7 +634,7 @@ Create a new job.
 - `422 Validation Error` — Invalid request body (includes non-HTTPS `callback_url`)
 - `500 Internal Server Error` — Database error
 
-### `POST /jobs/{id}/start`
+### `POST /jobs/{job_id}/start`
 
 Start job with thread count. Sets `started_by` to the authenticated user and `started_at` to the current timestamp. Resets `completed_at` to `null`. Accepts jobs in `PENDING` or `FAILED` status (allowing restart of failed jobs).
 
@@ -649,7 +649,7 @@ Start job with thread count. Sets `started_by` to the authenticated user and `st
 - `422 Validation Error` — Invalid path/body parameters
 - `500 Internal Server Error` — Database error
 
-### `GET /jobs/{id}`
+### `GET /jobs/{job_id}`
 
 Return job status, progress, file counts, timestamps, drive info, and error summary.
 
@@ -662,7 +662,7 @@ Return job status, progress, file counts, timestamps, drive info, and error summ
 - `404 Not Found` — Job not found
 - `422 Validation Error` — Invalid path parameter
 
-### `GET /jobs/{id}/files`
+### `GET /jobs/{job_id}/files`
 
 Return operator-safe file status rows for a job.
 
@@ -700,7 +700,7 @@ copy status metadata without requiring introspection-only debug access.
 - `404 Not Found` — Job not found
 - `422 Validation Error` — Invalid path parameter
 
-### `POST /jobs/{id}/verify`
+### `POST /jobs/{job_id}/verify`
 
 Re-verify checksums.
 
@@ -714,7 +714,7 @@ Re-verify checksums.
 - `422 Validation Error` — Invalid path parameter
 - `500 Internal Server Error` — Database error
 
-### `POST /jobs/{id}/manifest`
+### `POST /jobs/{job_id}/manifest`
 
 Regenerate manifest.
 
@@ -1442,7 +1442,7 @@ CPU, memory, disk I/O, worker queue.
 - `401 Unauthorized` — Missing/invalid token
 - `403 Forbidden` — Insufficient role
 
-### `GET /introspection/jobs/{id}/debug`
+### `GET /introspection/jobs/{job_id}/debug`
 
 Internal worker state.
 
