@@ -1,8 +1,11 @@
 # 5. Data Model — Design
 
-This document describes how ECUBE data is structured. It is written for engineers, implementers, maintainers, and technical reviewers who need schema shape, storage structure, data types, indexes, validation rules, and relationship design.
-
-This document intentionally includes schema structure, physical storage choices, constraints, indexes, validation-oriented notes, and implementation-facing lifecycle representation. It intentionally excludes business justification, user stories, and product-level rationale except where a brief note is necessary to explain a concrete design choice.
+| Field | Value |
+|---|---|
+| Title | Data Model Design |
+| Purpose | Describes how ECUBE data is structured, covering schema shape, storage types, indexes, validation rules, and relationship design. |
+| Updated on | 04/08/26 |
+| Audience | Engineers, implementers, maintainers, and technical reviewers. |
 
 ## Modeling Approach
 
@@ -272,3 +275,7 @@ Notes:
 - `drive_assignments` is the junction/history table between drives and jobs.
 - `audit_logs` can exist without a job association (for non-job events).
 - `user_roles` is not FK-linked to OS users because identities are PAM/IdP-backed, not DB-owned.
+
+## References
+
+- [docs/requirements/05-data-model.md](../requirements/05-data-model.md)

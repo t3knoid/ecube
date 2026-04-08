@@ -1,10 +1,11 @@
 # ECUBE Operational Guide
 
-**Version:** 1.0  
-**Last Updated:** March 2026  
-**Audience:** Systems Administrators, Operators, IT Staff, QA Personnel  
-
----
+| Field | Value |
+|---|---|
+| Title | ECUBE Operational Guide |
+| Purpose | Provides an index and introduction to the ECUBE operational documentation set for administrators, operators, and IT staff. |
+| Updated on | 04/08/26 |
+| Audience | Systems administrators, operators, IT staff, QA personnel. |
 
 ## Table of Contents
 
@@ -233,3 +234,7 @@ For architecture decisions, data model details, and full API specifications, see
 - **Service Logs:** `journalctl -u ecube -f`
 - **Database Logs:** PostgreSQL log file (check `postgresql.conf`)
 - **API Errors:** Check response JSON for `code`, `message`, and `trace_id` fields
+
+## References
+
+- [docs/operations/01-installation.md](01-installation.md)

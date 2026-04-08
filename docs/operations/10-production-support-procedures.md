@@ -1,12 +1,11 @@
 # Production Support Procedures
 
-## Overview
-
-**Version:** 1.0  
-**Last Updated:** April 2026  
-**Audience:** Operations Engineers, Database Administrators, Support Teams, On-Call Engineers
-
----
+| Field | Value |
+|---|---|
+| Title | Production Support Procedures |
+| Purpose | Documents on-call procedures, troubleshooting runbooks, backup and recovery steps, and escalation paths for ECUBE production support teams. |
+| Updated on | 04/08/26 |
+| Audience | Operations engineers, database administrators, support teams, on-call engineers. |
 
 ## Table of Contents
 
@@ -1051,3 +1050,8 @@ curl -X POST http://localhost:8000/jobs \
 - [02-compliance-and-evidence-handling.md](02-compliance-and-evidence-handling.md) — Chain-of-custody, regulations, incidents
 - [docs/design/04-functional-design.md](../design/04-functional-design.md) — System behavior, recovery procedures
 - [docs/design/13-build-and-deployment.md](../design/13-build-and-deployment.md) — Deployment models, configurations
+
+## References
+
+- [docs/operations/08-operational-readiness.md](08-operational-readiness.md)
+- [docs/requirements/09-production-support-and-resilience.md](../requirements/09-production-support-and-resilience.md)

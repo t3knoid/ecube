@@ -1,10 +1,11 @@
 # ECUBE Security Best Practices
 
-**Version:** 1.0  
-**Last Updated:** March 2026  
-**Audience:** Systems Administrators, Security Engineers
-
----
+| Field | Value |
+|---|---|
+| Title | Security Best Practices |
+| Purpose | Provides operational security guidance for hardening ECUBE deployments, including network isolation, certificate management, and access control. |
+| Updated on | 04/08/26 |
+| Audience | Systems administrators, security engineers. |
 
 ## Table of Contents
 
@@ -231,3 +232,8 @@ Topology-specific notes:
 - Bare-metal full install / nginx-fronted deployment: allow `443/tcp`; do not expose backend `8443/tcp` publicly.
 - Docker Compose deployment: allow only the published UI HTTPS port (`8443` by default). The backend port `8000` should remain unpublished.
 - Docker Compose PostgreSQL: if you do not need host access to PostgreSQL, remove the port mapping. If host access is required, bind it to localhost only instead of all interfaces.
+
+## References
+
+- [docs/operations/05-tls-certificates-and-letsencrypt.md](05-tls-certificates-and-letsencrypt.md)
+- [docs/requirements/10-security-and-access-control.md](../requirements/10-security-and-access-control.md)

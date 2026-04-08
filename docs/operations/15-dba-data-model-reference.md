@@ -1,10 +1,11 @@
 # ECUBE DBA Data Model Reference
 
-**Version:** 1.0  
-**Last Updated:** April 2026  
-**Audience:** Database Administrators, SQL Support Engineers, Data Governance Teams
-
----
+| Field | Value |
+|---|---|
+| Title | DBA Data Model Reference |
+| Purpose | Provides database administrators with a reference for ECUBE table structure, column types, relationships, and common query patterns. |
+| Updated on | 04/08/26 |
+| Audience | Database administrators, SQL support engineers, data governance teams. |
 
 ## Table of Contents
 
@@ -207,3 +208,8 @@ Quick access link for convenience:
 - [04-functional-requirements.md](../requirements/04-functional-requirements.md)
 - [10-security-and-access-control.md](../requirements/10-security-and-access-control.md)
 - [10-production-support-procedures.md](10-production-support-procedures.md)
+
+## References
+
+- [docs/requirements/05-data-model.md](../requirements/05-data-model.md)
+- [docs/design/05-data-model.md](../design/05-data-model.md)

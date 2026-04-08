@@ -1,12 +1,11 @@
 # ECUBE Configuration Reference
 
-**Version:** 1.0  
-**Last Updated:** March 2026  
-**Audience:** Systems Administrators, Operators, IT Staff
-
-> **Source of truth:** `app/config.py` — all ECUBE application settings in this document map 1-to-1 to fields in the `Settings` class. Deployment-only Docker Compose variables are explicitly marked in their own section.
-
----
+| Field | Value |
+|---|---|
+| Title | ECUBE Configuration Reference |
+| Purpose | Documents all ECUBE application and deployment configuration settings, environment variables, and their defaults. |
+| Updated on | 04/08/26 |
+| Audience | Systems administrators, operators, IT staff. |
 
 ## Table of Contents
 
@@ -344,3 +343,7 @@ Additional behavior notes:
 - Trailing slashes are normalized by the frontend (`https://api.example.com/api/` becomes `https://api.example.com/api`).
 
 **CORS note:** If you set `VITE_API_BASE_URL`, ensure the backend's `CORS_ALLOWED_ORIGINS` includes the frontend origin (for example `https://portal.example.com`), otherwise browser preflight requests will be rejected.
+
+## References
+
+- [docs/operations/01-installation.md](01-installation.md)

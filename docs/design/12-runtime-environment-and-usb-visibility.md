@@ -1,8 +1,11 @@
 # 12. Runtime Environment and USB Visibility — Design
 
-This document defines the runtime-environment design for ECUBE when hardware-aware services run on a Linux host or Linux guest and explains the architectural requirements for USB visibility when hardware is accessed through a virtual machine boundary.
-
-Operational deployment steps and verification procedures belong in operations documentation.
+| Field | Value |
+|---|---|
+| Title | Runtime Environment and USB Visibility |
+| Purpose | Defines the runtime-environment design for ECUBE on Linux and the architectural requirements for USB visibility through virtual machine boundaries. |
+| Updated on | 04/08/26 |
+| Audience | Engineers, implementers, DevOps, and technical reviewers. |
 
 ## 12.1 Architectural Purpose
 
@@ -75,3 +78,8 @@ These concerns are part of the deployment architecture, even though the exact op
 - `docs/design/04-functional-design.md`
 - `docs/design/13-build-and-deployment.md`
 - `docs/operations/`
+
+## References
+
+- [docs/design/13-build-and-deployment.md](13-build-and-deployment.md)
+- [docs/operations/01-installation.md](../operations/01-installation.md)

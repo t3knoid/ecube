@@ -1,10 +1,11 @@
 # ECUBE User Manual
 
-**Version:** 0.5 Draft  
-**Last Updated:** April 2026  
-**Audience:** Processors, Managers, Auditors, Administrators, End Users
-
----
+| Field | Value |
+|---|---|
+| Title | ECUBE User Manual |
+| Purpose | Guides end users, processors, managers, and auditors through day-to-day ECUBE workflows and operational tasks. |
+| Updated on | 04/08/26 |
+| Audience | Processors, managers, auditors, administrators, end users. |
 
 ## Table of Contents
 
@@ -826,3 +827,6 @@ Common causes:
 
 ---
 
+## References
+
+- [docs/operations/00-operational-guide.md](00-operational-guide.md)

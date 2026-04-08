@@ -1,5 +1,12 @@
 # 10. Security and Role-Based Access Control
 
+| Field | Value |
+|---|---|
+| Title | Security and Role-Based Access Control |
+| Purpose | Defines the ECUBE identity model, role-based access control requirements, and authentication and authorization policy constraints. |
+| Updated on | 04/08/26 |
+| Audience | Stakeholders, auditors, security engineers, product managers, and QA teams. |
+
 ## Identity Model
 
 ECUBE must:
@@ -61,3 +68,7 @@ ECUBE defines four roles:
 - Unauthenticated requests must return `401 Unauthorized`.
 - Requests lacking required roles must return `403 Forbidden`.
 - All security-relevant events must be audit-logged, including authentication attempts and access denials.
+
+## References
+
+- [docs/design/10-security-and-access-control.md](../design/10-security-and-access-control.md)
