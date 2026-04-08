@@ -14,7 +14,7 @@ The design documents are grouped by role so readers can move from high-level int
 ### Foundations
 
 1. `01-purpose-and-scope.md` — design intent, scope boundaries, and non-functional goals.
-2. `02-hardware-requirements.md` — physical host and USB hardware assumptions the product is designed around.
+2. `02-hardware-design.md` — physical host architecture, model profiles, PCIe topology, and wiring assumptions the product is built around.
 3. `03-system-architecture.md` — trust boundaries, runtime structure, platform abstraction, and startup architecture.
 
 ### Domain Behavior and Interfaces
@@ -42,6 +42,10 @@ The design documents are grouped by role so readers can move from high-level int
 15. `15-frontend-architecture.md` — frontend application structure, routing, state, and UI runtime design.
 16. `16-theme-and-logo-system.md` — theme and branding subsystem design.
 
+### Turnkey Appliance Profiles
+
+17. `17-turnkey-appliance-design.md` — tiered ECUBE appliance hardware profiles (ECUBE-4/8/12), PCIe and USB topology assumptions, thermal and power design, and manufacturing/QA validation skeleton.
+
 ## Recommended Reading Order
 
 For most readers, the most efficient path is:
@@ -51,6 +55,7 @@ For most readers, the most efficient path is:
 3. `10` and `09` for security posture and non-negotiable guarantees.
 4. `11` through `13` for quality and runtime-environment design.
 5. `14` through `16` for frontend and UX design.
+6. `17` for turnkey appliance tiering and production-hardware profile design.
 
 ## Design Principles
 
