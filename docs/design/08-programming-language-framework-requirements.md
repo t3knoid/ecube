@@ -1,6 +1,11 @@
 # 8. Programming Language & Framework Requirements — Design
 
-This document defines the language and framework requirements for ECUBE and the rationale for the selected stack. It does not restate system topology or trust boundaries; those belong in [docs/design/03-system-architecture.md](docs/design/03-system-architecture.md).
+| Field | Value |
+|---|---|
+| Title | Programming Language and Framework Requirements |
+| Purpose | Defines the language and framework requirements for ECUBE and the rationale for the selected technology stack. |
+| Updated on | 04/08/26 |
+| Audience | Engineers, implementers, maintainers, and technical reviewers. |
 
 ## 8.1 Design Goals
 
@@ -80,3 +85,7 @@ Any future change to the ECUBE language or framework stack should be evaluated a
 - preserve testability without requiring physical hardware for routine automated runs,
 - preserve clean separation between business logic and host-specific integrations,
 - avoid increasing operational complexity without a clear architectural gain.
+
+## References
+
+- [docs/design/03-system-architecture.md](03-system-architecture.md)

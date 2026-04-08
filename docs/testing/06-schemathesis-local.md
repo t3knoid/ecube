@@ -1,9 +1,11 @@
 # ECUBE — Running Schemathesis Locally
 
-**Audience:** Developers, QA  
-**See also:** [Security Scanning](05-security-scanning.md) (CI workflow reference)
-
----
+| Field | Value |
+|---|---|
+| Title | Running Schemathesis Locally |
+| Purpose | Explains how to run Schemathesis OpenAPI fuzz testing locally against a running ECUBE instance. |
+| Updated on | 04/08/26 |
+| Audience | Developers, QA. |
 
 ## Overview
 
@@ -116,3 +118,8 @@ Schemathesis prints a summary at the end of each run. Look for:
 | Port 8000 in use | Another service on that port | Stop the conflicting service or set `HOST_PORT` to a different port (the script passes it through to the Compose port mapping) |
 | `password authentication failed` | Database container unhealthy | Run `docker compose -p ecube-schemathesis -f docker-compose.ecube.yml logs postgres` to diagnose |
 | Runs are too slow or noisy | Scope/checks too broad for local smoke | Keep default smoke profile, then widen with env vars incrementally |
+
+## References
+
+- [docs/testing/05-security-scanning.md](05-security-scanning.md)
+- [docs/testing/07-newman-local.md](07-newman-local.md)

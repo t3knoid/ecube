@@ -1,5 +1,12 @@
 # 8. Operational Readiness Requirements
 
+| Field | Value |
+|---|---|
+| Title | Operational Readiness Requirements |
+| Purpose | Defines readiness requirements for production ECUBE deployments, covering health signaling, observability, alerting, and go-live gates. |
+| Updated on | 04/08/26 |
+| Audience | Stakeholders, operations engineers, DevOps, and QA teams. |
+
 ## 8.1 Purpose
 
 This document defines readiness requirements for production ECUBE deployments, covering health signaling, observability, alerting, performance baselines, and go-live gates.
@@ -74,3 +81,7 @@ A deployment satisfies this requirements document only when all statements below
 
 Primary operational reference: [docs/operations/08-operational-readiness.md](../operations/08-operational-readiness.md).
 Related requirements: [docs/requirements/04-functional-requirements.md](04-functional-requirements.md), [docs/requirements/06-rest-api-requirements.md](06-rest-api-requirements.md), and [docs/requirements/10-security-and-access-control.md](10-security-and-access-control.md).
+
+## References
+
+- [docs/operations/08-operational-readiness.md](../operations/08-operational-readiness.md)

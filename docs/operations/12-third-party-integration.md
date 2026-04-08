@@ -1,10 +1,11 @@
 # ECUBE Third-Party Integration Guide
 
-**Version:** 1.0  
-**Last Updated:** April 2026  
-**Audience:** Developers, Integration Engineers
-
----
+| Field | Value |
+|---|---|
+| Title | Third-Party Integration Guide |
+| Purpose | Describes how to integrate external systems with ECUBE using the REST API, webhook callbacks, and available authentication mechanisms. |
+| Updated on | 04/08/26 |
+| Audience | Developers, integration engineers. |
 
 ## Table of Contents
 
@@ -862,3 +863,8 @@ async def ecube_callback(request: Request):
 - **Authenticate inbound requests:** Consider placing your webhook behind a reverse proxy that validates a shared secret or HMAC signature.
 - **Idempotency:** Your receiver may be called more than once for the same job (e.g., if the first `200 OK` was lost in transit). Design your handler to be idempotent.
 - **Firewall rules:** Only allow inbound connections from the ECUBE host IP to your webhook port.
+
+## References
+
+- [docs/operations/11-api-quick-reference.md](11-api-quick-reference.md)
+- [docs/design/06-rest-api-design.md](../design/06-rest-api-design.md)

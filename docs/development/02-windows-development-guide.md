@@ -1,11 +1,11 @@
 # ECUBE Windows Development Guide
 
-**Version:** 1.0  
-**Last Updated:** March 2026  
-**Audience:** Developers, Contributors (Windows)  
-**Document Type:** Setup / How-To
-
----
+| Field | Value |
+|---|---|
+| Title | ECUBE Windows Development Guide |
+| Purpose | Describes how to set up and develop ECUBE on Windows using WSL2 and Docker Desktop. |
+| Updated on | 04/08/26 |
+| Audience | Developers, contributors (Windows). |
 
 ## Table of Contents
 
@@ -348,3 +348,7 @@ python -m pytest tests/ -v --run-hardware
 ---
 
 **End of Windows Development Guide**
+
+## References
+
+- [docs/development/00-development-guide.md](00-development-guide.md)

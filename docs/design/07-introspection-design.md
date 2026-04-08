@@ -1,8 +1,11 @@
-# 7. Introspection Design — Design
+# 7. Introspection Design
 
-## Design Goal
-
-This document defines the design intent for ECUBE introspection capabilities as a companion to the REST API design. It focuses on diagnostic scope, safety boundaries, and read-only behavior rather than the full endpoint contract.
+| Field | Value |
+|---|---|
+| Title | Introspection Design |
+| Purpose | Defines the design intent for ECUBE introspection capabilities, focusing on diagnostic scope, safety boundaries, and read-only behavior. |
+| Updated on | 04/08/26 |
+| Audience | Engineers, implementers, maintainers, and technical reviewers. |
 
 ## Endpoint Design
 
@@ -17,3 +20,7 @@ This document defines the design intent for ECUBE introspection capabilities as 
 - Read-only responses only.
 - Restrict to authorized administrative roles.
 - Redact sensitive path or credential-like fields from output payloads.
+
+## References
+
+- [docs/design/06-rest-api-design.md](06-rest-api-design.md)

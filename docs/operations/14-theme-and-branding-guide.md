@@ -1,10 +1,11 @@
 # ECUBE Theme and Branding Guide
 
-**Version:** 1.2  
-**Last Updated:** April 2026  
-**Audience:** Systems Administrators, Platform Engineers, UI Maintainers
-
----
+| Field | Value |
+|---|---|
+| Title | Theme and Branding Guide |
+| Purpose | Explains how to configure, deploy, and manage ECUBE themes and custom branding assets for an ECUBE installation. |
+| Updated on | 04/08/26 |
+| Audience | Systems administrators, platform engineers, UI maintainers. |
 
 ## Table of Contents
 
@@ -394,3 +395,8 @@ Quick diagnostics:
 - `frontend/src/components/layout/AppHeader.vue`
 - [04-configuration-reference.md](04-configuration-reference.md)
 - [10-user-manual.md](10-user-manual.md)
+
+## References
+
+- [docs/requirements/16-theme-and-logo-system-requirements.md](../requirements/16-theme-and-logo-system-requirements.md)
+- [docs/design/16-theme-and-logo-system.md](../design/16-theme-and-logo-system.md)

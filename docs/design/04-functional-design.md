@@ -1,8 +1,11 @@
 # 4. Functional Design
 
-This document describes how ECUBE functional behavior is implemented. It is written for engineers, implementers, maintainers, and technical reviewers who need endpoint structure, flows, algorithms, state handling, and data-oriented design detail.
-
-This document intentionally includes lifecycle flows, endpoint responsibilities, state transitions, algorithms, validation order, and implementation-oriented constraints. It intentionally excludes business justification, user stories, and product-level rationale except where a brief note is necessary to explain a resulting design choice.
+| Field | Value |
+|---|---|
+| Title | Functional Design |
+| Purpose | Describes how ECUBE functional behavior is implemented, covering lifecycle flows, state transitions, endpoint responsibilities, algorithms, and locking strategies. |
+| Updated on | 04/08/26 |
+| Audience | Engineers, implementers, maintainers, and technical reviewers. |
 
 ## 4.1 Drive Lifecycle Management
 
@@ -345,3 +348,7 @@ All three passes are fully idempotent — running them multiple times without un
 ### Multi-Worker Safety
 
 The cross-process lock guarantees that exactly one worker runs reconciliation per startup cycle. Workers that do not acquire the lock skip reconciliation, which prevents duplicate correction audit events and conflicting writes during startup.
+
+## References
+
+- [docs/requirements/04-functional-requirements.md](../requirements/04-functional-requirements.md)

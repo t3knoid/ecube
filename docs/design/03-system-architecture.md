@@ -1,5 +1,12 @@
 # 3. System Architecture — Design
 
+| Field | Value |
+|---|---|
+| Title | System Architecture |
+| Purpose | Describes the ECUBE component model, trust boundaries, runtime software stack, and interaction patterns between the UI, system layer, and database. |
+| Updated on | 04/08/26 |
+| Audience | Engineers, systems architects, implementers, maintainers, and technical reviewers. |
+
 ## Component View
 
 - **UI Layer (untrusted):** Displays status, submits requests, never talks directly to DB/hardware.
@@ -75,3 +82,8 @@ The startup and steady-state architecture must support operational readiness obj
 - Hardware access scoped to system-layer process user/group.
 - API endpoints validate project ownership and allowed transitions.
 - Authentication and access control are enforced at the system-layer API boundary so role-gated authorization decisions are centralized and consistently auditable.
+
+## References
+
+- [docs/requirements/01-purpose-and-scope.md](../requirements/01-purpose-and-scope.md)
+- [docs/design/04-functional-design.md](04-functional-design.md)

@@ -1,10 +1,11 @@
 # ECUBE Docker Deployment
 
-**Version:** 1.0  
-**Last Updated:** March 2026  
-**Audience:** Systems Administrators, IT Staff
-
----
+| Field | Value |
+|---|---|
+| Title | ECUBE Docker Deployment |
+| Purpose | Describes how to deploy ECUBE with Docker Compose, including container configuration and environment variable setup. |
+| Updated on | 04/08/26 |
+| Audience | Systems administrators, IT staff. |
 
 ## Table of Contents
 
@@ -199,3 +200,8 @@ docker compose -f docker-compose.ecube.yml logs -n 100 ecube-app
 - **Design document:** [12-runtime-environment-and-usb-visibility.md](../design/12-runtime-environment-and-usb-visibility.md)
 - **Configuration reference:** [04-configuration-reference.md](04-configuration-reference.md)
 - **Administration automation guide:** [07-administration-automation-guide.md](07-administration-automation-guide.md)
+
+## References
+
+- [docs/operations/01-installation.md](01-installation.md)
+- [docs/operations/04-configuration-reference.md](04-configuration-reference.md)
