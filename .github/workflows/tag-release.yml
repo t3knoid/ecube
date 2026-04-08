@@ -74,6 +74,7 @@ jobs:
             install.sh \
             app \
             alembic \
+            deploy \
             pyproject.toml \
             alembic.ini \
             frontend/dist \
