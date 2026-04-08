@@ -5,7 +5,8 @@ name: Docker Build
 # docker-compose.yml as a release asset.
 #
 # Jobs:
-#   build-and-smoke-test  — runs on every push/PR; validates images start cleanly
+#   version-check         — detects whether pyproject.toml version field changed
+#   build-and-smoke-test  — runs only when version changed (or on release/dispatch)
 #   publish               — runs on published releases only; pushes images and
 #                           attaches docker-compose.yml to the GitHub Release
 
@@ -13,7 +14,10 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    tags: ["v*"]
+    # Only trigger when pyproject.toml could have changed (version-check job
+    # further verifies the version field itself was bumped).
+    paths:
+      - pyproject.toml
   release:
     types: [published]
 
@@ -29,12 +33,48 @@ env:
   UI_IMAGE: ghcr.io/${{ github.repository_owner }}/ecube-ui
 
 jobs:
-  build-and-smoke-test:
-    name: Build and smoke test
+  version-check:
+    name: Check version changed
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: read
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Need the previous commit to diff the version field.
+          fetch-depth: 2
+
+      - name: Verify version field changed
+        id: check
+        run: |
+          if [[ "${{ github.event_name }}" != "push" ]]; then
+            # release and workflow_dispatch always build.
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          OLD=$(git show HEAD~1:pyproject.toml 2>/dev/null \
+            | grep -E '^version\s*=' | sed 's/.*"\(.*\)".*/\1/')
+          NEW=$(grep -E '^version\s*=' pyproject.toml | sed 's/.*"\(.*\)".*/\1/')
+          echo "Previous version: ${OLD:-<none>}"
+          echo "Current version:  $NEW"
+          if [ "$OLD" != "$NEW" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Version bumped: ${OLD:-<none>} → $NEW"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Version unchanged ($NEW) — skipping Docker build."
+          fi
+
+  build-and-smoke-test:
+    name: Build and smoke test
+    needs: version-check
+    if: needs.version-check.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       SECRET_KEY: ci-smoke-test-key-not-for-production
       POSTGRES_PASSWORD: ci-smoke-test-postgres-password
@@ -50,8 +90,14 @@ jobs:
         id: tag
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            # Released via a git tag (e.g. v1.2.3).
             echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event_name }}" == "push" ]]; then
+            # Push to main that bumped the version — derive tag from pyproject.toml.
+            VERSION=$(grep -E '^version\s*=' pyproject.toml | sed 's/.*"\(.*\)".*/\1/')
+            echo "value=v${VERSION}" >> "$GITHUB_OUTPUT"
           else
+            # workflow_dispatch or any other trigger — use the commit SHA.
             echo "value=sha-${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
           fi
 
@@ -63,10 +109,27 @@ jobs:
           docker tag ecube-app ${{ env.APP_IMAGE }}:${{ steps.tag.outputs.value }}
           docker tag ecube-ui  ${{ env.UI_IMAGE }}:${{ steps.tag.outputs.value }}
 
+      - name: Save smoke-tested images as artifacts
+        if: github.event_name == 'release'
+        run: |
+          mkdir -p /tmp/docker-images
+          docker save "${{ env.APP_IMAGE }}:${{ steps.tag.outputs.value }}" \
+            | gzip > /tmp/docker-images/ecube-app.tar.gz
+          docker save "${{ env.UI_IMAGE }}:${{ steps.tag.outputs.value }}" \
+            | gzip > /tmp/docker-images/ecube-ui.tar.gz
+
+      - name: Upload smoke-tested images
+        if: github.event_name == 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-images
+          path: /tmp/docker-images/
+          retention-days: 1
+
       - name: Generate self-signed TLS certificate for smoke test
         run: |
           mkdir -p deploy/certs
-          openssl req -x509 -newkey rsa:2048 -nodes \
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
             -keyout deploy/certs/key.pem \
             -out    deploy/certs/cert.pem \
             -days   1 \
@@ -76,25 +139,54 @@ jobs:
         run: |
           docker compose -f docker-compose.ecube.yml up -d
           echo "Waiting for postgres to be healthy..."
+          POSTGRES_READY=false
           for i in $(seq 1 30); do
             STATUS=$(docker inspect --format='{{.State.Health.Status}}' ecube-postgres 2>/dev/null || echo "starting")
-            [ "$STATUS" = "healthy" ] && echo "postgres is healthy" && break
+            if [ "$STATUS" = "healthy" ]; then
+              echo "postgres is healthy"
+              POSTGRES_READY=true
+              break
+            fi
             echo "  attempt $i/30 — $STATUS"
             sleep 3
           done
+          $POSTGRES_READY || { echo "::error::postgres never became healthy"; exit 1; }
 
       - name: Smoke test — API health check (via app container)
         run: |
           echo "Waiting for ecube-app to respond..."
+          APP_READY=false
           for i in $(seq 1 20); do
             CODE=$(docker compose -f docker-compose.ecube.yml exec -T ecube-app \
               curl -sf -o /dev/null -w "%{http_code}" http://localhost:8000/health 2>/dev/null || echo "000")
-            [ "$CODE" = "200" ] && echo "Health check passed (HTTP $CODE)" && break
+            if [ "$CODE" = "200" ]; then
+              echo "Health check passed (HTTP $CODE)"
+              APP_READY=true
+              break
+            fi
             echo "  attempt $i/20 — HTTP $CODE"
             sleep 3
           done
+          $APP_READY || { echo "::error::ecube-app health check never passed"; exit 1; }
           docker compose -f docker-compose.ecube.yml exec -T ecube-app \
             curl -sf http://localhost:8000/health | grep '"status"'
+
+      - name: Smoke test — nginx TLS proxy health check (via host)
+        run: |
+          echo "Verifying nginx TLS proxy is reachable..."
+          TLS_READY=false
+          for i in $(seq 1 10); do
+            CODE=$(curl -sk -o /dev/null -w "%{http_code}" https://localhost:8443/api/health 2>/dev/null || echo "000")
+            if [ "$CODE" = "200" ]; then
+              echo "nginx TLS proxy health check passed (HTTP $CODE)"
+              TLS_READY=true
+              break
+            fi
+            echo "  attempt $i/10 — HTTP $CODE"
+            sleep 2
+          done
+          $TLS_READY || { echo "::error::nginx TLS proxy health check never passed"; exit 1; }
+          curl -sk https://localhost:8443/api/health | grep '"status"'
 
       - name: Dump logs on failure
         if: failure()
@@ -127,32 +219,32 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push ecube-app
-        uses: docker/build-push-action@v6
+      - name: Download smoke-tested images
+        uses: actions/download-artifact@v4
         with:
-          context: .
-          file: deploy/ecube-host/Dockerfile
-          push: true
-          tags: |
-            ${{ env.APP_IMAGE }}:${{ needs.build-and-smoke-test.outputs.tag }}
-            ${{ env.APP_IMAGE }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          name: docker-images
+          path: /tmp/docker-images
 
-      - name: Build and push ecube-ui
-        uses: docker/build-push-action@v6
-        with:
-          context: ./frontend
-          file: frontend/Dockerfile
-          push: true
-          tags: |
-            ${{ env.UI_IMAGE }}:${{ needs.build-and-smoke-test.outputs.tag }}
-            ${{ env.UI_IMAGE }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Load smoke-tested images
+        # Pushes the exact linux/amd64 images that passed the smoke test — no rebuild.
+        run: |
+          docker load < /tmp/docker-images/ecube-app.tar.gz
+          docker load < /tmp/docker-images/ecube-ui.tar.gz
+
+      - name: Tag images with :latest
+        run: |
+          docker tag "${{ env.APP_IMAGE }}:${{ needs.build-and-smoke-test.outputs.tag }}" "${{ env.APP_IMAGE }}:latest"
+          docker tag "${{ env.UI_IMAGE }}:${{ needs.build-and-smoke-test.outputs.tag }}" "${{ env.UI_IMAGE }}:latest"
+
+      - name: Push ecube-app
+        run: |
+          docker push "${{ env.APP_IMAGE }}:${{ needs.build-and-smoke-test.outputs.tag }}"
+          docker push "${{ env.APP_IMAGE }}:latest"
+
+      - name: Push ecube-ui
+        run: |
+          docker push "${{ env.UI_IMAGE }}:${{ needs.build-and-smoke-test.outputs.tag }}"
+          docker push "${{ env.UI_IMAGE }}:latest"
 
       - name: Set up Python
         uses: actions/setup-python@v5
