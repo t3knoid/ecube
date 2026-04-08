@@ -72,4 +72,4 @@ A deployment satisfies this requirements document only when all statements below
 ## 9.10 Traceability
 
 Primary operational reference: [docs/operations/10-production-support-procedures.md](../operations/10-production-support-procedures.md).
-Related requirements: [docs/requirements/04-functional-requirements.md](04-functional-requirements.md), [docs/requirements/05-data-model.md](05-data-model.md), [docs/requirements/06-rest-api-specification.md](06-rest-api-specification.md), and [docs/requirements/10-security-and-access-control.md](10-security-and-access-control.md).
+Related requirements: [docs/requirements/04-functional-requirements.md](04-functional-requirements.md), [docs/requirements/05-data-model.md](05-data-model.md), [docs/requirements/06-rest-api-requirements.md](06-rest-api-requirements.md), and [docs/requirements/10-security-and-access-control.md](10-security-and-access-control.md).
