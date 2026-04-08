@@ -1,10 +1,11 @@
 # ECUBE Compliance and Evidence Handling
 
-**Version:** 1.0  
-**Last Updated:** April 2026  
-**Audience:** Legal Teams, Compliance Officers, Evidence Managers, IT Security, Operations
-
----
+| Field | Value |
+|---|---|
+| Title | Compliance and Evidence Handling |
+| Purpose | Specifies compliance requirements, chain-of-custody procedures, and evidence integrity guarantees for legal admissibility and audit defensibility. |
+| Updated on | 04/08/26 |
+| Audience | Legal teams, compliance officers, evidence managers, IT security, operations. |
 
 ## Overview
 
@@ -674,3 +675,7 @@ Before deploying ECUBE to production, complete the following compliance tasks:
 - [docs/design/10-security-and-access-control.md](../design/10-security-and-access-control.md) — Identity, RBAC, authentication implementation
 - [01-operational-readiness.md](01-operational-readiness.md) — Health checks, monitoring, alerting
 - [production-support-procedures.md](production-support-procedures.md) — Backup/recovery, upgrade, patching, troubleshooting
+
+## References
+
+- [docs/requirements/07-compliance-and-evidence-handling.md](../requirements/07-compliance-and-evidence-handling.md)

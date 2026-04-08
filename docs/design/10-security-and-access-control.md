@@ -1,5 +1,12 @@
 # 10. Security and Role-Based Access Control — Design
 
+| Field | Value |
+|---|---|
+| Title | Security and Role-Based Access Control |
+| Purpose | Describes how ECUBE authentication, role resolution, authorization enforcement, and denial auditing are designed. |
+| Updated on | 04/08/26 |
+| Audience | Engineers, implementers, security reviewers, maintainers, and technical reviewers. |
+
 ## Design Goals
 
 - Centralize authentication and authorization in the ECUBE System Layer.
@@ -241,3 +248,8 @@ OS user and group management endpoints are scoped to the `ecube-` namespace to p
 
   Initialization state is determined by `UserRoleRepository.has_any_admin()`. The remaining database endpoints (`GET /setup/database/status`, `PUT /setup/database/settings`) always require the `admin` role.
 - **SSRF protection for webhook callbacks:** When a job specifies a `callback_url`, the callback service resolves the hostname and rejects any address that maps to a private or loopback range (RFC 1918, `127.0.0.0/8`, `::1`) before making the outbound HTTP request. This prevents server-side request forgery via crafted callback URLs. The check can be relaxed with `CALLBACK_ALLOW_PRIVATE_IPS=true` for isolated lab environments. See [04-functional-design.md § 4.8](04-functional-design.md) for retry and audit details.
+
+## References
+
+- [docs/requirements/10-security-and-access-control.md](../requirements/10-security-and-access-control.md)
+- [docs/design/06-rest-api-design.md](06-rest-api-design.md)

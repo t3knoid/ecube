@@ -1,8 +1,11 @@
 # 11. Testing and Validation
 
-This document defines the quality strategy for ECUBE and the categories of validation needed to support a system that combines API behavior, database state, OS integration, and hardware-aware workflows.
-
-Operational instructions for invoking tests belong in `docs/testing/` and repository tooling, not in the design set.
+| Field | Value |
+|---|---|
+| Title | Testing and Validation |
+| Purpose | Defines the quality strategy and validation categories for ECUBE backend, API, OS integration, and hardware-aware workflows. |
+| Updated on | 04/08/26 |
+| Audience | Engineers, implementers, QA teams, and technical reviewers. |
 
 ## 11.1 Testing Objectives
 
@@ -87,3 +90,8 @@ Operational readiness validation should explicitly cover health signaling, readi
 - `docs/design/05-data-model.md`
 - `docs/design/10-security-and-access-control.md`
 - `docs/testing/`
+
+## References
+
+- [docs/testing/01-automated-test-requirements.md](../testing/01-automated-test-requirements.md)
+- [docs/testing/02-automated-test-runbook.md](../testing/02-automated-test-runbook.md)

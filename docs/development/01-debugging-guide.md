@@ -1,11 +1,11 @@
 # ECUBE Debugging Guide
 
-**Version:** 1.0  
-**Last Updated:** April 2026  
-**Audience:** Developers, Contributors  
-**Document Type:** How-To
-
----
+| Field | Value |
+|---|---|
+| Title | ECUBE Debugging Guide |
+| Purpose | Provides step-by-step guidance for diagnosing and resolving common development-time issues in ECUBE. |
+| Updated on | 04/08/26 |
+| Audience | Developers, contributors. |
 
 ## Table of Contents
 
@@ -303,3 +303,7 @@ SQLALCHEMY_ECHO=true uvicorn app.main:app --reload
 ---
 
 **End of Debugging Guide**
+
+## References
+
+- [docs/development/00-development-guide.md](00-development-guide.md)

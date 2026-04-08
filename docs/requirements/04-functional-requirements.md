@@ -1,8 +1,11 @@
 # 4. Functional Requirements
 
-This document defines what ECUBE must do at the functional level. It is written primarily for stakeholders, auditors, product managers, and reviewers who need to understand required behavior, constraints, and acceptance criteria.
-
-This document intentionally excludes implementation details such as endpoints, algorithms, internal flows, locking strategies, data structures, and schema design. Those design details are documented in [../design/04-functional-design.md](../design/04-functional-design.md).
+| Field | Value |
+|---|---|
+| Title | Functional Requirements |
+| Purpose | Defines what ECUBE must do at the functional level, covering required behavior, constraints, and acceptance criteria. |
+| Updated on | 04/08/26 |
+| Audience | Stakeholders, auditors, product managers, reviewers, and QA teams. |
 
 ## 4.1 Audience and Scope
 
@@ -257,3 +260,7 @@ Acceptance criteria:
 
 - Discovery refresh does not silently defeat project isolation.
 - Discovery refresh does not silently convert a finalized drive back into a writable drive.
+
+## References
+
+- [docs/design/04-functional-design.md](../design/04-functional-design.md)

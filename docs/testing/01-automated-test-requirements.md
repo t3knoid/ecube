@@ -1,13 +1,11 @@
 # ECUBE — Automated Test Requirements
 
-**Audience:** Developers, Contributors  
-**Scope:** Required standards for backend unit, backend integration, HIL, frontend unit, and frontend E2E testing  
-**Last Updated:** April 2026
-
-Operational execution commands and CI run procedures are now maintained in:
-[docs/testing/02-automated-test-runbook.md](docs/testing/02-automated-test-runbook.md)
-
----
+| Field | Value |
+|---|---|
+| Title | Automated Test Requirements |
+| Purpose | Defines required standards for ECUBE backend unit, integration, HIL, frontend unit, and end-to-end automated testing. |
+| Updated on | 04/08/26 |
+| Audience | Developers, contributors. |
 
 ## Table of Contents
 
@@ -248,3 +246,8 @@ Backend coverage is enforced through breadth and critical path assertions across
 - use Playwright fixtures only
 - ensure state isolation between tests
 - add accessibility assertions (`@axe-core/playwright`) where appropriate
+
+## References
+
+- [docs/testing/02-automated-test-runbook.md](02-automated-test-runbook.md)
+- [docs/design/11-testing-and-validation.md](../design/11-testing-and-validation.md)

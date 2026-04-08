@@ -1,5 +1,12 @@
 # 2. Hardware Requirements
 
+| Field | Value |
+|---|---|
+| Title | Hardware Requirements |
+| Purpose | Defines the hardware requirements for the ECUBE copy machine, USB hubs and ports, and network volume sources. |
+| Updated on | 04/08/26 |
+| Audience | Stakeholders, hardware engineers, IT staff, and QA teams. |
+
 ## 2.1 Copy Machine
 
 A dedicated Linux workstation that:
@@ -27,3 +34,7 @@ ECUBE must:
 - Detect filesystem type on inserted drives (e.g., ext4, exFAT, NTFS, or unformatted)
 - Track drive states: `EMPTY`, `AVAILABLE`, `IN_USE`
 - Persist stable identifiers for hubs and ports
+
+## References
+
+- [docs/design/02-hardware-requirements.md](../design/02-hardware-requirements.md)

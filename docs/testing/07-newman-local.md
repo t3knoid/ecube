@@ -1,9 +1,11 @@
 # ECUBE — Running Newman Smoke Tests Locally
 
-**Audience:** Developers, QA  
-**See also:** [Schemathesis Local Guide](06-schemathesis-local.md), [Security Scanning](05-security-scanning.md)
-
----
+| Field | Value |
+|---|---|
+| Title | Running Newman Smoke Tests Locally |
+| Purpose | Explains how to run the ECUBE Postman collection as a Newman smoke test locally for quick API validation before commits. |
+| Updated on | 04/08/26 |
+| Audience | Developers, QA. |
 
 ## Overview
 
@@ -92,3 +94,8 @@ HOST_PORT=18000 BASE_URL=http://localhost:18000 ./scripts/run_newman_smoke.sh
 | `PyJWT is required` | Missing `jwt` module in Python env | `source .venv/bin/activate && pip install PyJWT` |
 | 401/403 responses | Invalid token/key mismatch | Ensure `SECRET_KEY` matches runtime key or pass a valid `ECUBE_TOKEN` |
 | Newman request timeouts | Local app overloaded or blocked | Retry after stack restart; increase `--timeout-request` in script if necessary |
+
+## References
+
+- [docs/testing/06-schemathesis-local.md](06-schemathesis-local.md)
+- [docs/testing/05-security-scanning.md](05-security-scanning.md)

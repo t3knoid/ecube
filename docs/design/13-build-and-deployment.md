@@ -1,8 +1,11 @@
 # 13. Build and Deployment
 
-This document defines the ECUBE build outputs, supported deployment models, and the architectural considerations that shape how the system is packaged and operated.
-
-Procedural installation, release handling, and environment-specific runbooks belong in operations documentation.
+| Field | Value |
+|---|---|
+| Title | Build and Deployment |
+| Purpose | Defines ECUBE build outputs, supported deployment models, and the architectural considerations shaping how the system is packaged and operated. |
+| Updated on | 04/08/26 |
+| Audience | Engineers, implementers, DevOps, release engineers, and technical reviewers. |
 
 ## 13.1 Design Goals
 
@@ -119,3 +122,9 @@ The build and deployment design assumes:
 - `docs/design/12-runtime-environment-and-usb-visibility.md`
 - `docs/design/15-frontend-architecture.md`
 - `docs/operations/`
+
+## References
+
+- [docs/design/12-runtime-environment-and-usb-visibility.md](12-runtime-environment-and-usb-visibility.md)
+- [docs/operations/01-installation.md](../operations/01-installation.md)
+- [docs/development/03-ci-build-and-installer-artifacts.md](../development/03-ci-build-and-installer-artifacts.md)

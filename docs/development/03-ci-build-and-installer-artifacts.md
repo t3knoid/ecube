@@ -1,11 +1,11 @@
 # ECUBE CI Build and Installer Artifact Contract
 
-**Version:** 1.1  
-**Last Updated:** April 2026  
-**Audience:** Developers, Release Engineers  
-**Document Type:** Development Reference
-
----
+| Field | Value |
+|---|---|
+| Title | CI Build and Installer Artifact Contract |
+| Purpose | Defines the contract between GitHub Actions build workflows and the bare-metal installer, including expected artifacts and naming conventions. |
+| Updated on | 04/08/26 |
+| Audience | Developers, release engineers. |
 
 ## Purpose
 
@@ -221,3 +221,8 @@ When editing packaging workflows or installer copy logic, verify all items below
 - `.github/workflows/tag-release.yml`
 - `.github/workflows/build-artifact.yml`
 - `install.sh`
+
+## References
+
+- [docs/development/00-development-guide.md](00-development-guide.md)
+- [docs/operations/01-installation.md](../operations/01-installation.md)
