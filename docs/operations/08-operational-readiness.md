@@ -1,10 +1,11 @@
 # ECUBE Operational Readiness
 
-**Version:** 1.0  
-**Last Updated:** April 2026  
-**Audience:** Operations Engineers, DevOps, Support Teams, Security Officers
-
----
+| Field | Value |
+|---|---|
+| Title | Operational Readiness |
+| Purpose | Specifies monitoring, observability, health checks, alerting requirements, and performance baselines for ECUBE in production environments. |
+| Updated on | 04/08/26 |
+| Audience | Operations engineers, DevOps, support teams, security officers. |
 
 ## Overview
 
@@ -464,3 +465,8 @@ Before moving ECUBE to production, verify:
 - [docs/design/11-testing-and-validation.md](../design/11-testing-and-validation.md) — Testing strategy and validation approach
 - [production-support-procedures.md](production-support-procedures.md) — Troubleshooting, upgrade, backup, and patching
 - [compliance-and-evidence-handling.md](compliance-and-evidence-handling.md) — Compliance mappings and chain-of-custody requirements
+
+## References
+
+- [docs/requirements/08-operational-readiness.md](../requirements/08-operational-readiness.md)
+- [docs/operations/10-production-support-procedures.md](10-production-support-procedures.md)

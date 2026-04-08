@@ -1,12 +1,11 @@
 # ECUBE UI Wireframes
 
-**Version:** 1.0  
-**Last Updated:** March 2026  
-**Audience:** UI Designers, Developers, QA  
-**Document Type:** Wireframe Reference  
-**Source:** Derived from [04-ui-use-cases.md](../testing/04-ui-use-cases.md)
-
----
+| Field | Value |
+|---|---|
+| Title | ECUBE UI Wireframes |
+| Purpose | Provides reference wireframes illustrating the ECUBE user interface layout and key user interaction flows. |
+| Updated on | 04/08/26 |
+| Audience | UI designers, developers, and QA teams. |
 
 ## Table of Contents
 
@@ -1017,3 +1016,8 @@ Used for: Format Drive (UC-4.4), Delete User (UC-3.8), Remove Mount (UC-5.4), Re
 | UC-8.4 – UC-8.5 | Screen 9a: Block Devices / Mounts tabs |
 | UC-8.6 | Screen 9d: Job Debug |
 | UC-8.7 – UC-8.8 | Screen 9c: Logs Tab |
+
+## References
+
+- [docs/testing/04-ui-use-cases.md](../testing/04-ui-use-cases.md)
+- [docs/design/15-frontend-architecture.md](15-frontend-architecture.md)

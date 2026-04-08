@@ -1,11 +1,11 @@
 # ECUBE Deployment Architecture Guide
 
-**Version:** 1.0  
-**Last Updated:** March 2026  
-**Audience:** IT Decision-Makers, Systems Architects, Administrators  
-**Document Type:** Deployment Planning
-
----
+| Field | Value |
+|---|---|
+| Title | ECUBE Deployment Architecture Guide |
+| Purpose | Describes ECUBE deployment topology options, component roles, and infrastructure requirements for IT decision-makers and system architects. |
+| Updated on | 04/08/26 |
+| Audience | IT decision-makers, systems architects, administrators. |
 
 ## Table of Contents
 
@@ -608,3 +608,8 @@ The ECUBE application is identical in all profiles. Only the host topology, netw
 | [operations/02-manual-installation.md](operations/02-manual-installation.md) | Systemd-based package deployment (Profile A/B application host) |
 | [operations/03-docker-deployment.md](operations/03-docker-deployment.md) | Docker Compose deployment (Profile A/C) |
 | [operations/06-security-best-practices.md](operations/06-security-best-practices.md) | TLS, credentials, firewall, and audit log guidelines |
+
+## References
+
+- [docs/operations/01-installation.md](../operations/01-installation.md)
+- [docs/design/03-system-architecture.md](../design/03-system-architecture.md)

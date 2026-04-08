@@ -1,5 +1,12 @@
 # 9. Production Support and Resilience Requirements
 
+| Field | Value |
+|---|---|
+| Title | Production Support and Resilience Requirements |
+| Purpose | Defines production support requirements for ECUBE, including diagnostics, backup and recovery, patch safety, secret rotation, and disaster recovery readiness. |
+| Updated on | 04/08/26 |
+| Audience | Stakeholders, operations engineers, support teams, and QA teams. |
+
 ## 9.1 Purpose
 
 This document defines production support requirements for ECUBE, including diagnostics, backup and recovery, patch and upgrade safety, secret rotation, and disaster recovery readiness.
@@ -73,3 +80,7 @@ A deployment satisfies this requirements document only when all statements below
 
 Primary operational reference: [docs/operations/10-production-support-procedures.md](../operations/10-production-support-procedures.md).
 Related requirements: [docs/requirements/04-functional-requirements.md](04-functional-requirements.md), [docs/requirements/05-data-model.md](05-data-model.md), [docs/requirements/06-rest-api-requirements.md](06-rest-api-requirements.md), and [docs/requirements/10-security-and-access-control.md](10-security-and-access-control.md).
+
+## References
+
+- [docs/operations/10-production-support-procedures.md](../operations/10-production-support-procedures.md)

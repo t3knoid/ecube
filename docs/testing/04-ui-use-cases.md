@@ -1,12 +1,11 @@
 # ECUBE UI Use Cases
 
-**Version:** 1.0  
-**Last Updated:** April 2026  
-**Audience:** UI Designers, Developers, QA  
-**Document Type:** Use Case Catalog  
-**Source:** Derived from [07-administration-automation-guide.md](../operations/07-administration-automation-guide.md)
-
----
+| Field | Value |
+|---|---|
+| Title | UI Use Cases |
+| Purpose | Provides a catalog of ECUBE user interface use cases that define expected UI behavior for design, development, and QA validation. |
+| Updated on | 04/08/26 |
+| Audience | UI designers, developers, QA. |
 
 ## Table of Contents
 
@@ -213,3 +212,7 @@ The primary operational workflow combines use cases across groups:
 - The setup wizard (Group 1) is a distinct UX flow from the main application
 - Runtime configuration workflows (Group 9) are admin-only and include restart-aware UX for deferred settings
 
+## References
+
+- [docs/testing/01-automated-test-requirements.md](01-automated-test-requirements.md)
+- [docs/design/14-ui-wireframes.md](../design/14-ui-wireframes.md)

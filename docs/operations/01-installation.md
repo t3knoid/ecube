@@ -1,10 +1,11 @@
 # ECUBE Installation Guide
 
-**Version:** 1.0  
-**Last Updated:** April 2026  
-**Audience:** Systems Administrators, IT Staff
-
----
+| Field | Value |
+|---|---|
+| Title | ECUBE Installation Guide |
+| Purpose | Guides administrators through deploying ECUBE using the automated installer or Docker, including prerequisites and environment validation. |
+| Updated on | 04/08/26 |
+| Audience | Systems administrators, IT staff. |
 
 ## Table of Contents
 
@@ -361,3 +362,9 @@ This will:
   and drop the configured application database (best-effort).
 
 Use `--yes` to auto-accept the initial uninstall confirmation prompt.
+
+## References
+
+- [docs/operations/02-manual-installation.md](02-manual-installation.md)
+- [docs/operations/03-docker-deployment.md](03-docker-deployment.md)
+- [docs/operations/04-configuration-reference.md](04-configuration-reference.md)

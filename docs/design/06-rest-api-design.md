@@ -1,10 +1,11 @@
 # 6. REST API Design
 
-This document describes how the ECUBE API works: route structure, authentication and authorization model, payload and response shapes, endpoint behavior, operational flows, and implementation-oriented constraints. It is the design-side companion to [../requirements/06-rest-api-requirements.md](../requirements/06-rest-api-requirements.md), which captures the normative requirement set.
-
-Audience: engineers, implementers, maintainers, and reviewers working on the API implementation.
-
-This document intentionally includes endpoints, request and response schemas, state-dependent behavior, and implementation-oriented flow details. It intentionally excludes business justification, user stories, and product-level rationale except where needed to explain the resulting API contract.
+| Field | Value |
+|---|---|
+| Title | REST API Design |
+| Purpose | Describes how the ECUBE API works, including route structure, authentication and authorization model, payload shapes, endpoint behavior, and implementation-oriented constraints. |
+| Updated on | 04/08/26 |
+| Audience | Engineers, implementers, maintainers, and technical reviewers. |
 
 **OpenAPI Documentation:** This API contract is also available interactively via OpenAPI (Swagger) when the ECUBE API server is running:
 
@@ -1526,3 +1527,8 @@ Every security‑relevant event is logged:
 - Port enablement changes (`PORT_ENABLED`, `PORT_DISABLED`)
 - System initialization (`SYSTEM_INITIALIZED`)
 - Webhook callback delivery (`CALLBACK_SENT`, `CALLBACK_DELIVERY_FAILED`, `CALLBACK_DELIVERY_DROPPED`)
+
+## References
+
+- [docs/requirements/06-rest-api-requirements.md](../requirements/06-rest-api-requirements.md)
+- [docs/design/10-security-and-access-control.md](10-security-and-access-control.md)

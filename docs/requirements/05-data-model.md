@@ -1,8 +1,11 @@
 # 5. Data Model Requirements
 
-This document defines what ECUBE data must represent. It is written primarily for stakeholders, auditors, product managers, and reviewers who need to understand the meaning of the data, the constraints that govern it, its lifecycle expectations, and how compliance is assessed.
-
-This document intentionally excludes storage formats, table layouts, field types, indexes, JSON structure, and other implementation details. Those design details are documented in [../design/05-data-model.md](../design/05-data-model.md).
+| Field | Value |
+|---|---|
+| Title | Data Model Requirements |
+| Purpose | Defines what ECUBE data must represent, including the meaning, constraints, lifecycle expectations, and acceptance criteria for core data domains. |
+| Updated on | 04/08/26 |
+| Audience | Stakeholders, auditors, product managers, reviewers, and QA teams. |
 
 ## 5.1 Audience and Scope
 
@@ -252,3 +255,6 @@ Acceptance criteria:
 
 - Reviewers can trace a project-bound export across drive state, job state, manifest output, and audit evidence.
 - Temporary infrastructure interruptions do not erase the system’s authoritative understanding of prior work.
+## References
+
+- [docs/design/05-data-model.md](../design/05-data-model.md)

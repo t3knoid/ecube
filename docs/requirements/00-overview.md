@@ -1,5 +1,12 @@
 # ECUBE — Requirements Specification
 
+| Field | Value |
+|---|---|
+| Title | ECUBE Requirements Specification Overview |
+| Purpose | Provides an organized index and reading guide for the ECUBE requirements document set. |
+| Updated on | 04/08/26 |
+| Audience | Stakeholders, auditors, product managers, reviewers, and QA teams. |
+
 ## Specification Structure
 
 ECUBE requirements are organized into two layers:
@@ -41,3 +48,7 @@ For implementation details, architecture decisions, and platform-specific patter
 - Design `11–16` — Quality, runtime environment, build/deployment, and frontend architecture
 
 Requirements documents map to one or more design documents that provide implementation perspective; in many cases the mapping is by matching document number.
+
+## References
+
+- [docs/design/00-overview.md](../design/00-overview.md)

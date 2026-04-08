@@ -1,13 +1,11 @@
 # ECUBE — Automated Test Runbook
 
-**Audience:** Developers, Contributors, QA  
-**Scope:** How to install dependencies, run all automated suites, and reproduce CI behavior locally  
-**Last Updated:** April 2026
-
-Normative test standards are maintained in:
-[docs/testing/01-automated-test-requirements.md](docs/testing/01-automated-test-requirements.md)
-
----
+| Field | Value |
+|---|---|
+| Title | Automated Test Runbook |
+| Purpose | Explains how to install dependencies, run all automated test suites, and reproduce CI behavior locally. |
+| Updated on | 04/08/26 |
+| Audience | Developers, contributors, QA. |
 
 ## Table of Contents
 
@@ -229,3 +227,7 @@ For installer-oriented package artifact generation details, see:
 | `update-e2e-snapshots.yml` | manual (`workflow_dispatch`) | `npx playwright test --update-snapshots --reporter=line`, then commit and push snapshots |
 | `docker-build.yml` — build and smoke | manual (`workflow_dispatch`), push to `main`, tag push (`v*`) | build images, bring stack up, smoke-check `/health` |
 | `docker-build.yml` — publish | release published | push images to GHCR, attach generated `docker-compose.yml` release asset |
+
+## References
+
+- [docs/testing/01-automated-test-requirements.md](01-automated-test-requirements.md)

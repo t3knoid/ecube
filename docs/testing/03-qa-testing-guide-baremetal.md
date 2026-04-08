@@ -1,9 +1,11 @@
 # ECUBE — QA Testing Guide (Bare-Metal Linux)
 
-**Audience:** QA Personnel  
-**Deployment:** Native Linux installation (no Docker/containers)
-
----
+| Field | Value |
+|---|---|
+| Title | QA Testing Guide (Bare-Metal Linux) |
+| Purpose | Guides QA personnel through setting up a bare-metal Linux environment and running ECUBE with physical hardware for hands-on testing. |
+| Updated on | 04/08/26 |
+| Audience | QA personnel. |
 
 ## Table of Contents
 
@@ -1340,3 +1342,7 @@ sudo ss -tlnp | grep 8443
 Always test against the ECUBE release tag matching your deployment. Check the release notes
 for any version-specific migration steps or breaking changes:
 `https://github.com/t3knoid/ecube/releases`
+
+## References
+
+- [docs/testing/02-automated-test-runbook.md](02-automated-test-runbook.md)

@@ -1,11 +1,11 @@
 # ECUBE — Security Scanning
 
-**Audience:** Developers, DevOps, QA  
-**Workflows:**
-- `.github/workflows/security-scan.yml` — Bandit static analysis + pip-audit dependency scan
-- `.github/workflows/schemathesis-fuzz.yml` — Schemathesis (OpenAPI fuzz testing)
-
----
+| Field | Value |
+|---|---|
+| Title | Security Scanning |
+| Purpose | Documents the ECUBE security and API testing workflows, covering Bandit static analysis, pip-audit dependency scanning, and Schemathesis fuzz testing. |
+| Updated on | 04/08/26 |
+| Audience | Developers, DevOps, QA. |
 
 ## Overview
 
@@ -208,3 +208,7 @@ The README displays live badges for all workflows:
 2. Select the desired workflow run.
 3. Download the report artifact from the run summary.
 4. Open JSON/HTML files to review individual findings.
+
+## References
+
+- [docs/testing/06-schemathesis-local.md](06-schemathesis-local.md)
