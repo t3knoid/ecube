@@ -308,15 +308,23 @@ def list_log_files(
         if not allowed_log_pattern.fullmatch(entry):
             continue
         full = os.path.join(log_dir, entry)
-        if not os.path.isfile(full):
+        try:
+            entry_stat = os.lstat(full)
+        except (FileNotFoundError, PermissionError, OSError):
+            # File may have been rotated/removed or is otherwise unreadable
+            # between directory listing and metadata lookup. Skip it.
             continue
-        stat = os.stat(full)
+
+        # Keep listing behavior aligned with download protections.
+        # Skip symlinks and anything that is not a regular file.
+        if stat.S_ISLNK(entry_stat.st_mode) or not stat.S_ISREG(entry_stat.st_mode):
+            continue
         files.append(
             LogFileInfo(
                 name=entry,
-                size=stat.st_size,
-                created=datetime.fromtimestamp(stat.st_ctime, tz=timezone.utc),
-                modified=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+                size=entry_stat.st_size,
+                created=datetime.fromtimestamp(entry_stat.st_ctime, tz=timezone.utc),
+                modified=datetime.fromtimestamp(entry_stat.st_mtime, tz=timezone.utc),
             )
         )
 

@@ -284,6 +284,62 @@ class TestAdminLogsEndpoints:
                 assert data["total_size"] > 0
                 assert "log_directory" not in data
 
+    def test_list_logs_skips_allowlisted_symlink(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            symlink_path = os.path.join(tmpdir, "app.log.1")
+            target_path = os.path.join(tmpdir, "sensitive.txt")
+
+            with open(log_path, "w") as f:
+                f.write("primary log\n")
+            with open(target_path, "w") as f:
+                f.write("should not be listed via symlink\n")
+
+            if not hasattr(os, "symlink"):
+                pytest.skip("symlink is not available on this platform")
+
+            try:
+                os.symlink(target_path, symlink_path)
+            except (OSError, NotImplementedError):
+                pytest.skip("symlink creation is not permitted in this environment")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = admin_client.get("/admin/logs")
+
+            assert resp.status_code == 200
+            data = resp.json()
+            names = [item["name"] for item in data["log_files"]]
+            assert "app.log" in names
+            assert "app.log.1" not in names
+
+    def test_list_logs_ignores_transient_lstat_failures(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            rotated_path = os.path.join(tmpdir, "app.log.1")
+            with open(log_path, "w") as f:
+                f.write("active log\n")
+            with open(rotated_path, "w") as f:
+                f.write("rotated log\n")
+
+            original_lstat = os.lstat
+
+            def lstat_side_effect(path):
+                if path == rotated_path:
+                    raise FileNotFoundError("rotated away")
+                return original_lstat(path)
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                with patch("app.routers.admin.os.lstat", side_effect=lstat_side_effect):
+                    resp = admin_client.get("/admin/logs")
+
+            assert resp.status_code == 200
+            data = resp.json()
+            names = [item["name"] for item in data["log_files"]]
+            assert "app.log" in names
+            assert "app.log.1" not in names
+
     def test_download_log_file_success(self, admin_client, db):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = os.path.join(tmpdir, "app.log")
