@@ -51,7 +51,8 @@ function mountView() {
       plugins: [i18n],
       stubs: {
         DataTable: {
-          template: '<div><slot /></div>',
+          props: ['rows'],
+          template: '<div>{{ (rows || []).map((row) => row.name || row.id || row.device || "").join(" ") }}<slot /></div>',
         },
         Pagination: {
           template: '<div />',
@@ -142,6 +143,24 @@ describe('SystemView logs tab', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain(i18n.global.t('system.logsNotConfigured'))
+  })
+
+  it('still shows downloadable log files when log line fetch fails', async () => {
+    mocks.getLogFiles.mockResolvedValue({
+      log_files: [{ name: 'app.log', size: 64, modified: '2026-04-08T11:59:00Z' }],
+    })
+    mocks.getLogLines.mockRejectedValue({ response: { status: 503 } })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const logsButton = wrapper.findAll('button').find((b) => b.text() === i18n.global.t('system.tabs.logs'))
+    await logsButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.getLogFiles).toHaveBeenCalled()
+    expect(mocks.getLogLines).toHaveBeenCalled()
+    expect(wrapper.text()).toContain('app.log')
   })
 
   it('hides logs tab for non-admin users', async () => {
