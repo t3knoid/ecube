@@ -776,15 +776,18 @@ Notes:
 1. Open `Users`.
 2. Click `Create User`.
 3. Enter the username.
-4. Enter a temporary or assigned password.
-5. Select the appropriate ECUBE roles.
-6. Create the user.
-7. Refresh the page and confirm the new user appears with the intended role assignments.
+4. Select the appropriate ECUBE roles.
+5. Click `Create`.
+6. If the username already exists on the host (or directory-backed identity source), review the confirmation prompt and choose whether to add that existing account to ECUBE.
+7. If this is a brand-new user, complete the password dialog by entering and confirming the password, then submit.
+8. Refresh the page and confirm the user appears with the intended role assignments.
 
 Notes:
 
 - Choose the smallest role set needed for the user's responsibilities.
 - If your organization uses a separate account-provisioning process, follow that policy before creating ECUBE access.
+- Existing users that are linked into ECUBE are not prompted for a new password in this flow.
+- For directory-backed users that cannot be fully enumerated by host account listing, ECUBE may show placeholder host fields while still exposing role management controls.
 
 ### 14.7 Remove a User's ECUBE Access
 
