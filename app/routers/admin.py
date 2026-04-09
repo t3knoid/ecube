@@ -183,24 +183,56 @@ def _tail_lines(path: str, max_lines: int) -> Tuple[List[str], bool]:
 
 
 def _tail_filtered_lines(path: str, needle: str, max_lines: int) -> Tuple[List[str], bool]:
-    """Stream file forward and keep only the last matching lines."""
+    """Scan backward from EOF and keep only the last matching lines.
+
+    This avoids full forward scans in common cases: once ``max_lines + 1``
+    matches are seen, we can stop and report ``has_more=True``.
+    """
     if max_lines <= 0:
         return [], False
 
     lowered = needle.lower()
-    window: Deque[str] = deque()
-    match_count = 0
+    chunk_size = 64 * 1024
+    matches_newest_first: List[str] = []
+    has_more = False
 
     with open(path, "rb") as handle:
-        for raw in handle:
-            line = raw.decode("utf-8", errors="replace").rstrip("\n")
-            if lowered in line.lower():
-                match_count += 1
-                if len(window) == max_lines:
-                    window.popleft()
-                window.append(line)
+        handle.seek(0, os.SEEK_END)
+        position = handle.tell()
+        carry = b""
 
-    return list(window), match_count > max_lines
+        while position > 0 and len(matches_newest_first) <= max_lines:
+            read_size = min(chunk_size, position)
+            position -= read_size
+            handle.seek(position)
+            chunk = handle.read(read_size)
+
+            data = chunk + carry
+            parts = data.split(b"\n")
+
+            if position > 0:
+                carry = parts[0]
+                lines = parts[1:]
+            else:
+                carry = b""
+                lines = parts
+
+            for raw_line in reversed(lines):
+                line = raw_line.decode("utf-8", errors="replace")
+                if lowered in line.lower():
+                    matches_newest_first.append(line)
+                    if len(matches_newest_first) > max_lines:
+                        has_more = True
+                        break
+
+            if has_more:
+                break
+
+    if len(matches_newest_first) > max_lines:
+        matches_newest_first = matches_newest_first[:max_lines]
+
+    # Return oldest->newest for compatibility with caller behavior.
+    return list(reversed(matches_newest_first)), has_more
 
 
 def _redact_log_line(line: str) -> str:
