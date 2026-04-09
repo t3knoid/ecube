@@ -456,6 +456,24 @@ PUT  /admin/password-policy          → writes updated values to pwquality.conf
 - `enforce_for_root` must not be settable to `0` through the API to prevent policy bypass. Attempts to set it to `0` or `false` must be rejected with `422`.
 - Each write emits a `PASSWORD_POLICY_UPDATED` audit event with the actor, the previous values, and the new values.
 
+**UI design:**
+- A new "Password Policy" card or panel must be added to the Configuration page (admin-only, role-gated).
+- Display the current policy settings in a read-only summary view by default.
+- An "Edit Policy" button opens a form with input fields for each writable key:
+  - `minlen`: number input (12–128)
+  - `minclass`: number input (0–4) with label "Minimum character classes"
+  - `maxrepeat`: number input (0 or greater) with label "Max consecutive identical chars (0 = disabled)"
+  - `maxsequence`: number input (0 or greater) with label "Max monotonic sequence length (0 = disabled)"
+  - `maxclassrepeat`: number input (0 or greater) with label "Max consecutive same-class chars (0 = disabled)"
+  - `dictcheck`: toggle (0 or 1) with label "Enable dictionary check"
+  - `usercheck`: toggle (0 or 1) with label "Reject passwords containing username"
+  - `difok`: number input (0–255) with label "Min chars different from old password (0 = disabled)"
+  - `retry`: number input (1–10) with label "Number of retry attempts"
+- Display `enforce_for_root` as a read-only badge or non-editable field showing "Always Enforced" to clarify it is not user-configurable.
+- A "Save" button submits the PUT request; on success, display a confirmation banner and refresh the view to show updated values.
+- On validation error (422), display user-facing error messages explaining which fields are invalid and why.
+- Changes must be audit-logged automatically by the backend; the UI may show a timestamp of the last change and the actor who made it.
+
 **Schema:**
 
 ```python
