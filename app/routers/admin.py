@@ -892,6 +892,8 @@ def list_os_users(
     # but not appear in list_users() enumeration. Include them when they already
     # have ECUBE DB role assignments so admins can see and manage them.
     for username in sorted(role_assigned_usernames):
+        if username in RESERVED_USERNAMES:
+            continue
         if username in users_by_username:
             continue
         if provider.user_exists(username):
