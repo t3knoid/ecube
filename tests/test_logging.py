@@ -12,6 +12,11 @@ Covers:
   – path traversal rejection
   – audit trail recording
   – 404 when file-logging not configured
+* ``/admin/logs/view`` endpoint
+    – admin-only access and denied-attempt auditing
+    – allowlisted source enforcement
+    – tail pagination and text filtering
+    – sensitive value redaction
 """
 
 import json
@@ -388,3 +393,101 @@ class TestAdminLogsEndpoints:
                 assert file_info["size"] == 256
                 assert "created" in file_info
                 assert "modified" in file_info
+
+    def test_view_logs_unauthenticated_returns_401(self, unauthenticated_client):
+        resp = unauthenticated_client.get("/admin/logs/view")
+        assert resp.status_code == 401
+
+    def test_view_logs_non_admin_returns_403_and_audits_denial(self, manager_client, db):
+        from app.repositories.audit_repository import AuditRepository
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("line\n")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = manager_client.get("/admin/logs/view")
+                assert resp.status_code == 403
+
+                entries = AuditRepository(db).query(action="LOG_LINES_VIEW_DENIED")
+                assert len(entries) >= 1
+                assert entries[0].details.get("reason") == "admin_role_required"
+
+    def test_view_logs_unknown_source_returns_404(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("line\n")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = admin_client.get("/admin/logs/view", params={"source": "unknown"})
+                assert resp.status_code == 404
+
+    def test_view_logs_returns_tail_with_offset_and_has_more(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                for i in range(1, 31):
+                    f.write(f"line {i}\n")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = admin_client.get(
+                    "/admin/logs/view",
+                    params={"source": "app", "limit": 5, "offset": 2},
+                )
+                assert resp.status_code == 200
+                data = resp.json()
+                contents = [row["content"] for row in data["lines"]]
+                assert contents == ["line 24", "line 25", "line 26", "line 27", "line 28"]
+                assert data["returned"] == 5
+                assert data["has_more"] is True
+
+    def test_view_logs_search_filters_and_redacts_sensitive_values(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("INFO healthy\n")
+                f.write("ERROR password=hunter2 Authorization=Bearer abc.def.ghi\n")
+                f.write('ERROR {"token":"secret-token"}\n')
+                f.write("WARN done\n")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = admin_client.get(
+                    "/admin/logs/view",
+                    params={"source": "app", "search": "error", "limit": 10},
+                )
+                assert resp.status_code == 200
+                data = resp.json()
+                contents = [row["content"] for row in data["lines"]]
+                assert len(contents) == 2
+                joined = "\n".join(contents)
+                assert "hunter2" not in joined
+                assert "secret-token" not in joined
+                assert "abc.def.ghi" not in joined
+                assert "[REDACTED]" in joined
+
+    def test_view_logs_records_audit_trail(self, admin_client, db):
+        from app.repositories.audit_repository import AuditRepository
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("line\n")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = admin_client.get(
+                    "/admin/logs/view",
+                    params={"source": "app", "limit": 1},
+                )
+                assert resp.status_code == 200
+
+                entries = AuditRepository(db).query(action="LOG_LINES_VIEWED")
+                assert len(entries) >= 1
+                assert entries[0].details.get("source") == "app"
+                assert entries[0].details.get("limit") == 1
