@@ -332,7 +332,6 @@ def list_log_files(
     return LogFilesResponse(
         log_files=files,
         total_size=total_size,
-        log_directory=log_dir,
     )
 
 

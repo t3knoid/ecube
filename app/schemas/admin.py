@@ -51,7 +51,6 @@ class LogFilesResponse(BaseModel):
 
     log_files: List[LogFileInfo] = Field(default_factory=list, description="Available log files")
     total_size: int = Field(..., description="Total size of all log files in bytes")
-    log_directory: str = Field(..., description="Absolute path to the log directory")
 
 
 class LogSourceInfo(BaseModel):
