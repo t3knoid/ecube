@@ -44,9 +44,26 @@ const pendingUsernameForPassword = ref(null)
 const pendingCreateUserPayload = ref(null)
 
 function isPasswordRequiredForNewUserError(err) {
-  const detail = err?.response?.data?.detail
-  if (typeof detail !== 'string') return false
-  return detail.toLowerCase().includes('password is required when creating a new os user')
+  const data = err?.response?.data
+  const candidateMessages = []
+
+  if (typeof data?.message === 'string') {
+    candidateMessages.push(data.message)
+  }
+  if (typeof data?.detail === 'string') {
+    candidateMessages.push(data.detail)
+  }
+  if (Array.isArray(data?.detail)) {
+    for (const item of data.detail) {
+      if (typeof item === 'string') {
+        candidateMessages.push(item)
+      } else if (item && typeof item.msg === 'string') {
+        candidateMessages.push(item.msg)
+      }
+    }
+  }
+
+  return candidateMessages.some((msg) => msg.toLowerCase().includes('password is required when creating a new os user'))
 }
 
 const userColumns = computed(() => [
@@ -395,6 +412,7 @@ onMounted(loadAll)
               id="set-password-field"
               v-model="setPasswordForm.password"
               :type="showPassword ? 'text' : 'password'"
+              maxlength="128"
               autocomplete="new-password"
             />
             <button
@@ -407,12 +425,16 @@ onMounted(loadAll)
           </div>
 
           <label for="confirm-password-field">{{ t('users.confirmPassword') }}</label>
-          <input
-            id="confirm-password-field"
-            v-model="setPasswordForm.confirmPassword"
-            :type="showPassword ? 'text' : 'password'"
-            autocomplete="new-password"
-          />
+          <div class="password-input-group">
+            <input
+              id="confirm-password-field"
+              v-model="setPasswordForm.confirmPassword"
+              :type="showPassword ? 'text' : 'password'"
+              maxlength="128"
+              autocomplete="new-password"
+            />
+            <div class="btn-icon-spacer"></div>
+          </div>
 
           <div v-if="setPasswordForm.password && setPasswordForm.confirmPassword && setPasswordForm.password !== setPasswordForm.confirmPassword" class="error-message">
             {{ t('users.passwordMismatch') }}
@@ -522,6 +544,7 @@ input {
 .dialog-actions {
   justify-content: flex-end;
   margin-top: var(--space-sm);
+}
 
 .password-input-group {
   display: flex;
@@ -531,6 +554,13 @@ input {
 
 .password-input-group input {
   flex: 1;
+}
+
+.btn-icon-spacer {
+  min-width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-icon {
@@ -554,6 +584,5 @@ input {
   border-radius: var(--border-radius);
   padding: var(--space-xs) var(--space-sm);
   font-size: 0.875rem;
-}
 }
 </style>
