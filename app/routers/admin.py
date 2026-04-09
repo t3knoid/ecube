@@ -353,7 +353,24 @@ def view_log_lines(
         )
         raise HTTPException(status_code=403, detail="This action requires the admin role")
 
-    source_info = _resolve_log_source(source)
+    try:
+        source_info = _resolve_log_source(source)
+    except HTTPException as exc:
+        if exc.status_code == 404:
+            detail_text = str(exc.detail).lower()
+            reason = "unknown_log_source"
+            if "not configured" in detail_text or "unavailable" in detail_text:
+                reason = "log_source_unavailable"
+
+            best_effort_audit(
+                db,
+                action="LOG_LINES_VIEW_DENIED",
+                user=current_user.username,
+                details={"source": source, "reason": reason},
+                client_ip=get_client_ip(request),
+            )
+        raise
+
     max_matching_lines = limit + offset
     file_modified_at: Optional[datetime] = None
 
