@@ -163,7 +163,7 @@ async function loadTabData() {
       const response = await getSystemMounts()
       mounts.value = response.mounts || []
     } else if (activeTab.value === 'logs') {
-      const [filesResponse, linesResponse] = await Promise.all([
+      const [filesResult, linesResult] = await Promise.allSettled([
         getLogFiles(),
         getLogLines({
           source: logViewer.value.source,
@@ -173,8 +173,24 @@ async function loadTabData() {
           reverse: logViewer.value.reverse,
         }),
       ])
-      logs.value = filesResponse.log_files || []
-      logView.value = linesResponse
+
+      const filesError = filesResult.status === 'rejected' ? filesResult.reason : null
+      const linesError = linesResult.status === 'rejected' ? linesResult.reason : null
+
+      logs.value = filesResult.status === 'fulfilled' ? (filesResult.value.log_files || []) : []
+      logView.value = linesResult.status === 'fulfilled' ? linesResult.value : null
+
+      const err = linesError || filesError
+      if (err) {
+        const status = err?.response?.status
+        if (status === 403) {
+          error.value = t('auth.insufficientPermissions')
+        } else if (status === 404) {
+          error.value = t('system.logsNotConfigured')
+        } else {
+          error.value = extractApiMessage(err) || t('common.errors.requestConflict')
+        }
+      }
     }
   } catch (err) {
     const status = err?.response?.status
