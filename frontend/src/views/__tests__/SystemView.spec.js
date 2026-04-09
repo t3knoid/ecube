@@ -108,6 +108,8 @@ describe('SystemView logs tab', () => {
     await flushPromises()
 
     expect(mocks.getLogLines).toHaveBeenCalled()
+    const lastCallArgs = mocks.getLogLines.mock.calls.at(-1)?.[0] || {}
+    expect(lastCallArgs.reverse).toBe(true)
     expect(wrapper.text()).toContain('[REDACTED]')
     expect(wrapper.text()).toContain('/var/log/ecube/app.log')
   })
