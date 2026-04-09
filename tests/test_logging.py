@@ -8,10 +8,15 @@ Covers:
 * ``log_and_audit`` service helper
 * ``/admin/logs`` and ``/admin/logs/{filename}`` endpoints
   – authentication enforcement (401 for unauthenticated)
-  – successful listing/download for authenticated users
+    – admin-only listing/download; 403 for non-admin users
   – path traversal rejection
   – audit trail recording
   – 404 when file-logging not configured
+* ``/admin/logs/view`` endpoint
+    – admin-only access and denied-attempt auditing
+    – allowlisted source enforcement
+    – tail pagination and text filtering
+    – sensitive value redaction
 """
 
 import json
@@ -247,20 +252,20 @@ class TestAdminLogsEndpoints:
         resp = unauthenticated_client.get("/admin/logs/app.log")
         assert resp.status_code == 401
 
-    def test_list_logs_returns_404_when_file_logging_not_configured(self, client):
+    def test_list_logs_returns_404_when_file_logging_not_configured(self, admin_client):
         """When LOG_FILE is not set, /admin/logs returns 404."""
         with patch("app.routers.admin.settings") as mock_settings:
             mock_settings.log_file = None
-            resp = client.get("/admin/logs")
+            resp = admin_client.get("/admin/logs")
             assert resp.status_code == 404
 
-    def test_download_log_returns_404_when_file_logging_not_configured(self, client):
+    def test_download_log_returns_404_when_file_logging_not_configured(self, admin_client):
         with patch("app.routers.admin.settings") as mock_settings:
             mock_settings.log_file = None
-            resp = client.get("/admin/logs/app.log")
+            resp = admin_client.get("/admin/logs/app.log")
             assert resp.status_code == 404
 
-    def test_list_logs_returns_files(self, client, db):
+    def test_list_logs_returns_files(self, admin_client, db):
         """When file logging is configured, listing returns file metadata."""
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = os.path.join(tmpdir, "app.log")
@@ -269,7 +274,7 @@ class TestAdminLogsEndpoints:
 
             with patch("app.routers.admin.settings") as mock_settings:
                 mock_settings.log_file = log_path
-                resp = client.get("/admin/logs")
+                resp = admin_client.get("/admin/logs")
                 assert resp.status_code == 200
                 data = resp.json()
                 assert "log_files" in data
@@ -277,9 +282,65 @@ class TestAdminLogsEndpoints:
                 assert data["log_files"][0]["name"] == "app.log"
                 assert data["log_files"][0]["size"] > 0
                 assert data["total_size"] > 0
-                assert data["log_directory"] == tmpdir
+                assert "log_directory" not in data
 
-    def test_download_log_file_success(self, client, db):
+    def test_list_logs_skips_allowlisted_symlink(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            symlink_path = os.path.join(tmpdir, "app.log.1")
+            target_path = os.path.join(tmpdir, "sensitive.txt")
+
+            with open(log_path, "w") as f:
+                f.write("primary log\n")
+            with open(target_path, "w") as f:
+                f.write("should not be listed via symlink\n")
+
+            if not hasattr(os, "symlink"):
+                pytest.skip("symlink is not available on this platform")
+
+            try:
+                os.symlink(target_path, symlink_path)
+            except (OSError, NotImplementedError):
+                pytest.skip("symlink creation is not permitted in this environment")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = admin_client.get("/admin/logs")
+
+            assert resp.status_code == 200
+            data = resp.json()
+            names = [item["name"] for item in data["log_files"]]
+            assert "app.log" in names
+            assert "app.log.1" not in names
+
+    def test_list_logs_ignores_transient_lstat_failures(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            rotated_path = os.path.join(tmpdir, "app.log.1")
+            with open(log_path, "w") as f:
+                f.write("active log\n")
+            with open(rotated_path, "w") as f:
+                f.write("rotated log\n")
+
+            original_lstat = os.lstat
+
+            def lstat_side_effect(path):
+                if path == rotated_path:
+                    raise FileNotFoundError("rotated away")
+                return original_lstat(path)
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                with patch("app.routers.admin.os.lstat", side_effect=lstat_side_effect):
+                    resp = admin_client.get("/admin/logs")
+
+            assert resp.status_code == 200
+            data = resp.json()
+            names = [item["name"] for item in data["log_files"]]
+            assert "app.log" in names
+            assert "app.log.1" not in names
+
+    def test_download_log_file_success(self, admin_client, db):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = os.path.join(tmpdir, "app.log")
             content = b"test log content\n"
@@ -288,11 +349,59 @@ class TestAdminLogsEndpoints:
 
             with patch("app.routers.admin.settings") as mock_settings:
                 mock_settings.log_file = log_path
-                resp = client.get("/admin/logs/app.log")
+                resp = admin_client.get("/admin/logs/app.log")
                 assert resp.status_code == 200
                 assert resp.content == content
 
-    def test_download_rejects_path_traversal(self, client):
+    def test_download_log_returns_503_on_permission_error(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("test log content\n")
+
+            original_lstat = os.lstat
+
+            def lstat_side_effect(path):
+                if path == log_path:
+                    raise PermissionError("permission denied")
+                return original_lstat(path)
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                with patch("app.routers.admin.os.lstat", side_effect=lstat_side_effect):
+                    resp = admin_client.get("/admin/logs/app.log")
+
+            assert resp.status_code == 503
+            data = resp.json()
+            assert data["code"] == "HTTP_503"
+            assert data["message"] == "Log file is unavailable due to file permissions"
+            assert data["trace_id"]
+
+    def test_download_log_returns_503_on_io_error(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("test log content\n")
+
+            original_open = os.open
+
+            def open_side_effect(path, flags, mode=0o777):
+                if path == log_path:
+                    raise OSError("disk error")
+                return original_open(path, flags, mode)
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                with patch("app.routers.admin.os.open", side_effect=open_side_effect):
+                    resp = admin_client.get("/admin/logs/app.log")
+
+            assert resp.status_code == 503
+            data = resp.json()
+            assert data["code"] == "HTTP_503"
+            assert data["message"] == "Log file is unavailable"
+            assert data["trace_id"]
+
+    def test_download_rejects_path_traversal(self, admin_client):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = os.path.join(tmpdir, "app.log")
             with open(log_path, "w") as f:
@@ -308,7 +417,7 @@ class TestAdminLogsEndpoints:
                     ("..%2f..%2fetc%2fpasswd", {400, 404}),
                 ]
                 for bad_name, expected_codes in traversal_patterns:
-                    resp = client.get(f"/admin/logs/{bad_name}")
+                    resp = admin_client.get(f"/admin/logs/{bad_name}")
                     assert resp.status_code in expected_codes, (
                         f"Expected one of {expected_codes} for {bad_name!r}, got {resp.status_code}"
                     )
@@ -317,7 +426,7 @@ class TestAdminLogsEndpoints:
                     if hasattr(resp, "text"):
                         assert resp.text != "safe"
 
-    def test_download_nonexistent_file_returns_404(self, client):
+    def test_download_nonexistent_file_returns_404(self, admin_client):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = os.path.join(tmpdir, "app.log")
             with open(log_path, "w") as f:
@@ -325,10 +434,48 @@ class TestAdminLogsEndpoints:
 
             with patch("app.routers.admin.settings") as mock_settings:
                 mock_settings.log_file = log_path
-                resp = client.get("/admin/logs/nonexistent.log")
+                resp = admin_client.get("/admin/logs/nonexistent.log")
                 assert resp.status_code == 404
 
-    def test_list_logs_records_audit_trail(self, client, db):
+    def test_download_rejects_non_allowlisted_file_in_log_directory(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            other_path = os.path.join(tmpdir, "notes.txt")
+            with open(log_path, "w") as f:
+                f.write("log")
+            with open(other_path, "w") as f:
+                f.write("not a log")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = admin_client.get("/admin/logs/notes.txt")
+                assert resp.status_code == 404
+
+    def test_download_rejects_allowlisted_symlink(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            symlink_path = os.path.join(tmpdir, "app.log.1")
+            target_path = os.path.join(tmpdir, "sensitive.txt")
+
+            with open(log_path, "w") as f:
+                f.write("primary log")
+            with open(target_path, "w") as f:
+                f.write("should not be downloadable via symlink")
+
+            if not hasattr(os, "symlink"):
+                pytest.skip("symlink is not available on this platform")
+
+            try:
+                os.symlink(target_path, symlink_path)
+            except (OSError, NotImplementedError):
+                pytest.skip("symlink creation is not permitted in this environment")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = admin_client.get("/admin/logs/app.log.1")
+                assert resp.status_code == 404
+
+    def test_list_logs_records_audit_trail(self, admin_client, db):
         """Accessing /admin/logs should record an audit entry."""
         from app.repositories.audit_repository import AuditRepository
 
@@ -339,11 +486,11 @@ class TestAdminLogsEndpoints:
 
             with patch("app.routers.admin.settings") as mock_settings:
                 mock_settings.log_file = log_path
-                client.get("/admin/logs")
+                admin_client.get("/admin/logs")
                 entries = AuditRepository(db).query(action="LOG_FILES_LISTED")
                 assert len(entries) >= 1
 
-    def test_download_log_records_audit_trail(self, client, db):
+    def test_download_log_records_audit_trail(self, admin_client, db):
         from app.repositories.audit_repository import AuditRepository
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -353,14 +500,14 @@ class TestAdminLogsEndpoints:
 
             with patch("app.routers.admin.settings") as mock_settings:
                 mock_settings.log_file = log_path
-                client.get("/admin/logs/app.log")
+                admin_client.get("/admin/logs/app.log")
                 entries = AuditRepository(db).query(action="LOG_FILE_DOWNLOADED")
                 assert len(entries) >= 1
                 assert entries[0].details["filename"] == "app.log"
                 assert "action" not in entries[0].details
 
-    def test_all_roles_can_list_logs(self, admin_client, manager_client, auditor_client, client):
-        """All authenticated users should have access (no role restriction)."""
+    def test_list_logs_non_admin_returns_403(self, manager_client, auditor_client, client):
+        """Non-admin users should be denied access to /admin/logs."""
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = os.path.join(tmpdir, "app.log")
             with open(log_path, "w") as f:
@@ -368,11 +515,71 @@ class TestAdminLogsEndpoints:
 
             with patch("app.routers.admin.settings") as mock_settings:
                 mock_settings.log_file = log_path
-                for c in [admin_client, manager_client, auditor_client, client]:
+                for c in [manager_client, auditor_client, client]:
                     resp = c.get("/admin/logs")
-                    assert resp.status_code == 200, f"Expected 200 for authenticated user"
+                    assert resp.status_code == 403, "Expected 403 for non-admin user"
 
-    def test_file_metadata_accuracy(self, client, db):
+    def test_list_logs_non_admin_records_denied_audit(self, manager_client, db):
+        from app.repositories.audit_repository import AuditRepository
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("x")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = manager_client.get("/admin/logs")
+                assert resp.status_code == 403
+
+                entries = AuditRepository(db).query(action="LOG_FILES_LIST_DENIED")
+                assert len(entries) >= 1
+                assert entries[0].details.get("reason") == "admin_role_required"
+
+    def test_download_log_non_admin_returns_403(self, manager_client, auditor_client, client):
+        """Non-admin users should be denied access to /admin/logs/{filename}."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("x")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                for c in [manager_client, auditor_client, client]:
+                    resp = c.get("/admin/logs/app.log")
+                    assert resp.status_code == 403, "Expected 403 for non-admin user"
+
+    def test_download_log_non_admin_records_denied_audit(self, manager_client, db):
+        from app.repositories.audit_repository import AuditRepository
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("x")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = manager_client.get("/admin/logs/app.log")
+                assert resp.status_code == 403
+
+                entries = AuditRepository(db).query(action="LOG_FILE_DOWNLOAD_DENIED")
+                assert len(entries) >= 1
+                assert entries[0].details.get("reason") == "admin_role_required"
+                assert entries[0].details.get("filename") == "app.log"
+
+    def test_admin_can_list_logs(self, admin_client):
+        """Admin users should be allowed to list logs."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("x")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = admin_client.get("/admin/logs")
+                assert resp.status_code == 200
+
+    def test_file_metadata_accuracy(self, admin_client, db):
         """Verify size and date fields are accurate."""
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = os.path.join(tmpdir, "app.log")
@@ -382,9 +589,151 @@ class TestAdminLogsEndpoints:
 
             with patch("app.routers.admin.settings") as mock_settings:
                 mock_settings.log_file = log_path
-                resp = client.get("/admin/logs")
+                resp = admin_client.get("/admin/logs")
                 data = resp.json()
                 file_info = data["log_files"][0]
                 assert file_info["size"] == 256
                 assert "created" in file_info
                 assert "modified" in file_info
+
+    def test_view_logs_unauthenticated_returns_401(self, unauthenticated_client):
+        resp = unauthenticated_client.get("/admin/logs/view")
+        assert resp.status_code == 401
+
+    def test_view_logs_non_admin_returns_403_and_audits_denial(self, manager_client, db):
+        from app.repositories.audit_repository import AuditRepository
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("line\n")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = manager_client.get("/admin/logs/view")
+                assert resp.status_code == 403
+
+                entries = AuditRepository(db).query(action="LOG_LINES_VIEW_DENIED")
+                assert len(entries) >= 1
+                assert entries[0].details.get("reason") == "admin_role_required"
+
+    def test_view_logs_unknown_source_returns_404_and_audits_denial(self, admin_client, db):
+        from app.repositories.audit_repository import AuditRepository
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("line\n")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = admin_client.get("/admin/logs/view", params={"source": "unknown"})
+                assert resp.status_code == 404
+
+                entries = AuditRepository(db).query(action="LOG_LINES_VIEW_DENIED")
+                assert len(entries) >= 1
+                assert entries[0].details.get("source") == "unknown"
+                assert entries[0].details.get("reason") == "unknown_log_source"
+
+    def test_view_logs_returns_404_when_logging_not_configured_and_audits_denial(self, admin_client, db):
+        from app.repositories.audit_repository import AuditRepository
+
+        with patch("app.routers.admin.settings") as mock_settings:
+            mock_settings.log_file = None
+            resp = admin_client.get("/admin/logs/view", params={"source": "app"})
+            assert resp.status_code == 404
+
+            entries = AuditRepository(db).query(action="LOG_LINES_VIEW_DENIED")
+            assert len(entries) >= 1
+            assert entries[0].details.get("source") == "app"
+            assert entries[0].details.get("reason") == "log_source_unavailable"
+
+    def test_view_logs_returns_tail_with_offset_and_has_more(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                for i in range(1, 31):
+                    f.write(f"line {i}\n")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = admin_client.get(
+                    "/admin/logs/view",
+                    params={"source": "app", "limit": 5, "offset": 2},
+                )
+                assert resp.status_code == 200
+                data = resp.json()
+                contents = [row["content"] for row in data["lines"]]
+                assert contents == ["line 24", "line 25", "line 26", "line 27", "line 28"]
+                assert data["returned"] == 5
+                assert data["has_more"] is True
+
+    def test_view_logs_search_filters_and_redacts_sensitive_values(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("INFO healthy\n")
+                f.write("ERROR password=hunter2 Authorization=Bearer abc.def.ghi\n")
+                f.write('ERROR {"token":"secret-token"}\n')
+                f.write("WARN done\n")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = admin_client.get(
+                    "/admin/logs/view",
+                    params={"source": "app", "search": "error", "limit": 10},
+                )
+                assert resp.status_code == 200
+                data = resp.json()
+                contents = [row["content"] for row in data["lines"]]
+                assert len(contents) == 2
+                joined = "\n".join(contents)
+                assert "hunter2" not in joined
+                assert "secret-token" not in joined
+                assert "abc.def.ghi" not in joined
+                assert "[REDACTED]" in joined
+
+    def test_view_logs_records_audit_trail(self, admin_client, db):
+        from app.repositories.audit_repository import AuditRepository
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("line\n")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = admin_client.get(
+                    "/admin/logs/view",
+                    params={"source": "app", "limit": 1},
+                )
+                assert resp.status_code == 200
+                assert resp.json()["source"]["path"] == "app.log"
+
+                entries = AuditRepository(db).query(action="LOG_LINES_VIEWED")
+                assert len(entries) >= 1
+                assert entries[0].details.get("source") == "app"
+                assert entries[0].details.get("limit") == 1
+                assert entries[0].details.get("log_file") == "app.log"
+                assert "path" not in entries[0].details
+
+    def test_view_logs_returns_lines_when_stat_fails(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("line\n")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                with patch("app.routers.admin.os.stat", side_effect=FileNotFoundError):
+                    resp = admin_client.get(
+                        "/admin/logs/view",
+                        params={"source": "app", "limit": 1},
+                    )
+
+                assert resp.status_code == 200
+                data = resp.json()
+                assert data["returned"] == 1
+                assert data["lines"][0]["content"] == "line"
+                assert data["source"]["path"] == "app.log"
+                assert data["file_modified_at"] is None
