@@ -63,7 +63,7 @@ from app.infrastructure import get_os_user_provider
 from app.infrastructure.os_user_protocol import OSUserError, OsUserProvider
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500, R_503, R_504
 from app.services.os_user_service import validate_group_name, validate_username
-from app.constants import ECUBE_GROUPNAME_PATTERN, USERNAME_PATTERN, ECUBE_GROUP_ROLE_MAP
+from app.constants import ECUBE_GROUPNAME_PATTERN, USERNAME_PATTERN, ECUBE_GROUP_ROLE_MAP, RESERVED_USERNAMES
 from app.utils.client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
@@ -639,6 +639,12 @@ def create_os_user(
         raise HTTPException(
             status_code=422,
             detail="At least one mapped ECUBE role is required to derive OS groups.",
+        )
+
+    if body.username in RESERVED_USERNAMES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Cannot create reserved username: {body.username}",
         )
 
     user_exists = provider.user_exists(body.username)
