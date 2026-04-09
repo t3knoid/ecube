@@ -47,7 +47,8 @@ GROUPNAME_RE = USERNAME_RE
 #: Path-parameter pattern for DELETE of ECUBE-managed groups (ecube-* only).
 ECUBE_GROUPNAME_PATTERN = r"^ecube-[a-z0-9_-]{1,25}$"
 
-#: Usernames that cannot be created/deleted through the API.
+#: Reserved system/service usernames that ECUBE never exposes in user-management
+#: listings or allows the API to mutate.
 RESERVED_USERNAMES: frozenset[str] = frozenset(
-    {"root", "ecube", "nobody", "daemon", "bin", "sys"}
+    {"root", "ecube", "nobody", "daemon", "bin", "sys", "www-data"}
 )

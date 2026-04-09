@@ -373,7 +373,11 @@ def create_user(
 
 
 def list_users(ecube_only: bool = True) -> List[OSUser]:
-    """List OS users, optionally filtered to ECUBE-relevant groups."""
+    """List OS users, optionally filtered to ECUBE-relevant groups.
+
+    Reserved system/service accounts are always excluded so user-management
+    views only show ECUBE-manageable human accounts.
+    """
     _require_posix()
     # Build a username→groups mapping in one pass over grp.getgrall()
     # to avoid O(users×groups) repeated scans.
@@ -385,6 +389,8 @@ def list_users(ecube_only: bool = True) -> List[OSUser]:
 
     result: List[OSUser] = []
     for pw in pwd.getpwall():
+        if _is_reserved_username(pw.pw_name):
+            continue
         groups = list(user_group_map.get(pw.pw_name, []))
         # Include the primary group.
         try:
