@@ -24,6 +24,7 @@ import logging
 import os
 import re
 import stat
+import errno
 from datetime import datetime, timezone
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
@@ -492,7 +493,7 @@ def download_log_file(
 
     full_path = os.path.join(log_dir, safe)
     try:
-        file_stat = os.stat(full_path)
+        file_stat = os.lstat(full_path)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Log file not found")
     except PermissionError:
@@ -500,16 +501,34 @@ def download_log_file(
     except OSError:
         raise HTTPException(status_code=503, detail="Log file is unavailable")
 
+    if stat.S_ISLNK(file_stat.st_mode):
+        raise HTTPException(status_code=404, detail="Log file not found")
+
     if not stat.S_ISREG(file_stat.st_mode):
         raise HTTPException(status_code=404, detail="Log file not found")
 
+    real_log_dir = os.path.realpath(log_dir)
+    real_full_path = os.path.realpath(full_path)
     try:
-        log_file = open(full_path, "rb")
+        if os.path.commonpath([real_log_dir, real_full_path]) != real_log_dir:
+            raise HTTPException(status_code=404, detail="Log file not found")
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Log file not found")
+
+    open_flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        open_flags |= os.O_NOFOLLOW
+
+    try:
+        file_descriptor = os.open(full_path, open_flags)
+        log_file = os.fdopen(file_descriptor, "rb")
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Log file not found")
     except PermissionError:
         raise HTTPException(status_code=503, detail="Log file is unavailable due to file permissions")
-    except OSError:
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise HTTPException(status_code=404, detail="Log file not found")
         raise HTTPException(status_code=503, detail="Log file is unavailable")
 
     def _stream_chunks():
