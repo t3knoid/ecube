@@ -943,6 +943,22 @@ class TestOSUserEndpoints:
         assert users[0]["uid"] == -1
         assert users[0]["gid"] == -1
 
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_list_os_users_excludes_reserved_directory_user_with_db_role(self, mock_pwd, mock_grp, admin_client, db):
+        db.add(UserRole(username="www-data", role="processor"))
+        db.commit()
+
+        # Reserved user not present in host enumeration, but exists in identity source.
+        mock_pwd.getpwall.return_value = []
+        mock_pwd.getpwnam.return_value = _make_pw(name="www-data", uid=33, gid=33)
+        mock_grp.getgrall.return_value = []
+
+        resp = admin_client.get("/admin/os-users")
+        assert resp.status_code == 200
+        users = resp.json()["users"]
+        assert users == []
+
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
