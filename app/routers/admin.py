@@ -24,8 +24,7 @@ import logging
 import os
 import re
 from datetime import datetime, timezone
-from collections import deque
-from typing import Deque, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import FileResponse
