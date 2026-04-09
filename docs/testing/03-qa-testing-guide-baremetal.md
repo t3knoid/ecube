@@ -652,8 +652,12 @@ curl -sk -X POST https://localhost:8443/admin/os-users \
     "roles": ["processor"]
   }' | jq
 
-# List OS users (filtered to ecube-* group members)
+# List OS users (filtered to ecube-* group members; reserved accounts excluded)
 curl -sk https://localhost:8443/admin/os-users \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# List OS users with optional username search (case-insensitive substring)
+curl -sk 'https://localhost:8443/admin/os-users?search=qa-testuser' \
   -H "Authorization: Bearer $TOKEN" | jq
 
 # Reset a user's password
