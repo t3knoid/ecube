@@ -29,7 +29,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
-from fastapi.responses import Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, get_current_user, require_roles
@@ -504,14 +504,23 @@ def download_log_file(
         raise HTTPException(status_code=404, detail="Log file not found")
 
     try:
-        with open(full_path, "rb") as log_file:
-            content = log_file.read()
+        log_file = open(full_path, "rb")
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Log file not found")
     except PermissionError:
         raise HTTPException(status_code=503, detail="Log file is unavailable due to file permissions")
     except OSError:
         raise HTTPException(status_code=503, detail="Log file is unavailable")
+
+    def _stream_chunks():
+        try:
+            while True:
+                chunk = log_file.read(64 * 1024)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            log_file.close()
 
     # Record access in audit trail.
     try:
@@ -524,8 +533,8 @@ def download_log_file(
     except Exception:
         logger.exception("Failed to record log file download in audit trail")
 
-    return Response(
-        content=content,
+    return StreamingResponse(
+        _stream_chunks(),
         media_type="text/plain",
         headers={"Content-Disposition": f'attachment; filename="{safe}"'},
     )
