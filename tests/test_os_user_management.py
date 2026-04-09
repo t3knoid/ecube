@@ -14,6 +14,7 @@ import pytest
 from sqlalchemy.exc import ProgrammingError
 
 from app.config import settings
+from app.models.audit import AuditLog
 from app.models.users import UserRole
 from app.models.system import SystemInitialization
 from app.repositories.user_role_repository import UserRoleRepository
@@ -424,13 +425,13 @@ class TestAddUserToGroups:
     @patch("app.services.os_user_service.pwd")
     def test_add_to_groups_non_ecube_user_rejected(self, mock_pwd, mock_grp):
         """Users not in any ecube-* group cannot have groups appended."""
-        mock_pwd.getpwnam.return_value = _make_pw(name="www-data")
-        mock_grp.getgrgid.return_value = _make_grp(name="www-data", gid=1000)
+        mock_pwd.getpwnam.return_value = _make_pw(name="plainuser")
+        mock_grp.getgrgid.return_value = _make_grp(name="plainuser", gid=1000)
         mock_grp.getgrall.return_value = [
-            _make_grp(name="www-data", members=["www-data"]),
+            _make_grp(name="plaingroup", members=["plainuser"]),
         ]
         with pytest.raises(AuthorizationError, match="not in any ecube"):
-            os_user_service.add_user_to_groups("www-data", ["ecube-admins"])
+            os_user_service.add_user_to_groups("plainuser", ["ecube-admins"])
 
 
 class TestCreateGroup:
@@ -596,7 +597,8 @@ class TestOSUserEndpoints:
     def test_create_user_success(self, mock_pwd, mock_grp, mock_subprocess, admin_client):
         pw = _make_pw(name="newuser", uid=1050)
         mock_pwd.getpwnam.side_effect = [
-            KeyError("no such user"),  # user_exists
+            KeyError("no such user"),  # router-level user_exists
+            KeyError("no such user"),  # service-level user_exists
             pw,                        # final lookup
             pw,                        # _get_user_groups
         ]
@@ -646,7 +648,8 @@ class TestOSUserEndpoints:
         """Creating user with roles should seed DB role assignments."""
         pw = _make_pw(name="roleuser", uid=1051)
         mock_pwd.getpwnam.side_effect = [
-            KeyError("no such user"),  # user_exists
+            KeyError("no such user"),  # router-level user_exists
+            KeyError("no such user"),  # service-level user_exists
             pw,                        # final lookup
             pw,                        # _get_user_groups
         ]
@@ -678,6 +681,7 @@ class TestOSUserEndpoints:
         """If set_roles raises a DB error, the OS user should be deleted."""
         pw = _make_pw(name="dbfail", uid=1060)
         mock_pwd.getpwnam.side_effect = [
+            KeyError("no such user"),  # router-level user_exists
             KeyError("no such user"),  # user_exists (create_user)
             pw,                        # final lookup (create_user)
             pw,                        # _get_user_groups (create_user)
@@ -709,16 +713,107 @@ class TestOSUserEndpoints:
         ]
         assert len(del_calls) == 1
 
-    @patch("app.services.os_user_service.grp")
-    @patch("app.services.os_user_service.pwd")
-    def test_create_user_already_exists(self, mock_pwd, mock_grp, admin_client):
-        mock_pwd.getpwnam.return_value = _make_pw()
-        mock_grp.getgrnam.return_value = _make_grp(name="ecube-admins")
-        resp = admin_client.post("/admin/os-users", json={
-            "username": "testuser",
-            "password": "pass",
-            "roles": ["admin"],
-        })
+    def test_create_user_existing_os_user_requires_confirmation(self, admin_client, db):
+        provider = MagicMock()
+        provider.user_exists.return_value = True
+
+        with patch("app.routers.admin._get_provider", return_value=provider):
+            resp = admin_client.post("/admin/os-users", json={
+                "username": "testuser",
+                "roles": ["admin"],
+            })
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "confirmation_required"
+        assert body["username"] == "testuser"
+
+        audit = (
+            db.query(AuditLog)
+            .filter(AuditLog.action == "OS_USER_CREATE_CONFIRMATION_REQUIRED")
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+        assert audit is not None
+        assert audit.user == "admin-user"
+        assert (audit.details or {}).get("target_user") == "testuser"
+
+    def test_create_user_existing_os_user_cancel_records_audit(self, admin_client, db):
+        provider = MagicMock()
+        provider.user_exists.return_value = True
+
+        with patch("app.routers.admin._get_provider", return_value=provider):
+            resp = admin_client.post("/admin/os-users", json={
+                "username": "testuser",
+                "roles": ["admin"],
+                "confirm_existing_os_user": False,
+            })
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "canceled"
+
+        repo = UserRoleRepository(db)
+        assert repo.get_roles("testuser") == []
+
+        audit = (
+            db.query(AuditLog)
+            .filter(AuditLog.action == "OS_USER_CREATE_CANCELED")
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+        assert audit is not None
+        assert (audit.details or {}).get("target_user") == "testuser"
+
+    def test_create_user_existing_os_user_confirm_syncs_roles(self, admin_client, db):
+        provider = MagicMock()
+        provider.user_exists.return_value = True
+        provider.add_user_to_groups.return_value = OSUser(
+            username="testuser",
+            uid=1001,
+            gid=1001,
+            home="/home/testuser",
+            shell="/bin/bash",
+            groups=["ecube-admins", "testuser"],
+        )
+
+        with patch("app.routers.admin._get_provider", return_value=provider):
+            resp = admin_client.post("/admin/os-users", json={
+                "username": "testuser",
+                "roles": ["admin"],
+                "confirm_existing_os_user": True,
+            })
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "synced_existing_user"
+        assert body["user"]["username"] == "testuser"
+
+        repo = UserRoleRepository(db)
+        assert repo.get_roles("testuser") == ["admin"]
+
+        audit = (
+            db.query(AuditLog)
+            .filter(AuditLog.action == "OS_USER_SYNCED_EXISTING")
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+        assert audit is not None
+        assert (audit.details or {}).get("target_user") == "testuser"
+
+    def test_create_user_existing_ecube_user_conflict(self, admin_client, db):
+        provider = MagicMock()
+        provider.user_exists.return_value = True
+
+        db.add(UserRole(username="testuser", role="admin"))
+        db.commit()
+
+        with patch("app.routers.admin._get_provider", return_value=provider):
+            resp = admin_client.post("/admin/os-users", json={
+                "username": "testuser",
+                "roles": ["admin"],
+            })
+
         assert resp.status_code == 409
 
     def test_create_user_invalid_username(self, admin_client):
@@ -1511,7 +1606,8 @@ class TestOSUserAuditLogging:
     def test_create_user_audit(self, mock_pwd, mock_grp, mock_subprocess, admin_client, db):
         pw = _make_pw(name="audituser", uid=1060)
         mock_pwd.getpwnam.side_effect = [
-            KeyError("no such user"),  # user_exists
+            KeyError("no such user"),  # router-level user_exists
+            KeyError("no such user"),  # service-level user_exists
             pw,                        # final lookup
             pw,                        # _get_user_groups
         ]
