@@ -138,6 +138,8 @@ async function submitCreateOsUser(confirmExistingOsUser = null) {
         username: payload.username,
         roles: payload.roles,
       }
+      // Hide the create form so the confirmation prompt is always visible.
+      createUserDialog.value = false
       existingUserConfirmDialog.value = true
       return
     }
