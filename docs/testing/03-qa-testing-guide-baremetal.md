@@ -4,7 +4,7 @@
 |---|---|
 | Title | QA Testing Guide (Bare-Metal Linux) |
 | Purpose | Guides QA personnel through setting up a bare-metal Linux environment and running ECUBE with physical hardware for hands-on testing. |
-| Updated on | 04/08/26 |
+| Updated on | 04/09/26 |
 | Audience | QA personnel. |
 
 ## Table of Contents
@@ -628,7 +628,7 @@ curl -sk -X DELETE https://localhost:8443/users/qa-processor/roles \
 
 ### 11.8 OS User & Group Management (Admin Only, Local Mode)
 
-These endpoints manage OS-level user and group accounts. They require the `admin` role and are only available when `role_resolver = "local"` (returns `404` otherwise). Group names must start with the `ecube-` prefix. Creating a user requires at least one `ecube-*` group, and all other mutative user operations require the target user to be a member of at least one `ecube-*` group.
+These endpoints manage OS-level user and group accounts. They require the `admin` role and are only available when `role_resolver = "local"` (returns `404` otherwise). Group names must start with the `ecube-` prefix. Creating a user requires at least one role that maps to an `ecube-*` group, and mutative user operations require the target user to be ECUBE-managed.
 
 ```bash
 # Create an OS group
@@ -652,7 +652,38 @@ curl -sk -X POST https://localhost:8443/admin/os-users \
     "roles": ["processor"]
   }' | jq
 
-# List OS users (filtered to ecube-* group members; reserved accounts excluded)
+# Existing-user decision flow (no password): request confirmation
+curl -sk -X POST https://localhost:8443/admin/os-users \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "qa-existing",
+    "roles": ["processor"]
+  }' | jq
+
+# Confirm linking an existing OS/directory user into ECUBE roles
+curl -sk -X POST https://localhost:8443/admin/os-users \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "qa-existing",
+    "roles": ["processor"],
+    "confirm_existing_os_user": true
+  }' | jq
+
+# Cancel the existing-user create request (records cancellation audit event)
+curl -sk -X POST https://localhost:8443/admin/os-users \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "qa-existing",
+    "roles": ["processor"],
+    "confirm_existing_os_user": false
+  }' | jq
+
+# List OS users relevant to ECUBE user management
+# Includes users in ecube-* groups and users with DB role assignments.
+# Reserved accounts are excluded.
 curl -sk https://localhost:8443/admin/os-users \
   -H "Authorization: Bearer $TOKEN" | jq
 
@@ -1047,32 +1078,54 @@ All OS user and group management endpoints require the `admin` role and are only
 | 3 | List groups | `GET /admin/os-groups` | 200, only `ecube-*` groups listed |
 | 4 | Delete group | `DELETE /admin/os-groups/ecube-testers` | 200 |
 | 5 | Delete group without prefix | `DELETE /admin/os-groups/somegroup` | 422, group name must start with `ecube-` |
-| 6 | Create user | `POST /admin/os-users` with username, password, roles | 201, returns username, uid, gid, home, shell, groups |
-| 7 | Create user — duplicate | `POST /admin/os-users` with existing username | 409, Conflict |
-| 8 | Create user — reserved name | `POST /admin/os-users` with `{"username": "root", ...}` | 422, reserved username |
-| 9 | Create user — empty password | `POST /admin/os-users` with `{"password": "", ...}` | 422 |
-| 10 | Create user — password with newline | `POST /admin/os-users` with password containing `\n` | 422, unsafe characters |
-| 11 | Create user — password with colon | `POST /admin/os-users` with password containing `:` | 422, unsafe characters |
-| 12 | Create user — invalid group | `POST /admin/os-users` with non-existent group in groups list | 422, group does not exist |
-| 13 | Create user — no roles | `POST /admin/os-users` with empty/omitted roles | 422, at least one role required |
-| 14 | List users | `GET /admin/os-users` | 200, only users in `ecube-*` groups listed |
-| 15 | Reset password | `PUT /admin/os-users/{username}/password` with `{"password": "NewPass!"}` | 200 |
-| 16 | Reset password — non-ECUBE user | `PUT /admin/os-users/postgres/password` | 422, user is not ECUBE-managed |
-| 17 | Replace groups | `PUT /admin/os-users/{username}/groups` with `{"groups": ["ecube-admins"]}` | 200, updated group list; non-`ecube-*` groups preserved |
-| 18 | Replace groups — empty list | `PUT /admin/os-users/{username}/groups` with `{"groups": []}` | 422, at least one `ecube-*` group required |
-| 19 | Replace groups — non-ecube name | `PUT /admin/os-users/{username}/groups` with `{"groups": ["docker"]}` | 422, group does not start with `ecube-` |
-| 20 | Append groups | `POST /admin/os-users/{username}/groups` with `{"groups": ["ecube-managers"]}` | 200, updated group list |
-| 21 | Modify groups — non-ECUBE user | `PUT /admin/os-users/www-data/groups` | 422, user is not ECUBE-managed |
-| 22 | Delete user | `DELETE /admin/os-users/{username}` | 200, user and DB roles removed |
-| 23 | Delete user — non-ECUBE user | `DELETE /admin/os-users/daemon` | 422, user is not ECUBE-managed |
-| 24 | Delete user — not found | `DELETE /admin/os-users/nonexistent` | 404 |
-| 25 | Processor cannot access OS endpoints | `GET /admin/os-users` with processor token | 403, FORBIDDEN |
-| 26 | Non-local mode returns 404 | All `/admin/os-*` endpoints when `role_resolver != "local"` | 404, Not Found |
-| 27 | OS_USER_CREATED audit log | `GET /audit?action=OS_USER_CREATED` after creating user | Audit entry with actor and username |
-| 28 | OS_USER_DELETED audit log | `GET /audit?action=OS_USER_DELETED` after deleting user | Audit entry with actor and username |
-| 29 | OS_PASSWORD_RESET audit log | `GET /audit?action=OS_PASSWORD_RESET` after resetting password | Audit entry (no password in details) |
-| 30 | OS_GROUP_CREATED audit log | `GET /audit?action=OS_GROUP_CREATED` after creating group | Audit entry with group name |
-| 31 | OS_GROUP_DELETED audit log | `GET /audit?action=OS_GROUP_DELETED` after deleting group | Audit entry with group name |
+| 6 | Create new user | `POST /admin/os-users` with username, password, roles | 201, returns username, uid, gid, home, shell, groups |
+| 7 | Create user — existing ECUBE mapping | `POST /admin/os-users` with username that already has DB roles | 409, Conflict |
+| 8 | Create user — existing OS/directory account (step 1) | `POST /admin/os-users` with username+roles and no `confirm_existing_os_user` | 200, `status: "confirmation_required"` |
+| 9 | Create user — existing OS/directory account (confirm) | `POST /admin/os-users` with `confirm_existing_os_user: true` | 200, `status: "synced_existing_user"` |
+| 10 | Create user — existing OS/directory account (cancel) | `POST /admin/os-users` with `confirm_existing_os_user: false` | 200, `status: "canceled"` |
+| 11 | Create user — reserved name | `POST /admin/os-users` with `{"username": "root", ...}` | 422, reserved username |
+| 12 | Create user — empty password (new user path) | `POST /admin/os-users` with `{"password": "", ...}` | 422 |
+| 13 | Create user — password with newline | `POST /admin/os-users` with password containing `\n` | 422, unsafe characters |
+| 14 | Create user — password with colon | `POST /admin/os-users` with password containing `:` | 422, unsafe characters |
+| 15 | Create user — invalid group | `POST /admin/os-users` with non-existent group in groups list | 422, group does not exist |
+| 16 | Create user — no roles | `POST /admin/os-users` with empty/omitted roles | 422, at least one role required |
+| 17 | List users | `GET /admin/os-users` | 200, includes users in `ecube-*` groups and users with DB role assignments |
+| 18 | List users — directory-backed role-only account | Assign DB roles for a directory user that is not in OS enumeration, then `GET /admin/os-users` | 200, user appears with placeholder host fields (`uid=-1`, `gid=-1`) |
+| 19 | Reset password | `PUT /admin/os-users/{username}/password` with `{"password": "NewPass!"}` | 200 |
+| 20 | Reset password — non-ECUBE user | `PUT /admin/os-users/postgres/password` | 422, user is not ECUBE-managed |
+| 21 | Replace groups | `PUT /admin/os-users/{username}/groups` with `{"groups": ["ecube-admins"]}` | 200, updated group list; non-`ecube-*` groups preserved |
+| 22 | Replace groups — empty list | `PUT /admin/os-users/{username}/groups` with `{"groups": []}` | 422, at least one `ecube-*` group required |
+| 23 | Replace groups — non-ecube name | `PUT /admin/os-users/{username}/groups` with `{"groups": ["docker"]}` | 422, group does not start with `ecube-` |
+| 24 | Append groups | `POST /admin/os-users/{username}/groups` with `{"groups": ["ecube-managers"]}` | 200, updated group list |
+| 25 | Modify groups — non-ECUBE user | `PUT /admin/os-users/www-data/groups` | 422, user is not ECUBE-managed |
+| 26 | Delete user | `DELETE /admin/os-users/{username}` | 200, user and DB roles removed |
+| 27 | Delete user — non-ECUBE user | `DELETE /admin/os-users/daemon` | 422, user is not ECUBE-managed |
+| 28 | Delete user — not found | `DELETE /admin/os-users/nonexistent` | 404 |
+| 29 | Processor cannot access OS endpoints | `GET /admin/os-users` with processor token | 403, FORBIDDEN |
+| 30 | Non-local mode returns 404 | All `/admin/os-*` endpoints when `role_resolver != "local"` | 404, Not Found |
+| 31 | OS_USER_CREATED audit log | `GET /audit?action=OS_USER_CREATED` after creating user | Audit entry with actor and username |
+| 32 | OS_USER_CREATE_CONFIRMATION_REQUIRED audit log | `GET /audit?action=OS_USER_CREATE_CONFIRMATION_REQUIRED` after existing-user step 1 | Audit entry with actor and target username |
+| 33 | OS_USER_CREATE_CANCELED audit log | `GET /audit?action=OS_USER_CREATE_CANCELED` after cancel path | Audit entry with actor and target username |
+| 34 | OS_USER_SYNCED_EXISTING audit log | `GET /audit?action=OS_USER_SYNCED_EXISTING` after confirm path | Audit entry with actor and target username |
+| 35 | OS_USER_DELETED audit log | `GET /audit?action=OS_USER_DELETED` after deleting user | Audit entry with actor and username |
+| 36 | OS_PASSWORD_RESET audit log | `GET /audit?action=OS_PASSWORD_RESET` after resetting password | Audit entry (no password in details) |
+| 37 | OS_GROUP_CREATED audit log | `GET /audit?action=OS_GROUP_CREATED` after creating group | Audit entry with group name |
+| 38 | OS_GROUP_DELETED audit log | `GET /audit?action=OS_GROUP_DELETED` after deleting group | Audit entry with group name |
+
+### 12.9.1 UI Validation Checklist — Create User Modal Flow
+
+Use this checklist to validate frontend behavior in the `Users` page for manual QA runs.
+
+| # | UI Check | Steps | Expected |
+|---|----------|-------|----------|
+| 1 | Existing user shows confirmation prompt | In `Users` -> `Create User`, enter username that exists in OS/directory, select roles, click `Create` | Create dialog closes and existing-user confirmation dialog appears |
+| 2 | Existing user confirm path | From confirmation dialog click confirm (`Add to ECUBE`) | Confirmation dialog closes, user is linked to ECUBE roles, no password dialog appears |
+| 3 | Existing user cancel path | From confirmation dialog click `Cancel` | Dialog closes, returns to Users page (no create dialog reopened) |
+| 4 | New user opens password dialog | In `Create User`, enter brand-new username + roles and click `Create` | Password dialog appears (with password + confirm-password fields) |
+| 5 | Password mismatch validation | In password dialog enter different values in password and confirm fields | Inline mismatch message appears and submit remains disabled |
+| 6 | Show/hide password toggle | In password dialog click show/hide control | Password field visibility toggles between masked and plain text |
+| 7 | New user completion | Enter matching password/confirm values and submit | Dialog closes and newly created user appears in Users list with expected roles |
+| 8 | Directory-backed visibility | Link a directory-backed user with DB roles and refresh Users page | User is visible in list even if host-level fields are placeholders |
 
 ### 12.10 Admin Log Viewing API
 

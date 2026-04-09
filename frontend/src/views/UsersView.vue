@@ -29,12 +29,25 @@ const pageSize = ref(10)
 
 const createUserDialog = ref(false)
 const existingUserConfirmDialog = ref(false)
+const passwordDialog = ref(false)
 const createUserForm = ref({
   username: '',
-  password: '',
   roles: ['processor'],
 })
+const setPasswordForm = ref({
+  password: '',
+  confirmPassword: '',
+})
+const showPassword = ref(false)
 const pendingExistingUserPayload = ref(null)
+const pendingUsernameForPassword = ref(null)
+const pendingCreateUserPayload = ref(null)
+
+function isPasswordRequiredForNewUserError(err) {
+  const detail = err?.response?.data?.detail
+  if (typeof detail !== 'string') return false
+  return detail.toLowerCase().includes('password is required when creating a new os user')
+}
 
 const userColumns = computed(() => [
   { key: 'username', label: t('auth.username') },
@@ -121,12 +134,11 @@ async function saveRoles(user) {
 async function submitCreateOsUser(confirmExistingOsUser = null) {
   saving.value = true
   error.value = ''
+  const payload = {
+    username: createUserForm.value.username.trim(),
+    roles: normalizeRoleSelection(createUserForm.value.roles),
+  }
   try {
-    const payload = {
-      username: createUserForm.value.username.trim(),
-      password: createUserForm.value.password || undefined,
-      roles: normalizeRoleSelection(createUserForm.value.roles),
-    }
     if (confirmExistingOsUser !== null) {
       payload.confirm_existing_os_user = confirmExistingOsUser
     }
@@ -138,6 +150,7 @@ async function submitCreateOsUser(confirmExistingOsUser = null) {
         username: payload.username,
         roles: payload.roles,
       }
+      pendingCreateUserPayload.value = null
       // Hide the create form so the confirmation prompt is always visible.
       createUserDialog.value = false
       existingUserConfirmDialog.value = true
@@ -146,15 +159,50 @@ async function submitCreateOsUser(confirmExistingOsUser = null) {
 
     if (result?.status === 'canceled') {
       existingUserConfirmDialog.value = false
+      pendingCreateUserPayload.value = null
+      return
+    }
+
+    // Existing OS users already have a password; no prompt needed after linking.
+    if (result?.status === 'synced_existing_user') {
+      existingUserConfirmDialog.value = false
+      pendingExistingUserPayload.value = null
+      pendingUsernameForPassword.value = null
+      pendingCreateUserPayload.value = null
+      passwordDialog.value = false
+      createUserDialog.value = false
+      createUserForm.value = { username: '', roles: ['processor'] }
+      setPasswordForm.value = { password: '', confirmPassword: '' }
+      showPassword.value = false
+      await loadAll()
       return
     }
 
     existingUserConfirmDialog.value = false
     pendingExistingUserPayload.value = null
+    pendingCreateUserPayload.value = null
+    // Show password dialog instead of closing
+    pendingUsernameForPassword.value = payload.username
+    existingUserConfirmDialog.value = false
     createUserDialog.value = false
-    createUserForm.value = { username: '', password: '', roles: ['processor'] }
-    await loadAll()
-  } catch {
+    passwordDialog.value = true
+    setPasswordForm.value = { password: '', confirmPassword: '' }
+    showPassword.value = false
+  } catch (err) {
+    if (confirmExistingOsUser === null && isPasswordRequiredForNewUserError(err)) {
+      pendingCreateUserPayload.value = {
+        username: payload.username,
+        roles: payload.roles,
+      }
+      pendingUsernameForPassword.value = payload.username
+      existingUserConfirmDialog.value = false
+      createUserDialog.value = false
+      passwordDialog.value = true
+      setPasswordForm.value = { password: '', confirmPassword: '' }
+      showPassword.value = false
+      error.value = ''
+      return
+    }
     error.value = t('common.errors.validationFailed')
   } finally {
     saving.value = false
@@ -186,6 +234,56 @@ async function cancelExistingOsUserSync() {
     existingUserConfirmDialog.value = false
     pendingExistingUserPayload.value = null
   }
+}
+
+async function submitSetPassword() {
+  if (!pendingUsernameForPassword.value) return
+  if (setPasswordForm.value.password !== setPasswordForm.value.confirmPassword) {
+    error.value = t('users.passwordMismatch')
+    return
+  }
+  if (!setPasswordForm.value.password) {
+    error.value = t('users.passwordRequired')
+    return
+  }
+
+  saving.value = true
+  error.value = ''
+  try {
+    if (pendingCreateUserPayload.value) {
+      await createOsUser({
+        username: pendingCreateUserPayload.value.username,
+        roles: pendingCreateUserPayload.value.roles,
+        password: setPasswordForm.value.password,
+      })
+    } else {
+      await resetOsUserPassword(pendingUsernameForPassword.value, {
+        password: setPasswordForm.value.password,
+      })
+    }
+    pendingUsernameForPassword.value = null
+    pendingExistingUserPayload.value = null
+    pendingCreateUserPayload.value = null
+    passwordDialog.value = false
+    createUserForm.value = { username: '', roles: ['processor'] }
+    setPasswordForm.value = { password: '', confirmPassword: '' }
+    showPassword.value = false
+    await loadAll()
+  } catch {
+    error.value = t('common.errors.requestConflict')
+  } finally {
+    saving.value = false
+  }
+}
+
+function cancelPasswordDialog() {
+  pendingUsernameForPassword.value = null
+  pendingExistingUserPayload.value = null
+  pendingCreateUserPayload.value = null
+  passwordDialog.value = false
+  createUserForm.value = { username: '', roles: ['processor'] }
+  setPasswordForm.value = { password: '', confirmPassword: '' }
+  showPassword.value = false
 }
 
 async function submitResetPassword(username) {
@@ -273,8 +371,6 @@ onMounted(loadAll)
           <h2>{{ t('users.createOsUser') }}</h2>
           <label for="create-user-username">{{ t('auth.username') }}</label>
           <input id="create-user-username" v-model="createUserForm.username" type="text" />
-          <label for="create-user-password">{{ t('auth.password') }}</label>
-          <input id="create-user-password" v-model="createUserForm.password" type="password" autocomplete="new-password" />
           <span id="create-user-roles-label">{{ t('users.roles') }}</span>
           <div class="role-grid" role="group" :aria-labelledby="'create-user-roles-label'">
             <label v-for="role in roles" :key="`new-${role}`">
@@ -286,6 +382,51 @@ onMounted(loadAll)
           <div class="dialog-actions">
             <button class="btn" @click="createUserDialog = false">{{ t('common.actions.cancel') }}</button>
             <button class="btn btn-primary" :disabled="saving" @click="submitCreateOsUser()">{{ t('common.actions.create') }}</button>
+          </div>
+        </div>
+      </div>
+      <div v-if="passwordDialog" class="dialog-overlay" @click.self="cancelPasswordDialog">
+        <div class="dialog-panel" role="dialog" aria-modal="true">
+          <h2>{{ t('users.setPassword') }}</h2>
+          
+          <label for="set-password-field">{{ t('auth.password') }}</label>
+          <div class="password-input-group">
+            <input
+              id="set-password-field"
+              v-model="setPasswordForm.password"
+              :type="showPassword ? 'text' : 'password'"
+              autocomplete="new-password"
+            />
+            <button
+              class="btn btn-icon"
+              :title="showPassword ? t('users.hidePassword') : t('users.showPassword')"
+              @click="showPassword = !showPassword"
+            >
+              {{ showPassword ? '🔒' : '👁️' }}
+            </button>
+          </div>
+
+          <label for="confirm-password-field">{{ t('users.confirmPassword') }}</label>
+          <input
+            id="confirm-password-field"
+            v-model="setPasswordForm.confirmPassword"
+            :type="showPassword ? 'text' : 'password'"
+            autocomplete="new-password"
+          />
+
+          <div v-if="setPasswordForm.password && setPasswordForm.confirmPassword && setPasswordForm.password !== setPasswordForm.confirmPassword" class="error-message">
+            {{ t('users.passwordMismatch') }}
+          </div>
+
+          <div class="dialog-actions">
+            <button class="btn" @click="cancelPasswordDialog" :disabled="saving">{{ t('common.actions.cancel') }}</button>
+            <button
+              class="btn btn-primary"
+              :disabled="saving || !setPasswordForm.password || setPasswordForm.password !== setPasswordForm.confirmPassword"
+              @click="submitSetPassword"
+            >
+              {{ t('users.setPassword') }}
+            </button>
           </div>
         </div>
       </div>
@@ -381,5 +522,38 @@ input {
 .dialog-actions {
   justify-content: flex-end;
   margin-top: var(--space-sm);
+
+.password-input-group {
+  display: flex;
+  gap: var(--space-xs);
+  align-items: center;
+}
+
+.password-input-group input {
+  flex: 1;
+}
+
+.btn-icon {
+  padding: var(--space-xs) var(--space-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+}
+
+.btn-icon:hover {
+  background: var(--color-bg-tertiary);
+}
+
+.error-message {
+  color: var(--color-alert-danger-text);
+  background: var(--color-alert-danger-bg);
+  border: 1px solid var(--color-alert-danger-border);
+  border-radius: var(--border-radius);
+  padding: var(--space-xs) var(--space-sm);
+  font-size: 0.875rem;
+}
 }
 </style>

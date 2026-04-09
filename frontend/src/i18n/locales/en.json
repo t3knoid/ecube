@@ -168,7 +168,13 @@
     "loadUsersError": "Failed to load user list.",
     "existingOsUserConfirmTitle": "Use Existing OS User?",
     "existingOsUserConfirmMessage": "User already exists on this system. Do you want to add this existing OS user to ECUBE?",
-    "existingOsUserConfirmAction": "Add to ECUBE"
+    "existingOsUserConfirmAction": "Add to ECUBE",
+    "setPassword": "Set Password",
+    "confirmPassword": "Confirm Password",
+    "passwordMismatch": "Passwords do not match",
+    "passwordRequired": "Password is required",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password"
   },
   "system": {
     "title": "System",
