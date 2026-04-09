@@ -23,12 +23,13 @@ Security considerations
 import logging
 import os
 import re
+import stat
 from datetime import datetime, timezone
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, get_current_user, require_roles
@@ -561,7 +562,7 @@ def view_log_lines(
     "/logs/{filename}",
     responses={
         200: {"content": {"text/plain": {}}, "description": "Log file contents"},
-        **R_400, **R_401, **R_403, **R_404, **R_422,
+        **R_400, **R_401, **R_403, **R_404, **R_422, **R_503,
     },
 )
 def download_log_file(
@@ -601,8 +602,27 @@ def download_log_file(
         raise HTTPException(status_code=404, detail="Log file not found")
 
     full_path = os.path.join(log_dir, safe)
-    if not os.path.isfile(full_path):
+    try:
+        file_stat = os.stat(full_path)
+    except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Log file not found")
+    except PermissionError:
+        raise HTTPException(status_code=503, detail="Log file is unavailable due to file permissions")
+    except OSError:
+        raise HTTPException(status_code=503, detail="Log file is unavailable")
+
+    if not stat.S_ISREG(file_stat.st_mode):
+        raise HTTPException(status_code=404, detail="Log file not found")
+
+    try:
+        with open(full_path, "rb") as log_file:
+            content = log_file.read()
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Log file not found")
+    except PermissionError:
+        raise HTTPException(status_code=503, detail="Log file is unavailable due to file permissions")
+    except OSError:
+        raise HTTPException(status_code=503, detail="Log file is unavailable")
 
     # Record access in audit trail.
     try:
@@ -615,10 +635,10 @@ def download_log_file(
     except Exception:
         logger.exception("Failed to record log file download in audit trail")
 
-    return FileResponse(
-        path=full_path,
-        filename=safe,
+    return Response(
+        content=content,
         media_type="text/plain",
+        headers={"Content-Disposition": f'attachment; filename="{safe}"'},
     )
 
 
