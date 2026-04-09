@@ -851,30 +851,62 @@ def create_os_user(
 @_os_router.get("/os-users", response_model=OSUserListResponse, responses={**R_401, **R_403, **R_404})
 def list_os_users(
     search: str | None = Query(default=None, description="Optional case-insensitive username filter."),
+    db: Session = Depends(get_db),
     _current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSUserListResponse:
-    """List OS users filtered to ECUBE-relevant groups.
+    """List OS users relevant to ECUBE user management.
 
     When ``search`` is provided, results are filtered by case-insensitive
     username match after reserved system/service accounts have already been
-    excluded by the provider.
+    excluded by the provider. Users are included when they either belong to
+    an ``ecube-*`` OS group or have DB role assignments in ``user_roles``.
     """
-    users = _get_provider().list_users(ecube_only=True)
+    provider = _get_provider()
+    users = provider.list_users(ecube_only=False)
+    repo = UserRoleRepository(db)
+    role_assigned_usernames = {row["username"] for row in repo.list_users()}
+
+    users_by_username = {u.username: u for u in users}
+    visible_users: list[OSUserResponse] = []
+
+    for u in users:
+        if any(g.startswith("ecube-") for g in u.groups) or u.username in role_assigned_usernames:
+            visible_users.append(
+                OSUserResponse(
+                    username=u.username,
+                    uid=u.uid,
+                    gid=u.gid,
+                    home=u.home,
+                    shell=u.shell,
+                    groups=u.groups,
+                )
+            )
+
+    # Some directory-backed users (for example AD) can resolve through user_exists
+    # but not appear in list_users() enumeration. Include them when they already
+    # have ECUBE DB role assignments so admins can see and manage them.
+    for username in sorted(role_assigned_usernames):
+        if username in users_by_username:
+            continue
+        if provider.user_exists(username):
+            visible_users.append(
+                OSUserResponse(
+                    username=username,
+                    uid=-1,
+                    gid=-1,
+                    home="",
+                    shell="",
+                    groups=[],
+                )
+            )
+
     if search is not None:
         query = search.strip().lower()
-        users = [u for u in users if query in u.username.lower()]
+        visible_users = [u for u in visible_users if query in u.username.lower()]
+
+    visible_users.sort(key=lambda u: u.username)
     return OSUserListResponse(
-        users=[
-            OSUserResponse(
-                username=u.username,
-                uid=u.uid,
-                gid=u.gid,
-                home=u.home,
-                shell=u.shell,
-                groups=u.groups,
-            )
-            for u in users
-        ]
+        users=visible_users
     )
 
 
