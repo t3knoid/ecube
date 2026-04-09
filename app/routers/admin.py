@@ -187,7 +187,7 @@ def _tail_lines(path: str, max_lines: int) -> Tuple[List[str], bool]:
         handle.seek(0, os.SEEK_END)
         position = handle.tell()
         block_size = 8192
-        buffer = b""
+        chunks: List[bytes] = []
         newline_count = 0
 
         while position > 0 and newline_count <= max_lines:
@@ -196,7 +196,9 @@ def _tail_lines(path: str, max_lines: int) -> Tuple[List[str], bool]:
             handle.seek(position, os.SEEK_SET)
             chunk = handle.read(chunk_size)
             newline_count += chunk.count(b"\n")
-            buffer = chunk + buffer
+            chunks.append(chunk)
+
+    buffer = b"".join(reversed(chunks))
 
     lines = [line.decode("utf-8", errors="replace") for line in buffer.splitlines()]
     has_more = len(lines) > max_lines
