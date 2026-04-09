@@ -657,7 +657,7 @@ The **Logs** tab allows administrators to view recent application log lines in r
 
 1. Enter a search term in the **Search** field.
 2. Only log lines containing your search term will be displayed.
-3. The search is case-sensitive.
+3. The search is case-insensitive.
 4. Click **Refresh** to rerun the search with fresh log data.
 
 #### Pagination
