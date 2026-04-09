@@ -8,15 +8,25 @@ import {
   getSystemMounts,
   getJobDebug,
 } from '@/api/introspection.js'
-import { downloadLogFile, getLogFiles } from '@/api/admin.js'
+import { downloadLogFile, getLogFiles, getLogLines } from '@/api/admin.js'
 import { listJobs } from '@/api/jobs.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import { useAuthStore } from '@/stores/auth.js'
 
 const { t } = useI18n()
+const authStore = useAuthStore()
 
-const tabs = ['health', 'usb', 'block', 'mounts', 'logs', 'job-debug']
+const canViewLogs = computed(() => authStore.hasRole('admin'))
+const tabs = computed(() => {
+  const items = ['health', 'usb', 'block', 'mounts']
+  if (canViewLogs.value) {
+    items.push('logs')
+  }
+  items.push('job-debug')
+  return items
+})
 const activeTab = ref('health')
 const loading = ref(false)
 const error = ref('')
@@ -27,6 +37,8 @@ const blockDevices = ref([])
 const mounts = ref([])
 const logs = ref([])
 const downloadingLogName = ref('')
+const logViewer = ref({ source: 'app', search: '', limit: 200, offset: 0, reverse: false })
+const logView = ref(null)
 const jobDebug = ref(null)
 const jobDebugId = ref('')
 const jobs = ref([])
@@ -151,12 +163,24 @@ async function loadTabData() {
       const response = await getSystemMounts()
       mounts.value = response.mounts || []
     } else if (activeTab.value === 'logs') {
-      const response = await getLogFiles()
-      logs.value = response.log_files || []
+      const [filesResponse, linesResponse] = await Promise.all([
+        getLogFiles(),
+        getLogLines({
+          source: logViewer.value.source,
+          search: logViewer.value.search || undefined,
+          limit: logViewer.value.limit,
+          offset: logViewer.value.offset,
+          reverse: logViewer.value.reverse,
+        }),
+      ])
+      logs.value = filesResponse.log_files || []
+      logView.value = linesResponse
     }
   } catch (err) {
     const status = err?.response?.status
-    if (activeTab.value === 'logs' && status === 404) {
+    if (activeTab.value === 'logs' && status === 403) {
+      error.value = t('auth.insufficientPermissions')
+    } else if (activeTab.value === 'logs' && status === 404) {
       error.value = t('system.logsNotConfigured')
     } else {
       error.value = extractApiMessage(err) || t('common.errors.requestConflict')
@@ -236,6 +260,11 @@ async function downloadLog(row) {
   }
 }
 
+async function refreshLogViewer() {
+  if (activeTab.value !== 'logs') return
+  await loadTabData()
+}
+
 watch(activeTab, async () => {
   page.value = 1
   error.value = ''
@@ -243,6 +272,12 @@ watch(activeTab, async () => {
     await loadJobOptions()
   } else {
     await loadTabData()
+  }
+})
+
+watch(canViewLogs, (isAdmin) => {
+  if (!isAdmin && activeTab.value === 'logs') {
+    activeTab.value = 'health'
   }
 })
 
@@ -320,6 +355,43 @@ onMounted(loadTabData)
       </DataTable>
     </article>
 
+    <article v-else-if="activeTab === 'logs'" class="panel">
+      <div class="log-controls">
+        <label for="log-source">{{ t('system.logSource') }}</label>
+        <select id="log-source" v-model="logViewer.source" class="job-picker">
+          <option value="app">app.log</option>
+        </select>
+        <label for="log-search">{{ t('system.logSearch') }}</label>
+        <input
+          id="log-search"
+          v-model="logViewer.search"
+          type="text"
+          :placeholder="t('system.logSearchPlaceholder')"
+          @keyup.enter="refreshLogViewer"
+        />
+        <button class="btn" @click="refreshLogViewer">{{ t('common.actions.refresh') }}</button>
+      </div>
+
+      <div class="log-meta">
+        <span>{{ t('system.logSourcePath') }}: <strong>{{ logView?.source?.path || '-' }}</strong></span>
+        <span>{{ t('system.logFetchedAt') }}: <strong>{{ asLocalDate(logView?.fetched_at) }}</strong></span>
+        <span>{{ t('system.logFileModifiedAt') }}: <strong>{{ asLocalDate(logView?.file_modified_at) }}</strong></span>
+      </div>
+
+      <pre class="log-viewer">{{ (logView?.lines || []).map((line) => line.content).join('\n') || t('system.logViewerEmpty') }}</pre>
+
+      <DataTable :columns="tabColumns" :rows="pagedRows" :empty-text="t('system.empty')">
+        <template #cell-size="{ row }">{{ formatBytes(row.size) }}</template>
+        <template #cell-modified="{ row }">{{ asLocalDate(row.modified) }}</template>
+        <template #cell-download="{ row }">
+          <button class="btn" :disabled="downloadingLogName === row.name" @click="downloadLog(row)">
+            {{ t('system.download') }}
+          </button>
+        </template>
+      </DataTable>
+      <Pagination v-model:page="page" :page-size="pageSize" :total="tabRows.length" />
+    </article>
+
     <article v-else class="panel">
       <DataTable :columns="tabColumns" :rows="pagedRows" :empty-text="t('system.empty')">
         <template #cell-size="{ row }">{{ formatBytes(row.size) }}</template>
@@ -356,6 +428,34 @@ onMounted(loadTabData)
 .tabs,
 .job-debug-form {
   flex-wrap: wrap;
+}
+
+.log-controls {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.log-meta {
+  display: grid;
+  gap: var(--space-xs);
+  color: var(--color-text-secondary);
+}
+
+.log-viewer {
+  margin: 0;
+  min-height: 220px;
+  max-height: 420px;
+  overflow: auto;
+  padding: var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg-input);
+  color: var(--color-text-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 0.85rem;
+  line-height: 1.4;
 }
 
 .job-picker-label {
