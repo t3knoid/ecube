@@ -447,6 +447,117 @@ def view_log_lines(
 
 
 @router.get(
+    "/logs/view",
+    response_model=LogViewResponse,
+    responses={**R_401, **R_403, **R_404, **R_422, **R_503},
+)
+def view_log_lines(
+    request: Request,
+    source: str = Query("app", min_length=1, max_length=32),
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0, le=100000),
+    search: Optional[str] = Query(None, max_length=256),
+    reverse: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Return recent, redacted log lines from an allowlisted source.
+
+    Access is restricted to users with the ``admin`` role.
+    """
+    if "admin" not in current_user.roles:
+        best_effort_audit(
+            db,
+            action="LOG_LINES_VIEW_DENIED",
+            user=current_user.username,
+            details={"source": source, "reason": "admin_role_required"},
+            client_ip=get_client_ip(request),
+        )
+        raise HTTPException(status_code=403, detail="This action requires the admin role")
+
+    try:
+        source_info = _resolve_log_source(source)
+    except HTTPException as exc:
+        if exc.status_code == 404:
+            detail_text = str(exc.detail).lower()
+            reason = "unknown_log_source"
+            if "not configured" in detail_text or "unavailable" in detail_text:
+                reason = "log_source_unavailable"
+
+            best_effort_audit(
+                db,
+                action="LOG_LINES_VIEW_DENIED",
+                user=current_user.username,
+                details={"source": source, "reason": reason},
+                client_ip=get_client_ip(request),
+            )
+        raise
+
+    max_matching_lines = limit + offset
+    file_modified_at: Optional[datetime] = None
+
+    try:
+        if search and search.strip():
+            lines, has_more = _tail_filtered_lines(source_info.absolute_path, search.strip(), max_matching_lines)
+        else:
+            lines, has_more = _tail_lines(source_info.absolute_path, max_matching_lines)
+
+        if offset > 0:
+            lines = lines[:-offset] if offset < len(lines) else []
+
+        if reverse:
+            lines = list(reversed(lines))
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Log source file not found")
+    except PermissionError:
+        raise HTTPException(status_code=503, detail="Log source is unavailable due to file permissions")
+    except OSError:
+        raise HTTPException(status_code=503, detail="Log source is unavailable")
+
+    # If the file is rotated/removed after reads succeed, keep returning lines
+    # and omit file_modified_at instead of failing the whole request.
+    try:
+        stat = os.stat(source_info.absolute_path)
+        file_modified_at = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+    except (FileNotFoundError, PermissionError, OSError):
+        file_modified_at = None
+
+    redacted_lines = [LogViewLine(content=_redact_log_line(line)) for line in lines]
+    source_response = LogSourceInfo(
+        source=source_info.source,
+        path=os.path.basename(source_info.absolute_path),
+    )
+
+    best_effort_audit(
+        db,
+        action="LOG_LINES_VIEWED",
+        user=current_user.username,
+        details={
+            "source": source_info.source,
+            "log_file": os.path.basename(source_info.absolute_path),
+            "limit": limit,
+            "offset": offset,
+            "search": search or "",
+            "reverse": reverse,
+            "returned": len(redacted_lines),
+            "has_more": has_more,
+        },
+        client_ip=get_client_ip(request),
+    )
+
+    return LogViewResponse(
+        source=source_response,
+        fetched_at=datetime.now(timezone.utc),
+        file_modified_at=file_modified_at,
+        offset=offset,
+        limit=limit,
+        returned=len(redacted_lines),
+        has_more=has_more,
+        lines=redacted_lines,
+    )
+
+
+@router.get(
     "/logs/{filename}",
     responses={
         200: {"content": {"text/plain": {}}, "description": "Log file contents"},
