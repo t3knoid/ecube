@@ -461,7 +461,8 @@ def download_log_file(
     # Restrict downloads to the configured log file family (for example,
     # app.log, app.log.1, app.log.2) even if other files exist in the
     # same directory.
-    if not safe.startswith(base_name):
+    allowed_log_pattern = re.compile(rf"^{re.escape(base_name)}(?:\.\d+)?$")
+    if not allowed_log_pattern.fullmatch(safe):
         raise HTTPException(status_code=404, detail="Log file not found")
 
     full_path = os.path.join(log_dir, safe)
