@@ -26,7 +26,7 @@ import os
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -353,10 +353,19 @@ def create_os_user(
 
 @_os_router.get("/os-users", response_model=OSUserListResponse, responses={**R_401, **R_403, **R_404})
 def list_os_users(
+    search: str | None = Query(default=None, description="Optional case-insensitive username filter."),
     _current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSUserListResponse:
-    """List OS users filtered to ECUBE-relevant groups."""
+    """List OS users filtered to ECUBE-relevant groups.
+
+    When ``search`` is provided, results are filtered by case-insensitive
+    username match after reserved system/service accounts have already been
+    excluded by the provider.
+    """
     users = _get_provider().list_users(ecube_only=True)
+    if search is not None:
+        query = search.strip().lower()
+        users = [u for u in users if query in u.username.lower()]
     return OSUserListResponse(
         users=[
             OSUserResponse(

@@ -509,8 +509,13 @@ directly through the API. All endpoints require the `admin` role.
 #### List OS users
 
 ```bash
+# List all ECUBE-managed OS users (reserved accounts such as www-data are excluded)
 curl -k -H "Authorization: Bearer $TOKEN" \
   https://localhost:8443/admin/os-users
+
+# Filter by username (case-insensitive substring match)
+curl -k -H "Authorization: Bearer $TOKEN" \
+  'https://localhost:8443/admin/os-users?search=frank'
 ```
 
 #### Create an OS user
