@@ -85,7 +85,7 @@ describe('SystemView logs tab', () => {
     mocks.getJobDebug.mockResolvedValue(null)
     mocks.getLogFiles.mockResolvedValue({ log_files: [] })
     mocks.getLogLines.mockResolvedValue({
-      source: { source: 'app', path: '/var/log/ecube/app.log' },
+      source: { source: 'app', path: 'app.log' },
       fetched_at: '2026-04-08T12:00:00Z',
       file_modified_at: '2026-04-08T11:59:00Z',
       lines: [{ content: 'ERROR password=[REDACTED]' }],
@@ -111,7 +111,7 @@ describe('SystemView logs tab', () => {
     const lastCallArgs = mocks.getLogLines.mock.calls.at(-1)?.[0] || {}
     expect(lastCallArgs.reverse).toBe(true)
     expect(wrapper.text()).toContain('[REDACTED]')
-    expect(wrapper.text()).toContain('/var/log/ecube/app.log')
+    expect(wrapper.text()).toContain('app.log')
   })
 
   it('refreshes with search filter', async () => {
