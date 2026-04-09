@@ -1112,7 +1112,7 @@ List recent lines from an application log file with optional filtering and pagin
 {
     "source": {
         "source": "app",
-        "path": "/var/log/ecube/app.log"
+        "path": "app.log"
     },
     "fetched_at": "2026-04-08T14:32:15.123456Z",
     "file_modified_at": "2026-04-08T14:31:22.654321Z",
@@ -1135,7 +1135,7 @@ List recent lines from an application log file with optional filtering and pagin
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `source` | object | Info about the log source — includes `source` identifier and absolute `path` |
+| `source` | object | Info about the log source — includes `source` identifier and a redacted display `path` (basename only) |
 | `fetched_at` | datetime | UTC timestamp when the request was processed |
 | `file_modified_at` | datetime or null | Last modification time of the log file (null if file cannot be stat'd) |
 | `offset` | integer | The pagination offset parameter (number of matches skipped) |
@@ -1156,7 +1156,7 @@ List recent lines from an application log file with optional filtering and pagin
   - Password/token field values (e.g., `password=***`, `api_key=***`)
   - Sensitive JSON field values (e.g., `{"secret": "***"}`)
   - Other credential-like patterns
-- Redaction is applied to log line content; the `source.path` response field contains the configured absolute log file path.
+- Redaction is applied to log line content; `source.path` is returned as a basename-only display value to avoid exposing host filesystem layout.
 - If the file does not exist or cannot be read, returns `404`.
 - If the source identifier is not in the allowlist, returns `404`.
 

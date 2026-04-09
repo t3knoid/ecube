@@ -373,6 +373,10 @@ def view_log_lines(
         file_modified_at = None
 
     redacted_lines = [LogViewLine(content=_redact_log_line(line)) for line in lines]
+    source_response = LogSourceInfo(
+        source=source_info.source,
+        path=os.path.basename(source_info.path),
+    )
 
     best_effort_audit(
         db,
@@ -392,7 +396,7 @@ def view_log_lines(
     )
 
     return LogViewResponse(
-        source=source_info,
+        source=source_response,
         fetched_at=datetime.now(timezone.utc),
         file_modified_at=file_modified_at,
         offset=offset,
