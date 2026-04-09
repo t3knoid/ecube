@@ -649,7 +649,7 @@ The **Logs** tab allows administrators to view recent application log lines in r
 3. The tab displays recent log lines from the application log file.
 4. Log entries are displayed in reverse chronological order (newest first).
 5. File metadata shows:
-   - **Source:** Application log file location (relative path shown, absolute paths redacted for security)
+	- **Source:** Log source display path (basename only, for example `app.log`)
    - **Fetched at:** UTC timestamp of when the log data was retrieved
    - **File modified:** Last modification time of the log file
 
