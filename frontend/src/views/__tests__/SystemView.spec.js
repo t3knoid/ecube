@@ -163,6 +163,29 @@ describe('SystemView logs tab', () => {
     expect(wrapper.text()).toContain('app.log')
   })
 
+  it('renders basename only when API returns an absolute source path', async () => {
+    mocks.getLogLines.mockResolvedValue({
+      source: { source: 'app', path: '/var/log/ecube/app.log' },
+      fetched_at: '2026-04-08T12:00:00Z',
+      file_modified_at: '2026-04-08T11:59:00Z',
+      lines: [{ content: 'INFO ok' }],
+      returned: 1,
+      has_more: false,
+      limit: 200,
+      offset: 0,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const logsButton = wrapper.findAll('button').find((b) => b.text() === i18n.global.t('system.tabs.logs'))
+    await logsButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('app.log')
+    expect(wrapper.text()).not.toContain('/var/log/ecube/app.log')
+  })
+
   it('hides logs tab for non-admin users', async () => {
     mocks.hasRole.mockReturnValue(false)
 
