@@ -756,6 +756,26 @@ class TestOSUserEndpoints:
 
     @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
+    def test_list_os_users_applies_username_search(self, mock_pwd, mock_grp, admin_client):
+        mock_pwd.getpwall.return_value = [
+            _make_pw(name="admin1", uid=1001),
+            _make_pw(name="auditor1", uid=1002),
+        ]
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="ecube-admins", members=["admin1"]),
+            _make_grp(name="ecube-auditors", members=["auditor1"]),
+        ]
+        mock_grp.getgrgid.side_effect = [
+            _make_grp(name="admin1", gid=1001),
+            _make_grp(name="auditor1", gid=1002),
+        ]
+
+        resp = admin_client.get("/admin/os-users?search=ADMIN")
+        assert resp.status_code == 200
+        assert [user["username"] for user in resp.json()["users"]] == ["admin1"]
+
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
     def test_list_os_users_excludes_www_data_for_exact_search_term(self, mock_pwd, mock_grp, admin_client):
         mock_pwd.getpwall.return_value = [
             _make_pw(name="www-data", uid=33, gid=33, home="/var/www", shell="/usr/sbin/nologin"),
