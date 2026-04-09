@@ -29,8 +29,8 @@ from datetime import datetime, timezone
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, get_current_user, require_roles
@@ -623,7 +623,8 @@ def create_os_user(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
     request: Request,
-) -> OSUserResponse | JSONResponse:
+    response: Response,
+) -> OSUserResponse | CreateOSUserDecisionResponse:
     """Create an OS user or sync an existing OS user into ECUBE roles."""
     provider = _get_provider()
     repo = UserRoleRepository(db)
@@ -680,17 +681,15 @@ def create_os_user(
                 {**base_details, "outcome": "confirmation_required"},
                 client_ip=get_client_ip(request),
             )
-            return JSONResponse(
-                status_code=200,
-                content=CreateOSUserDecisionResponse(
-                    status="confirmation_required",
-                    username=body.username,
-                    message=(
-                        "User already exists on this system. "
-                        "Do you want to add this existing OS user to ECUBE?"
-                    ),
-                    roles=deduplicated_roles,
-                ).model_dump(),
+            response.status_code = 200
+            return CreateOSUserDecisionResponse(
+                status="confirmation_required",
+                username=body.username,
+                message=(
+                    "User already exists on this system. "
+                    "Do you want to add this existing OS user to ECUBE?"
+                ),
+                roles=deduplicated_roles,
             )
 
         if body.confirm_existing_os_user is False:
@@ -706,14 +705,12 @@ def create_os_user(
                 {**base_details, "outcome": "canceled"},
                 client_ip=get_client_ip(request),
             )
-            return JSONResponse(
-                status_code=200,
-                content=CreateOSUserDecisionResponse(
-                    status="canceled",
-                    username=body.username,
-                    message="Create user request canceled. No ECUBE user was created.",
-                    roles=deduplicated_roles,
-                ).model_dump(),
+            response.status_code = 200
+            return CreateOSUserDecisionResponse(
+                status="canceled",
+                username=body.username,
+                message="Create user request canceled. No ECUBE user was created.",
+                roles=deduplicated_roles,
             )
 
         try:
@@ -765,22 +762,20 @@ def create_os_user(
             client_ip=get_client_ip(request),
         )
 
-        return JSONResponse(
-            status_code=200,
-            content=CreateOSUserDecisionResponse(
-                status="synced_existing_user",
-                username=body.username,
-                message="Existing OS user was added to ECUBE successfully.",
-                roles=deduplicated_roles,
-                user=OSUserResponse(
-                    username=os_user.username,
-                    uid=os_user.uid,
-                    gid=os_user.gid,
-                    home=os_user.home,
-                    shell=os_user.shell,
-                    groups=os_user.groups,
-                ),
-            ).model_dump(),
+        response.status_code = 200
+        return CreateOSUserDecisionResponse(
+            status="synced_existing_user",
+            username=body.username,
+            message="Existing OS user was added to ECUBE successfully.",
+            roles=deduplicated_roles,
+            user=OSUserResponse(
+                username=os_user.username,
+                uid=os_user.uid,
+                gid=os_user.gid,
+                home=os_user.home,
+                shell=os_user.shell,
+                groups=os_user.groups,
+            ),
         )
 
     if not body.password:
