@@ -650,8 +650,8 @@ The **Logs** tab allows administrators to view recent application log lines in r
 4. Log entries are displayed in reverse chronological order (newest first).
 5. File metadata shows:
 	- **Source:** Log source display path (basename only, for example `app.log`)
-   - **Fetched at:** UTC timestamp of when the log data was retrieved
-   - **File modified:** Last modification time of the log file
+	- **Fetched at:** Viewer-local date/time (converted by the browser from the UTC timestamp returned by the API)
+	- **File modified:** Last modification time of the log file
 
 #### Searching Logs
 
