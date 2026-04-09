@@ -546,6 +546,7 @@ class TestAdminLogsEndpoints:
                     params={"source": "app", "limit": 1},
                 )
                 assert resp.status_code == 200
+                assert resp.json()["source"]["path"] == "app.log"
 
                 entries = AuditRepository(db).query(action="LOG_LINES_VIEWED")
                 assert len(entries) >= 1
@@ -572,4 +573,5 @@ class TestAdminLogsEndpoints:
                 data = resp.json()
                 assert data["returned"] == 1
                 assert data["lines"][0]["content"] == "line"
+                assert data["source"]["path"] == "app.log"
                 assert data["file_modified_at"] is None
