@@ -165,7 +165,10 @@
     "saveRoles": "Save",
     "savePassword": "Save Password",
     "loadRolesError": "Failed to load role assignments. Role data may be incomplete.",
-    "loadUsersError": "Failed to load user list."
+    "loadUsersError": "Failed to load user list.",
+    "existingOsUserConfirmTitle": "Use Existing OS User?",
+    "existingOsUserConfirmMessage": "User already exists on this system. Do you want to add this existing OS user to ECUBE?",
+    "existingOsUserConfirmAction": "Add to ECUBE"
   },
   "system": {
     "title": "System",

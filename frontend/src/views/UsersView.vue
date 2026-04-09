@@ -7,6 +7,7 @@ import {
   getOsUsers,
   resetOsUserPassword,
 } from '@/api/admin.js'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 
@@ -27,11 +28,13 @@ const osUserPage = ref(1)
 const pageSize = ref(10)
 
 const createUserDialog = ref(false)
+const existingUserConfirmDialog = ref(false)
 const createUserForm = ref({
   username: '',
   password: '',
   roles: ['processor'],
 })
+const pendingExistingUserPayload = ref(null)
 
 const userColumns = computed(() => [
   { key: 'username', label: t('auth.username') },
@@ -115,16 +118,37 @@ async function saveRoles(user) {
   }
 }
 
-async function submitCreateOsUser() {
+async function submitCreateOsUser(confirmExistingOsUser = null) {
   saving.value = true
   error.value = ''
   try {
     const payload = {
       username: createUserForm.value.username.trim(),
-      password: createUserForm.value.password,
+      password: createUserForm.value.password || undefined,
       roles: normalizeRoleSelection(createUserForm.value.roles),
     }
-    await createOsUser(payload)
+    if (confirmExistingOsUser !== null) {
+      payload.confirm_existing_os_user = confirmExistingOsUser
+    }
+
+    const result = await createOsUser(payload)
+
+    if (result?.status === 'confirmation_required') {
+      pendingExistingUserPayload.value = {
+        username: payload.username,
+        roles: payload.roles,
+      }
+      existingUserConfirmDialog.value = true
+      return
+    }
+
+    if (result?.status === 'canceled') {
+      existingUserConfirmDialog.value = false
+      return
+    }
+
+    existingUserConfirmDialog.value = false
+    pendingExistingUserPayload.value = null
     createUserDialog.value = false
     createUserForm.value = { username: '', password: '', roles: ['processor'] }
     await loadAll()
@@ -132,6 +156,33 @@ async function submitCreateOsUser() {
     error.value = t('common.errors.validationFailed')
   } finally {
     saving.value = false
+  }
+}
+
+async function confirmExistingOsUserSync() {
+  await submitCreateOsUser(true)
+}
+
+async function cancelExistingOsUserSync() {
+  if (!pendingExistingUserPayload.value) {
+    existingUserConfirmDialog.value = false
+    return
+  }
+
+  saving.value = true
+  error.value = ''
+  try {
+    await createOsUser({
+      username: pendingExistingUserPayload.value.username,
+      roles: pendingExistingUserPayload.value.roles,
+      confirm_existing_os_user: false,
+    })
+  } catch {
+    // Cancel is best-effort for audit telemetry; keep the form open even on failure.
+  } finally {
+    saving.value = false
+    existingUserConfirmDialog.value = false
+    pendingExistingUserPayload.value = null
   }
 }
 
@@ -203,6 +254,17 @@ onMounted(loadAll)
       <Pagination v-model:page="osUserPage" :page-size="pageSize" :total="osUsers.length" />
     </article>
 
+    <ConfirmDialog
+      v-model="existingUserConfirmDialog"
+      :title="t('users.existingOsUserConfirmTitle')"
+      :message="t('users.existingOsUserConfirmMessage')"
+      :confirm-label="t('users.existingOsUserConfirmAction')"
+      :cancel-label="t('common.actions.cancel')"
+      :busy="saving"
+      @confirm="confirmExistingOsUserSync"
+      @update:model-value="(open) => { if (!open) cancelExistingOsUserSync() }"
+    />
+
     <teleport to="body">
       <div v-if="createUserDialog" class="dialog-overlay" @click.self="createUserDialog = false">
         <div class="dialog-panel" role="dialog" aria-modal="true">
@@ -221,7 +283,7 @@ onMounted(loadAll)
 
           <div class="dialog-actions">
             <button class="btn" @click="createUserDialog = false">{{ t('common.actions.cancel') }}</button>
-            <button class="btn btn-primary" :disabled="saving" @click="submitCreateOsUser">{{ t('common.actions.create') }}</button>
+            <button class="btn btn-primary" :disabled="saving" @click="submitCreateOsUser()">{{ t('common.actions.create') }}</button>
           </div>
         </div>
       </div>
