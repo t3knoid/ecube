@@ -116,6 +116,14 @@ function asLocalDate(value) {
   return parsed.toLocaleString()
 }
 
+function displayLogSourcePath(value) {
+  if (!value) return '-'
+  const normalized = String(value).trim().replace(/\\/g, '/')
+  if (!normalized) return '-'
+  const parts = normalized.split('/').filter(Boolean)
+  return parts.length ? parts[parts.length - 1] : normalized
+}
+
 const cpuDisplay = computed(() => {
   const p = health.value?.cpu_percent
   return p != null ? `${p.toFixed(1)}%` : t('common.labels.notAvailable')
@@ -389,7 +397,7 @@ onMounted(loadTabData)
       </div>
 
       <div class="log-meta">
-        <span>{{ t('system.logSourcePath') }}: <strong>{{ logView?.source?.path || '-' }}</strong></span>
+        <span>{{ t('system.logSourcePath') }}: <strong>{{ displayLogSourcePath(logView?.source?.path) }}</strong></span>
         <span>{{ t('system.logFetchedAt') }}: <strong>{{ asLocalDate(logView?.fetched_at) }}</strong></span>
         <span>{{ t('system.logFileModifiedAt') }}: <strong>{{ asLocalDate(logView?.file_modified_at) }}</strong></span>
       </div>
