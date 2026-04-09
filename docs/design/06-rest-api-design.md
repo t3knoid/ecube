@@ -1102,7 +1102,7 @@ List recent lines from an application log file with optional filtering and pagin
 |-----------|------|---------|-------------|
 | `source` | string | `app` | Allowlisted log source identifier; currently only `"app"` (application log) is supported |
 | `offset` | integer | `0` | Number of matches to skip when paginating through results |
-| `limit` | integer | `100` | Maximum number of matching lines to return per request |
+| `limit` | integer | `200` | Maximum number of matching lines to return per request |
 | `search` | string | (empty) | Optional text filter; lines containing this substring (case-sensitive) are included; pagination applies to filtered results |
 
 **Response (200 OK):**
@@ -1116,7 +1116,7 @@ List recent lines from an application log file with optional filtering and pagin
     "fetched_at": "2026-04-08T14:32:15.123456Z",
     "file_modified_at": "2026-04-08T14:31:22.654321Z",
     "offset": 0,
-    "limit": 100,
+    "limit": 200,
     "returned": 42,
     "has_more": true,
     "lines": [
@@ -1147,7 +1147,7 @@ List recent lines from an application log file with optional filtering and pagin
 
 - Log file access is restricted to an allowlist of safe source identifiers. Only `"app"` (mapped to the configured log file) is currently supported.
 - The endpoint reads from the end of the file backward (tail semantics) to avoid loading large files into memory.
-- **Pagination:** The endpoint reads the last `(limit + offset)` matching lines and returns the slice `[offset : offset + limit]`. This enables page iteration: `offset=0, limit=100` returns the newest 100 results; `offset=100, limit=100` returns results 100-199 (next page). The `has_more` field indicates when additional pages exist.
+- **Pagination:** The endpoint reads the last `(limit + offset)` matching lines and returns the slice `[offset : offset + limit]`. This enables page iteration: `offset=0, limit=200` returns the newest 200 results; `offset=200, limit=200` returns results 200-399 (next page). The `has_more` field indicates when additional pages exist.
 - If `search` is provided, lines are filtered to include only those containing the substring (case-sensitive).
 - **Sensitive value redaction:** Before returning, all lines are scanned for and redacted of:
   - Authorization headers (e.g., `Authorization: Bearer ...` → sanitized)
