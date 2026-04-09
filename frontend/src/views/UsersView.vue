@@ -416,11 +416,15 @@ onMounted(loadAll)
               autocomplete="new-password"
             />
             <button
+              type="button"
               class="btn btn-icon"
+              :aria-label="showPassword ? t('users.hidePassword') : t('users.showPassword')"
+              :aria-pressed="showPassword"
               :title="showPassword ? t('users.hidePassword') : t('users.showPassword')"
               @click="showPassword = !showPassword"
             >
-              {{ showPassword ? '🔒' : '👁️' }}
+              <span aria-hidden="true">{{ showPassword ? '🔒' : '👁️' }}</span>
+              <span class="sr-only">{{ showPassword ? t('users.hidePassword') : t('users.showPassword') }}</span>
             </button>
           </div>
 
