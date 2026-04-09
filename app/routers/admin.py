@@ -1,6 +1,6 @@
 """Administrative endpoints for log file access and OS user/group management.
 
-Log endpoints allow authenticated users to list and download application log
+Log endpoints allow ``admin`` users to list and download application log
 files.  OS user/group endpoints allow ``admin``-role users to create, list,
 delete, reset passwords, and modify group memberships for OS users, as well
 as create, list, and delete OS groups through the API.
@@ -11,10 +11,9 @@ Security considerations
   against ``os.path.basename`` and must match a real file inside the
   configured log directory.  Attempts to escape the directory (e.g.
   ``../../etc/passwd``) are rejected with ``400 Bad Request``.
-* **Authentication required**: both log endpoints require a valid JWT bearer
-  token (enforced at the router level via ``get_current_user``).  No
-  additional role restriction is applied — all authenticated users may
-  access log files.
+* **Admin-only log access**: all log endpoints require a valid JWT bearer
+    token and the ``admin`` role. This prevents non-admin users from listing
+    or downloading full, unredacted log files.
 * **Admin-only OS management**: all ``/admin/os-users`` and ``/admin/os-groups``
   endpoints are gated with ``require_roles("admin")``.
 * **Password handling**: passwords are never logged, stored in the database,
@@ -23,11 +22,15 @@ Security considerations
 
 import logging
 import os
+import re
+import stat
+import errno
 from datetime import datetime, timezone
-from typing import List, Optional
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, get_current_user, require_roles
@@ -43,6 +46,9 @@ from app.schemas.admin import (
     CreateOSUserRequest,
     LogFileInfo,
     LogFilesResponse,
+    LogSourceInfo,
+    LogViewLine,
+    LogViewResponse,
     MessageResponse,
     OSGroupListResponse,
     OSGroupResponse,
@@ -54,12 +60,18 @@ from app.schemas.admin import (
 from app.schemas.hardware import HubUpdateRequest, PortEnableRequest, PortUpdateRequest, UsbHubSchema, UsbPortSchema
 from app.infrastructure import get_os_user_provider
 from app.infrastructure.os_user_protocol import OSUserError, OsUserProvider
-from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500, R_504
+from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500, R_503, R_504
 from app.services.os_user_service import validate_group_name, validate_username
 from app.constants import ECUBE_GROUPNAME_PATTERN, USERNAME_PATTERN, ECUBE_GROUP_ROLE_MAP
 from app.utils.client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
+
+_SENSITIVE_LOG_PATTERNS = [
+    re.compile(r"(?i)(authorization\s*[:=]\s*)(bearer|basic)\s+[^\s,;]+"),
+    re.compile(r"(?i)(\b(?:password|passwd|pwd|secret|token|api[_-]?key|client_secret|access_token|refresh_token)\b\s*[:=]\s*)([^\s,;]+)"),
+    re.compile(r'(?i)("(?:password|passwd|pwd|secret|token|api[_-]?key|client_secret|access_token|refresh_token)"\s*:\s*")([^"]+)(")'),
+]
 
 
 def _get_provider() -> OsUserProvider:
@@ -99,12 +111,30 @@ def _raise_os_error(exc: OSUserError, *, context: str = "OS operation") -> None:
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
+@dataclass(frozen=True)
+class _ResolvedLogSource:
+    """Internal log source mapping with host-local absolute path."""
+
+    source: str
+    absolute_path: str
+
+
 def _log_directory() -> Optional[str]:
     """Return the configured log directory, or ``None`` if logging to file is
     not enabled."""
     if not settings.log_file:
         return None
     return os.path.dirname(os.path.abspath(settings.log_file))
+
+
+def _log_file_pattern(base_name: str) -> re.Pattern[str]:
+    """Return the compiled allowlist regex for a log file family.
+
+    Matches exactly the base log file (e.g. ``app.log``) and numbered
+    rotation siblings (e.g. ``app.log.1``, ``app.log.2``).  Files with
+    non-numeric suffixes (``app.log.tmp``, ``app.log.bak``) are excluded.
+    """
+    return re.compile(rf"^{re.escape(base_name)}(?:\.\d+)?$")
 
 
 def _safe_filename(filename: str) -> str:
@@ -122,7 +152,123 @@ def _safe_filename(filename: str) -> str:
     return safe
 
 
-@router.get("/logs", response_model=LogFilesResponse, responses={**R_401, **R_404})
+def _allowed_log_sources() -> Dict[str, str]:
+    """Return allowlisted log sources mapped to absolute file paths."""
+    if not settings.log_file:
+        return {}
+    return {
+        "app": os.path.abspath(settings.log_file),
+    }
+
+
+def _resolve_log_source(source: str) -> _ResolvedLogSource:
+    """Resolve a user-selected source key to an allowlisted log file path."""
+    normalized = (source or "").strip().lower()
+    allowed = _allowed_log_sources()
+
+    if not allowed:
+        raise HTTPException(
+            status_code=404,
+            detail="File-based logging is not configured or log source is unavailable",
+        )
+
+    if normalized not in allowed:
+        raise HTTPException(status_code=404, detail="Unknown log source")
+
+    return _ResolvedLogSource(source=normalized, absolute_path=allowed[normalized])
+
+
+def _tail_lines(path: str, max_lines: int) -> Tuple[List[str], bool]:
+    """Read up to ``max_lines`` from the end of file without full-file loads."""
+    if max_lines <= 0:
+        return [], False
+
+    with open(path, "rb") as handle:
+        handle.seek(0, os.SEEK_END)
+        position = handle.tell()
+        block_size = 8192
+        chunks: List[bytes] = []
+        newline_count = 0
+
+        while position > 0 and newline_count <= max_lines:
+            chunk_size = min(block_size, position)
+            position -= chunk_size
+            handle.seek(position, os.SEEK_SET)
+            chunk = handle.read(chunk_size)
+            newline_count += chunk.count(b"\n")
+            chunks.append(chunk)
+
+    buffer = b"".join(reversed(chunks))
+
+    lines = [line.decode("utf-8", errors="replace") for line in buffer.splitlines()]
+    has_more = len(lines) > max_lines
+    if has_more:
+        lines = lines[-max_lines:]
+    return lines, has_more
+
+
+def _tail_filtered_lines(path: str, needle: str, max_lines: int) -> Tuple[List[str], bool]:
+    """Scan backward from EOF and keep only the last matching lines.
+
+    This avoids full forward scans in common cases: once ``max_lines + 1``
+    matches are seen, we can stop and report ``has_more=True``.
+    """
+    if max_lines <= 0:
+        return [], False
+
+    lowered = needle.lower()
+    chunk_size = 64 * 1024
+    matches_newest_first: List[str] = []
+    has_more = False
+
+    with open(path, "rb") as handle:
+        handle.seek(0, os.SEEK_END)
+        position = handle.tell()
+        carry = b""
+
+        while position > 0 and len(matches_newest_first) <= max_lines:
+            read_size = min(chunk_size, position)
+            position -= read_size
+            handle.seek(position)
+            chunk = handle.read(read_size)
+
+            data = chunk + carry
+            parts = data.split(b"\n")
+
+            if position > 0:
+                carry = parts[0]
+                lines = parts[1:]
+            else:
+                carry = b""
+                lines = parts
+
+            for raw_line in reversed(lines):
+                line = raw_line.decode("utf-8", errors="replace")
+                if lowered in line.lower():
+                    matches_newest_first.append(line)
+                    if len(matches_newest_first) > max_lines:
+                        has_more = True
+                        break
+
+            if has_more:
+                break
+
+    if len(matches_newest_first) > max_lines:
+        matches_newest_first = matches_newest_first[:max_lines]
+
+    # Return oldest->newest for compatibility with caller behavior.
+    return list(reversed(matches_newest_first)), has_more
+
+
+def _redact_log_line(line: str) -> str:
+    redacted = line
+    redacted = _SENSITIVE_LOG_PATTERNS[0].sub(r"\1\2 [REDACTED]", redacted)
+    redacted = _SENSITIVE_LOG_PATTERNS[1].sub(r"\1[REDACTED]", redacted)
+    redacted = _SENSITIVE_LOG_PATTERNS[2].sub(r"\1[REDACTED]\3", redacted)
+    return redacted
+
+
+@router.get("/logs", response_model=LogFilesResponse, responses={**R_401, **R_403, **R_404})
 def list_log_files(
     request: Request,
     db: Session = Depends(get_db),
@@ -130,12 +276,21 @@ def list_log_files(
 ):
     """List available log files with metadata (size, timestamps).
 
-    Requires authentication (all authenticated users have access; no role
-    restriction).
+    Requires the ``admin`` role.
 
     Returns ``200`` with file list, or ``404`` if file-based logging is not
     configured.
     """
+    if "admin" not in current_user.roles:
+        best_effort_audit(
+            db,
+            action="LOG_FILES_LIST_DENIED",
+            user=current_user.username,
+            details={"reason": "admin_role_required"},
+            client_ip=get_client_ip(request),
+        )
+        raise HTTPException(status_code=403, detail="This action requires the admin role")
+
     log_dir = _log_directory()
     if not log_dir or not os.path.isdir(log_dir):
         raise HTTPException(
@@ -145,21 +300,31 @@ def list_log_files(
 
     files: List[LogFileInfo] = []
     base_name = os.path.basename(settings.log_file)  # type: ignore[arg-type]
+    allowed_log_pattern = _log_file_pattern(base_name)
     for entry in sorted(os.listdir(log_dir)):
-        # Only expose log files that share the base name prefix (e.g.
-        # "app.log", "app.log.1", "app.log.2").
-        if not entry.startswith(base_name):
+        # Only expose log files that belong to the configured log family
+        # (e.g. "app.log", "app.log.1").  Uses the same allowlist regex as
+        # the download endpoint so the listed set is always downloadable.
+        if not allowed_log_pattern.fullmatch(entry):
             continue
         full = os.path.join(log_dir, entry)
-        if not os.path.isfile(full):
+        try:
+            entry_stat = os.lstat(full)
+        except (FileNotFoundError, PermissionError, OSError):
+            # File may have been rotated/removed or is otherwise unreadable
+            # between directory listing and metadata lookup. Skip it.
             continue
-        stat = os.stat(full)
+
+        # Keep listing behavior aligned with download protections.
+        # Skip symlinks and anything that is not a regular file.
+        if stat.S_ISLNK(entry_stat.st_mode) or not stat.S_ISREG(entry_stat.st_mode):
+            continue
         files.append(
             LogFileInfo(
                 name=entry,
-                size=stat.st_size,
-                created=datetime.fromtimestamp(stat.st_ctime, tz=timezone.utc),
-                modified=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+                size=entry_stat.st_size,
+                created=datetime.fromtimestamp(entry_stat.st_ctime, tz=timezone.utc),
+                modified=datetime.fromtimestamp(entry_stat.st_mtime, tz=timezone.utc),
             )
         )
 
@@ -179,7 +344,117 @@ def list_log_files(
     return LogFilesResponse(
         log_files=files,
         total_size=total_size,
-        log_directory=log_dir,
+    )
+
+
+@router.get(
+    "/logs/view",
+    response_model=LogViewResponse,
+    responses={**R_401, **R_403, **R_404, **R_422, **R_503},
+)
+def view_log_lines(
+    request: Request,
+    source: str = Query("app", min_length=1, max_length=32),
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0, le=100000),
+    search: Optional[str] = Query(None, max_length=256),
+    reverse: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Return recent, redacted log lines from an allowlisted source.
+
+    Access is restricted to users with the ``admin`` role.
+    """
+    if "admin" not in current_user.roles:
+        best_effort_audit(
+            db,
+            action="LOG_LINES_VIEW_DENIED",
+            user=current_user.username,
+            details={"source": source, "reason": "admin_role_required"},
+            client_ip=get_client_ip(request),
+        )
+        raise HTTPException(status_code=403, detail="This action requires the admin role")
+
+    try:
+        source_info = _resolve_log_source(source)
+    except HTTPException as exc:
+        if exc.status_code == 404:
+            detail_text = str(exc.detail).lower()
+            reason = "unknown_log_source"
+            if "not configured" in detail_text or "unavailable" in detail_text:
+                reason = "log_source_unavailable"
+
+            best_effort_audit(
+                db,
+                action="LOG_LINES_VIEW_DENIED",
+                user=current_user.username,
+                details={"source": source, "reason": reason},
+                client_ip=get_client_ip(request),
+            )
+        raise
+
+    max_matching_lines = limit + offset
+    file_modified_at: Optional[datetime] = None
+
+    try:
+        if search and search.strip():
+            lines, has_more = _tail_filtered_lines(source_info.absolute_path, search.strip(), max_matching_lines)
+        else:
+            lines, has_more = _tail_lines(source_info.absolute_path, max_matching_lines)
+
+        if offset > 0:
+            lines = lines[:-offset] if offset < len(lines) else []
+
+        if reverse:
+            lines = list(reversed(lines))
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Log source file not found")
+    except PermissionError:
+        raise HTTPException(status_code=503, detail="Log source is unavailable due to file permissions")
+    except OSError:
+        raise HTTPException(status_code=503, detail="Log source is unavailable")
+
+    # If the file is rotated/removed after reads succeed, keep returning lines
+    # and omit file_modified_at instead of failing the whole request.
+    try:
+        stat = os.stat(source_info.absolute_path)
+        file_modified_at = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+    except (FileNotFoundError, PermissionError, OSError):
+        file_modified_at = None
+
+    redacted_lines = [LogViewLine(content=_redact_log_line(line)) for line in lines]
+    source_response = LogSourceInfo(
+        source=source_info.source,
+        path=os.path.basename(source_info.absolute_path),
+    )
+
+    best_effort_audit(
+        db,
+        action="LOG_LINES_VIEWED",
+        user=current_user.username,
+        details={
+            "source": source_info.source,
+            "log_file": os.path.basename(source_info.absolute_path),
+            "limit": limit,
+            "offset": offset,
+            "search": search or "",
+            "reverse": reverse,
+            "returned": len(redacted_lines),
+            "has_more": has_more,
+        },
+        client_ip=get_client_ip(request),
+    )
+
+    return LogViewResponse(
+        source=source_response,
+        fetched_at=datetime.now(timezone.utc),
+        file_modified_at=file_modified_at,
+        offset=offset,
+        limit=limit,
+        returned=len(redacted_lines),
+        has_more=has_more,
+        lines=redacted_lines,
     )
 
 
@@ -187,7 +462,7 @@ def list_log_files(
     "/logs/{filename}",
     responses={
         200: {"content": {"text/plain": {}}, "description": "Log file contents"},
-        **R_400, **R_401, **R_404, **R_422,
+        **R_400, **R_401, **R_403, **R_404, **R_422, **R_503,
     },
 )
 def download_log_file(
@@ -199,11 +474,20 @@ def download_log_file(
 ):
     """Download a specific log file.
 
-    Requires authentication (all authenticated users have access; no role
-    restriction).
+    Requires the ``admin`` role.
 
     The ``{filename}`` parameter is validated to prevent path traversal.
     """
+    if "admin" not in current_user.roles:
+        best_effort_audit(
+            db,
+            action="LOG_FILE_DOWNLOAD_DENIED",
+            user=current_user.username,
+            details={"filename": filename, "reason": "admin_role_required"},
+            client_ip=get_client_ip(request),
+        )
+        raise HTTPException(status_code=403, detail="This action requires the admin role")
+
     log_dir = _log_directory()
     if not log_dir or not os.path.isdir(log_dir):
         raise HTTPException(
@@ -212,9 +496,60 @@ def download_log_file(
         )
 
     safe = _safe_filename(filename)
-    full_path = os.path.join(log_dir, safe)
-    if not os.path.isfile(full_path):
+    base_name = os.path.basename(settings.log_file)  # type: ignore[arg-type]
+
+    if not _log_file_pattern(base_name).fullmatch(safe):
         raise HTTPException(status_code=404, detail="Log file not found")
+
+    full_path = os.path.join(log_dir, safe)
+    try:
+        file_stat = os.lstat(full_path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Log file not found")
+    except PermissionError:
+        raise HTTPException(status_code=503, detail="Log file is unavailable due to file permissions")
+    except OSError:
+        raise HTTPException(status_code=503, detail="Log file is unavailable")
+
+    if stat.S_ISLNK(file_stat.st_mode):
+        raise HTTPException(status_code=404, detail="Log file not found")
+
+    if not stat.S_ISREG(file_stat.st_mode):
+        raise HTTPException(status_code=404, detail="Log file not found")
+
+    real_log_dir = os.path.realpath(log_dir)
+    real_full_path = os.path.realpath(full_path)
+    try:
+        if os.path.commonpath([real_log_dir, real_full_path]) != real_log_dir:
+            raise HTTPException(status_code=404, detail="Log file not found")
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Log file not found")
+
+    open_flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        open_flags |= os.O_NOFOLLOW
+
+    try:
+        file_descriptor = os.open(full_path, open_flags)
+        log_file = os.fdopen(file_descriptor, "rb")
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Log file not found")
+    except PermissionError:
+        raise HTTPException(status_code=503, detail="Log file is unavailable due to file permissions")
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise HTTPException(status_code=404, detail="Log file not found")
+        raise HTTPException(status_code=503, detail="Log file is unavailable")
+
+    def _stream_chunks():
+        try:
+            while True:
+                chunk = log_file.read(64 * 1024)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            log_file.close()
 
     # Record access in audit trail.
     try:
@@ -227,10 +562,10 @@ def download_log_file(
     except Exception:
         logger.exception("Failed to record log file download in audit trail")
 
-    return FileResponse(
-        path=full_path,
-        filename=safe,
+    return StreamingResponse(
+        _stream_chunks(),
         media_type="text/plain",
+        headers={"Content-Disposition": f'attachment; filename="{safe}"'},
     )
 
 
