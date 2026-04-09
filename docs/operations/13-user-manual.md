@@ -670,7 +670,7 @@ The **Logs** tab allows administrators to view recent application log lines in r
 
 All sensitive values are automatically redacted from displayed log lines:
 
-- **Passwords and tokens:** Any field containing password, secret, api_key, or token values are masked (e.g., `password=***`)
+- **Passwords and tokens:** Any field containing password, secret, api_key, or token values are masked (e.g., `password=[REDACTED]`)
 - **Authorization headers:** Bearer tokens in Authorization headers are sanitized
 - **Credential-like values:** Other sensitive patterns (e.g., sensitive JSON fields) are masked
 
