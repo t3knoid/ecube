@@ -1451,7 +1451,9 @@ Every audit entry contains:
 | Action | Trigger |
 |--------|---------|
 | `LOG_FILES_LISTED` | Log file listing accessed |
+| `LOG_FILES_LIST_DENIED` | Non-admin denied access to log file listing |
 | `LOG_FILE_DOWNLOADED` | Log file downloaded |
+| `LOG_FILE_DOWNLOAD_DENIED` | Non-admin denied access to log file download |
 
 ### Querying Audit Logs
 
@@ -1707,11 +1709,11 @@ curl -k -H "Authorization: Bearer $TOKEN" \
 ECUBE exposes log files through the API for remote access without SSH.
 
 ```bash
-# List available log files with size and timestamps (any authenticated user)
+# List available log files with size and timestamps (admin only)
 curl -k -H "Authorization: Bearer $TOKEN" \
   https://localhost:8443/admin/logs
 
-# Download a specific log file (any authenticated user)
+# Download a specific log file (admin only)
 curl -k -H "Authorization: Bearer $TOKEN" \
   https://localhost:8443/admin/logs/ecube.log -o ecube.log
 ```
