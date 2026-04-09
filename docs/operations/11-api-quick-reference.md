@@ -4,7 +4,7 @@
 |---|---|
 | Title | API Quick Reference |
 | Purpose | Provides a quick-reference guide to ECUBE API endpoints, authentication, and common request examples for operators and developers. |
-| Updated on | 04/08/26 |
+| Updated on | 04/09/26 |
 | Audience | Developers, operators, IT staff. |
 
 ## Table of Contents
@@ -15,10 +15,11 @@
 4. [Mounts (`/mounts`)](#mountsmounts)
 5. [Jobs (`/jobs`)](#jobsjobs)
 6. [Audit (`/audit`)](#auditaudit)
-7. [Admin Logs (`/admin/logs`)](#admin-logs-adminlogs)
-8. [Introspection (`/introspection`)](#introspectionintrospection)
-9. [Telemetry (`/telemetry`)](#telemetrytelemetry)
-10. [Support and Resources](#support-and-resources)
+7. [Admin Users (`/admin/os-users`)](#admin-users-adminos-users)
+8. [Admin Logs (`/admin/logs`)](#admin-logs-adminlogs)
+9. [Introspection (`/introspection`)](#introspectionintrospection)
+10. [Telemetry (`/telemetry`)](#telemetrytelemetry)
+11. [Support and Resources](#support-and-resources)
 
 ---
 
@@ -129,6 +130,30 @@ curl -H "Authorization: Bearer $JWT_TOKEN" https://localhost:8443/endpoint
 curl -H "Authorization: Bearer $TOKEN" \
   'https://localhost:8443/audit?action=JOB_STARTED&user=griffin&limit=50&offset=0'
 ```
+
+---
+
+## Admin Users (`/admin/os-users`)
+
+| Method | Endpoint | Role | Description |
+| ------ | -------- | ---- | ----------- |
+| POST | `/admin/os-users` | admin | Create a new OS user or link an existing OS/directory user into ECUBE role assignments (decision-based flow). |
+| GET | `/admin/os-users` | admin | List ECUBE-relevant users (ecube-group users plus DB role-assigned users). |
+| DELETE | `/admin/os-users/{username}` | admin | Delete OS user and clean up DB role assignments. |
+| PUT | `/admin/os-users/{username}/password` | admin | Reset OS user password. |
+
+`POST /admin/os-users` supports existing-user decision outcomes:
+
+- `200 confirmation_required` when target user exists and no decision was supplied
+- `200 canceled` when `confirm_existing_os_user=false`
+- `200 synced_existing_user` when `confirm_existing_os_user=true`
+- `201 Created` for brand-new OS account creation
+
+`GET /admin/os-users` visibility behavior:
+
+- includes users in `ecube-*` OS groups
+- includes usernames with DB role assignments in `user_roles`
+- may return placeholder host fields (`uid=-1`, `gid=-1`, empty `home`/`shell`/`groups`) for directory-backed users that are role-assigned but not returned by host enumeration
 
 ---
 

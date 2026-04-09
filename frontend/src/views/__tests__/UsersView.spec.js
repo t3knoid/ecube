@@ -83,7 +83,6 @@ describe('UsersView existing OS-user confirmation flow', () => {
 
     await wrapper.find('button.btn.btn-primary').trigger('click')
     await wrapper.find('#create-user-username').setValue('existing')
-    await wrapper.find('#create-user-password').setValue('ignored-pass')
 
     const createPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.createOsUser'))
     expect(createPanel).toBeTruthy()
@@ -105,16 +104,18 @@ describe('UsersView existing OS-user confirmation flow', () => {
 
     expect(mocks.createOsUser).toHaveBeenNthCalledWith(1, {
       username: 'existing',
-      password: 'ignored-pass',
       roles: ['processor'],
     })
     expect(mocks.createOsUser).toHaveBeenNthCalledWith(2, {
       username: 'existing',
-      password: 'ignored-pass',
       roles: ['processor'],
       confirm_existing_os_user: true,
     })
-    expect(wrapper.text()).not.toContain(i18n.global.t('users.existingOsUserConfirmMessage'))
+
+    // Existing users should not be prompted for password setup.
+    expect(wrapper.text()).not.toContain(i18n.global.t('users.setPassword'))
+    const passwordPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.setPassword'))
+    expect(passwordPanel).toBeFalsy()
   })
 
   it('records cancel decision and closes dialogs', async () => {
@@ -133,7 +134,6 @@ describe('UsersView existing OS-user confirmation flow', () => {
 
     await wrapper.find('button.btn.btn-primary').trigger('click')
     await wrapper.find('#create-user-username').setValue('existing')
-    await wrapper.find('#create-user-password').setValue('ignored-pass')
 
     const createPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.createOsUser'))
     expect(createPanel).toBeTruthy()
@@ -160,5 +160,63 @@ describe('UsersView existing OS-user confirmation flow', () => {
     // Verify both dialogs are closed after cancel
     expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.createOsUser'))).toBeFalsy()
     expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.existingOsUserConfirmTitle'))).toBeFalsy()
+  })
+
+  it('prompts for password and retries create for a new OS user', async () => {
+    mocks.createOsUser
+      .mockRejectedValueOnce({
+        response: {
+          data: {
+            detail: 'Password is required when creating a new OS user.',
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        username: 'newuser',
+        uid: 1002,
+        gid: 1002,
+        home: '/home/newuser',
+        shell: '/bin/bash',
+        groups: ['ecube-processors', 'newuser'],
+      })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.find('button.btn.btn-primary').trigger('click')
+    await wrapper.find('#create-user-username').setValue('newuser')
+
+    const createPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.createOsUser'))
+    expect(createPanel).toBeTruthy()
+    const createButtons = createPanel.findAll('.dialog-actions button')
+    await createButtons[1].trigger('click')
+    await flushPromises()
+
+    const passwordPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.setPassword'))
+    expect(passwordPanel).toBeTruthy()
+
+    await wrapper.find('#set-password-field').setValue('StrongPass#123')
+    await wrapper.find('#confirm-password-field').setValue('StrongPass#123')
+    await flushPromises()
+
+    const updatedPasswordPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.setPassword'))
+    expect(updatedPasswordPanel).toBeTruthy()
+    const setPasswordButton = updatedPasswordPanel
+      .findAll('.dialog-actions button')
+      .find((node) => node.text() === i18n.global.t('users.setPassword'))
+    expect(setPasswordButton).toBeTruthy()
+    await setPasswordButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.createOsUser).toHaveBeenNthCalledWith(1, {
+      username: 'newuser',
+      roles: ['processor'],
+    })
+    expect(mocks.createOsUser).toHaveBeenNthCalledWith(2, {
+      username: 'newuser',
+      roles: ['processor'],
+      password: 'StrongPass#123',
+    })
+    expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.setPassword'))).toBeFalsy()
   })
 })

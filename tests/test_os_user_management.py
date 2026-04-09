@@ -884,6 +884,45 @@ class TestOSUserEndpoints:
         assert resp.status_code == 200
         assert resp.json()["users"] == []
 
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_list_os_users_includes_db_role_user_without_ecube_group(self, mock_pwd, mock_grp, admin_client, db):
+        db.add(UserRole(username="orphaned", role="processor"))
+        db.commit()
+
+        mock_pwd.getpwall.return_value = [
+            _make_pw(name="orphaned", uid=1101, gid=1101),
+        ]
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="users", members=[]),
+        ]
+        mock_grp.getgrgid.return_value = _make_grp(name="users", gid=1101)
+
+        resp = admin_client.get("/admin/os-users")
+        assert resp.status_code == 200
+        usernames = [u["username"] for u in resp.json()["users"]]
+        assert usernames == ["orphaned"]
+
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_list_os_users_includes_directory_user_with_db_role(self, mock_pwd, mock_grp, admin_client, db):
+        db.add(UserRole(username="aduser", role="processor"))
+        db.commit()
+
+        # Simulate directory-backed account that resolves via getpwnam/user_exists
+        # but is not returned by getpwall/list_users enumeration.
+        mock_pwd.getpwall.return_value = []
+        mock_pwd.getpwnam.return_value = _make_pw(name="aduser", uid=2101, gid=2101)
+        mock_grp.getgrall.return_value = []
+
+        resp = admin_client.get("/admin/os-users")
+        assert resp.status_code == 200
+        users = resp.json()["users"]
+        assert len(users) == 1
+        assert users[0]["username"] == "aduser"
+        assert users[0]["uid"] == -1
+        assert users[0]["gid"] == -1
+
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
