@@ -801,6 +801,26 @@ class TestOSUserEndpoints:
         assert audit is not None
         assert (audit.details or {}).get("target_user") == "testuser"
 
+    def test_create_user_existing_reserved_os_user_rejected(self, admin_client, db):
+        provider = MagicMock()
+
+        with patch("app.routers.admin._get_provider", return_value=provider):
+            resp = admin_client.post("/admin/os-users", json={
+                "username": "root",
+                "roles": ["admin"],
+                "confirm_existing_os_user": True,
+            })
+
+        assert resp.status_code == 422
+        body = resp.json()
+        assert body["code"] == "HTTP_422"
+        assert "reserved" in body["message"].lower()
+        provider.user_exists.assert_not_called()
+        provider.add_user_to_groups.assert_not_called()
+
+        repo = UserRoleRepository(db)
+        assert repo.get_roles("root") == []
+
     def test_create_user_existing_ecube_user_conflict(self, admin_client, db):
         provider = MagicMock()
         provider.user_exists.return_value = True
