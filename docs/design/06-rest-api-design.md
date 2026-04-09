@@ -1190,6 +1190,17 @@ List available log files for download.
 - Provides metadata: file name, size, and last modification time.
 - File paths are redacted from the response.
 
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role (non-admin)
+- `404 Not Found` — File-based logging is not configured or log directory does not exist
+
+**Audit events:**
+
+- `LOG_FILES_LISTED` — Successful list access; includes file count and total size
+- `LOG_FILES_LIST_DENIED` — Access denied (non-admin); includes actor and denial reason
+
 **Response (200 OK):**
 
 ```json
@@ -1226,6 +1237,11 @@ Download a complete log file.
 - `403 Forbidden` — Insufficient role (non-admin)
 - `404 Not Found` — File not found or not in allowlist
 - `503 Service Unavailable` — File I/O error
+
+**Audit events:**
+
+- `LOG_FILE_DOWNLOADED` — Successful download access; includes filename
+- `LOG_FILE_DOWNLOAD_DENIED` — Access denied (non-admin); includes actor, requested filename, and denial reason
 
 ---
 
