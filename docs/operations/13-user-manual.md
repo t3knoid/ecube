@@ -662,9 +662,9 @@ The **Logs** tab allows administrators to view recent application log lines in r
 
 #### Pagination
 
-1. Use the **Limit** control to set how many log lines to display (default: 200).
-2. The display shows "X of Y lines" to indicate if more lines exist in the log file.
-3. Use **Offset** controls (if available) to browse earlier log entries.
+1. The current Logs tab UI does not expose **Limit** or **Offset** controls.
+2. Log results are fetched using the UI's built-in defaults and refreshed with the **Refresh** action.
+3. A total-count indicator (for example, "X of Y lines") is not currently shown in the UI.
 
 #### Automatic Redaction
 
