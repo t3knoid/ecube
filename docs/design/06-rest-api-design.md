@@ -1206,13 +1206,18 @@ List available log files for download.
 **Response (200 OK):**
 
 ```json
-[
-    {
-        "name": "app.log",
-        "size": 2097152,
-        "modified_at": "2026-04-08T14:31:22.654321Z"
-    }
-]
+{
+    "log_files": [
+        {
+            "name": "app.log",
+            "size": 2097152,
+            "created": "2026-04-08T14:00:00.000000Z",
+            "modified": "2026-04-08T14:31:22.654321Z"
+        }
+    ],
+    "total_size": 2097152,
+    "log_directory": "/var/log/ecube"
+}
 ```
 
 ### `GET /admin/logs/{filename}`
