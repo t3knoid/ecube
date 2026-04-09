@@ -204,6 +204,13 @@
     "empty": "No data available",
     "error": "Error",
     "logsNotConfigured": "System logs are unavailable because file-based logging is not configured on the backend.",
+    "logSource": "Source",
+    "logSearch": "Search",
+    "logSearchPlaceholder": "Filter visible log lines",
+    "logSourcePath": "Log path",
+    "logFetchedAt": "Fetched",
+    "logFileModifiedAt": "File modified",
+    "logViewerEmpty": "No log lines available for the selected filters.",
     "enterJobId": "Enter a job ID before loading debug details.",
     "jobNotFound": "No job was found for the provided job ID."
   },
