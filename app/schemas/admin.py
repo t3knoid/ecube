@@ -58,7 +58,7 @@ class LogSourceInfo(BaseModel):
     """Metadata about an allowlisted log source."""
 
     source: str = Field(..., description="Stable log source key (for example: app)")
-    path: str = Field(..., description="Absolute path of the backing log file")
+    path: str = Field(..., description="Display path for the backing log file (basename only)")
 
 
 class LogViewLine(BaseModel):
