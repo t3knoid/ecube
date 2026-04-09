@@ -333,6 +333,20 @@ class TestAdminLogsEndpoints:
                 resp = admin_client.get("/admin/logs/nonexistent.log")
                 assert resp.status_code == 404
 
+    def test_download_rejects_non_allowlisted_file_in_log_directory(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            other_path = os.path.join(tmpdir, "notes.txt")
+            with open(log_path, "w") as f:
+                f.write("log")
+            with open(other_path, "w") as f:
+                f.write("not a log")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = admin_client.get("/admin/logs/notes.txt")
+                assert resp.status_code == 404
+
     def test_list_logs_records_audit_trail(self, admin_client, db):
         """Accessing /admin/logs should record an audit entry."""
         from app.repositories.audit_repository import AuditRepository
