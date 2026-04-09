@@ -167,7 +167,8 @@ describe('UsersView existing OS-user confirmation flow', () => {
       .mockRejectedValueOnce({
         response: {
           data: {
-            detail: 'Password is required when creating a new OS user.',
+            code: 'VALIDATION_ERROR',
+            message: 'Password is required when creating a new OS user.',
           },
         },
       })
