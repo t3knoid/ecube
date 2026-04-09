@@ -1086,7 +1086,150 @@ Operations that fail this check return `422 Unprocessable Entity` with a descrip
 
 ---
 
-## 3.8 First-Run Setup API
+## 3.8 Admin Log Viewing API
+
+Read-only endpoints for viewing application log files. These endpoints support real-time log inspection by administrators, with built-in pagination, filtering, and automatic redaction of sensitive values (passwords, tokens, authorization headers).
+
+### `GET /admin/logs/view`
+
+List recent lines from an application log file with optional filtering and pagination.
+
+**Roles:** `admin`
+
+**Query parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `source` | string | `app` | Allowlisted log source identifier; currently only `"app"` (application log) is supported |
+| `offset` | integer | `0` | Starting byte offset from the end of the file; `0` reads the last N lines |
+| `limit` | integer | `100` | Maximum number of lines to return |
+| `search` | string | (empty) | Optional text filter; lines containing this substring are included; filter is applied after tail selection |
+
+**Response (200 OK):**
+
+```json
+{
+    "source": {
+        "source": "app",
+        "path": "/var/log/ecube/app.log"
+    },
+    "fetched_at": "2026-04-08T14:32:15.123456Z",
+    "file_modified_at": "2026-04-08T14:31:22.654321Z",
+    "offset": 0,
+    "limit": 100,
+    "returned": 42,
+    "has_more": true,
+    "lines": [
+        {
+            "content": "2026-04-08T14:31:22.654Z [INFO] Application started"
+        },
+        {
+            "content": "2026-04-08T14:31:25.123Z [DEBUG] Database connection established"
+        }
+    ]
+}
+```
+
+**Response fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `source` | object | Info about the log source — includes `source` identifier and absolute `path` |
+| `fetched_at` | datetime | UTC timestamp when the request was processed |
+| `file_modified_at` | datetime or null | Last modification time of the log file (null if file cannot be stat'd) |
+| `offset` | integer | The byte offset parameter used for tail selection |
+| `limit` | integer | The line limit parameter |
+| `returned` | integer | Actual number of lines returned (≤ limit) |
+| `has_more` | boolean | Whether more lines exist beyond the returned set (useful for pagination UI) |
+| `lines` | array | Array of `{content: string}` objects; content is redacted before serialization |
+
+**Behavior:**
+
+- Log file access is restricted to an allowlist of safe source identifiers. Only `"app"` (mapped to the configured log file) is currently supported.
+- The endpoint reads from the end of the file backward (tail semantics) to avoid loading large files into memory.
+- The `offset` and `limit` parameters control pagination: `offset=0` reads the last `limit` lines; `offset=N` skips the first `N` bytes from the end.
+- If `search` is provided, lines are filtered to include only those containing the substring (case-sensitive).
+- **Sensitive value redaction:** Before returning, all lines are scanned for and redacted of:
+  - Authorization headers (e.g., `Authorization: Bearer ...` → sanitized)
+  - Password/token field values (e.g., `password=***`, `api_key=***`)
+  - Sensitive JSON field values (e.g., `{"secret": "***"}`)
+  - Other credential-like patterns
+- File paths and credential-like strings are redacted from all response fields.
+- If the file does not exist or cannot be read, returns `404`.
+- If the source identifier is not in the allowlist, returns `404`.
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role (non-admin) or project isolation violation
+- `404 Not Found` — Log source not in allowlist, or log file does not exist
+- `422 Unprocessable Entity` — Invalid query parameter (e.g., negative offset/limit, non-integer values)
+- `503 Service Unavailable` — Log file I/O error (permission denied, disk error, etc.)
+
+**Audit events:**
+
+- `LOG_LINES_VIEWED` — Successful access to log lines; includes `source`, `offset`, `limit`, `search_filter`, `lines_returned`
+- `LOG_LINES_VIEW_DENIED` — Access denied (non-admin); includes `source`, `actor`, `reason` (role violation)
+
+**Security notes:**
+
+- This endpoint is admin-only to prevent information leakage from log files, which may contain sensitive system diagnostics, tracebacks, or user data.
+- All sensitive values are redacted in transit; the redaction cannot be bypassed via query parameters.
+- File I/O errors are caught gracefully and do not expose system paths or OS error details to the client.
+- Log file access respects OS-level permissions; if the ECUBE service account lacks read permissions, returns `503`.
+
+### `GET /admin/logs`
+
+List available log files for download.
+
+**Roles:** `admin`
+
+**Behavior:**
+
+- Returns a list of log files available in the log directory.
+- Provides metadata: file name, size, and last modification time.
+- File paths are redacted from the response.
+
+**Response (200 OK):**
+
+```json
+[
+    {
+        "name": "app.log",
+        "size": 2097152,
+        "modified_at": "2026-04-08T14:31:22.654321Z"
+    }
+]
+```
+
+### `GET /admin/logs/{filename}`
+
+Download a complete log file.
+
+**Roles:** `admin`
+
+**Path parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `filename` | string | Log file name (e.g., `app.log`); must match allowlisted names |
+
+**Behavior:**
+
+- Returns the complete file content as-is (no redaction).
+- Content-Disposition header specifies attachment mode for browser download.
+- File paths are validated against an allowlist to prevent directory traversal.
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role (non-admin)
+- `404 Not Found` — File not found or not in allowlist
+- `503 Service Unavailable` — File I/O error
+
+---
+
+## 3.9 First-Run Setup API
 
 These endpoints are **unauthenticated** and guarded by a first-run check.
 
@@ -1129,7 +1272,7 @@ Perform first-run system initialization: create OS groups, create admin user, se
 
 **Audit events:** `SYSTEM_INITIALIZED`
 
-### 3.8.1 Database Provisioning API
+### 3.9.1 Database Provisioning API
 
 These endpoints support the setup wizard's database configuration step.  They live under `/setup/database/`.
 
