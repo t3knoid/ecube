@@ -959,6 +959,23 @@ class TestOSUserEndpoints:
         users = resp.json()["users"]
         assert users == []
 
+    def test_list_os_users_search_prefilters_directory_role_lookup(self, admin_client, db):
+        db.add(UserRole(username="alice", role="processor"))
+        db.add(UserRole(username="bravo", role="processor"))
+        db.commit()
+
+        provider = MagicMock()
+        provider.list_users.return_value = []
+        provider.user_exists.return_value = True
+
+        with patch("app.routers.admin._get_provider", return_value=provider):
+            resp = admin_client.get("/admin/os-users?search=ali")
+
+        assert resp.status_code == 200
+        users = resp.json()["users"]
+        assert [u["username"] for u in users] == ["alice"]
+        provider.user_exists.assert_called_once_with("alice")
+
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
