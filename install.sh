@@ -1062,13 +1062,31 @@ EOF_PAM
 _maybe_download_release() {
   if [[ -z "${VERSION_TAG}" ]]; then
     # Running from an extracted release package: copy source files into
-    # INSTALL_DIR.  Skip the copy when INSTALL_DIR is the current directory
-    # (e.g., --install-dir set to the package directory itself).
+    # INSTALL_DIR. Resolve the package root from the install script location,
+    # not the caller's current working directory, so invocation from another
+    # directory (for example repo-root/install.sh while cwd=dist/) still stages
+    # the correct files.
+    # Skip the copy when INSTALL_DIR is the package directory itself.
     local src_dir
-    src_dir="$(pwd)"
+    src_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+    local required_items=(app alembic alembic.ini pyproject.toml frontend/dist)
+    local missing_items=()
+    for item in "${required_items[@]}"; do
+      if [[ ! -e "${src_dir}/${item}" ]]; then
+        missing_items+=("${item}")
+      fi
+    done
+    if [[ ${#missing_items[@]} -gt 0 ]]; then
+      error "Local install source '${src_dir}' is incomplete. Missing required items:"
+      for item in "${missing_items[@]}"; do
+        error "  ${item}"
+      done
+      error "Run the installer from an extracted release package or from the repository root."
+      exit 1
+    fi
     if [[ "$(realpath "${INSTALL_DIR}" 2>/dev/null || echo "${INSTALL_DIR}")" == \
           "$(realpath "${src_dir}" 2>/dev/null || echo "${src_dir}")" ]]; then
-      info "INSTALL_DIR is the current directory — no copy needed."
+      info "INSTALL_DIR matches the package source directory (${src_dir}) — no copy needed."
       return
     fi
     info "Copying package contents from ${src_dir} to ${INSTALL_DIR}..."
