@@ -15,9 +15,10 @@
 4. [Mounts (`/mounts`)](#mountsmounts)
 5. [Jobs (`/jobs`)](#jobsjobs)
 6. [Audit (`/audit`)](#auditaudit)
-7. [Introspection (`/introspection`)](#introspectionintrospection)
-8. [Telemetry (`/telemetry`)](#telemetrytelemetry)
-9. [Support and Resources](#support-and-resources)
+7. [Admin Logs (`/admin/logs`)](#admin-logs-adminlogs)
+8. [Introspection (`/introspection`)](#introspectionintrospection)
+9. [Telemetry (`/telemetry`)](#telemetrytelemetry)
+10. [Support and Resources](#support-and-resources)
 
 ---
 
@@ -128,6 +129,57 @@ curl -H "Authorization: Bearer $JWT_TOKEN" https://localhost:8443/endpoint
 curl -H "Authorization: Bearer $TOKEN" \
   'https://localhost:8443/audit?action=JOB_STARTED&user=griffin&limit=50&offset=0'
 ```
+
+---
+
+## Admin Logs (`/admin/logs`)
+
+| Method | Endpoint | Role | Description |
+| ------ | -------- | ---- | ----------- |
+| GET | `/admin/logs/view` | admin | View redacted log lines with pagination/filtering (source allowlist) |
+| GET | `/admin/logs` | admin | List downloadable log files with metadata and aggregate size |
+| GET | `/admin/logs/{filename}` | admin | Download raw log file content |
+
+### `GET /admin/logs/view` (quick params)
+
+- `source=app` — Allowlisted log source key (currently `app` only)
+- `limit=200` — Max matching lines to return (min 1, max 1000)
+- `offset=0` — Number of newest matching lines to skip
+- `search=` — Optional case-insensitive substring filter
+- `reverse=false` — `false`: oldest→newest in selected window, `true`: newest→oldest
+
+**Response highlights:**
+
+- Returns an object with `source`, `fetched_at`, `file_modified_at`, `offset`, `limit`, `returned`, `has_more`, `lines`
+- `source.path` is basename-only (for example `app.log`), not an absolute host path
+- `lines[].content` is automatically redacted for sensitive values
+
+**Example:**
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  'https://localhost:8443/admin/logs/view?source=app&limit=100&offset=0&search=error&reverse=true'
+```
+
+### `GET /admin/logs` (response shape)
+
+Returns an object envelope (not a bare array):
+
+```json
+{
+  "log_files": [
+    {
+      "name": "app.log",
+      "size": 2097152,
+      "created": "2026-04-08T14:00:00.000000Z",
+      "modified": "2026-04-08T14:31:22.654321Z"
+    }
+  ],
+  "total_size": 2097152
+}
+```
+
+Common errors for admin log endpoints: `401` (missing/invalid token), `403` (non-admin), `404` (source/file not found or file logging unavailable), `422` (invalid query params on `/admin/logs/view`), `503` (log I/O/permission issues).
 
 ---
 
