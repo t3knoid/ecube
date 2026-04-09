@@ -341,7 +341,7 @@ def view_log_lines(
         user=current_user.username,
         details={
             "source": source_info.source,
-            "path": source_info.path,
+            "log_file": os.path.basename(source_info.path),
             "limit": limit,
             "offset": offset,
             "search": search or "",
