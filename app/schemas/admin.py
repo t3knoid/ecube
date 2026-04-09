@@ -82,6 +82,35 @@ class LogViewResponse(BaseModel):
     lines: List[LogViewLine] = Field(default_factory=list, description="Redacted log lines")
 
 
+class LogSourceInfo(BaseModel):
+    """Metadata about an allowlisted log source."""
+
+    source: str = Field(..., description="Stable log source key (for example: app)")
+    path: str = Field(..., description="Display path for the backing log file (basename only)")
+
+
+class LogViewLine(BaseModel):
+    """Single log line returned by the log viewer endpoint."""
+
+    content: str = Field(..., description="Redacted log line content")
+
+
+class LogViewResponse(BaseModel):
+    """Response for ``GET /admin/logs/view``."""
+
+    source: LogSourceInfo = Field(..., description="Selected log source")
+    fetched_at: datetime = Field(..., description="Timestamp when lines were fetched")
+    file_modified_at: Optional[datetime] = Field(
+        default=None,
+        description="Last-modified timestamp for the source file (UTC)",
+    )
+    offset: int = Field(..., description="Current tail offset (number of newest matching lines skipped)")
+    limit: int = Field(..., description="Maximum number of matching lines requested")
+    returned: int = Field(..., description="Number of lines returned in this response")
+    has_more: bool = Field(..., description="True when additional older matching lines exist")
+    lines: List[LogViewLine] = Field(default_factory=list, description="Redacted log lines")
+
+
 class _GroupItem(str):
     """Constrained string for group names used in list fields."""
 
