@@ -47,3 +47,7 @@ export function downloadLogFile(name) {
     responseType: 'blob',
   })
 }
+
+export function getLogLines(params = {}) {
+  return toData(apiClient.get(`${API_BASE}/admin/logs/view`, { params }))
+}

@@ -1074,7 +1074,30 @@ All OS user and group management endpoints require the `admin` role and are only
 | 30 | OS_GROUP_CREATED audit log | `GET /audit?action=OS_GROUP_CREATED` after creating group | Audit entry with group name |
 | 31 | OS_GROUP_DELETED audit log | `GET /audit?action=OS_GROUP_DELETED` after deleting group | Audit entry with group name |
 
-### 12.10 First-Run Setup
+### 12.10 Admin Log Viewing API
+
+All admin log endpoints require the `admin` role.
+
+| # | Test | How | Expected |
+|---|------|-----|----------|
+| 1 | View logs — unauthenticated | `GET /admin/logs/view` without token | 401, `UNAUTHORIZED` |
+| 2 | View logs — non-admin denied | `GET /admin/logs/view` with manager/processor/auditor token | 403, `FORBIDDEN`; denied audit event recorded |
+| 3 | View logs — unknown source | `GET /admin/logs/view?source=unknown` with admin token | 404, unknown log source |
+| 4 | View logs — baseline response shape | `GET /admin/logs/view?source=app&limit=5&offset=0` | 200 with object fields: `source`, `fetched_at`, `file_modified_at`, `offset`, `limit`, `returned`, `has_more`, `lines` |
+| 5 | View logs — source path redaction | Inspect `source.path` in successful response | Basename only (for example `app.log`), no absolute filesystem path |
+| 6 | View logs — offset pagination | Create known numbered lines, call `GET /admin/logs/view?limit=5&offset=2` | Returns correct window from tail semantics, `returned <= limit` |
+| 7 | View logs — reverse ordering | Compare `reverse=false` vs `reverse=true` on same query | Same selected window; line order is inverted when `reverse=true` |
+| 8 | View logs — search filtering | `GET /admin/logs/view?search=error` | Only matching lines are returned (case-insensitive contains) |
+| 9 | View logs — sensitive value redaction | Include tokens/passwords in source log lines, call view endpoint | Sensitive values replaced with redacted markers in `lines[].content` |
+| 10 | View logs — success audit | `GET /audit?action=LOG_LINES_VIEWED` after successful view | Audit entry includes `source`, `limit`, `offset`, `returned`, `has_more`, and basename `log_file` |
+| 11 | List logs — unauthenticated | `GET /admin/logs` without token | 401, `UNAUTHORIZED` |
+| 12 | List logs — non-admin denied | `GET /admin/logs` with non-admin token | 403, `FORBIDDEN`; denied audit event recorded |
+| 13 | List logs — response envelope | `GET /admin/logs` with admin token and file logging configured | 200 object with `log_files` array and `total_size`; no `log_directory` field in response |
+| 14 | Download log — non-admin denied | `GET /admin/logs/app.log` with non-admin token | 403, `FORBIDDEN`; denied audit event recorded |
+| 15 | Download log — path traversal blocked | `GET /admin/logs/../../../etc/passwd` | Rejected (400/404/422), no file disclosure |
+| 16 | Download log — success audit | Download valid file as admin, then query audit | `LOG_FILE_DOWNLOADED` entry includes requested filename |
+
+### 12.11 First-Run Setup
 
 Setup endpoints are unauthenticated and can only succeed once.
 
@@ -1090,7 +1113,7 @@ Setup endpoints are unauthenticated and can only succeed once.
 | 8 | Login as initialized admin | `POST /auth/token` with the admin credentials from step 2 | 200, JWT contains `admin` role |
 | 9 | SYSTEM_INITIALIZED audit log | `GET /audit?action=SYSTEM_INITIALIZED` | Audit entry with actor |
 
-### 12.11 Database Provisioning API
+### 12.12 Database Provisioning API
 
 Database provisioning endpoints use a dual-auth model with fail-closed semantics: unauthenticated during initial setup, admin-only after, and 503 when the database server is unreachable without a valid admin JWT.  The following conditions are treated as "not provisioned" (allowing initial provisioning to proceed without `force`):
 
@@ -1138,7 +1161,7 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 | 34 | Provision — .env write failure | `POST /setup/database/provision` after making `.env` read-only (or disk full) | 500, "failed to persist" message; engine not swapped |
 | 35 | Provision — engine reinit failure | `POST /setup/database/provision` while another reinit is in progress (lock contention) | 500, "engine could not be switched" message; `.env` already written |
 
-### 12.12 Startup State Reconciliation
+### 12.13 Startup State Reconciliation
 
 | # | Test | How | Expected |
 |---|------|-----|----------|
@@ -1155,7 +1178,7 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 | 11 | Stale lock reclaim | Insert a stale lock row (`locked_at` > 5 minutes ago) via SQL, restart the service | Service reclaims the stale lock, reconciliation runs normally |
 | 12 | Lock released after failure | Disconnect NFS, restart the service, reconnect NFS, restart again | Second restart acquires lock and runs reconciliation; lock table is empty after startup completes |
 
-### 12.13 System Health
+### 12.14 System Health
 
 `GET /introspection/system-health` requires any authenticated role.
 

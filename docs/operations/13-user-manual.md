@@ -24,6 +24,7 @@
 13. [Audit Logs](#11-audit-logs)
 14. [Users](#12-users)
 15. [System](#13-system)
+   - [Application Logs Tab](#131-application-logs-tab)
 16. [Common Tasks](#14-common-tasks)
 17. [Troubleshooting](#15-troubleshooting)
 
@@ -620,19 +621,77 @@ If your role does not include access to this page, the navigation item will not 
 
 > **Access Summary**
 > **Page visibility:** `admin`, `manager`, `processor`, `auditor`
-> **Restricted actions:** Some diagnostics shown here may be more relevant to administrators and support personnel than to routine operators.
+> **Restricted actions:** Most diagnostics on this page are relevant to administrators and support personnel. Log viewing is admin-only.
 
-The `System` page provides operational and diagnostic information. Depending on deployment and permissions, this may include system health, USB information, block-device data, mount diagnostics, logs, and job-debug details.
+The `System` page provides operational and diagnostic information. Depending on deployment and permissions, this may include system health, USB information, block-device data, mount diagnostics, application logs, and job-debug details.
 
 This page is useful when:
 
 - Confirming the backend is healthy
 - Checking whether hardware is visible to ECUBE
 - Reviewing mount or log details during issue investigation
+- Investigating system errors or performance issues via application logs (admin-only)
 
 End users who only perform evidence exports may rarely need this page. Administrators and support personnel are more likely to use it during troubleshooting.
 
 ![System page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/system-default-chromium-linux.png)
+
+### 13.1 Application Logs Tab
+
+**Access:** `admin` role only
+
+The **Logs** tab allows administrators to view recent application log lines in real time without requiring SSH or command-line access to the ECUBE host. This is useful for diagnosing system issues, checking for errors, and monitoring application behavior.
+
+#### Viewing Logs
+
+1. Open the `System` page.
+2. Click the **Logs** tab (visible to admins only).
+3. The tab displays recent log lines from the application log file.
+4. Log entries are displayed in reverse chronological order (newest first).
+5. File metadata shows:
+   - **Source:** Log source display path (basename only, for example `app.log`)
+   - **Fetched at:** Viewer-local date/time (converted by the browser from the UTC timestamp returned by the API)
+   - **File modified:** Last modification time of the log file
+
+#### Searching Logs
+
+1. Enter a search term in the **Search** field.
+2. Only log lines containing your search term will be displayed.
+3. The search is case-insensitive.
+4. Click **Refresh** to rerun the search with fresh log data.
+
+#### Pagination
+
+1. The current Logs tab UI does not expose **Limit** or **Offset** controls.
+2. Log results are fetched using the UI's built-in defaults and refreshed with the **Refresh** action.
+3. A total-count indicator (for example, "X of Y lines") is not currently shown in the UI.
+
+#### Automatic Redaction
+
+All sensitive values are automatically redacted from displayed log lines:
+
+- **Passwords and tokens:** Any field containing password, secret, api_key, or token values are masked (e.g., `password=[REDACTED]`)
+- **Authorization headers:** Bearer tokens in Authorization headers are sanitized
+- **Credential-like values:** Other sensitive patterns (e.g., sensitive JSON fields) are masked
+
+This redaction occurs automatically; you cannot bypass it via search or filter options.
+
+#### Refreshing Log Data
+
+1. Click the **Refresh** button to retrieve the latest log entries.
+2. The displayed lines update immediately with the most recent data from the log file.
+3. If the log file has been rotated or is unavailable, an appropriate error message appears.
+
+#### Troubleshooting Log Viewing
+
+If the Logs tab shows an error or is unavailable:
+
+- Verify you have the `admin` role (non-admin users will not see this tab).
+- Check that the application log file exists on the ECUBE host.
+- Verify the ECUBE service account has read permissions on the log file.
+- Consult [15. Troubleshooting](#15-troubleshooting) for service-level issues.
+
+Governance note: denied log access attempts by non-admin users are recorded in the audit trail for accountability and compliance visibility.
 
 ---
 
@@ -741,6 +800,24 @@ Notes:
 
 - In the current web UI, removing all roles is the visible workflow for removing ECUBE access.
 - Full operating-system user deletion is not currently exposed in the web UI and should be handled through administrative procedures outside this manual.
+
+### 14.8 View Application Logs for Troubleshooting
+
+**Allowed roles:** `admin`
+
+1. Open the `System` page.
+2. Click the **Logs** tab (available to admins only).
+3. The tab displays the most recent log lines from the application log file.
+4. Optionally, enter a search term to filter the displayed lines.
+5. Click **Refresh** to load the latest log data.
+6. Review the redacted log entries for errors, warnings, or relevant diagnostic messages.
+7. If you need to investigate further, take note of timestamps or error messages to share with support, or download the full log file using the file list below the viewer.
+
+Notes:
+
+- Sensitive values (passwords, tokens, API keys) are automatically redacted from displayed logs for security.
+- The log viewer shows recent entries only; if you need earlier entries or the full log file, use the file download option in the Logs tab.
+- This feature is admin-only to prevent information leakage from diagnostic data.
 
 ---
 
