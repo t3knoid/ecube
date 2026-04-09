@@ -125,6 +125,16 @@ def _log_directory() -> Optional[str]:
     return os.path.dirname(os.path.abspath(settings.log_file))
 
 
+def _log_file_pattern(base_name: str) -> re.Pattern[str]:
+    """Return the compiled allowlist regex for a log file family.
+
+    Matches exactly the base log file (e.g. ``app.log``) and numbered
+    rotation siblings (e.g. ``app.log.1``, ``app.log.2``).  Files with
+    non-numeric suffixes (``app.log.tmp``, ``app.log.bak``) are excluded.
+    """
+    return re.compile(rf"^{re.escape(base_name)}(?:\.\d+)?$")
+
+
 def _safe_filename(filename: str) -> str:
     """Validate *filename* to prevent path traversal.
 
@@ -286,10 +296,12 @@ def list_log_files(
 
     files: List[LogFileInfo] = []
     base_name = os.path.basename(settings.log_file)  # type: ignore[arg-type]
+    allowed_log_pattern = _log_file_pattern(base_name)
     for entry in sorted(os.listdir(log_dir)):
-        # Only expose log files that share the base name prefix (e.g.
-        # "app.log", "app.log.1", "app.log.2").
-        if not entry.startswith(base_name):
+        # Only expose log files that belong to the configured log family
+        # (e.g. "app.log", "app.log.1").  Uses the same allowlist regex as
+        # the download endpoint so the listed set is always downloadable.
+        if not allowed_log_pattern.fullmatch(entry):
             continue
         full = os.path.join(log_dir, entry)
         if not os.path.isfile(full):
@@ -475,11 +487,7 @@ def download_log_file(
     safe = _safe_filename(filename)
     base_name = os.path.basename(settings.log_file)  # type: ignore[arg-type]
 
-    # Restrict downloads to the configured log file family (for example,
-    # app.log, app.log.1, app.log.2) even if other files exist in the
-    # same directory.
-    allowed_log_pattern = re.compile(rf"^{re.escape(base_name)}(?:\.\d+)?$")
-    if not allowed_log_pattern.fullmatch(safe):
+    if not _log_file_pattern(base_name).fullmatch(safe):
         raise HTTPException(status_code=404, detail="Log file not found")
 
     full_path = os.path.join(log_dir, safe)
