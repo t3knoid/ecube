@@ -117,7 +117,7 @@ describe('UsersView existing OS-user confirmation flow', () => {
     expect(wrapper.text()).not.toContain(i18n.global.t('users.existingOsUserConfirmMessage'))
   })
 
-  it('records cancel decision and keeps create form unchanged', async () => {
+  it('records cancel decision and closes dialogs', async () => {
     mocks.createOsUser
       .mockResolvedValueOnce({
         status: 'confirmation_required',
@@ -157,7 +157,8 @@ describe('UsersView existing OS-user confirmation flow', () => {
       confirm_existing_os_user: false,
     })
 
-    expect(wrapper.find('#create-user-username').element.value).toBe('existing')
-    expect(wrapper.find('#create-user-password').element.value).toBe('ignored-pass')
+    // Verify both dialogs are closed after cancel
+    expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.createOsUser'))).toBeFalsy()
+    expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.existingOsUserConfirmTitle'))).toBeFalsy()
   })
 })
