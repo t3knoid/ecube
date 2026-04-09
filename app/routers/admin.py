@@ -23,8 +23,10 @@ Security considerations
 
 import logging
 import os
+import re
 from datetime import datetime, timezone
-from typing import List, Optional
+from collections import deque
+from typing import Deque, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import FileResponse
@@ -43,6 +45,9 @@ from app.schemas.admin import (
     CreateOSUserRequest,
     LogFileInfo,
     LogFilesResponse,
+    LogSourceInfo,
+    LogViewLine,
+    LogViewResponse,
     MessageResponse,
     OSGroupListResponse,
     OSGroupResponse,
@@ -54,12 +59,18 @@ from app.schemas.admin import (
 from app.schemas.hardware import HubUpdateRequest, PortEnableRequest, PortUpdateRequest, UsbHubSchema, UsbPortSchema
 from app.infrastructure import get_os_user_provider
 from app.infrastructure.os_user_protocol import OSUserError, OsUserProvider
-from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500, R_504
+from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500, R_503, R_504
 from app.services.os_user_service import validate_group_name, validate_username
 from app.constants import ECUBE_GROUPNAME_PATTERN, USERNAME_PATTERN, ECUBE_GROUP_ROLE_MAP
 from app.utils.client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
+
+_SENSITIVE_LOG_PATTERNS = [
+    re.compile(r"(?i)(authorization\s*[:=]\s*)(bearer|basic)\s+[^\s,;]+"),
+    re.compile(r"(?i)(\b(?:password|passwd|pwd|secret|token|api[_-]?key|client_secret|access_token|refresh_token)\b\s*[:=]\s*)([^\s,;]+)"),
+    re.compile(r'(?i)("(?:password|passwd|pwd|secret|token|api[_-]?key|client_secret|access_token|refresh_token)"\s*:\s*")([^"]+)(")'),
+]
 
 
 def _get_provider() -> OsUserProvider:
@@ -122,6 +133,85 @@ def _safe_filename(filename: str) -> str:
     return safe
 
 
+def _allowed_log_sources() -> Dict[str, str]:
+    """Return allowlisted log sources mapped to absolute file paths."""
+    if not settings.log_file:
+        return {}
+    return {
+        "app": os.path.abspath(settings.log_file),
+    }
+
+
+def _resolve_log_source(source: str) -> LogSourceInfo:
+    """Resolve a user-selected source key to an allowlisted log file path."""
+    normalized = (source or "").strip().lower()
+    allowed = _allowed_log_sources()
+
+    if not allowed:
+        raise HTTPException(
+            status_code=404,
+            detail="File-based logging is not configured or log source is unavailable",
+        )
+
+    if normalized not in allowed:
+        raise HTTPException(status_code=404, detail="Unknown log source")
+
+    return LogSourceInfo(source=normalized, path=allowed[normalized])
+
+
+def _tail_lines(path: str, max_lines: int) -> Tuple[List[str], bool]:
+    """Read up to ``max_lines`` from the end of file without full-file loads."""
+    if max_lines <= 0:
+        return [], False
+
+    with open(path, "rb") as handle:
+        handle.seek(0, os.SEEK_END)
+        position = handle.tell()
+        block_size = 8192
+        buffer = b""
+
+        while position > 0 and buffer.count(b"\n") <= max_lines:
+            chunk_size = min(block_size, position)
+            position -= chunk_size
+            handle.seek(position, os.SEEK_SET)
+            buffer = handle.read(chunk_size) + buffer
+
+    lines = [line.decode("utf-8", errors="replace") for line in buffer.splitlines()]
+    has_more = len(lines) > max_lines
+    if has_more:
+        lines = lines[-max_lines:]
+    return lines, has_more
+
+
+def _tail_filtered_lines(path: str, needle: str, max_lines: int) -> Tuple[List[str], bool]:
+    """Stream file forward and keep only the last matching lines."""
+    if max_lines <= 0:
+        return [], False
+
+    lowered = needle.lower()
+    window: Deque[str] = deque()
+    match_count = 0
+
+    with open(path, "rb") as handle:
+        for raw in handle:
+            line = raw.decode("utf-8", errors="replace").rstrip("\n")
+            if lowered in line.lower():
+                match_count += 1
+                if len(window) == max_lines:
+                    window.popleft()
+                window.append(line)
+
+    return list(window), match_count > max_lines
+
+
+def _redact_log_line(line: str) -> str:
+    redacted = line
+    redacted = _SENSITIVE_LOG_PATTERNS[0].sub(r"\1\2 [REDACTED]", redacted)
+    redacted = _SENSITIVE_LOG_PATTERNS[1].sub(r"\1[REDACTED]", redacted)
+    redacted = _SENSITIVE_LOG_PATTERNS[2].sub(r"\1[REDACTED]\3", redacted)
+    return redacted
+
+
 @router.get("/logs", response_model=LogFilesResponse, responses={**R_401, **R_404})
 def list_log_files(
     request: Request,
@@ -180,6 +270,89 @@ def list_log_files(
         log_files=files,
         total_size=total_size,
         log_directory=log_dir,
+    )
+
+
+@router.get(
+    "/logs/view",
+    response_model=LogViewResponse,
+    responses={**R_401, **R_403, **R_404, **R_422, **R_503},
+)
+def view_log_lines(
+    request: Request,
+    source: str = Query("app", min_length=1, max_length=32),
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0, le=100000),
+    search: Optional[str] = Query(None, max_length=256),
+    reverse: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Return recent, redacted log lines from an allowlisted source.
+
+    Access is restricted to users with the ``admin`` role.
+    """
+    if "admin" not in current_user.roles:
+        best_effort_audit(
+            db,
+            action="LOG_LINES_VIEW_DENIED",
+            user=current_user.username,
+            details={"source": source, "reason": "admin_role_required"},
+            client_ip=get_client_ip(request),
+        )
+        raise HTTPException(status_code=403, detail="This action requires the admin role")
+
+    source_info = _resolve_log_source(source)
+    max_matching_lines = limit + offset
+
+    try:
+        if search and search.strip():
+            lines, has_more = _tail_filtered_lines(source_info.path, search.strip(), max_matching_lines)
+        else:
+            lines, has_more = _tail_lines(source_info.path, max_matching_lines)
+
+        if offset > 0:
+            lines = lines[:-offset] if offset < len(lines) else []
+
+        if reverse:
+            lines = list(reversed(lines))
+
+        stat = os.stat(source_info.path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Log source file not found")
+    except PermissionError:
+        raise HTTPException(status_code=503, detail="Log source is unavailable due to file permissions")
+    except OSError:
+        raise HTTPException(status_code=503, detail="Log source is unavailable")
+
+    redacted_lines = [LogViewLine(content=_redact_log_line(line)) for line in lines]
+
+    best_effort_audit(
+        db,
+        action="LOG_LINES_VIEWED",
+        user=current_user.username,
+        details={
+            "source": source_info.source,
+            "path": source_info.path,
+            "limit": limit,
+            "offset": offset,
+            "search": search or "",
+            "reverse": reverse,
+            "returned": len(redacted_lines),
+            "has_more": has_more,
+        },
+        client_ip=get_client_ip(request),
+    )
+
+    return LogViewResponse(
+        source=source_info,
+        fetched_at=datetime.now(timezone.utc),
+        file_modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+        offset=offset,
+        limit=limit,
+        returned=len(redacted_lines),
+        has_more=has_more,
+        lines=redacted_lines,
     )
 
 
