@@ -344,6 +344,7 @@ def view_log_lines(
 
     source_info = _resolve_log_source(source)
     max_matching_lines = limit + offset
+    file_modified_at: Optional[datetime] = None
 
     try:
         if search and search.strip():
@@ -356,14 +357,20 @@ def view_log_lines(
 
         if reverse:
             lines = list(reversed(lines))
-
-        stat = os.stat(source_info.path)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Log source file not found")
     except PermissionError:
         raise HTTPException(status_code=503, detail="Log source is unavailable due to file permissions")
     except OSError:
         raise HTTPException(status_code=503, detail="Log source is unavailable")
+
+    # If the file is rotated/removed after reads succeed, keep returning lines
+    # and omit file_modified_at instead of failing the whole request.
+    try:
+        stat = os.stat(source_info.path)
+        file_modified_at = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+    except (FileNotFoundError, PermissionError, OSError):
+        file_modified_at = None
 
     redacted_lines = [LogViewLine(content=_redact_log_line(line)) for line in lines]
 
@@ -387,7 +394,7 @@ def view_log_lines(
     return LogViewResponse(
         source=source_info,
         fetched_at=datetime.now(timezone.utc),
-        file_modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+        file_modified_at=file_modified_at,
         offset=offset,
         limit=limit,
         returned=len(redacted_lines),
