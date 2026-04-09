@@ -24,6 +24,7 @@ import logging
 import os
 import re
 from datetime import datetime, timezone
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
@@ -108,6 +109,14 @@ def _raise_os_error(exc: OSUserError, *, context: str = "OS operation") -> None:
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
+@dataclass(frozen=True)
+class _ResolvedLogSource:
+    """Internal log source mapping with host-local absolute path."""
+
+    source: str
+    absolute_path: str
+
+
 def _log_directory() -> Optional[str]:
     """Return the configured log directory, or ``None`` if logging to file is
     not enabled."""
@@ -140,7 +149,7 @@ def _allowed_log_sources() -> Dict[str, str]:
     }
 
 
-def _resolve_log_source(source: str) -> LogSourceInfo:
+def _resolve_log_source(source: str) -> _ResolvedLogSource:
     """Resolve a user-selected source key to an allowlisted log file path."""
     normalized = (source or "").strip().lower()
     allowed = _allowed_log_sources()
@@ -154,7 +163,7 @@ def _resolve_log_source(source: str) -> LogSourceInfo:
     if normalized not in allowed:
         raise HTTPException(status_code=404, detail="Unknown log source")
 
-    return LogSourceInfo(source=normalized, path=allowed[normalized])
+    return _ResolvedLogSource(source=normalized, absolute_path=allowed[normalized])
 
 
 def _tail_lines(path: str, max_lines: int) -> Tuple[List[str], bool]:
@@ -347,9 +356,9 @@ def view_log_lines(
 
     try:
         if search and search.strip():
-            lines, has_more = _tail_filtered_lines(source_info.path, search.strip(), max_matching_lines)
+            lines, has_more = _tail_filtered_lines(source_info.absolute_path, search.strip(), max_matching_lines)
         else:
-            lines, has_more = _tail_lines(source_info.path, max_matching_lines)
+            lines, has_more = _tail_lines(source_info.absolute_path, max_matching_lines)
 
         if offset > 0:
             lines = lines[:-offset] if offset < len(lines) else []
@@ -366,7 +375,7 @@ def view_log_lines(
     # If the file is rotated/removed after reads succeed, keep returning lines
     # and omit file_modified_at instead of failing the whole request.
     try:
-        stat = os.stat(source_info.path)
+        stat = os.stat(source_info.absolute_path)
         file_modified_at = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
     except (FileNotFoundError, PermissionError, OSError):
         file_modified_at = None
@@ -374,7 +383,7 @@ def view_log_lines(
     redacted_lines = [LogViewLine(content=_redact_log_line(line)) for line in lines]
     source_response = LogSourceInfo(
         source=source_info.source,
-        path=os.path.basename(source_info.path),
+        path=os.path.basename(source_info.absolute_path),
     )
 
     best_effort_audit(
@@ -383,7 +392,7 @@ def view_log_lines(
         user=current_user.username,
         details={
             "source": source_info.source,
-            "log_file": os.path.basename(source_info.path),
+            "log_file": os.path.basename(source_info.absolute_path),
             "limit": limit,
             "offset": offset,
             "search": search or "",
