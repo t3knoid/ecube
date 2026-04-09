@@ -489,7 +489,9 @@ class TestAdminLogsEndpoints:
                 assert len(entries) >= 1
                 assert entries[0].details.get("reason") == "admin_role_required"
 
-    def test_view_logs_unknown_source_returns_404(self, admin_client):
+    def test_view_logs_unknown_source_returns_404_and_audits_denial(self, admin_client, db):
+        from app.repositories.audit_repository import AuditRepository
+
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = os.path.join(tmpdir, "app.log")
             with open(log_path, "w") as f:
@@ -499,6 +501,24 @@ class TestAdminLogsEndpoints:
                 mock_settings.log_file = log_path
                 resp = admin_client.get("/admin/logs/view", params={"source": "unknown"})
                 assert resp.status_code == 404
+
+                entries = AuditRepository(db).query(action="LOG_LINES_VIEW_DENIED")
+                assert len(entries) >= 1
+                assert entries[0].details.get("source") == "unknown"
+                assert entries[0].details.get("reason") == "unknown_log_source"
+
+    def test_view_logs_returns_404_when_logging_not_configured_and_audits_denial(self, admin_client, db):
+        from app.repositories.audit_repository import AuditRepository
+
+        with patch("app.routers.admin.settings") as mock_settings:
+            mock_settings.log_file = None
+            resp = admin_client.get("/admin/logs/view", params={"source": "app"})
+            assert resp.status_code == 404
+
+            entries = AuditRepository(db).query(action="LOG_LINES_VIEW_DENIED")
+            assert len(entries) >= 1
+            assert entries[0].details.get("source") == "app"
+            assert entries[0].details.get("reason") == "log_source_unavailable"
 
     def test_view_logs_returns_tail_with_offset_and_has_more(self, admin_client):
         with tempfile.TemporaryDirectory() as tmpdir:
