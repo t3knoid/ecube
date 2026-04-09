@@ -1104,6 +1104,7 @@ List recent lines from an application log file with optional filtering and pagin
 | `offset` | integer | `0` | Number of matches to skip when paginating through results |
 | `limit` | integer | `200` | Maximum number of matching lines to return per request |
 | `search` | string | (empty) | Optional text filter; lines containing this substring (case-sensitive) are included; pagination applies to filtered results |
+| `reverse` | boolean | `false` | Controls output line order; `false` returns oldest→newest within the selected window, `true` returns newest→oldest |
 
 **Response (200 OK):**
 
@@ -1148,6 +1149,7 @@ List recent lines from an application log file with optional filtering and pagin
 - Log file access is restricted to an allowlist of safe source identifiers. Only `"app"` (mapped to the configured log file) is currently supported.
 - The endpoint reads from the end of the file backward (tail semantics) to avoid loading large files into memory.
 - **Pagination:** The endpoint reads the last `(limit + offset)` matching lines and returns the slice `[offset : offset + limit]`. This enables page iteration: `offset=0, limit=200` returns the newest 200 results; `offset=200, limit=200` returns results 200-399 (next page). The `has_more` field indicates when additional pages exist.
+- **Ordering:** By default (`reverse=false`), lines are returned oldest→newest within the selected result window. When `reverse=true`, the same selected window is returned in newest→oldest order.
 - If `search` is provided, lines are filtered to include only those containing the substring (case-sensitive).
 - **Sensitive value redaction:** Before returning, all lines are scanned for and redacted of:
   - Authorization headers (e.g., `Authorization: Bearer ...` → sanitized)
