@@ -297,6 +297,59 @@ class TestAdminLogsEndpoints:
                 assert resp.status_code == 200
                 assert resp.content == content
 
+    def test_download_log_returns_503_on_permission_error(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("test log content\n")
+
+            original_stat = os.stat
+
+            def stat_side_effect(path):
+                if path == log_path:
+                    raise PermissionError("permission denied")
+                return original_stat(path)
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                with patch("app.routers.admin.os.stat", side_effect=stat_side_effect):
+                    resp = admin_client.get("/admin/logs/app.log")
+
+            assert resp.status_code == 503
+            data = resp.json()
+            assert data["code"] == "HTTP_503"
+            assert data["message"] == "Log file is unavailable due to file permissions"
+            assert data["trace_id"]
+
+    def test_download_log_returns_503_on_io_error(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("test log content\n")
+
+            original_stat = os.stat
+            original_open = open
+
+            def stat_side_effect(path):
+                return original_stat(path)
+
+            def open_side_effect(path, mode="r", *args, **kwargs):
+                if path == log_path and mode == "rb":
+                    raise OSError("disk error")
+                return original_open(path, mode, *args, **kwargs)
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                with patch("app.routers.admin.os.stat", side_effect=stat_side_effect):
+                    with patch("builtins.open", side_effect=open_side_effect):
+                        resp = admin_client.get("/admin/logs/app.log")
+
+            assert resp.status_code == 503
+            data = resp.json()
+            assert data["code"] == "HTTP_503"
+            assert data["message"] == "Log file is unavailable"
+            assert data["trace_id"]
+
     def test_download_rejects_path_traversal(self, admin_client):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = os.path.join(tmpdir, "app.log")
