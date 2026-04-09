@@ -937,9 +937,15 @@ Create an OS user, set password, and assign roles. ECUBE OS groups are derived f
 
 ### `GET /admin/os-users`
 
-List OS users filtered to ECUBE-relevant groups.
+List OS users filtered to ECUBE-relevant groups. Reserved system/service accounts (e.g. `www-data`) are always excluded.
 
 **Roles:** `admin`
+
+**Query parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `search` | string (optional) | Case-insensitive substring filter on `username`. Reserved accounts are excluded before the filter is applied, so searching for `www-data` always returns an empty list. |
 
 **Error responses:**
 
