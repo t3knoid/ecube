@@ -1101,9 +1101,9 @@ List recent lines from an application log file with optional filtering and pagin
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `source` | string | `app` | Allowlisted log source identifier; currently only `"app"` (application log) is supported |
-| `offset` | integer | `0` | Starting byte offset from the end of the file; `0` reads the last N lines |
-| `limit` | integer | `100` | Maximum number of lines to return |
-| `search` | string | (empty) | Optional text filter; lines containing this substring are included; filter is applied after tail selection |
+| `offset` | integer | `0` | Number of matches to skip when paginating through results |
+| `limit` | integer | `100` | Maximum number of matching lines to return per request |
+| `search` | string | (empty) | Optional text filter; lines containing this substring (case-sensitive) are included; pagination applies to filtered results |
 
 **Response (200 OK):**
 
@@ -1137,7 +1137,7 @@ List recent lines from an application log file with optional filtering and pagin
 | `source` | object | Info about the log source — includes `source` identifier and absolute `path` |
 | `fetched_at` | datetime | UTC timestamp when the request was processed |
 | `file_modified_at` | datetime or null | Last modification time of the log file (null if file cannot be stat'd) |
-| `offset` | integer | The byte offset parameter used for tail selection |
+| `offset` | integer | The pagination offset parameter (number of matches skipped) |
 | `limit` | integer | The line limit parameter |
 | `returned` | integer | Actual number of lines returned (≤ limit) |
 | `has_more` | boolean | Whether more lines exist beyond the returned set (useful for pagination UI) |
@@ -1147,7 +1147,7 @@ List recent lines from an application log file with optional filtering and pagin
 
 - Log file access is restricted to an allowlist of safe source identifiers. Only `"app"` (mapped to the configured log file) is currently supported.
 - The endpoint reads from the end of the file backward (tail semantics) to avoid loading large files into memory.
-- The `offset` and `limit` parameters control pagination: `offset=0` reads the last `limit` lines; `offset=N` skips the first `N` bytes from the end.
+- **Pagination:** The endpoint reads the last `(limit + offset)` matching lines and returns the slice `[offset : offset + limit]`. This enables page iteration: `offset=0, limit=100` returns the newest 100 results; `offset=100, limit=100` returns results 100-199 (next page). The `has_more` field indicates when additional pages exist.
 - If `search` is provided, lines are filtered to include only those containing the substring (case-sensitive).
 - **Sensitive value redaction:** Before returning, all lines are scanned for and redacted of:
   - Authorization headers (e.g., `Authorization: Bearer ...` → sanitized)
