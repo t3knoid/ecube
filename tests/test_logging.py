@@ -282,7 +282,7 @@ class TestAdminLogsEndpoints:
                 assert data["log_files"][0]["name"] == "app.log"
                 assert data["log_files"][0]["size"] > 0
                 assert data["total_size"] > 0
-                assert data["log_directory"] == tmpdir
+                assert "log_directory" not in data
 
     def test_download_log_file_success(self, admin_client, db):
         with tempfile.TemporaryDirectory() as tmpdir:

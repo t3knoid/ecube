@@ -175,8 +175,7 @@ Returns an object envelope (not a bare array):
       "modified": "2026-04-08T14:31:22.654321Z"
     }
   ],
-  "total_size": 2097152,
-  "log_directory": "/var/log/ecube"
+  "total_size": 2097152
 }
 ```
 
