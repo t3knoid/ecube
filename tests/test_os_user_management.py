@@ -836,6 +836,24 @@ class TestOSUserEndpoints:
 
         assert resp.status_code == 409
 
+    def test_create_user_existing_ecube_user_conflict_even_if_os_lookup_false(self, admin_client, db):
+        provider = MagicMock()
+        provider.user_exists.return_value = False
+
+        db.add(UserRole(username="testuser", role="admin"))
+        db.commit()
+
+        with patch("app.routers.admin._get_provider", return_value=provider):
+            resp = admin_client.post("/admin/os-users", json={
+                "username": "testuser",
+                "password": "pass",
+                "roles": ["admin"],
+            })
+
+        assert resp.status_code == 409
+        provider.user_exists.assert_not_called()
+        provider.create_user.assert_not_called()
+
     def test_create_user_invalid_username(self, admin_client):
         resp = admin_client.post("/admin/os-users", json={
             "username": "Invalid!",
