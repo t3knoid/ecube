@@ -868,9 +868,17 @@ def list_os_users(
     an ``ecube-*`` OS group or have DB role assignments in ``user_roles``.
     """
     provider = _get_provider()
+    query = search.strip().lower() if search is not None else None
     users = provider.list_users(ecube_only=False)
     repo = UserRoleRepository(db)
     role_assigned_usernames = {row["username"] for row in repo.list_users()}
+    role_assigned_usernames_for_lookup = role_assigned_usernames
+    if query is not None:
+        role_assigned_usernames_for_lookup = {
+            username
+            for username in role_assigned_usernames
+            if query in username.lower()
+        }
 
     users_by_username = {u.username: u for u in users}
     visible_users: list[OSUserResponse] = []
@@ -891,7 +899,7 @@ def list_os_users(
     # Some directory-backed users (for example AD) can resolve through user_exists
     # but not appear in list_users() enumeration. Include them when they already
     # have ECUBE DB role assignments so admins can see and manage them.
-    for username in sorted(role_assigned_usernames):
+    for username in sorted(role_assigned_usernames_for_lookup):
         if username in RESERVED_USERNAMES:
             continue
         if username in users_by_username:
@@ -908,8 +916,7 @@ def list_os_users(
                 )
             )
 
-    if search is not None:
-        query = search.strip().lower()
+    if query is not None:
         visible_users = [u for u in visible_users if query in u.username.lower()]
 
     visible_users.sort(key=lambda u: u.username)
