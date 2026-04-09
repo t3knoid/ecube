@@ -1,6 +1,6 @@
 """Administrative endpoints for log file access and OS user/group management.
 
-Log endpoints allow authenticated users to list and download application log
+Log endpoints allow ``admin`` users to list and download application log
 files.  OS user/group endpoints allow ``admin``-role users to create, list,
 delete, reset passwords, and modify group memberships for OS users, as well
 as create, list, and delete OS groups through the API.
@@ -11,10 +11,9 @@ Security considerations
   against ``os.path.basename`` and must match a real file inside the
   configured log directory.  Attempts to escape the directory (e.g.
   ``../../etc/passwd``) are rejected with ``400 Bad Request``.
-* **Authentication required**: both log endpoints require a valid JWT bearer
-  token (enforced at the router level via ``get_current_user``).  No
-  additional role restriction is applied — all authenticated users may
-  access log files.
+* **Admin-only log access**: all log endpoints require a valid JWT bearer
+    token and the ``admin`` role. This prevents non-admin users from listing
+    or downloading full, unredacted log files.
 * **Admin-only OS management**: all ``/admin/os-users`` and ``/admin/os-groups``
   endpoints are gated with ``require_roles("admin")``.
 * **Password handling**: passwords are never logged, stored in the database,
@@ -212,7 +211,7 @@ def _redact_log_line(line: str) -> str:
     return redacted
 
 
-@router.get("/logs", response_model=LogFilesResponse, responses={**R_401, **R_404})
+@router.get("/logs", response_model=LogFilesResponse, responses={**R_401, **R_403, **R_404})
 def list_log_files(
     request: Request,
     db: Session = Depends(get_db),
@@ -220,12 +219,21 @@ def list_log_files(
 ):
     """List available log files with metadata (size, timestamps).
 
-    Requires authentication (all authenticated users have access; no role
-    restriction).
+    Requires the ``admin`` role.
 
     Returns ``200`` with file list, or ``404`` if file-based logging is not
     configured.
     """
+    if "admin" not in current_user.roles:
+        best_effort_audit(
+            db,
+            action="LOG_FILES_LIST_DENIED",
+            user=current_user.username,
+            details={"reason": "admin_role_required"},
+            client_ip=get_client_ip(request),
+        )
+        raise HTTPException(status_code=403, detail="This action requires the admin role")
+
     log_dir = _log_directory()
     if not log_dir or not os.path.isdir(log_dir):
         raise HTTPException(
@@ -360,7 +368,7 @@ def view_log_lines(
     "/logs/{filename}",
     responses={
         200: {"content": {"text/plain": {}}, "description": "Log file contents"},
-        **R_400, **R_401, **R_404, **R_422,
+        **R_400, **R_401, **R_403, **R_404, **R_422,
     },
 )
 def download_log_file(
@@ -372,11 +380,20 @@ def download_log_file(
 ):
     """Download a specific log file.
 
-    Requires authentication (all authenticated users have access; no role
-    restriction).
+    Requires the ``admin`` role.
 
     The ``{filename}`` parameter is validated to prevent path traversal.
     """
+    if "admin" not in current_user.roles:
+        best_effort_audit(
+            db,
+            action="LOG_FILE_DOWNLOAD_DENIED",
+            user=current_user.username,
+            details={"filename": filename, "reason": "admin_role_required"},
+            client_ip=get_client_ip(request),
+        )
+        raise HTTPException(status_code=403, detail="This action requires the admin role")
+
     log_dir = _log_directory()
     if not log_dir or not os.path.isdir(log_dir):
         raise HTTPException(

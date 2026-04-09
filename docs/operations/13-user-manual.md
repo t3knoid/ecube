@@ -691,6 +691,8 @@ If the Logs tab shows an error or is unavailable:
 - Verify the ECUBE service account has read permissions on the log file.
 - Consult [15. Troubleshooting](#15-troubleshooting) for service-level issues.
 
+Governance note: denied log access attempts by non-admin users are recorded in the audit trail for accountability and compliance visibility.
+
 ---
 
 ## 14. Common Tasks
