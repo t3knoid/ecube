@@ -303,16 +303,16 @@ class TestAdminLogsEndpoints:
             with open(log_path, "w") as f:
                 f.write("test log content\n")
 
-            original_stat = os.stat
+            original_lstat = os.lstat
 
-            def stat_side_effect(path):
+            def lstat_side_effect(path):
                 if path == log_path:
                     raise PermissionError("permission denied")
-                return original_stat(path)
+                return original_lstat(path)
 
             with patch("app.routers.admin.settings") as mock_settings:
                 mock_settings.log_file = log_path
-                with patch("app.routers.admin.os.stat", side_effect=stat_side_effect):
+                with patch("app.routers.admin.os.lstat", side_effect=lstat_side_effect):
                     resp = admin_client.get("/admin/logs/app.log")
 
             assert resp.status_code == 503
@@ -327,22 +327,17 @@ class TestAdminLogsEndpoints:
             with open(log_path, "w") as f:
                 f.write("test log content\n")
 
-            original_stat = os.stat
-            original_open = open
+            original_open = os.open
 
-            def stat_side_effect(path):
-                return original_stat(path)
-
-            def open_side_effect(path, mode="r", *args, **kwargs):
-                if path == log_path and mode == "rb":
+            def open_side_effect(path, flags, mode=0o777):
+                if path == log_path:
                     raise OSError("disk error")
-                return original_open(path, mode, *args, **kwargs)
+                return original_open(path, flags, mode)
 
             with patch("app.routers.admin.settings") as mock_settings:
                 mock_settings.log_file = log_path
-                with patch("app.routers.admin.os.stat", side_effect=stat_side_effect):
-                    with patch("builtins.open", side_effect=open_side_effect):
-                        resp = admin_client.get("/admin/logs/app.log")
+                with patch("app.routers.admin.os.open", side_effect=open_side_effect):
+                    resp = admin_client.get("/admin/logs/app.log")
 
             assert resp.status_code == 503
             data = resp.json()
@@ -398,6 +393,30 @@ class TestAdminLogsEndpoints:
             with patch("app.routers.admin.settings") as mock_settings:
                 mock_settings.log_file = log_path
                 resp = admin_client.get("/admin/logs/notes.txt")
+                assert resp.status_code == 404
+
+    def test_download_rejects_allowlisted_symlink(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            symlink_path = os.path.join(tmpdir, "app.log.1")
+            target_path = os.path.join(tmpdir, "sensitive.txt")
+
+            with open(log_path, "w") as f:
+                f.write("primary log")
+            with open(target_path, "w") as f:
+                f.write("should not be downloadable via symlink")
+
+            if not hasattr(os, "symlink"):
+                pytest.skip("symlink is not available on this platform")
+
+            try:
+                os.symlink(target_path, symlink_path)
+            except (OSError, NotImplementedError):
+                pytest.skip("symlink creation is not permitted in this environment")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = admin_client.get("/admin/logs/app.log.1")
                 assert resp.status_code == 404
 
     def test_list_logs_records_audit_trail(self, admin_client, db):
