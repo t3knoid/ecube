@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, get_current_user, require_roles
@@ -43,6 +43,7 @@ from app.repositories.user_role_repository import UserRoleRepository
 from app.schemas.admin import (
     AddOSGroupsRequest,
     CreateOSGroupRequest,
+    CreateOSUserDecisionResponse,
     CreateOSUserRequest,
     LogFileInfo,
     LogFilesResponse,
@@ -597,20 +598,40 @@ _os_router = APIRouter(
 # ---------------------------------------------------------------------------
 
 
-@_os_router.post("/os-users", response_model=OSUserResponse, status_code=201, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500, **R_504})
+@_os_router.post(
+    "/os-users",
+    response_model=OSUserResponse | CreateOSUserDecisionResponse,
+    status_code=201,
+    responses={
+        200: {
+            "description": "Existing OS-user decision/sync response",
+            "model": CreateOSUserDecisionResponse,
+        },
+        **R_400,
+        **R_401,
+        **R_403,
+        **R_404,
+        **R_409,
+        **R_422,
+        **R_500,
+        **R_504,
+    },
+)
 def create_os_user(
     body: CreateOSUserRequest,
     *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
     request: Request,
-) -> OSUserResponse:
-    """Create an OS user, set password, and assign groups derived from roles."""
+) -> OSUserResponse | JSONResponse:
+    """Create an OS user or sync an existing OS user into ECUBE roles."""
     provider = _get_provider()
+    repo = UserRoleRepository(db)
 
     deduplicated_roles = sorted(set(body.roles or []))
+    role_names = [str(role) for role in deduplicated_roles]
     role_to_group = {role: group for group, role in ECUBE_GROUP_ROLE_MAP.items()}
-    derived_groups = sorted({role_to_group[r] for r in deduplicated_roles if r in role_to_group})
+    derived_groups = sorted({role_to_group[r] for r in role_names if r in role_to_group})
     extra_groups = sorted(set(body.groups or []))
     effective_groups = sorted(set(derived_groups + extra_groups))
 
@@ -618,6 +639,147 @@ def create_os_user(
         raise HTTPException(
             status_code=422,
             detail="At least one mapped ECUBE role is required to derive OS groups.",
+        )
+
+    user_exists = provider.user_exists(body.username)
+    if user_exists:
+        existing_roles = repo.get_roles(body.username)
+        if existing_roles:
+            raise HTTPException(
+                status_code=409,
+                detail=f"User '{body.username}' already exists as an ECUBE user",
+            )
+
+        base_details = {
+            "target_user": body.username,
+            "roles": role_names,
+            "groups": effective_groups,
+            "groups_derived_from_roles": derived_groups,
+            "groups_extra": extra_groups,
+            "path": str(request.url.path),
+            "existing_os_user": True,
+        }
+
+        if body.confirm_existing_os_user is None:
+            logger.info(
+                "OS_USER_CREATE_EXISTING actor=%s requested_username=%s outcome=confirmation_required",
+                current_user.username,
+                body.username,
+            )
+            best_effort_audit(
+                db,
+                "OS_USER_CREATE_CONFIRMATION_REQUIRED",
+                current_user.username,
+                {**base_details, "outcome": "confirmation_required"},
+                client_ip=get_client_ip(request),
+            )
+            return JSONResponse(
+                status_code=200,
+                content=CreateOSUserDecisionResponse(
+                    status="confirmation_required",
+                    username=body.username,
+                    message=(
+                        "User already exists on this system. "
+                        "Do you want to add this existing OS user to ECUBE?"
+                    ),
+                    roles=deduplicated_roles,
+                ).model_dump(),
+            )
+
+        if body.confirm_existing_os_user is False:
+            logger.info(
+                "OS_USER_CREATE_EXISTING actor=%s requested_username=%s outcome=canceled",
+                current_user.username,
+                body.username,
+            )
+            best_effort_audit(
+                db,
+                "OS_USER_CREATE_CANCELED",
+                current_user.username,
+                {**base_details, "outcome": "canceled"},
+                client_ip=get_client_ip(request),
+            )
+            return JSONResponse(
+                status_code=200,
+                content=CreateOSUserDecisionResponse(
+                    status="canceled",
+                    username=body.username,
+                    message="Create user request canceled. No ECUBE user was created.",
+                    roles=deduplicated_roles,
+                ).model_dump(),
+            )
+
+        try:
+            repo.set_roles(body.username, role_names)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        except Exception:
+            db.rollback()
+            logger.error("Failed to assign roles to existing OS user '%s'", body.username)
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    f"Existing OS user '{body.username}' was not synced because role assignment failed. "
+                    "Please retry."
+                ),
+            )
+
+        try:
+            os_user = provider.add_user_to_groups(
+                body.username,
+                effective_groups,
+                _skip_managed_check=True,
+            )
+        except (ValueError, OSUserError, HTTPException) as exc:
+            try:
+                repo.delete_roles(body.username)
+            except Exception:
+                db.rollback()
+                logger.error(
+                    "Failed to roll back ECUBE roles for '%s' after sync failure",
+                    body.username,
+                )
+            if isinstance(exc, ValueError):
+                raise HTTPException(status_code=422, detail=str(exc))
+            if isinstance(exc, OSUserError):
+                _raise_os_error(exc, context="Sync existing OS user")
+            raise
+
+        logger.info(
+            "OS_USER_CREATE_EXISTING actor=%s requested_username=%s outcome=confirmed_sync",
+            current_user.username,
+            body.username,
+        )
+        best_effort_audit(
+            db,
+            "OS_USER_SYNCED_EXISTING",
+            current_user.username,
+            {**base_details, "outcome": "confirmed_sync"},
+            client_ip=get_client_ip(request),
+        )
+
+        return JSONResponse(
+            status_code=200,
+            content=CreateOSUserDecisionResponse(
+                status="synced_existing_user",
+                username=body.username,
+                message="Existing OS user was added to ECUBE successfully.",
+                roles=deduplicated_roles,
+                user=OSUserResponse(
+                    username=os_user.username,
+                    uid=os_user.uid,
+                    gid=os_user.gid,
+                    home=os_user.home,
+                    shell=os_user.shell,
+                    groups=os_user.groups,
+                ),
+            ).model_dump(),
+        )
+
+    if not body.password:
+        raise HTTPException(
+            status_code=422,
+            detail="Password is required when creating a new OS user.",
         )
 
     try:
@@ -631,9 +793,8 @@ def create_os_user(
     except OSUserError as exc:
         _raise_os_error(exc, context="Create OS user")
 
-    repo = UserRoleRepository(db)
     try:
-        repo.set_roles(body.username, deduplicated_roles)
+        repo.set_roles(body.username, role_names)
     except ValueError as exc:
         # Invalid role name — shouldn't reach here (schema validates), but
         # guard defensively.  The OS user was already created; delete it to
@@ -672,8 +833,9 @@ def create_os_user(
         "groups": effective_groups,
         "groups_derived_from_roles": derived_groups,
         "groups_extra": extra_groups,
-        "roles": deduplicated_roles,
+        "roles": role_names,
         "path": str(request.url.path),
+        "existing_os_user": False,
     }, client_ip=get_client_ip(request))
 
     return OSUserResponse(
