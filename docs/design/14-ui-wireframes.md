@@ -12,6 +12,7 @@
 - [Global Layout & Navigation](#global-layout--navigation)
 - [Screen 1: Setup Wizard](#screen-1-setup-wizard)
 - [Screen 2: Login](#screen-2-login)
+- [Screen 2.5: Password Expiration](#screen-25-password-expiration)
 - [Screen 3: Dashboard](#screen-3-dashboard)
 - [Screen 4: Drive Management](#screen-4-drive-management)
 - [Screen 5: Mount Management](#screen-5-mount-management)
@@ -19,6 +20,7 @@
 - [Screen 7: Audit Logs](#screen-7-audit-logs)
 - [Screen 8: User & Role Administration](#screen-8-user--role-administration)
 - [Screen 9: System Monitoring](#screen-9-system-monitoring)
+- [Screen 10: Configuration](#screen-10-configuration)
 - [Modals & Dialogs](#modals--dialogs)
 - [Error States](#error-states)
 - [Use Case to Wireframe Traceability](#use-case--wireframe-traceability)
@@ -247,6 +249,196 @@ Shown when `GET /setup/status` returns `{"initialized": false}`. Replaces the en
 ```
 
 **Use Cases Covered:** UC-2.1, UC-2.2, UC-2.3, UC-2.4, UC-2.5
+
+---
+
+## Screen 2.5: Password Expiration
+
+### 2.5a — Password Expired - Forced Change Dialog (UC-2.6)
+
+Shown when login succeeds but PAM returns `PAM_NEW_AUTHTOK_REQD` or `PAM_AUTHTOK_EXPIRED`. This is a modal overlay blocking all access until password is changed.
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                    ┌─ ✖ ─────────────────────────────────────┐              │
+│                    │  Password Expired                        │              │
+│                    │                                          │              │
+│                    │  Your password has expired and must      │              │
+│                    │  be changed before continuing.           │              │
+│                    │                                          │              │
+│                    │  ⚠ This action cannot be deferred.       │              │
+│                    │                                          │              │
+│                    │      ┌──────────────────────────┐        │              │
+│                    │      │  Change Password         │        │              │
+│                    │      └──────────────────────────┘        │              │
+│                    │                                          │              │
+│                    │                ┌──────────────┐          │              │
+│                    │                │  Log Out     │          │              │
+│                    │                └──────────────┘          │              │
+│                    │                                          │              │
+│                    └──────────────────────────────────────────┘              │
+│                                                                              │
+│  (background darkened; modal cannot be dismissed)                           │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key Interactions:**
+- Displayed immediately after successful auth when PAM signals expiry
+- Modal is **non-dismissible** (no close button; only "Change Password" or "Log Out")
+- Clicking "Change Password" shows Screen 2.5b
+- Clicking "Log Out" clears any temporary auth state and returns to login
+
+---
+
+### 2.5b — Change Password Form (UC-2.7)
+
+Self-service password change form. Can be accessed from:
+1. The forced expiration dialog (Screen 2.5a)
+2. A voluntary "Change Password" link in user menu (future enhancement)
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                    ┌──────────────────────────────────────┐                 │
+│                    │  Change Password                     │                 │
+│                    │                                      │                 │
+│                    │  Current Password                    │                 │
+│                    │  [ _____________________________ ]    │                 │
+│                    │                                      │                 │
+│                    │  New Password                        │                 │
+│                    │  [ _____________________________ ]    │                 │
+│                    │                                      │                 │
+│                    │  Confirm New Password                │                 │
+│                    │  [ _____________________________ ]    │                 │
+│                    │                                      │                 │
+│                    │  Password Requirements:              │                 │
+│                    │  • At least 14 characters            │                 │
+│                    │  • Mix of uppercase, lowercase,      │                 │
+│                    │    numbers, and symbols              │                 │
+│                    │  • No more than 3 repeated chars     │                 │
+│                    │  • Not a suffix of current password   │                 │
+│                    │  ⓘ Cannot reuse last 12 passwords    │                 │
+│                    │                                      │                 │
+│                    │       ┌──────────────┐  ┌─────────┐ │                 │
+│                    │       │  Change      │  │ Cancel  │ │                 │
+│                    │       └──────────────┘  └─────────┘ │                 │
+│                    │                                      │                 │
+│                    │  ✖ New password does not meet        │                 │
+│                    │    complexity requirements. Minimum  │                 │
+│                    │    3 character classes required.     │                 │
+│                    │    (shown on validation error)       │                 │
+│                    │                                      │                 │
+│                    └──────────────────────────────────────┘                 │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key Behaviors:**
+- **Current Password field** — must be provided; used to re-authenticate (POST `/auth/change-password` includes current_password)
+- **New Password fields** — both must match; validated against current PAM policy
+- **Password Requirements** — listed inline; updates dynamically as user types based on current `pwquality.conf` settings
+- **Validation errors** — shown inline below the form when submitted if requirements not met; error message specifies which requirement failed
+- **Cancel button** — if from forced expiration dialog, returns to Screen 2.5a; if voluntary change, returns to previous page
+- **On success** — display confirmation ("Password changed successfully") and redirect to Dashboard or refresh to logged-in state
+- **On failure** — display reason (422 Unprocessable Entity) with specific PAM rejection reason
+
+---
+
+### 2.5c — Expiration Warning Banner (UC-2.8)
+
+Shown on Dashboard and other pages when password is nearing expiration (e.g., within 14 days based on chage --list output). Non-blocking informational banner.
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  ┌────────┐                                                                  │
+│  │ [LOGO] │  ECUBE                       griffin [processor] ▾               │
+│  └────────┘                                                                  │
+├──────────────┬───────────────────────────────────────────────────────────────┤
+│              │                                                               │
+│  ◉ Dashboard │  ⚠ Your password will expire in 12 days. [ Change Password ] │
+│              │                                                               │
+│  ◎ Drives    │  Dashboard                                                   │
+│              │                                                               │
+│              │  ┌─ Active Exports ─────────────┐  ┌─ Recent Jobs ──────┐   │
+│              │  │ • 3 jobs running             │  │ Completed: 42      │   │
+│              │  │ • 1 job pending              │  │ Failed: 2          │   │
+│              │  └──────────────────────────────┘  └────────────────────┘   │
+│              │                                                               │
+│              │  [... rest of dashboard ...]                                 │
+│              │                                                               │
+│              │                                                               │
+├──────────────┴───────────────────────────────────────────────────────────────┤
+│  Status: Ready  │  Timer: 12m  │  Active Jobs: 3                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key Elements:**
+- **Banner location** — top of main content area, below title/subtitle
+- **Color** — amber/yellow background to indicate non-critical warning
+- **Message** — varies based on days remaining (14-8 days: "will expire in X days"; <7 days: "expiring soon")
+- **Action link** — "Change Password" link launches Screen 2.5b in a modal or navigates to a standalone change password page
+- **Dismissible** — optional "X" button to dismiss banner for current session (returns on subsequent page reload)
+- **Persistence** — shown on all dashboard/menu pages; not on login or restricted pages
+
+---
+
+### 2.5d — Password Policy Validation Error Modal (UC-2.9)
+
+Displayed when user submits a password that fails policy validation (422 response from `/auth/change-password`). Shows which specific requirements were violated and the complete current policy.
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                    ┌──────────────────────────────────────┐                 │
+│                    │  ✖ Password Does Not Meet           │                 │
+│                    │    Policy Requirements               │                 │
+│                    │                                      │                 │
+│                    │  The password you entered was        │                 │
+│                    │  rejected by the system. Please      │                 │
+│                    │  review the requirements below and   │                 │
+│                    │  try again.                          │                 │
+│                    │                                      │                 │
+│                    │  ✖ Failed Requirements:              │                 │
+│                    │    • Minimum 14 characters (you      │                 │
+│                    │      provided 10)                    │                 │
+│                    │    • At least 3 character classes    │                 │
+│                    │      (uppercase, lowercase, number,  │                 │
+│                    │      symbol); you provided 2         │                 │
+│                    │                                      │                 │
+│                    │  ✓ Current Password Policy:          │                 │
+│                    │    ├─ Min length: 14 characters      │                 │
+│                    │    ├─ Min classes: 3 of 4            │                 │
+│                    │    ├─ Max repeat: 3 consecutive      │                 │
+│                    │    ├─ Max sequence: 4 (123... OK)    │                 │
+│                    │    ├─ Dictionary check: Enabled      │                 │
+│                    │    ├─ Username rejection: Enabled    │                 │
+│                    │    └─ Difference from old: 5 chars   │                 │
+│                    │                                      │                 │
+│                    │       ┌──────────────┐  ┌─────────┐ │                 │
+│                    │       │  Try Again   │  │ Log Out │ │                 │
+│                    │       └──────────────┘  └─────────┘ │                 │
+│                    │                                      │                 │
+│                    └──────────────────────────────────────┘                 │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key Elements:**
+- **Failed Requirements section** — Lists each requirement that was violated in plain language with the user's submitted value for comparison
+- **Current Password Policy section** — Complete read-only summary of all active policy settings with brief descriptions (e.g., "123... OK" clarifies that maxsequence=4 accepts sequences up to 4 chars)
+- **Try Again button** — Returns to Screen 2.5b form, clearing the new password fields; focus on the "New Password" field
+- **Log Out button** — Clears session and returns to login (similar to Screen 2.5a)
+- **Non-dismissible** — Modal must be addressed before continuing (no close button; only button actions)
+
+**Data source:**
+- Failed requirements come from the `422` response body detail; service layer parses PAM rejection reason and maps to policy rules
+- Current policy is fetched from `/admin/password-policy` GET endpoint or cached on login
+
+---
+
+**Use Cases Covered:** UC-2.6, UC-2.7, UC-2.8, UC-2.9
 
 ---
 
@@ -882,6 +1074,75 @@ and management remain available through admin API endpoints only.
 
 ---
 
+## Screen 10: Configuration
+
+A single-page admin-only settings panel divided into collapsible sections. Access: `admin` role only (role-gated in sidebar and API layer).
+
+### 10a — Configuration Page Header & Sections
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  ┌────────┐                                                                  │
+│  │ [LOGO] │  ECUBE                       griffin [admin] ▾  ⏱ 54m  [ Log Out ]│
+│  └────────┘                                                                  │
+├──────────────┬───────────────────────────────────────────────────────────────┤
+│              │                                                               │
+│  ◉ Dashboard │   Configuration (admin only)                                 │
+│  ◎ Drives    │                                                               │
+│  ◎ Mounts    │   [ Save ]  [ Reset to Defaults ]                           │
+│  ◎ Jobs      │                                                               │
+│  ◎ Audit     │   ┌─ Logging ────────────────────────────────────────────┐   │
+│  ─────────── │   │                                                      │   │
+│  ◎ Users     │   │  Log Level           [ Debug ▾ ]                    │   │
+│  ◎ System    │   │  Log to File         [ Toggle ON/OFF ]              │   │
+│  ◉ Config    │   │  Log Format          [ JSON ▾ ]                     │   │
+│              │   │                                                      │   │
+│              │   │  ⓘ Changes take effect after service restart         │   │
+│              │   └──────────────────────────────────────────────────────┘   │
+│              │                                                               │
+│              │   ┌─ Database Connection ────────────────────────────────┐   │
+│              │   │  Pool Min Connections    [ 5 ]                       │   │
+│              │   │  Pool Max Connections    [ 20 ]                      │   │
+│              │   │  Pool Timeout (seconds)  [ 30 ]                      │   │
+│              │   │                                                      │   │
+│              │   │  ⓘ Pending Restart Required ⚠                        │   │
+│              │   └──────────────────────────────────────────────────────┘   │
+│              │                                                               │
+│              │   ┌─ Password Policy ─────────────────────────────────────┐  │
+│              │   │                                                      │  │
+│              │   │  Minimum Length              [ 14  ]  Min: 12, Max: 128│
+│              │   │  Min Character Classes       [ 3   ]  (0-4)           │
+│              │   │  Max Repeated Chars          [ 3   ]  (0 = disabled) │
+│              │   │  Max Monotonic Sequence      [ 4   ]  (0 = disabled) │
+│              │   │  Max Same-Class Chars        [ 0   ]  (0 = disabled) │
+│              │   │  Dictionary Check           [ ON ]                  │
+│              │   │  Reject Username in Password [ ON ]                  │
+│              │   │  Min Chars from Old Password [ 5   ]  (0 = disabled) │
+│              │   │  Retry Attempts             [ 3   ]  (1-10)         │
+│              │   │  Enforce for root           [✓ Always Enabled]      │
+│              │   │                                                      │
+│              │   │  Last Updated: 2026-04-02 14:32 UTC by admin        │
+│              │   │  ⓘ Changes apply to new password operations.         │
+│              │   └──────────────────────────────────────────────────────┘  │
+│              │                                                               │
+├──────────────┴───────────────────────────────────────────────────────────────┤
+│  ECUBE v1.0.0  │  DB: Connected  │  Active Jobs: 0                          │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key Elements:**
+
+| Component | Behavior |
+|---|---|
+| **Configuration menu item** | Visible only to `admin` role. Sidebar highlights current section when selected. |
+| **Logging section** | Displays log level dropdown, file logging toggle, log format dropdown. Info tooltip notes restart requirement. |
+| **Database section** | Three number inputs for connection pool settings. "Pending Restart Required" badge shows if values differ from current server state. |
+| **Password Policy section** | Nine inputs (text, number, or toggle) for each writable PAM policy setting. Read-only `enforce_for_root` badge shows "Always Enabled". Last update timestamp and actor shown for audit trail visibility. |
+| **Save button** | Calls `PUT /admin/configuration` with all changed values. On success, shows confirmation banner and refreshes displayed state. |
+| **Reset to Defaults button** | Optional. Calls backend endpoint to restore default configuration (optional feature). Requires confirmation dialog. |
+
+---
+
 ## Modals & Dialogs
 
 ### Confirmation Dialog (destructive actions)
@@ -988,6 +1249,10 @@ Used for: Format Drive (UC-4.4), Delete User (UC-3.8), Remove Mount (UC-5.4), Re
 | UC-2.1 – UC-2.2 | Screen 2a: Login |
 | UC-2.3 – UC-2.4 | Global Layout: Header bar |
 | UC-2.5 | Screen 2b: Session Expired Dialog |
+| UC-2.6 | Screen 2.5a: Password Expired - Forced Change Dialog |
+| UC-2.7 | Screen 2.5b: Change Password Form |
+| UC-2.8 | Screen 2.5c: Expiration Warning Banner |
+| UC-2.9 | Screen 2.5d: Password Policy Validation Error Modal |
 | UC-3.1 – UC-3.4 | Screen 8a: User List, Screen 8b: Edit Roles |
 | UC-3.5 | Screen 8c: Create User Dialog |
 | UC-3.6 – UC-3.9 | Screen 8a: User List (inline actions) |
@@ -1016,6 +1281,8 @@ Used for: Format Drive (UC-4.4), Delete User (UC-3.8), Remove Mount (UC-5.4), Re
 | UC-8.4 – UC-8.5 | Screen 9a: Block Devices / Mounts tabs |
 | UC-8.6 | Screen 9d: Job Debug |
 | UC-8.7 – UC-8.8 | Screen 9c: Logs Tab |
+| UC-9.1 – UC-9.3 | Screen 10a: Configuration (Logging & Database sections) |
+| UC-9.4 – UC-9.5 | Screen 10a: Configuration (Password Policy section) |
 
 ## References
 
