@@ -647,14 +647,15 @@ def create_os_user(
             detail=f"Cannot create reserved username: {body.username}",
         )
 
+    existing_roles = repo.get_roles(body.username)
+    if existing_roles:
+        raise HTTPException(
+            status_code=409,
+            detail=f"User '{body.username}' already exists as an ECUBE user",
+        )
+
     user_exists = provider.user_exists(body.username)
     if user_exists:
-        existing_roles = repo.get_roles(body.username)
-        if existing_roles:
-            raise HTTPException(
-                status_code=409,
-                detail=f"User '{body.username}' already exists as an ECUBE user",
-            )
 
         base_details = {
             "target_user": body.username,
