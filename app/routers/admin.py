@@ -176,12 +176,15 @@ def _tail_lines(path: str, max_lines: int) -> Tuple[List[str], bool]:
         position = handle.tell()
         block_size = 8192
         buffer = b""
+        newline_count = 0
 
-        while position > 0 and buffer.count(b"\n") <= max_lines:
+        while position > 0 and newline_count <= max_lines:
             chunk_size = min(block_size, position)
             position -= chunk_size
             handle.seek(position, os.SEEK_SET)
-            buffer = handle.read(chunk_size) + buffer
+            chunk = handle.read(chunk_size)
+            newline_count += chunk.count(b"\n")
+            buffer = chunk + buffer
 
     lines = [line.decode("utf-8", errors="replace") for line in buffer.splitlines()]
     has_more = len(lines) > max_lines
