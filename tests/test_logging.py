@@ -553,3 +553,23 @@ class TestAdminLogsEndpoints:
                 assert entries[0].details.get("limit") == 1
                 assert entries[0].details.get("log_file") == "app.log"
                 assert "path" not in entries[0].details
+
+    def test_view_logs_returns_lines_when_stat_fails(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("line\n")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                with patch("app.routers.admin.os.stat", side_effect=FileNotFoundError):
+                    resp = admin_client.get(
+                        "/admin/logs/view",
+                        params={"source": "app", "limit": 1},
+                    )
+
+                assert resp.status_code == 200
+                data = resp.json()
+                assert data["returned"] == 1
+                assert data["lines"][0]["content"] == "line"
+                assert data["file_modified_at"] is None
