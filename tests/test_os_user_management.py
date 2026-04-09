@@ -499,15 +499,17 @@ class TestListUsers:
             _make_pw(name="admin1", uid=1001),
             _make_pw(name="customuser", uid=1002),
             _make_pw(name="sysuser", uid=999),
+            _make_pw(name="www-data", uid=33, gid=33, home="/var/www", shell="/usr/sbin/nologin"),
         ]
         mock_grp.getgrall.return_value = [
-            _make_grp(name="ecube-admins", members=["admin1"]),
+            _make_grp(name="ecube-admins", members=["admin1", "www-data"]),
             _make_grp(name="ecube-reviewers", members=["customuser"]),
         ]
         mock_grp.getgrgid.side_effect = [
             _make_grp(name="admin1", gid=1001),
             _make_grp(name="customuser", gid=1002),
             _make_grp(name="sysuser", gid=999),
+            _make_grp(name="www-data", gid=33),
         ]
 
         users = list_users(ecube_only=True)
@@ -516,6 +518,7 @@ class TestListUsers:
         assert "admin1" in names
         assert "customuser" in names
         assert "sysuser" not in names
+        assert "www-data" not in names
 
 
 class TestListGroups:
@@ -735,17 +738,56 @@ class TestOSUserEndpoints:
     def test_list_os_users(self, mock_pwd, mock_grp, admin_client):
         mock_pwd.getpwall.return_value = [
             _make_pw(name="admin1", uid=1001),
+            _make_pw(name="www-data", uid=33, gid=33, home="/var/www", shell="/usr/sbin/nologin"),
         ]
         mock_grp.getgrall.return_value = [
-            _make_grp(name="ecube-admins", members=["admin1"]),
+            _make_grp(name="ecube-admins", members=["admin1", "www-data"]),
         ]
-        mock_grp.getgrgid.return_value = _make_grp(name="admin1", gid=1001)
+        mock_grp.getgrgid.side_effect = [
+            _make_grp(name="admin1", gid=1001),
+            _make_grp(name="www-data", gid=33),
+        ]
 
         resp = admin_client.get("/admin/os-users")
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["users"]) == 1
         assert data["users"][0]["username"] == "admin1"
+
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_list_os_users_applies_username_search(self, mock_pwd, mock_grp, admin_client):
+        mock_pwd.getpwall.return_value = [
+            _make_pw(name="admin1", uid=1001),
+            _make_pw(name="auditor1", uid=1002),
+        ]
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="ecube-admins", members=["admin1"]),
+            _make_grp(name="ecube-auditors", members=["auditor1"]),
+        ]
+        mock_grp.getgrgid.side_effect = [
+            _make_grp(name="admin1", gid=1001),
+            _make_grp(name="auditor1", gid=1002),
+        ]
+
+        resp = admin_client.get("/admin/os-users?search=ADMIN")
+        assert resp.status_code == 200
+        assert [user["username"] for user in resp.json()["users"]] == ["admin1"]
+
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_list_os_users_excludes_www_data_for_exact_search_term(self, mock_pwd, mock_grp, admin_client):
+        mock_pwd.getpwall.return_value = [
+            _make_pw(name="www-data", uid=33, gid=33, home="/var/www", shell="/usr/sbin/nologin"),
+        ]
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="ecube-admins", members=["www-data"]),
+        ]
+        mock_grp.getgrgid.return_value = _make_grp(name="www-data", gid=33)
+
+        resp = admin_client.get("/admin/os-users?search=www-data")
+        assert resp.status_code == 200
+        assert resp.json()["users"] == []
 
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
