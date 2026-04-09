@@ -551,3 +551,5 @@ class TestAdminLogsEndpoints:
                 assert len(entries) >= 1
                 assert entries[0].details.get("source") == "app"
                 assert entries[0].details.get("limit") == 1
+                assert entries[0].details.get("log_file") == "app.log"
+                assert "path" not in entries[0].details
