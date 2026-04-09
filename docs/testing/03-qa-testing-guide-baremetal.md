@@ -1092,7 +1092,7 @@ All admin log endpoints require the `admin` role.
 | 10 | View logs — success audit | `GET /audit?action=LOG_LINES_VIEWED` after successful view | Audit entry includes `source`, `limit`, `offset`, `returned`, `has_more`, and basename `log_file` |
 | 11 | List logs — unauthenticated | `GET /admin/logs` without token | 401, `UNAUTHORIZED` |
 | 12 | List logs — non-admin denied | `GET /admin/logs` with non-admin token | 403, `FORBIDDEN`; denied audit event recorded |
-| 13 | List logs — response envelope | `GET /admin/logs` with admin token and file logging configured | 200 object with `log_files` array, `total_size`, and `log_directory` |
+| 13 | List logs — response envelope | `GET /admin/logs` with admin token and file logging configured | 200 object with `log_files` array and `total_size`; no `log_directory` field in response |
 | 14 | Download log — non-admin denied | `GET /admin/logs/app.log` with non-admin token | 403, `FORBIDDEN`; denied audit event recorded |
 | 15 | Download log — path traversal blocked | `GET /admin/logs/../../../etc/passwd` | Rejected (400/404/422), no file disclosure |
 | 16 | Download log — success audit | Download valid file as admin, then query audit | `LOG_FILE_DOWNLOADED` entry includes requested filename |

@@ -1190,7 +1190,7 @@ List available log files for download.
 
 - Returns a list of log files available in the log directory.
 - Provides metadata: file name, size, and last modification time.
-- File paths are redacted from the response.
+- Absolute host paths are not exposed in the response. Log files are identified by filename only (`name` field). The log directory path is not returned.
 
 **Error responses:**
 
@@ -1215,8 +1215,7 @@ List available log files for download.
             "modified": "2026-04-08T14:31:22.654321Z"
         }
     ],
-    "total_size": 2097152,
-    "log_directory": "/var/log/ecube"
+    "total_size": 2097152
 }
 ```
 
