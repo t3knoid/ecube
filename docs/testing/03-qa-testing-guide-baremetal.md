@@ -329,7 +329,7 @@ curl -k https://localhost:8443/health
 
 ## 10. Authenticate and Obtain Tokens
 
-All endpoints except the public routes (`/health`, `/health/live`, `/health/ready`, `/auth/token`, `/setup/status`, `/setup/initialize`, `/introspection/version`, `/setup/database/system-info`) require a JWT bearer token.
+All endpoints except the public routes (`/health`, `/health/live`, `/health/ready`, `/auth/token`, `/setup/status`, `/setup/initialize`, `/introspection/version`, `/setup/database/system-info`) require a JWT bearer token. During initial setup, `/setup/database/test-connection`, `/setup/database/provision`, and `/setup/database/provision-status` are also accessible without a token; after setup, they require an `admin` token.
 Log in via `POST /auth/token` using the OS accounts created in step 5.
 
 ### Log in as admin
