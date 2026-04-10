@@ -91,7 +91,7 @@ Authenticate with OS credentials and receive a signed JWT.
 
 ### 1.3 Authentication Model
 
-- All endpoints except `/health`, `/auth/token`, `/setup/status`, `/setup/initialize`, and `/introspection/version` require a bearer token.
+- All endpoints except `/health`, `/health/live`, `/health/ready`, `/auth/token`, `/setup/status`, `/setup/initialize`, and `/introspection/version` require a bearer token.
 - `/setup/database/test-connection`, `/setup/database/provision`, and `/setup/database/provision-status` accept an **optional** bearer token: unauthenticated during initial setup (no admin exists), `admin` role required after.
 - `/setup/database/system-info` is always public — no bearer token is required or checked at any point.
 - Token includes:
@@ -188,7 +188,7 @@ The Pydantic schema for this payload is `ErrorResponse` in `app/schemas/errors.p
 
 ### Common Error Codes
 
-For authenticated endpoints (except `/health`, `/auth/token`, `/setup/status`, `/setup/initialize`, and `/introspection/version`), these error codes are part of the designed error surface when applicable:
+For authenticated endpoints (except `/health`, `/health/live`, `/health/ready`, `/auth/token`, `/setup/status`, `/setup/initialize`, and `/introspection/version`), these error codes are part of the designed error surface when applicable:
 
 - `401 Unauthorized` — Missing, invalid, or expired authentication token
 - `403 Forbidden` — Authenticated user lacks the required role
