@@ -403,3 +403,89 @@ def test_health_ready_returns_503_when_usb_sysfs_unavailable(unauthenticated_cli
     assert payload["checks"]["database"] == "healthy"
     assert payload["checks"]["file_system"] == "mounted"
     assert payload["checks"]["usb_discovery"] == "unavailable"
+
+
+def test_health_ready_usb_discovery_success_is_cached_within_ttl(unauthenticated_client, db, monkeypatch):
+    class _CountingDiscoveryProvider:
+        def __init__(self):
+            self.call_count = 0
+
+        def discover_topology(self):
+            self.call_count += 1
+            return {"hubs": [], "ports": [], "drives": []}
+
+    provider = _CountingDiscoveryProvider()
+    monkeypatch.setattr(main_module, "get_mount_provider", lambda: _HealthyMountProvider())
+    monkeypatch.setattr(main_module, "get_drive_discovery", lambda: provider)
+    monkeypatch.setattr(main_module, "_probe_usb_sysfs_available", lambda: True)
+    monkeypatch.setattr(main_module.settings, "readiness_usb_discovery_cache_ttl_seconds", 5.0)
+
+    with main_module._USB_DISCOVERY_READY_CACHE_LOCK:
+        main_module._USB_DISCOVERY_READY_CACHE.clear()
+
+    response1 = unauthenticated_client.get("/health/ready")
+    response2 = unauthenticated_client.get("/health/ready")
+
+    assert response1.status_code == 200
+    assert response2.status_code == 200
+    assert provider.call_count == 1
+
+
+def test_health_ready_usb_discovery_cache_expires_after_ttl(unauthenticated_client, db, monkeypatch):
+    class _ExpiringDiscoveryProvider:
+        def __init__(self):
+            self.call_count = 0
+
+        def discover_topology(self):
+            self.call_count += 1
+            return {"hubs": [], "ports": [], "drives": []}
+
+    provider = _ExpiringDiscoveryProvider()
+    fake_time = [100.0]
+
+    monkeypatch.setattr(main_module, "get_mount_provider", lambda: _HealthyMountProvider())
+    monkeypatch.setattr(main_module, "get_drive_discovery", lambda: provider)
+    monkeypatch.setattr(main_module, "_probe_usb_sysfs_available", lambda: True)
+    monkeypatch.setattr(main_module.settings, "readiness_usb_discovery_cache_ttl_seconds", 0.5)
+    monkeypatch.setattr(main_module.time, "monotonic", lambda: fake_time[0])
+
+    with main_module._USB_DISCOVERY_READY_CACHE_LOCK:
+        main_module._USB_DISCOVERY_READY_CACHE.clear()
+
+    response1 = unauthenticated_client.get("/health/ready")
+    fake_time[0] = 101.0
+    response2 = unauthenticated_client.get("/health/ready")
+
+    assert response1.status_code == 200
+    assert response2.status_code == 200
+    assert provider.call_count == 2
+
+
+def test_health_ready_uses_provider_probe_ready_when_available(unauthenticated_client, db, monkeypatch):
+    class _ProbeReadyDiscoveryProvider:
+        def __init__(self):
+            self.probe_count = 0
+            self.discover_count = 0
+
+        def probe_ready(self):
+            self.probe_count += 1
+
+        def discover_topology(self):
+            self.discover_count += 1
+            raise AssertionError("discover_topology should not be called for readiness")
+
+    provider = _ProbeReadyDiscoveryProvider()
+
+    monkeypatch.setattr(main_module, "get_mount_provider", lambda: _HealthyMountProvider())
+    monkeypatch.setattr(main_module, "get_drive_discovery", lambda: provider)
+    monkeypatch.setattr(main_module, "_probe_usb_sysfs_available", lambda: True)
+    monkeypatch.setattr(main_module.settings, "readiness_usb_discovery_cache_ttl_seconds", 0)
+
+    with main_module._USB_DISCOVERY_READY_CACHE_LOCK:
+        main_module._USB_DISCOVERY_READY_CACHE.clear()
+
+    response = unauthenticated_client.get("/health/ready")
+
+    assert response.status_code == 200
+    assert provider.probe_count == 1
+    assert provider.discover_count == 0
