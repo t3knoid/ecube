@@ -1706,6 +1706,29 @@ class TestSetupEndpoints:
         data = resp.json()
         assert data["status"] == "reconciled_existing_user"
 
+    @patch("app.routers.setup.get_os_user_provider")
+    def test_run_os_setup_existing_user_match_is_case_insensitive(self, mock_get_provider):
+        from app.routers.setup import _run_os_setup
+        from app.schemas.admin import SetupInitializeRequest
+
+        provider = MagicMock()
+        provider.ensure_ecube_groups.return_value = ["ecube-admins"]
+        provider.create_user.side_effect = OSUserError("User ALREADY EXISTS")
+        mock_get_provider.return_value = provider
+
+        groups_created, status = _run_os_setup(
+            SetupInitializeRequest(username="admin1", password="s3cret"),
+        )
+
+        assert groups_created == ["ecube-admins"]
+        assert status == "reconciled_existing_user"
+        provider.add_user_to_groups.assert_called_once_with(
+            "admin1", ["ecube-admins"], _skip_managed_check=True,
+        )
+        provider.reset_password.assert_called_once_with(
+            "admin1", "s3cret", _skip_managed_check=True,
+        )
+
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
