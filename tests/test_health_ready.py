@@ -31,12 +31,6 @@ class _RecordingMountProvider:
         self.last_timeout_seconds = timeout_seconds
         return True
 
-
-class _AlwaysMountedProvider:
-    def check_mounted(self, _local_mount_point, *, timeout_seconds=None):
-        return True
-
-
 class _HealthyDiscoveryProvider:
     def discover_topology(self):
         return {"hubs": [], "ports": [], "drives": []}
