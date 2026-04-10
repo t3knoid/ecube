@@ -4,6 +4,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, field_validator, model_validator
 
 
+DEFAULT_READINESS_MOUNT_CHECK_TIMEOUT_SECONDS = 1.0
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -95,6 +98,20 @@ class Settings(BaseSettings):
     #: Interval in seconds between automatic USB discovery sweeps.
     #: ``0`` disables periodic discovery.
     usb_discovery_interval: int = 30
+
+    #: Timeout in seconds for each mountpoint check during ``GET /health/ready``.
+    #: Keep this low so readiness fails fast even when a mount check hangs.
+    readiness_mount_check_timeout_seconds: float = DEFAULT_READINESS_MOUNT_CHECK_TIMEOUT_SECONDS
+
+    #: Total timeout budget in seconds for all mount checks during
+    #: ``GET /health/ready``. This keeps probe latency bounded as mount count
+    #: grows.
+    readiness_mount_checks_total_timeout_seconds: float = 1.0
+
+    #: Cache window in seconds for successful USB discovery readiness probes.
+    #: A positive value avoids repeated full sysfs walks on frequent
+    #: ``GET /health/ready`` checks while preserving periodic re-validation.
+    readiness_usb_discovery_cache_ttl_seconds: float = 5.0
 
     # ---------------------------------------------------------------------------
     # Logging configuration

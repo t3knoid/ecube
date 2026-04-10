@@ -255,7 +255,7 @@ class TestOpenAPISchema:
         from app.main import app
 
         openapi_schema = app.openapi()
-        unauthenticated_paths = {"/health", "/auth/token", "/setup/status", "/setup/initialize", "/introspection/version", "/setup/database/system-info"}
+        unauthenticated_paths = {"/health", "/health/live", "/health/ready", "/auth/token", "/setup/status", "/setup/initialize", "/introspection/version", "/setup/database/system-info"}
         violations = []
         for path, path_item in openapi_schema.get("paths", {}).items():
             if path in unauthenticated_paths:
@@ -276,7 +276,7 @@ class TestOpenAPISchema:
         openapi_schema = app.openapi()
         # Endpoints that do not require authentication at all
         unauthenticated_paths = {
-            "/health", "/auth/token", "/setup/status", "/setup/initialize",
+            "/health", "/health/live", "/health/ready", "/auth/token", "/setup/status", "/setup/initialize",
             "/introspection/version", "/setup/database/system-info",
         }
         # Authenticated but no role restriction (any valid user succeeds, no 403)
@@ -319,6 +319,8 @@ class TestOpenAPISchema:
                 for status_code, resp in operation["responses"].items():
                     code = int(status_code)
                     if code < 400:
+                        continue
+                    if path == "/health/ready" and status_code == "503":
                         continue
                     # Check that content -> application/json -> schema -> $ref
                     # points to ErrorResponse
@@ -398,6 +400,14 @@ class TestEndpointHttpMethods:
         # Verify /health is GET
         health_route = [r for r in get_routes if r.path == "/health"]
         assert len(health_route) == 1, "/health endpoint missing"
+
+        # Verify /health/live is GET
+        health_live_route = [r for r in get_routes if r.path == "/health/live"]
+        assert len(health_live_route) == 1, "/health/live endpoint missing"
+
+        # Verify /health/ready is GET
+        health_ready_route = [r for r in get_routes if r.path == "/health/ready"]
+        assert len(health_ready_route) == 1, "/health/ready endpoint missing"
 
     def test_write_operations_use_correct_methods(self):
         """POST/PUT/PATCH operations should be used for mutations."""

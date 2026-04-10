@@ -859,7 +859,7 @@ def create_os_user(
     )
 
 
-@_os_router.get("/os-users", response_model=OSUserListResponse, responses={**R_401, **R_403, **R_404})
+@_os_router.get("/os-users", response_model=OSUserListResponse, responses={**R_401, **R_403, **R_404, **R_422})
 def list_os_users(
     search: str | None = Query(default=None, description="Optional case-insensitive username filter."),
     db: Session = Depends(get_db),

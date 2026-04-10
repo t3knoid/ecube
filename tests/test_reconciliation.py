@@ -14,6 +14,7 @@ from unittest.mock import patch
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive, UsbHub, UsbPort
 from app.models.jobs import ExportJob, JobStatus
@@ -310,6 +311,40 @@ class TestReconcileMounts:
         assert m3.status == MountStatus.UNMOUNTED
         assert result["mounts_checked"] == 3
         assert result["mounts_corrected"] == 2
+
+    def test_reconcile_mounts_passes_configured_timeout(self, db: Session):
+        mount = _make_mount(db, MountStatus.MOUNTED, "/mnt/timeout-aware")
+
+        class TimeoutAwareProvider(FakeMountProvider):
+            def __init__(self):
+                super().__init__(mounted_paths={"/mnt/timeout-aware"})
+                self.seen_timeouts = []
+
+            def check_mounted(self, local_mount_point: str, *, timeout_seconds=None) -> Optional[bool]:
+                self.seen_timeouts.append(timeout_seconds)
+                return super().check_mounted(local_mount_point)
+
+        provider = TimeoutAwareProvider()
+        result = reconcile_mounts(db, provider)
+
+        db.refresh(mount)
+        assert mount.status == MountStatus.MOUNTED
+        assert result["mounts_checked"] == 1
+        assert provider.seen_timeouts == [settings.subprocess_timeout_seconds]
+
+    def test_reconcile_mounts_legacy_provider_without_timeout_kw(self, db: Session):
+        mount = _make_mount(db, MountStatus.MOUNTED, "/mnt/legacy-provider")
+
+        class LegacyProvider(FakeMountProvider):
+            def check_mounted(self, local_mount_point: str) -> Optional[bool]:
+                return super().check_mounted(local_mount_point)
+
+        result = reconcile_mounts(db, LegacyProvider(mounted_paths={"/mnt/legacy-provider"}))
+
+        db.refresh(mount)
+        assert mount.status == MountStatus.MOUNTED
+        assert result["mounts_checked"] == 1
+        assert result["mounts_corrected"] == 0
 
 
 # =======================================================================
