@@ -111,6 +111,49 @@ def test_login_without_roles_returns_403(unauthenticated_client):
     assert "not assigned any ecube roles" in body["message"].lower()
 
 
+def test_login_local_mode_uses_group_mapping_when_db_roles_missing(unauthenticated_client):
+    mock_pam = MagicMock()
+    mock_pam.authenticate.return_value = True
+    mock_pam.get_user_groups.return_value = ["ecube-processors"]
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
+
+    with patch.object(settings, "role_resolver", "local"), patch(
+        "app.routers.auth.get_role_resolver",
+    ) as mock_resolver_fn:
+        mock_resolver_fn.return_value.resolve.return_value = ["processor"]
+
+        resp = unauthenticated_client.post(
+            "/auth/token",
+            json={"username": "mappedlocal", "password": "secret"},
+        )
+
+    assert resp.status_code == 200
+    claims = _decode_token(resp.json()["access_token"])
+    assert claims["roles"] == ["processor"]
+
+
+def test_login_db_roles_override_resolver_mapping(unauthenticated_client, db):
+    db.add(UserRole(username="dboverride", role="auditor"))
+    db.commit()
+
+    mock_pam = MagicMock()
+    mock_pam.authenticate.return_value = True
+    mock_pam.get_user_groups.return_value = ["ecube-admins"]
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
+
+    with patch("app.routers.auth.get_role_resolver") as mock_resolver_fn:
+        mock_resolver_fn.return_value.resolve.return_value = ["admin"]
+
+        resp = unauthenticated_client.post(
+            "/auth/token",
+            json={"username": "dboverride", "password": "secret"},
+        )
+
+    assert resp.status_code == 200
+    claims = _decode_token(resp.json()["access_token"])
+    assert claims["roles"] == ["auditor"]
+
+
 def test_login_missing_username_returns_422(unauthenticated_client):
     mock_pam = MagicMock()
     fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
