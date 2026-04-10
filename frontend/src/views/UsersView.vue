@@ -182,7 +182,6 @@ async function submitCreateOsUser(confirmExistingOsUser = null) {
     pendingCreateUserPayload.value = null
     // Show password dialog instead of closing
     pendingUsernameForPassword.value = payload.username
-    existingUserConfirmDialog.value = false
     createUserDialog.value = false
     passwordDialog.value = true
     setPasswordForm.value = { password: '', confirmPassword: '' }
