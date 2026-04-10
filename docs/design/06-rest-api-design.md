@@ -908,7 +908,7 @@ Requests with non-matching values are rejected with `422 Unprocessable Entity` a
 
 ### `POST /admin/os-users`
 
-Create an OS user, set password, and assign roles. ECUBE OS groups are derived from the selected roles. Optional extra groups may be included for compatibility, but role-derived ECUBE groups are always applied.
+Create an OS user (new-account path) or link an already-existing OS user into ECUBE role assignments (existing-account path). ECUBE OS groups are derived from selected roles. Optional extra groups may be included for compatibility, but role-derived ECUBE groups are always applied.
 
 **Roles:** `admin`
 
@@ -922,22 +922,43 @@ Create an OS user, set password, and assign roles. ECUBE OS groups are derived f
 }
 ```
 
-**Response (201 Created):** `OSUserResponse` with `username`, `uid`, `gid`, `home`, `shell`, `groups`.
+`password` is required when creating a brand-new OS account and omitted when linking an already-existing OS user.
+
+`confirm_existing_os_user` drives the existing-user decision flow:
+
+- omitted or explicit `null` -> returns `confirmation_required`
+- `true` -> confirms linking existing OS user to ECUBE roles
+- `false` -> records cancellation and performs no link
+
+**Response (201 Created):** `OSUserResponse` when a brand-new OS account is created.
+
+**Response (200 OK):** `CreateOSUserDecisionResponse` for existing-user decision/sync outcomes:
+
+- `confirmation_required`
+- `canceled`
+- `synced_existing_user`
 
 **Error responses:**
 
 - `401 Unauthorized` — Missing/invalid token
 - `403 Forbidden` — Insufficient role (non-admin)
-- `409 Conflict` — User already exists
-- `422 Unprocessable Entity` — Invalid username, empty password, reserved username, invalid/empty role list, or invalid extra group name
+- `409 Conflict` — Username already has ECUBE role assignments (`user_roles` conflict)
+- `422 Unprocessable Entity` — Invalid username, reserved username, invalid/empty role list, invalid extra group name, or missing password on new-account create path
 - `500 Internal Server Error` — OS command failed
 - `504 Gateway Timeout` — OS command timed out
 
-**Audit events:** `OS_USER_CREATED`
+**Audit events:** `OS_USER_CREATED`, `OS_USER_CREATE_CONFIRMATION_REQUIRED`, `OS_USER_CREATE_CANCELED`, `OS_USER_SYNCED_EXISTING`
 
 ### `GET /admin/os-users`
 
-List OS users filtered to ECUBE-relevant groups. Reserved system/service accounts (e.g. `www-data`) are always excluded.
+List users relevant to ECUBE user management. Reserved system/service accounts (e.g. `www-data`) are always excluded.
+
+Inclusion rules:
+
+- users in at least one `ecube-*` OS group
+- users with ECUBE DB role assignments in `user_roles`
+
+Directory-backed users (for example AD/LDAP users) can have DB role assignments but not appear in host OS enumeration. When that happens, the endpoint still returns the username using placeholder host fields (`uid=-1`, `gid=-1`, empty `home`, `shell`, `groups`) so the account remains visible/manageable in the UI.
 
 **Roles:** `admin`
 
