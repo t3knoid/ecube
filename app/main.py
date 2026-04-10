@@ -386,8 +386,8 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
     try:
         db.execute(text("SELECT 1"))
     except Exception as exc:
-        logger.warning("Readiness probe dependency failed reason=database_connection_failed error=%s", exc)
-        logger.debug("Readiness DB failure traceback", exc_info=True)
+        logger.warning("Readiness probe dependency failed reason=database_connection_failed error_type=%s", type(exc).__name__)
+        logger.debug("Readiness DB failure detail", exc_info=True)
         return _not_ready_response(
             reason="database_connection_failed",
             details="Database connectivity check failed.",
@@ -403,8 +403,8 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
     try:
         provider = get_mount_provider()
     except Exception as exc:
-        logger.warning("Readiness probe dependency failed reason=mount_provider_unavailable error=%s", exc)
-        logger.debug("Readiness mount provider resolution traceback", exc_info=True)
+        logger.warning("Readiness probe dependency failed reason=mount_provider_unavailable error_type=%s", type(exc).__name__)
+        logger.debug("Readiness mount provider resolution detail", exc_info=True)
         return _not_ready_response(
             reason="mount_provider_unavailable",
             details="Filesystem mount provider is not available.",
@@ -432,8 +432,8 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
                     "usb_discovery": "unknown",
                 },
             )
-        logger.warning("Readiness probe dependency failed reason=mount_metadata_check_failed error=%s", exc)
-        logger.debug("Readiness mount metadata failure traceback", exc_info=True)
+        logger.warning("Readiness probe dependency failed reason=mount_metadata_check_failed error_type=%s", type(exc).__name__)
+        logger.debug("Readiness mount metadata failure detail", exc_info=True)
         return _not_ready_response(
             reason="mount_metadata_check_failed",
             details="Mount metadata readiness check failed.",
@@ -483,11 +483,11 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
             )
         except Exception as exc:
             logger.warning(
-                "Readiness probe dependency failed reason=filesystem_mount_check_failed mount_point=%s error=%s",
+                "Readiness probe dependency failed reason=filesystem_mount_check_failed mount_point=%s error_type=%s",
                 mount.local_mount_point,
-                exc,
+                type(exc).__name__,
             )
-            logger.debug("Readiness mount provider check traceback", exc_info=True)
+            logger.debug("Readiness mount check failure detail", exc_info=True)
             return _not_ready_response(
                 reason="filesystem_mount_check_failed",
                 details="A required filesystem mount readiness check failed.",
@@ -550,8 +550,8 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
     try:
         get_drive_discovery().discover_topology()
     except Exception as exc:
-        logger.warning("Readiness probe dependency failed reason=usb_discovery_not_initialized error=%s", exc)
-        logger.debug("Readiness USB discovery failure traceback", exc_info=True)
+        logger.warning("Readiness probe dependency failed reason=usb_discovery_not_initialized error_type=%s", type(exc).__name__)
+        logger.debug("Readiness USB discovery failure detail", exc_info=True)
         return _not_ready_response(
             reason="usb_discovery_not_initialized",
             details="USB discovery readiness check failed.",
