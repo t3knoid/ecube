@@ -218,6 +218,24 @@ Acceptance criteria:
 - Reviewers can trace major operational and policy events through the audit record.
 - A denied cross-project action produces explicit audit evidence.
 
+### 4.8.1 Chain-of-Custody Report Requirements
+
+- The system must provide chain-of-custody report retrieval by `drive_id` and by `project_id`.
+- Drive-based query must be the default mode.
+- Access to chain-of-custody reports must be restricted to the same roles that can read audit reports.
+- Authorized users must be able to print or save chain-of-custody reports from the UI.
+- `delivery_time` must represent physical custody handoff time, not technical drive prepare-eject time.
+- Drive prepare-eject and custody delivery must be modeled as separate events.
+- The UI must prompt an authorized user to confirm handoff details (`possessor`, `delivery_time`) before CoC is considered complete.
+
+Acceptance criteria:
+
+- A valid drive-based request returns a chain-of-custody report.
+- A valid project-based request returns a chain-of-custody report.
+- CoC report access is denied for roles that cannot read audit reports.
+- Printed/saved CoC output includes custody actors and timestamps.
+- A prepare-eject event without handoff confirmation does not populate `delivery_time`.
+
 ## 4.9 Discovery and Reconciliation Requirements
 
 Discovery and refresh behavior must preserve protected drive states and policy guarantees:

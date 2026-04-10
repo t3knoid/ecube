@@ -29,8 +29,10 @@ ECUBE must provide an auditable chain-of-custody record for every evidence expor
 
 - Every material custody event must be recorded with immutable UTC timestamp, actor identity, action, resource identifiers, outcome, and contextual metadata.
 - Chain-of-custody records must cover at minimum: job creation, copy start, copy completion/failure, verification, manifest generation, drive assignment, and drive eject preparation.
+- Strict minimum custody fields for each exported USB must include: who created/prepared the USB in ECUBE, who took possession, and when custody was delivered.
 - Chain-of-custody exports must be reproducible from system records and must not require modification of historical audit entries.
 - Physical handoff events that occur outside ECUBE must be captured in an operator-controlled custody form linked to job and drive identifiers.
+- CoC report retrieval must support query by `drive_id` and by `project_id`; drive-based query is the default mode.
 
 ## 7.5 Evidence Integrity and Preservation
 
@@ -50,6 +52,13 @@ ECUBE must provide tamper-resistant accountability records.
 - Authorization denials, authentication outcomes, privileged changes, and evidence-handling actions must all be audit-logged.
 - Audit records must be queryable by time range, actor, resource type, resource identifier, and event type.
 - Audit exports for legal review must preserve field semantics and event ordering.
+- Access to CoC reports (API and UI) must be restricted to the same roles authorized to read audit reports.
+
+## 7.6.1 CoC Report Delivery Requirements
+
+- The platform must expose a digital CoC report retrieval capability suitable for legal review.
+- The UI must provide authorized users with controls to print or save a CoC report.
+- Printed/saved CoC output must include custody actors and timestamps required for legal defensibility.
 
 ## 7.7 Data Handling, Encryption, and Retention
 
@@ -75,6 +84,10 @@ A deployment satisfies this requirements document only when all statements below
 
 - A compliance control matrix exists, is legally reviewed, and is version-controlled.
 - Chain-of-custody events are complete and exportable for representative test jobs.
+- Chain-of-custody exports can be retrieved by both `drive_id` and `project_id`, with drive-based query as default behavior.
+- CoC exports include creator/preparer identity, possession recipient identity, and custody-delivery timestamp.
+- CoC report access control is identical to audit-report read access.
+- Authorized users can print or save CoC reports with required custody actors and timestamps.
 - Hash-based verification demonstrates source-to-destination integrity for representative datasets.
 - Audit immutability and access controls are verified in pre-production testing.
 - Retention and legal-hold procedures are documented and exercised.
