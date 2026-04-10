@@ -342,8 +342,9 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
     # 1) Database connectivity
     try:
         db.execute(text("SELECT 1"))
-    except Exception:
-        logger.exception("Readiness probe failed database connectivity check")
+    except Exception as exc:
+        logger.warning("Readiness probe dependency failed reason=database_connection_failed error=%s", exc)
+        logger.debug("Readiness DB failure traceback", exc_info=True)
         return JSONResponse(
             status_code=503,
             content={
@@ -381,7 +382,8 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
                     },
                 },
             )
-        logger.exception("Readiness probe failed while loading mount metadata")
+        logger.warning("Readiness probe dependency failed reason=mount_metadata_check_failed error=%s", exc)
+        logger.debug("Readiness mount metadata failure traceback", exc_info=True)
         return JSONResponse(
             status_code=503,
             content={
@@ -442,7 +444,8 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
     try:
         get_drive_discovery().discover_topology()
     except Exception as exc:
-        logger.exception("Readiness probe failed USB discovery check")
+        logger.warning("Readiness probe dependency failed reason=usb_discovery_not_initialized error=%s", exc)
+        logger.debug("Readiness USB discovery failure traceback", exc_info=True)
         return JSONResponse(
             status_code=503,
             content={
