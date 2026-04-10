@@ -83,9 +83,9 @@ Acceptance criteria:
 - An unsupported filesystem target is rejected.
 - Successful formatting changes the reported filesystem classification.
 
-### 4.2.3 Finalize Requirements
+### 4.2.3 Prepare-Eject (Safe Removal) Requirements
 
-Drive finalize behavior is the safe-removal capability. It must:
+Drive prepare-eject behavior is the safe-removal capability. It must:
 
 - Flush pending writes and unmount all partitions belonging to the device.
 - Transition the drive from `IN_USE` to `AVAILABLE`.
@@ -96,9 +96,9 @@ Drive finalize behavior is the safe-removal capability. It must:
 
 Acceptance criteria:
 
-- After a successful finalize, the drive is in `AVAILABLE` state and retains its `current_project_id`.
-- A finalize attempt on a drive not in `IN_USE` is rejected with an appropriate error.
-- All finalize attempts (successful and failed) are audit-logged.
+- After a successful prepare-eject, the drive is in `AVAILABLE` state and retains its `current_project_id`.
+- A prepare-eject attempt on a drive not in `IN_USE` is rejected with an appropriate error.
+- All prepare-eject attempts (successful and failed) are audit-logged.
 
 ## 4.3 Project Isolation Requirements
 
