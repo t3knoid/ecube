@@ -64,7 +64,8 @@ class LinuxMountProvider:
 
     def check_mounted(self, local_mount_point: str, *, timeout_seconds: Optional[float] = None) -> Optional[bool]:
         try:
-            timeout = timeout_seconds if timeout_seconds is not None else 10
+            default_timeout = settings.subprocess_timeout_seconds
+            timeout = default_timeout if timeout_seconds is None or timeout_seconds <= 0 else timeout_seconds
             result = subprocess.run(
                 [settings.mountpoint_binary_path, "-q", local_mount_point],
                 capture_output=True, timeout=timeout,
@@ -72,6 +73,19 @@ class LinuxMountProvider:
             return result.returncode == 0
         except Exception:
             return None
+
+
+def _check_mounted_with_timeout(provider: "MountProvider", local_mount_point: str) -> Optional[bool]:
+    """Invoke provider mount check with configured timeout, falling back for legacy providers."""
+    try:
+        return provider.check_mounted(
+            local_mount_point,
+            timeout_seconds=settings.subprocess_timeout_seconds,
+        )
+    except TypeError as exc:
+        if "timeout_seconds" not in str(exc):
+            raise
+        return provider.check_mounted(local_mount_point)
 
 
 def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
@@ -221,7 +235,7 @@ def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None,
         raise HTTPException(status_code=404, detail="Mount not found")
 
     provider = provider or _default_provider()
-    result = provider.check_mounted(mount.local_mount_point)
+    result = _check_mounted_with_timeout(provider, mount.local_mount_point)
     if result is True:
         mount.status = MountStatus.MOUNTED
     elif result is False:
