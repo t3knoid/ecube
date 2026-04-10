@@ -488,10 +488,10 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
                         timestamp=timestamp,
                         checks={
                             "database": "healthy",
-                        "file_system": "unknown",
-                        "usb_discovery": "unknown",
-                    },
-                )
+                            "file_system": "unknown",
+                            "usb_discovery": "unknown",
+                        },
+                    )
 
             per_mount_timeout = _resolve_readiness_mount_timeout(remaining_budget)
 
