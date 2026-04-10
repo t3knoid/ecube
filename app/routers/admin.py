@@ -1005,9 +1005,10 @@ def set_os_user_groups(
 ) -> OSUserResponse:
     """Modify an OS user's group memberships."""
     _validate_path_username(username)
+    requested_groups = [str(group) for group in body.groups]
 
     try:
-        os_user = _get_provider().set_user_groups(username, body.groups)
+        os_user = _get_provider().set_user_groups(username, requested_groups)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except OSUserError as exc:
@@ -1015,7 +1016,7 @@ def set_os_user_groups(
 
     best_effort_audit(db, "OS_USER_GROUPS_MODIFIED", current_user.username, {
         "target_user": username,
-        "groups": body.groups,
+        "groups": requested_groups,
         "path": str(request.url.path),
     }, client_ip=get_client_ip(request))
 
@@ -1040,9 +1041,10 @@ def add_os_user_groups(
 ) -> OSUserResponse:
     """Add an OS user to additional groups without removing existing memberships."""
     _validate_path_username(username)
+    groups_to_add = [str(group) for group in body.groups]
 
     try:
-        os_user = _get_provider().add_user_to_groups(username, body.groups)
+        os_user = _get_provider().add_user_to_groups(username, groups_to_add)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except OSUserError as exc:
@@ -1050,7 +1052,7 @@ def add_os_user_groups(
 
     best_effort_audit(db, "OS_USER_GROUPS_APPENDED", current_user.username, {
         "target_user": username,
-        "groups_added": body.groups,
+        "groups_added": groups_to_add,
         "resulting_groups": os_user.groups,
         "path": str(request.url.path),
     }, client_ip=get_client_ip(request))
