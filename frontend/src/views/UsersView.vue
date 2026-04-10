@@ -334,7 +334,7 @@ onMounted(loadAll)
       <div class="panel-actions">
         <button class="btn btn-primary" @click="createUserDialog = true">{{ t('users.createOsUser') }}</button>
       </div>
-      <DataTable :columns="userColumns" :rows="pagedOsUsers" row-key="uid" :empty-text="t('users.emptyOsUsers')">
+      <DataTable :columns="userColumns" :rows="pagedOsUsers" row-key="username" :empty-text="t('users.emptyOsUsers')">
         <template #cell-roles="{ row }">
           <div class="role-cell">
             <div class="role-grid">
