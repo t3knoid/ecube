@@ -166,7 +166,7 @@ stateDiagram-v2
   [*] --> EMPTY
   EMPTY --> AVAILABLE: Discovery detects present drive
   AVAILABLE --> IN_USE: Initialize with project_id
-  IN_USE --> AVAILABLE: Prepare-eject/finalize
+  IN_USE --> AVAILABLE: Prepare-eject
   AVAILABLE --> EMPTY: Drive removed
   IN_USE --> IN_USE: Project isolation enforced
 ```
