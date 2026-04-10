@@ -39,8 +39,6 @@ ECUBE must:
 - Support operator-initiated formatting when policy and lifecycle state allow it.
 - Support drive initialization for a project-bound workflow.
 - Support safe operational removal of a drive without implying export completion.
-- Support explicit drive finalization when export handling is complete.
-- Support an explicitly audited reopen of a finalized drive when additional export work is required.
 - Preserve sufficient drive history to support audit and operational review.
 
 Managed drive states must include:
@@ -48,13 +46,11 @@ Managed drive states must include:
 - `EMPTY`
 - `AVAILABLE`
 - `IN_USE`
-- `FINALIZED`
 
 State constraints:
 
 - `AVAILABLE` means the drive is eligible for initialization or assignment.
 - `IN_USE` means the drive is actively participating in a write-capable workflow.
-- `FINALIZED` means the drive is logically sealed against further writes until explicitly reopened.
 - Illegal lifecycle transitions must be rejected.
 
 ### 4.2.1 Filesystem Detection Requirements
@@ -87,40 +83,22 @@ Acceptance criteria:
 - An unsupported filesystem target is rejected.
 - Successful formatting changes the reported filesystem classification.
 
-### 4.2.3 Prepare-Eject, Finalize, and Reopen Requirements
+### 4.2.3 Prepare-Eject (Safe Removal) Requirements
 
-ECUBE must distinguish operational safe removal from custody finalization.
+Drive prepare-eject behavior is the safe-removal capability. It must:
 
-Prepare-eject requirements:
-
-- Safe-removal preparation must flush pending writes and leave the drive in a removable, non-writing state.
-- Safe-removal preparation must not imply export completion or write sealing.
-- Safe-removal preparation must not clear project binding.
-
-Finalization requirements:
-
-- Finalization must be a distinct capability from safe-removal preparation.
-- Finalization must transition the drive to `FINALIZED`.
-- Finalization must only be allowed for project-bound drives.
-- Finalization must be rejected while active work still depends on the drive.
-- If the drive is not already safely removable, finalization must include the behavior required to make it safely removable before the finalized state is committed.
-- Finalization must produce dedicated audit evidence including actor, drive, project, and finalization context.
-- Finalized drives must not become eligible for new writes, reinitialization, formatting, or implicit return to active use.
-
-Reopen requirements:
-
-- Reopen is only allowed from `FINALIZED`.
-- Reopen requires elevated privilege.
-- Reopen requires an explicit operator-provided reason.
-- Reopen returns the drive to an eligible non-finalized state without implicitly changing its project binding.
-- Reopen produces dedicated audit evidence including actor, reason, drive, and project context.
-- Reopen must never occur implicitly as a side effect of unrelated operations.
+- Flush pending writes and unmount all partitions belonging to the device.
+- Transition the drive from `IN_USE` to `AVAILABLE`.
+- Not imply export completion, write sealing, or custody transfer.
+- Not clear `current_project_id`; the drive remains bound to its project.
+- Emit an audit event recording the actor, drive, and outcome.
+- Reject the operation if the drive is not in `IN_USE` state.
 
 Acceptance criteria:
 
-- Safe-removal preparation and finalization remain behaviorally distinct.
-- A finalized drive cannot accept additional export work until explicitly reopened.
-- Reopen without a reason or sufficient privilege is rejected.
+- After a successful prepare-eject, the drive is in `AVAILABLE` state and retains its `current_project_id`.
+- A prepare-eject attempt on a drive not in `IN_USE` is rejected with an appropriate error.
+- All prepare-eject attempts (successful and failed) are audit-logged.
 
 ## 4.3 Project Isolation Requirements
 
@@ -130,9 +108,7 @@ To prevent evidence contamination:
 - A drive must not accept writes for a different project than the one to which it is currently bound.
 - Cross-project write attempts must be blocked before data movement begins.
 - Each denial must produce audit evidence.
-- The active project association of in-use and finalized drives must remain visible to operators.
-- Finalization must not clear project binding.
-- A finalized drive must remain project-bound until explicitly reopened or reset by an authorized lifecycle action.
+- The active project association of in-use drives must remain visible to operators.
 
 Acceptance criteria:
 
@@ -154,8 +130,6 @@ ECUBE must support job workflows that include:
 Assignment constraints:
 
 - Only drives in an eligible writable state may be assigned to new work.
-- Finalized drives must be excluded from new assignment until explicitly reopened.
-- Additional export to a finalized drive must require an explicit reopen first.
 
 Acceptance criteria:
 
@@ -227,9 +201,7 @@ Acceptance criteria:
 The system must emit audit records for security-relevant and operationally significant events, including at minimum:
 
 - Drive initialization.
-- Drive safe-removal preparation success and failure.
-- Drive finalization.
-- Drive reopen or unfinalize.
+- Drive prepare-eject (safe-removal) success and failure.
 - Job creation and job state changes.
 - Copy execution outcomes.
 - Manifest generation.
@@ -253,13 +225,10 @@ Discovery and refresh behavior must preserve protected drive states and policy g
 - Reconnected eligible drives may return to an available state when policy permits.
 - Removed drives may leave the available set when no longer present or when policy disables their port.
 - In-use drives must not be demoted by discovery while project isolation remains active.
-- Finalized drives must not be demoted or implicitly reopened by discovery or reconciliation.
-- A finalized drive that is removed and later reinserted must remain finalized until an explicit reopen occurs.
 
 Acceptance criteria:
 
 - Discovery refresh does not silently defeat project isolation.
-- Discovery refresh does not silently convert a finalized drive back into a writable drive.
 
 ## References
 
