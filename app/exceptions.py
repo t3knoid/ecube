@@ -76,3 +76,11 @@ class EncodingError(ECUBEException):
     status_code = 422
     default_code = "ENCODING_ERROR"
     default_message = "Request contains invalid characters."
+
+
+class OSUserPasswordRequiredError(ECUBEException):
+    """Raised when creating a new OS user without a password (HTTP 422)."""
+
+    status_code = 422
+    default_code = "OS_USER_PASSWORD_REQUIRED"
+    default_message = "Password is required when creating a new OS user."
