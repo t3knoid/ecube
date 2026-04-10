@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import traceback
 import uuid
 from contextlib import asynccontextmanager
@@ -46,6 +47,24 @@ def _is_missing_table_error(exc: Exception) -> bool:
         or "undefinedtable" in msg
         or "no such table" in msg
     )
+
+
+def _probe_usb_sysfs_available() -> bool:
+    """Return True when the configured USB sysfs path is accessible.
+
+    This avoids false "initialized" readiness when discovery falls back to an
+    empty topology due to unreadable/missing sysfs.
+    """
+    usb_path = settings.sysfs_usb_devices_path
+    if not os.path.isdir(usb_path):
+        return False
+    if not os.access(usb_path, os.R_OK | os.X_OK):
+        return False
+    try:
+        os.listdir(usb_path)
+    except OSError:
+        return False
+    return True
 
 # OpenAPI tags with descriptions for organizing endpoints
 tags_metadata = [
@@ -441,6 +460,26 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
             )
 
     # 3) USB discovery readiness signal (provider can enumerate topology)
+    if not _probe_usb_sysfs_available():
+        logger.warning(
+            "Readiness probe dependency failed reason=usb_discovery_unavailable usb_path=%s",
+            settings.sysfs_usb_devices_path,
+        )
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "not_ready",
+                "reason": "usb_discovery_unavailable",
+                "details": "USB discovery runtime path is not accessible.",
+                "timestamp": timestamp,
+                "checks": {
+                    "database": "healthy",
+                    "file_system": "mounted",
+                    "usb_discovery": "unavailable",
+                },
+            },
+        )
+
     try:
         get_drive_discovery().discover_topology()
     except Exception as exc:

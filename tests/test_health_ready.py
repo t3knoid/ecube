@@ -162,3 +162,19 @@ def test_health_ready_returns_503_when_usb_discovery_not_ready(unauthenticated_c
     assert payload["checks"]["database"] == "healthy"
     assert payload["checks"]["file_system"] == "mounted"
     assert payload["checks"]["usb_discovery"] == "not_initialized"
+
+
+def test_health_ready_returns_503_when_usb_sysfs_unavailable(unauthenticated_client, db, monkeypatch):
+    monkeypatch.setattr(main_module, "get_mount_provider", lambda: _HealthyMountProvider())
+    monkeypatch.setattr(main_module.os.path, "isdir", lambda _path: False)
+
+    response = unauthenticated_client.get("/health/ready")
+
+    assert response.status_code == 503
+    payload = response.json()
+    assert payload["status"] == "not_ready"
+    assert payload["reason"] == "usb_discovery_unavailable"
+    assert payload["details"] == "USB discovery runtime path is not accessible."
+    assert payload["checks"]["database"] == "healthy"
+    assert payload["checks"]["file_system"] == "mounted"
+    assert payload["checks"]["usb_discovery"] == "unavailable"
