@@ -23,7 +23,7 @@ Recommended legal transitions:
 
 - `EMPTY → AVAILABLE` on discovery of a usable drive.
 - `AVAILABLE → IN_USE` on initialize or job assignment.
-- `IN_USE → AVAILABLE` on finalize.
+- `IN_USE → AVAILABLE` on prepare-eject.
 - `AVAILABLE → EMPTY` on removal or disabled-port reconciliation.
 
 Illegal transitions should be rejected with `409 Conflict`.
@@ -57,7 +57,7 @@ Illegal transitions should be rejected with `409 Conflict`.
   - Formatting commands run with bounded timeouts.
   - Only `admin` and `manager` roles may format drives.
 
-## 4.2 Drive Finalize Procedure
+## 4.2 Drive Prepare-Eject Procedure
 
 - **Precondition:** Drive must be in `IN_USE` state; reject with 409 if not
 - **Initial validation:** Capture drive state and filesystem path at request start
@@ -81,15 +81,15 @@ Illegal transitions should be rejected with `409 Conflict`.
   - This ensures audit trail records the device path actually used for OS operations
 - Failure handling: If any operation fails, keep drive `IN_USE` and audit the failure with details
 - Success: Transition drive to `AVAILABLE` only after all operations succeed
-- No-op case: If device is not currently mounted, consider finalize successful (return success)
+- No-op case: If device is not currently mounted, consider prepare-eject successful (return success)
 
-### 4.2.1 Finalize Semantics
+### 4.2.1 Prepare-Eject Semantics
 
-- `POST /drives/{drive_id}/finalize` is the safe-removal endpoint.
+- `POST /drives/{drive_id}/prepare-eject` is the safe-removal endpoint.
 - It flushes pending writes, unmounts all partitions, and transitions the drive from `IN_USE` to `AVAILABLE`.
 - It does **not** imply legal handoff, write protection, or export completion.
-- It does **not** clear `current_project_id`; the drive remains bound to its project after finalization.
-- After finalize, the drive is immediately reusable within the current workflow and can be assigned back to `IN_USE` under existing project-isolation rules.
+- It does **not** clear `current_project_id`; the drive remains bound to its project after prepare-eject.
+- After prepare-eject, the drive is immediately reusable within the current workflow and can be assigned back to `IN_USE` under existing project-isolation rules.
 
 ## 4.3 Project Isolation Design
 
