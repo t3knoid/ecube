@@ -445,7 +445,13 @@ def _run_os_setup(
 ) -> tuple[list[str], Literal["created_admin_user", "reconciled_existing_user"]]:
     """Execute OS-level setup: create groups and the admin user.
 
-    Returns the list of groups created.
+    Returns a tuple ``(groups_created, setup_status)`` where:
+
+    - ``groups_created`` is the list of ECUBE OS groups created.
+    - ``setup_status`` is ``"created_admin_user"`` when a new OS admin user
+      is created, or ``"reconciled_existing_user"`` when an existing OS user
+      is reconciled (added to ``ecube-admins`` and password reset).
+
     Raises :class:`HTTPException` on failure.
     """
     provider = get_os_user_provider()
