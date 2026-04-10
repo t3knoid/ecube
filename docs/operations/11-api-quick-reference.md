@@ -55,8 +55,13 @@ The following endpoints are publicly accessible and do **not** require
 authentication:
 
 - `GET /health`
+- `GET /health/live`
+- `GET /health/ready`
 - `GET /introspection/version`
 - `POST /auth/token` (login / token issuance)
+- `GET /setup/status`
+- `POST /setup/initialize`
+- `GET /setup/database/system-info`
 - API documentation: `GET /docs`, `GET /redoc`, `GET /openapi.json`
 
 All other API endpoints require a bearer token in the `Authorization` header:
