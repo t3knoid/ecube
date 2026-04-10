@@ -477,7 +477,7 @@ def _run_os_setup(
         raise HTTPException(status_code=422, detail=str(exc))
     except OSUserError as exc:
         # User may already exist (e.g. re-running setup after partial failure).
-        if "already exists" not in exc.message:
+        if "already exists" not in exc.message.lower():
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to create admin user: {exc.message}",
