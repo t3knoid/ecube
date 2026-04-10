@@ -1,6 +1,8 @@
 from unittest.mock import MagicMock, patch
 
 from app.models.network import MountStatus, MountType, NetworkMount
+from app.config import settings
+from app.services.mount_service import LinuxMountProvider, validate_mount
 
 
 def test_list_mounts_empty(client, db):
@@ -181,4 +183,53 @@ def test_validate_all_mounts_empty(manager_client, db):
 
     assert response.status_code == 200
     assert response.json() == []
+
+
+def test_linux_mount_provider_check_mounted_uses_configured_default_timeout():
+    provider = LinuxMountProvider()
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+
+        mounted = provider.check_mounted("/mnt/data")
+
+    assert mounted is True
+    assert mock_run.call_args.kwargs["timeout"] == settings.subprocess_timeout_seconds
+
+
+def test_linux_mount_provider_check_mounted_non_positive_timeout_uses_default():
+    provider = LinuxMountProvider()
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+
+        mounted = provider.check_mounted("/mnt/data", timeout_seconds=0)
+
+    assert mounted is True
+    assert mock_run.call_args.kwargs["timeout"] == settings.subprocess_timeout_seconds
+
+
+def test_validate_mount_passes_configured_timeout_to_provider(db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="192.168.1.1:/data",
+        local_mount_point="/mnt/data-timeout",
+        status=MountStatus.UNMOUNTED,
+    )
+    db.add(mount)
+    db.commit()
+
+    class TimeoutCapturingProvider:
+        def __init__(self):
+            self.timeout_seconds = None
+
+        def check_mounted(self, local_mount_point: str, *, timeout_seconds=None):
+            self.timeout_seconds = timeout_seconds
+            return True
+
+    provider = TimeoutCapturingProvider()
+    updated = validate_mount(mount.id, db, provider=provider)
+
+    assert updated.status == MountStatus.MOUNTED
+    assert provider.timeout_seconds == settings.subprocess_timeout_seconds
 
