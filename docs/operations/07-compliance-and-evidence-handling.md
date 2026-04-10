@@ -386,8 +386,9 @@ After ECUBE completes a copy job, the destination USB drive should be write-prot
 2. Physically enable write-protection switch on the USB device (if available).
 3. Store in secure facility with access controls.
 
-**ECUBE Support (Future):**
-- An admin endpoint may be added to "finalize" a drive after copy, preventing further writes: `POST /drives/{drive_id}/finalize` (not yet implemented).
+**ECUBE Support:**
+- ECUBE provides a drive safe-removal endpoint (`POST /drives/{drive_id}/prepare-eject`) for safe removal (flush + unmount + transition back to `AVAILABLE`).
+- Prepare-eject does **not** enforce write-protection or seal custody state, and it does **not** clear `current_project_id`; project binding is preserved. Operational write-protection controls remain a physical and procedural responsibility.
 
 ### Evidence Segregation
 
