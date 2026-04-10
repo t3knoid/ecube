@@ -46,9 +46,9 @@ class HealthNotReadyResponse(BaseModel):
     reason: str = Field(..., description="Machine-readable reason code")
     details: str = Field(..., description="Human-readable failure detail")
     timestamp: str = Field(..., description="UTC timestamp in ISO 8601 format")
-    checks: Optional[HealthReadyChecks] = Field(
-        default=None,
-        description="Last known check breakdown up to the failing dependency",
+    checks: HealthReadyChecks = Field(
+        ...,
+        description="Per-dependency readiness checks for the current failure state",
     )
 
 
