@@ -438,7 +438,30 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
         )
 
     for mount in configured_mounts:
-        result = provider.check_mounted(mount.local_mount_point)
+        try:
+            result = provider.check_mounted(mount.local_mount_point)
+        except Exception as exc:
+            logger.warning(
+                "Readiness probe dependency failed reason=filesystem_mount_check_failed mount_point=%s error=%s",
+                mount.local_mount_point,
+                exc,
+            )
+            logger.debug("Readiness mount provider check traceback", exc_info=True)
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "not_ready",
+                    "reason": "filesystem_mount_check_failed",
+                    "details": "A required filesystem mount readiness check failed.",
+                    "timestamp": timestamp,
+                    "checks": {
+                        "database": "healthy",
+                        "file_system": "unknown",
+                        "usb_discovery": "unknown",
+                    },
+                },
+            )
+
         if result is False:
             logger.warning(
                 "Readiness probe mount unavailable for mount_point=%s",
