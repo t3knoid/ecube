@@ -223,6 +223,18 @@ The callback body is a JSON object containing:
   - `MOUNT_RECONCILED` — Mount state corrected after restart; includes `mount_id`, `local_mount_point`, `old_status`, `new_status`, `reason`.
   - `JOB_RECONCILED` — In-progress job failed after restart; includes `job_id`, `old_status`, `new_status`, `reason`.
 
+### 4.9.1 Chain-of-Custody Report Design
+
+- Provide chain-of-custody report retrieval by `drive_id` and by `project_id`.
+- Default query mode to drive-based retrieval.
+- When both `drive_id` and `project_id` are provided, drive-based retrieval takes precedence.
+- Restrict CoC report access to the same role set that can read audit logs (`admin`, `manager`, `auditor`).
+- Support UI print/save workflows for authorized users using the same CoC report data model.
+- Ensure printed/saved CoC outputs include custody actors and custody timestamps required for legal review.
+- Define `delivery_time` as the timestamp of physical custody transfer confirmation.
+- Do not infer delivery from `POST /drives/{drive_id}/prepare-eject`; prepare-eject only confirms safe-removal readiness.
+- Capture custody handoff through a dedicated confirmation step in the UI/API that records `possessor` and `delivery_time` as a distinct CoC event.
+
 ## 4.10 USB Discovery and State Refresh Design
 
 - Service reads host USB topology through the platform abstraction layer and produces a normalized snapshot for persistence.

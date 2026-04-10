@@ -64,6 +64,20 @@
 
 - `audit_logs` provides append-only operation history with actor and context.
 
+#### Chain-of-Custody Reporting Model (Design Impact)
+
+- CoC report generation is modeled as a read over existing records; no new base table is required for the current design.
+- CoC report queries use existing identifiers:
+  - Drive-based retrieval uses drive identifiers recorded in audit context (`audit_logs.details`).
+  - Project-based retrieval uses existing `export_jobs.project_id` linkage plus related audit/job records.
+- To satisfy strict CoC output requirements, custody-relevant events must include these fields in structured audit context:
+  - `creator` (who created/prepared the USB in ECUBE)
+  - `possessor` (who took possession)
+  - `delivery_time` (when physical custody was delivered, UTC)
+- `delivery_time` is populated only by a custody handoff confirmation event, not by prepare-eject.
+- This confirmation event should carry a distinct action type in `audit_logs.action` so reports can distinguish safe-removal from legal custody transfer.
+- UI print/save is a presentation/export concern and does not require schema changes.
+
 ### User & System Domain
 
 - `user_roles` stores explicit username→role assignments managed through the admin API.
@@ -111,6 +125,7 @@ This makes `user_roles` the day-to-day control plane while preserving OS-group f
 - `usb_hubs.system_identifier` and `usb_ports.system_path` carry **unique constraints**, ensuring each hub and port maps to exactly one row. The discovery upsert logic relies on these keys for stable identity across sync cycles.
 - Enumerated statuses should be constrained by check/enum types.
 - Index by `project_id`, `status`, and recent timestamps for UI queries.
+- CoC retrieval performance should be supported by indexes on audit query paths (for example: `audit_logs.action`, `audit_logs.timestamp`, and PostgreSQL expression indexes on frequently queried `audit_logs.details` keys such as `drive_id` and custody fields).
 
 ## Physical Schema Reference (Current ORM)
 
