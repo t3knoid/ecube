@@ -196,7 +196,7 @@ def test_health_ready_returns_503_when_mount_check_is_unknown(unauthenticated_cl
     assert response.status_code == 503
     payload = response.json()
     assert payload["status"] == "not_ready"
-    assert payload["reason"] == "filesystem_mount_check_failed"
+    assert payload["reason"] == "filesystem_mount_check_unknown"
     assert payload["checks"]["database"] == "healthy"
     assert payload["checks"]["file_system"] == "unknown"
 
