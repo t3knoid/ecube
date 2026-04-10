@@ -40,6 +40,7 @@ from app.database import get_db
 from app.repositories.audit_repository import AuditRepository, best_effort_audit
 from app.repositories.hardware_repository import HubRepository, PortRepository
 from app.repositories.user_role_repository import UserRoleRepository
+from app.exceptions import OSUserPasswordRequiredError
 from app.schemas.admin import (
     AddOSGroupsRequest,
     CreateOSGroupRequest,
@@ -779,10 +780,7 @@ def create_os_user(
         )
 
     if not body.password:
-        raise HTTPException(
-            status_code=422,
-            detail="Password is required when creating a new OS user.",
-        )
+        raise OSUserPasswordRequiredError()
 
     try:
         os_user = provider.create_user(

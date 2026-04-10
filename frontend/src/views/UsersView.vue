@@ -45,25 +45,7 @@ const pendingCreateUserPayload = ref(null)
 
 function isPasswordRequiredForNewUserError(err) {
   const data = err?.response?.data
-  const candidateMessages = []
-
-  if (typeof data?.message === 'string') {
-    candidateMessages.push(data.message)
-  }
-  if (typeof data?.detail === 'string') {
-    candidateMessages.push(data.detail)
-  }
-  if (Array.isArray(data?.detail)) {
-    for (const item of data.detail) {
-      if (typeof item === 'string') {
-        candidateMessages.push(item)
-      } else if (item && typeof item.msg === 'string') {
-        candidateMessages.push(item.msg)
-      }
-    }
-  }
-
-  return candidateMessages.some((msg) => msg.toLowerCase().includes('password is required when creating a new os user'))
+  return data?.code === 'OS_USER_PASSWORD_REQUIRED'
 }
 
 const userColumns = computed(() => [
