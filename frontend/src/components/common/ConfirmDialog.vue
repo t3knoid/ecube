@@ -32,7 +32,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['update:modelValue', 'confirm'])
+const emit = defineEmits(['update:modelValue', 'confirm', 'cancel'])
 const slots = useSlots()
 
 const dialogId = `confirm-dialog-${Math.random().toString(36).slice(2, 10)}`
@@ -49,6 +49,7 @@ const describedBy = computed(() => {
 function close() {
   if (props.busy) return
   emit('update:modelValue', false)
+  emit('cancel')
 }
 
 function confirm() {

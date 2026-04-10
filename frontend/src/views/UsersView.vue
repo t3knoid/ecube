@@ -241,7 +241,6 @@ async function confirmExistingOsUserSync() {
 
 async function cancelExistingOsUserSync() {
   if (!pendingExistingUserPayload.value) {
-    existingUserConfirmDialog.value = false
     return
   }
 
@@ -435,7 +434,7 @@ onMounted(loadAll)
       :cancel-label="t('common.actions.cancel')"
       :busy="saving"
       @confirm="confirmExistingOsUserSync"
-      @update:model-value="(open) => { if (!open) cancelExistingOsUserSync() }"
+      @cancel="cancelExistingOsUserSync"
     />
 
     <teleport to="body">
