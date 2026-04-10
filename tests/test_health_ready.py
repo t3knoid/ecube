@@ -4,23 +4,32 @@ from sqlalchemy.exc import ProgrammingError
 
 
 class _HealthyMountProvider:
-    def check_mounted(self, _local_mount_point):
+    def check_mounted(self, _local_mount_point, *, timeout_seconds=None):
         return True
 
 
 class _FailingMountProvider:
-    def check_mounted(self, _local_mount_point):
+    def check_mounted(self, _local_mount_point, *, timeout_seconds=None):
         return False
 
 
 class _UnknownMountProvider:
-    def check_mounted(self, _local_mount_point):
+    def check_mounted(self, _local_mount_point, *, timeout_seconds=None):
         return None
 
 
 class _RaisingMountProvider:
-    def check_mounted(self, _local_mount_point):
+    def check_mounted(self, _local_mount_point, *, timeout_seconds=None):
         raise RuntimeError("mountpoint command failed")
+
+
+class _RecordingMountProvider:
+    def __init__(self):
+        self.last_timeout_seconds = None
+
+    def check_mounted(self, _local_mount_point, *, timeout_seconds=None):
+        self.last_timeout_seconds = timeout_seconds
+        return True
 
 
 class _HealthyDiscoveryProvider:
@@ -214,6 +223,27 @@ def test_health_ready_returns_503_when_mount_check_raises(unauthenticated_client
     assert payload["details"] == "A required filesystem mount readiness check failed."
     assert payload["checks"]["database"] == "healthy"
     assert payload["checks"]["file_system"] == "unknown"
+
+
+def test_health_ready_passes_configured_mount_check_timeout(unauthenticated_client, db, monkeypatch):
+    db.add(
+        NetworkMount(
+            type=MountType.NFS,
+            remote_path="10.0.0.1:/evidence",
+            local_mount_point="/mnt/evidence",
+        )
+    )
+    db.commit()
+
+    provider = _RecordingMountProvider()
+    monkeypatch.setattr(main_module, "get_mount_provider", lambda: provider)
+    monkeypatch.setattr(main_module.settings, "readiness_mount_check_timeout_seconds", 0.25)
+    monkeypatch.setattr(main_module, "get_drive_discovery", lambda: _HealthyDiscoveryProvider())
+
+    response = unauthenticated_client.get("/health/ready")
+
+    assert response.status_code == 200
+    assert provider.last_timeout_seconds == 0.25
 
 
 def test_health_ready_returns_503_when_usb_discovery_not_ready(unauthenticated_client, db, monkeypatch):
