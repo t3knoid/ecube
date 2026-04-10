@@ -854,6 +854,22 @@ class TestOSUserEndpoints:
         provider.user_exists.assert_not_called()
         provider.create_user.assert_not_called()
 
+    def test_create_user_missing_password_returns_structured_code(self, admin_client, db):
+        provider = MagicMock()
+        provider.user_exists.return_value = False
+
+        with patch("app.routers.admin._get_provider", return_value=provider):
+            resp = admin_client.post("/admin/os-users", json={
+                "username": "newuser",
+                "roles": ["processor"],
+            })
+
+        assert resp.status_code == 422
+        body = resp.json()
+        assert body["code"] == "OS_USER_PASSWORD_REQUIRED"
+        assert "trace_id" in body
+        provider.create_user.assert_not_called()
+
     def test_create_user_invalid_username(self, admin_client):
         resp = admin_client.post("/admin/os-users", json={
             "username": "Invalid!",
