@@ -58,6 +58,27 @@ def test_health_ready_returns_200_when_all_checks_pass(unauthenticated_client, d
     }
 
 
+def test_health_ready_returns_200_when_no_mounts_configured(unauthenticated_client, db, monkeypatch):
+    """Readiness should pass without provider when no mounts are configured."""
+    def _raise_provider_error():
+        raise ValueError("Mount provider not available")
+
+    monkeypatch.setattr(main_module, "get_mount_provider", _raise_provider_error)
+    monkeypatch.setattr(main_module, "get_drive_discovery", lambda: _HealthyDiscoveryProvider())
+    monkeypatch.setattr(main_module, "_probe_usb_sysfs_available", lambda: True)
+
+    response = unauthenticated_client.get("/health/ready")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ready"
+    assert payload["checks"] == {
+        "database": "healthy",
+        "file_system": "mounted",
+        "usb_discovery": "initialized",
+    }
+
+
 def test_health_ready_returns_503_when_database_fails(unauthenticated_client, db, monkeypatch):
     def _raise_db_error(*_args, **_kwargs):
         raise RuntimeError("database offline")
@@ -161,6 +182,16 @@ def test_health_ready_returns_503_when_mount_metadata_table_missing(unauthentica
 
 
 def test_health_ready_returns_503_when_mount_provider_unavailable(unauthenticated_client, db, monkeypatch):
+    # Add a mount so provider resolution is attempted
+    db.add(
+        NetworkMount(
+            type=MountType.NFS,
+            remote_path="10.0.0.1:/evidence",
+            local_mount_point="/mnt/evidence",
+        )
+    )
+    db.commit()
+
     def _raise_provider_error():
         raise ValueError("Unsupported platform")
 
