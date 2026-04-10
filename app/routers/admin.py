@@ -643,6 +643,12 @@ def create_os_user(
             detail="At least one mapped ECUBE role is required to derive OS groups.",
         )
 
+    if body.username in RESERVED_USERNAMES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Cannot create reserved username: {body.username}",
+        )
+
     for group_name in effective_groups:
         try:
             validate_group_name(group_name)
@@ -653,12 +659,6 @@ def create_os_user(
                 status_code=422,
                 detail=f"Group '{group_name}' does not exist",
             )
-
-    if body.username in RESERVED_USERNAMES:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Cannot create reserved username: {body.username}",
-        )
 
     existing_roles = repo.get_roles(body.username)
     if existing_roles:
