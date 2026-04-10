@@ -219,8 +219,8 @@ def test_health_ready_returns_503_when_mount_check_raises(unauthenticated_client
     assert response.status_code == 503
     payload = response.json()
     assert payload["status"] == "not_ready"
-    assert payload["reason"] == "filesystem_mount_check_failed"
-    assert payload["details"] == "A required filesystem mount readiness check failed."
+    assert payload["reason"] == "filesystem_mount_check_error"
+    assert payload["details"] == "A required filesystem mount readiness check encountered a runtime error."
     assert payload["checks"]["database"] == "healthy"
     assert payload["checks"]["file_system"] == "unknown"
 

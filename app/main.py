@@ -499,14 +499,14 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
             )
         except Exception as exc:
             logger.warning(
-                "Readiness probe dependency failed reason=filesystem_mount_check_failed mount_point=%s error_type=%s",
+                "Readiness probe dependency failed reason=filesystem_mount_check_error mount_point=%s error_type=%s",
                 mount.local_mount_point,
                 type(exc).__name__,
             )
             logger.debug("Readiness mount check failure detail", exc_info=True)
             return _not_ready_response(
-                reason="filesystem_mount_check_failed",
-                details="A required filesystem mount readiness check failed.",
+                reason="filesystem_mount_check_error",
+                details="A required filesystem mount readiness check encountered a runtime error.",
                 timestamp=timestamp,
                 checks={
                     "database": "healthy",
