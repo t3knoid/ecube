@@ -45,6 +45,16 @@ function findDialogPanelByTitle(wrapper, title) {
   return wrapper.findAll('.dialog-panel').find((panel) => panel.text().includes(title))
 }
 
+async function openCreateUserDialog(wrapper) {
+  const panelActions = wrapper.find('.panel-actions')
+  expect(panelActions.exists()).toBe(true)
+  const createUserButton = panelActions
+    .findAll('button')
+    .find((node) => node.text() === i18n.global.t('users.createOsUser'))
+  expect(createUserButton).toBeTruthy()
+  await createUserButton.trigger('click')
+}
+
 describe('UsersView existing OS-user confirmation flow', () => {
   beforeEach(() => {
     mocks.getUsers.mockReset()
@@ -81,7 +91,7 @@ describe('UsersView existing OS-user confirmation flow', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    await wrapper.find('button.btn.btn-primary').trigger('click')
+    await openCreateUserDialog(wrapper)
     await wrapper.find('#create-user-username').setValue('existing')
 
     const createPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.createOsUser'))
@@ -132,7 +142,7 @@ describe('UsersView existing OS-user confirmation flow', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    await wrapper.find('button.btn.btn-primary').trigger('click')
+    await openCreateUserDialog(wrapper)
     await wrapper.find('#create-user-username').setValue('existing')
 
     const createPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.createOsUser'))
@@ -184,7 +194,7 @@ describe('UsersView existing OS-user confirmation flow', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    await wrapper.find('button.btn.btn-primary').trigger('click')
+    await openCreateUserDialog(wrapper)
     await wrapper.find('#create-user-username').setValue('newuser')
 
     const createPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.createOsUser'))
