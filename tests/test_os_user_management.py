@@ -715,6 +715,7 @@ class TestOSUserEndpoints:
 
     def test_create_user_existing_os_user_requires_confirmation(self, admin_client, db):
         provider = MagicMock()
+        provider.group_exists.return_value = True
         provider.user_exists.return_value = True
 
         with patch("app.routers.admin._get_provider", return_value=provider):
@@ -740,6 +741,7 @@ class TestOSUserEndpoints:
 
     def test_create_user_existing_os_user_cancel_records_audit(self, admin_client, db):
         provider = MagicMock()
+        provider.group_exists.return_value = True
         provider.user_exists.return_value = True
 
         with patch("app.routers.admin._get_provider", return_value=provider):
@@ -767,6 +769,7 @@ class TestOSUserEndpoints:
 
     def test_create_user_existing_os_user_confirm_syncs_roles(self, admin_client, db):
         provider = MagicMock()
+        provider.group_exists.return_value = True
         provider.user_exists.return_value = True
         provider.add_user_to_groups.return_value = OSUser(
             username="testuser",
@@ -803,6 +806,7 @@ class TestOSUserEndpoints:
 
     def test_create_user_existing_reserved_os_user_rejected(self, admin_client, db):
         provider = MagicMock()
+        provider.group_exists.return_value = True
 
         with patch("app.routers.admin._get_provider", return_value=provider):
             resp = admin_client.post("/admin/os-users", json={
@@ -823,6 +827,7 @@ class TestOSUserEndpoints:
 
     def test_create_user_existing_ecube_user_conflict(self, admin_client, db):
         provider = MagicMock()
+        provider.group_exists.return_value = True
         provider.user_exists.return_value = True
 
         db.add(UserRole(username="testuser", role="admin"))
@@ -838,6 +843,7 @@ class TestOSUserEndpoints:
 
     def test_create_user_existing_ecube_user_conflict_even_if_os_lookup_false(self, admin_client, db):
         provider = MagicMock()
+        provider.group_exists.return_value = True
         provider.user_exists.return_value = False
 
         db.add(UserRole(username="testuser", role="admin"))
@@ -856,6 +862,7 @@ class TestOSUserEndpoints:
 
     def test_create_user_missing_password_returns_structured_code(self, admin_client, db):
         provider = MagicMock()
+        provider.group_exists.return_value = True
         provider.user_exists.return_value = False
 
         with patch("app.routers.admin._get_provider", return_value=provider):
@@ -869,6 +876,23 @@ class TestOSUserEndpoints:
         assert body["code"] == "OS_USER_PASSWORD_REQUIRED"
         assert "trace_id" in body
         provider.create_user.assert_not_called()
+
+    def test_create_user_existing_os_user_missing_group_returns_422_before_confirmation(self, admin_client, db):
+        provider = MagicMock()
+        provider.group_exists.return_value = False
+        provider.user_exists.return_value = True
+
+        with patch("app.routers.admin._get_provider", return_value=provider):
+            resp = admin_client.post("/admin/os-users", json={
+                "username": "testuser",
+                "roles": ["admin"],
+            })
+
+        assert resp.status_code == 422
+        body = resp.json()
+        assert body["code"] == "HTTP_422"
+        assert "does not exist" in body["message"]
+        provider.user_exists.assert_not_called()
 
     def test_create_user_invalid_username(self, admin_client):
         resp = admin_client.post("/admin/os-users", json={
