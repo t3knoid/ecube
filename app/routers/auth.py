@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.auth_providers import get_role_resolver
 from app.config import settings
 from app.database import get_db
+from app.exceptions import AuthorizationError
 from app.repositories.audit_repository import best_effort_audit
 from app.repositories.user_role_repository import UserRoleRepository
 from app.infrastructure.pam_protocol import PamAuthenticator
@@ -83,7 +84,7 @@ def login(
 ) -> TokenResponse:
     """Authenticate with OS credentials and receive a signed JWT.
 
-    No role is required — this is the login route.
+    Authentication requires valid OS credentials and at least one ECUBE role.
 
     This endpoint is available when ``role_resolver`` is ``local`` or ``ldap``.
     When OIDC mode is active, users authenticate externally via the identity
@@ -103,11 +104,29 @@ def login(
         )
 
     # Resolve ECUBE roles for the user.
-    # Priority: 1) Explicit roles from DB ``user_roles`` table,
-    #            2) Roles derived from OS groups via the configured resolver.
+    # Local mode requires explicit DB ``user_roles`` assignments.
+    # LDAP mode falls back to resolver-derived roles from groups when no DB
+    # override exists.
     groups = pam.get_user_groups(body.username)
     db_roles = UserRoleRepository(db).get_roles(body.username)
-    roles = db_roles if db_roles else get_role_resolver().resolve(groups)
+    if settings.role_resolver == "local":
+        roles = db_roles
+    else:
+        roles = db_roles if db_roles else get_role_resolver().resolve(groups)
+
+    if not roles:
+        best_effort_audit(
+            db,
+            "AUTH_FAILURE",
+            body.username,
+            {
+                "reason": "No ECUBE roles assigned",
+                "path": str(request.url.path),
+                "groups": groups,
+            },
+            client_ip=get_client_ip(request),
+        )
+        raise AuthorizationError("User is not assigned any ECUBE roles")
 
     # Build JWT payload
     now = datetime.now(timezone.utc)
