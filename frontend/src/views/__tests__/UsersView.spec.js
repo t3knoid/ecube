@@ -306,4 +306,34 @@ describe('UsersView existing OS-user confirmation flow', () => {
     expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.setPassword'))).toBeFalsy()
     expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.existingOsUserConfirmTitle'))).toBeTruthy()
   })
+
+  it('completes create flow without opening password dialog when create returns OSUserResponse', async () => {
+    mocks.createOsUser.mockResolvedValueOnce({
+      username: 'directcreate',
+      uid: 1003,
+      gid: 1003,
+      home: '/home/directcreate',
+      shell: '/bin/bash',
+      groups: ['ecube-processors', 'directcreate'],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await openCreateUserDialog(wrapper)
+    await wrapper.find('#create-user-username').setValue('directcreate')
+
+    const createPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.createOsUser'))
+    expect(createPanel).toBeTruthy()
+    const createButtons = createPanel.findAll('.dialog-actions button')
+    await createButtons[1].trigger('click')
+    await flushPromises()
+
+    expect(mocks.createOsUser).toHaveBeenNthCalledWith(1, {
+      username: 'directcreate',
+      roles: ['processor'],
+    })
+    expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.setPassword'))).toBeFalsy()
+    expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.createOsUser'))).toBeFalsy()
+  })
 })
