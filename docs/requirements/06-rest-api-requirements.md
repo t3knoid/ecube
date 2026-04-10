@@ -152,15 +152,14 @@ Acceptance criteria:
 - The platform shall expose drive inventory and project-binding status.
 - Drive initialization shall enforce project isolation before any write-oriented workflow proceeds.
 - Drive formatting shall be restricted to valid lifecycle states and supported filesystem choices.
-- Safe-eject preparation shall flush and unmount relevant storage state before the drive is treated as removable.
-- If finalized drive semantics are implemented, finalized state shall preserve chain-of-custody expectations and prevent reuse until explicitly reopened according to policy.
+- Drive prepare-eject (safe removal) behavior shall flush and unmount relevant storage state before the drive is treated as removable.
 - Drive refresh and discovery capabilities shall preserve authoritative state where policy requires it and reconcile stale physical-state assumptions.
 
 Acceptance criteria:
 
 - A drive cannot be rebound across projects without the intended lifecycle transition.
-- An operator cannot prepare a drive for eject from an invalid lifecycle state.
-- Discovery refresh does not silently defeat project isolation or finalized-state guarantees.
+- An operator cannot prepare-eject a drive from an invalid lifecycle state.
+- Discovery refresh does not silently defeat project isolation guarantees.
 
 ### 4.5 Job Lifecycle Management
 
