@@ -9,6 +9,7 @@ import pytest
 
 from app.config import settings
 from app.main import app as fastapi_app
+from app.models.users import UserRole
 from app.routers.auth import _get_pam
 
 
@@ -25,19 +26,19 @@ def _decode_token(token: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def test_login_success_returns_token(unauthenticated_client):
+def test_login_success_returns_token(unauthenticated_client, db):
     """Valid credentials yield a JWT with expected claims."""
+    db.add(UserRole(username="testuser", role="processor"))
+    db.commit()
+
     mock_pam = MagicMock()
     mock_pam.authenticate.return_value = True
     mock_pam.get_user_groups.return_value = ["evidence-team", "users"]
     fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
-    with patch("app.routers.auth.get_role_resolver") as mock_resolver_fn:
-        mock_resolver_fn.return_value.resolve.return_value = ["processor"]
-
-        resp = unauthenticated_client.post(
-            "/auth/token",
-            json={"username": "testuser", "password": "secret"},
-        )
+    resp = unauthenticated_client.post(
+        "/auth/token",
+        json={"username": "testuser", "password": "secret"},
+    )
 
     assert resp.status_code == 200
     data = resp.json()
@@ -53,19 +54,19 @@ def test_login_success_returns_token(unauthenticated_client):
     assert "iat" in claims
 
 
-def test_login_success_token_is_usable(unauthenticated_client):
+def test_login_success_token_is_usable(unauthenticated_client, db):
     """A token obtained from /auth/token can authenticate subsequent requests."""
+    db.add(UserRole(username="admin-user", role="admin"))
+    db.commit()
+
     mock_pam = MagicMock()
     mock_pam.authenticate.return_value = True
     mock_pam.get_user_groups.return_value = ["admins"]
     fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
-    with patch("app.routers.auth.get_role_resolver") as mock_resolver_fn:
-        mock_resolver_fn.return_value.resolve.return_value = ["admin"]
-
-        resp = unauthenticated_client.post(
-            "/auth/token",
-            json={"username": "admin-user", "password": "pass"},
-        )
+    resp = unauthenticated_client.post(
+        "/auth/token",
+        json={"username": "admin-user", "password": "pass"},
+    )
 
     token = resp.json()["access_token"]
     # Use the token to call an authenticated endpoint (e.g. /health is open,
@@ -91,6 +92,66 @@ def test_login_invalid_credentials_returns_401(unauthenticated_client):
 
     assert resp.status_code == 401
     assert "invalid" in resp.json()["message"].lower()
+
+
+def test_login_without_roles_returns_403(unauthenticated_client):
+    mock_pam = MagicMock()
+    mock_pam.authenticate.return_value = True
+    mock_pam.get_user_groups.return_value = ["ecube-processors"]
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
+
+    resp = unauthenticated_client.post(
+        "/auth/token",
+        json={"username": "norole", "password": "secret"},
+    )
+
+    assert resp.status_code == 403
+    body = resp.json()
+    assert body["code"] == "FORBIDDEN"
+    assert "not assigned any ecube roles" in body["message"].lower()
+
+
+def test_login_local_mode_uses_group_mapping_when_db_roles_missing(unauthenticated_client):
+    mock_pam = MagicMock()
+    mock_pam.authenticate.return_value = True
+    mock_pam.get_user_groups.return_value = ["ecube-processors"]
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
+
+    with patch.object(settings, "role_resolver", "local"), patch(
+        "app.routers.auth.get_role_resolver",
+    ) as mock_resolver_fn:
+        mock_resolver_fn.return_value.resolve.return_value = ["processor"]
+
+        resp = unauthenticated_client.post(
+            "/auth/token",
+            json={"username": "mappedlocal", "password": "secret"},
+        )
+
+    assert resp.status_code == 200
+    claims = _decode_token(resp.json()["access_token"])
+    assert claims["roles"] == ["processor"]
+
+
+def test_login_db_roles_override_resolver_mapping(unauthenticated_client, db):
+    db.add(UserRole(username="dboverride", role="auditor"))
+    db.commit()
+
+    mock_pam = MagicMock()
+    mock_pam.authenticate.return_value = True
+    mock_pam.get_user_groups.return_value = ["ecube-admins"]
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
+
+    with patch("app.routers.auth.get_role_resolver") as mock_resolver_fn:
+        mock_resolver_fn.return_value.resolve.return_value = ["admin"]
+
+        resp = unauthenticated_client.post(
+            "/auth/token",
+            json={"username": "dboverride", "password": "secret"},
+        )
+
+    assert resp.status_code == 200
+    claims = _decode_token(resp.json()["access_token"])
+    assert claims["roles"] == ["auditor"]
 
 
 def test_login_missing_username_returns_422(unauthenticated_client):
@@ -154,21 +215,21 @@ def test_login_empty_password_returns_422(unauthenticated_client):
 # ---------------------------------------------------------------------------
 
 
-def test_token_expiration_uses_config(unauthenticated_client, monkeypatch):
+def test_token_expiration_uses_config(unauthenticated_client, monkeypatch, db):
     """Token exp claim reflects TOKEN_EXPIRE_MINUTES setting."""
     monkeypatch.setattr(settings, "token_expire_minutes", 30)
+
+    db.add(UserRole(username="testuser", role="processor"))
+    db.commit()
 
     mock_pam = MagicMock()
     mock_pam.authenticate.return_value = True
     mock_pam.get_user_groups.return_value = []
     fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
-    with patch("app.routers.auth.get_role_resolver") as mock_resolver_fn:
-        mock_resolver_fn.return_value.resolve.return_value = []
-
-        resp = unauthenticated_client.post(
-            "/auth/token",
-            json={"username": "testuser", "password": "secret"},
-        )
+    resp = unauthenticated_client.post(
+        "/auth/token",
+        json={"username": "testuser", "password": "secret"},
+    )
 
     claims = _decode_token(resp.json()["access_token"])
     # exp should be approximately 30 minutes from iat
@@ -185,17 +246,17 @@ def test_login_success_creates_audit_log(unauthenticated_client, db):
     """Successful login writes AUTH_SUCCESS to audit_logs."""
     from app.models.audit import AuditLog
 
+    db.add(UserRole(username="testuser", role="processor"))
+    db.commit()
+
     mock_pam = MagicMock()
     mock_pam.authenticate.return_value = True
     mock_pam.get_user_groups.return_value = ["evidence-team"]
     fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
-    with patch("app.routers.auth.get_role_resolver") as mock_resolver_fn:
-        mock_resolver_fn.return_value.resolve.return_value = ["processor"]
-
-        unauthenticated_client.post(
-            "/auth/token",
-            json={"username": "testuser", "password": "secret"},
-        )
+    unauthenticated_client.post(
+        "/auth/token",
+        json={"username": "testuser", "password": "secret"},
+    )
 
     logs = db.query(AuditLog).filter(AuditLog.action == "AUTH_SUCCESS").all()
     assert len(logs) == 1
@@ -229,19 +290,19 @@ def test_login_failure_creates_audit_log(unauthenticated_client, db):
 # ---------------------------------------------------------------------------
 
 
-def test_auth_token_endpoint_requires_no_auth(unauthenticated_client):
+def test_auth_token_endpoint_requires_no_auth(unauthenticated_client, db):
     """The /auth/token endpoint must be accessible without a bearer token."""
+    db.add(UserRole(username="noauth", role="processor"))
+    db.commit()
+
     mock_pam = MagicMock()
     mock_pam.authenticate.return_value = True
     mock_pam.get_user_groups.return_value = []
     fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
-    with patch("app.routers.auth.get_role_resolver") as mock_resolver_fn:
-        mock_resolver_fn.return_value.resolve.return_value = []
-
-        resp = unauthenticated_client.post(
-            "/auth/token",
-            json={"username": "noauth", "password": "test"},
-        )
+    resp = unauthenticated_client.post(
+        "/auth/token",
+        json={"username": "noauth", "password": "test"},
+    )
 
     assert resp.status_code == 200
 
