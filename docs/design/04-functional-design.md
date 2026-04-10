@@ -11,24 +11,19 @@
 
 - Implement a finite-state machine for drive states and legal transitions.
 - Gate all transitions through a single service module to ensure consistency.
-- The recommended persisted drive states are `EMPTY`, `AVAILABLE`, `IN_USE`, and `FINALIZED`.
-- `FINALIZED` is distinct from `AVAILABLE`: it represents a drive that has completed export handling and is logically sealed against further writes until an explicit reopen action is performed.
+- The recommended persisted drive states are `EMPTY`, `AVAILABLE`, and `IN_USE`.
 
 ### 4.1.0 Recommended Drive State Semantics
 
 - `EMPTY` — drive record exists but hardware is not presently available for use.
 - `AVAILABLE` — drive is present, writable, and eligible for initialization or job assignment.
 - `IN_USE` — drive is actively assigned to a project/job workflow and may receive data writes.
-- `FINALIZED` — drive has been explicitly finalized for handoff/custody; it remains project-bound but is not eligible for new writes, auto-assignment, or reinitialization until reopened.
 
 Recommended legal transitions:
 
 - `EMPTY → AVAILABLE` on discovery of a usable drive.
 - `AVAILABLE → IN_USE` on initialize or job assignment.
-- `IN_USE → AVAILABLE` on prepare-eject.
-- `IN_USE → FINALIZED` on finalize.
-- `AVAILABLE → FINALIZED` on finalize when the drive was already safely prepared and no additional OS-level unmount work is needed.
-- `FINALIZED → AVAILABLE` on explicit reopen/unfinalize.
+- `IN_USE → AVAILABLE` on finalize.
 - `AVAILABLE → EMPTY` on removal or disabled-port reconciliation.
 
 Illegal transitions should be rejected with `409 Conflict`.
@@ -62,7 +57,7 @@ Illegal transitions should be rejected with `409 Conflict`.
   - Formatting commands run with bounded timeouts.
   - Only `admin` and `manager` roles may format drives.
 
-## 4.2 Drive Prepare-Eject Procedure
+## 4.2 Drive Finalize Procedure
 
 - **Precondition:** Drive must be in `IN_USE` state; reject with 409 if not
 - **Initial validation:** Capture drive state and filesystem path at request start
@@ -86,62 +81,15 @@ Illegal transitions should be rejected with `409 Conflict`.
   - This ensures audit trail records the device path actually used for OS operations
 - Failure handling: If any operation fails, keep drive `IN_USE` and audit the failure with details
 - Success: Transition drive to `AVAILABLE` only after all operations succeed
-- No-op case: If device is not currently mounted, consider it successfully prepared (return success)
+- No-op case: If device is not currently mounted, consider finalize successful (return success)
 
-### 4.2.1 Relationship Between Prepare-Eject and Finalize
+### 4.2.1 Finalize Semantics
 
-- `prepare-eject` remains the operational safe-removal endpoint.
+- `POST /drives/{drive_id}/finalize` is the safe-removal endpoint.
+- It flushes pending writes, unmounts all partitions, and transitions the drive from `IN_USE` to `AVAILABLE`.
 - It does **not** imply legal handoff, write protection, or export completion.
-- It does **not** clear `current_project_id`; the drive remains bound to its project after prepare-eject.
-- A prepare-ejected drive remains reusable within the current workflow and can later be assigned back to `IN_USE` under existing project-isolation rules.
-- Finalization, if implemented, must be a separate endpoint and separate persisted state, not an alias for prepare-eject.
-
-### 4.2.2 Drive Finalization Design
-
-- Provide an API endpoint (`POST /drives/{drive_id}/finalize`) to mark a drive as export-complete and logically sealed.
-- Finalization is exposed as an explicit sealed-state transition after copy-oriented work is complete.
-- Recommended allowed starting states:
-  - `IN_USE` — perform safe-eject operations as part of finalization, then transition to `FINALIZED`.
-  - `AVAILABLE` — permit finalization if the drive is already safely unmounted/prepared and remains project-bound to the intended export.
-- Recommended preconditions:
-  - Drive must be bound to a project (`current_project_id` is not `NULL`).
-  - No active copy/verify/manifest job may still be operating against the drive.
-  - If a job is associated with the drive, it should be in a terminal successful state before finalization is accepted.
-  - If manifest completion is part of the deployment policy, manifest generation should already be complete.
-- Finalization procedure:
-  1. Validate state and project binding.
-  2. Validate no active job is still using the drive.
-  3. If state is `IN_USE`, reuse prepare-eject OS behavior (sync + unmount + race validation).
-  4. Transition drive state to `FINALIZED`.
-  5. Persist finalization metadata (`finalized_at`, `finalized_by`, and optional operator note/reason).
-  6. Emit a dedicated audit event such as `DRIVE_FINALIZED`.
-- Finalization effects:
-  - Finalized drives must not be eligible for new job creation or auto-assignment.
-  - Finalized drives must not be reinitialized, formatted, or returned to `IN_USE` implicitly.
-  - Finalized drives remain associated with their existing `current_project_id` until explicitly reopened or reset.
-- Failure handling:
-  - If OS-level prepare-eject work fails, do not mark the drive finalized.
-  - If database persistence of finalization fails after OS work succeeded, return `500` and require operator review; state must not silently degrade to `AVAILABLE` without an audit trail.
-
-### 4.2.3 Drive Reopen / Unfinalize Design
-
-- Provide an API endpoint (`POST /drives/{drive_id}/reopen`) or equivalent to reverse finalization when additional data must be exported.
-- Reopen is intentionally explicit because it breaks the sealed-handoff assumption established by finalization.
-- Recommended preconditions:
-  - Drive must currently be in `FINALIZED` state.
-  - Caller must have elevated privileges (`admin`, or stricter if policy requires).
-  - Request body should include a mandatory human-readable reason.
-- Reopen procedure:
-  1. Validate the drive is `FINALIZED`.
-  2. Record the operator-supplied reason.
-  3. Transition drive state from `FINALIZED` to `AVAILABLE`.
-  4. Preserve `current_project_id` by default so additional exports remain constrained to the same case/project.
-  5. Emit a dedicated audit event such as `DRIVE_REOPENED` or `DRIVE_UNFINALIZED` containing actor, reason, prior finalization metadata, and drive/project identifiers.
-- Reopen effects:
-  - The drive becomes eligible for explicit reuse.
-  - Subsequent writes must still respect project isolation.
-  - Operators may then assign/start an additional job and later finalize the drive again.
-- Reopen must never happen implicitly as a side effect of discovery, job creation, or initialize.
+- It does **not** clear `current_project_id`; the drive remains bound to its project after finalization.
+- After finalize, the drive is immediately reusable within the current workflow and can be assigned back to `IN_USE` under existing project-isolation rules.
 
 ## 4.3 Project Isolation Design
 
@@ -173,9 +121,6 @@ The binding is persisted as part of the drive's authoritative state. A drive wit
 4. **Release** — The project binding persists until the drive is explicitly
    re-initialized for a different project or reset. Removing a drive
    physically does not clear its `current_project_id` in the database.
-5. **Finalization interaction** — Finalization does not clear project binding.
-  A finalized drive remains bound to its project but is write-ineligible
-  until explicitly reopened.
 
 ### Concurrency
 
@@ -284,13 +229,13 @@ The callback body is a JSON object containing:
 - Hub and port records are upserted using stable hardware identity keys.
 - **Hardware enrichment:** Discovery should capture vendor, product, and negotiated-speed metadata when available, without erasing previously known values with empty readings.
 - **Label preservation:** Admin-assigned hub and port labels are never overwritten by discovery.
-- Drive state transitions follow FSM rules: `EMPTY → AVAILABLE` on reconnection, `AVAILABLE → EMPTY` on removal (unless `IN_USE` or `FINALIZED` — project isolation and custody state are preserved).
+- Drive state transitions follow FSM rules: `EMPTY → AVAILABLE` on reconnection, `AVAILABLE → EMPTY` on removal (unless `IN_USE` — project isolation takes priority).
 - **Port enablement filtering:** Each USB port has an `enabled` flag (default `false`). Discovery uses this flag to gate drive availability:
   - A newly discovered drive on a **disabled** port is inserted in `EMPTY` state (not `AVAILABLE`).
   - A reconnecting drive (previously `EMPTY`) on a **disabled** port remains `EMPTY`.
   - An `AVAILABLE` drive whose port is subsequently **disabled** is demoted to `EMPTY` on the next discovery sync.
   - Drives with no associated port (`port_id = NULL`) are treated as **disabled** — they remain in `EMPTY` state.
-  - Drives already in `IN_USE` or `FINALIZED` state are **never** changed by the enablement filter — project isolation and custody state take priority.
+  - Drives already in `IN_USE` state are **never** changed by the enablement filter — project isolation takes priority.
   - Port enablement changes take effect on the next discovery sync.
 - Refresh operation is fully idempotent: running multiple times without hardware changes produces no mutations.
 - **Concurrency safety:** Discovery must remain idempotent under multi-worker execution and tolerate concurrent upsert attempts against the same hardware identities.
