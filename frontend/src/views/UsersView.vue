@@ -134,6 +134,10 @@ async function saveRoles(user) {
       error.value = t('common.errors.requestConflict')
     } else if (status === 422 || code === 'VALIDATION_ERROR' || code === 'HTTP_422' || code === 'OS_USER_PASSWORD_REQUIRED') {
       error.value = t('common.errors.validationFailed')
+    } else if (!status) {
+      error.value = t('common.errors.networkError')
+    } else if (status >= 500) {
+      error.value = t('common.errors.serverError', { status })
     } else {
       error.value = t('common.errors.validationFailed')
     }
@@ -219,6 +223,10 @@ async function submitCreateOsUser(confirmExistingOsUser = null) {
       error.value = t('common.errors.requestConflict')
     } else if (status === 422 || code === 'VALIDATION_ERROR' || code === 'HTTP_422' || code === 'OS_USER_PASSWORD_REQUIRED') {
       error.value = t('common.errors.validationFailed')
+    } else if (!status) {
+      error.value = t('common.errors.networkError')
+    } else if (status >= 500) {
+      error.value = t('common.errors.serverError', { status })
     } else {
       error.value = t('common.errors.validationFailed')
     }
