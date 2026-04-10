@@ -16,6 +16,42 @@ class HealthResponse(BaseModel):
     status: str = Field(..., description="Health status ('ok')")
 
 
+class HealthLiveResponse(BaseModel):
+    """Response for ``GET /health/live``."""
+
+    status: str = Field(..., description="Liveness status ('alive')")
+    timestamp: str = Field(..., description="UTC timestamp in ISO 8601 format")
+
+
+class HealthReadyChecks(BaseModel):
+    """Dependency check breakdown for ``GET /health/ready``."""
+
+    database: str = Field(..., description="Database readiness check result")
+    file_system: str = Field(..., description="Filesystem mount readiness result")
+    usb_discovery: str = Field(..., description="USB discovery readiness result")
+
+
+class HealthReadyResponse(BaseModel):
+    """Response for ready state from ``GET /health/ready``."""
+
+    status: str = Field(..., description="Readiness status ('ready')")
+    timestamp: str = Field(..., description="UTC timestamp in ISO 8601 format")
+    checks: HealthReadyChecks = Field(..., description="Per-dependency readiness checks")
+
+
+class HealthNotReadyResponse(BaseModel):
+    """Response for non-ready state from ``GET /health/ready``."""
+
+    status: str = Field(..., description="Readiness status ('not_ready')")
+    reason: str = Field(..., description="Machine-readable reason code")
+    details: str = Field(..., description="Human-readable failure detail")
+    timestamp: str = Field(..., description="UTC timestamp in ISO 8601 format")
+    checks: HealthReadyChecks = Field(
+        ...,
+        description="Per-dependency readiness checks for the current failure state",
+    )
+
+
 # ---------------------------------------------------------------------------
 # /introspection/version
 # ---------------------------------------------------------------------------

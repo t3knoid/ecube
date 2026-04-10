@@ -25,6 +25,10 @@ class MountProvider(Protocol):
         """Unmount a filesystem. Returns (success, error_message)."""
         ...
 
-    def check_mounted(self, local_mount_point: str) -> Optional[bool]:
-        """Check if a path is an active mountpoint. Returns True/False/None on error."""
+    def check_mounted(self, local_mount_point: str, *, timeout_seconds: Optional[float] = None) -> Optional[bool]:
+        """Check if a path is an active mountpoint.
+
+        Returns True/False/None on error. ``timeout_seconds`` allows callers
+        (e.g., readiness probes) to enforce faster failure bounds.
+        """
         ...

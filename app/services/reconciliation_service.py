@@ -38,6 +38,7 @@ from app.models.network import MountStatus, NetworkMount
 from app.models.system import ReconciliationLock
 from app.repositories.user_role_repository import UserRoleRepository
 from app.repositories.audit_repository import AuditRepository
+from app.services.mount_check_utils import check_mounted_with_configured_timeout
 from app.constants import ECUBE_GROUP_ROLE_MAP
 
 logger = logging.getLogger(__name__)
@@ -169,7 +170,7 @@ def reconcile_mounts(
     for mount in mounts:
         checked += 1
         try:
-            result = mount_provider.check_mounted(mount.local_mount_point)
+            result = check_mounted_with_configured_timeout(mount_provider, mount.local_mount_point)
         except Exception:
             logger.exception(
                 "OS check failed for mount %s (%s) — treating as ERROR",

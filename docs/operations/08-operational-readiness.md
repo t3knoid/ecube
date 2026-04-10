@@ -70,8 +70,13 @@ The application must expose an HTTP `GET /health/ready` endpoint that returns `2
 {
   "status": "not_ready",
   "reason": "database_connection_failed",
-  "details": "PostgreSQL connection timeout at :5432",
-  "timestamp": "2026-04-05T20:00:00Z"
+  "details": "Database connectivity check failed.",
+  "timestamp": "2026-04-05T20:00:00Z",
+  "checks": {
+    "database": "unhealthy",
+    "file_system": "unknown",
+    "usb_discovery": "unknown"
+  }
 }
 ```
 
@@ -80,6 +85,8 @@ The application must expose an HTTP `GET /health/ready` endpoint that returns `2
 **Expected behavior:**
 - Validates critical dependencies: PostgreSQL connectivity, filesystem mounts, USB discovery subsystem.
 - Fails fast (< 1 second) if any dependency fails.
+- Filesystem mount checks for this endpoint are controlled by `READINESS_MOUNT_CHECK_TIMEOUT_SECONDS` (per-mount timeout) and `READINESS_MOUNT_CHECKS_TOTAL_TIMEOUT_SECONDS` (total timeout budget); see [Configuration Reference](04-configuration-reference.md).
+- USB discovery readiness checks are optimized with `READINESS_USB_DISCOVERY_CACHE_TTL_SECONDS`, which caches successful readiness probes briefly to reduce steady-state probe CPU/IO load; see [Configuration Reference](04-configuration-reference.md).
 - Returned `503 Service Unavailable` if not ready.
 - During startup, the service may return `503` until initialization completes (§ [docs/design/04-functional-design.md](../design/04-functional-design.md#startup-initialization) Startup Reconciliation).
 
@@ -454,6 +461,7 @@ Before moving ECUBE to production, verify:
 | `NFS_MOUNT_TIMEOUT` | Integer | `30` | Timeout (seconds) for NFS mount attempts |
 | `SMB_MOUNT_TIMEOUT` | Integer | `30` | Timeout (seconds) for SMB mount attempts |
 | `USB_DISCOVERY_INTERVAL` | Integer | `5` | USB hub discovery interval (seconds) |
+| `READINESS_USB_DISCOVERY_CACHE_TTL_SECONDS` | Float | `5.0` | Cache TTL (seconds) for successful USB readiness checks to avoid full discovery on every probe |
 | `STARTUP_WAIT_TIMEOUT` | Integer | `300` | Max time (seconds) to wait for startup reconciliation |
 
 ---
