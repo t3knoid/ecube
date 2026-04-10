@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import threading
 import time
 import traceback
 import uuid
@@ -39,6 +40,9 @@ configure_logging()
 
 logger = logging.getLogger(__name__)
 
+_USB_DISCOVERY_READY_CACHE: dict[type, float] = {}
+_USB_DISCOVERY_READY_CACHE_LOCK = threading.Lock()
+
 
 def _is_missing_table_error(exc: Exception) -> bool:
     """Return True when *exc* indicates a missing/unmigrated table."""
@@ -65,6 +69,42 @@ def _probe_usb_sysfs_available() -> bool:
         os.listdir(usb_path)
     except OSError:
         return False
+    return True
+
+
+def _is_usb_discovery_ready() -> bool:
+    """Return True when USB discovery is ready without full scans on each probe.
+
+    Successful readiness checks are cached for a short TTL to avoid repeated
+    sysfs topology walks under frequent ``/health/ready`` polling.
+    """
+    ttl_seconds = settings.readiness_usb_discovery_cache_ttl_seconds
+    now = time.monotonic()
+
+    try:
+        provider = get_drive_discovery()
+    except Exception:
+        return False
+
+    provider_type = type(provider)
+    if ttl_seconds > 0:
+        with _USB_DISCOVERY_READY_CACHE_LOCK:
+            expires_at = _USB_DISCOVERY_READY_CACHE.get(provider_type)
+            if expires_at is not None and expires_at > now:
+                return True
+
+    probe_ready = getattr(provider, "probe_ready", None)
+    try:
+        if callable(probe_ready):
+            probe_ready()
+        else:
+            provider.discover_topology()
+    except Exception:
+        return False
+
+    if ttl_seconds > 0:
+        with _USB_DISCOVERY_READY_CACHE_LOCK:
+            _USB_DISCOVERY_READY_CACHE[provider_type] = now + ttl_seconds
     return True
 
 
@@ -566,11 +606,8 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
             },
         )
 
-    try:
-        get_drive_discovery().discover_topology()
-    except Exception as exc:
-        logger.warning("Readiness probe dependency failed reason=usb_discovery_not_initialized error_type=%s", type(exc).__name__)
-        logger.debug("Readiness USB discovery failure detail", exc_info=True)
+    if not _is_usb_discovery_ready():
+        logger.warning("Readiness probe dependency failed reason=usb_discovery_not_initialized")
         return _not_ready_response(
             reason="usb_discovery_not_initialized",
             details="USB discovery readiness check failed.",
