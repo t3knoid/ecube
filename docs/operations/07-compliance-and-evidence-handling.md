@@ -177,6 +177,8 @@ Chain-of-custody (CoC) is a legal requirement for evidence admissibility. It doc
 
 The `audit_logs` table serves as the authoritative chain-of-custody record. For each evidence export, the following must be documented:
 
+Strict minimum custody log fields for each exported USB must include: who created/prepared the USB in ECUBE, who took possession of the USB, and when custody was delivered.
+
 **A. Source & Seizure (Responsibility: Litigation Team)**
 - Original evidence location (server, custodian, drive, etc.)
 - Date/time of seizure
@@ -199,9 +201,10 @@ The `audit_logs` table serves as the authoritative chain-of-custody record. For 
 
 **D. Export & Physical Custody (Responsibility: Manager/Auditor)**
 - Drive initialization: project binding, filesystem type, capacity
+- USB created/prepared by: operator identity and timestamp
 - Drive assignment to job: timestamp, operator name
 - Drive eject: unmount operation, timestamp
-- USB drive handoff: Physical receipt/signature by receiving party (outside ECUBE; manual process)
+- USB drive handoff: recipient identity, delivery timestamp, and physical receipt/signature by receiving party (outside ECUBE; manual process)
 
 **E. Final Verification (Responsibility: Receiving Party)**
 - Drive contents verified against manifest hashes
@@ -247,8 +250,11 @@ Verification Result: [PASSED/FAILED]
 Verifier: [ECUBE Auditor Name]
 
 === HANDOFF ===
+Created/Prepared By (ECUBE): [Operator Name]
+Created/Prepared On: [Date/Time]
+Delivered By: [Operator Name/Title]
 Handed Over To: [Receiving Party Name/Title]
-Date/Time: [Date/Time]
+Delivered On: [Date/Time]
 Receiving Party Signature: _____________________
 ECUBE Operator Signature: _____________________
 
@@ -264,6 +270,10 @@ Verified by Legal Counsel: [Yes/No]
 ### Digital Chain-of-Custody Export
 
 ECUBE must provide an automated export of chain-of-custody records:
+
+- Access to CoC reports (API and UI) must be restricted to the same roles authorized to read audit reports.
+- The UI must provide an authorized user control to print or save a chain-of-custody report.
+- Printed/saved output must include custody actors and timestamps needed for legal review.
 
 **Endpoint:** `GET /audit/chain-of-custody?job_id={job_id}`
 
