@@ -70,8 +70,13 @@ The application must expose an HTTP `GET /health/ready` endpoint that returns `2
 {
   "status": "not_ready",
   "reason": "database_connection_failed",
-  "details": "PostgreSQL connection timeout at :5432",
-  "timestamp": "2026-04-05T20:00:00Z"
+  "details": "Database connectivity check failed.",
+  "timestamp": "2026-04-05T20:00:00Z",
+  "checks": {
+    "database": "unhealthy",
+    "file_system": "unknown",
+    "usb_discovery": "unknown"
+  }
 }
 ```
 
