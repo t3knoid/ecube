@@ -4,19 +4,21 @@ import traceback
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from typing import Generator
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.routing import BaseRoute, Match
 
 from app.auth import get_current_user
 from app import API_VERSION, __version__
 from app.config import settings
-from app.database import get_db
+from app import database as db_module
 from app.infrastructure import get_drive_discovery, get_mount_provider
 from app.exceptions import AuthenticationError, AuthorizationError, ConflictError, ECUBEException
 from app.utils.sanitize import is_encoding_error
@@ -285,19 +287,51 @@ def health_live():
     return {"status": "alive", "timestamp": timestamp}
 
 
+def _get_db_or_none() -> Generator[Session | None, None, None]:
+    """Yield a DB session when configured, otherwise ``None``.
+
+    This keeps readiness responses consistent even when DATABASE_URL is unset.
+    """
+    if not db_module.is_database_configured():
+        yield None
+        return
+
+    db = db_module.SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 @app.get(
     "/health/ready",
     response_model=HealthReadyResponse,
     responses={503: {"model": HealthNotReadyResponse, "description": "Service is not ready"}},
 )
-def health_ready(db=Depends(get_db)):
+def health_ready(db: Session | None = Depends(_get_db_or_none)):
     """Check whether critical runtime dependencies are ready for traffic."""
     timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    if db is None:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "not_ready",
+                "reason": "database_not_configured",
+                "details": "Database is not configured.",
+                "timestamp": timestamp,
+                "checks": {
+                    "database": "unhealthy",
+                    "file_system": "unknown",
+                    "usb_discovery": "unknown",
+                },
+            },
+        )
 
     # 1) Database connectivity
     try:
         db.execute(text("SELECT 1"))
-    except Exception as exc:
+    except Exception:
         logger.exception("Readiness probe failed database connectivity check")
         return JSONResponse(
             status_code=503,
