@@ -71,7 +71,7 @@ Lifecycle requirements:
 
 - Drive state must change in ways that preserve an auditable lifecycle.
 - Project binding must persist across temporary removal and reinsertion unless an explicit reset or lifecycle transition changes it.
-- Finalize behavior must transition drive lifecycle state from `IN_USE` to `AVAILABLE` without clearing project binding.
+- Prepare-eject (safe removal) behavior must transition drive lifecycle state from `IN_USE` to `AVAILABLE` without clearing project binding.
 
 Constraints:
 
