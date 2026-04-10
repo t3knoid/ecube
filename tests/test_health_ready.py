@@ -50,6 +50,7 @@ class _FailingDiscoveryProvider:
 def test_health_ready_returns_200_when_all_checks_pass(unauthenticated_client, db, monkeypatch):
     monkeypatch.setattr(main_module, "get_mount_provider", lambda: _HealthyMountProvider())
     monkeypatch.setattr(main_module, "get_drive_discovery", lambda: _HealthyDiscoveryProvider())
+    monkeypatch.setattr(main_module, "_probe_usb_sysfs_available", lambda: True)
 
     response = unauthenticated_client.get("/health/ready")
 
@@ -244,6 +245,7 @@ def test_health_ready_passes_configured_mount_check_timeout(unauthenticated_clie
     monkeypatch.setattr(main_module, "get_mount_provider", lambda: provider)
     monkeypatch.setattr(main_module.settings, "readiness_mount_check_timeout_seconds", 0.25)
     monkeypatch.setattr(main_module, "get_drive_discovery", lambda: _HealthyDiscoveryProvider())
+    monkeypatch.setattr(main_module, "_probe_usb_sysfs_available", lambda: True)
 
     response = unauthenticated_client.get("/health/ready")
 
@@ -302,6 +304,7 @@ def test_health_ready_returns_503_when_mount_checks_exceed_total_budget(unauthen
 def test_health_ready_returns_503_when_usb_discovery_not_ready(unauthenticated_client, db, monkeypatch):
     monkeypatch.setattr(main_module, "get_mount_provider", lambda: _HealthyMountProvider())
     monkeypatch.setattr(main_module, "get_drive_discovery", lambda: _FailingDiscoveryProvider())
+    monkeypatch.setattr(main_module, "_probe_usb_sysfs_available", lambda: True)
 
     response = unauthenticated_client.get("/health/ready")
 
