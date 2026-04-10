@@ -4,7 +4,7 @@
 |---|---|
 | Title | ECUBE User Manual |
 | Purpose | Guides end users, processors, managers, and auditors through day-to-day ECUBE workflows and operational tasks. |
-| Updated on | 04/08/26 |
+| Updated on | 04/09/26 |
 | Audience | Processors, managers, auditors, administrators, end users. |
 
 ## Table of Contents
@@ -173,6 +173,13 @@ The setup wizard walks through:
 2. Provisioning the application database
 3. Creating the first administrative account
 4. Completing setup and returning to login
+
+Important first-run behavior:
+
+- If the admin username entered in setup does not yet exist on the host, ECUBE creates that OS user, adds it to `ecube-admins`, and grants the ECUBE `admin` role.
+- If the admin username already exists on the host, ECUBE treats that as a reconciliation path instead of an error. The wizard adds the existing OS user to `ecube-admins`, syncs the ECUBE `admin` role, resets the password entered in the wizard, and then completes setup successfully.
+- In the existing-user path, the setup screen shows an informational success message indicating that the existing OS admin user was reconciled.
+- After either path completes, return to the login page and sign in with the username and password entered during setup.
 
 If you are not responsible for installation, stop here and contact the administrator who owns the deployment.
 
