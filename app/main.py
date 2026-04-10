@@ -3,6 +3,7 @@ import logging
 import traceback
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -15,14 +16,18 @@ from starlette.routing import BaseRoute, Match
 from app.auth import get_current_user
 from app import API_VERSION, __version__
 from app.config import settings
+from app.database import get_db
+from app.infrastructure import get_drive_discovery, get_mount_provider
 from app.exceptions import AuthenticationError, AuthorizationError, ConflictError, ECUBEException
 from app.utils.sanitize import is_encoding_error
 from app.logging_config import configure_logging
+from app.models.network import NetworkMount
 from app.routers import admin, audit, auth, configuration, database_setup, drives, files, introspection, jobs, mounts, setup, telemetry, users
 from app.schemas.errors import ErrorResponse
-from app.schemas.introspection import HealthResponse, VersionResponse
+from app.schemas.introspection import HealthLiveResponse, HealthNotReadyResponse, HealthReadyResponse, HealthResponse, VersionResponse
 from app.session import close_session_backend, init_session_backend, mount_session_middleware
 from app.utils.client_ip import get_client_ip
+from sqlalchemy import text
 
 # Configure logging before anything else.
 configure_logging()
@@ -273,6 +278,97 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/health/live", response_model=HealthLiveResponse)
+def health_live():
+    """Return process liveness for orchestrator probes without dependency checks."""
+    timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return {"status": "alive", "timestamp": timestamp}
+
+
+@app.get(
+    "/health/ready",
+    response_model=HealthReadyResponse,
+    responses={503: {"model": HealthNotReadyResponse, "description": "Service is not ready"}},
+)
+def health_ready(db=Depends(get_db)):
+    """Check whether critical runtime dependencies are ready for traffic."""
+    timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    # 1) Database connectivity
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception as exc:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "not_ready",
+                "reason": "database_connection_failed",
+                "details": str(exc),
+                "timestamp": timestamp,
+                "checks": {
+                    "database": "unhealthy",
+                    "file_system": "unknown",
+                    "usb_discovery": "unknown",
+                },
+            },
+        )
+
+    # 2) Filesystem mount availability (using current mount provider checks)
+    provider = get_mount_provider()
+    configured_mounts = db.query(NetworkMount).all()
+    for mount in configured_mounts:
+        result = provider.check_mounted(mount.local_mount_point)
+        if result is not True:
+            detail = (
+                f"Mount '{mount.local_mount_point}' check returned 'unmounted'"
+                if result is False
+                else f"Mount '{mount.local_mount_point}' check failed"
+            )
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "not_ready",
+                    "reason": "filesystem_mount_unavailable",
+                    "details": detail,
+                    "timestamp": timestamp,
+                    "checks": {
+                        "database": "healthy",
+                        "file_system": "unmounted",
+                        "usb_discovery": "unknown",
+                    },
+                },
+            )
+
+    # 3) USB discovery readiness signal (provider can enumerate topology)
+    try:
+        get_drive_discovery().discover_topology()
+    except Exception as exc:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "not_ready",
+                "reason": "usb_discovery_not_initialized",
+                "details": str(exc),
+                "timestamp": timestamp,
+                "checks": {
+                    "database": "healthy",
+                    "file_system": "mounted",
+                    "usb_discovery": "not_initialized",
+                },
+            },
+        )
+
+    return {
+        "status": "ready",
+        "timestamp": timestamp,
+        "checks": {
+            "database": "healthy",
+            "file_system": "mounted",
+            "usb_discovery": "initialized",
+        },
+    }
+
+
 @app.get("/introspection/version", response_model=VersionResponse)
 def introspection_version():
     """Return application and API version information.
@@ -311,7 +407,7 @@ def custom_openapi():
     # Apply security requirement to all endpoints except unauthenticated routes
     _unauthenticated_paths = {
         "/health", "/auth/token", "/setup/status", "/setup/initialize",
-        "/introspection/version", "/setup/database/system-info",
+        "/introspection/version", "/setup/database/system-info", "/health/ready", "/health/live",
     }
     # Endpoints that accept an optional bearer token (unauthenticated during
     # initial setup, admin-required after the first admin user is created).
