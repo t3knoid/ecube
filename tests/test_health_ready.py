@@ -68,6 +68,7 @@ def test_health_ready_returns_503_when_database_fails(unauthenticated_client, db
 
 def test_health_ready_returns_503_when_database_not_configured(unauthenticated_client, db, monkeypatch):
     monkeypatch.setattr(main_module.db_module, "is_database_configured", lambda: False)
+    monkeypatch.setattr(main_module.settings, "database_url", "")
 
     response = unauthenticated_client.get("/health/ready")
 
@@ -86,6 +87,25 @@ def test_health_ready_returns_503_when_database_not_configured(unauthenticated_c
     assert "code" not in payload
     assert "message" not in payload
     assert "trace_id" not in payload
+
+
+def test_health_ready_returns_503_when_database_misconfigured(unauthenticated_client, db, monkeypatch):
+    monkeypatch.setattr(main_module.db_module, "is_database_configured", lambda: False)
+    monkeypatch.setattr(main_module.settings, "database_url", "postgresql://invalid-url")
+
+    response = unauthenticated_client.get("/health/ready")
+
+    assert response.status_code == 503
+    payload = response.json()
+    assert payload["status"] == "not_ready"
+    assert payload["reason"] == "database_misconfigured"
+    assert payload["details"] == "Database is configured but failed to initialize."
+    assert isinstance(payload.get("timestamp"), str)
+    assert payload["checks"] == {
+        "database": "unhealthy",
+        "file_system": "unknown",
+        "usb_discovery": "unknown",
+    }
 
 
 def test_health_ready_returns_503_when_mount_check_fails(unauthenticated_client, db, monkeypatch):
