@@ -536,8 +536,8 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
                 mount.local_mount_point,
             )
             return _not_ready_response(
-                reason="filesystem_mount_check_failed",
-                details="A required filesystem mount readiness check failed.",
+                reason="filesystem_mount_check_unknown",
+                details="A required filesystem mount readiness check returned an indeterminate result.",
                 timestamp=timestamp,
                 checks={
                     "database": "healthy",
