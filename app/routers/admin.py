@@ -643,6 +643,17 @@ def create_os_user(
             detail="At least one mapped ECUBE role is required to derive OS groups.",
         )
 
+    for group_name in effective_groups:
+        try:
+            validate_group_name(group_name)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        if not provider.group_exists(group_name):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Group '{group_name}' does not exist",
+            )
+
     if body.username in RESERVED_USERNAMES:
         raise HTTPException(
             status_code=422,
