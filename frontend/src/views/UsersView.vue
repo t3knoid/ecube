@@ -78,6 +78,10 @@ function hasRoleChanges(user) {
   return !rolesEqual(user.roles, user.savedRoles)
 }
 
+function isOsManageableUser(user) {
+  return Array.isArray(user?.groups) && user.groups.some((group) => group.startsWith('ecube-'))
+}
+
 async function loadAll() {
   loading.value = true
   error.value = ''
@@ -316,8 +320,22 @@ async function submitResetPassword(username) {
     await resetOsUserPassword(username, { password: passwordResetValue.value })
     passwordResetTarget.value = ''
     passwordResetValue.value = ''
-  } catch {
-    error.value = t('common.errors.requestConflict')
+  } catch (err) {
+    const status = err?.response?.status
+    const code = err?.response?.data?.code
+    if (status === 403 || code === 'FORBIDDEN' || code === 'HTTP_403') {
+      error.value = t('common.errors.insufficientPermissions')
+    } else if (status === 409 || code === 'CONFLICT' || code === 'HTTP_409') {
+      error.value = t('common.errors.requestConflict')
+    } else if (status === 422 || code === 'VALIDATION_ERROR' || code === 'HTTP_422') {
+      error.value = t('common.errors.validationFailed')
+    } else if (!status) {
+      error.value = t('common.errors.networkError')
+    } else if (status >= 500) {
+      error.value = t('common.errors.serverError', { status })
+    } else {
+      error.value = t('common.errors.validationFailed')
+    }
   } finally {
     saving.value = false
   }
@@ -364,8 +382,9 @@ onMounted(loadAll)
         </template>
         <template #cell-reset="{ row }">
           <div class="inline-reset">
-            <button class="btn" @click="openResetPassword(row.username)">{{ t('users.resetPassword') }}</button>
-            <div v-if="passwordResetTarget === row.username" class="inline-form">
+            <button v-if="isOsManageableUser(row)" class="btn" @click="openResetPassword(row.username)">{{ t('users.resetPassword') }}</button>
+            <span v-else class="muted">{{ t('users.resetPasswordUnavailable') }}</span>
+            <div v-if="isOsManageableUser(row) && passwordResetTarget === row.username" class="inline-form">
               <input v-model="passwordResetValue" type="password" :placeholder="t('auth.password')" :aria-label="t('users.resetPassword')" autocomplete="new-password" />
               <button class="btn btn-primary" @click="submitResetPassword(row.username)">{{ t('users.savePassword') }}</button>
               <button class="btn" @click="cancelResetPassword">{{ t('common.actions.cancel') }}</button>
