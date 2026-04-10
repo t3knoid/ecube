@@ -380,7 +380,26 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
         )
 
     # 2) Filesystem mount availability (using current mount provider checks)
-    provider = get_mount_provider()
+    try:
+        provider = get_mount_provider()
+    except Exception as exc:
+        logger.warning("Readiness probe dependency failed reason=mount_provider_unavailable error=%s", exc)
+        logger.debug("Readiness mount provider resolution traceback", exc_info=True)
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "not_ready",
+                "reason": "mount_provider_unavailable",
+                "details": "Filesystem mount provider is not available.",
+                "timestamp": timestamp,
+                "checks": {
+                    "database": "healthy",
+                    "file_system": "unknown",
+                    "usb_discovery": "unknown",
+                },
+            },
+        )
+
     try:
         configured_mounts = db.query(NetworkMount).all()
     except (ProgrammingError, OperationalError) as exc:

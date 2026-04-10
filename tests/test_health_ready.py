@@ -126,6 +126,24 @@ def test_health_ready_returns_503_when_mount_metadata_table_missing(unauthentica
     assert payload["checks"]["file_system"] == "unknown"
 
 
+def test_health_ready_returns_503_when_mount_provider_unavailable(unauthenticated_client, db, monkeypatch):
+    def _raise_provider_error():
+        raise ValueError("Unsupported platform")
+
+    monkeypatch.setattr(main_module, "get_mount_provider", _raise_provider_error)
+    monkeypatch.setattr(main_module, "get_drive_discovery", lambda: _HealthyDiscoveryProvider())
+
+    response = unauthenticated_client.get("/health/ready")
+
+    assert response.status_code == 503
+    payload = response.json()
+    assert payload["status"] == "not_ready"
+    assert payload["reason"] == "mount_provider_unavailable"
+    assert payload["details"] == "Filesystem mount provider is not available."
+    assert payload["checks"]["database"] == "healthy"
+    assert payload["checks"]["file_system"] == "unknown"
+
+
 def test_health_ready_returns_503_when_mount_check_is_unknown(unauthenticated_client, db, monkeypatch):
     db.add(
         NetworkMount(
