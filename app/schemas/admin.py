@@ -308,6 +308,10 @@ class SetupInitializeRequest(BaseModel):
 class SetupInitializeResponse(BaseModel):
     """Response for ``POST /setup/initialize``."""
 
+    status: Literal["created_admin_user", "reconciled_existing_user"] = Field(
+        ...,
+        description="Initialization outcome indicating whether the admin OS user was created or reconciled",
+    )
     message: str
     username: str
     groups_created: List[str] = Field(default_factory=list)
