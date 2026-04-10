@@ -47,6 +47,8 @@ def test_health_ready_returns_503_when_database_fails(unauthenticated_client, db
     def _raise_db_error(*_args, **_kwargs):
         raise RuntimeError("database offline")
 
+    monkeypatch.setattr(main_module.db_module, "is_database_configured", lambda: True)
+    monkeypatch.setattr(main_module.db_module, "SessionLocal", lambda: db)
     monkeypatch.setattr(db, "execute", _raise_db_error)
 
     response = unauthenticated_client.get("/health/ready")
@@ -56,6 +58,23 @@ def test_health_ready_returns_503_when_database_fails(unauthenticated_client, db
     assert payload["status"] == "not_ready"
     assert payload["reason"] == "database_connection_failed"
     assert payload["checks"]["database"] == "unhealthy"
+
+
+def test_health_ready_returns_503_when_database_not_configured(unauthenticated_client, db, monkeypatch):
+    monkeypatch.setattr(main_module.db_module, "is_database_configured", lambda: False)
+
+    response = unauthenticated_client.get("/health/ready")
+
+    assert response.status_code == 503
+    payload = response.json()
+    assert payload["status"] == "not_ready"
+    assert payload["reason"] == "database_not_configured"
+    assert payload["details"] == "Database is not configured."
+    assert payload["checks"] == {
+        "database": "unhealthy",
+        "file_system": "unknown",
+        "usb_discovery": "unknown",
+    }
 
 
 def test_health_ready_returns_503_when_mount_check_fails(unauthenticated_client, db, monkeypatch):
