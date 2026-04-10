@@ -201,7 +201,7 @@ Acceptance criteria:
 The system must emit audit records for security-relevant and operationally significant events, including at minimum:
 
 - Drive initialization.
-- Drive finalize (safe-removal) success and failure.
+- Drive prepare-eject (safe-removal) success and failure.
 - Job creation and job state changes.
 - Copy execution outcomes.
 - Manifest generation.
