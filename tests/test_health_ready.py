@@ -247,6 +247,53 @@ def test_health_ready_passes_configured_mount_check_timeout(unauthenticated_clie
     assert provider.last_timeout_seconds == 0.25
 
 
+def test_health_ready_non_positive_mount_timeout_uses_default_when_no_budget(unauthenticated_client, db, monkeypatch):
+    db.add(
+        NetworkMount(
+            type=MountType.NFS,
+            remote_path="10.0.0.1:/evidence",
+            local_mount_point="/mnt/evidence",
+        )
+    )
+    db.commit()
+
+    provider = _RecordingMountProvider()
+    monkeypatch.setattr(main_module, "get_mount_provider", lambda: provider)
+    monkeypatch.setattr(main_module.settings, "readiness_mount_check_timeout_seconds", 0)
+    monkeypatch.setattr(main_module.settings, "readiness_mount_checks_total_timeout_seconds", 0)
+    monkeypatch.setattr(main_module, "get_drive_discovery", lambda: _HealthyDiscoveryProvider())
+    monkeypatch.setattr(main_module, "_probe_usb_sysfs_available", lambda: True)
+
+    response = unauthenticated_client.get("/health/ready")
+
+    assert response.status_code == 200
+    assert provider.last_timeout_seconds == 1.0
+
+
+def test_health_ready_non_positive_mount_timeout_uses_remaining_budget(unauthenticated_client, db, monkeypatch):
+    db.add(
+        NetworkMount(
+            type=MountType.NFS,
+            remote_path="10.0.0.1:/evidence",
+            local_mount_point="/mnt/evidence",
+        )
+    )
+    db.commit()
+
+    provider = _RecordingMountProvider()
+    monkeypatch.setattr(main_module, "get_mount_provider", lambda: provider)
+    monkeypatch.setattr(main_module.settings, "readiness_mount_check_timeout_seconds", -1)
+    monkeypatch.setattr(main_module.settings, "readiness_mount_checks_total_timeout_seconds", 0.5)
+    monkeypatch.setattr(main_module, "get_drive_discovery", lambda: _HealthyDiscoveryProvider())
+    monkeypatch.setattr(main_module, "_probe_usb_sysfs_available", lambda: True)
+
+    response = unauthenticated_client.get("/health/ready")
+
+    assert response.status_code == 200
+    assert provider.last_timeout_seconds > 0
+    assert provider.last_timeout_seconds <= 0.5
+
+
 def test_health_ready_returns_503_when_mount_checks_exceed_total_budget(unauthenticated_client, monkeypatch):
     class _FakeQuery:
         def all(self):

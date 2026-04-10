@@ -39,6 +39,8 @@ configure_logging()
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_READINESS_MOUNT_CHECK_TIMEOUT_SECONDS = 1.0
+
 
 def _is_missing_table_error(exc: Exception) -> bool:
     """Return True when *exc* indicates a missing/unmigrated table."""
@@ -86,6 +88,25 @@ def _not_ready_response(
             "checks": checks,
         },
     )
+
+
+def _resolve_readiness_mount_timeout(remaining_budget: float | None) -> float:
+    """Return a positive per-mount timeout for readiness mount checks.
+
+    Non-positive configured values are treated as invalid and replaced with:
+    - remaining budget when total-budget mode is active
+    - otherwise the documented default readiness timeout
+    """
+    configured_timeout = settings.readiness_mount_check_timeout_seconds
+    if configured_timeout <= 0:
+        if remaining_budget is not None:
+            configured_timeout = remaining_budget
+        else:
+            configured_timeout = _DEFAULT_READINESS_MOUNT_CHECK_TIMEOUT_SECONDS
+
+    if remaining_budget is not None:
+        return min(configured_timeout, remaining_budget)
+    return configured_timeout
 
 # OpenAPI tags with descriptions for organizing endpoints
 tags_metadata = [
@@ -452,6 +473,7 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
         )
 
     for mount in configured_mounts:
+        remaining_budget = None
         if mount_checks_deadline is not None:
             # Bound cumulative mount-check time so probe latency is predictable.
             remaining_budget = mount_checks_deadline - time.monotonic()
@@ -469,12 +491,8 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
                         "usb_discovery": "unknown",
                     },
                 )
-            per_mount_timeout = min(
-                settings.readiness_mount_check_timeout_seconds,
-                remaining_budget,
-            )
-        else:
-            per_mount_timeout = settings.readiness_mount_check_timeout_seconds
+
+        per_mount_timeout = _resolve_readiness_mount_timeout(remaining_budget)
 
         try:
             result = provider.check_mounted(
