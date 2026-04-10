@@ -1476,6 +1476,7 @@ class TestSetupEndpoints:
         ) as mock_migrate, patch(
             "app.routers.setup._do_initialize",
             return_value={
+                "status": "created_admin_user",
                 "message": "Setup complete",
                 "username": "admin1",
                 "groups_created": [],
@@ -1540,6 +1541,7 @@ class TestSetupEndpoints:
         })
         assert resp.status_code == 200
         data = resp.json()
+        assert data["status"] == "created_admin_user"
         assert data["message"] == "Setup complete"
         assert data["username"] == "admin1"
         assert isinstance(data["groups_created"], list)
@@ -1659,8 +1661,13 @@ class TestSetupEndpoints:
         assert len(chpasswd_calls) >= 1
         # Verify groups_created is reported.
         data = resp.json()
+        assert data["status"] == "reconciled_existing_user"
+        assert "existing os admin user was reconciled" in data["message"].lower()
         assert isinstance(data["groups_created"], list)
         assert len(data["groups_created"]) == 4
+
+        repo = UserRoleRepository(db)
+        assert "admin" in repo.get_roles("admin1")
 
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
@@ -1696,6 +1703,31 @@ class TestSetupEndpoints:
             "password": "s3cret",
         })
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "reconciled_existing_user"
+
+    @patch("app.routers.setup.get_os_user_provider")
+    def test_run_os_setup_existing_user_match_is_case_insensitive(self, mock_get_provider):
+        from app.routers.setup import _run_os_setup
+        from app.schemas.admin import SetupInitializeRequest
+
+        provider = MagicMock()
+        provider.ensure_ecube_groups.return_value = ["ecube-admins"]
+        provider.create_user.side_effect = OSUserError("User ALREADY EXISTS")
+        mock_get_provider.return_value = provider
+
+        groups_created, status = _run_os_setup(
+            SetupInitializeRequest(username="admin1", password="s3cret"),
+        )
+
+        assert groups_created == ["ecube-admins"]
+        assert status == "reconciled_existing_user"
+        provider.add_user_to_groups.assert_called_once_with(
+            "admin1", ["ecube-admins"], _skip_managed_check=True,
+        )
+        provider.reset_password.assert_called_once_with(
+            "admin1", "s3cret", _skip_managed_check=True,
+        )
 
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
