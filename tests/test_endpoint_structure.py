@@ -405,6 +405,10 @@ class TestEndpointHttpMethods:
         health_live_route = [r for r in get_routes if r.path == "/health/live"]
         assert len(health_live_route) == 1, "/health/live endpoint missing"
 
+        # Verify /health/ready is GET
+        health_ready_route = [r for r in get_routes if r.path == "/health/ready"]
+        assert len(health_ready_route) == 1, "/health/ready endpoint missing"
+
     def test_write_operations_use_correct_methods(self):
         """POST/PUT/PATCH operations should be used for mutations."""
         post_routes = [r for r in app.routes if hasattr(r, "methods") and "POST" in r.methods]
