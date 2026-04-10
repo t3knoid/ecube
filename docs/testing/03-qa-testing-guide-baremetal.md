@@ -1248,6 +1248,110 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 | 9 | Unauthenticated rejected | `GET /introspection/system-health` without token | 401 |
 | 10 | Processor role allowed | `GET /introspection/system-health` with processor token | 200 |
 
+### 12.15 Real-World Copy Performance & Hashing Addendum
+
+This addendum defines a reproducible bare-metal QA scenario that exercises ECUBE copy throughput and hashing with publicly available forensic/eDiscovery-style datasets.
+
+#### Public Dataset Sources
+
+- NIST CFReDS: `https://www.cfreds.nist.gov/` (forensic reference images and challenge datasets).
+- Digital Corpora: `https://digitalcorpora.org/` (disk images, file corpora, scenarios; bulk download available via AWS Open Data bucket `s3://digitalcorpora/`).
+- EDRM datasets: `https://edrm.net/resources/data-sets/` (EDRM micro/file-format/internationalization datasets).
+
+Use only datasets you are authorized to download and handle in your environment.
+
+#### Test Objective
+
+Validate that ECUBE can copy realistic mixed-file corpora to USB media at stable throughput while preserving hash integrity end-to-end.
+
+#### Recommended Test Matrix
+
+| Profile | Dataset Size | File Mix | USB Targets | Thread Count |
+|---|---|---|---|---|
+| RW-1 (Baseline) | 10-25 GB | Many small + medium files | 1 drive | 4 |
+| RW-2 (Throughput) | 50-100 GB | Large files (100 MB to multi-GB) | 1 drive | 4 and 8 |
+| RW-3 (Scale-out) | 25-50 GB per destination | Mixed corpus | 4 drives in parallel | 4 per job |
+
+#### Dataset Preparation (Example)
+
+```bash
+# Workspace for source corpora
+sudo mkdir -p /mnt/test-evidence/public-corpus
+sudo chown -R "$USER":"$USER" /mnt/test-evidence/public-corpus
+
+# Example Digital Corpora pull (choose a specific folder to keep size bounded)
+aws s3 cp --recursive s3://digitalcorpora/corpora/files/ \
+  /mnt/test-evidence/public-corpus/files/
+
+# Optional: add CFReDS/EDRM downloads into the same corpus root
+# (use the provider's documented download links/process)
+
+# Build independent source hash manifest
+cd /mnt/test-evidence/public-corpus
+find . -type f -print0 | sort -z | xargs -0 sha256sum > source.sha256
+
+# Record source footprint
+du -sh .
+find . -type f | wc -l
+```
+
+#### Execution Procedure
+
+1. Enable target USB ports and confirm drives are `AVAILABLE`.
+2. Initialize each target drive to a QA project ID (for example `PROJ-RW-COPY-001`).
+3. Create one ECUBE job per target drive using the same `source_path`.
+4. Start jobs and poll until terminal status.
+5. Run `POST /jobs/{job_id}/verify` for each completed job.
+6. Generate manifest for each completed job.
+7. Prepare-eject each drive and mount read-only on a verifier host.
+8. Recompute destination SHA-256 and compare with `source.sha256`.
+
+#### Throughput Capture Method
+
+Capture per-job metrics from ECUBE job payloads and/or audit timestamps:
+
+- `total_bytes`
+- `started_at`
+- `completed_at`
+- `status`
+
+Compute effective throughput per job:
+
+$$
+throughput\_MBps = \frac{total\_bytes}{completed\_at - started\_at} \div 1{,}048{,}576
+$$
+
+For parallel runs, also report aggregate throughput:
+
+$$
+aggregate\_MBps = \sum_{jobs=1}^{n} throughput\_MBps(job)
+$$
+
+#### Hashing and Integrity Validation
+
+- ECUBE verification step must return success for all files (`POST /jobs/{job_id}/verify`).
+- Independent verifier check (`sha256sum -c`) on destination copy must report zero mismatches.
+- Any mismatch is a test failure and must include attached audit/job/manifest evidence.
+
+#### Pass/Fail Criteria
+
+| Check | Pass Condition |
+|---|---|
+| Job completion | All benchmark jobs end in `COMPLETED` |
+| ECUBE verify | All jobs return successful verification |
+| Independent hash check | 0 SHA-256 mismatches against `source.sha256` |
+| Stability | No unexpected job retries/failures attributable to ECUBE logic |
+| Performance baseline | Throughput variance between repeated RW-1 runs is within +/-15% on same hardware |
+| Scale-out behavior | RW-3 aggregate throughput increases versus RW-1 single-drive baseline |
+
+#### Evidence to Attach to QA Report
+
+- Dataset source and exact download scope (paths/filters/date).
+- `source.sha256` file and destination hash-check outputs.
+- ECUBE job JSON snapshots (`/jobs/{id}`), verify responses, and manifest outputs.
+- Audit excerpts for `JOB_CREATED`, `JOB_STARTED`, `JOB_COMPLETED`, verification and manifest events, and `DRIVE_EJECT_PREPARED`.
+- Host hardware profile (CPU, RAM, USB controller/hub, drive model).
+
 ---
 
 ## 13. Environment Reset Between Test Runs
