@@ -298,12 +298,13 @@ def health_ready(db=Depends(get_db)):
     try:
         db.execute(text("SELECT 1"))
     except Exception as exc:
+        logger.exception("Readiness probe failed database connectivity check")
         return JSONResponse(
             status_code=503,
             content={
                 "status": "not_ready",
                 "reason": "database_connection_failed",
-                "details": str(exc),
+                "details": "Database connectivity check failed.",
                 "timestamp": timestamp,
                 "checks": {
                     "database": "unhealthy",
