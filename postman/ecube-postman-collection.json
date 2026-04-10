@@ -131,7 +131,85 @@
 								"health"
 							]
 						},
-						"description": "Returns 200 OK for readiness/liveness probes."
+						"description": "Basic process health endpoint. Returns 200 OK with status=ok."
+					}
+				},
+				{
+					"name": "Health Live",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Health live returns 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test('Health live response has status alive and timestamp', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.status).to.eql('alive');",
+									"    pm.expect(jsonData).to.have.property('timestamp');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health/live",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health",
+								"live"
+							]
+						},
+						"description": "Liveness probe endpoint. Returns 200 OK with status=alive and timestamp."
+					}
+				},
+				{
+					"name": "Health Ready",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Health ready returns 200 or 503', function () {",
+									"    pm.expect([200, 503]).to.include(pm.response.code);",
+									"});",
+									"pm.test('Health ready response has status and timestamp', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('status');",
+									"    pm.expect(jsonData).to.have.property('timestamp');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health/ready",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health",
+								"ready"
+							]
+						},
+						"description": "Readiness probe endpoint. Returns 200 when dependencies are ready, 503 otherwise."
 					}
 				},
 				{

@@ -55,8 +55,13 @@ The following endpoints are publicly accessible and do **not** require
 authentication:
 
 - `GET /health`
+- `GET /health/live`
+- `GET /health/ready`
 - `GET /introspection/version`
 - `POST /auth/token` (login / token issuance)
+- `GET /setup/status`
+- `POST /setup/initialize`
+- `GET /setup/database/system-info`
 - API documentation: `GET /docs`, `GET /redoc`, `GET /openapi.json`
 
 All other API endpoints require a bearer token in the `Authorization` header:
@@ -64,6 +69,8 @@ All other API endpoints require a bearer token in the `Authorization` header:
 ```bash
 curl -H "Authorization: Bearer $JWT_TOKEN" https://localhost:8443/endpoint
 ```
+
+During initial setup, `POST /setup/database/test-connection`, `POST /setup/database/provision`, and `GET /setup/database/provision-status` also accept unauthenticated access. After setup is complete, these endpoints require an `admin` token.
 
 ---
 
