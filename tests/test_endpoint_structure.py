@@ -38,7 +38,7 @@ class TestEndpointDocumentation:
         routes = self._get_all_routes()
         
         # Exclude FastAPI auto-generated documentation endpoints
-        excluded_paths = {"/health", "/health/live", "/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
+        excluded_paths = {"/health", "/health/live", "/health/ready", "/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
         
         undocumented = []
         for route in routes:
@@ -58,7 +58,7 @@ class TestEndpointDocumentation:
         routes = self._get_all_routes()
         
         # Exclude FastAPI auto-generated documentation endpoints and health check
-        excluded_paths = {"/health", "/health/live", "/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
+        excluded_paths = {"/health", "/health/live", "/health/ready", "/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
         
         short_docstrings = []
         for route in routes:
