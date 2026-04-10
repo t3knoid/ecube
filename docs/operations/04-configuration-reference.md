@@ -172,6 +172,7 @@ Required only when `SESSION_BACKEND=redis`. If Redis is unavailable, ECUBE autom
 | `USB_DISCOVERY_INTERVAL`   | `30`    | Seconds between automatic USB discovery sweeps. `0` = disabled.            |
 | `READINESS_MOUNT_CHECK_TIMEOUT_SECONDS` | `1.0` | Timeout in seconds for each mount check in `GET /health/ready`. Keep low to preserve fail-fast readiness behavior. |
 | `READINESS_MOUNT_CHECKS_TOTAL_TIMEOUT_SECONDS` | `1.0` | Total timeout budget in seconds for all mount checks in `GET /health/ready` to keep probe latency bounded as mount count grows. |
+| `READINESS_USB_DISCOVERY_CACHE_TTL_SECONDS` | `5.0` | Cache TTL (seconds) for successful USB discovery readiness checks in `GET /health/ready`. Reduces repeated sysfs discovery scans under frequent probes while still re-validating periodically. |
 
 ---
 

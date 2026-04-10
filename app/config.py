@@ -108,6 +108,11 @@ class Settings(BaseSettings):
     #: grows.
     readiness_mount_checks_total_timeout_seconds: float = 1.0
 
+    #: Cache window in seconds for successful USB discovery readiness probes.
+    #: A positive value avoids repeated full sysfs walks on frequent
+    #: ``GET /health/ready`` checks while preserving periodic re-validation.
+    readiness_usb_discovery_cache_ttl_seconds: float = 5.0
+
     # ---------------------------------------------------------------------------
     # Logging configuration
     # ---------------------------------------------------------------------------
