@@ -91,7 +91,7 @@ Authenticate with OS credentials and receive a signed JWT.
 
 ### 1.3 Authentication Model
 
-- All endpoints except `/health`, `/health/live`, `/health/ready`, `/auth/token`, `/setup/status`, `/setup/initialize`, and `/introspection/version` require a bearer token.
+- All endpoints except `/health`, `/health/live`, `/health/ready`, `/auth/token`, `/setup/status`, `/setup/initialize`, `/introspection/version`, and `/setup/database/system-info` require a bearer token.
 - `/setup/database/test-connection`, `/setup/database/provision`, and `/setup/database/provision-status` accept an **optional** bearer token: unauthenticated during initial setup (no admin exists), `admin` role required after.
 - `/setup/database/system-info` is always public — no bearer token is required or checked at any point.
 - Token includes:
