@@ -96,6 +96,10 @@ class Settings(BaseSettings):
     #: ``0`` disables periodic discovery.
     usb_discovery_interval: int = 30
 
+    #: Timeout in seconds for each mountpoint check during ``GET /health/ready``.
+    #: Keep this low so readiness fails fast even when a mount check hangs.
+    readiness_mount_check_timeout_seconds: float = 1.0
+
     # ---------------------------------------------------------------------------
     # Logging configuration
     # ---------------------------------------------------------------------------
