@@ -2110,6 +2110,18 @@ sudo cp -r /opt/ecube /mnt/backup/ecube/app.backup_$(date +%Y%m%d)
 ECUBE manages OS-level users and groups for authentication. These should be
 backed up alongside the database and configuration.
 
+### Minimum Backup Set for Local Accounts
+
+If `ROLE_RESOLVER=local` (PAM/local account mode), a database-only backup is not sufficient to restore operator access. At minimum, back up all of the following together for the same recovery point:
+
+- PostgreSQL database backup (`ecube`), including `user_roles` and `audit_logs`.
+- ECUBE configuration file (`/opt/ecube/.env`), especially `ROLE_RESOLVER` and `LOCAL_GROUP_ROLE_MAP`.
+- OS identity files: `/etc/passwd`, `/etc/group`, `/etc/shadow`.
+- Recommended companion file: `/etc/gshadow` (group password/admin metadata).
+- ECUBE runtime authorization artifacts if present on your deployment: PAM/sudoers policy files and service unit overrides.
+
+Without the OS identity files, local users may exist in the ECUBE database but be unable to authenticate via PAM after recovery.
+
 #### Via the API (ECUBE-Managed Only)
 
 Export the ECUBE-managed users and their group memberships as JSON. This is
@@ -2134,11 +2146,58 @@ Back up the underlying system files directly. This captures all OS users
 sudo cp /etc/passwd /mnt/backup/ecube/passwd.backup
 sudo cp /etc/group  /mnt/backup/ecube/group.backup
 sudo cp /etc/shadow /mnt/backup/ecube/shadow.backup
+sudo cp /etc/gshadow /mnt/backup/ecube/gshadow.backup
 sudo chmod 600 /mnt/backup/ecube/shadow.backup
+sudo chmod 600 /mnt/backup/ecube/gshadow.backup
 ```
 
 > **Tip:** Include OS user/group backup in the automated daily backup script
 > to ensure user accounts are recoverable alongside the database.
+
+### OS Users and Groups Recovery (Local Account Mode)
+
+Use one of the following recovery methods when `ROLE_RESOLVER=local`.
+
+#### Method A: Recreate from ECUBE API Exports (Preferred for Cross-Host Recovery)
+
+Use this method when rebuilding onto a fresh host where you do not want to overwrite system identity files.
+
+1. Restore database and `/opt/ecube/.env`.
+2. Ensure `ROLE_RESOLVER=local` and `LOCAL_GROUP_ROLE_MAP` match the original deployment.
+3. Recreate `ecube-*` groups first from `ecube_os_groups.json`.
+4. Recreate ECUBE-managed users and their group memberships from `ecube_os_users.json`.
+5. Reset user passwords as part of post-restore credential rotation.
+6. Validate login using `POST /auth/token` for at least one account per role.
+
+#### Method B: Restore OS Identity Files (Same-Host or Like-for-Like Image Recovery)
+
+Use this method only when restoring onto the same host or an equivalent system image.
+
+```bash
+# Stop ECUBE before restoring identity files
+sudo systemctl stop ecube
+
+# Restore identity databases
+sudo cp /mnt/backup/ecube/passwd.backup /etc/passwd
+sudo cp /mnt/backup/ecube/group.backup  /etc/group
+sudo cp /mnt/backup/ecube/shadow.backup /etc/shadow
+sudo cp /mnt/backup/ecube/gshadow.backup /etc/gshadow
+
+# Enforce secure permissions
+sudo chmod 644 /etc/passwd /etc/group
+sudo chmod 600 /etc/shadow /etc/gshadow
+
+# Restart ECUBE
+sudo systemctl start ecube
+```
+
+Post-restore validation checklist:
+
+- Confirm required groups exist: `getent group ecube-admins ecube-managers ecube-processors ecube-auditors`.
+- Confirm representative users resolve correctly: `id <username>`.
+- Confirm API authentication succeeds for restored users (`POST /auth/token`).
+- Confirm role resolution matches expectation (`/users/{username}/roles` for DB roles and fallback behavior).
+- Record a recovery validation audit entry by performing a benign admin action.
 
 ---
 
