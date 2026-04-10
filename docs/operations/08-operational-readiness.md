@@ -85,7 +85,7 @@ The application must expose an HTTP `GET /health/ready` endpoint that returns `2
 **Expected behavior:**
 - Validates critical dependencies: PostgreSQL connectivity, filesystem mounts, USB discovery subsystem.
 - Fails fast (< 1 second) if any dependency fails.
-- Filesystem mount check timeout for this endpoint is controlled by `READINESS_MOUNT_CHECK_TIMEOUT_SECONDS` (see [Configuration Reference](04-configuration-reference.md)).
+- Filesystem mount checks for this endpoint are controlled by `READINESS_MOUNT_CHECK_TIMEOUT_SECONDS` (per-mount timeout) and `READINESS_MOUNT_CHECKS_TOTAL_TIMEOUT_SECONDS` (total timeout budget); see [Configuration Reference](04-configuration-reference.md).
 - Returned `503 Service Unavailable` if not ready.
 - During startup, the service may return `503` until initialization completes (§ [docs/design/04-functional-design.md](../design/04-functional-design.md#startup-initialization) Startup Reconciliation).
 
