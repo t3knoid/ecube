@@ -13,6 +13,7 @@ from app.repositories.mount_repository import MountRepository
 from app.schemas.network import MountCreate
 from app.config import settings
 from app.exceptions import EncodingError
+from app.services.mount_check_utils import check_mounted_with_configured_timeout
 
 from app.utils.sanitize import is_encoding_error
 
@@ -73,19 +74,6 @@ class LinuxMountProvider:
             return result.returncode == 0
         except Exception:
             return None
-
-
-def _check_mounted_with_timeout(provider: "MountProvider", local_mount_point: str) -> Optional[bool]:
-    """Invoke provider mount check with configured timeout, falling back for legacy providers."""
-    try:
-        return provider.check_mounted(
-            local_mount_point,
-            timeout_seconds=settings.subprocess_timeout_seconds,
-        )
-    except TypeError as exc:
-        if "timeout_seconds" not in str(exc):
-            raise
-        return provider.check_mounted(local_mount_point)
 
 
 def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
@@ -235,7 +223,7 @@ def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None,
         raise HTTPException(status_code=404, detail="Mount not found")
 
     provider = provider or _default_provider()
-    result = _check_mounted_with_timeout(provider, mount.local_mount_point)
+    result = check_mounted_with_configured_timeout(provider, mount.local_mount_point)
     if result is True:
         mount.status = MountStatus.MOUNTED
     elif result is False:
