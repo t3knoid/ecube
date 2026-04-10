@@ -249,3 +249,51 @@ def test_check_mounted_with_configured_timeout_does_not_mask_provider_type_error
     else:
         assert False, "Expected provider TypeError to propagate"
 
+
+def test_check_mounted_with_configured_timeout_caches_capability(monkeypatch):
+    """Verify capability check is only done once per provider instance."""
+    import app.services.mount_check_utils as utils_module
+
+    call_count = [0]
+    original_check = utils_module._check_accepts_timeout_seconds
+
+    def counting_check(provider):
+        call_count[0] += 1
+        return original_check(provider)
+
+    monkeypatch.setattr(utils_module, "_check_accepts_timeout_seconds", counting_check)
+
+    class CachingTestProvider:
+        def check_mounted(self, local_mount_point: str, *, timeout_seconds=None):
+            return True
+
+    provider = CachingTestProvider()
+
+    call_count[0] = 0
+    utils_module.check_mounted_with_configured_timeout(provider, "/mnt/1")
+    first_call_count = call_count[0]
+    assert first_call_count == 1, "First call should invoke _check_accepts_timeout_seconds"
+
+    utils_module.check_mounted_with_configured_timeout(provider, "/mnt/2")
+    second_call_count = call_count[0]
+    assert second_call_count == 1, "Second call should use cached result, not re-inspect"
+
+
+def test_check_mounted_with_configured_timeout_gracefully_handles_signature_inspection_failure():
+    """When signature inspection fails, treat provider conservatively as not supporting timeout_seconds."""
+    import app.services.mount_check_utils as utils_module
+
+    class UninspectableProvider:
+        def check_mounted(self, local_mount_point: str):
+            return True
+
+    provider = UninspectableProvider()
+
+    # This should not raise; instead it should call without timeout_seconds
+    result = utils_module.check_mounted_with_configured_timeout(provider, "/mnt/data")
+    assert result is True
+
+    # Verify the capability was cached as False (conservative fallback)
+    cached = getattr(provider, utils_module._SUPPORTS_TIMEOUT_SECONDS_ATTR, None)
+    assert cached is False
+
