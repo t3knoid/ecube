@@ -173,6 +173,7 @@
     "confirmPassword": "Confirm Password",
     "passwordMismatch": "Passwords do not match",
     "passwordRequired": "Password is required",
+    "resetPasswordUnavailable": "Reset unavailable for this account",
     "showPassword": "Show password",
     "hidePassword": "Hide password"
   },
