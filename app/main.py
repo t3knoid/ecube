@@ -419,22 +419,7 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
         )
 
     # 2) Filesystem mount availability (using current mount provider checks)
-    try:
-        provider = get_mount_provider()
-    except Exception as exc:
-        logger.warning("Readiness probe dependency failed reason=mount_provider_unavailable error_type=%s", type(exc).__name__)
-        logger.debug("Readiness mount provider resolution detail", exc_info=True)
-        return _not_ready_response(
-            reason="mount_provider_unavailable",
-            details="Filesystem mount provider is not available.",
-            timestamp=timestamp,
-            checks={
-                "database": "healthy",
-                "file_system": "unknown",
-                "usb_discovery": "unknown",
-            },
-        )
-
+    # Query mounts first; only resolve provider if there are mounts to check
     try:
         configured_mounts = db.query(NetworkMount).all()
     except (ProgrammingError, OperationalError) as exc:
@@ -464,24 +449,67 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
             },
         )
 
-    mount_checks_deadline = None
-    if settings.readiness_mount_checks_total_timeout_seconds > 0:
-        mount_checks_deadline = (
-            time.monotonic() + settings.readiness_mount_checks_total_timeout_seconds
-        )
+    # Only check mounts and resolve provider if there are configured mounts
+    if configured_mounts:
+        try:
+            provider = get_mount_provider()
+        except Exception as exc:
+            logger.warning("Readiness probe dependency failed reason=mount_provider_unavailable error_type=%s", type(exc).__name__)
+            logger.debug("Readiness mount provider resolution detail", exc_info=True)
+            return _not_ready_response(
+                reason="mount_provider_unavailable",
+                details="Filesystem mount provider is not available.",
+                timestamp=timestamp,
+                checks={
+                    "database": "healthy",
+                    "file_system": "unknown",
+                    "usb_discovery": "unknown",
+                },
+            )
 
-    for mount in configured_mounts:
-        remaining_budget = None
-        if mount_checks_deadline is not None:
-            # Bound cumulative mount-check time so probe latency is predictable.
-            remaining_budget = mount_checks_deadline - time.monotonic()
-            if remaining_budget <= 0:
-                logger.warning(
-                    "Readiness probe dependency failed reason=filesystem_mount_checks_timed_out",
+        mount_checks_deadline = None
+        if settings.readiness_mount_checks_total_timeout_seconds > 0:
+            mount_checks_deadline = (
+                time.monotonic() + settings.readiness_mount_checks_total_timeout_seconds
+            )
+
+        for mount in configured_mounts:
+            remaining_budget = None
+            if mount_checks_deadline is not None:
+                # Bound cumulative mount-check time so probe latency is predictable.
+                remaining_budget = mount_checks_deadline - time.monotonic()
+                if remaining_budget <= 0:
+                    logger.warning(
+                        "Readiness probe dependency failed reason=filesystem_mount_checks_timed_out",
+                    )
+                    return _not_ready_response(
+                        reason="filesystem_mount_checks_timed_out",
+                        details="Filesystem mount checks exceeded readiness time budget.",
+                        timestamp=timestamp,
+                        checks={
+                            "database": "healthy",
+                        "file_system": "unknown",
+                        "usb_discovery": "unknown",
+                    },
                 )
+
+            per_mount_timeout = _resolve_readiness_mount_timeout(remaining_budget)
+
+            try:
+                result = provider.check_mounted(
+                    mount.local_mount_point,
+                    timeout_seconds=per_mount_timeout,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Readiness probe dependency failed reason=filesystem_mount_check_error mount_point=%s error_type=%s",
+                    mount.local_mount_point,
+                    type(exc).__name__,
+                )
+                logger.debug("Readiness mount check failure detail", exc_info=True)
                 return _not_ready_response(
-                    reason="filesystem_mount_checks_timed_out",
-                    details="Filesystem mount checks exceeded readiness time budget.",
+                    reason="filesystem_mount_check_error",
+                    details="A required filesystem mount readiness check encountered a runtime error.",
                     timestamp=timestamp,
                     checks={
                         "database": "healthy",
@@ -490,61 +518,36 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
                     },
                 )
 
-        per_mount_timeout = _resolve_readiness_mount_timeout(remaining_budget)
-
-        try:
-            result = provider.check_mounted(
-                mount.local_mount_point,
-                timeout_seconds=per_mount_timeout,
-            )
-        except Exception as exc:
-            logger.warning(
-                "Readiness probe dependency failed reason=filesystem_mount_check_error mount_point=%s error_type=%s",
-                mount.local_mount_point,
-                type(exc).__name__,
-            )
-            logger.debug("Readiness mount check failure detail", exc_info=True)
-            return _not_ready_response(
-                reason="filesystem_mount_check_error",
-                details="A required filesystem mount readiness check encountered a runtime error.",
-                timestamp=timestamp,
-                checks={
-                    "database": "healthy",
-                    "file_system": "unknown",
-                    "usb_discovery": "unknown",
-                },
-            )
-
-        if result is False:
-            logger.warning(
-                "Readiness probe mount unavailable for mount_point=%s",
-                mount.local_mount_point,
-            )
-            return _not_ready_response(
-                reason="filesystem_mount_unavailable",
-                details="A required filesystem mount is unavailable.",
-                timestamp=timestamp,
-                checks={
-                    "database": "healthy",
-                    "file_system": "unmounted",
-                    "usb_discovery": "unknown",
-                },
-            )
-        if result is None:
-            logger.warning(
-                "Readiness probe mount check returned unknown state for mount_point=%s",
-                mount.local_mount_point,
-            )
-            return _not_ready_response(
-                reason="filesystem_mount_check_unknown",
-                details="A required filesystem mount readiness check returned an indeterminate result.",
-                timestamp=timestamp,
-                checks={
-                    "database": "healthy",
-                    "file_system": "unknown",
-                    "usb_discovery": "unknown",
-                },
-            )
+            if result is False:
+                logger.warning(
+                    "Readiness probe mount unavailable for mount_point=%s",
+                    mount.local_mount_point,
+                )
+                return _not_ready_response(
+                    reason="filesystem_mount_unavailable",
+                    details="A required filesystem mount is unavailable.",
+                    timestamp=timestamp,
+                    checks={
+                        "database": "healthy",
+                        "file_system": "unmounted",
+                        "usb_discovery": "unknown",
+                    },
+                )
+            if result is None:
+                logger.warning(
+                    "Readiness probe mount check returned unknown state for mount_point=%s",
+                    mount.local_mount_point,
+                )
+                return _not_ready_response(
+                    reason="filesystem_mount_check_unknown",
+                    details="A required filesystem mount readiness check returned an indeterminate result.",
+                    timestamp=timestamp,
+                    checks={
+                        "database": "healthy",
+                        "file_system": "unknown",
+                        "usb_discovery": "unknown",
+                    },
+                )
 
     # 3) USB discovery readiness signal (provider can enumerate topology)
     if not _probe_usb_sysfs_available():
