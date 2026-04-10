@@ -18,6 +18,11 @@ class _UnknownMountProvider:
         return None
 
 
+class _RaisingMountProvider:
+    def check_mounted(self, _local_mount_point):
+        raise RuntimeError("mountpoint command failed")
+
+
 class _HealthyDiscoveryProvider:
     def discover_topology(self):
         return {"hubs": [], "ports": [], "drives": []}
@@ -163,6 +168,30 @@ def test_health_ready_returns_503_when_mount_check_is_unknown(unauthenticated_cl
     payload = response.json()
     assert payload["status"] == "not_ready"
     assert payload["reason"] == "filesystem_mount_check_failed"
+    assert payload["checks"]["database"] == "healthy"
+    assert payload["checks"]["file_system"] == "unknown"
+
+
+def test_health_ready_returns_503_when_mount_check_raises(unauthenticated_client, db, monkeypatch):
+    db.add(
+        NetworkMount(
+            type=MountType.NFS,
+            remote_path="10.0.0.1:/evidence",
+            local_mount_point="/mnt/evidence",
+        )
+    )
+    db.commit()
+
+    monkeypatch.setattr(main_module, "get_mount_provider", lambda: _RaisingMountProvider())
+    monkeypatch.setattr(main_module, "get_drive_discovery", lambda: _HealthyDiscoveryProvider())
+
+    response = unauthenticated_client.get("/health/ready")
+
+    assert response.status_code == 503
+    payload = response.json()
+    assert payload["status"] == "not_ready"
+    assert payload["reason"] == "filesystem_mount_check_failed"
+    assert payload["details"] == "A required filesystem mount readiness check failed."
     assert payload["checks"]["database"] == "healthy"
     assert payload["checks"]["file_system"] == "unknown"
 
