@@ -104,15 +104,11 @@ def login(
         )
 
     # Resolve ECUBE roles for the user.
-    # Local mode requires explicit DB ``user_roles`` assignments.
-    # LDAP mode falls back to resolver-derived roles from groups when no DB
-    # override exists.
+    # Priority: 1) Explicit roles from DB ``user_roles`` table,
+    #           2) Roles derived from groups via the configured resolver.
     groups = pam.get_user_groups(body.username)
     db_roles = UserRoleRepository(db).get_roles(body.username)
-    if settings.role_resolver == "local":
-        roles = db_roles
-    else:
-        roles = db_roles if db_roles else get_role_resolver().resolve(groups)
+    roles = db_roles if db_roles else get_role_resolver().resolve(groups)
 
     if not roles:
         best_effort_audit(
