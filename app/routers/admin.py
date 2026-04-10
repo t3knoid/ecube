@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -40,9 +40,11 @@ from app.database import get_db
 from app.repositories.audit_repository import AuditRepository, best_effort_audit
 from app.repositories.hardware_repository import HubRepository, PortRepository
 from app.repositories.user_role_repository import UserRoleRepository
+from app.exceptions import OSUserPasswordRequiredError
 from app.schemas.admin import (
     AddOSGroupsRequest,
     CreateOSGroupRequest,
+    CreateOSUserDecisionResponse,
     CreateOSUserRequest,
     LogFileInfo,
     LogFilesResponse,
@@ -62,7 +64,7 @@ from app.infrastructure import get_os_user_provider
 from app.infrastructure.os_user_protocol import OSUserError, OsUserProvider
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500, R_503, R_504
 from app.services.os_user_service import validate_group_name, validate_username
-from app.constants import ECUBE_GROUPNAME_PATTERN, USERNAME_PATTERN, ECUBE_GROUP_ROLE_MAP
+from app.constants import ECUBE_GROUPNAME_PATTERN, USERNAME_PATTERN, ECUBE_GROUP_ROLE_MAP, RESERVED_USERNAMES
 from app.utils.client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
@@ -597,20 +599,41 @@ _os_router = APIRouter(
 # ---------------------------------------------------------------------------
 
 
-@_os_router.post("/os-users", response_model=OSUserResponse, status_code=201, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500, **R_504})
+@_os_router.post(
+    "/os-users",
+    response_model=OSUserResponse | CreateOSUserDecisionResponse,
+    status_code=201,
+    responses={
+        200: {
+            "description": "Existing OS-user decision/sync response",
+            "model": CreateOSUserDecisionResponse,
+        },
+        **R_400,
+        **R_401,
+        **R_403,
+        **R_404,
+        **R_409,
+        **R_422,
+        **R_500,
+        **R_504,
+    },
+)
 def create_os_user(
     body: CreateOSUserRequest,
     *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles("admin")),
     request: Request,
-) -> OSUserResponse:
-    """Create an OS user, set password, and assign groups derived from roles."""
+    response: Response,
+) -> OSUserResponse | CreateOSUserDecisionResponse:
+    """Create an OS user or sync an existing OS user into ECUBE roles."""
     provider = _get_provider()
+    repo = UserRoleRepository(db)
 
     deduplicated_roles = sorted(set(body.roles or []))
+    role_names = [str(role) for role in deduplicated_roles]
     role_to_group = {role: group for group, role in ECUBE_GROUP_ROLE_MAP.items()}
-    derived_groups = sorted({role_to_group[r] for r in deduplicated_roles if r in role_to_group})
+    derived_groups = sorted({role_to_group[r] for r in role_names if r in role_to_group})
     extra_groups = sorted(set(body.groups or []))
     effective_groups = sorted(set(derived_groups + extra_groups))
 
@@ -619,6 +642,156 @@ def create_os_user(
             status_code=422,
             detail="At least one mapped ECUBE role is required to derive OS groups.",
         )
+
+    if body.username in RESERVED_USERNAMES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Cannot create reserved username: {body.username}",
+        )
+
+    for group_name in effective_groups:
+        try:
+            validate_group_name(group_name)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        if not provider.group_exists(group_name):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Group '{group_name}' does not exist",
+            )
+
+    existing_roles = repo.get_roles(body.username)
+    if existing_roles:
+        raise HTTPException(
+            status_code=409,
+            detail=f"User '{body.username}' already exists as an ECUBE user",
+        )
+
+    user_exists = provider.user_exists(body.username)
+    if user_exists:
+
+        base_details = {
+            "target_user": body.username,
+            "roles": role_names,
+            "groups": effective_groups,
+            "groups_derived_from_roles": derived_groups,
+            "groups_extra": extra_groups,
+            "path": str(request.url.path),
+            "existing_os_user": True,
+        }
+
+        if body.confirm_existing_os_user is None:
+            logger.info(
+                "OS_USER_CREATE_EXISTING actor=%s requested_username=%s outcome=confirmation_required",
+                current_user.username,
+                body.username,
+            )
+            best_effort_audit(
+                db,
+                "OS_USER_CREATE_CONFIRMATION_REQUIRED",
+                current_user.username,
+                {**base_details, "outcome": "confirmation_required"},
+                client_ip=get_client_ip(request),
+            )
+            response.status_code = 200
+            return CreateOSUserDecisionResponse(
+                status="confirmation_required",
+                username=body.username,
+                message=(
+                    "User already exists on this system. "
+                    "Do you want to add this existing OS user to ECUBE?"
+                ),
+                roles=deduplicated_roles,
+            )
+
+        if body.confirm_existing_os_user is False:
+            logger.info(
+                "OS_USER_CREATE_EXISTING actor=%s requested_username=%s outcome=canceled",
+                current_user.username,
+                body.username,
+            )
+            best_effort_audit(
+                db,
+                "OS_USER_CREATE_CANCELED",
+                current_user.username,
+                {**base_details, "outcome": "canceled"},
+                client_ip=get_client_ip(request),
+            )
+            response.status_code = 200
+            return CreateOSUserDecisionResponse(
+                status="canceled",
+                username=body.username,
+                message="Create user request canceled. No ECUBE user was created.",
+                roles=deduplicated_roles,
+            )
+
+        try:
+            repo.set_roles(body.username, role_names)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        except Exception:
+            db.rollback()
+            logger.error("Failed to assign roles to existing OS user '%s'", body.username)
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    f"Existing OS user '{body.username}' was not synced because role assignment failed. "
+                    "Please retry."
+                ),
+            )
+
+        try:
+            os_user = provider.add_user_to_groups(
+                body.username,
+                effective_groups,
+                _skip_managed_check=True,
+            )
+        except (ValueError, OSUserError, HTTPException) as exc:
+            try:
+                repo.delete_roles(body.username)
+            except Exception:
+                db.rollback()
+                logger.error(
+                    "Failed to roll back ECUBE roles for '%s' after sync failure",
+                    body.username,
+                )
+            if isinstance(exc, ValueError):
+                raise HTTPException(status_code=422, detail=str(exc))
+            if isinstance(exc, OSUserError):
+                _raise_os_error(exc, context="Sync existing OS user")
+            raise
+
+        logger.info(
+            "OS_USER_CREATE_EXISTING actor=%s requested_username=%s outcome=confirmed_sync",
+            current_user.username,
+            body.username,
+        )
+        best_effort_audit(
+            db,
+            "OS_USER_SYNCED_EXISTING",
+            current_user.username,
+            {**base_details, "outcome": "confirmed_sync"},
+            client_ip=get_client_ip(request),
+        )
+
+        response.status_code = 200
+        return CreateOSUserDecisionResponse(
+            status="synced_existing_user",
+            username=body.username,
+            message="Existing OS user was added to ECUBE successfully.",
+            roles=deduplicated_roles,
+            user=OSUserResponse(
+                username=os_user.username,
+                uid=os_user.uid,
+                gid=os_user.gid,
+                home=os_user.home,
+                shell=os_user.shell,
+                groups=os_user.groups,
+            ),
+        )
+
+    if not body.password:
+        raise OSUserPasswordRequiredError()
 
     try:
         os_user = provider.create_user(
@@ -631,9 +804,8 @@ def create_os_user(
     except OSUserError as exc:
         _raise_os_error(exc, context="Create OS user")
 
-    repo = UserRoleRepository(db)
     try:
-        repo.set_roles(body.username, deduplicated_roles)
+        repo.set_roles(body.username, role_names)
     except ValueError as exc:
         # Invalid role name — shouldn't reach here (schema validates), but
         # guard defensively.  The OS user was already created; delete it to
@@ -672,8 +844,9 @@ def create_os_user(
         "groups": effective_groups,
         "groups_derived_from_roles": derived_groups,
         "groups_extra": extra_groups,
-        "roles": deduplicated_roles,
+        "roles": role_names,
         "path": str(request.url.path),
+        "existing_os_user": False,
     }, client_ip=get_client_ip(request))
 
     return OSUserResponse(
@@ -689,30 +862,71 @@ def create_os_user(
 @_os_router.get("/os-users", response_model=OSUserListResponse, responses={**R_401, **R_403, **R_404})
 def list_os_users(
     search: str | None = Query(default=None, description="Optional case-insensitive username filter."),
+    db: Session = Depends(get_db),
     _current_user: CurrentUser = Depends(require_roles("admin")),
 ) -> OSUserListResponse:
-    """List OS users filtered to ECUBE-relevant groups.
+    """List OS users relevant to ECUBE user management.
 
     When ``search`` is provided, results are filtered by case-insensitive
     username match after reserved system/service accounts have already been
-    excluded by the provider.
+    excluded by the provider. Users are included when they either belong to
+    an ``ecube-*`` OS group or have DB role assignments in ``user_roles``.
     """
-    users = _get_provider().list_users(ecube_only=True)
-    if search is not None:
-        query = search.strip().lower()
-        users = [u for u in users if query in u.username.lower()]
-    return OSUserListResponse(
-        users=[
-            OSUserResponse(
-                username=u.username,
-                uid=u.uid,
-                gid=u.gid,
-                home=u.home,
-                shell=u.shell,
-                groups=u.groups,
+    provider = _get_provider()
+    query = ((search or "").strip().lower() or None)
+    users = provider.list_users(ecube_only=False)
+    repo = UserRoleRepository(db)
+    role_assigned_usernames = {row["username"] for row in repo.list_users()}
+    role_assigned_usernames_for_lookup = role_assigned_usernames
+    if query is not None:
+        role_assigned_usernames_for_lookup = {
+            username
+            for username in role_assigned_usernames
+            if query in username.lower()
+        }
+
+    users_by_username = {u.username: u for u in users}
+    visible_users: list[OSUserResponse] = []
+
+    for u in users:
+        if any(g.startswith("ecube-") for g in u.groups) or u.username in role_assigned_usernames:
+            visible_users.append(
+                OSUserResponse(
+                    username=u.username,
+                    uid=u.uid,
+                    gid=u.gid,
+                    home=u.home,
+                    shell=u.shell,
+                    groups=u.groups,
+                )
             )
-            for u in users
-        ]
+
+    # Some directory-backed users (for example AD) can resolve through user_exists
+    # but not appear in list_users() enumeration. Include them when they already
+    # have ECUBE DB role assignments so admins can see and manage them.
+    for username in sorted(role_assigned_usernames_for_lookup):
+        if username in RESERVED_USERNAMES:
+            continue
+        if username in users_by_username:
+            continue
+        if provider.user_exists(username):
+            visible_users.append(
+                OSUserResponse(
+                    username=username,
+                    uid=-1,
+                    gid=-1,
+                    home="",
+                    shell="",
+                    groups=[],
+                )
+            )
+
+    if query is not None:
+        visible_users = [u for u in visible_users if query in u.username.lower()]
+
+    visible_users.sort(key=lambda u: u.username)
+    return OSUserListResponse(
+        users=visible_users
     )
 
 
