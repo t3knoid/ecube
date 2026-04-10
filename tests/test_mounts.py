@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.config import settings
+from app.services.mount_check_utils import check_mounted_with_configured_timeout
 from app.services.mount_service import LinuxMountProvider, validate_mount
 
 
@@ -232,4 +233,19 @@ def test_validate_mount_passes_configured_timeout_to_provider(db):
 
     assert updated.status == MountStatus.MOUNTED
     assert provider.timeout_seconds == settings.subprocess_timeout_seconds
+
+
+def test_check_mounted_with_configured_timeout_does_not_mask_provider_type_error():
+    class BrokenProvider:
+        def check_mounted(self, local_mount_point: str, *, timeout_seconds=None):
+            raise TypeError("provider internal type mismatch")
+
+    provider = BrokenProvider()
+
+    try:
+        check_mounted_with_configured_timeout(provider, "/mnt/data")
+    except TypeError as exc:
+        assert str(exc) == "provider internal type mismatch"
+    else:
+        assert False, "Expected provider TypeError to propagate"
 
