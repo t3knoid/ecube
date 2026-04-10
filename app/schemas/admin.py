@@ -1,7 +1,7 @@
 """Pydantic schemas for administrative endpoints."""
 
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -125,16 +125,21 @@ class CreateOSUserRequest(BaseModel):
         pattern=r"^[a-z_][a-z0-9_-]{0,31}$",
         description="POSIX username (lowercase letters, digits, hyphens, underscores)",
     )
-    password: str = Field(
-        ...,
+    password: Optional[str] = Field(
+        default=None,
         min_length=1,
         pattern=r"^[^\n\r:]+$",
-        description="Initial password for the user (newlines and colons are not permitted)",
+        description=(
+            "Initial password for new OS-user creation. "
+            "Not required when linking an already-existing OS user to ECUBE."
+        ),
     )
 
     @field_validator("password")
     @classmethod
-    def password_safe_chars(cls, v: str) -> str:
+    def password_safe_chars(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
         return _check_password_safety(v)
 
     roles: List[RoleName] = Field(
@@ -148,6 +153,15 @@ class CreateOSUserRequest(BaseModel):
         description=(
             "Optional additional OS groups for backward compatibility. "
             "ECUBE groups are derived from selected roles."
+        ),
+    )
+
+    confirm_existing_os_user: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Decision for existing OS-user flow. "
+            "When omitted and the OS user exists, API returns confirmation_required; "
+            "true confirms sync; false records cancel."
         ),
     )
 
@@ -167,6 +181,19 @@ class OSUserListResponse(BaseModel):
     """Response for ``GET /admin/os-users``."""
 
     users: List[OSUserResponse]
+
+
+class CreateOSUserDecisionResponse(BaseModel):
+    """Informational decision response for existing OS-user create flow."""
+
+    status: Literal["confirmation_required", "canceled", "synced_existing_user"]
+    username: str = Field(..., description="Requested username")
+    message: str = Field(..., description="Human-readable decision/outcome message")
+    roles: List[RoleName] = Field(default_factory=list, description="Requested ECUBE roles")
+    user: Optional[OSUserResponse] = Field(
+        default=None,
+        description="Updated OS-user details when an existing account was synced",
+    )
 
 
 class ResetPasswordRequest(BaseModel):
