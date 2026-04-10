@@ -71,17 +71,16 @@ Lifecycle requirements:
 
 - Drive state must change in ways that preserve an auditable lifecycle.
 - Project binding must persist across temporary removal and reinsertion unless an explicit reset or lifecycle transition changes it.
-- Finalized state, when present, must remain represented until an explicit reopen or equivalent authorized action occurs.
+- Prepare-eject (safe removal) behavior must transition drive lifecycle state from `IN_USE` to `AVAILABLE` without clearing project binding.
 
 Constraints:
 
 - A drive cannot simultaneously represent mutually incompatible lifecycle meanings.
-- A drive represented as finalized cannot also be represented as eligible for ordinary writable reuse.
 - Filesystem classification must distinguish recognized media from unknown or unformatted media.
 
 Acceptance criteria:
 
-- Reviewers can determine from stored drive data whether the media is writable, in use, finalized, or absent.
+- Reviewers can determine from stored drive data whether the media is writable, in use, or absent.
 - Reviewers can determine whether a drive remains bound to a project after temporary removal.
 
 ## 5.4 Mount Representation Requirements
