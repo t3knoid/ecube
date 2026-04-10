@@ -209,7 +209,15 @@ async function submitCreateOsUser(confirmExistingOsUser = null) {
       error.value = ''
       return
     }
-    error.value = t('common.errors.validationFailed')
+    const status = err?.response?.status
+    const code = err?.response?.data?.code
+    if (status === 409 || code === 'CONFLICT' || code === 'HTTP_409') {
+      error.value = t('common.errors.requestConflict')
+    } else if (status === 422 || code === 'VALIDATION_ERROR' || code === 'HTTP_422' || code === 'OS_USER_PASSWORD_REQUIRED') {
+      error.value = t('common.errors.validationFailed')
+    } else {
+      error.value = t('common.errors.validationFailed')
+    }
   } finally {
     saving.value = false
   }
