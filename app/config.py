@@ -4,6 +4,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, field_validator, model_validator
 
 
+DEFAULT_READINESS_MOUNT_CHECK_TIMEOUT_SECONDS = 1.0
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -98,7 +101,7 @@ class Settings(BaseSettings):
 
     #: Timeout in seconds for each mountpoint check during ``GET /health/ready``.
     #: Keep this low so readiness fails fast even when a mount check hangs.
-    readiness_mount_check_timeout_seconds: float = 1.0
+    readiness_mount_check_timeout_seconds: float = DEFAULT_READINESS_MOUNT_CHECK_TIMEOUT_SECONDS
 
     #: Total timeout budget in seconds for all mount checks during
     #: ``GET /health/ready``. This keeps probe latency bounded as mount count
