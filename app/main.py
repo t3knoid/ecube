@@ -446,7 +446,10 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
 
     for mount in configured_mounts:
         try:
-            result = provider.check_mounted(mount.local_mount_point)
+            result = provider.check_mounted(
+                mount.local_mount_point,
+                timeout_seconds=settings.readiness_mount_check_timeout_seconds,
+            )
         except Exception as exc:
             logger.warning(
                 "Readiness probe dependency failed reason=filesystem_mount_check_failed mount_point=%s error=%s",

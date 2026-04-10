@@ -62,11 +62,12 @@ class LinuxMountProvider:
         except Exception as exc:
             return False, str(exc)
 
-    def check_mounted(self, local_mount_point: str) -> Optional[bool]:
+    def check_mounted(self, local_mount_point: str, *, timeout_seconds: Optional[float] = None) -> Optional[bool]:
         try:
+            timeout = timeout_seconds if timeout_seconds is not None else 10
             result = subprocess.run(
                 [settings.mountpoint_binary_path, "-q", local_mount_point],
-                capture_output=True, timeout=10,
+                capture_output=True, timeout=timeout,
             )
             return result.returncode == 0
         except Exception:

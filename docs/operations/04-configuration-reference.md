@@ -170,6 +170,7 @@ Required only when `SESSION_BACKEND=redis`. If Redis is unavailable, ECUBE autom
 | `AUDIT_LOG_RETENTION_DAYS` | `365`   | Days to retain audit log records. `0` = keep forever.                      |
 | `COPY_JOB_TIMEOUT`         | `3600`  | Seconds before a copy job is marked FAILED with timeout. `0` = no timeout. |
 | `USB_DISCOVERY_INTERVAL`   | `30`    | Seconds between automatic USB discovery sweeps. `0` = disabled.            |
+| `READINESS_MOUNT_CHECK_TIMEOUT_SECONDS` | `1.0` | Timeout in seconds for each mount check in `GET /health/ready`. Keep low to preserve fail-fast readiness behavior. |
 
 ---
 
