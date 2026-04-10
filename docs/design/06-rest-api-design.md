@@ -918,8 +918,7 @@ Create an OS user (new-account path) or link an already-existing OS user into EC
 {
     "username": "griffin",
     "password": "s3cret",
-    "roles": ["processor"],
-    "confirm_existing_os_user": null
+    "roles": ["processor"]
 }
 ```
 
@@ -927,7 +926,7 @@ Create an OS user (new-account path) or link an already-existing OS user into EC
 
 `confirm_existing_os_user` drives the existing-user decision flow:
 
-- omitted (`null`) -> returns `confirmation_required`
+- omitted or explicit `null` -> returns `confirmation_required`
 - `true` -> confirms linking existing OS user to ECUBE roles
 - `false` -> records cancellation and performs no link
 
