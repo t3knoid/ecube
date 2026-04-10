@@ -343,12 +343,19 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
     timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
     if db is None:
+        configured_db_url = (settings.database_url or "").strip()
+        if configured_db_url:
+            reason = "database_misconfigured"
+            details = "Database is configured but failed to initialize."
+        else:
+            reason = "database_not_configured"
+            details = "Database is not configured."
         return JSONResponse(
             status_code=503,
             content={
                 "status": "not_ready",
-                "reason": "database_not_configured",
-                "details": "Database is not configured.",
+                "reason": reason,
+                "details": details,
                 "timestamp": timestamp,
                 "checks": {
                     "database": "unhealthy",
