@@ -110,7 +110,7 @@ If you run the full Docker app + UI stack, docs are available through the nginx 
 
 > **Note:** In the full-stack compose setup, API port 8000 is published for development convenience. This is not a typical hardened deployment shape; production-style Docker should expose only port 8443 through the nginx UI proxy.
 
-All endpoints except the public routes (`/health`, `/health/live`, `/health/ready`, `/auth/token`, `/setup/status`, `/setup/initialize`, `/introspection/version`, `/setup/database/system-info`) and documentation routes (`/docs`, `/redoc`, `/openapi.json`) require authentication via JWT bearer tokens. See the [REST API Design](docs/design/06-rest-api-design.md) and [Security & Access Control](docs/design/10-security-and-access-control.md) for details.
+All endpoints except the public routes (`/health`, `/health/live`, `/health/ready`, `/auth/token`, `/setup/status`, `/setup/initialize`, `/introspection/version`, `/setup/database/system-info`) and documentation routes (`/docs`, `/redoc`, `/openapi.json`) require authentication via JWT bearer tokens. During initial setup, `/setup/database/test-connection`, `/setup/database/provision`, and `/setup/database/provision-status` also allow unauthenticated access; after setup, these endpoints require an `admin` token. See the [REST API Design](docs/design/06-rest-api-design.md) and [Security & Access Control](docs/design/10-security-and-access-control.md) for details.
 
 A [Postman collection](postman/ecube-postman-collection.json) is also available for testing and exploring the API.
 
