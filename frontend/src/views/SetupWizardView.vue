@@ -21,6 +21,7 @@ const busy = ref(false)
 const error = ref('')
 const complete = ref(false)
 const provisionNote = ref('')
+const setupSuccessMessage = ref('')
 
 const db = ref({
   host: 'localhost',
@@ -146,10 +147,17 @@ async function runInitializeSetup() {
   busy.value = true
   error.value = ''
   try {
-    await initializeSetup({
+    const response = await initializeSetup({
       username: admin.value.username,
       password: admin.value.password,
     })
+    if (typeof response?.message === 'string' && response.message.trim()) {
+      setupSuccessMessage.value = response.message
+    } else if (response?.status === 'reconciled_existing_user') {
+      setupSuccessMessage.value = t('setup.adminReconciled')
+    } else {
+      setupSuccessMessage.value = t('setup.adminCreated')
+    }
     complete.value = true
   } catch (err) {
     if (err?.response?.status === 401) {
@@ -262,7 +270,7 @@ onMounted(async () => {
         <button class="btn" :disabled="busy || !step3Valid() || complete" @click="runInitializeSetup">
           {{ t('setup.createAdmin') }}
         </button>
-        <p v-if="complete" class="ok-text">{{ t('setup.adminCreated') }}</p>
+        <p v-if="complete" class="ok-text">{{ setupSuccessMessage || t('setup.adminCreated') }}</p>
       </div>
 
       <div v-else class="step-grid">

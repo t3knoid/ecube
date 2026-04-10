@@ -22,6 +22,7 @@ from __future__ import annotations
 import logging
 import threading
 from datetime import datetime, timezone
+from typing import Literal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -323,7 +324,7 @@ def _do_initialize(
     # From here on, this worker owns initialization.  If OS operations fail,
     # we must remove the lock row so that setup can be retried.
     try:
-        groups_created = _run_os_setup(body)
+        groups_created, setup_status = _run_os_setup(body)
     except HTTPException as exc:
         if not _release_init_lock(db):
             exc.detail += _LOCK_STUCK_SUFFIX
@@ -386,14 +387,23 @@ def _do_initialize(
             details={
                 "groups_created": groups_created,
                 "admin_user": body.username,
+                "setup_status": setup_status,
             },
             client_ip=client_ip,
         )
     except Exception:
         logger.error("Failed to write audit log for SYSTEM_INITIALIZED")
 
+    message = "Setup complete"
+    if setup_status == "reconciled_existing_user":
+        message = (
+            "Setup complete. Existing OS admin user was reconciled, "
+            "added to ecube-admins, and synced to ECUBE as an admin."
+        )
+
     return SetupInitializeResponse(
-        message="Setup complete",
+        status=setup_status,
+        message=message,
         username=body.username,
         groups_created=groups_created,
     )
@@ -432,7 +442,7 @@ def _release_init_lock(db: Session) -> bool:
 
 def _run_os_setup(
     body: SetupInitializeRequest,
-) -> list[str]:
+) -> tuple[list[str], Literal["created_admin_user", "reconciled_existing_user"]]:
     """Execute OS-level setup: create groups and the admin user.
 
     Returns the list of groups created.
@@ -456,6 +466,7 @@ def _run_os_setup(
             password=body.password,
             groups=["ecube-admins"],
         )
+        setup_status: Literal["created_admin_user", "reconciled_existing_user"] = "created_admin_user"
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except OSUserError as exc:
@@ -485,5 +496,6 @@ def _run_os_setup(
                 status_code=500,
                 detail=f"User exists but failed to reset password: {pw_exc}",
             )
+        setup_status = "reconciled_existing_user"
 
-    return groups_created
+    return groups_created, setup_status

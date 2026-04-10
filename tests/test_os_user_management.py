@@ -1476,6 +1476,7 @@ class TestSetupEndpoints:
         ) as mock_migrate, patch(
             "app.routers.setup._do_initialize",
             return_value={
+                "status": "created_admin_user",
                 "message": "Setup complete",
                 "username": "admin1",
                 "groups_created": [],
@@ -1540,6 +1541,7 @@ class TestSetupEndpoints:
         })
         assert resp.status_code == 200
         data = resp.json()
+        assert data["status"] == "created_admin_user"
         assert data["message"] == "Setup complete"
         assert data["username"] == "admin1"
         assert isinstance(data["groups_created"], list)
@@ -1659,8 +1661,13 @@ class TestSetupEndpoints:
         assert len(chpasswd_calls) >= 1
         # Verify groups_created is reported.
         data = resp.json()
+        assert data["status"] == "reconciled_existing_user"
+        assert "existing os admin user was reconciled" in data["message"].lower()
         assert isinstance(data["groups_created"], list)
         assert len(data["groups_created"]) == 4
+
+        repo = UserRoleRepository(db)
+        assert "admin" in repo.get_roles("admin1")
 
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
@@ -1696,6 +1703,8 @@ class TestSetupEndpoints:
             "password": "s3cret",
         })
         assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "reconciled_existing_user"
 
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
