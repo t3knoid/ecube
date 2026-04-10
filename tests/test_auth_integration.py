@@ -24,3 +24,14 @@ def test_public_health_endpoint_is_unauthenticated(unauthenticated_client, db):
     response = unauthenticated_client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+def test_public_health_live_endpoint_is_unauthenticated(unauthenticated_client, db):
+    response = unauthenticated_client.get("/health/live")
+    assert response.status_code == 200
+    assert response.json()["status"] == "alive"
+
+
+def test_public_health_ready_endpoint_is_unauthenticated(unauthenticated_client, db):
+    response = unauthenticated_client.get("/health/ready")
+    assert response.status_code in (200, 503)
