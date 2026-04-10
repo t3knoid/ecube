@@ -29,6 +29,7 @@ from typing import Any, Callable, Dict
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.infrastructure.mount_protocol import MountProvider
 from app.infrastructure.os_user_protocol import OsUserProvider
 from app.infrastructure.usb_discovery import DiscoveredTopology
@@ -144,6 +145,18 @@ def reconcile_identity_users(
 # Mount reconciliation
 # -----------------------------------------------------------------------
 
+def _check_mounted_with_timeout(mount_provider: MountProvider, local_mount_point: str) -> bool | None:
+    """Invoke mount checks with configured timeout and support legacy provider signatures."""
+    try:
+        return mount_provider.check_mounted(
+            local_mount_point,
+            timeout_seconds=settings.subprocess_timeout_seconds,
+        )
+    except TypeError as exc:
+        if "timeout_seconds" not in str(exc):
+            raise
+        return mount_provider.check_mounted(local_mount_point)
+
 def reconcile_mounts(
     db: Session,
     mount_provider: MountProvider,
@@ -169,7 +182,7 @@ def reconcile_mounts(
     for mount in mounts:
         checked += 1
         try:
-            result = mount_provider.check_mounted(mount.local_mount_point)
+            result = _check_mounted_with_timeout(mount_provider, mount.local_mount_point)
         except Exception:
             logger.exception(
                 "OS check failed for mount %s (%s) — treating as ERROR",
