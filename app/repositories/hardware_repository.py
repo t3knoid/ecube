@@ -105,7 +105,7 @@ class HubRepository:
         self.db.refresh(hub)
         return hub
 
-    def update_location_hint(self, hub_id: int, location_hint: str) -> Optional[UsbHub]:
+    def update_location_hint(self, hub_id: int, location_hint: Optional[str]) -> Optional[UsbHub]:
         """Set *location_hint* on a hub.  Returns ``None`` if not found."""
         hub = self.get(hub_id)
         if hub is None:
@@ -221,7 +221,7 @@ class PortRepository:
         self.db.refresh(port)
         return port
 
-    def update_friendly_label(self, port_id: int, friendly_label: str) -> Optional[UsbPort]:
+    def update_friendly_label(self, port_id: int, friendly_label: Optional[str]) -> Optional[UsbPort]:
         """Set *friendly_label* on a port.  Returns ``None`` if not found."""
         port = self.get(port_id)
         if port is None:
