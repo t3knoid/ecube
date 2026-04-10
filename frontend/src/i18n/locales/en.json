@@ -249,6 +249,7 @@
     "provisionAlready": "Database is already provisioned. Continuing with existing schema.",
     "createAdmin": "Create Admin User",
     "adminCreated": "Admin user created successfully. Continue to the next step.",
+    "adminReconciled": "Existing OS admin user reconciled successfully. Continue to the next step.",
     "completeTitle": "Setup Complete",
     "completeBody": "System initialization has completed successfully.",
     "goToLogin": "Go to Login",
