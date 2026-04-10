@@ -873,7 +873,7 @@ def list_os_users(
     an ``ecube-*`` OS group or have DB role assignments in ``user_roles``.
     """
     provider = _get_provider()
-    query = search.strip().lower() if search is not None else None
+    query = ((search or "").strip().lower() or None)
     users = provider.list_users(ecube_only=False)
     repo = UserRoleRepository(db)
     role_assigned_usernames = {row["username"] for row in repo.list_users()}
