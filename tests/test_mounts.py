@@ -279,19 +279,28 @@ def test_check_mounted_with_configured_timeout_caches_capability(monkeypatch):
     assert second_call_count == 1, "Second call should use cached result, not re-inspect"
 
 
-def test_check_mounted_with_configured_timeout_gracefully_handles_signature_inspection_failure():
-    """When signature inspection fails, treat provider conservatively as not supporting timeout_seconds."""
+def test_check_mounted_with_configured_timeout_gracefully_handles_signature_inspection_failure(monkeypatch):
+    """If inspect.signature fails, provider is treated as not supporting timeout_seconds."""
     import app.services.mount_check_utils as utils_module
 
-    class UninspectableProvider:
-        def check_mounted(self, local_mount_point: str):
+    class InspectFailureProvider:
+        def check_mounted(self, local_mount_point: str, *, timeout_seconds=None):
             return True
 
-    provider = UninspectableProvider()
+    provider = InspectFailureProvider()
+
+    call_count = [0]
+
+    def _raising_signature(_):
+        call_count[0] += 1
+        raise ValueError("signature unavailable")
+
+    monkeypatch.setattr(utils_module.inspect, "signature", _raising_signature)
 
     # This should not raise; instead it should call without timeout_seconds
     result = utils_module.check_mounted_with_configured_timeout(provider, "/mnt/data")
     assert result is True
+    assert call_count[0] == 1
 
     # Verify the capability was cached as False (conservative fallback)
     cached = getattr(provider, utils_module._SUPPORTS_TIMEOUT_SECONDS_ATTR, None)
