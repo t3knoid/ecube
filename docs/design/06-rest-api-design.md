@@ -157,6 +157,7 @@ Every authenticated request resolves to:
 | Regenerate manifest | ✔ | ✔ | ✔ | ✖ |
 | Verify job | ✔ | ✔ | ✔ | ✖ |
 | Read audit logs | ✔ | ✔ | ✖ | ✔ |
+| Read chain-of-custody reports | ✔ | ✔ | ✖ | ✔ |
 | Introspection (read-only) | ✔ | ✔ | ✔ | ✔ |
 | File hash/compare | ✔ | ✖ | ✖ | ✔ |
 
@@ -749,6 +750,35 @@ Return audit logs with filters.
 
 - `401 Unauthorized` — Missing/invalid token
 - `403 Forbidden` — Insufficient role
+
+### `GET /audit/chain-of-custody`
+
+Return chain-of-custody report data for legal review.
+
+**Roles:** `admin`, `manager`, `auditor` (same role set as audit-log read access)
+
+**Query parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `drive_id` | integer | No* | Drive identifier. Default query mode when no explicit mode is provided. |
+| `project_id` | string | No* | Project identifier for project-scoped CoC retrieval. |
+
+\* At least one of `drive_id` or `project_id` must be provided. When both are provided, drive-based query takes precedence.
+
+**Behavior:**
+
+1. Validates caller authorization with the same role policy as `GET /audit`.
+2. Resolves query mode (`drive_id` first by default/precedence, otherwise `project_id`).
+3. Aggregates custody events from audit/job records.
+4. Returns structured CoC report content including custody actors and timestamps.
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+- `404 Not Found` — Unknown drive/project for requested query mode
+- `422 Validation Error` — Missing required query parameters or invalid values
 
 ---
 
