@@ -32,6 +32,11 @@ class _RecordingMountProvider:
         return True
 
 
+class _AlwaysMountedProvider:
+    def check_mounted(self, _local_mount_point, *, timeout_seconds=None):
+        return True
+
+
 class _HealthyDiscoveryProvider:
     def discover_topology(self):
         return {"hubs": [], "ports": [], "drives": []}
@@ -244,6 +249,54 @@ def test_health_ready_passes_configured_mount_check_timeout(unauthenticated_clie
 
     assert response.status_code == 200
     assert provider.last_timeout_seconds == 0.25
+
+
+def test_health_ready_returns_503_when_mount_checks_exceed_total_budget(unauthenticated_client, monkeypatch):
+    class _FakeQuery:
+        def all(self):
+            return [
+                type("M", (), {"local_mount_point": "/mnt/evidence-a"})(),
+                type("M", (), {"local_mount_point": "/mnt/evidence-b"})(),
+            ]
+
+    class _FakeDB:
+        def execute(self, *_args, **_kwargs):
+            return None
+
+        def query(self, *_args, **_kwargs):
+            return _FakeQuery()
+
+        def close(self):
+            return None
+
+    def _override_get_db_or_none():
+        yield _FakeDB()
+
+    monkeypatch.setitem(
+        main_module.app.dependency_overrides,
+        main_module._get_db_or_none,
+        _override_get_db_or_none,
+    )
+
+    class _SlowMountedProvider:
+        def check_mounted(self, _local_mount_point, *, timeout_seconds=None):
+            main_module.time.sleep(0.1)
+            return True
+
+    monkeypatch.setattr(main_module, "get_mount_provider", lambda: _SlowMountedProvider())
+    monkeypatch.setattr(main_module.settings, "readiness_mount_check_timeout_seconds", 1.0)
+    monkeypatch.setattr(main_module.settings, "readiness_mount_checks_total_timeout_seconds", 0.05)
+    monkeypatch.setattr(main_module, "get_drive_discovery", lambda: _HealthyDiscoveryProvider())
+
+    response = unauthenticated_client.get("/health/ready")
+
+    assert response.status_code == 503
+    payload = response.json()
+    assert payload["status"] == "not_ready"
+    assert payload["reason"] == "filesystem_mount_checks_timed_out"
+    assert payload["details"] == "Filesystem mount checks exceeded readiness time budget."
+    assert payload["checks"]["database"] == "healthy"
+    assert payload["checks"]["file_system"] == "unknown"
 
 
 def test_health_ready_returns_503_when_usb_discovery_not_ready(unauthenticated_client, db, monkeypatch):

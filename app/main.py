@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import time
 import traceback
 import uuid
 from contextlib import asynccontextmanager
@@ -444,11 +445,41 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
             },
         )
 
+    mount_checks_deadline = None
+    if settings.readiness_mount_checks_total_timeout_seconds > 0:
+        mount_checks_deadline = (
+            time.monotonic() + settings.readiness_mount_checks_total_timeout_seconds
+        )
+
     for mount in configured_mounts:
+        if mount_checks_deadline is not None:
+            # Bound cumulative mount-check time so probe latency is predictable.
+            remaining_budget = mount_checks_deadline - time.monotonic()
+            if remaining_budget <= 0:
+                logger.warning(
+                    "Readiness probe dependency failed reason=filesystem_mount_checks_timed_out",
+                )
+                return _not_ready_response(
+                    reason="filesystem_mount_checks_timed_out",
+                    details="Filesystem mount checks exceeded readiness time budget.",
+                    timestamp=timestamp,
+                    checks={
+                        "database": "healthy",
+                        "file_system": "unknown",
+                        "usb_discovery": "unknown",
+                    },
+                )
+            per_mount_timeout = min(
+                settings.readiness_mount_check_timeout_seconds,
+                remaining_budget,
+            )
+        else:
+            per_mount_timeout = settings.readiness_mount_check_timeout_seconds
+
         try:
             result = provider.check_mounted(
                 mount.local_mount_point,
-                timeout_seconds=settings.readiness_mount_check_timeout_seconds,
+                timeout_seconds=per_mount_timeout,
             )
         except Exception as exc:
             logger.warning(
