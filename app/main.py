@@ -319,22 +319,36 @@ def health_ready(db=Depends(get_db)):
     configured_mounts = db.query(NetworkMount).all()
     for mount in configured_mounts:
         result = provider.check_mounted(mount.local_mount_point)
-        if result is not True:
-            detail = (
-                f"Mount '{mount.local_mount_point}' check returned 'unmounted'"
-                if result is False
-                else f"Mount '{mount.local_mount_point}' check failed"
-            )
+        if result is False:
             return JSONResponse(
                 status_code=503,
                 content={
                     "status": "not_ready",
                     "reason": "filesystem_mount_unavailable",
-                    "details": detail,
+                    "details": f"Mount '{mount.local_mount_point}' check returned 'unmounted'",
                     "timestamp": timestamp,
                     "checks": {
                         "database": "healthy",
                         "file_system": "unmounted",
+                        "usb_discovery": "unknown",
+                    },
+                },
+            )
+        if result is None:
+            logger.warning(
+                "Readiness probe mount check returned unknown state for mount_point=%s",
+                mount.local_mount_point,
+            )
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "not_ready",
+                    "reason": "filesystem_mount_check_failed",
+                    "details": f"Mount '{mount.local_mount_point}' check failed.",
+                    "timestamp": timestamp,
+                    "checks": {
+                        "database": "healthy",
+                        "file_system": "unknown",
                         "usb_discovery": "unknown",
                     },
                 },
