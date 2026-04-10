@@ -256,4 +256,54 @@ describe('UsersView existing OS-user confirmation flow', () => {
 
     expect(wrapper.text()).toContain(i18n.global.t('common.errors.requestConflict'))
   })
+
+  it('switches to existing-user confirmation when password submit returns decision response', async () => {
+    mocks.createOsUser
+      .mockRejectedValueOnce({
+        response: {
+          data: {
+            code: 'OS_USER_PASSWORD_REQUIRED',
+            message: 'Password is required when creating a new OS user.',
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'confirmation_required',
+        username: 'newuser',
+      })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await openCreateUserDialog(wrapper)
+    await wrapper.find('#create-user-username').setValue('newuser')
+
+    const createPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.createOsUser'))
+    expect(createPanel).toBeTruthy()
+    const createButtons = createPanel.findAll('.dialog-actions button')
+    await createButtons[1].trigger('click')
+    await flushPromises()
+
+    expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.setPassword'))).toBeTruthy()
+    await wrapper.find('#set-password-field').setValue('StrongPass#123')
+    await wrapper.find('#confirm-password-field').setValue('StrongPass#123')
+    await flushPromises()
+
+    const passwordPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.setPassword'))
+    expect(passwordPanel).toBeTruthy()
+    const setPasswordButton = passwordPanel
+      .findAll('.dialog-actions button')
+      .find((node) => node.text() === i18n.global.t('users.setPassword'))
+    expect(setPasswordButton).toBeTruthy()
+    await setPasswordButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.createOsUser).toHaveBeenNthCalledWith(2, {
+      username: 'newuser',
+      roles: ['processor'],
+      password: 'StrongPass#123',
+    })
+    expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.setPassword'))).toBeFalsy()
+    expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.existingOsUserConfirmTitle'))).toBeTruthy()
+  })
 })
