@@ -242,7 +242,7 @@ async function cancelExistingOsUserSync() {
       confirm_existing_os_user: false,
     })
   } catch {
-    // Cancel is best-effort for audit telemetry; keep the form open even on failure.
+    // Cancel is best-effort for audit telemetry; dialog state is closed/reset in finally.
   } finally {
     saving.value = false
     existingUserConfirmDialog.value = false
