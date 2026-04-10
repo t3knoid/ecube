@@ -1,5 +1,6 @@
 import app.main as main_module
 from app.models.network import MountType, NetworkMount
+from sqlalchemy.exc import ProgrammingError
 
 
 class _HealthyMountProvider:
@@ -98,6 +99,26 @@ def test_health_ready_returns_503_when_mount_check_fails(unauthenticated_client,
     assert payload["reason"] == "filesystem_mount_unavailable"
     assert payload["checks"]["database"] == "healthy"
     assert payload["checks"]["file_system"] == "unmounted"
+
+
+def test_health_ready_returns_503_when_mount_metadata_table_missing(unauthenticated_client, db, monkeypatch):
+    def _raise_missing_table(*_args, **_kwargs):
+        raise ProgrammingError("SELECT ...", {}, Exception("no such table: network_mounts"))
+
+    monkeypatch.setattr(main_module.db_module, "is_database_configured", lambda: True)
+    monkeypatch.setattr(main_module.db_module, "SessionLocal", lambda: db)
+    monkeypatch.setattr(main_module, "get_drive_discovery", lambda: _HealthyDiscoveryProvider())
+    monkeypatch.setattr(db, "query", _raise_missing_table)
+
+    response = unauthenticated_client.get("/health/ready")
+
+    assert response.status_code == 503
+    payload = response.json()
+    assert payload["status"] == "not_ready"
+    assert payload["reason"] == "mount_metadata_unavailable"
+    assert payload["details"] == "Mount metadata is not available yet."
+    assert payload["checks"]["database"] == "healthy"
+    assert payload["checks"]["file_system"] == "unknown"
 
 
 def test_health_ready_returns_503_when_mount_check_is_unknown(unauthenticated_client, db, monkeypatch):

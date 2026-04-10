@@ -30,11 +30,22 @@ from app.schemas.introspection import HealthLiveResponse, HealthNotReadyResponse
 from app.session import close_session_backend, init_session_backend, mount_session_middleware
 from app.utils.client_ip import get_client_ip
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
 # Configure logging before anything else.
 configure_logging()
 
 logger = logging.getLogger(__name__)
+
+
+def _is_missing_table_error(exc: Exception) -> bool:
+    """Return True when *exc* indicates a missing/unmigrated table."""
+    msg = str(exc).lower()
+    return (
+        ("relation" in msg and "does not exist" in msg)
+        or "undefinedtable" in msg
+        or "no such table" in msg
+    )
 
 # OpenAPI tags with descriptions for organizing endpoints
 tags_metadata = [
@@ -350,7 +361,42 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
 
     # 2) Filesystem mount availability (using current mount provider checks)
     provider = get_mount_provider()
-    configured_mounts = db.query(NetworkMount).all()
+    try:
+        configured_mounts = db.query(NetworkMount).all()
+    except (ProgrammingError, OperationalError) as exc:
+        db.rollback()
+        if _is_missing_table_error(exc):
+            logger.warning("Readiness probe mount metadata table is not available")
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "not_ready",
+                    "reason": "mount_metadata_unavailable",
+                    "details": "Mount metadata is not available yet.",
+                    "timestamp": timestamp,
+                    "checks": {
+                        "database": "healthy",
+                        "file_system": "unknown",
+                        "usb_discovery": "unknown",
+                    },
+                },
+            )
+        logger.exception("Readiness probe failed while loading mount metadata")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "not_ready",
+                "reason": "mount_metadata_check_failed",
+                "details": "Mount metadata readiness check failed.",
+                "timestamp": timestamp,
+                "checks": {
+                    "database": "healthy",
+                    "file_system": "unknown",
+                    "usb_discovery": "unknown",
+                },
+            },
+        )
+
     for mount in configured_mounts:
         result = provider.check_mounted(mount.local_mount_point)
         if result is False:
