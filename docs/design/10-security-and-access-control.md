@@ -172,6 +172,7 @@ groups are entirely unmapped receives an empty role list, which causes
 | View job status                            |  ✔    |    ✔    |     ✔     |    ✔    |
 | Regenerate manifest / verify job           |  ✔    |    ✔    |     ✔     |    ✖    |
 | Read audit logs                            |  ✔    |    ✔    |     ✖     |    ✔    |
+| Read chain-of-custody reports              |  ✔    |    ✔    |     ✖     |    ✔    |
 | View application logs (`/admin/logs/view`) |  ✔    |    ✖    |     ✖     |    ✖    |
 | Introspection (read-only system info)      |  ✔    |    ✔    |     ✔     |    ✔    |
 | File hash / file compare (audit functions) |  ✔    |    ✖    |     ✖     |    ✔    |
