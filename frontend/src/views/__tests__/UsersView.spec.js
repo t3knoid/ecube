@@ -230,4 +230,30 @@ describe('UsersView existing OS-user confirmation flow', () => {
     })
     expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.setPassword'))).toBeFalsy()
   })
+
+  it('shows conflict error when create user returns 409', async () => {
+    mocks.createOsUser.mockRejectedValueOnce({
+      response: {
+        status: 409,
+        data: {
+          code: 'CONFLICT',
+          message: "User 'existing' already exists as an ECUBE user",
+        },
+      },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await openCreateUserDialog(wrapper)
+    await wrapper.find('#create-user-username').setValue('existing')
+
+    const createPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.createOsUser'))
+    expect(createPanel).toBeTruthy()
+    const createButtons = createPanel.findAll('.dialog-actions button')
+    await createButtons[1].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('common.errors.requestConflict'))
+  })
 })
