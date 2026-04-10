@@ -19,7 +19,7 @@ from starlette.routing import BaseRoute, Match
 
 from app.auth import get_current_user
 from app import API_VERSION, __version__
-from app.config import settings
+from app.config import DEFAULT_READINESS_MOUNT_CHECK_TIMEOUT_SECONDS, settings
 from app import database as db_module
 from app.infrastructure import get_drive_discovery, get_mount_provider
 from app.exceptions import AuthenticationError, AuthorizationError, ConflictError, ECUBEException
@@ -38,8 +38,6 @@ from sqlalchemy.exc import OperationalError, ProgrammingError
 configure_logging()
 
 logger = logging.getLogger(__name__)
-
-_DEFAULT_READINESS_MOUNT_CHECK_TIMEOUT_SECONDS = 1.0
 
 
 def _is_missing_table_error(exc: Exception) -> bool:
@@ -102,7 +100,7 @@ def _resolve_readiness_mount_timeout(remaining_budget: float | None) -> float:
         if remaining_budget is not None:
             configured_timeout = remaining_budget
         else:
-            configured_timeout = _DEFAULT_READINESS_MOUNT_CHECK_TIMEOUT_SECONDS
+            configured_timeout = DEFAULT_READINESS_MOUNT_CHECK_TIMEOUT_SECONDS
 
     if remaining_budget is not None:
         return min(configured_timeout, remaining_budget)
