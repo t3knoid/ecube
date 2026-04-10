@@ -188,7 +188,7 @@ The Pydantic schema for this payload is `ErrorResponse` in `app/schemas/errors.p
 
 ### Common Error Codes
 
-For authenticated endpoints (except `/health`, `/health/live`, `/health/ready`, `/auth/token`, `/setup/status`, `/setup/initialize`, and `/introspection/version`), these error codes are part of the designed error surface when applicable:
+For authenticated endpoints (except `/health`, `/health/live`, `/health/ready`, `/auth/token`, `/setup/status`, `/setup/initialize`, `/introspection/version`, and `/setup/database/system-info`), these error codes are part of the designed error surface when applicable:
 
 - `401 Unauthorized` — Missing, invalid, or expired authentication token
 - `403 Forbidden` — Authenticated user lacks the required role
