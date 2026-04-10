@@ -277,11 +277,35 @@ async function submitSetPassword() {
   error.value = ''
   try {
     if (pendingCreateUserPayload.value) {
-      await createOsUser({
+      const createResult = await createOsUser({
         username: pendingCreateUserPayload.value.username,
         roles: pendingCreateUserPayload.value.roles,
         password: setPasswordForm.value.password,
       })
+
+      if (createResult?.status === 'confirmation_required') {
+        pendingExistingUserPayload.value = {
+          username: pendingCreateUserPayload.value.username,
+          roles: pendingCreateUserPayload.value.roles,
+        }
+        pendingUsernameForPassword.value = null
+        pendingCreateUserPayload.value = null
+        passwordDialog.value = false
+        setPasswordForm.value = { password: '', confirmPassword: '' }
+        showPassword.value = false
+        existingUserConfirmDialog.value = true
+        return
+      }
+
+      if (createResult?.status === 'canceled') {
+        pendingUsernameForPassword.value = null
+        pendingCreateUserPayload.value = null
+        passwordDialog.value = false
+        setPasswordForm.value = { password: '', confirmPassword: '' }
+        showPassword.value = false
+        existingUserConfirmDialog.value = false
+        return
+      }
     } else {
       await resetOsUserPassword(pendingUsernameForPassword.value, {
         password: setPasswordForm.value.password,
