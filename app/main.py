@@ -358,12 +358,13 @@ def health_ready(db=Depends(get_db)):
     try:
         get_drive_discovery().discover_topology()
     except Exception as exc:
+        logger.exception("Readiness probe failed USB discovery check")
         return JSONResponse(
             status_code=503,
             content={
                 "status": "not_ready",
                 "reason": "usb_discovery_not_initialized",
-                "details": str(exc),
+                "details": "USB discovery readiness check failed.",
                 "timestamp": timestamp,
                 "checks": {
                     "database": "healthy",
