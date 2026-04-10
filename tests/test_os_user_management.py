@@ -806,7 +806,6 @@ class TestOSUserEndpoints:
 
     def test_create_user_existing_reserved_os_user_rejected(self, admin_client, db):
         provider = MagicMock()
-        provider.group_exists.return_value = True
 
         with patch("app.routers.admin._get_provider", return_value=provider):
             resp = admin_client.post("/admin/os-users", json={
@@ -819,6 +818,7 @@ class TestOSUserEndpoints:
         body = resp.json()
         assert body["code"] == "HTTP_422"
         assert "reserved" in body["message"].lower()
+        provider.group_exists.assert_not_called()
         provider.user_exists.assert_not_called()
         provider.add_user_to_groups.assert_not_called()
 
