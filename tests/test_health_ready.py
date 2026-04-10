@@ -71,11 +71,16 @@ def test_health_ready_returns_503_when_database_not_configured(unauthenticated_c
     assert payload["status"] == "not_ready"
     assert payload["reason"] == "database_not_configured"
     assert payload["details"] == "Database is not configured."
+    assert isinstance(payload.get("timestamp"), str)
     assert payload["checks"] == {
         "database": "unhealthy",
         "file_system": "unknown",
         "usb_discovery": "unknown",
     }
+    # Guard against accidental fallback to global ErrorResponse payload shape.
+    assert "code" not in payload
+    assert "message" not in payload
+    assert "trace_id" not in payload
 
 
 def test_health_ready_returns_503_when_mount_check_fails(unauthenticated_client, db, monkeypatch):
