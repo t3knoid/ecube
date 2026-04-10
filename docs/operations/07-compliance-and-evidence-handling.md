@@ -387,8 +387,8 @@ After ECUBE completes a copy job, the destination USB drive should be write-prot
 3. Store in secure facility with access controls.
 
 **ECUBE Support:**
-- ECUBE provides a drive safe-removal endpoint (`POST /drives/{drive_id}/prepare-eject`) for safe removal (flush + unmount + return to available state).
-- Prepare-eject does **not** enforce write-protection or seal custody state; operational write-protection controls remain a physical and procedural responsibility.
+- ECUBE provides a drive safe-removal endpoint (`POST /drives/{drive_id}/prepare-eject`) for safe removal (flush + unmount + transition back to `AVAILABLE`).
+- Prepare-eject does **not** enforce write-protection or seal custody state, and it does **not** clear `current_project_id`; project binding is preserved. Operational write-protection controls remain a physical and procedural responsibility.
 
 ### Evidence Segregation
 
