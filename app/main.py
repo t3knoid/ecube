@@ -1,33 +1,150 @@
 import asyncio
 import logging
+import os
+import threading
+import time
 import traceback
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from typing import Generator
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.routing import BaseRoute, Match
 
 from app.auth import get_current_user
 from app import API_VERSION, __version__
-from app.config import settings
+from app.config import DEFAULT_READINESS_MOUNT_CHECK_TIMEOUT_SECONDS, settings
+from app import database as db_module
+from app.infrastructure import get_drive_discovery, get_mount_provider
 from app.exceptions import AuthenticationError, AuthorizationError, ConflictError, ECUBEException
 from app.utils.sanitize import is_encoding_error
 from app.logging_config import configure_logging
+from app.models.network import NetworkMount
 from app.routers import admin, audit, auth, configuration, database_setup, drives, files, introspection, jobs, mounts, setup, telemetry, users
 from app.schemas.errors import ErrorResponse
-from app.schemas.introspection import HealthResponse, VersionResponse
+from app.schemas.introspection import HealthLiveResponse, HealthNotReadyResponse, HealthReadyResponse, HealthResponse, VersionResponse
 from app.session import close_session_backend, init_session_backend, mount_session_middleware
 from app.utils.client_ip import get_client_ip
+from sqlalchemy import text
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
 # Configure logging before anything else.
 configure_logging()
 
 logger = logging.getLogger(__name__)
+
+_USB_DISCOVERY_READY_CACHE: dict[type, float] = {}
+_USB_DISCOVERY_READY_CACHE_LOCK = threading.Lock()
+
+
+def _is_missing_table_error(exc: Exception) -> bool:
+    """Return True when *exc* indicates a missing/unmigrated table."""
+    msg = str(exc).lower()
+    return (
+        ("relation" in msg and "does not exist" in msg)
+        or "undefinedtable" in msg
+        or "no such table" in msg
+    )
+
+
+def _probe_usb_sysfs_available() -> bool:
+    """Return True when the configured USB sysfs path is accessible.
+
+    This avoids false "initialized" readiness when discovery falls back to an
+    empty topology due to unreadable/missing sysfs.
+    """
+    usb_path = settings.sysfs_usb_devices_path
+    if not os.path.isdir(usb_path):
+        return False
+    if not os.access(usb_path, os.R_OK | os.X_OK):
+        return False
+    try:
+        os.listdir(usb_path)
+    except OSError:
+        return False
+    return True
+
+
+def _is_usb_discovery_ready() -> bool:
+    """Return True when USB discovery is ready without full scans on each probe.
+
+    Successful readiness checks are cached for a short TTL to avoid repeated
+    sysfs topology walks under frequent ``/health/ready`` polling.
+    """
+    ttl_seconds = settings.readiness_usb_discovery_cache_ttl_seconds
+    now = time.monotonic()
+
+    try:
+        provider = get_drive_discovery()
+    except Exception:
+        return False
+
+    provider_type = type(provider)
+    if ttl_seconds > 0:
+        with _USB_DISCOVERY_READY_CACHE_LOCK:
+            expires_at = _USB_DISCOVERY_READY_CACHE.get(provider_type)
+            if expires_at is not None and expires_at > now:
+                return True
+
+    probe_ready = getattr(provider, "probe_ready", None)
+    try:
+        if callable(probe_ready):
+            probe_ready()
+        else:
+            provider.discover_topology()
+    except Exception:
+        return False
+
+    if ttl_seconds > 0:
+        with _USB_DISCOVERY_READY_CACHE_LOCK:
+            _USB_DISCOVERY_READY_CACHE[provider_type] = now + ttl_seconds
+    return True
+
+
+def _not_ready_response(
+    *,
+    reason: str,
+    details: str,
+    timestamp: str,
+    checks: dict[str, str],
+) -> JSONResponse:
+    """Build the standard ``/health/ready`` non-ready response payload."""
+    return JSONResponse(
+        status_code=503,
+        content={
+            "status": "not_ready",
+            "reason": reason,
+            "details": details,
+            "timestamp": timestamp,
+            "checks": checks,
+        },
+    )
+
+
+def _resolve_readiness_mount_timeout(remaining_budget: float | None) -> float:
+    """Return a positive per-mount timeout for readiness mount checks.
+
+    Non-positive configured values are treated as invalid and replaced with:
+    - remaining budget when total-budget mode is active
+    - otherwise the documented default readiness timeout
+    """
+    configured_timeout = settings.readiness_mount_check_timeout_seconds
+    if configured_timeout <= 0:
+        if remaining_budget is not None:
+            configured_timeout = remaining_budget
+        else:
+            configured_timeout = DEFAULT_READINESS_MOUNT_CHECK_TIMEOUT_SECONDS
+
+    if remaining_budget is not None:
+        return min(configured_timeout, remaining_budget)
+    return configured_timeout
 
 # OpenAPI tags with descriptions for organizing endpoints
 tags_metadata = [
@@ -273,6 +390,246 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/health/live", response_model=HealthLiveResponse)
+def health_live():
+    """Return process liveness for orchestrator probes without dependency checks."""
+    timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return {"status": "alive", "timestamp": timestamp}
+
+
+def _get_db_or_none() -> Generator[Session | None, None, None]:
+    """Yield a DB session when configured, otherwise ``None``.
+
+    This keeps readiness responses consistent even when DATABASE_URL is unset.
+    """
+    if not db_module.is_database_configured():
+        yield None
+        return
+
+    db = db_module.SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@app.get(
+    "/health/ready",
+    response_model=HealthReadyResponse,
+    responses={503: {"model": HealthNotReadyResponse, "description": "Service is not ready"}},
+)
+def health_ready(db: Session | None = Depends(_get_db_or_none)):
+    """Check whether critical runtime dependencies are ready for traffic."""
+    timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    if db is None:
+        configured_db_url = (settings.database_url or "").strip()
+        if configured_db_url:
+            reason = "database_misconfigured"
+            details = "Database is configured but failed to initialize."
+        else:
+            reason = "database_not_configured"
+            details = "Database is not configured."
+        return _not_ready_response(
+            reason=reason,
+            details=details,
+            timestamp=timestamp,
+            checks={
+                "database": "unhealthy",
+                "file_system": "unknown",
+                "usb_discovery": "unknown",
+            },
+        )
+
+    # 1) Database connectivity
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception as exc:
+        logger.warning("Readiness probe dependency failed reason=database_connection_failed error_type=%s", type(exc).__name__)
+        logger.debug("Readiness DB failure detail", exc_info=True)
+        return _not_ready_response(
+            reason="database_connection_failed",
+            details="Database connectivity check failed.",
+            timestamp=timestamp,
+            checks={
+                "database": "unhealthy",
+                "file_system": "unknown",
+                "usb_discovery": "unknown",
+            },
+        )
+
+    # 2) Filesystem mount availability (using current mount provider checks)
+    # Query mounts first; only resolve provider if there are mounts to check
+    try:
+        configured_mounts = db.query(NetworkMount).all()
+    except (ProgrammingError, OperationalError) as exc:
+        db.rollback()
+        if _is_missing_table_error(exc):
+            logger.warning("Readiness probe mount metadata table is not available")
+            return _not_ready_response(
+                reason="mount_metadata_unavailable",
+                details="Mount metadata is not available yet.",
+                timestamp=timestamp,
+                checks={
+                    "database": "healthy",
+                    "file_system": "unknown",
+                    "usb_discovery": "unknown",
+                },
+            )
+        logger.warning("Readiness probe dependency failed reason=mount_metadata_check_failed error_type=%s", type(exc).__name__)
+        logger.debug("Readiness mount metadata failure detail", exc_info=True)
+        return _not_ready_response(
+            reason="mount_metadata_check_failed",
+            details="Mount metadata readiness check failed.",
+            timestamp=timestamp,
+            checks={
+                "database": "healthy",
+                "file_system": "unknown",
+                "usb_discovery": "unknown",
+            },
+        )
+
+    # Only check mounts and resolve provider if there are configured mounts
+    if configured_mounts:
+        try:
+            provider = get_mount_provider()
+        except Exception as exc:
+            logger.warning("Readiness probe dependency failed reason=mount_provider_unavailable error_type=%s", type(exc).__name__)
+            logger.debug("Readiness mount provider resolution detail", exc_info=True)
+            return _not_ready_response(
+                reason="mount_provider_unavailable",
+                details="Filesystem mount provider is not available.",
+                timestamp=timestamp,
+                checks={
+                    "database": "healthy",
+                    "file_system": "unknown",
+                    "usb_discovery": "unknown",
+                },
+            )
+
+        mount_checks_deadline = None
+        if settings.readiness_mount_checks_total_timeout_seconds > 0:
+            mount_checks_deadline = (
+                time.monotonic() + settings.readiness_mount_checks_total_timeout_seconds
+            )
+
+        for mount in configured_mounts:
+            remaining_budget = None
+            if mount_checks_deadline is not None:
+                # Bound cumulative mount-check time so probe latency is predictable.
+                remaining_budget = mount_checks_deadline - time.monotonic()
+                if remaining_budget <= 0:
+                    logger.warning(
+                        "Readiness probe dependency failed reason=filesystem_mount_checks_timed_out",
+                    )
+                    return _not_ready_response(
+                        reason="filesystem_mount_checks_timed_out",
+                        details="Filesystem mount checks exceeded readiness time budget.",
+                        timestamp=timestamp,
+                        checks={
+                            "database": "healthy",
+                            "file_system": "unknown",
+                            "usb_discovery": "unknown",
+                        },
+                    )
+
+            per_mount_timeout = _resolve_readiness_mount_timeout(remaining_budget)
+
+            try:
+                result = provider.check_mounted(
+                    mount.local_mount_point,
+                    timeout_seconds=per_mount_timeout,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Readiness probe dependency failed reason=filesystem_mount_check_error mount_point=%s error_type=%s",
+                    mount.local_mount_point,
+                    type(exc).__name__,
+                )
+                logger.debug("Readiness mount check failure detail", exc_info=True)
+                return _not_ready_response(
+                    reason="filesystem_mount_check_error",
+                    details="A required filesystem mount readiness check encountered a runtime error.",
+                    timestamp=timestamp,
+                    checks={
+                        "database": "healthy",
+                        "file_system": "unknown",
+                        "usb_discovery": "unknown",
+                    },
+                )
+
+            if result is False:
+                logger.warning(
+                    "Readiness probe mount unavailable for mount_point=%s",
+                    mount.local_mount_point,
+                )
+                return _not_ready_response(
+                    reason="filesystem_mount_unavailable",
+                    details="A required filesystem mount is unavailable.",
+                    timestamp=timestamp,
+                    checks={
+                        "database": "healthy",
+                        "file_system": "unmounted",
+                        "usb_discovery": "unknown",
+                    },
+                )
+            if result is None:
+                logger.warning(
+                    "Readiness probe mount check returned unknown state for mount_point=%s",
+                    mount.local_mount_point,
+                )
+                return _not_ready_response(
+                    reason="filesystem_mount_check_unknown",
+                    details="A required filesystem mount readiness check returned an indeterminate result.",
+                    timestamp=timestamp,
+                    checks={
+                        "database": "healthy",
+                        "file_system": "unknown",
+                        "usb_discovery": "unknown",
+                    },
+                )
+
+    # 3) USB discovery readiness signal (provider can enumerate topology)
+    if not _probe_usb_sysfs_available():
+        logger.warning(
+            "Readiness probe dependency failed reason=usb_discovery_unavailable usb_path=%s",
+            settings.sysfs_usb_devices_path,
+        )
+        return _not_ready_response(
+            reason="usb_discovery_unavailable",
+            details="USB discovery runtime path is not accessible.",
+            timestamp=timestamp,
+            checks={
+                "database": "healthy",
+                "file_system": "mounted",
+                "usb_discovery": "unavailable",
+            },
+        )
+
+    if not _is_usb_discovery_ready():
+        logger.warning("Readiness probe dependency failed reason=usb_discovery_not_initialized")
+        return _not_ready_response(
+            reason="usb_discovery_not_initialized",
+            details="USB discovery readiness check failed.",
+            timestamp=timestamp,
+            checks={
+                "database": "healthy",
+                "file_system": "mounted",
+                "usb_discovery": "not_initialized",
+            },
+        )
+
+    return {
+        "status": "ready",
+        "timestamp": timestamp,
+        "checks": {
+            "database": "healthy",
+            "file_system": "mounted",
+            "usb_discovery": "initialized",
+        },
+    }
+
+
 @app.get("/introspection/version", response_model=VersionResponse)
 def introspection_version():
     """Return application and API version information.
@@ -311,7 +668,7 @@ def custom_openapi():
     # Apply security requirement to all endpoints except unauthenticated routes
     _unauthenticated_paths = {
         "/health", "/auth/token", "/setup/status", "/setup/initialize",
-        "/introspection/version", "/setup/database/system-info",
+        "/introspection/version", "/setup/database/system-info", "/health/ready", "/health/live",
     }
     # Endpoints that accept an optional bearer token (unauthenticated during
     # initial setup, admin-required after the first admin user is created).
