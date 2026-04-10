@@ -355,6 +355,8 @@ Before initializing a drive:
 
 Use `Prepare Eject` before physically removing a drive. This allows the system to complete pending operations and safely transition the device for removal.
 
+> **Reconnect behavior:** After a successful prepare-eject, the drive returns to `AVAILABLE` and keeps its project binding (`current_project_id`). If the same initialized drive is connected again, discovery restores it to `IN_USE` for that same project.
+
 ![Drives page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/drives-default-chromium-linux.png)
 
 ---
