@@ -100,6 +100,11 @@ class Settings(BaseSettings):
     #: Keep this low so readiness fails fast even when a mount check hangs.
     readiness_mount_check_timeout_seconds: float = 1.0
 
+    #: Total timeout budget in seconds for all mount checks during
+    #: ``GET /health/ready``. This keeps probe latency bounded as mount count
+    #: grows.
+    readiness_mount_checks_total_timeout_seconds: float = 1.0
+
     # ---------------------------------------------------------------------------
     # Logging configuration
     # ---------------------------------------------------------------------------
