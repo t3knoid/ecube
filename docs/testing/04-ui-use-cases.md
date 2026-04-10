@@ -4,7 +4,7 @@
 |---|---|
 | Title | UI Use Cases |
 | Purpose | Provides a catalog of ECUBE user interface use cases that define expected UI behavior for design, development, and QA validation. |
-| Updated on | 04/08/26 |
+| Updated on | 04/09/26 |
 | Audience | UI designers, developers, QA. |
 
 ## Table of Contents
@@ -72,6 +72,21 @@
 | UC-3.12 | Delete an OS group *(API only; not exposed in current UI)* | Admin | admin |
 
 **UI Implication:** Admin panel uses a single editable users table with role selection, per-user save actions, password reset, and user creation with role picker. Group listing/management is API-only in the current UI build.
+
+### Group 3 QA Checklist: Create User Modal Behavior
+
+Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 (list users), and UC-3.7 (reset password).
+
+| Check | Steps | Expected |
+|---|---|---|
+| Existing user confirmation prompt appears | In `Users` click `Create User`, enter a username that already exists in OS/directory identity, choose roles, click `Create` | Create dialog closes and confirmation dialog appears with existing-user wording |
+| Existing user confirm path | In confirmation dialog click `Add to ECUBE` | Confirmation dialog closes, user is linked to ECUBE roles, no password dialog is shown |
+| Existing user cancel path | In confirmation dialog click `Cancel` | Dialog closes and screen returns to Users page (create dialog does not reopen) |
+| New user deferred password prompt | Create a brand-new username with roles and click `Create` | Password dialog appears after create attempt |
+| Password confirmation enforcement | Enter non-matching password/confirm password in password dialog | Validation message appears and submit action remains disabled |
+| Password show/hide control | Toggle the show/hide password control in password dialog | Password fields toggle between masked and plain text |
+| New user completion | Enter matching password values and submit | Password dialog closes and new user appears in Users list with selected roles |
+| Directory-backed role visibility | Link a directory-backed user into ECUBE roles and refresh Users page | User remains visible in list even when host-enumeration fields are placeholders |
 
 ---
 

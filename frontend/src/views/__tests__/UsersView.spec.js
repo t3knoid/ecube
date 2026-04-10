@@ -1,0 +1,339 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import i18n from '@/i18n/index.js'
+import UsersView from '@/views/UsersView.vue'
+
+const mocks = vi.hoisted(() => ({
+  getUsers: vi.fn(),
+  setUserRoles: vi.fn(),
+  deleteUserRoles: vi.fn(),
+  createOsUser: vi.fn(),
+  getOsUsers: vi.fn(),
+  resetOsUserPassword: vi.fn(),
+}))
+
+vi.mock('@/api/users.js', () => ({
+  getUsers: (...args) => mocks.getUsers(...args),
+  setUserRoles: (...args) => mocks.setUserRoles(...args),
+  deleteUserRoles: (...args) => mocks.deleteUserRoles(...args),
+}))
+
+vi.mock('@/api/admin.js', () => ({
+  createOsUser: (...args) => mocks.createOsUser(...args),
+  getOsUsers: (...args) => mocks.getOsUsers(...args),
+  resetOsUserPassword: (...args) => mocks.resetOsUserPassword(...args),
+}))
+
+function mountView() {
+  return mount(UsersView, {
+    global: {
+      plugins: [i18n],
+      stubs: {
+        teleport: true,
+        DataTable: {
+          template: '<div class="datatable-stub"><slot /></div>',
+        },
+        Pagination: {
+          template: '<div class="pagination-stub" />',
+        },
+      },
+    },
+  })
+}
+
+function findDialogPanelByTitle(wrapper, title) {
+  return wrapper.findAll('.dialog-panel').find((panel) => panel.text().includes(title))
+}
+
+async function openCreateUserDialog(wrapper) {
+  const panelActions = wrapper.find('.panel-actions')
+  expect(panelActions.exists()).toBe(true)
+  const createUserButton = panelActions
+    .findAll('button')
+    .find((node) => node.text() === i18n.global.t('users.createOsUser'))
+  expect(createUserButton).toBeTruthy()
+  await createUserButton.trigger('click')
+}
+
+describe('UsersView existing OS-user confirmation flow', () => {
+  beforeEach(() => {
+    mocks.getUsers.mockReset()
+    mocks.setUserRoles.mockReset()
+    mocks.deleteUserRoles.mockReset()
+    mocks.createOsUser.mockReset()
+    mocks.getOsUsers.mockReset()
+    mocks.resetOsUserPassword.mockReset()
+
+    mocks.getUsers.mockResolvedValue({ users: [] })
+    mocks.getOsUsers.mockResolvedValue({ users: [] })
+    mocks.resetOsUserPassword.mockResolvedValue({ message: 'ok' })
+  })
+
+  it('shows confirmation dialog and confirms sync for existing OS user', async () => {
+    mocks.createOsUser
+      .mockResolvedValueOnce({
+        status: 'confirmation_required',
+        username: 'existing',
+      })
+      .mockResolvedValueOnce({
+        status: 'synced_existing_user',
+        username: 'existing',
+        user: {
+          username: 'existing',
+          uid: 1001,
+          gid: 1001,
+          home: '/home/existing',
+          shell: '/bin/bash',
+          groups: ['ecube-admins', 'existing'],
+        },
+      })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await openCreateUserDialog(wrapper)
+    await wrapper.find('#create-user-username').setValue('existing')
+
+    const createPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.createOsUser'))
+    expect(createPanel).toBeTruthy()
+    const createButtons = createPanel.findAll('.dialog-actions button')
+    await createButtons[1].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('users.existingOsUserConfirmMessage'))
+
+    const confirmPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.existingOsUserConfirmTitle'))
+    expect(confirmPanel).toBeTruthy()
+    const confirmButton = confirmPanel
+      .findAll('.dialog-actions button')
+      .find((node) => node.text() === i18n.global.t('users.existingOsUserConfirmAction'))
+    expect(confirmButton).toBeTruthy()
+
+    await confirmButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.createOsUser).toHaveBeenNthCalledWith(1, {
+      username: 'existing',
+      roles: ['processor'],
+    })
+    expect(mocks.createOsUser).toHaveBeenNthCalledWith(2, {
+      username: 'existing',
+      roles: ['processor'],
+      confirm_existing_os_user: true,
+    })
+
+    // Existing users should not be prompted for password setup.
+    expect(wrapper.text()).not.toContain(i18n.global.t('users.setPassword'))
+    const passwordPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.setPassword'))
+    expect(passwordPanel).toBeFalsy()
+  })
+
+  it('records cancel decision and closes dialogs', async () => {
+    mocks.createOsUser
+      .mockResolvedValueOnce({
+        status: 'confirmation_required',
+        username: 'existing',
+      })
+      .mockResolvedValueOnce({
+        status: 'canceled',
+        username: 'existing',
+      })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await openCreateUserDialog(wrapper)
+    await wrapper.find('#create-user-username').setValue('existing')
+
+    const createPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.createOsUser'))
+    expect(createPanel).toBeTruthy()
+    const createButtons = createPanel.findAll('.dialog-actions button')
+    await createButtons[1].trigger('click')
+    await flushPromises()
+
+    const confirmPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.existingOsUserConfirmTitle'))
+    expect(confirmPanel).toBeTruthy()
+    const cancelButton = confirmPanel
+      .findAll('.dialog-actions button')
+      .find((node) => node.text() === i18n.global.t('common.actions.cancel'))
+    expect(cancelButton).toBeTruthy()
+
+    await cancelButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.createOsUser).toHaveBeenNthCalledWith(2, {
+      username: 'existing',
+      roles: ['processor'],
+      confirm_existing_os_user: false,
+    })
+
+    // Verify both dialogs are closed after cancel
+    expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.createOsUser'))).toBeFalsy()
+    expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.existingOsUserConfirmTitle'))).toBeFalsy()
+  })
+
+  it('prompts for password and retries create for a new OS user', async () => {
+    mocks.createOsUser
+      .mockRejectedValueOnce({
+        response: {
+          data: {
+            code: 'OS_USER_PASSWORD_REQUIRED',
+            message: 'Password is required when creating a new OS user.',
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        username: 'newuser',
+        uid: 1002,
+        gid: 1002,
+        home: '/home/newuser',
+        shell: '/bin/bash',
+        groups: ['ecube-processors', 'newuser'],
+      })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await openCreateUserDialog(wrapper)
+    await wrapper.find('#create-user-username').setValue('newuser')
+
+    const createPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.createOsUser'))
+    expect(createPanel).toBeTruthy()
+    const createButtons = createPanel.findAll('.dialog-actions button')
+    await createButtons[1].trigger('click')
+    await flushPromises()
+
+    const passwordPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.setPassword'))
+    expect(passwordPanel).toBeTruthy()
+
+    await wrapper.find('#set-password-field').setValue('StrongPass#123')
+    await wrapper.find('#confirm-password-field').setValue('StrongPass#123')
+    await flushPromises()
+
+    const updatedPasswordPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.setPassword'))
+    expect(updatedPasswordPanel).toBeTruthy()
+    const setPasswordButton = updatedPasswordPanel
+      .findAll('.dialog-actions button')
+      .find((node) => node.text() === i18n.global.t('users.setPassword'))
+    expect(setPasswordButton).toBeTruthy()
+    await setPasswordButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.createOsUser).toHaveBeenNthCalledWith(1, {
+      username: 'newuser',
+      roles: ['processor'],
+    })
+    expect(mocks.createOsUser).toHaveBeenNthCalledWith(2, {
+      username: 'newuser',
+      roles: ['processor'],
+      password: 'StrongPass#123',
+    })
+    expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.setPassword'))).toBeFalsy()
+  })
+
+  it('shows conflict error when create user returns 409', async () => {
+    mocks.createOsUser.mockRejectedValueOnce({
+      response: {
+        status: 409,
+        data: {
+          code: 'CONFLICT',
+          message: "User 'existing' already exists as an ECUBE user",
+        },
+      },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await openCreateUserDialog(wrapper)
+    await wrapper.find('#create-user-username').setValue('existing')
+
+    const createPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.createOsUser'))
+    expect(createPanel).toBeTruthy()
+    const createButtons = createPanel.findAll('.dialog-actions button')
+    await createButtons[1].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('common.errors.requestConflict'))
+  })
+
+  it('switches to existing-user confirmation when password submit returns decision response', async () => {
+    mocks.createOsUser
+      .mockRejectedValueOnce({
+        response: {
+          data: {
+            code: 'OS_USER_PASSWORD_REQUIRED',
+            message: 'Password is required when creating a new OS user.',
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'confirmation_required',
+        username: 'newuser',
+      })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await openCreateUserDialog(wrapper)
+    await wrapper.find('#create-user-username').setValue('newuser')
+
+    const createPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.createOsUser'))
+    expect(createPanel).toBeTruthy()
+    const createButtons = createPanel.findAll('.dialog-actions button')
+    await createButtons[1].trigger('click')
+    await flushPromises()
+
+    expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.setPassword'))).toBeTruthy()
+    await wrapper.find('#set-password-field').setValue('StrongPass#123')
+    await wrapper.find('#confirm-password-field').setValue('StrongPass#123')
+    await flushPromises()
+
+    const passwordPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.setPassword'))
+    expect(passwordPanel).toBeTruthy()
+    const setPasswordButton = passwordPanel
+      .findAll('.dialog-actions button')
+      .find((node) => node.text() === i18n.global.t('users.setPassword'))
+    expect(setPasswordButton).toBeTruthy()
+    await setPasswordButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.createOsUser).toHaveBeenNthCalledWith(2, {
+      username: 'newuser',
+      roles: ['processor'],
+      password: 'StrongPass#123',
+    })
+    expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.setPassword'))).toBeFalsy()
+    expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.existingOsUserConfirmTitle'))).toBeTruthy()
+  })
+
+  it('completes create flow without opening password dialog when create returns OSUserResponse', async () => {
+    mocks.createOsUser.mockResolvedValueOnce({
+      username: 'directcreate',
+      uid: 1003,
+      gid: 1003,
+      home: '/home/directcreate',
+      shell: '/bin/bash',
+      groups: ['ecube-processors', 'directcreate'],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await openCreateUserDialog(wrapper)
+    await wrapper.find('#create-user-username').setValue('directcreate')
+
+    const createPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.createOsUser'))
+    expect(createPanel).toBeTruthy()
+    const createButtons = createPanel.findAll('.dialog-actions button')
+    await createButtons[1].trigger('click')
+    await flushPromises()
+
+    expect(mocks.createOsUser).toHaveBeenNthCalledWith(1, {
+      username: 'directcreate',
+      roles: ['processor'],
+    })
+    expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.setPassword'))).toBeFalsy()
+    expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.createOsUser'))).toBeFalsy()
+  })
+})
