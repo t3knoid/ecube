@@ -70,6 +70,8 @@ All other API endpoints require a bearer token in the `Authorization` header:
 curl -H "Authorization: Bearer $JWT_TOKEN" https://localhost:8443/endpoint
 ```
 
+During initial setup, `POST /setup/database/test-connection`, `POST /setup/database/provision`, and `GET /setup/database/provision-status` also accept unauthenticated access. After setup is complete, these endpoints require an `admin` token.
+
 ---
 
 ## Drives (`/drives`)

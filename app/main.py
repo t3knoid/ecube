@@ -66,6 +66,26 @@ def _probe_usb_sysfs_available() -> bool:
         return False
     return True
 
+
+def _not_ready_response(
+    *,
+    reason: str,
+    details: str,
+    timestamp: str,
+    checks: dict[str, str],
+) -> JSONResponse:
+    """Build the standard ``/health/ready`` non-ready response payload."""
+    return JSONResponse(
+        status_code=503,
+        content={
+            "status": "not_ready",
+            "reason": reason,
+            "details": details,
+            "timestamp": timestamp,
+            "checks": checks,
+        },
+    )
+
 # OpenAPI tags with descriptions for organizing endpoints
 tags_metadata = [
     {
@@ -350,18 +370,14 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
         else:
             reason = "database_not_configured"
             details = "Database is not configured."
-        return JSONResponse(
-            status_code=503,
-            content={
-                "status": "not_ready",
-                "reason": reason,
-                "details": details,
-                "timestamp": timestamp,
-                "checks": {
-                    "database": "unhealthy",
-                    "file_system": "unknown",
-                    "usb_discovery": "unknown",
-                },
+        return _not_ready_response(
+            reason=reason,
+            details=details,
+            timestamp=timestamp,
+            checks={
+                "database": "unhealthy",
+                "file_system": "unknown",
+                "usb_discovery": "unknown",
             },
         )
 
@@ -371,18 +387,14 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
     except Exception as exc:
         logger.warning("Readiness probe dependency failed reason=database_connection_failed error=%s", exc)
         logger.debug("Readiness DB failure traceback", exc_info=True)
-        return JSONResponse(
-            status_code=503,
-            content={
-                "status": "not_ready",
-                "reason": "database_connection_failed",
-                "details": "Database connectivity check failed.",
-                "timestamp": timestamp,
-                "checks": {
-                    "database": "unhealthy",
-                    "file_system": "unknown",
-                    "usb_discovery": "unknown",
-                },
+        return _not_ready_response(
+            reason="database_connection_failed",
+            details="Database connectivity check failed.",
+            timestamp=timestamp,
+            checks={
+                "database": "unhealthy",
+                "file_system": "unknown",
+                "usb_discovery": "unknown",
             },
         )
 
@@ -392,18 +404,14 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
     except Exception as exc:
         logger.warning("Readiness probe dependency failed reason=mount_provider_unavailable error=%s", exc)
         logger.debug("Readiness mount provider resolution traceback", exc_info=True)
-        return JSONResponse(
-            status_code=503,
-            content={
-                "status": "not_ready",
-                "reason": "mount_provider_unavailable",
-                "details": "Filesystem mount provider is not available.",
-                "timestamp": timestamp,
-                "checks": {
-                    "database": "healthy",
-                    "file_system": "unknown",
-                    "usb_discovery": "unknown",
-                },
+        return _not_ready_response(
+            reason="mount_provider_unavailable",
+            details="Filesystem mount provider is not available.",
+            timestamp=timestamp,
+            checks={
+                "database": "healthy",
+                "file_system": "unknown",
+                "usb_discovery": "unknown",
             },
         )
 
@@ -413,34 +421,26 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
         db.rollback()
         if _is_missing_table_error(exc):
             logger.warning("Readiness probe mount metadata table is not available")
-            return JSONResponse(
-                status_code=503,
-                content={
-                    "status": "not_ready",
-                    "reason": "mount_metadata_unavailable",
-                    "details": "Mount metadata is not available yet.",
-                    "timestamp": timestamp,
-                    "checks": {
-                        "database": "healthy",
-                        "file_system": "unknown",
-                        "usb_discovery": "unknown",
-                    },
-                },
-            )
-        logger.warning("Readiness probe dependency failed reason=mount_metadata_check_failed error=%s", exc)
-        logger.debug("Readiness mount metadata failure traceback", exc_info=True)
-        return JSONResponse(
-            status_code=503,
-            content={
-                "status": "not_ready",
-                "reason": "mount_metadata_check_failed",
-                "details": "Mount metadata readiness check failed.",
-                "timestamp": timestamp,
-                "checks": {
+            return _not_ready_response(
+                reason="mount_metadata_unavailable",
+                details="Mount metadata is not available yet.",
+                timestamp=timestamp,
+                checks={
                     "database": "healthy",
                     "file_system": "unknown",
                     "usb_discovery": "unknown",
                 },
+            )
+        logger.warning("Readiness probe dependency failed reason=mount_metadata_check_failed error=%s", exc)
+        logger.debug("Readiness mount metadata failure traceback", exc_info=True)
+        return _not_ready_response(
+            reason="mount_metadata_check_failed",
+            details="Mount metadata readiness check failed.",
+            timestamp=timestamp,
+            checks={
+                "database": "healthy",
+                "file_system": "unknown",
+                "usb_discovery": "unknown",
             },
         )
 
@@ -457,18 +457,14 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
                 exc,
             )
             logger.debug("Readiness mount provider check traceback", exc_info=True)
-            return JSONResponse(
-                status_code=503,
-                content={
-                    "status": "not_ready",
-                    "reason": "filesystem_mount_check_failed",
-                    "details": "A required filesystem mount readiness check failed.",
-                    "timestamp": timestamp,
-                    "checks": {
-                        "database": "healthy",
-                        "file_system": "unknown",
-                        "usb_discovery": "unknown",
-                    },
+            return _not_ready_response(
+                reason="filesystem_mount_check_failed",
+                details="A required filesystem mount readiness check failed.",
+                timestamp=timestamp,
+                checks={
+                    "database": "healthy",
+                    "file_system": "unknown",
+                    "usb_discovery": "unknown",
                 },
             )
 
@@ -477,18 +473,14 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
                 "Readiness probe mount unavailable for mount_point=%s",
                 mount.local_mount_point,
             )
-            return JSONResponse(
-                status_code=503,
-                content={
-                    "status": "not_ready",
-                    "reason": "filesystem_mount_unavailable",
-                    "details": "A required filesystem mount is unavailable.",
-                    "timestamp": timestamp,
-                    "checks": {
-                        "database": "healthy",
-                        "file_system": "unmounted",
-                        "usb_discovery": "unknown",
-                    },
+            return _not_ready_response(
+                reason="filesystem_mount_unavailable",
+                details="A required filesystem mount is unavailable.",
+                timestamp=timestamp,
+                checks={
+                    "database": "healthy",
+                    "file_system": "unmounted",
+                    "usb_discovery": "unknown",
                 },
             )
         if result is None:
@@ -496,18 +488,14 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
                 "Readiness probe mount check returned unknown state for mount_point=%s",
                 mount.local_mount_point,
             )
-            return JSONResponse(
-                status_code=503,
-                content={
-                    "status": "not_ready",
-                    "reason": "filesystem_mount_check_failed",
-                    "details": "A required filesystem mount readiness check failed.",
-                    "timestamp": timestamp,
-                    "checks": {
-                        "database": "healthy",
-                        "file_system": "unknown",
-                        "usb_discovery": "unknown",
-                    },
+            return _not_ready_response(
+                reason="filesystem_mount_check_failed",
+                details="A required filesystem mount readiness check failed.",
+                timestamp=timestamp,
+                checks={
+                    "database": "healthy",
+                    "file_system": "unknown",
+                    "usb_discovery": "unknown",
                 },
             )
 
@@ -517,18 +505,14 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
             "Readiness probe dependency failed reason=usb_discovery_unavailable usb_path=%s",
             settings.sysfs_usb_devices_path,
         )
-        return JSONResponse(
-            status_code=503,
-            content={
-                "status": "not_ready",
-                "reason": "usb_discovery_unavailable",
-                "details": "USB discovery runtime path is not accessible.",
-                "timestamp": timestamp,
-                "checks": {
-                    "database": "healthy",
-                    "file_system": "mounted",
-                    "usb_discovery": "unavailable",
-                },
+        return _not_ready_response(
+            reason="usb_discovery_unavailable",
+            details="USB discovery runtime path is not accessible.",
+            timestamp=timestamp,
+            checks={
+                "database": "healthy",
+                "file_system": "mounted",
+                "usb_discovery": "unavailable",
             },
         )
 
@@ -537,18 +521,14 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
     except Exception as exc:
         logger.warning("Readiness probe dependency failed reason=usb_discovery_not_initialized error=%s", exc)
         logger.debug("Readiness USB discovery failure traceback", exc_info=True)
-        return JSONResponse(
-            status_code=503,
-            content={
-                "status": "not_ready",
-                "reason": "usb_discovery_not_initialized",
-                "details": "USB discovery readiness check failed.",
-                "timestamp": timestamp,
-                "checks": {
-                    "database": "healthy",
-                    "file_system": "mounted",
-                    "usb_discovery": "not_initialized",
-                },
+        return _not_ready_response(
+            reason="usb_discovery_not_initialized",
+            details="USB discovery readiness check failed.",
+            timestamp=timestamp,
+            checks={
+                "database": "healthy",
+                "file_system": "mounted",
+                "usb_discovery": "not_initialized",
             },
         )
 
