@@ -193,15 +193,17 @@ async function submitCreateOsUser(confirmExistingOsUser = null) {
       return
     }
 
+    // New-user create completed (201 OSUserResponse path).
     existingUserConfirmDialog.value = false
     pendingExistingUserPayload.value = null
+    pendingUsernameForPassword.value = null
     pendingCreateUserPayload.value = null
-    // Show password dialog instead of closing
-    pendingUsernameForPassword.value = payload.username
     createUserDialog.value = false
-    passwordDialog.value = true
+    passwordDialog.value = false
+    createUserForm.value = { username: '', roles: ['processor'] }
     setPasswordForm.value = { password: '', confirmPassword: '' }
     showPassword.value = false
+    await loadAll()
   } catch (err) {
     if (confirmExistingOsUser === null && isPasswordRequiredForNewUserError(err)) {
       pendingCreateUserPayload.value = {
