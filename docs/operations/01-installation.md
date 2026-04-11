@@ -349,6 +349,8 @@ Optional database cleanup during uninstall:
 sudo /opt/ecube/install.sh --uninstall --drop-database
 ```
 
+Note: when `--drop-database` targets a remote PostgreSQL instance, superuser-role cleanup may require credentials for `SETUP_DEFAULT_ADMIN_USERNAME` via `.pgpass` or `PGPASSWORD`.
+
 If ECUBE was installed with a custom `--install-dir`, run the installer from that location instead (for example, `sudo /srv/ecube/install.sh --uninstall`).
 
 > **Warning:** Database drop is destructive and irreversible.
