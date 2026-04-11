@@ -131,6 +131,7 @@ ECUBE must support job workflows that include:
 Assignment constraints:
 
 - Only drives in an eligible writable state may be assigned to new work.
+- Job source selection must satisfy configured project source-binding policy when such bindings exist.
 
 Acceptance criteria:
 
@@ -178,6 +179,34 @@ Acceptance criteria:
 
 - Operators can determine whether a configured mount is usable before starting a job.
 - Invalid or unavailable mounts are surfaced explicitly rather than silently ignored.
+
+### 4.6.1 Project Source Binding Requirements
+
+ECUBE must support project-level source-binding policy so operators can bind evidence source paths to specific projects.
+
+Project source-binding behavior must include:
+
+- A project settings capability to define one or more allowed source bindings per project.
+- Binding fields that include at minimum project identifier, selected mount source, and optional subfolder path under the mount.
+- Support for single-share multi-project layouts where one mount is shared and projects are segregated by subfolder.
+- Visibility of configured bindings to authorized users creating jobs.
+- Validation during job creation that the submitted source path is allowed for the job's project when bindings are configured.
+- Rejection of job creation when a project has required source bindings but none are configured.
+- Rejection of job creation when the submitted source path resolves outside the configured mount plus subfolder boundary for that project.
+- Audit evidence for source-binding create, update, and delete actions, and for source-binding enforcement denials at job creation.
+
+Role and access constraints:
+
+- Only admin and manager roles may create, edit, or remove project source bindings.
+- Processor role may use configured project bindings during job creation but may not modify binding policy.
+
+Acceptance criteria:
+
+- A manager can configure a project to allow only a specific mount plus subfolder and that configuration is visible in project settings.
+- A processor creating a job for that project can select or resolve only allowed source paths.
+- A job creation request for that project with a source path outside the allowed boundary is rejected before copy begins.
+- A project using a shared mount with per-project subfolders can create jobs from its own subfolder and cannot create jobs from another project's subfolder.
+- All source-binding policy changes and enforcement denials are represented in audit logs with actor, project, and attempted source context.
 
 ## 4.7 Manifest Requirements
 
