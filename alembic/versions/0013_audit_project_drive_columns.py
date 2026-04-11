@@ -77,11 +77,9 @@ def _backfill_postgresql() -> None:
               AND details IS NOT NULL
               AND (
                     jsonb_typeof(details::jsonb -> 'drive_id') = 'number'
-                 OR (
-                        jsonb_typeof(details::jsonb -> 'drive_id') = 'string'
-                    AND details->>'drive_id' ~ '^[0-9]+$'
-                 )
+                 OR jsonb_typeof(details::jsonb -> 'drive_id') = 'string'
               )
+              AND details->>'drive_id' ~ '^[0-9]+$'
               AND EXISTS (
                     SELECT 1
                     FROM usb_drives u
