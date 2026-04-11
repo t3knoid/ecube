@@ -13,6 +13,7 @@ from app.models.jobs import DriveAssignment, ExportJob, JobStatus, Manifest
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
 from app.repositories.job_repository import (
+    DriveAssignmentRepository,
     JobRepository,
     ManifestRepository,
 )
@@ -60,6 +61,8 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
                     audit_repo.add(
                         action="PROJECT_ISOLATION_VIOLATION",
                         user=actor,
+                        project_id=body.project_id,
+                        drive_id=body.drive_id,
                         job_id=job.id,
                         details={
                             "actor": actor,
@@ -281,7 +284,17 @@ def start_job(
         )
 
     try:
-        audit_repo.add(action="JOB_STARTED", user=actor, job_id=job_id, details={}, client_ip=client_ip)
+        assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
+        active_drive_id = assignment.drive_id if assignment else None
+        audit_repo.add(
+            action="JOB_STARTED",
+            user=actor,
+            project_id=job.project_id,
+            drive_id=active_drive_id,
+            job_id=job_id,
+            details={},
+            client_ip=client_ip,
+        )
     except Exception:
         logger.exception("Failed to write audit log for JOB_STARTED")
     background_tasks.add_task(copy_engine.run_copy_job, job_id)
@@ -313,7 +326,17 @@ def verify_job(
             detail="Database error while starting job verification",
         )
     try:
-        audit_repo.add(action="JOB_VERIFY_STARTED", user=actor, job_id=job_id, details={}, client_ip=client_ip)
+        assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
+        active_drive_id = assignment.drive_id if assignment else None
+        audit_repo.add(
+            action="JOB_VERIFY_STARTED",
+            user=actor,
+            project_id=job.project_id,
+            drive_id=active_drive_id,
+            job_id=job_id,
+            details={},
+            client_ip=client_ip,
+        )
     except Exception:
         logger.exception("Failed to write audit log for JOB_VERIFY_STARTED")
     background_tasks.add_task(copy_engine.run_verify_job, job_id)
@@ -369,9 +392,13 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
             detail="Database error while creating manifest",
         )
     try:
+        assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
+        active_drive_id = assignment.drive_id if assignment else None
         audit_repo.add(
             action="MANIFEST_CREATED",
             user=actor,
+            project_id=job.project_id,
+            drive_id=active_drive_id,
             job_id=job_id,
             details={"manifest_path": manifest_path, "error": manifest_error},
             client_ip=client_ip,
