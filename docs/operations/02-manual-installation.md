@@ -4,7 +4,7 @@
 |---|---|
 | Title | ECUBE Manual Installation |
 | Purpose | Documents the manual deployment steps for ECUBE on a bare-metal Linux host without using the automated installer. |
-| Updated on | 04/08/26 |
+| Updated on | 04/10/26 |
 | Audience | Systems administrators, platform engineers. |
 
 ## Table of Contents
@@ -165,10 +165,13 @@ sudo apt-get install -y \
 
 ```bash
 sudo useradd --system --create-home --home-dir /opt/ecube --shell /usr/sbin/nologin ecube
-sudo mkdir -p /opt/ecube /var/lib/ecube
-sudo chown -R ecube:ecube /opt/ecube /var/lib/ecube
+sudo mkdir -p /opt/ecube /var/lib/ecube /var/log/ecube /nfs /smb
+sudo chown -R ecube:ecube /opt/ecube /var/lib/ecube /var/log/ecube
+sudo chown ecube:ecube /nfs /smb
 sudo chmod 750 /opt/ecube
 sudo chmod 700 /var/lib/ecube
+sudo chmod 750 /var/log/ecube
+sudo chmod 755 /nfs /smb
 
 # Optional hardware groups when present on the host
 getent group plugdev >/dev/null && sudo usermod -aG plugdev ecube
@@ -182,7 +185,7 @@ The `shadow` group membership allows the non-root `ecube` service process to
 perform local PAM (`pam_unix`) authentication consistently on hosts where
 helper privilege transitions are restricted by host security policy.
 
-Install the sudoers policy required for setup-time OS user/group management:
+Install the sudoers policy required for setup-time OS user/group management, mount operations, and managed mount-root bootstrap/ownership:
 
 ```bash
 sudo install -d -m 0755 /etc/sudoers.d
@@ -190,10 +193,15 @@ sudo tee /etc/sudoers.d/ecube-user-mgmt > /dev/null <<'EOF_SUDOERS'
 # /etc/sudoers.d/ecube-user-mgmt
 # Narrowly scoped privilege escalation for the ECUBE service account.
 ecube ALL=(root) NOPASSWD: /usr/sbin/useradd, /usr/sbin/usermod, /usr/sbin/userdel, /usr/sbin/groupadd, /usr/sbin/groupdel, /usr/sbin/chpasswd
+ecube ALL=(root) NOPASSWD: /bin/mount, /bin/umount, /sbin/mount.nfs, /usr/sbin/mount.nfs
+ecube ALL=(root) NOPASSWD: /bin/sync, /sbin/mkfs.ext4, /sbin/mkfs.exfat
+ecube ALL=(root) NOPASSWD: /bin/mkdir, /bin/chown, /usr/bin/chown
 EOF_SUDOERS
 sudo chmod 0440 /etc/sudoers.d/ecube-user-mgmt
 sudo visudo -cf /etc/sudoers.d/ecube-user-mgmt
 ```
+
+The managed mount roots (`/nfs` and `/smb`) must be owned by the `ecube` service account. Runtime mount requests can use narrowly scoped sudo to create missing leaf folders and repair ownership under these roots.
 
 Install the PAM configuration for local and domain user authentication:
 
@@ -634,6 +642,8 @@ For strictly manual teardown, remove:
 - `/etc/pam.d/ecube` PAM configuration (if installed)
 - `/opt/ecube` application files
 - `/var/lib/ecube` runtime directory
+- `/var/log/ecube` application log directory
+- `/nfs` and `/smb` managed mount roots (if they were created solely for ECUBE and are no longer needed)
 - nginx ECUBE site config/symlinks (if present)
 - ECUBE service user/group and firewall rules (if created for this deployment)
 - PostgreSQL role/database only after verified backup
