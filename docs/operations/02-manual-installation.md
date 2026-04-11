@@ -3,21 +3,49 @@
 | Field | Value |
 |---|---|
 | Title | ECUBE Manual Installation |
-| Purpose | Documents the manual deployment steps for ECUBE on a bare-metal Linux host without using the automated installer. |
-| Updated on | 04/08/26 |
+| Purpose | Documents the manual deployment steps for ECUBE on a Linux host without using the automated installer. |
+| Updated on | 04/10/26 |
 | Audience | Systems administrators, platform engineers. |
 
 ## Table of Contents
 
-1. [Scope and Source of Truth](#scope-and-source-of-truth)
-2. [Requirements](#requirements)
-3. [Deployment Topologies](#deployment-topologies)
-4. [Package Contents and Verification](#package-contents-and-verification)
-5. [Single-Host Manual Deployment](#single-host-manual-deployment)
-6. [Enterprise Split-Host Deployment](#enterprise-split-host-deployment)
-7. [Host Firewall Hardening](#host-firewall-hardening)
-8. [Operations and Upgrades](#operations-and-upgrades)
-9. [Advanced: Hosting UI with Another Web Frontend](#advanced-hosting-ui-with-another-web-frontend)
+1. [Scope and Source of Truth](#1-scope-and-source-of-truth)
+2. [Requirements](#2-requirements)
+   - [2.1 OS Requirements](#21-os-requirements)
+   - [2.2 External Services](#22-external-services)
+   - [2.3 Required Tools](#23-required-tools)
+   - [2.4 Service Account Requirement (Backend)](#24-service-account-requirement-backend)
+3. [Deployment Topologies](#3-deployment-topologies)
+4. [Package Contents and Verification](#4-package-contents-and-verification)
+5. [Single-Host Manual Deployment (DB + Backend + Frontend)](#5-single-host-manual-deployment-db--backend--frontend)
+   - [5.1 Install OS packages](#51-install-os-packages)
+   - [5.2 Create backend service account and directories](#52-create-backend-service-account-and-directories)
+   - [5.3 Install sudoers Policy](#53-install-sudoers-policy)
+   - [5.4 Install PAM Configuration](#54-install-pam-configuration)
+   - [5.5 Extract package](#55-extract-package)
+   - [5.6 Prepare PostgreSQL](#56-prepare-postgresql)
+   - [5.7 Build backend runtime](#57-build-backend-runtime)
+   - [5.8 Write backend `.env`](#58-write-backend-env)
+   - [5.9 Generate certificates (nginx TLS terminator)](#59-generate-certificates-nginx-tls-terminator)
+   - [5.10 Create backend systemd unit (HTTP loopback behind nginx)](#510-create-backend-systemd-unit-http-loopback-behind-nginx)
+   - [5.11 Configure frontend and reverse proxy (same host)](#511-configure-frontend-and-reverse-proxy-same-host)
+   - [5.12 Production certificate replacement (recommended)](#512-production-certificate-replacement-recommended)
+   - [5.13 Validate](#513-validate)
+   - [5.14 Continue in web UI (required)](#514-continue-in-web-ui-required)
+6. [Enterprise Split-Host Deployment (DB, Backend, Frontend on Separate Hosts)](#6-enterprise-split-host-deployment-db-backend-frontend-on-separate-hosts)
+   - [6.1 DB host](#61-db-host)
+   - [6.2 Backend host (no nginx/UI)](#62-backend-host-no-nginxui)
+   - [6.3 Frontend host (no backend service)](#63-frontend-host-no-backend-service)
+   - [6.4 Continue in web UI (required)](#64-continue-in-web-ui-required)
+7. [Host Firewall Hardening](#7-host-firewall-hardening)
+   - [7.1 Single-host mode](#71-single-host-mode)
+   - [7.2 Split-host mode](#72-split-host-mode)
+8. [Operations and Upgrades](#8-operations-and-upgrades)
+   - [8.1 Service operations](#81-service-operations)
+   - [8.2 Manual package upgrade](#82-manual-package-upgrade)
+   - [8.3 Uninstall / cleanup](#83-uninstall--cleanup)
+  - [8.3.1 Manual Teardown (Step-by-Step)](#831-manual-teardown-step-by-step)
+9. [Advanced: Hosting UI with Another Web Frontend](#9-advanced-hosting-ui-with-another-web-frontend)
 
 ---
 
@@ -25,7 +53,7 @@
 
 This document describes manual installation for:
 
-- Bare-metal / VM Linux hosts (no Docker runtime required)
+- Bare-metal / VM Linux hosts
 - systemd-managed ECUBE backend service
 - frontend static bundle hosting and API reverse proxying
 
@@ -165,10 +193,13 @@ sudo apt-get install -y \
 
 ```bash
 sudo useradd --system --create-home --home-dir /opt/ecube --shell /usr/sbin/nologin ecube
-sudo mkdir -p /opt/ecube /var/lib/ecube
-sudo chown -R ecube:ecube /opt/ecube /var/lib/ecube
+sudo mkdir -p /opt/ecube /var/lib/ecube /var/log/ecube /nfs /smb
+sudo chown -R ecube:ecube /opt/ecube /var/lib/ecube /var/log/ecube
+sudo chown ecube:ecube /nfs /smb
 sudo chmod 750 /opt/ecube
 sudo chmod 700 /var/lib/ecube
+sudo chmod 750 /var/log/ecube
+sudo chmod 755 /nfs /smb
 
 # Optional hardware groups when present on the host
 getent group plugdev >/dev/null && sudo usermod -aG plugdev ecube
@@ -178,37 +209,52 @@ getent group dialout >/dev/null && sudo usermod -aG dialout ecube
 getent group shadow >/dev/null && sudo usermod -aG shadow ecube
 ```
 
+The managed mount roots (`/nfs` and `/smb`) must be owned by the `ecube` service account. Runtime mount requests can use narrowly scoped sudo to create missing leaf folders and repair ownership under these roots.
+
 The `shadow` group membership allows the non-root `ecube` service process to
 perform local PAM (`pam_unix`) authentication consistently on hosts where
 helper privilege transitions are restricted by host security policy.
 
-Install the sudoers policy required for setup-time OS user/group management:
+### 5.3 Install sudoers Policy
+Install the sudoers policy required for setup-time OS user/group management, mount operations, and managed mount-root bootstrap/ownership:
 
 ```bash
 sudo install -d -m 0755 /etc/sudoers.d
 sudo tee /etc/sudoers.d/ecube-user-mgmt > /dev/null <<'EOF_SUDOERS'
 # /etc/sudoers.d/ecube-user-mgmt
 # Narrowly scoped privilege escalation for the ECUBE service account.
-ecube ALL=(root) NOPASSWD: /usr/sbin/useradd, /usr/sbin/usermod, /usr/sbin/userdel, /usr/sbin/groupadd, /usr/sbin/groupdel, /usr/sbin/chpasswd
+ecube ALL=(root) NOPASSWD: /usr/sbin/useradd, /usr/sbin/usermod, /usr/sbin/userdel, /usr/sbin/groupadd, /usr/sbin/groupdel, /usr/sbin/chpasswd, /bin/mount, /bin/umount, /sbin/mount.nfs, /usr/sbin/mount.nfs, /bin/sync, /sbin/mkfs.ext4, /sbin/mkfs.exfat, /bin/mkdir, /bin/chown, /usr/bin/chown
 EOF_SUDOERS
 sudo chmod 0440 /etc/sudoers.d/ecube-user-mgmt
 sudo visudo -cf /etc/sudoers.d/ecube-user-mgmt
 ```
 
-Install the PAM configuration for local and domain user authentication:
+### 5.4 Install PAM Configuration
+
+Install PAM configuration by selecting one of the two options below.
+
+To detect whether SSSD support is installed on the host:
+
+```bash
+if command -v sssd >/dev/null 2>&1 || \
+   [[ -f /lib/security/pam_sss.so || -f /lib/x86_64-linux-gnu/security/pam_sss.so ]]; then
+  echo "SSSD support detected: use 5.4.1"
+else
+  echo "SSSD support not detected: use 5.4.2"
+fi
+```
+
+#### 5.4.1 Install PAM with SSSD support (local + domain users)
+
+Use this option only when SSSD and `pam_sss.so` are installed and operational on the host.
 
 ```bash
 sudo install -d -m 0755 /etc/pam.d
-
-# If SSSD is present on the host, install the full config with domain support
-if command -v sssd &>/dev/null || [[ -f /lib/security/pam_sss.so || -f /lib/x86_64-linux-gnu/security/pam_sss.so ]]; then
-  sudo tee /etc/pam.d/ecube > /dev/null <<'EOF_PAM'
+sudo tee /etc/pam.d/ecube > /dev/null <<'EOF_PAM'
 # /etc/pam.d/ecube
 # PAM configuration for the ECUBE service (local and domain user authentication).
-#
-# Tries local users first (pam_unix, sufficient = stop on success), then
-# domain users via SSSD (pam_sss, only attempted if SSSD is installed).
-# Falls back to an unconditional deny so a missing module does not open a hole.
+# Tries local users first (pam_unix, sufficient = stop on success), then domain users via SSSD.
+# Falls back to an unconditional deny so missing modules or backend failures do not open a hole.
 
 auth    sufficient  pam_unix.so nullok
 auth    [success=done ignore=ignore default=die] pam_sss.so use_first_pass
@@ -217,37 +263,44 @@ account sufficient  pam_unix.so
 account [success=done ignore=ignore default=die] pam_sss.so
 account required    pam_deny.so
 EOF_PAM
-  echo "PAM config installed with SSSD support: /etc/pam.d/ecube"
-else
-  # SSSD not present — install a local-only variant
-  sudo tee /etc/pam.d/ecube > /dev/null <<'EOF_PAM'
+sudo chmod 0644 /etc/pam.d/ecube
+```
+
+#### 5.4.2 Install PAM without SSSD support (local users only)
+
+Use this option when the host does not use SSSD for directory authentication.
+
+```bash
+sudo install -d -m 0755 /etc/pam.d
+sudo tee /etc/pam.d/ecube > /dev/null <<'EOF_PAM'
 # /etc/pam.d/ecube
-# Local-only PAM configuration (SSSD not detected at install time).
-# Re-run setup steps after installing SSSD to enable domain user authentication.
+# Local-only PAM configuration.
+# Use this when SSSD is not installed on the host.
 
 auth    sufficient  pam_unix.so nullok
 auth    required    pam_deny.so
 account sufficient  pam_unix.so
 account required    pam_deny.so
 EOF_PAM
-  echo "PAM config installed (local users only): /etc/pam.d/ecube"
-fi
-
 sudo chmod 0644 /etc/pam.d/ecube
 ```
 
-### 5.3 Extract package
+### 5.5 Extract package
 
 ```bash
-sudo mkdir -p /opt/ecube
 sudo tar -xzf "/tmp/ecube-package-${LATEST_TAG}.tar.gz" -C /opt/ecube --strip-components=1
 sudo chown -R ecube:ecube /opt/ecube
 ```
 
-### 5.4 Prepare PostgreSQL (Installer-equivalent wizard flow)
+### 5.6 Prepare PostgreSQL
 
-To mirror current `install.sh` behavior, create a PostgreSQL superuser for the
-setup wizard and let the wizard create the ECUBE app role/database.
+Create a PostgreSQL superuser that the setup wizard uses to provision the ECUBE application role and database. 
+
+#### Create the PostgreSQL superuser 
+
+This role is used only by the ECUBE setup wizard to create the application role
+and database. Choose a name and password that match what you will enter in the
+setup wizard (`/setup` → database provisioning step).
 
 ```bash
 sudo -u postgres psql <<'SQL'
@@ -261,7 +314,20 @@ If the role already exists:
 sudo -u postgres psql -c "ALTER ROLE ecubeadmin WITH SUPERUSER LOGIN PASSWORD 'change-me-strong';"
 ```
 
-### 5.5 Build backend runtime
+#### Create the ECUBE application role and database
+
+It is recommended to use the setup wizard shown the first time the ECUBE web frontend is visited. The setup wizard will use the superuser credentials entered at `/setup` to create the `ecube` role and `ecube` database automatically.
+
+Optionally, create the application role and database yourself before starting the service, then set `DATABASE_URL` directly in `.env`:
+
+```bash
+sudo -u postgres psql <<'SQL'
+CREATE ROLE ecube WITH LOGIN PASSWORD 'change-me-strong';
+CREATE DATABASE ecube OWNER ecube;
+SQL
+```
+
+### 5.7 Build backend runtime
 
 ```bash
 sudo -u ecube python3.11 -m venv /opt/ecube/venv
@@ -269,7 +335,7 @@ sudo -u ecube /opt/ecube/venv/bin/pip install --upgrade pip setuptools wheel
 sudo -u ecube /opt/ecube/venv/bin/pip install -e /opt/ecube
 ```
 
-### 5.6 Write backend `.env`
+### 5.8 Write backend `.env`
 
 Installer-equivalent path (wizard-managed DB provisioning):
 
@@ -277,7 +343,7 @@ Installer-equivalent path (wizard-managed DB provisioning):
 sudo tee /opt/ecube/.env > /dev/null <<'EOF_ENV'
 SECRET_KEY=replace-with-random-hex
 DATABASE_URL=
-SETUP_DEFAULT_ADMIN_USERNAME=ecubeadmin
+SETUP_DEFAULT_ADMIN_USERNAME=<superuser-name-used-in-5.6>
 TRUST_PROXY_HEADERS=true
 API_ROOT_PATH=/api
 EOF_ENV
@@ -292,7 +358,7 @@ Alternative manual path (operator-managed DB connection):
 sudo tee /opt/ecube/.env > /dev/null <<'EOF_ENV'
 SECRET_KEY=replace-with-random-hex
 DATABASE_URL=postgresql://ecube:change-me-strong@localhost:5432/ecube
-SETUP_DEFAULT_ADMIN_USERNAME=ecubeadmin
+SETUP_DEFAULT_ADMIN_USERNAME=<superuser-name-used-in-5.6>
 TRUST_PROXY_HEADERS=true
 API_ROOT_PATH=/api
 EOF_ENV
@@ -304,7 +370,7 @@ sudo chmod 600 /opt/ecube/.env
 After service start, open `/setup` and enter the PostgreSQL superuser
 credentials (for example, `ecubeadmin`) in the database provisioning step.
 
-### 5.7 Generate certificates (nginx TLS terminator)
+### 5.9 Generate certificates (nginx TLS terminator)
 
 The command below creates a **self-signed** certificate with `CN=$(hostname -f)`.
 This means clients should access ECUBE using that hostname (for example,
@@ -338,7 +404,7 @@ Notes:
 - This mirrors installer defaults (`--cert-validity 730`).
 - If you use an IP literal for host identity (especially IPv6), use IP SAN entries instead of `DNS:` SAN entries.
 
-### 5.8 Create backend systemd unit (HTTP loopback behind nginx)
+### 5.10 Create backend systemd unit (HTTP loopback behind nginx)
 
 ```bash
 sudo tee /etc/systemd/system/ecube.service > /dev/null <<'EOF_UNIT'
@@ -371,7 +437,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now ecube.service
 ```
 
-### 5.9 Configure frontend and reverse proxy (same host)
+### 5.11 Configure frontend and reverse proxy (same host)
 
 ```bash
 sudo mkdir -p /opt/ecube/www
@@ -427,7 +493,7 @@ sudo systemctl enable --now nginx
 sudo systemctl reload nginx
 ```
 
-### 5.10 Production certificate replacement (recommended)
+### 5.12 Production certificate replacement (recommended)
 
 Replace self-signed certificates with CA-signed certificates before production cutover.
 
@@ -436,13 +502,19 @@ split-host notes, and permissions), see:
 
 - [05-tls-certificates-and-letsencrypt.md](05-tls-certificates-and-letsencrypt.md)
 
-### 5.11 Validate
+### 5.13 Validate
 
 ```bash
 curl -fsk https://localhost/api/health
 ```
 
-### 5.12 Continue in web UI (required)
+This should return the following if everything has been configured.
+
+```json
+{"status":"ok"}
+```
+
+### 5.14 Continue in web UI (required)
 
 After the service and nginx validate successfully, open the web UI and complete initial configuration:
 
@@ -486,9 +558,9 @@ Follow sections 5.1 to 5.6 with these differences:
 - For manual DB configuration: set `DATABASE_URL` to the DB host.
 - For wizard-managed DB configuration: leave `DATABASE_URL=` blank and configure it in `/setup` from a frontend-enabled host.
 - backend serves HTTPS directly (no local nginx).
-- backend `.env` includes:
-  - `TRUST_PROXY_HEADERS=true`
-  - `API_ROOT_PATH=/api`
+- **Required for split-host operation:** backend `.env` must include:
+  - `TRUST_PROXY_HEADERS=true` (so backend trusts `X-Forwarded-*` headers from frontend proxy)
+  - `API_ROOT_PATH=/api` (so OpenAPI schema reflects the mount prefix)
 
 Use TLS in systemd unit:
 
@@ -626,17 +698,104 @@ If the original install used a custom `--install-dir`, run the script from that 
 > **Warning:** `--drop-database` is destructive and irreversible.
 > Before dropping the database, perform and verify a backup (for example, a
 > `pg_dump` backup restored successfully in a test environment).
+>
+> **Remote Database Note:** When `--drop-database` targets a remote PostgreSQL instance, superuser-role cleanup may require credentials for `SETUP_DEFAULT_ADMIN_USERNAME` (from `.env`) via `.pgpass` or `PGPASSWORD`. Ensure these credentials are available on the host where `install.sh --uninstall` is run.
+### 8.3.1 Manual Teardown (Step-by-Step)
 
-For strictly manual teardown, remove:
+If for any reason the installer script is not available or you prefer manual removal, follow these steps:
 
-- `ecube.service` systemd unit and reload systemd
-- `/etc/sudoers.d/ecube-user-mgmt` sudoers policy (if installed)
-- `/etc/pam.d/ecube` PAM configuration (if installed)
-- `/opt/ecube` application files
-- `/var/lib/ecube` runtime directory
-- nginx ECUBE site config/symlinks (if present)
-- ECUBE service user/group and firewall rules (if created for this deployment)
-- PostgreSQL role/database only after verified backup
+#### 1. Stop and disable the ECUBE service
+
+```bash
+sudo systemctl stop ecube.service
+sudo systemctl disable ecube.service
+sudo rm /etc/systemd/system/ecube.service
+sudo systemctl daemon-reload
+```
+
+#### 2. Remove sudoers policy
+
+```bash
+sudo rm -f /etc/sudoers.d/ecube-user-mgmt
+sudo visudo -cf /etc/sudoers.d  # optional validation
+```
+
+#### 3. Remove PAM configuration
+
+```bash
+sudo rm -f /etc/pam.d/ecube
+```
+
+#### 4. Stop nginx (if running) and remove ECUBE site config
+
+```bash
+sudo systemctl stop nginx  # optional; may be used by other services
+sudo rm -f /etc/nginx/sites-enabled/ecube
+sudo rm -f /etc/nginx/sites-available/ecube
+sudo systemctl reload nginx  # reload if still running
+```
+
+#### 5. Remove application installation directory
+
+```bash
+sudo rm -rf /opt/ecube
+```
+
+#### 6. Remove runtime and log directories
+
+```bash
+sudo rm -rf /var/lib/ecube
+sudo rm -rf /var/log/ecube
+```
+
+#### 7. Remove managed mount roots (optional)
+
+Only remove if these directories were created solely for ECUBE and are no longer needed:
+
+```bash
+sudo rm -rf /nfs /smb
+```
+
+#### 8. Remove service account and group
+
+```bash
+sudo userdel -r ecube  # -r removes home directory
+sudo groupdel ecube-www 2>/dev/null || true  # optional group if created
+```
+
+#### 9. Clean up firewall rules (if using `ufw`)
+
+```bash
+sudo ufw delete allow 443/tcp  # if configured
+sudo ufw delete allow 8443/tcp  # if configured
+sudo ufw delete allow from <admin-cidr> to any port 22 proto tcp  # if configured
+```
+
+#### 10. PostgreSQL cleanup (optional, after verified backup)
+
+```bash
+# Back up the database first
+sudo -u postgres pg_dump ecube > /tmp/ecube-backup.sql
+
+# Drop the database
+sudo -u postgres psql -c "DROP DATABASE IF EXISTS ecube;"
+
+# Drop the application role
+sudo -u postgres psql -c "DROP ROLE IF EXISTS ecube;"
+
+# Drop the setup superuser role (if applicable)
+sudo -u postgres psql -c "DROP ROLE IF EXISTS ecubeadmin;"
+```
+
+For remote PostgreSQL instances, use `psql` with connection parameters or `.pgpass` credentials:
+
+```bash
+# Example with explicit host
+psql -h db.example.com -U ecubeadmin -d postgres \
+  -c "DROP DATABASE IF EXISTS ecube; DROP ROLE IF EXISTS ecube; DROP ROLE IF EXISTS ecubeadmin;"
+```
+
+> **Warning:** Database removal is irreversible. Always test your backup restoration before removing the live database.
 
 ---
 

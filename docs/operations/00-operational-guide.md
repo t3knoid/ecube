@@ -209,7 +209,7 @@ Use this guide to find the right document for your task:
 | Folder | Description |
 |--------|-------------|
 | [development/](../development/00-development-guide.md) | Developer setup, repository layout, testing, architecture, coding conventions |
-| [testing/](../testing/03-qa-testing-guide-baremetal.md) | QA testing guide (bare-metal) and test-case tracking spreadsheet |
+| [testing/](../testing/03-qa-testing-guide.md) | QA testing guide and test-case tracking spreadsheet |
 | [requirements/](../requirements/00-overview.md) | Requirements documents |
 
 ## Design Documents

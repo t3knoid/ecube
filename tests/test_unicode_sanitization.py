@@ -194,7 +194,6 @@ class TestMountsUnicodeSanitization:
             json={
                 "type": "NFS",
                 "remote_path": "192.168.1.1:/export\x00s",
-                "local_mount_point": "/mnt/evidence",
             },
         )
         assert response.status_code == 422
@@ -204,7 +203,6 @@ class TestMountsUnicodeSanitization:
         payload = json.dumps({
             "type": "NFS",
             "remote_path": "server\ud800:/share",
-            "local_mount_point": "/mnt/test",
         }).encode("utf-8", "surrogatepass")
         response = manager_client.post(
             "/mounts",
@@ -220,7 +218,6 @@ class TestMountsUnicodeSanitization:
             json={
                 "type": "NFS",
                 "remote_path": "\x00\x00",
-                "local_mount_point": "/mnt/test",
             },
         )
         assert response.status_code == 422

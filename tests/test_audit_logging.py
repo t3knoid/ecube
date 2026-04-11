@@ -143,7 +143,6 @@ class TestMountAuditLogging:
                 json={
                     "type": "NFS",
                     "remote_path": "1.2.3.4:/audit-data",
-                    "local_mount_point": "/mnt/audit",
                 },
             )
         assert response.status_code == 200
@@ -392,7 +391,6 @@ class TestAuthorizationDeniedAuditLogging:
             json={
                 "type": "NFS",
                 "remote_path": "1.2.3.4:/data",
-                "local_mount_point": "/mnt/a",
             },
         )
         assert response.status_code == 403
