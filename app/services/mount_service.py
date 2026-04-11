@@ -128,11 +128,30 @@ class LinuxMountProvider:
         try:
             default_timeout = settings.subprocess_timeout_seconds
             timeout = default_timeout if timeout_seconds is None or timeout_seconds <= 0 else timeout_seconds
-            cmd = _with_host_mount_namespace([settings.mountpoint_binary_path, "-q", local_mount_point])
-            result = subprocess.run(cmd, capture_output=True, timeout=timeout)
-            return result.returncode == 0
+            if not _in_host_mount_namespace():
+                local_path = os.path.normpath(local_mount_point)
+                cmd = _with_sudo([settings.mount_binary_path, "-N", "/proc/1/ns/mnt"])
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+                if result.returncode != 0:
+                    error = (result.stderr or result.stdout or "").strip() or "mount list check failed"
+                    logger.warning("Host namespace mount list check failed: %s", error)
+                    return self._check_mounted_with_mountpoint(local_mount_point, timeout)
+
+                stdout = result.stdout if isinstance(result.stdout, str) else ""
+                if stdout:
+                    return f" on {local_path} " in stdout
+
+                # Some mocked/test environments don't provide mount output.
+                return self._check_mounted_with_mountpoint(local_mount_point, timeout)
+
+            return self._check_mounted_with_mountpoint(local_mount_point, timeout)
         except Exception:
             return None
+
+    def _check_mounted_with_mountpoint(self, local_mount_point: str, timeout: float) -> Optional[bool]:
+        cmd = _with_sudo([settings.mountpoint_binary_path, "-q", local_mount_point])
+        result = subprocess.run(cmd, capture_output=True, timeout=timeout)
+        return result.returncode == 0
 
 
 def _resolve_mount_nfs_binary() -> Optional[str]:
@@ -148,6 +167,17 @@ def _with_sudo(cmd: list[str]) -> list[str]:
     if settings.use_sudo and os.geteuid() != 0:
         return ["sudo", "-n", *cmd]
     return cmd
+
+
+def _with_mount_namespace_flag(cmd: list[str]) -> Optional[list[str]]:
+    """Add util-linux namespace flag for mount/umount commands when applicable."""
+    if not cmd:
+        return None
+
+    binary = os.path.basename(cmd[0])
+    if binary in ("mount", "umount"):
+        return [cmd[0], "-N", "/proc/1/ns/mnt", *cmd[1:]]
+    return None
 
 
 def _in_host_mount_namespace() -> bool:
@@ -171,6 +201,10 @@ def _in_host_mount_namespace() -> bool:
 def _with_host_mount_namespace(cmd: list[str]) -> list[str]:
     if _in_host_mount_namespace():
         return _with_sudo(cmd)
+
+    ns_flag_cmd = _with_mount_namespace_flag(cmd)
+    if ns_flag_cmd is not None:
+        return _with_sudo(ns_flag_cmd)
 
     nsenter = shutil.which("nsenter")
     if not nsenter:
