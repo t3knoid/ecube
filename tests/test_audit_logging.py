@@ -100,6 +100,7 @@ class TestDriveAuditLogging:
         assert entry is not None
         assert entry.user == "manager-user"
         assert entry.drive_id == drive.id
+        assert entry.project_id == "PROJ-B"
         assert entry.details["actor"] == "manager-user"
         assert entry.details["drive_id"] == drive.id
         assert entry.details["existing_project_id"] == "PROJ-A"
@@ -282,6 +283,8 @@ class TestJobAuditLogging:
         entry = _audit_by_action(db, "PROJECT_ISOLATION_VIOLATION")
         assert entry is not None
         assert entry.user == "test-user"
+        assert entry.project_id == "PROJ-DIFFERENT"
+        assert entry.drive_id == drive.id
         assert entry.details["actor"] == "test-user"
         assert entry.details["existing_project_id"] == "PROJ-OTHER"
         assert entry.details["requested_project_id"] == "PROJ-DIFFERENT"
@@ -306,6 +309,8 @@ class TestJobAuditLogging:
         assert entry is not None
         assert entry.user == "test-user"
         assert entry.job_id == job_id
+        assert entry.project_id == "PROJ-AUDIT"
+        assert entry.drive_id is not None
 
     def test_verify_job_logs_actor(self, client, db):
         self._add_drive(db, "PROJ-AUDIT", "USB-AUDIT-VERIFY")
@@ -327,6 +332,8 @@ class TestJobAuditLogging:
         assert entry is not None
         assert entry.user == "test-user"
         assert entry.job_id == job_id
+        assert entry.project_id == "PROJ-AUDIT"
+        assert entry.drive_id is not None
 
     def test_create_manifest_logs_actor(self, client, db):
         self._add_drive(db, "PROJ-AUDIT", "USB-AUDIT-MANIFEST")
@@ -347,6 +354,8 @@ class TestJobAuditLogging:
         assert entry is not None
         assert entry.user == "test-user"
         assert entry.job_id == job_id
+        assert entry.project_id == "PROJ-AUDIT"
+        assert entry.drive_id is not None
 
 
 # ---------------------------------------------------------------------------
