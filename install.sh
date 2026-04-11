@@ -1001,6 +1001,7 @@ _install_os_user_mgmt_sudoers() {
 ecube ALL=(root) NOPASSWD: /usr/sbin/useradd, /usr/sbin/usermod, /usr/sbin/userdel, /usr/sbin/groupadd, /usr/sbin/groupdel, /usr/sbin/chpasswd
 ecube ALL=(root) NOPASSWD: /bin/mount, /bin/umount, /sbin/mount.nfs, /usr/sbin/mount.nfs
 ecube ALL=(root) NOPASSWD: /bin/sync, /sbin/mkfs.ext4, /sbin/mkfs.exfat
+ecube ALL=(root) NOPASSWD: /bin/mkdir, /bin/chown, /usr/bin/chown
 EOF_SUDOERS
   chmod 0440 "${sudoers_tmp}"
   chown root:root "${sudoers_tmp}"
@@ -1309,6 +1310,13 @@ install_backend() {
   run mkdir -p /var/log/ecube
   run chown -R ecube:ecube /var/log/ecube
   run chmod 750 /var/log/ecube
+
+  # 4c. Managed network mount roots used for auto-generated mountpoints.
+  # Must be service-account owned so mountpoint create/remove does not rely on
+  # root-owned directories.
+  run mkdir -p /nfs /smb
+  run chown ecube:ecube /nfs /smb
+  run chmod 755 /nfs /smb
 
   # 5. Python virtual environment
   # Run venv creation and pip installs as the ecube user so all files under

@@ -669,15 +669,15 @@ Accessible from the Drive Management screen via a "Manage Hubs" button. Visible 
 │  ◉ Mounts    │  │ ID │ Type │ Remote Path              │ Local Mount      │  │
 │  ◎ Jobs      │  │    │      │                          │                  │  │
 │              │  ├────┼──────┼──────────────────────────┼──────────────────┤  │
-│              │  │ 1  │ NFS  │ nfs.example.com:/evidence│ /mnt/evidence    │  │
+│              │  │ 1  │ NFS  │ nfs.example.com:/evidence│ /nfs/evidence    │  │
 │              │  │    │      │ Status: 🟢 MOUNTED       │ Checked: 14:30   │  │
 │              │  │    │      │              [ Validate ] │ [ Remove ]       │  │
 │              │  ├────┼──────┼──────────────────────────┼──────────────────┤  │
-│              │  │ 2  │ SMB  │ //fileserver/cases       │ /mnt/cases       │  │
+│              │  │ 2  │ SMB  │ //fileserver/cases       │ /smb/cases       │  │
 │              │  │    │      │ Status: 🔴 ERROR         │ Checked: 14:30   │  │
 │              │  │    │      │              [ Validate ] │ [ Remove ]       │  │
 │              │  ├────┼──────┼──────────────────────────┼──────────────────┤  │
-│              │  │ 3  │ NFS  │ nfs2.example.com:/archive│ /mnt/archive     │  │
+│              │  │ 3  │ NFS  │ nfs2.example.com:/archive│ /nfs/archive     │  │
 │              │  │    │      │ Status: 🟢 MOUNTED       │ Checked: 14:30   │  │
 │              │  │    │      │              [ Validate ] │ [ Remove ]       │  │
 │              │  └────┴──────┴──────────────────────────┴──────────────────┘  │
@@ -695,7 +695,8 @@ Accessible from the Drive Management screen via a "Manage Hubs" button. Visible 
 │  Protocol:    (●) NFS    ( ) SMB                              │
 │                                                               │
 │  Remote Path:       [ nfs.example.com:/evidence            ]  │
-│  Local Mount Point: [ /mnt/evidence                        ]  │
+│  Local Mount Point: [ Auto-generated after create          ]  │
+│  Example result:    [ /nfs/evidence                        ]  │
 │                                                               │
 │  ┌─ SMB Credentials (shown only when SMB selected) ────────┐ │
 │  │  Username:  [ svc-ecube                               ]  │ │
@@ -755,7 +756,7 @@ Accessible from the Drive Management screen via a "Manage Hubs" button. Visible 
 │                                                                              │
 │  ┌─ Overview ──────────────────────────────────────────────────────────┐     │
 │  │  Project:      PROJ-042             Evidence #:  EV-2026-003       │     │
-│  │  Source:       /mnt/evidence/case-003                               │     │
+│  │  Source:       /nfs/evidence/case-003                               │     │
 │  │  Target:       /mnt/usb/drive1                                      │     │
 │  │  Drive:        #1 (4C530000220226...)    Threads: 4                 │     │
 │  │  Retries:      3 max / 1s delay                                     │     │
@@ -817,8 +818,8 @@ Accessible from the Drive Management screen via a "Manage Hubs" button. Visible 
 │                                                                              │
 │  Step 2:  Source                                                             │
 │  ─────────────────                                                           │
-│  Source Mount:      [ /mnt/evidence  (NFS — MOUNTED)     ▾ ]                 │
-│  Source Path:       [ /mnt/evidence/case-003               ]                 │
+│  Source Mount:      [ /nfs/evidence  (NFS — MOUNTED)     ▾ ]                 │
+│  Source Path:       [ /nfs/evidence/case-003               ]                 │
 │                                                                              │
 │  Step 3:  Target Drive                                                       │
 │  ─────────────────────                                                       │
@@ -1002,7 +1003,7 @@ and management remain available through admin API endpoints only.
 │              │  │  Device         │ Mount Point     │ FS Type │ Options     │ │
 │              │  │  /dev/sda1      │ /               │ ext4    │ rw,relatime │ │
 │              │  │  /dev/sdg1      │ /mnt/usb/drive1 │ ext4    │ rw,nosuid   │ │
-│              │  │  nfs.example... │ /mnt/evidence   │ nfs4    │ rw,vers=4.1 │ │
+│              │  │  nfs.example... │ /nfs/evidence   │ nfs4    │ rw,vers=4.1 │ │
 │              │  └──────────────────────────────────────────────────────────┘  │
 │              │                                                               │
 └──────────────┴───────────────────────────────────────────────────────────────┘
@@ -1056,7 +1057,7 @@ and management remain available through admin API endpoints only.
 │  │  Job ID:          1                                                     │ │
 │  │  Status:          COMPLETED                                             │ │
 │  │  Project:         PROJ-001                                              │ │
-│  │  Source:          /mnt/evidence/case-001                                 │ │
+│  │  Source:          /nfs/evidence/case-001                                 │ │
 │  │  Target:          /mnt/usb/drive4                                       │ │
 │  │  Total Bytes:     13,312,196,608                                        │ │
 │  │  Copied Bytes:    13,312,196,608                                        │ │

@@ -415,14 +415,18 @@ curl -sk https://localhost:8443/introspection/mounts \
 
 ```bash
 # Add an NFS mount
-curl -sk -X POST https://localhost:8443/mounts \
+MOUNT_JSON=$(curl -sk -X POST https://localhost:8443/mounts \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "type": "NFS",
-    "remote_path": "10.0.0.5:/evidence",
-    "local_mount_point": "/mnt/evidence"
-  }' | jq
+    "remote_path": "10.0.0.5:/evidence"
+  }')
+
+# Capture the local mount point returned by ECUBE
+MOUNT_POINT=$(echo "$MOUNT_JSON" | jq -r '.local_mount_point')
+echo "Mount point: $MOUNT_POINT"
+echo "$MOUNT_JSON" | jq
 
 # List all mounts
 curl -sk https://localhost:8443/mounts \
@@ -536,13 +540,14 @@ curl -sk https://localhost:8443/admin/hubs \
 
 ```bash
 # Create a copy job targeting the initialized USB drive (replace {drive_id})
+# Use the mount path returned by POST /mounts
 curl -sk -X POST https://localhost:8443/jobs \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "project_id": "PROJ-QA-001",
     "evidence_number": "EV-001",
-    "source_path": "/mnt/evidence/case-001",
+    "source_path": "'"$MOUNT_POINT""'/case-001",
     "drive_id": "{drive_id}",
     "target_mount_path": "/mnt/usb/{drive_id}",
     "thread_count": 4
@@ -990,7 +995,7 @@ Walk through the complete data export lifecycle:
    ls -la /mnt/smb-evidence/
    ```
 
-2. **Add the mount** via `POST /mounts`.
+2. **Add the mount** via `POST /mounts` and record the returned `local_mount_point`.
 
 3. **Plug in a USB drive** and wait for auto-discovery.
 
@@ -1006,7 +1011,7 @@ Walk through the complete data export lifecycle:
 
 5. **Initialize the drive** — `POST /drives/{drive_id}/initialize` with `project_id: "PROJ-E2E"`.
 
-6. **Create a job** — `POST /jobs` with `source_path` pointing to the test files.
+6. **Create a job** — `POST /jobs` with `source_path` set under the `local_mount_point` returned by step 2.
 
 7. **Start the job** — `POST /jobs/{job_id}/start`.
 
