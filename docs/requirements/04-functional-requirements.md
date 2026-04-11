@@ -4,7 +4,7 @@
 |---|---|
 | Title | Functional Requirements |
 | Purpose | Defines what ECUBE must do at the functional level, covering required behavior, constraints, and acceptance criteria. |
-| Updated on | 04/08/26 |
+| Updated on | 04/11/26 |
 | Audience | Stakeholders, auditors, product managers, reviewers, and QA teams. |
 
 ## 4.1 Audience and Scope
@@ -19,6 +19,7 @@
 ### 4.1.2 Scope
 
 - Define required functional behavior for drive lifecycle, project isolation, job handling, copy operations, mounts, manifests, auditability, and discovery behavior.
+- Define required functional behavior for the in-app Help system and its user-manual source-of-truth pipeline.
 - Define operational constraints and policy rules that implementations must satisfy.
 - Define acceptance criteria that allow reviewers to determine whether the product behavior is compliant.
 
@@ -247,6 +248,37 @@ Discovery and refresh behavior must preserve protected drive states and policy g
 Acceptance criteria:
 
 - Discovery refresh does not silently defeat project isolation.
+
+## 4.10 In-App Help System Requirements
+
+ECUBE must provide an in-app Help system suitable for end users and operational staff.
+
+Help content requirements:
+
+- The canonical content source must be `docs/operations/13-user-manual.md`.
+- The in-app Help artifact must be generated from that source through a deterministic build step.
+- The generated Help artifact must be a static HTML file included in frontend build outputs.
+- Help content included in the application must be curated for end-user workflows and exclude operator-only installation internals.
+
+UI behavior requirements:
+
+- The authenticated application shell must expose a Help entry point.
+- Activating Help must open a modal or equivalent in-app dialog/panel without leaving the current page context.
+- Help access must be available to authenticated users unless explicitly restricted by policy.
+
+Build and QA requirements:
+
+- A dedicated script must generate static help HTML from `docs/operations/13-user-manual.md`.
+- The script must be runnable locally so generated output can be QA-reviewed before CI packaging.
+- CI packaging must invoke the same help-generation script used in local QA.
+- Packaging flows must ensure the final shipped help HTML matches the output of the tested generation path.
+
+Acceptance criteria:
+
+- Running the help-generation script locally produces a static HTML help file from `docs/operations/13-user-manual.md`.
+- The generated help file is included in frontend build output and release package artifacts.
+- Authenticated users can open Help from the app shell and view generated content in-app.
+- CI uses the same help-generation script and does not use a separate manual generation path.
 
 ## References
 

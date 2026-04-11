@@ -180,6 +180,24 @@ docker compose -f docker-compose.ecube-win.yml down -v
 - In CI, Playwright uses `npm run preview` as web server command.
 - Locally, Playwright runs `npm run build && npm run preview` through `webServer` config.
 - Playwright HTML report output directory: `frontend/playwright-report/`.
+- Include help-system coverage in frontend E2E when help functionality changes (for example, `frontend/e2e/help.spec.js`).
+
+### 5.1 Help Generation QA Preflight
+
+When validating help-system changes, run the dedicated help-generation script before E2E execution so QA checks the same generated artifact expected in CI packaging.
+
+Example sequence:
+
+```bash
+# from repository root
+bash scripts/build-help.sh
+
+cd frontend
+npm run build
+npx playwright test frontend/e2e/help.spec.js
+```
+
+If the repository uses a JavaScript variant of the generator, replace the script call with the project-standard equivalent (for example, `node scripts/build-help.mjs`).
 
 ---
 
