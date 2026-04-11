@@ -395,6 +395,15 @@ Open the interactive **Swagger UI** at: `https://localhost:8443/docs`
 # Health (no auth)
 curl -sk https://localhost:8443/health | jq
 
+# Liveness (no auth)
+curl -sk https://localhost:8443/health/live | jq
+
+# Readiness (no auth)
+curl -sk https://localhost:8443/health/ready | jq
+
+# Public version metadata (no auth)
+curl -sk https://localhost:8443/introspection/version | jq
+
 # System health (CPU, memory, DB status)
 curl -sk https://localhost:8443/introspection/system-health \
   -H "Authorization: Bearer $TOKEN" | jq
@@ -431,6 +440,14 @@ echo "$MOUNT_JSON" | jq
 
 # List all mounts
 curl -sk https://localhost:8443/mounts \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# Validate a specific mount (replace {mount_id})
+curl -sk -X POST https://localhost:8443/mounts/{mount_id}/validate \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# Validate all mounts
+curl -sk -X POST https://localhost:8443/mounts/validate \
   -H "Authorization: Bearer $TOKEN" | jq
 
 # Remove a mount (replace {mount_id})
@@ -575,6 +592,20 @@ curl -sk -X POST https://localhost:8443/jobs/{job_id}/verify \
 # Generate manifest
 curl -sk -X POST https://localhost:8443/jobs/{job_id}/manifest \
   -H "Authorization: Bearer $TOKEN" | jq
+
+# Create a job with an HTTPS callback sink
+curl -sk -X POST https://localhost:8443/jobs \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "project_id": "PROJ-QA-CB-001",
+    "evidence_number": "EV-CB-001",
+    "source_path": "'"$MOUNT_POINT""'/case-001",
+    "drive_id": "{drive_id}",
+    "target_mount_path": "/mnt/usb/{drive_id}",
+    "thread_count": 4,
+    "callback_url": "https://example.com/webhook"
+  }' | jq
 ```
 
 ### 11.5 Audit Logs
@@ -817,6 +848,34 @@ curl -sk -X POST https://localhost:8443/setup/database/test-connection \
 # Expected: 422, host must be a hostname or IP address
 ```
 
+### 11.11 Runtime Configuration & Service Restart
+
+These endpoints are admin-only and support runtime tuning plus explicit service restart requests.
+
+```bash
+# View current runtime configuration
+curl -sk https://localhost:8443/admin/configuration \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# Update a runtime-only setting
+curl -sk -X PUT https://localhost:8443/admin/configuration \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"log_level": "DEBUG"}' | jq
+
+# Update a setting that requires restart metadata
+curl -sk -X PUT https://localhost:8443/admin/configuration \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"db_pool_recycle_seconds": 120}' | jq
+
+# Request a restart with explicit confirmation
+curl -sk -X POST https://localhost:8443/admin/configuration/restart \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"confirm": true}' | jq
+```
+
 ---
 
 ## 12. QA Test Cases
@@ -855,6 +914,18 @@ curl -sk -X POST https://localhost:8443/setup/database/test-connection \
 | 9 | Processor creates job | `POST /jobs` with processor token | 200 |
 | 10 | All four roles read job files | `GET /jobs/{job_id}/files` with admin/manager/processor/auditor tokens | 200 for each role |
 | 11 | All error responses have `trace_id` | Inspect any 4xx/5xx JSON body | `trace_id` field present |
+
+### 12.2.1 Session Lifecycle and Token Expiry
+
+Validate authenticated-session behavior from the UI shell and API access patterns.
+
+| # | Test | How | Expected |
+|---|------|-----|----------|
+| 1 | Authenticated shell shows current identity | Log in through the UI as `qa-admin` or another QA role | Current username, role badge, and remaining session indicator are visible in the shell |
+| 2 | Token works until expiry | Log in, then call an authenticated endpoint such as `GET /drives` with the issued token | 200 until token expiry or explicit logout |
+| 3 | Expired token is rejected | Generate a deliberately expired token or wait for expiry, then call `GET /drives` | 401, `UNAUTHORIZED`; UI should redirect or prompt for re-authentication |
+| 4 | Invalid token does not grant shell access | Replace a valid token with a malformed token in browser/session state or API call | Protected endpoints return 401 and the UI does not continue as authenticated |
+| 5 | Logout ends the active session | Use the UI `Log Out` action, then revisit a protected page | User is returned to the login screen and protected pages no longer load without re-authentication |
 
 ### 12.3 Project Isolation
 
@@ -949,6 +1020,18 @@ curl -sk -X POST https://localhost:8443/setup/database/test-connection \
 | 16 | Labels survive discovery resync | Set hub `location_hint` and port `friendly_label`, then `POST /drives/refresh` | Labels remain unchanged after resync |
 | 17 | Discovery populates vendor/product IDs | Run `POST /drives/refresh` with USB hardware connected | Hub and port records show `vendor_id` and `product_id` from sysfs |
 
+### 12.4.5 Mount Validation and Connectivity
+
+| # | Test | How | Expected |
+|---|------|-----|----------|
+| 1 | Validate mounted NFS share | Create an NFS mount, then `POST /mounts/{mount_id}/validate` | 200, mount remains `MOUNTED`, `last_checked_at` advances |
+| 2 | Validate mounted SMB share | Create an SMB mount, then `POST /mounts/{mount_id}/validate` | 200, mount remains `MOUNTED` |
+| 3 | Validate disconnected mount | Break connectivity or unmount externally, then `POST /mounts/{mount_id}/validate` | 200, mount status becomes `UNMOUNTED` or `ERROR` with a descriptive error |
+| 4 | Validate all mounts reports mixed states | Register one reachable mount and one broken mount, then `POST /mounts/validate` | 200, response includes updated status for each mount |
+| 5 | Validate missing mount | `POST /mounts/9999/validate` | 404, `NOT_FOUND` |
+| 6 | Processor cannot validate mounts | `POST /mounts/{mount_id}/validate` with processor token | 403, `FORBIDDEN` |
+| 7 | Mount validation audit trail | Validate a mount, then query `GET /audit?action=MOUNT_VALIDATED` | Audit entry records actor, mount id, and resulting status |
+
 ### 12.5 USB Hardware Validation
 
 These tests exercise real hardware paths that must be validated during manual QA on systems with attached USB hardware.
@@ -1033,6 +1116,19 @@ Walk through the complete data export lifecycle:
 
 13. **Check audit trail** — `GET /audit` — confirm the complete chain:
     `MOUNT_ADDED → PORT_ENABLED → DRIVE_FORMATTED → DRIVE_INITIALIZED → JOB_CREATED → JOB_STARTED → JOB_COMPLETED → DRIVE_EJECT_PREPARED`
+
+### 12.6.1 Job Callback URL Notifications
+
+Use a controlled HTTPS webhook sink when validating callback behavior.
+
+| # | Test | How | Expected |
+|---|------|-----|----------|
+| 1 | HTTPS callback URL accepted on job create | `POST /jobs` with `"callback_url": "https://example.com/webhook"` | 200, job response echoes `callback_url` |
+| 2 | HTTP callback URL rejected | `POST /jobs` with `"callback_url": "http://example.com/webhook"` | 422, validation error mentions HTTPS |
+| 3 | Callback URL with embedded credentials rejected | `POST /jobs` with `"callback_url": "https://user:pass@example.com/hook"` | 422, validation error rejects URL credentials |
+| 4 | Callback URL with no hostname rejected | `POST /jobs` with malformed HTTPS URL such as `"https:///path-only"` | 422 |
+| 5 | Terminal-state callback delivered | Create a job with a reachable HTTPS webhook sink, run job to completion, inspect sink | Sink receives terminal-state payload and job completes normally |
+| 6 | Callback delivery audit trail | After terminal-state delivery, query `GET /audit?action=CALLBACK_SENT` | Audit entry records delivery result without leaking secret material |
 
 ### 12.7 Error Handling
 
@@ -1156,6 +1252,35 @@ All admin log endpoints require the `admin` role.
 | 15 | Download log — path traversal blocked | `GET /admin/logs/../../../etc/passwd` | Rejected (400/404/422), no file disclosure |
 | 16 | Download log — success audit | Download valid file as admin, then query audit | `LOG_FILE_DOWNLOADED` entry includes requested filename |
 
+### 12.10.1 Runtime Configuration
+
+Runtime configuration endpoints are admin-only.
+
+| # | Test | How | Expected |
+|---|------|-----|----------|
+| 1 | Get configuration — admin | `GET /admin/configuration` with admin token | 200, response includes editable settings such as `log_level` and DB pool fields |
+| 2 | Get configuration — non-admin denied | `GET /admin/configuration` with manager/processor/auditor token | 403, `FORBIDDEN` |
+| 3 | Update runtime-only setting | `PUT /admin/configuration` with `{"log_level": "DEBUG"}` | 200, `status: "updated"`, `changed_settings` includes `log_level`, `restart_required` is `false` |
+| 4 | Update restart-required setting | `PUT /admin/configuration` with `{"db_pool_recycle_seconds": 120}` | 200, `restart_required` is `true` and the response lists the restart-required setting |
+| 5 | Reject empty update payload | `PUT /admin/configuration` with `{}` | 422 |
+| 6 | Reject unwritable log file path | `PUT /admin/configuration` with `{"log_file": "/var/log/ecube/denied.log"}` when path is not writable | 422, message indicates the log file cannot be written |
+| 7 | Configuration update audit trail | Update configuration, then query `GET /audit?action=CONFIGURATION_UPDATED` | Audit entry lists changed settings without leaking sensitive paths or secrets |
+| 8 | Restart requires confirmation | `POST /admin/configuration/restart` with `{"confirm": false}` | 400 |
+| 9 | Restart request accepted when confirmed | `POST /admin/configuration/restart` with `{"confirm": true}` | 200, `status: "restart_requested"`, `service: "ecube"` |
+
+### 12.10.2 Help System
+
+Run these checks when the tested build includes the in-app Help feature.
+
+| # | Test | How | Expected |
+|---|------|-----|----------|
+| 1 | Help trigger is visible in authenticated shell | Sign in to the application and inspect the shell/header | A Help trigger is visible without navigating away from the current page |
+| 2 | Help opens in-app | Activate the Help trigger from any primary page | Help opens in a modal or equivalent in-app panel |
+| 3 | Help does not break current workflow context | Open Help while on Drives, Mounts, Jobs, or Audit, then close it | Closing Help returns to the same page and preserved workflow context |
+| 4 | Help content is curated and user-facing | Review Help content in the modal | Content is derived from the user manual and excludes installer-only or operator-only internals |
+| 5 | Open full help document works | Use the Help modal action to open the full document if present | Full help content opens successfully and remains consistent with the in-app content |
+| 6 | Missing help asset fails gracefully | Test a build with the Help asset intentionally missing or inaccessible | UI shows a non-fatal fallback state with retry or operator guidance instead of breaking the app shell |
+
 ### 12.11 First-Run Setup
 
 Setup endpoints are unauthenticated and can only succeed once.
@@ -1253,6 +1378,17 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 | 8 | Degraded when DB down | Stop PostgreSQL, call endpoint with valid token | 200, `status: "degraded"`, `database: "error"`, `database_error` is non-null |
 | 9 | Unauthenticated rejected | `GET /introspection/system-health` without token | 401 |
 | 10 | Processor role allowed | `GET /introspection/system-health` with processor token | 200 |
+
+### 12.14.1 Liveness, Readiness, and Version
+
+| # | Test | How | Expected |
+|---|------|-----|----------|
+| 1 | Liveness endpoint is public | `GET /health/live` without token | 200, service reports live |
+| 2 | Readiness endpoint is public | `GET /health/ready` without token on a healthy system | 200, `status: "ready"`, checks show healthy or initialized dependencies |
+| 3 | Readiness reports missing database configuration | Clear DB config or test before configuration, then `GET /health/ready` | 503, `status: "not_ready"`, reason indicates database is not configured |
+| 4 | Readiness reports mount or provider problems | Break a configured mount or provider, then `GET /health/ready` | 503, response identifies the failing check without using the generic error schema |
+| 5 | Version endpoint is public | `GET /introspection/version` without token | 200, returns version/application metadata |
+| 6 | Readiness remains separate from authenticated system health | Compare `GET /health/ready` and authenticated `GET /introspection/system-health` | Readiness stays public and fail-fast; system health returns richer operational metrics |
 
 ### 12.15 Real-World Copy Performance & Hashing Addendum
 
