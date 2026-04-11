@@ -4,7 +4,7 @@
 |---|---|
 | Title | Functional Design |
 | Purpose | Describes how ECUBE functional behavior is implemented, covering lifecycle flows, state transitions, endpoint responsibilities, algorithms, and locking strategies. |
-| Updated on | 04/08/26 |
+| Updated on | 04/11/26 |
 | Audience | Engineers, implementers, maintainers, and technical reviewers. |
 
 ## 4.1 Drive Lifecycle Management
@@ -154,6 +154,74 @@ Every project-isolation decision is recorded:
 
 - Mount manager validates connectivity before exposing paths to job creation.
 - Reference counting prevents unmount while active jobs still depend on a mount.
+
+### 4.6.1 Project Source Binding Design
+
+Project source binding defines which source locations are valid for each project,
+so project isolation covers both destination drives and source-path selection.
+
+#### Configuration Model
+
+- Add a project source-binding entity keyed by project identifier.
+- Each binding row references:
+  - project identifier
+  - mount identifier
+  - optional subfolder path under the mount's local mount point
+  - active flag
+  - created/updated metadata
+- Multiple bindings per project are allowed.
+- A binding without subfolder means the whole mount root is allowed for that project.
+
+#### Path Resolution Model
+
+- Job creation resolves an effective source path as an absolute path visible to ECUBE.
+- If the caller provides a relative source component, the service resolves it under
+  the selected mount root before validation.
+- If the caller provides an absolute source path, it is normalized and validated
+  against allowed binding boundaries.
+- Normalization must remove redundant path segments and reject unsafe traversal
+  semantics (for example, attempts to escape via `..`).
+
+#### Job Creation Enforcement Flow
+
+1. Load active source bindings for the requested project.
+2. If bindings exist, require the effective source path to be contained by at
+   least one allowed binding boundary (`mount_root[/subfolder]`).
+3. If bindings are required by policy and none exist, reject job creation.
+4. If the source path is outside all allowed boundaries, reject job creation
+   before drive assignment or copy scheduling.
+5. If source binding passes, continue existing drive/project isolation and job
+   lifecycle validation.
+
+#### Shared-Share / Subfolder Pattern
+
+- One mount may be shared across many projects.
+- Per-project segregation is achieved by binding distinct subfolders on the
+  same mount root (for example `/mnt/evidence/PROJECT-A`, `/mnt/evidence/PROJECT-B`).
+- Boundary checks are path-prefix-safe and segment-aware so `PROJECT-A`
+  does not match `PROJECT-A-ARCHIVE` unless explicitly configured.
+
+#### UI / Workflow Model
+
+- Add a project settings screen for admin/manager roles.
+- The screen allows create/update/delete of project source bindings and displays
+  effective allowed source boundaries.
+- Job creation UI should present project-allowed source options first; free-text
+  source entry, if retained, must still pass server-side binding validation.
+
+#### Authorization Model
+
+- Admin/manager: can manage project source bindings.
+- Processor: can create jobs using allowed bindings but cannot modify binding policy.
+- Auditor: read-only visibility where policy permits, no mutation capability.
+
+#### Audit Model
+
+- Emit audit events for source-binding create/update/delete operations.
+- Emit a dedicated denial audit event when job creation is rejected due to
+  source-binding policy mismatch.
+- Denial details include actor, project identifier, submitted source path,
+  and evaluated binding boundary identifiers.
 
 ## 4.7 Manifest Generation Design
 
@@ -305,6 +373,39 @@ All three passes are fully idempotent — running them multiple times without un
 ### Multi-Worker Safety
 
 The cross-process lock guarantees that exactly one worker runs reconciliation per startup cycle. Workers that do not acquire the lock skip reconciliation, which prevents duplicate correction audit events and conflicting writes during startup.
+
+## 4.12 In-App Help System Design
+
+The Help system is generated from user-facing documentation and rendered in-app through a modal UX.
+
+### 4.12.1 Source of Truth and Curation
+
+- Canonical source: `docs/operations/13-user-manual.md`.
+- A generation step extracts and curates end-user-relevant sections for in-app usage.
+- Operator-only installation/deployment internals are excluded from in-app help output.
+
+### 4.12.2 Help Generation Pipeline
+
+- A dedicated script (for example `scripts/build-help.mjs` or `scripts/build-help.sh`) reads the source manual and emits static HTML.
+- Generated output is deterministic for identical source input and generation options.
+- Output target is a frontend-shipped location (for example `frontend/public/help/manual.html` or equivalent generated path consumed by frontend build).
+
+### 4.12.3 QA and CI Parity Model
+
+- Local QA runs the same dedicated help-generation script before packaging.
+- CI packaging invokes the identical script entrypoint; CI must not maintain a separate help-generation path.
+- This guarantees packaged help content is produced by the same process used for QA validation.
+
+### 4.12.4 Frontend Integration Design
+
+- Authenticated shell exposes a Help trigger (header/footer/sidebar placement per UI design).
+- Trigger opens a modal-style help container without hard navigation away from active workflow.
+- Recommended rendering model is an iframe or isolated container targeting generated static help HTML to minimize style/script interference.
+
+### 4.12.5 Error and Fallback Behavior
+
+- If generated help asset is missing, UI displays a non-fatal error state with retry and operator-facing guidance.
+- Missing-help events are surfaced through frontend diagnostics/logging pathways used for operational troubleshooting.
 
 ## References
 
