@@ -45,6 +45,11 @@ def _backfill_sqlite() -> None:
                     AND json_extract(details, '$.drive_id') <> ''
                  )
               )
+              AND EXISTS (
+                    SELECT 1
+                    FROM usb_drives u
+                    WHERE u.id = CAST(json_extract(details, '$.drive_id') AS INTEGER)
+              )
             """
         )
     )
@@ -76,6 +81,11 @@ def _backfill_postgresql() -> None:
                         jsonb_typeof(details::jsonb -> 'drive_id') = 'string'
                     AND details->>'drive_id' ~ '^[0-9]+$'
                  )
+              )
+              AND EXISTS (
+                    SELECT 1
+                    FROM usb_drives u
+                    WHERE u.id = (details->>'drive_id')::integer
               )
             """
         )
