@@ -222,6 +222,8 @@ class TestLogAndAudit:
         )
         assert entry.action == "TEST_ACTION"
         assert entry.user == "test-user"
+        assert entry.drive_id == 1
+        assert entry.project_id == "PRJ-001"
         assert entry.details["drive_id"] == 1
         assert entry.details["project_id"] == "PRJ-001"
         assert entry.details["key"] == "value"
@@ -230,6 +232,8 @@ class TestLogAndAudit:
         logs = AuditRepository(db).query(action="TEST_ACTION")
         assert len(logs) == 1
         assert logs[0].user == "test-user"
+        assert logs[0].drive_id == 1
+        assert logs[0].project_id == "PRJ-001"
 
     def test_log_and_audit_works_without_optional_fields(self, db):
         from app.services.audit_service import log_and_audit

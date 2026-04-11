@@ -10,6 +10,10 @@ class AuditLog(Base):
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
     user = Column(String)
     action = Column(String, nullable=False)
+    project_id = Column(String, nullable=True)
+    drive_id = Column(
+        Integer, ForeignKey("usb_drives.id", ondelete="SET NULL"), nullable=True
+    )
     job_id = Column(
         Integer, ForeignKey("export_jobs.id", ondelete="SET NULL"), nullable=True
     )

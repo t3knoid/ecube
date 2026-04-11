@@ -1,6 +1,6 @@
 from datetime import datetime
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from sqlalchemy.orm import Session
 
@@ -19,14 +19,20 @@ class AuditRepository:
         self,
         action: str,
         user: Optional[str] = None,
+        project_id: Optional[str] = None,
+        drive_id: Optional[int] = None,
         job_id: Optional[int] = None,
         details: Optional[Dict[str, Any]] = None,
         client_ip: Optional[str] = None,
     ) -> AuditLog:
         """Create and persist an immutable audit log entry."""
+        resolved_project_id = project_id if project_id is not None else _extract_project_id(details)
+        resolved_drive_id = drive_id if drive_id is not None else _extract_drive_id(details)
         entry = AuditLog(
             user=user,
             action=action,
+            project_id=resolved_project_id,
+            drive_id=resolved_drive_id,
             job_id=job_id,
             details=details or {},
             client_ip=client_ip,
@@ -47,16 +53,19 @@ class AuditRepository:
         """Batch-insert multiple audit log entries in a single commit.
 
         Each dict in *entries* may contain the keys accepted by
-        :meth:`add`: ``action``, ``user``, ``job_id``, ``details``,
+        :meth:`add`: ``action``, ``user``, ``project_id``, ``drive_id``, ``job_id``, ``details``,
         ``client_ip``.
         """
         rows = []
         for kwargs in entries:
+            details = kwargs.get("details") or {}
             row = AuditLog(
                 action=kwargs["action"],
                 user=kwargs.get("user"),
+                project_id=kwargs.get("project_id") or _extract_project_id(details),
+                drive_id=kwargs.get("drive_id") if kwargs.get("drive_id") is not None else _extract_drive_id(details),
                 job_id=kwargs.get("job_id"),
-                details=kwargs.get("details") or {},
+                details=details,
                 client_ip=kwargs.get("client_ip"),
             )
             self.db.add(row)
@@ -88,6 +97,8 @@ class AuditRepository:
         self,
         user: Optional[str] = None,
         action: Optional[str] = None,
+        project_id: Optional[str] = None,
+        drive_id: Optional[int] = None,
         job_id: Optional[int] = None,
         since: Optional[datetime] = None,
         until: Optional[datetime] = None,
@@ -100,6 +111,10 @@ class AuditRepository:
             q = q.filter(AuditLog.user == user)
         if action is not None:
             q = q.filter(AuditLog.action == action)
+        if project_id is not None:
+            q = q.filter(AuditLog.project_id == project_id)
+        if drive_id is not None:
+            q = q.filter(AuditLog.drive_id == drive_id)
         if job_id is not None:
             q = q.filter(AuditLog.job_id == job_id)
         if since is not None:
@@ -113,6 +128,8 @@ def best_effort_audit(
     db: Session,
     action: str,
     user: Optional[str] = None,
+    project_id: Optional[str] = None,
+    drive_id: Optional[int] = None,
     details: Optional[Dict[str, Any]] = None,
     client_ip: Optional[str] = None,
 ) -> None:
@@ -121,6 +138,35 @@ def best_effort_audit(
     Use this instead of duplicating try/except wrappers in every router.
     """
     try:
-        AuditRepository(db).add(action=action, user=user, details=details, client_ip=client_ip)
+        AuditRepository(db).add(
+            action=action,
+            user=user,
+            project_id=project_id,
+            drive_id=drive_id,
+            details=details,
+            client_ip=client_ip,
+        )
     except Exception:
         _logger.exception("Failed to write audit log for %s", action)
+
+
+def _extract_project_id(details: Optional[Mapping[str, Any]]) -> Optional[str]:
+    if not isinstance(details, Mapping):
+        return None
+    value = details.get("project_id")
+    return value if isinstance(value, str) and value else None
+
+
+def _extract_drive_id(details: Optional[Mapping[str, Any]]) -> Optional[int]:
+    if not isinstance(details, Mapping):
+        return None
+    value = details.get("drive_id")
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, float) and value.is_integer() and value >= 0:
+        return int(value)
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None

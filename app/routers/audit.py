@@ -33,6 +33,8 @@ def _redact_ip(entry, user: CurrentUser) -> AuditLogSchema:
 def list_audit_logs(
     user: Optional[str] = Query(default=None, description="Filter by user"),
     action: Optional[str] = Query(default=None, description="Filter by action"),
+    project_id: Optional[str] = Query(default=None, description="Filter by project ID"),
+    drive_id: Optional[int] = OptionalIntQuery(description="Filter by drive ID"),
     job_id: Optional[int] = OptionalIntQuery(description="Filter by job ID"),
     since: Optional[datetime] = OptionalDatetimeQuery(description="Filter entries at or after this timestamp (ISO 8601)"),
     until: Optional[datetime] = OptionalDatetimeQuery(description="Filter entries at or before this timestamp (ISO 8601)"),
@@ -48,6 +50,8 @@ def list_audit_logs(
     entries = AuditRepository(db).query(
         user=user,
         action=action,
+        project_id=project_id,
+        drive_id=drive_id,
         job_id=job_id,
         since=since,
         until=until,
