@@ -20,11 +20,17 @@ ECUBE is a secure evidence export platform designed to copy eDiscovery data onto
 
 ## Quick Start
 
-### Bare-metal installation (Debian/Ubuntu)
+### Installation (Debian/Ubuntu)
 
 Download a release package from [GitHub Releases](https://github.com/t3knoid/ecube/releases/latest), extract it, and run the installer as root.
 
 For CI packaging details and installer artifact naming/content requirements, see [CI Build and Installer Artifact Contract](docs/development/03-ci-build-and-installer-artifacts.md).
+
+To locally preflight the same packaging path used by CI workflows, run:
+
+```bash
+bash scripts/package-local.sh --sha "$(git rev-parse --short=8 HEAD)"
+```
 
 ```bash
 tar -xzf ecube-package-<version>.tar.gz
@@ -121,6 +127,8 @@ Build and deployment guidance (release artifacts, package deployment, Docker ima
 ## CI Status
 
 The five badges at the top of this file reflect the current state of automated CI workflows:
+
+Installer/package artifact workflows (`build-artifact.yml` and `tag-release.yml`) now call the shared script `scripts/package-local.sh` so local and CI packaging behavior stays aligned.
 
 - **Tests** — four test suites run on every push: backend unit tests (pytest, SQLite in-memory, cross-platform), backend integration tests (pytest against a live PostgreSQL instance), frontend unit tests (Vitest with coverage), and frontend end-to-end tests (Playwright). See [docs/testing/01-automated-test-requirements.md](docs/testing/01-automated-test-requirements.md) for test conventions.
 - **Docker Build** — container images are built and smoke-tested on version bumps (when `pyproject.toml` version changes), `workflow_dispatch`, or release events. Pre-built images are pushed to `ghcr.io/t3knoid/ecube-app` and `ghcr.io/t3knoid/ecube-ui`. See [Using Pre-built Release Images](docs/operations/03-docker-deployment.md#using-pre-built-release-images) for deployment options.

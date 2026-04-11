@@ -59,32 +59,9 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Build frontend
-        working-directory: frontend
+      - name: Build and package deployment artifact
         run: |
-          npm ci
-          npm run build
-
-      - name: Create deployment package
-        run: |
-          chmod 755 install.sh
-          mkdir -p dist
-          tar -czf "dist/${{ steps.meta.outputs.artifact_name }}.tar.gz" \
-            --transform "s|^|${{ steps.meta.outputs.artifact_name }}/|" \
-            install.sh \
-            app \
-            alembic \
-            deploy \
-            pyproject.toml \
-            alembic.ini \
-            frontend/dist \
-            README.md \
-            LICENSE
-
-      - name: Generate checksum
-        run: |
-          cd dist
-          sha256sum "${{ steps.meta.outputs.artifact_name }}.tar.gz" > "${{ steps.meta.outputs.artifact_name }}.sha256"
+          bash scripts/package-local.sh --artifact-name "${{ steps.meta.outputs.artifact_name }}"
 
       - name: Create/update draft release and upload installer assets
         uses: softprops/action-gh-release@v2

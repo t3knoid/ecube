@@ -25,7 +25,6 @@ const search = ref('')
 const form = ref({
   type: 'SMB',
   remote_path: '',
-  local_mount_point: '',
   username: '',
   password: '',
   credentials_file: '',
@@ -78,7 +77,6 @@ function resetForm() {
   form.value = {
     type: 'SMB',
     remote_path: '',
-    local_mount_point: '',
     username: '',
     password: '',
     credentials_file: '',
@@ -86,7 +84,7 @@ function resetForm() {
 }
 
 function formValid() {
-  return !!form.value.type && !!form.value.remote_path.trim() && !!form.value.local_mount_point.trim()
+  return !!form.value.type && !!form.value.remote_path.trim()
 }
 
 async function submitAddMount() {
@@ -97,7 +95,6 @@ async function submitAddMount() {
     const payload = {
       type: form.value.type,
       remote_path: form.value.remote_path.trim(),
-      local_mount_point: form.value.local_mount_point.trim(),
       username: form.value.username.trim() || null,
       password: form.value.password || null,
       credentials_file: form.value.credentials_file.trim() || null,
@@ -195,8 +192,6 @@ onMounted(loadMounts)
           </select>
           <label for="mount-remote-path">{{ t('mounts.remotePath') }}</label>
           <input id="mount-remote-path" v-model="form.remote_path" type="text" />
-          <label for="mount-local-path">{{ t('mounts.localPath') }}</label>
-          <input id="mount-local-path" v-model="form.local_mount_point" type="text" />
           <label for="mount-username">{{ t('auth.username') }}</label>
           <input id="mount-username" v-model="form.username" type="text" autocomplete="off" />
           <label for="mount-password">{{ t('auth.password') }}</label>

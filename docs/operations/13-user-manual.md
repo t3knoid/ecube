@@ -383,12 +383,13 @@ The add-mount dialog supports common fields such as:
 
 - Type (`SMB` or `NFS`)
 - Remote path
-- Local mount point
 - Username
 - Password
 - Credentials file
 
-The exact fields required depend on the mount type and your environment.
+ECUBE now creates the local mount point automatically based on the remote path and mount type (for example, NFS mounts are created under `/nfs/*` and SMB mounts under `/smb/*`).
+
+The exact credential fields required depend on the mount type and your environment.
 
 ### 8.2 Testing Mount Connectivity
 
