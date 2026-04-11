@@ -13,13 +13,14 @@
 2. [Authentication](#authentication)
 3. [Drives (`/drives`)](#drivesdrives)
 4. [Mounts (`/mounts`)](#mountsmounts)
-5. [Jobs (`/jobs`)](#jobsjobs)
-6. [Audit (`/audit`)](#auditaudit)
-7. [Admin Users (`/admin/os-users`)](#admin-users-adminos-users)
-8. [Admin Logs (`/admin/logs`)](#admin-logs-adminlogs)
-9. [Introspection (`/introspection`)](#introspectionintrospection)
-10. [Telemetry (`/telemetry`)](#telemetrytelemetry)
-11. [Support and Resources](#support-and-resources)
+5. [Project Source Bindings (`/projects/{project_id}/source-bindings`)](#project-source-bindings-projectsproject_idsource-bindings)
+6. [Jobs (`/jobs`)](#jobsjobs)
+7. [Audit (`/audit`)](#auditaudit)
+8. [Admin Users (`/admin/os-users`)](#admin-users-adminos-users)
+9. [Admin Logs (`/admin/logs`)](#admin-logs-adminlogs)
+10. [Introspection (`/introspection`)](#introspectionintrospection)
+11. [Telemetry (`/telemetry`)](#telemetrytelemetry)
+12. [Support and Resources](#support-and-resources)
 
 ---
 
@@ -95,6 +96,21 @@ During initial setup, `POST /setup/database/test-connection`, `POST /setup/datab
 | POST | `/mounts/{mount_id}/validate` | admin/manager | Validate mount connectivity |
 | POST | `/mounts/validate` | admin/manager | Validate all mounts |
 | DELETE | `/mounts/{mount_id}` | admin/manager | Remove mount |
+
+---
+
+## Project Source Bindings (`/projects/{project_id}/source-bindings`)
+
+Compatibility note: To support project-to-source-path policy, use project source bindings alongside mounts and jobs. Mounts still define connectivity, while bindings define which mount root and optional subfolder are valid for each project.
+
+| Method | Endpoint | Role | Description |
+| ------ | -------- | ---- | ----------- |
+| GET | `/projects/{project_id}/source-bindings` | manager+ | List source bindings for a project |
+| POST | `/projects/{project_id}/source-bindings` | admin/manager | Add a project source binding (mount + optional subfolder) |
+| PATCH | `/projects/{project_id}/source-bindings/{binding_id}` | admin/manager | Update an existing binding |
+| DELETE | `/projects/{project_id}/source-bindings/{binding_id}` | admin/manager | Remove a binding |
+
+**Job compatibility:** `POST /jobs` may reject source paths that are outside active bindings for the job project (for example `403` policy violation or `409` configuration conflict), so processors should select source paths from configured project bindings.
 
 ---
 
