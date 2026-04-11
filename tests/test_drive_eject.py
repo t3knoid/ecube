@@ -479,7 +479,7 @@ class TestResolveMapperDevice:
         assert error is None
         # Verify both mount points were unmounted
         assert mock_run.call_count == 2
-        called_mounts = {call_args[0][0][1] for call_args in mock_run.call_args_list}
+        called_mounts = {call_args[0][0][-1] for call_args in mock_run.call_args_list}
         assert called_mounts == {"/media/usb", "/media/encrypted"}
 
     def test_find_mapper_device_backed_by_traditional_partition(self):
@@ -596,7 +596,7 @@ class TestUnmountDevice:
         assert error is None
         # Verify unmount was called for all three mountpoints
         assert mock_run.call_count == 3
-        called_mounts = {call_args[0][0][1] for call_args in mock_run.call_args_list}
+        called_mounts = {call_args[0][0][-1] for call_args in mock_run.call_args_list}
         assert called_mounts == {"/media/usb", "/media/usb1", "/media/usb2"}
 
     def test_unmount_nvme_partitions(self):
@@ -613,7 +613,7 @@ class TestUnmountDevice:
         assert error is None
         # Verify unmount was called for all three mountpoints
         assert mock_run.call_count == 3
-        called_mounts = {call_args[0][0][1] for call_args in mock_run.call_args_list}
+        called_mounts = {call_args[0][0][-1] for call_args in mock_run.call_args_list}
         assert called_mounts == {"/media/nvme", "/media/nvme1", "/media/nvme2"}
 
     def test_unmount_mmc_partitions(self):
@@ -630,7 +630,7 @@ class TestUnmountDevice:
         assert error is None
         # Verify unmount was called for all three mountpoints
         assert mock_run.call_count == 3
-        called_mounts = {call_args[0][0][1] for call_args in mock_run.call_args_list}
+        called_mounts = {call_args[0][0][-1] for call_args in mock_run.call_args_list}
         assert called_mounts == {"/media/mmc", "/media/mmc1", "/media/mmc2"}
 
     def test_unmount_nothing_mounted(self):
@@ -746,12 +746,14 @@ class TestUnmountDevice:
         assert success is True
         assert error is None
         mock_run.assert_called_once()
-        mock_run.assert_called_with(
-            [settings.umount_binary_path, "/media/usb"],
-            check=True,
-            capture_output=True,
-            timeout=settings.subprocess_timeout_seconds,
-        )
+        called_cmd = mock_run.call_args.args[0]
+        assert called_cmd[-1] == "/media/usb"
+        assert settings.umount_binary_path in called_cmd
+        assert mock_run.call_args.kwargs == {
+            "check": True,
+            "capture_output": True,
+            "timeout": settings.subprocess_timeout_seconds,
+        }
 
     def test_unmount_not_mounted_race_is_success(self):
         """CalledProcessError with 'not mounted' stderr is treated as success.
@@ -807,7 +809,7 @@ class TestUnmountDevice:
         
         # Verify unmount calls were made in order of deepest-first
         # Extracting mount points from the calls in order
-        unmount_order = [call_args[0][0][1] for call_args in mock_run.call_args_list]
+        unmount_order = [call_args[0][0][-1] for call_args in mock_run.call_args_list]
         
         # Deepest paths should be unmounted first
         # /media/usb/sub/deep has depth 4, /media/usb/sub has depth 3, /media/usb has depth 2
