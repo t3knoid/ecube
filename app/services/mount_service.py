@@ -2,6 +2,9 @@ import logging
 import subprocess
 import shutil
 import os
+import re
+import pwd
+import grp
 from datetime import datetime, timezone
 from typing import Optional, Tuple
 
@@ -140,6 +143,188 @@ def _with_sudo(cmd: list[str]) -> list[str]:
     return cmd
 
 
+def _mount_root_for_type(mount_type: MountType) -> str:
+    return "/nfs" if mount_type == MountType.NFS else "/smb"
+
+
+def _extract_remote_leaf(mount_type: MountType, remote_path: str) -> str:
+    path_part = remote_path
+    if mount_type == MountType.NFS:
+        if ":" in remote_path:
+            path_part = remote_path.rsplit(":", 1)[1]
+    else:
+        stripped = remote_path.lstrip("/")
+        smb_parts = [part for part in stripped.split("/") if part]
+        if len(smb_parts) >= 2:
+            path_part = "/".join(smb_parts[1:])
+
+    parts = [part for part in path_part.split("/") if part not in ("", ".", "..")]
+    return parts[-1] if parts else "share"
+
+
+def _slugify_mount_leaf(name: str) -> str:
+    # Keep mount directory names predictable and filesystem-safe.
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-._")
+    return slug or "share"
+
+
+def _generate_local_mount_point(
+    mount_type: MountType,
+    remote_path: str,
+    existing_mount_points: set[str],
+) -> str:
+    root = _mount_root_for_type(mount_type)
+    leaf = _slugify_mount_leaf(_extract_remote_leaf(mount_type, remote_path))
+    candidate = f"{root}/{leaf}"
+    suffix = 2
+    while candidate in existing_mount_points:
+        candidate = f"{root}/{leaf}-{suffix}"
+        suffix += 1
+    return candidate
+
+
+def _managed_mount_root(local_mount_point: str) -> Optional[str]:
+    normalized = os.path.normpath(local_mount_point)
+    if normalized.startswith("/nfs/"):
+        return "/nfs"
+    if normalized.startswith("/smb/"):
+        return "/smb"
+    return None
+
+
+def _service_owner_spec() -> str:
+    uid = os.geteuid()
+    gid = os.getegid()
+    try:
+        user = pwd.getpwuid(uid).pw_name
+    except Exception:
+        user = str(uid)
+    try:
+        group = grp.getgrgid(gid).gr_name
+    except Exception:
+        group = str(gid)
+    return f"{user}:{group}"
+
+
+def _run_sudo_cmd(cmd: list[str]) -> Tuple[bool, str]:
+    result = subprocess.run(
+        ["sudo", "-n", *cmd],
+        capture_output=True,
+        text=True,
+        timeout=settings.subprocess_timeout_seconds,
+    )
+    if result.returncode == 0:
+        return True, ""
+    error = (result.stderr or result.stdout or "").strip() or "sudo command failed"
+    return False, error
+
+
+def _ensure_mount_directory(local_mount_point: str) -> Optional[str]:
+    try:
+        os.makedirs(local_mount_point, exist_ok=True)
+        return None
+    except PermissionError as exc:
+        managed_root = _managed_mount_root(local_mount_point)
+
+        # Bootstrap managed roots and mount leaf as root, then hand ownership
+        # to the service account so future operations are non-root.
+        if managed_root and settings.use_sudo and os.geteuid() != 0:
+            owner_spec = _service_owner_spec()
+            ok, error = _run_sudo_cmd(["mkdir", "-p", managed_root, local_mount_point])
+            if not ok:
+                return f"failed to create local mount point directory: {error}"
+            ok, error = _run_sudo_cmd(["chown", owner_spec, managed_root, local_mount_point])
+            if not ok:
+                return f"failed to set local mount point ownership: {error}"
+            return None
+
+        if managed_root and not os.path.isdir(managed_root):
+            return (
+                f"failed to create local mount point directory: {exc}. "
+                f"Missing managed mount root '{managed_root}'. "
+                f"Create it and set ownership to the ECUBE service account."
+            )
+
+        if managed_root:
+            return (
+                f"failed to create local mount point directory: {exc}. "
+                f"Ensure '{managed_root}' is writable by the ECUBE service account."
+            )
+
+        return f"failed to create local mount point directory: {exc}"
+    except Exception as exc:
+        return f"failed to create local mount point directory: {exc}"
+
+
+def _validate_mount_directory_owner(local_mount_point: str) -> Optional[str]:
+    try:
+        st = os.stat(local_mount_point)
+    except Exception as exc:
+        return f"failed to stat local mount point directory: {exc}"
+
+    # Enforce ownership by the service account; if needed and allowed, repair
+    # ownership for managed mount roots via sudo.
+    if os.geteuid() != 0 and st.st_uid != os.geteuid():
+        managed_root = _managed_mount_root(local_mount_point)
+        if managed_root and settings.use_sudo:
+            owner_spec = _service_owner_spec()
+            ok, error = _run_sudo_cmd(["chown", owner_spec, managed_root, local_mount_point])
+            if not ok:
+                return f"local mount point directory ownership repair failed: {error}"
+            try:
+                st = os.stat(local_mount_point)
+            except Exception as exc:
+                return f"failed to stat local mount point directory: {exc}"
+        if st.st_uid == 0:
+            return "local mount point directory is owned by root; it must be owned by the ECUBE service account"
+        if st.st_uid != os.geteuid():
+            return "local mount point directory is not owned by the ECUBE service account"
+    return None
+
+
+def _is_generated_mount_point(local_mount_point: str) -> bool:
+    return local_mount_point.startswith("/nfs/") or local_mount_point.startswith("/smb/")
+
+
+def _cleanup_target_for_generated_mount_point(local_mount_point: str) -> Optional[str]:
+    normalized = os.path.normpath(local_mount_point)
+    if normalized.startswith("/nfs/"):
+        root = "/nfs"
+    elif normalized.startswith("/smb/"):
+        root = "/smb"
+    else:
+        return None
+
+    rel = os.path.relpath(normalized, root)
+    # Only allow one generated leaf directly under /nfs or /smb.
+    if rel in (".", "..") or rel.startswith("../") or "/" in rel:
+        logger.warning(
+            "Skipping generated mount cleanup for non-leaf managed path: %s",
+            local_mount_point,
+        )
+        return None
+    return os.path.join(root, rel)
+
+
+def _cleanup_generated_mount_directory(local_mount_point: str) -> None:
+    # Only remove one generated leaf directory under managed roots.
+    target = _cleanup_target_for_generated_mount_point(local_mount_point)
+    if not target:
+        return
+
+    try:
+        os.rmdir(target)
+        return
+    except FileNotFoundError:
+        return
+    except PermissionError as exc:
+        logger.warning("Failed to remove generated mount directory %s: %s", target, exc)
+        return
+    except OSError as exc:
+        logger.warning("Failed to remove generated mount directory %s: %s", target, exc)
+        return
+
+
 def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
               provider: Optional["MountProvider"] = None,
               client_ip: Optional[str] = None) -> NetworkMount:
@@ -147,10 +332,17 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
     audit_repo = AuditRepository(db)
     provider = provider or _default_provider()
 
+    existing_mount_points = {str(m.local_mount_point) for m in mount_repo.list_all()}
+    local_mount_point = _generate_local_mount_point(
+        mount_data.type,
+        mount_data.remote_path,
+        existing_mount_points,
+    )
+
     mount = NetworkMount(
         type=mount_data.type,
         remote_path=mount_data.remote_path,
-        local_mount_point=mount_data.local_mount_point,
+        local_mount_point=local_mount_point,
         status=MountStatus.UNMOUNTED,
     )
     try:
@@ -174,17 +366,33 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
         "Mount attempt started: type=%s remote_path=%s local_mount_point=%s actor=%s",
         mount_data.type.value,
         mount_data.remote_path,
-        mount_data.local_mount_point,
+        mount.local_mount_point,
         actor or "system",
     )
     try:
-        success, error = provider.os_mount(
-            mount_data.type,
-            mount_data.remote_path,
-            mount_data.local_mount_point,
-            credentials_file=mount_data.credentials_file,
-            username=mount_data.username,
-        )
+        create_dir_error = _ensure_mount_directory(mount.local_mount_point)
+        if create_dir_error:
+            logger.warning(
+                "Mountpoint preparation failed: type=%s remote_path=%s local_mount_point=%s actor=%s error=%s",
+                mount_data.type.value,
+                mount_data.remote_path,
+                mount.local_mount_point,
+                actor or "system",
+                create_dir_error,
+            )
+            success, error = False, create_dir_error
+        else:
+            owner_error = _validate_mount_directory_owner(mount.local_mount_point)
+            if owner_error:
+                success, error = False, owner_error
+            else:
+                success, error = provider.os_mount(
+                    mount_data.type,
+                    mount_data.remote_path,
+                    mount.local_mount_point,
+                    credentials_file=mount_data.credentials_file,
+                    username=mount_data.username,
+                )
         if success:
             mount.status = MountStatus.MOUNTED
             logger.info(
@@ -192,7 +400,7 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
                 mount.id,
                 mount_data.type.value,
                 mount_data.remote_path,
-                mount_data.local_mount_point,
+                mount.local_mount_point,
                 actor or "system",
             )
         else:
@@ -203,7 +411,7 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
                 mount.id,
                 mount_data.type.value,
                 mount_data.remote_path,
-                mount_data.local_mount_point,
+                mount.local_mount_point,
                 actor or "system",
                 _mount_error,
             )
@@ -239,7 +447,7 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
             mount.id,
             mount_data.type.value,
             mount_data.remote_path,
-            mount_data.local_mount_point,
+            mount.local_mount_point,
             actor or "system",
         )
 
@@ -271,12 +479,15 @@ def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None,
         raise HTTPException(status_code=404, detail="Mount not found")
 
     provider = provider or _default_provider()
+    local_mount_point = str(mount.local_mount_point)
     try:
-        provider.os_unmount(mount.local_mount_point)
+        provider.os_unmount(local_mount_point)
     except Exception:
         # Unmount failures are non-fatal; the record is still deleted so the
         # operator can manually clean up the mount point if needed.
         pass
+
+    _cleanup_generated_mount_directory(local_mount_point)
 
     try:
         audit_repo.add(
