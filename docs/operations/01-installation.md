@@ -27,7 +27,8 @@
 
 | Method | When to use |
 |--------|-------------|
-| **Bare-metal (`install.sh`)** | Dedicated Linux host or VM; no Docker required. |
+| **Automated Installer (`install.sh`)** | Recommended for most deployments on a dedicated Linux host or VM. |
+| **Manual installation** | Advanced administrators who want full control of the installation and host provisioning steps instead of using the automated installer. See [02-manual-installation.md](02-manual-installation.md). |
 | **Docker Compose** | Dev/lab environments or container-native ops. See [03-docker-deployment.md](03-docker-deployment.md). |
 
 ---
@@ -87,8 +88,8 @@ The installer will:
 
 1. Run pre-flight checks (OS, disk space, ports, Python 3.11).
 2. Create the `ecube` system user and add it to required host groups (`plugdev`, `dialout`, and `shadow` when present).
-3. Install `/etc/sudoers.d/ecube-user-mgmt` with narrowly scoped `NOPASSWD` rules so setup endpoints can create required OS groups/users without interactive sudo prompts.
-4. Install `/etc/pam.d/ecube` PAM configuration for local and domain user authentication (detects SSSD at install time and creates appropriate config variant).
+3. Install `/etc/sudoers.d/ecube-user-mgmt` with narrowly scoped `NOPASSWD` rules for setup OS user/group management, mount/unmount operations, and selected drive filesystem commands.
+4. Install `/etc/pam.d/ecube` PAM configuration for local and domain user authentication (detects SSSD at install time and installs an SSSD-enabled or local-only variant accordingly).
 5. Set up a Python virtual environment in `<install-dir>/venv`.
 6. Generate a self-signed TLS certificate.
 7. Write `<install-dir>/.env` with a random `SECRET_KEY`, `SETUP_DEFAULT_ADMIN_USERNAME=ecubeadmin`, and runtime defaults. `DATABASE_URL` is left empty and configured later via the setup wizard.
@@ -97,6 +98,9 @@ The installer will:
 10. Optionally configure `ufw` firewall rules.
 
 At the end it prints a summary with the UI URL, API URL, and service management commands.
+
+ECUBE supports domain-backed user login through the host PAM stack when SSSD is installed and configured on the host. In that case, the installer writes an SSSD-enabled PAM configuration so both local accounts and domain accounts can authenticate to ECUBE.
+
 When PostgreSQL is available locally, the installer also creates (or updates)
 a PostgreSQL superuser for setup-wizard database provisioning and prints those
 credentials in the summary.
@@ -116,21 +120,22 @@ credentials in the summary.
 | `--backend-only` | — | Install the backend service and systemd unit only |
 | `--frontend-only` | — | Install nginx and the pre-built frontend only |
 | `--install-dir DIR` | `/opt/ecube` | Root installation directory |
-| `--api-port PORT` | `8443` | Port the backend (uvicorn) binds to (HTTP when behind nginx, HTTPS in backend-only mode) |
-| `--ui-port PORT` | `443` | HTTPS port nginx listens on |
-| `--backend-host HOST` | `127.0.0.1` | Hostname/IP of the backend. The default (`127.0.0.1`) assumes the backend runs on the same host and is only valid for same-host deployments. **Must be specified when using `--frontend-only` with a backend on a separate host.** |
-| `--allow-insecure-backend` | *(default)* | Explicitly select TLS verification disabled (`proxy_ssl_verify off`) when proxying to a remote backend. This is already the default behaviour; the flag is provided for clarity in scripts that also set `--secure-backend` in some code paths. A warning is always printed when verification is off. |
-| `--secure-backend` | — | Enable TLS certificate verification against the OS trust store (`proxy_ssl_verify on`). Use when the remote backend has a CA-signed cert already trusted by the system and no custom CA file is needed. Mutually exclusive with `--allow-insecure-backend`. |
-| `--backend-ca-file FILE` | — | Path to a PEM CA certificate used to verify the remote backend's TLS certificate (`proxy_ssl_trusted_certificate`). Use when the backend has a private CA-signed cert that is not in the system trust store. Implies `proxy_ssl_verify on`. |
-| `--pg-superuser-name NAME` | `ecubeadmin` | PostgreSQL superuser name to create/update during install for use in setup wizard provisioning. Skips prompt when supplied. |
-| `--pg-superuser-pass PASS` | — | PostgreSQL superuser password to set during install. Skips prompt when supplied. Must be non-empty and contain no whitespace. |
-| `--hostname HOST` | `$(hostname -f)` | Hostname/IP used as TLS certificate CN and in summary URLs |
-| `--cert-validity DAYS` | `730` | Self-signed certificate validity in days |
-| `--yes` / `-y` | off | Non-interactive / unattended mode |
-| `--version TAG` | *(current package)* | Download and install a specific release tag from GitHub. Must match `v<major>.<minor>.<patch>` exactly (e.g. `v0.2.0`). Pre-release suffixes, build metadata, and tags without a leading `v` are not accepted. |
-| `--uninstall` | — | Remove all installed ECUBE components |
-| `--drop-database` | — | With `--uninstall`, also attempt to drop the configured application database resolved from `DATABASE_URL` in `<install-dir>/.env`. Requires sufficient PostgreSQL privileges. |
-| `--dry-run` | — | Print all planned actions without executing them |
+| `--api-port PORT` | `8443` | HTTPS port for the backend |
+| `--ui-port PORT` | `443` | HTTPS port for nginx |
+| `--backend-host HOST` | `127.0.0.1` | Hostname/IP of the backend. Set this when the backend is on a separate host. |
+| `--allow-insecure-backend` | on | Disable TLS certificate verification (proxy_ssl_verify off) when proxying to a remote backend. Default: on. A warning is printed when this is in effect. |
+| `--secure-backend` | — | Enable TLS certificate verification against the system trust store (proxy_ssl_verify on). Use when the remote backend has a CA-signed cert trusted by the OS and you want strict verification without supplying a CA file. Mutually exclusive with --allow-insecure-backend. |
+| `--backend-ca-file FILE` | — | Path to a PEM CA certificate used to verify the remote backend's TLS certificate (proxy_ssl_trusted_certificate). Implies proxy_ssl_verify on. Ignored for loopback backends. |
+| `--pg-superuser-name NAME` | `ecubeadmin` | Name for the PostgreSQL superuser created during installation. Skips the interactive prompt when supplied. |
+| `--pg-superuser-pass PASS` | — | Password for the PostgreSQL superuser. Skips the interactive prompt when supplied. Must be non-empty and contain no whitespace. |
+| `--hostname HOST` | `$(hostname -f)` | Hostname/IP for TLS cert CN |
+| `--cert-validity DAYS` | `730` | Self-signed cert validity |
+| `--yes`, `-y` | off | Non-interactive / unattended mode |
+| `--version TAG` | *(current package)* | Download and install a specific GitHub release tag. Must be exact format: v<major>.<minor>.<patch> (e.g. v0.2.0). Pre-releases, build metadata, and tags without a leading v are not supported. |
+| `--uninstall` | — | Remove ECUBE from this host |
+| `--drop-database` | — | With --uninstall, also drop the configured application database (best-effort; requires sufficient DB privileges) |
+| `--dry-run` | — | Print all actions without executing them |
+| `-h`, `--help` | — | Show this help message |
 
 ---
 
@@ -143,6 +148,8 @@ sudo ./install.sh
 ```
 
 Installs the backend **and** the nginx-fronted frontend on the same host. nginx terminates TLS externally on port `443`; uvicorn serves plain HTTP on `127.0.0.1` (loopback only) so there is no TLS hop between nginx and uvicorn.
+
+Note: `--api-port` controls the backend listen port in all modes; the protocol is HTTPS in backend-only mode and HTTP in same-host nginx mode.
 
 ### Backend Only
 
@@ -224,8 +231,8 @@ sudo ./install.sh \
 ```
 
 If local PostgreSQL access via `sudo -u postgres psql` is not available,
-create a PostgreSQL superuser manually and enter those credentials in the
-setup wizard's database provisioning screen.
+create a PostgreSQL superuser (or a role with `CREATEDB` privilege) manually
+and enter those credentials in the setup wizard's database provisioning screen.
 
 ---
 
@@ -246,7 +253,7 @@ Notes:
   database provisioning/configuration step.
 2. On upgrades/re-runs, the installer preserves existing `.env`; it does not
   rotate or overwrite `DATABASE_URL`.
-3. Only `--pg-superuser-name` and `--pg-superuser-pass` configure
+3. During normal install flow, only `--pg-superuser-name` and `--pg-superuser-pass` configure
   database-related installer behavior.
 
 ---
