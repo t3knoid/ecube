@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Build the ECUBE deployment artifact locally the same way as GitHub workflows.
-# Mirrors:
+# Build the ECUBE deployment artifact.
+# Source of truth for both local packaging and CI packaging workflows:
 #   .github/workflows/build-artifact.yml
 #   .github/workflows/tag-release.yml
 

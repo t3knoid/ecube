@@ -4,12 +4,14 @@
 |---|---|
 | Title | CI Build and Installer Artifact Contract |
 | Purpose | Defines the contract between GitHub Actions build workflows and the bare-metal installer, including expected artifacts and naming conventions. |
-| Updated on | 04/08/26 |
+| Updated on | 04/11/26 |
 | Audience | Developers, release engineers. |
 
 ## Purpose
 
 This document defines the contract between GitHub Actions build workflows and the bare-metal installer (`install.sh`).
+
+CI and local artifact packaging are intentionally aligned through a single external entrypoint: `scripts/package-local.sh`.
 
 Use this as the source of truth when changing:
 
@@ -139,7 +141,15 @@ Use a non-production host for installer smoke tests.
 
 ## Package Build Steps (Shared Pattern)
 
-Both workflows perform the same package-generation sequence:
+Both workflows invoke the same external script:
+
+- `scripts/package-local.sh`
+
+In CI, workflows call:
+
+- `bash scripts/package-local.sh --artifact-name <artifact_name>`
+
+This script performs the package-generation sequence:
 
 1. Set up Node.js (`actions/setup-node@v4`) with npm cache enabled.
 2. Build frontend bundle:
@@ -147,6 +157,16 @@ Both workflows perform the same package-generation sequence:
    - `npm run build`
 3. Create `tar.gz` package with a top-level folder transform.
 4. Generate SHA-256 checksum file for the tarball.
+
+Local parity command examples:
+
+```bash
+# CI-equivalent naming using current git short SHA
+bash scripts/package-local.sh --sha "$(git rev-parse --short=8 HEAD)"
+
+# Explicit artifact name (same flag used by CI workflows)
+bash scripts/package-local.sh --artifact-name "ecube-package-localtest"
+```
 
 Included payload paths in the tarball:
 
@@ -205,6 +225,8 @@ CI packages must continue to provide `frontend/dist` so frontend deployment work
 ## Change Safety Checklist
 
 When editing packaging workflows or installer copy logic, verify all items below:
+
+0. CI workflows continue to call `scripts/package-local.sh` (do not re-introduce duplicated inline tar/checksum logic).
 
 1. Release assets keep the `ecube-package-<tag>.tar.gz` + `.sha256` naming scheme.
 2. Tarball still includes all installer-required paths listed above.
