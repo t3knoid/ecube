@@ -18,6 +18,7 @@ from app.config import settings
 from app.database import get_db
 from app.main import app
 from app.models.audit import AuditLog
+from app.models.hardware import DriveState, UsbDrive
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +77,8 @@ class TestAuditListBasic:
         assert "id" in entry
         assert "action" in entry
         assert "user" in entry
+        assert "project_id" in entry
+        assert "drive_id" in entry
         assert "job_id" in entry
         assert "details" in entry
         assert "timestamp" in entry
@@ -131,6 +134,41 @@ class TestAuditFilters:
         data = response.json()
         assert len(data) == 2
         assert all(d["job_id"] == 1 for d in data)
+
+    def test_filter_by_project_id(self, admin_client, db):
+        _seed_entries(
+            db,
+            [
+                {"action": "JOB_CREATED", "user": "griffin", "project_id": "PRJ-1", "details": {}},
+                {"action": "JOB_STARTED", "user": "griffin", "project_id": "PRJ-1", "details": {}},
+                {"action": "JOB_CREATED", "user": "alba", "project_id": "PRJ-2", "details": {}},
+            ],
+        )
+        response = admin_client.get("/audit?project_id=PRJ-1")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+        assert all(d["project_id"] == "PRJ-1" for d in data)
+
+    def test_filter_by_drive_id(self, admin_client, db):
+        drive_1 = UsbDrive(device_identifier="AUDIT-FILTER-DRIVE-1", current_state=DriveState.AVAILABLE)
+        drive_2 = UsbDrive(device_identifier="AUDIT-FILTER-DRIVE-2", current_state=DriveState.AVAILABLE)
+        db.add_all([drive_1, drive_2])
+        db.commit()
+
+        _seed_entries(
+            db,
+            [
+                {"action": "DRIVE_INITIALIZED", "user": "griffin", "drive_id": drive_1.id, "details": {}},
+                {"action": "DRIVE_EJECT_PREPARED", "user": "griffin", "drive_id": drive_1.id, "details": {}},
+                {"action": "DRIVE_INITIALIZED", "user": "alba", "drive_id": drive_2.id, "details": {}},
+            ],
+        )
+        response = admin_client.get(f"/audit?drive_id={drive_1.id}")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+        assert all(d["drive_id"] == drive_1.id for d in data)
 
     def test_filter_by_since(self, admin_client, db):
         from datetime import datetime, timezone
