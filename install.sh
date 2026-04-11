@@ -169,6 +169,131 @@ _extract_database_url_from_env() {
   return 0
 }
 
+_extract_setup_admin_username_from_env() {
+  local env_file="$1"
+  [[ -f "${env_file}" ]] || return 1
+
+  local admin_line
+  admin_line="$(grep -E '^[[:space:]]*SETUP_DEFAULT_ADMIN_USERNAME=' "${env_file}" 2>/dev/null | tail -1 || true)"
+  [[ -n "${admin_line}" ]] || return 1
+
+  local admin_value="${admin_line#*=}"
+  admin_value="${admin_value#"${admin_value%%[![:space:]]*}"}"
+  admin_value="${admin_value%"${admin_value##*[![:space:]]}"}"
+  if (( ${#admin_value} >= 2 )); then
+    local _first_char="${admin_value:0:1}"
+    local _last_char="${admin_value: -1}"
+    if [[ "${_first_char}" == '"' && "${_last_char}" == '"' ]] ||
+       [[ "${_first_char}" == "'" && "${_last_char}" == "'" ]]; then
+      admin_value="${admin_value:1:${#admin_value}-2}"
+    fi
+  fi
+  [[ -n "${admin_value}" ]] || return 1
+  [[ "${admin_value}" == "<"*">" ]] && return 1
+
+  printf '%s' "${admin_value}"
+  return 0
+}
+
+_cleanup_pg_superuser_role() {
+  local env_file="${INSTALL_DIR}/.env"
+
+  if [[ ! -f "${env_file}" ]]; then
+    warn "PostgreSQL superuser cleanup skipped: ${env_file} not found."
+    return
+  fi
+
+  # Resolve from persisted install state only; do not guess/fallback.
+  local su_name
+  su_name="$(_extract_setup_admin_username_from_env "${env_file}" || true)"
+  if [[ -z "${su_name}" ]]; then
+    warn "PostgreSQL superuser cleanup skipped: SETUP_DEFAULT_ADMIN_USERNAME not found in ${env_file}."
+    return
+  fi
+
+  if ! _is_valid_db_user "${su_name}"; then
+    warn "PostgreSQL superuser cleanup skipped: invalid role name '${su_name}'."
+    return
+  fi
+
+  local db_url
+  db_url="$(_extract_database_url_from_env "${env_file}" || true)"
+  if [[ -z "${db_url}" ]]; then
+    warn "PostgreSQL superuser cleanup skipped: no usable DATABASE_URL found in ${env_file}."
+    return
+  fi
+
+  local py_bin
+  if command -v python3.11 &>/dev/null; then
+    py_bin="python3.11"
+  elif command -v python3 &>/dev/null; then
+    py_bin="python3"
+  else
+    warn "PostgreSQL superuser cleanup skipped: python3 is required to parse DATABASE_URL safely."
+    return
+  fi
+
+  local parsed admin_url
+  parsed="$(${py_bin} - <<'PY' "${db_url}" "${su_name}"
+import sys
+from urllib.parse import urlparse, urlunparse
+
+url = sys.argv[1]
+superuser_name = sys.argv[2]
+u = urlparse(url)
+
+# Preserve transport/query params but point at maintenance database.
+path = "/postgres"
+
+# For remote DBs, credentials for SETUP_DEFAULT_ADMIN_USERNAME are often
+# provided via ~/.pgpass or PGPASSWORD during maintenance operations, so avoid
+# embedding a potentially stale app-role password when switching usernames.
+if "@" in u.netloc:
+    hostport = u.netloc.split("@", 1)[1]
+else:
+    hostport = u.netloc
+
+netloc = f"{superuser_name}@{hostport}" if hostport else superuser_name
+admin = u._replace(netloc=netloc, path=path, params="", fragment="")
+print(urlunparse(admin))
+PY
+)" || {
+    warn "PostgreSQL superuser cleanup skipped: failed to parse DATABASE_URL."
+    return
+  }
+
+  admin_url="${parsed}"
+  if [[ -z "${admin_url}" ]]; then
+    warn "PostgreSQL superuser cleanup skipped: parsed admin connection details were incomplete."
+    return
+  fi
+
+  if ! command -v psql &>/dev/null; then
+    warn "PostgreSQL superuser cleanup skipped: psql not found."
+    return
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    echo "[DRY-RUN] Would drop PostgreSQL role '${su_name}' via ${admin_url} if it exists"
+    return
+  fi
+
+  if ! psql "${admin_url}" -tAc "SELECT 1 FROM pg_roles WHERE rolname = '${su_name}'" 2>/dev/null | grep -q 1; then
+    info "PostgreSQL role '${su_name}' not found — skipping role cleanup."
+    return
+  fi
+
+  local escaped_su_name
+  escaped_su_name="${su_name//\"/\"\"}"
+  local drop_out
+  if ! drop_out="$(psql "${admin_url}" -v ON_ERROR_STOP=1 -c "DROP ROLE \"${escaped_su_name}\";" 2>&1)"; then
+    warn "Failed to drop PostgreSQL role '${su_name}': ${drop_out}"
+    return
+  fi
+
+  ok "PostgreSQL role '${su_name}' removed"
+}
+
 _cleanup_application_database() {
   local db_url=""
   local env_file="${INSTALL_DIR}/.env"
@@ -979,18 +1104,18 @@ _ensure_ecube_user() {
 }
 
 # ==========================================================================
-# INSTALL SUDOERS POLICY FOR OS USER/GROUP MANAGEMENT
+# INSTALL SUDOERS POLICY FOR OS USER/GROUP MANAGEMENT + MOUNT OPERATIONS
 # Required so the ecube service account can run narrowly-scoped user/group
-# commands non-interactively from API setup endpoints.
+# commands and mount/unmount commands non-interactively from API endpoints.
 # ==========================================================================
 _install_os_user_mgmt_sudoers() {
   local sudoers_file="/etc/sudoers.d/ecube-user-mgmt"
   local sudoers_tmp="${sudoers_file}.tmp"
 
-  info "Installing sudoers policy for ECUBE OS user/group management..."
+  info "Installing sudoers policy for ECUBE OS user/group management, mount operations, and drive formatting/eject..."
 
   if [[ "${DRY_RUN}" == true ]]; then
-    echo "[DRY-RUN] Would write ${sudoers_file} with NOPASSWD rules for user/group management binaries"
+    echo "[DRY-RUN] Would write ${sudoers_file} with NOPASSWD rules for user/group management, mount, sync, and mkfs binaries"
     return
   fi
 
@@ -999,6 +1124,9 @@ _install_os_user_mgmt_sudoers() {
 # /etc/sudoers.d/ecube-user-mgmt
 # Narrowly scoped privilege escalation for the ECUBE service account.
 ecube ALL=(root) NOPASSWD: /usr/sbin/useradd, /usr/sbin/usermod, /usr/sbin/userdel, /usr/sbin/groupadd, /usr/sbin/groupdel, /usr/sbin/chpasswd
+ecube ALL=(root) NOPASSWD: /bin/mount, /bin/umount, /sbin/mount.nfs, /usr/sbin/mount.nfs
+ecube ALL=(root) NOPASSWD: /bin/sync, /sbin/mkfs.ext4, /sbin/mkfs.exfat
+ecube ALL=(root) NOPASSWD: /bin/mkdir, /bin/chown, /usr/bin/chown
 EOF_SUDOERS
   chmod 0440 "${sudoers_tmp}"
   chown root:root "${sudoers_tmp}"
@@ -1307,6 +1435,13 @@ install_backend() {
   run mkdir -p /var/log/ecube
   run chown -R ecube:ecube /var/log/ecube
   run chmod 750 /var/log/ecube
+
+  # 4c. Managed network mount roots used for auto-generated mountpoints.
+  # Must be service-account owned so mountpoint create/remove does not rely on
+  # root-owned directories.
+  run mkdir -p /nfs /smb
+  run chown ecube:ecube /nfs /smb
+  run chmod 755 /nfs /smb
 
   # 5. Python virtual environment
   # Run venv creation and pip installs as the ecube user so all files under
@@ -1964,6 +2099,9 @@ do_uninstall() {
   # Optionally clean up application database before removing install files.
   if [[ "${DROP_DATABASE}" == true ]]; then
     _cleanup_application_database
+    # Best-effort cleanup of the PostgreSQL superuser created for setup wizard
+    # provisioning, resolved from persisted install state in .env.
+    _cleanup_pg_superuser_role
   fi
 
   # Remove nginx ecube site

@@ -1286,8 +1286,7 @@ curl -k -X POST https://localhost:8443/mounts \
   -H "Content-Type: application/json" \
   -d '{
     "type": "NFS",
-    "remote_path": "nfs.example.com:/evidence",
-    "local_mount_point": "/mnt/evidence"
+    "remote_path": "nfs.example.com:/evidence"
   }'
 
 # SMB mount with credentials
@@ -1297,7 +1296,6 @@ curl -k -X POST https://localhost:8443/mounts \
   -d '{
     "type": "SMB",
     "remote_path": "//fileserver/cases",
-    "local_mount_point": "/mnt/cases",
     "username": "svc-ecube",
     "password": "s3cret"
   }'

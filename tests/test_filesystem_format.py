@@ -11,7 +11,7 @@ from unittest.mock import patch
 import pytest
 
 from app.infrastructure.filesystem_detection import FilesystemDetector
-from app.infrastructure.drive_format import DriveFormatter
+from app.infrastructure.drive_format import DriveFormatter, LinuxDriveFormatter
 from app.infrastructure.usb_discovery import (
     DiscoveredDrive,
     DiscoveredHub,
@@ -57,6 +57,20 @@ class FakeFormatter:
     def is_mounted(self, device_path: str) -> bool:
         self.mounted_calls.append(device_path)
         return self._mounted
+
+
+def test_linux_drive_formatter_uses_sudo_when_configured(monkeypatch):
+    formatter = LinuxDriveFormatter()
+
+    monkeypatch.setattr("app.infrastructure.drive_format.settings.use_sudo", True)
+    monkeypatch.setattr("app.infrastructure.drive_format.os.geteuid", lambda: 1000)
+
+    with patch("app.infrastructure.drive_format.subprocess.run") as mock_run:
+        formatter.format("/dev/sdb", "ext4")
+
+    cmd = mock_run.call_args.args[0]
+    assert cmd[:2] == ["sudo", "-n"]
+    assert cmd[-2:] == ["/sbin/mkfs.ext4", "/dev/sdb"]
 
 
 # ---------------------------------------------------------------------------

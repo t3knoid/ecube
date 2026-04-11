@@ -138,8 +138,7 @@ Content-Type: application/json
 
 {
     "type": "NFS",
-    "remote_path": "fileserver:/exports/case-2026-001",
-    "local_mount_point": "/mnt/evidence/case-2026-001"
+  "remote_path": "fileserver:/exports/case-2026-001"
 }
 ```
 
@@ -149,7 +148,6 @@ For SMB shares, include credentials:
 {
     "type": "SMB",
     "remote_path": "//fileserver/evidence$/case-2026-001",
-    "local_mount_point": "/mnt/evidence/case-2026-001",
     "username": "svc-reader",
     "password": "share-password"
 }
@@ -206,7 +204,7 @@ Content-Type: application/json
 }
 ```
 
-The `source_path` must be the `local_mount_point` from Step 3. When provided, `drive_id` is from Step 1.
+The `source_path` must be the `local_mount_point` returned in the Step 3 response. When provided, `drive_id` is from Step 1.
 
 Optional fields to override defaults:
 
@@ -349,14 +347,15 @@ curl -sf -X POST "$ECUBE_URL/drives/$DRIVE_ID/initialize" \
 echo "  Drive initialized."
 
 # ── Step 4: Mount the network share ───────────────────────────
-echo "Mounting $REMOTE_PATH at $MOUNT_POINT..."
+echo "Mounting $REMOTE_PATH..."
 MOUNT_RESPONSE=$(curl -sf -X POST "$ECUBE_URL/mounts" \
   -H "$AUTH" \
   -H "Content-Type: application/json" \
-  -d "{\"type\": \"$MOUNT_TYPE\", \"remote_path\": \"$REMOTE_PATH\", \"local_mount_point\": \"$MOUNT_POINT\"}")
+  -d "{\"type\": \"$MOUNT_TYPE\", \"remote_path\": \"$REMOTE_PATH\"}")
 
 MOUNT_STATUS=$(echo "$MOUNT_RESPONSE" | jq -r '.status')
 MOUNT_ID=$(echo "$MOUNT_RESPONSE" | jq -r '.id')
+MOUNT_POINT=$(echo "$MOUNT_RESPONSE" | jq -r '.local_mount_point')
 
 if [ "$MOUNT_STATUS" != "MOUNTED" ]; then
   echo "ERROR: Mount failed with status: $MOUNT_STATUS" >&2
@@ -515,14 +514,14 @@ def main():
     print("  Drive initialized.")
 
     # ── Step 4: Mount the network share ───────────────────────
-    print(f"Mounting {REMOTE_PATH} at {MOUNT_POINT}...")
+    print(f"Mounting {REMOTE_PATH}...")
     resp = session.post(f"{ECUBE_URL}/mounts", json={
         "type": MOUNT_TYPE,
         "remote_path": REMOTE_PATH,
-        "local_mount_point": MOUNT_POINT,
     })
     resp.raise_for_status()
     mount = resp.json()
+    mount_point = mount["local_mount_point"]
 
     if mount["status"] != "MOUNTED":
         print(f"ERROR: Mount failed with status: {mount['status']}", file=sys.stderr)
@@ -534,7 +533,7 @@ def main():
     resp = session.post(f"{ECUBE_URL}/jobs", json={
         "project_id": PROJECT_ID,
         "evidence_number": EVIDENCE_NUMBER,
-        "source_path": MOUNT_POINT,
+        "source_path": mount_point,
         "thread_count": THREAD_COUNT,
         "max_file_retries": MAX_RETRIES,
         "retry_delay_seconds": RETRY_DELAY,
@@ -657,14 +656,15 @@ Invoke-RestMethod -Uri "$EcubeUrl/drives/$driveId/initialize" -Method Post `
 Write-Host "  Drive initialized."
 
 # ── Step 4: Mount the network share ───────────────────────────
-Write-Host "Mounting $RemotePath at $MountPoint..."
+Write-Host "Mounting $RemotePath..."
 $mount = Invoke-RestMethod -Uri "$EcubeUrl/mounts" -Method Post `
     -ContentType "application/json" -Headers $headers `
     -Body (@{
         type             = $MountType
         remote_path      = $RemotePath
-        local_mount_point = $MountPoint
     } | ConvertTo-Json)
+
+$mountPoint = $mount.local_mount_point
 
 if ($mount.status -ne "MOUNTED") {
     Write-Error "Mount failed with status: $($mount.status)"
@@ -679,7 +679,7 @@ $job = Invoke-RestMethod -Uri "$EcubeUrl/jobs" -Method Post `
     -Body (@{
         project_id         = $ProjectId
         evidence_number    = $EvidenceNum
-        source_path        = $MountPoint
+        source_path        = $mountPoint
         thread_count       = $ThreadCount
         max_file_retries   = $MaxRetries
         retry_delay_seconds = $RetryDelay

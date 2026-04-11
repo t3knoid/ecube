@@ -252,7 +252,6 @@ class TestMountDBFailures:
                 json={
                     "type": "NFS",
                     "remote_path": "server:/share",
-                    "local_mount_point": "/mnt/test",
                 },
             )
         assert response.status_code == 500
@@ -268,7 +267,6 @@ class TestMountDBFailures:
                 json={
                     "type": "NFS",
                     "remote_path": "server:/share",
-                    "local_mount_point": "/mnt/test",
                 },
             )
         assert response.status_code == 422
@@ -290,7 +288,6 @@ class TestMountDBFailures:
                 json={
                     "type": "NFS",
                     "remote_path": "server:/share",
-                    "local_mount_point": "/mnt/test",
                 },
             )
         # Should succeed despite audit failure
@@ -331,7 +328,6 @@ class TestMountDBFailures:
                 json={
                     "type": "NFS",
                     "remote_path": "server:/share",
-                    "local_mount_point": "/mnt/test",
                 },
             )
         assert response.status_code == 500

@@ -4,7 +4,7 @@
 |---|---|
 | Title | Automated Test Requirements |
 | Purpose | Defines required standards for ECUBE backend unit, integration, HIL, frontend unit, and end-to-end automated testing. |
-| Updated on | 04/08/26 |
+| Updated on | 04/11/26 |
 | Audience | Developers, contributors. |
 
 ## Table of Contents
@@ -70,6 +70,7 @@ Required active frontend E2E specs:
 - `frontend/e2e/jobs.spec.js`
 - `frontend/e2e/keyboard.spec.js`
 - `frontend/e2e/login.spec.js`
+- `frontend/e2e/help.spec.js`
 - `frontend/e2e/mounts.spec.js`
 - `frontend/e2e/role-gating.spec.js`
 - `frontend/e2e/setup-wizard.spec.js`
@@ -207,6 +208,7 @@ Backend coverage is enforced through breadth and critical path assertions across
 | Introspection and callbacks | `test_introspection.py`, `test_callback.py` |
 | User/session/logging/config/migrations | `test_os_user_management.py`, `test_session_management.py`, `test_logging.py`, `test_config_settings.py`, `test_migrations.py` |
 | UI telemetry and sanitization | `test_ui_telemetry.py`, `test_unicode_sanitization.py` |
+| Help system (frontend + generation) | `frontend/e2e/help.spec.js`, frontend help modal unit tests, help-generation script determinism checks |
 
 ---
 
@@ -239,6 +241,7 @@ Backend coverage is enforced through breadth and critical path assertions across
 - mock API I/O (`vi.mock`)
 - cover happy path and error/empty states
 - maintain configured coverage thresholds
+- include help modal open/close, content container render, and missing-help fallback behavior when help feature is changed
 
 ### 10.5 New frontend E2E tests
 
@@ -246,6 +249,13 @@ Backend coverage is enforced through breadth and critical path assertions across
 - use Playwright fixtures only
 - ensure state isolation between tests
 - add accessibility assertions (`@axe-core/playwright`) where appropriate
+- when help behavior changes, validate shell Help trigger visibility and modal rendering using generated static help asset
+
+### 10.6 Help Generation Pipeline Tests
+
+- help-generation script output must be testable locally and in CI
+- add deterministic-output checks (or equivalent guard) so identical source input yields stable generated HTML
+- ensure CI validates generated help artifact existence before packaging artifacts are uploaded
 
 ## References
 
