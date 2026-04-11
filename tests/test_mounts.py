@@ -29,6 +29,25 @@ def test_add_mount(manager_client, db):
     assert data["status"] == "MOUNTED"
 
 
+def test_add_mount_logs_attempt_and_success(manager_client, db, caplog):
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        with caplog.at_level("INFO"):
+            response = manager_client.post(
+                "/mounts",
+                json={
+                    "type": "NFS",
+                    "remote_path": "192.168.1.2:/exports/audit",
+                    "local_mount_point": "/mnt/audit-log-success",
+                },
+            )
+
+    assert response.status_code == 200
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("Mount attempt started" in m for m in messages)
+    assert any("Mount attempt succeeded" in m for m in messages)
+
+
 def test_add_mount_failure(manager_client, db):
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=1, stderr="Permission denied", stdout="")
@@ -43,6 +62,25 @@ def test_add_mount_failure(manager_client, db):
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ERROR"
+
+
+def test_add_mount_logs_failure(manager_client, db, caplog):
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=1, stderr="Permission denied", stdout="")
+        with caplog.at_level("INFO"):
+            response = manager_client.post(
+                "/mounts",
+                json={
+                    "type": "NFS",
+                    "remote_path": "192.168.1.3:/exports/audit",
+                    "local_mount_point": "/mnt/audit-log-failure",
+                },
+            )
+
+    assert response.status_code == 200
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("Mount attempt started" in m for m in messages)
+    assert any("Mount attempt failed" in m for m in messages)
 
 
 def test_list_mounts(client, db):
@@ -196,6 +234,106 @@ def test_linux_mount_provider_check_mounted_uses_configured_default_timeout():
 
     assert mounted is True
     assert mock_run.call_args.kwargs["timeout"] == settings.subprocess_timeout_seconds
+
+
+def test_linux_mount_provider_uses_sudo_for_mount_when_configured(monkeypatch):
+    provider = LinuxMountProvider()
+
+    monkeypatch.setattr("app.services.mount_service.settings.use_sudo", True)
+    monkeypatch.setattr("app.services.mount_service.os.geteuid", lambda: 1000)
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
+
+        ok, err = provider.os_mount(
+            MountType.NFS,
+            "192.168.2.250:/mnt/Data/music",
+            "/mnt/music",
+        )
+
+    assert ok is True
+    assert err is None
+    cmd = mock_run.call_args.args[0]
+    assert cmd[:2] == ["sudo", "-n"]
+
+
+def test_linux_mount_provider_uses_direct_helper_on_fstab_option_failure():
+    provider = LinuxMountProvider()
+
+    first = MagicMock(returncode=32, stderr="mount.nfs: failed to apply fstab options", stdout="")
+    second = MagicMock(returncode=0, stderr="", stdout="")
+
+    with patch("app.services.mount_service._resolve_mount_nfs_binary", return_value="/sbin/mount.nfs"), \
+         patch("subprocess.run", side_effect=[first, second]) as mock_run:
+        ok, err = provider.os_mount(
+            MountType.NFS,
+            "192.168.2.250:/mnt/Data/music",
+            "/mnt/music",
+        )
+
+    assert ok is True
+    assert err is None
+    assert mock_run.call_count == 2
+    direct_cmd = mock_run.call_args_list[1].args[0]
+    assert "/sbin/mount.nfs" in direct_cmd
+
+
+def test_linux_mount_provider_returns_retry_error_when_fstab_retry_fails():
+    provider = LinuxMountProvider()
+
+    first = MagicMock(returncode=32, stderr="mount.nfs: failed to apply fstab options", stdout="")
+    second = MagicMock(returncode=1, stderr="mount.nfs: access denied by server", stdout="")
+
+    with patch("app.services.mount_service._resolve_mount_nfs_binary", return_value=None), \
+         patch("subprocess.run", side_effect=[first, second]):
+        ok, err = provider.os_mount(
+            MountType.NFS,
+            "192.168.2.250:/mnt/Data/music",
+            "/mnt/music",
+        )
+
+    assert ok is False
+    assert "failed to apply fstab options" in (err or "")
+
+
+def test_linux_mount_provider_uses_direct_nfs_helper_after_fstab_failures():
+    provider = LinuxMountProvider()
+
+    first = MagicMock(returncode=32, stderr="mount.nfs: failed to apply fstab options", stdout="")
+    second = MagicMock(returncode=0, stderr="", stdout="")
+
+    with patch("app.services.mount_service._resolve_mount_nfs_binary", return_value="/sbin/mount.nfs"), \
+         patch("subprocess.run", side_effect=[first, second]) as mock_run:
+        ok, err = provider.os_mount(
+            MountType.NFS,
+            "192.168.2.250:/mnt/Data/music",
+            "/mnt/music",
+        )
+
+    assert ok is True
+    assert err is None
+    assert mock_run.call_count == 2
+    direct_cmd = mock_run.call_args_list[1].args[0]
+    assert "/sbin/mount.nfs" in direct_cmd
+
+
+def test_linux_mount_provider_treats_active_mountpoint_as_success_after_failures():
+    provider = LinuxMountProvider()
+
+    first = MagicMock(returncode=32, stderr="mount.nfs: failed to apply fstab options", stdout="")
+    second = MagicMock(returncode=1, stderr="still failing", stdout="")
+
+    with patch("app.services.mount_service._resolve_mount_nfs_binary", return_value="/sbin/mount.nfs"), \
+         patch("subprocess.run", side_effect=[first, second]), \
+         patch.object(provider, "check_mounted", return_value=True):
+        ok, err = provider.os_mount(
+            MountType.NFS,
+            "192.168.2.250:/mnt/Data/music",
+            "/mnt/music",
+        )
+
+    assert ok is True
+    assert err is None
 
 
 def test_linux_mount_provider_check_mounted_non_positive_timeout_uses_default():

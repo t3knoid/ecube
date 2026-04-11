@@ -979,18 +979,18 @@ _ensure_ecube_user() {
 }
 
 # ==========================================================================
-# INSTALL SUDOERS POLICY FOR OS USER/GROUP MANAGEMENT
+# INSTALL SUDOERS POLICY FOR OS USER/GROUP MANAGEMENT + MOUNT OPERATIONS
 # Required so the ecube service account can run narrowly-scoped user/group
-# commands non-interactively from API setup endpoints.
+# commands and mount/unmount commands non-interactively from API endpoints.
 # ==========================================================================
 _install_os_user_mgmt_sudoers() {
   local sudoers_file="/etc/sudoers.d/ecube-user-mgmt"
   local sudoers_tmp="${sudoers_file}.tmp"
 
-  info "Installing sudoers policy for ECUBE OS user/group management..."
+  info "Installing sudoers policy for ECUBE OS user/group management, mount operations, and drive formatting/eject..."
 
   if [[ "${DRY_RUN}" == true ]]; then
-    echo "[DRY-RUN] Would write ${sudoers_file} with NOPASSWD rules for user/group management binaries"
+    echo "[DRY-RUN] Would write ${sudoers_file} with NOPASSWD rules for user/group management, mount, sync, and mkfs binaries"
     return
   fi
 
@@ -999,6 +999,8 @@ _install_os_user_mgmt_sudoers() {
 # /etc/sudoers.d/ecube-user-mgmt
 # Narrowly scoped privilege escalation for the ECUBE service account.
 ecube ALL=(root) NOPASSWD: /usr/sbin/useradd, /usr/sbin/usermod, /usr/sbin/userdel, /usr/sbin/groupadd, /usr/sbin/groupdel, /usr/sbin/chpasswd
+ecube ALL=(root) NOPASSWD: /bin/mount, /bin/umount, /sbin/mount.nfs, /usr/sbin/mount.nfs
+ecube ALL=(root) NOPASSWD: /bin/sync, /sbin/mkfs.ext4, /sbin/mkfs.exfat
 EOF_SUDOERS
   chmod 0440 "${sudoers_tmp}"
   chown root:root "${sudoers_tmp}"
