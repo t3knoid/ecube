@@ -48,11 +48,16 @@ class LinuxMountProvider:
             elif username:
                 cmd += ["-o", f"username={username}"]
 
-        cmd = _with_sudo(cmd)
+        cmd = _with_host_mount_namespace(cmd)
         logger.info("Executing mount command: %s", " ".join(cmd))
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=settings.subprocess_timeout_seconds)
         if result.returncode == 0:
-            return True, None
+            mounted = self.check_mounted(local_mount_point)
+            if mounted is True:
+                return True, None
+            error = "mount command reported success but mountpoint is not active"
+            logger.warning("Mount command verification failed: %s", error)
+            return False, error
 
         error = (result.stderr or result.stdout or "").strip() or "mount failed"
         logger.warning("Mount command failed: returncode=%s error=%s", result.returncode, error)
@@ -68,7 +73,7 @@ class LinuxMountProvider:
                 nfs_bin = _resolve_mount_nfs_binary()
                 if nfs_bin:
                     direct_cmd = [nfs_bin, remote_path, local_mount_point]
-                    direct_cmd = _with_sudo(direct_cmd)
+                    direct_cmd = _with_host_mount_namespace(direct_cmd)
                     logger.info("Retrying with direct NFS helper: %s", " ".join(direct_cmd))
                     direct_result = subprocess.run(
                         direct_cmd,
@@ -102,7 +107,8 @@ class LinuxMountProvider:
 
     def os_unmount(self, local_mount_point: str) -> Tuple[bool, Optional[str]]:
         try:
-            cmd = _with_sudo([settings.umount_binary_path, local_mount_point])
+            cmd = _with_host_mount_namespace([settings.umount_binary_path, local_mount_point])
+            logger.info("Executing unmount command: %s", " ".join(cmd))
             result = subprocess.run(
                 cmd,
                 capture_output=True, text=True,
@@ -110,19 +116,20 @@ class LinuxMountProvider:
             )
             if result.returncode != 0:
                 error = (result.stderr or result.stdout or "").strip() or "umount failed"
+                logger.warning("Unmount command failed: returncode=%s error=%s", result.returncode, error)
                 return False, error
+            logger.info("Unmount command succeeded: %s", local_mount_point)
             return True, None
         except Exception as exc:
+            logger.warning("Unmount command raised exception: %s", exc)
             return False, str(exc)
 
     def check_mounted(self, local_mount_point: str, *, timeout_seconds: Optional[float] = None) -> Optional[bool]:
         try:
             default_timeout = settings.subprocess_timeout_seconds
             timeout = default_timeout if timeout_seconds is None or timeout_seconds <= 0 else timeout_seconds
-            result = subprocess.run(
-                [settings.mountpoint_binary_path, "-q", local_mount_point],
-                capture_output=True, timeout=timeout,
-            )
+            cmd = _with_host_mount_namespace([settings.mountpoint_binary_path, "-q", local_mount_point])
+            result = subprocess.run(cmd, capture_output=True, timeout=timeout)
             return result.returncode == 0
         except Exception:
             return None
@@ -141,6 +148,42 @@ def _with_sudo(cmd: list[str]) -> list[str]:
     if settings.use_sudo and os.geteuid() != 0:
         return ["sudo", "-n", *cmd]
     return cmd
+
+
+def _in_host_mount_namespace() -> bool:
+    try:
+        current_ns = os.readlink("/proc/self/ns/mnt")
+    except Exception:
+        # If we cannot read our own namespace, keep existing behavior.
+        return True
+
+    try:
+        host_ns = os.readlink("/proc/1/ns/mnt")
+    except Exception:
+        # If host namespace cannot be read (for example hidepid restrictions),
+        # force host-namespace command path via nsenter.
+        logger.warning("Unable to read host mount namespace; assuming namespace differs")
+        return False
+
+    return current_ns == host_ns
+
+
+def _with_host_mount_namespace(cmd: list[str]) -> list[str]:
+    if _in_host_mount_namespace():
+        return _with_sudo(cmd)
+
+    nsenter = shutil.which("nsenter")
+    if not nsenter:
+        logger.warning("Mount namespace differs from host but nsenter is unavailable; using current namespace")
+        return _with_sudo(cmd)
+
+    if os.geteuid() != 0:
+        if not settings.use_sudo:
+            logger.warning("Mount namespace differs from host but sudo is disabled; using current namespace")
+            return cmd
+        return ["sudo", "-n", nsenter, "-t", "1", "-m", *cmd]
+
+    return [nsenter, "-t", "1", "-m", *cmd]
 
 
 def _mount_root_for_type(mount_type: MountType) -> str:
@@ -481,11 +524,22 @@ def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None,
     provider = provider or _default_provider()
     local_mount_point = str(mount.local_mount_point)
     try:
-        provider.os_unmount(local_mount_point)
-    except Exception:
-        # Unmount failures are non-fatal; the record is still deleted so the
-        # operator can manually clean up the mount point if needed.
-        pass
+        unmount_ok, unmount_error = provider.os_unmount(local_mount_point)
+    except Exception as exc:
+        unmount_ok, unmount_error = False, str(exc)
+
+    if not unmount_ok:
+        error_text = unmount_error or "umount failed"
+        logger.warning(
+            "Mount removal aborted because unmount failed: mount_id=%s local_mount_point=%s error=%s",
+            mount_id,
+            local_mount_point,
+            error_text,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=f"Failed to unmount {local_mount_point}: {error_text}",
+        )
 
     _cleanup_generated_mount_directory(local_mount_point)
 
