@@ -1000,7 +1000,6 @@ _install_os_user_mgmt_sudoers() {
 # Narrowly scoped privilege escalation for the ECUBE service account.
 ecube ALL=(root) NOPASSWD: /usr/sbin/useradd, /usr/sbin/usermod, /usr/sbin/userdel, /usr/sbin/groupadd, /usr/sbin/groupdel, /usr/sbin/chpasswd
 ecube ALL=(root) NOPASSWD: /bin/mount, /bin/umount, /sbin/mount.nfs, /usr/sbin/mount.nfs
-ecube ALL=(root) NOPASSWD: /usr/bin/nsenter -t 1 -m /bin/mount *, /usr/bin/nsenter -t 1 -m /bin/umount *, /usr/bin/nsenter -t 1 -m /sbin/mount.nfs *, /usr/bin/nsenter -t 1 -m /usr/sbin/mount.nfs *, /usr/bin/nsenter -t 1 -m /bin/mountpoint *, /usr/bin/nsenter -t 1 -m /usr/bin/mountpoint *
 ecube ALL=(root) NOPASSWD: /bin/sync, /sbin/mkfs.ext4, /sbin/mkfs.exfat
 ecube ALL=(root) NOPASSWD: /bin/mkdir, /bin/chown, /usr/bin/chown
 EOF_SUDOERS
