@@ -1,5 +1,7 @@
 import logging
 import subprocess
+import shutil
+import os
 from datetime import datetime, timezone
 from typing import Optional, Tuple
 
@@ -43,16 +45,63 @@ class LinuxMountProvider:
             elif username:
                 cmd += ["-o", f"username={username}"]
 
+        cmd = _with_sudo(cmd)
+        logger.info("Executing mount command: %s", " ".join(cmd))
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=settings.subprocess_timeout_seconds)
         if result.returncode == 0:
             return True, None
+
         error = (result.stderr or result.stdout or "").strip() or "mount failed"
+        logger.warning("Mount command failed: returncode=%s error=%s", result.returncode, error)
+
+        # Some environments have /etc/fstab entries for the target path with options
+        # that conflict with on-demand API mounts.
+        if "failed to apply fstab options" in error.lower():
+            retry_error = error
+
+            # On some hosts, mount(8) continues to apply local policies for NFS
+            # paths. Try mount.nfs directly to bypass mount(8) option handling.
+            if mount_type == MountType.NFS:
+                nfs_bin = _resolve_mount_nfs_binary()
+                if nfs_bin:
+                    direct_cmd = [nfs_bin, remote_path, local_mount_point]
+                    direct_cmd = _with_sudo(direct_cmd)
+                    logger.info("Retrying with direct NFS helper: %s", " ".join(direct_cmd))
+                    direct_result = subprocess.run(
+                        direct_cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=settings.subprocess_timeout_seconds,
+                    )
+                    if direct_result.returncode == 0:
+                        logger.info("Direct NFS helper mount succeeded")
+                        return True, None
+                    direct_error = (direct_result.stderr or direct_result.stdout or "").strip() or "mount failed"
+                    logger.warning(
+                        "Direct NFS helper mount failed: returncode=%s error=%s",
+                        direct_result.returncode,
+                        direct_error,
+                    )
+                    retry_error = direct_error
+
+            # If command flow reports failure but mountpoint is active, treat as success.
+            mounted = self.check_mounted(local_mount_point)
+            if mounted is True:
+                logger.warning(
+                    "Mount commands reported failure but mountpoint is active; treating as mounted: %s",
+                    local_mount_point,
+                )
+                return True, None
+
+            return False, retry_error
+
         return False, error
 
     def os_unmount(self, local_mount_point: str) -> Tuple[bool, Optional[str]]:
         try:
+            cmd = _with_sudo([settings.umount_binary_path, local_mount_point])
             result = subprocess.run(
-                [settings.umount_binary_path, local_mount_point],
+                cmd,
                 capture_output=True, text=True,
                 timeout=settings.subprocess_timeout_seconds,
             )
@@ -74,6 +123,21 @@ class LinuxMountProvider:
             return result.returncode == 0
         except Exception:
             return None
+
+
+def _resolve_mount_nfs_binary() -> Optional[str]:
+    for candidate in ("/sbin/mount.nfs", "/usr/sbin/mount.nfs", "mount.nfs"):
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+    return None
+
+
+def _with_sudo(cmd: list[str]) -> list[str]:
+    # Use non-interactive sudo when configured and not already running as root.
+    if settings.use_sudo and os.geteuid() != 0:
+        return ["sudo", "-n", *cmd]
+    return cmd
 
 
 def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
@@ -106,6 +170,13 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
         )
 
     _mount_error = None
+    logger.info(
+        "Mount attempt started: type=%s remote_path=%s local_mount_point=%s actor=%s",
+        mount_data.type.value,
+        mount_data.remote_path,
+        mount_data.local_mount_point,
+        actor or "system",
+    )
     try:
         success, error = provider.os_mount(
             mount_data.type,
@@ -116,9 +187,26 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
         )
         if success:
             mount.status = MountStatus.MOUNTED
+            logger.info(
+                "Mount attempt succeeded: mount_id=%s type=%s remote_path=%s local_mount_point=%s actor=%s",
+                mount.id,
+                mount_data.type.value,
+                mount_data.remote_path,
+                mount_data.local_mount_point,
+                actor or "system",
+            )
         else:
             mount.status = MountStatus.ERROR
             _mount_error = error
+            logger.warning(
+                "Mount attempt failed: mount_id=%s type=%s remote_path=%s local_mount_point=%s actor=%s error=%s",
+                mount.id,
+                mount_data.type.value,
+                mount_data.remote_path,
+                mount_data.local_mount_point,
+                actor or "system",
+                _mount_error,
+            )
         try:
             mount_repo.save(mount)
         except Exception:
@@ -146,6 +234,14 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
                 mount.id,
             )
         _mount_error = str(exc)
+        logger.exception(
+            "Mount attempt raised exception: mount_id=%s type=%s remote_path=%s local_mount_point=%s actor=%s",
+            mount.id,
+            mount_data.type.value,
+            mount_data.remote_path,
+            mount_data.local_mount_point,
+            actor or "system",
+        )
 
     try:
         audit_repo.add(
