@@ -275,6 +275,24 @@ def test_delete_mount_not_found(manager_client, db):
     assert response.status_code == 404
 
 
+def test_delete_mount_returns_conflict_when_unmount_fails(manager_client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="192.168.1.1:/share",
+        local_mount_point="/mnt/share",
+        status=MountStatus.MOUNTED,
+    )
+    db.add(mount)
+    db.commit()
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=1, stderr="target is busy", stdout="")
+        response = manager_client.delete(f"/mounts/{mount.id}")
+
+    assert response.status_code == 409
+    assert db.get(NetworkMount, mount.id) is not None
+
+
 def test_validate_mount_success(manager_client, db):
     mount = NetworkMount(
         type=MountType.NFS,
@@ -406,8 +424,89 @@ def test_linux_mount_provider_uses_sudo_for_mount_when_configured(monkeypatch):
 
     assert ok is True
     assert err is None
-    cmd = mock_run.call_args.args[0]
+    cmd = mock_run.call_args_list[0].args[0]
     assert cmd[:2] == ["sudo", "-n"]
+
+
+def test_linux_mount_provider_treats_returncode_zero_with_inactive_mountpoint_as_failure():
+    provider = LinuxMountProvider()
+
+    with patch("subprocess.run") as mock_run, patch.object(provider, "check_mounted", return_value=False):
+        mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
+        ok, err = provider.os_mount(
+            MountType.NFS,
+            "192.168.2.250:/mnt/Data/music",
+            "/nfs/music",
+        )
+
+    assert ok is False
+    assert "not active" in (err or "")
+
+
+def test_linux_mount_provider_uses_nsenter_when_mount_namespace_differs(monkeypatch):
+    provider = LinuxMountProvider()
+
+    monkeypatch.setattr("app.services.mount_service.settings.use_sudo", True)
+    monkeypatch.setattr("app.services.mount_service.os.geteuid", lambda: 1000)
+
+    with patch("app.services.mount_service.os.readlink", side_effect=["mnt:[2]", "mnt:[1]"]), \
+         patch("app.services.mount_service.shutil.which", return_value="/usr/bin/nsenter"), \
+         patch("subprocess.run") as mock_run, \
+         patch.object(provider, "check_mounted", return_value=True):
+        mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
+
+        ok, err = provider.os_mount(
+            MountType.NFS,
+            "192.168.2.250:/mnt/Data/music",
+            "/nfs/music",
+        )
+
+    assert ok is True
+    assert err is None
+    cmd = mock_run.call_args_list[0].args[0]
+    assert cmd[:6] == ["sudo", "-n", "/usr/bin/nsenter", "-t", "1", "-m"]
+
+
+def test_check_mounted_uses_nsenter_when_mount_namespace_differs(monkeypatch):
+    provider = LinuxMountProvider()
+
+    monkeypatch.setattr("app.services.mount_service.settings.use_sudo", True)
+    monkeypatch.setattr("app.services.mount_service.os.geteuid", lambda: 1000)
+
+    with patch("app.services.mount_service.os.readlink", side_effect=["mnt:[2]", "mnt:[1]"]), \
+         patch("app.services.mount_service.shutil.which", return_value="/usr/bin/nsenter"), \
+         patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+
+        mounted = provider.check_mounted("/nfs/music")
+
+    assert mounted is True
+    cmd = mock_run.call_args.args[0]
+    assert cmd[:6] == ["sudo", "-n", "/usr/bin/nsenter", "-t", "1", "-m"]
+
+
+def test_linux_mount_provider_uses_nsenter_when_host_namespace_read_fails(monkeypatch):
+    provider = LinuxMountProvider()
+
+    monkeypatch.setattr("app.services.mount_service.settings.use_sudo", True)
+    monkeypatch.setattr("app.services.mount_service.os.geteuid", lambda: 1000)
+
+    with patch("app.services.mount_service.os.readlink", side_effect=["mnt:[2]", PermissionError("denied")]), \
+         patch("app.services.mount_service.shutil.which", return_value="/usr/bin/nsenter"), \
+         patch("subprocess.run") as mock_run, \
+         patch.object(provider, "check_mounted", return_value=True):
+        mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
+
+        ok, err = provider.os_mount(
+            MountType.SMB,
+            "//192.168.2.250/music",
+            "/smb/music",
+        )
+
+    assert ok is True
+    assert err is None
+    cmd = mock_run.call_args_list[0].args[0]
+    assert cmd[:6] == ["sudo", "-n", "/usr/bin/nsenter", "-t", "1", "-m"]
 
 
 def test_linux_mount_provider_uses_direct_helper_on_fstab_option_failure():
