@@ -155,6 +155,74 @@ Every project-isolation decision is recorded:
 - Mount manager validates connectivity before exposing paths to job creation.
 - Reference counting prevents unmount while active jobs still depend on a mount.
 
+### 4.6.1 Project Source Binding Design
+
+Project source binding defines which source locations are valid for each project,
+so project isolation covers both destination drives and source-path selection.
+
+#### Configuration Model
+
+- Add a project source-binding entity keyed by project identifier.
+- Each binding row references:
+  - project identifier
+  - mount identifier
+  - optional subfolder path under the mount's local mount point
+  - active flag
+  - created/updated metadata
+- Multiple bindings per project are allowed.
+- A binding without subfolder means the whole mount root is allowed for that project.
+
+#### Path Resolution Model
+
+- Job creation resolves an effective source path as an absolute path visible to ECUBE.
+- If the caller provides a relative source component, the service resolves it under
+  the selected mount root before validation.
+- If the caller provides an absolute source path, it is normalized and validated
+  against allowed binding boundaries.
+- Normalization must remove redundant path segments and reject unsafe traversal
+  semantics (for example, attempts to escape via `..`).
+
+#### Job Creation Enforcement Flow
+
+1. Load active source bindings for the requested project.
+2. If bindings exist, require the effective source path to be contained by at
+   least one allowed binding boundary (`mount_root[/subfolder]`).
+3. If bindings are required by policy and none exist, reject job creation.
+4. If the source path is outside all allowed boundaries, reject job creation
+   before drive assignment or copy scheduling.
+5. If source binding passes, continue existing drive/project isolation and job
+   lifecycle validation.
+
+#### Shared-Share / Subfolder Pattern
+
+- One mount may be shared across many projects.
+- Per-project segregation is achieved by binding distinct subfolders on the
+  same mount root (for example `/mnt/evidence/PROJECT-A`, `/mnt/evidence/PROJECT-B`).
+- Boundary checks are path-prefix-safe and segment-aware so `PROJECT-A`
+  does not match `PROJECT-A-ARCHIVE` unless explicitly configured.
+
+#### UI / Workflow Model
+
+- Add a project settings screen for admin/manager roles.
+- The screen allows create/update/delete of project source bindings and displays
+  effective allowed source boundaries.
+- Job creation UI should present project-allowed source options first; free-text
+  source entry, if retained, must still pass server-side binding validation.
+
+#### Authorization Model
+
+- Admin/manager: can manage project source bindings.
+- Processor: can create jobs using allowed bindings but cannot modify binding policy.
+- Auditor: read-only visibility where policy permits, no mutation capability.
+
+#### Audit Model
+
+- Emit audit events for source-binding create/update/delete operations.
+- Emit a dedicated denial audit event when job creation is rejected due to
+  source-binding policy mismatch.
+- Denial details include actor, project identifier, submitted source path,
+  and evaluated binding boundary identifiers.
+
 ## 4.7 Manifest Generation Design
 
 - Generate deterministic manifest per job completion (or on-demand regeneration).
