@@ -76,6 +76,8 @@ class TestDriveAuditLogging:
         entry = _audit_by_action(db, "DRIVE_INITIALIZED")
         assert entry is not None
         assert entry.user == "manager-user"
+        assert entry.drive_id == drive.id
+        assert entry.project_id == "PROJ-AUDIT"
         assert entry.details["drive_id"] == drive.id
         assert entry.details["project_id"] == "PROJ-AUDIT"
 
@@ -97,6 +99,7 @@ class TestDriveAuditLogging:
         entry = _audit_by_action(db, "PROJECT_ISOLATION_VIOLATION")
         assert entry is not None
         assert entry.user == "manager-user"
+        assert entry.drive_id == drive.id
         assert entry.details["actor"] == "manager-user"
         assert entry.details["drive_id"] == drive.id
         assert entry.details["existing_project_id"] == "PROJ-A"
@@ -252,6 +255,7 @@ class TestJobAuditLogging:
         assert entry is not None
         assert entry.user == "test-user"
         assert entry.job_id == job_id
+        assert entry.project_id == "PROJ-AUDIT"
         assert entry.details["project_id"] == "PROJ-AUDIT"
 
     def test_job_create_project_isolation_violation_logs_actor(self, client, db):
