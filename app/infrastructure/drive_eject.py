@@ -11,6 +11,7 @@ without requiring physical hardware.
 """
 from __future__ import annotations
 
+import os
 import os.path
 import re
 import subprocess
@@ -24,6 +25,12 @@ from app.infrastructure.device_path import validate_device_path
 # Actual values come from settings; these module-level names kept for readability.
 _SYNC_BIN = settings.sync_binary_path
 _UMOUNT_BIN = settings.umount_binary_path
+
+
+def _with_sudo(cmd: list[str]) -> list[str]:
+    if settings.use_sudo and os.geteuid() != 0:
+        return ["sudo", "-n", *cmd]
+    return cmd
 
 
 # ---------------------------------------------------------------------------
@@ -156,7 +163,12 @@ def sync_filesystem() -> Tuple[bool, Optional[str]]:
     success or ``(False, error_message)`` on failure.
     """
     try:
-        subprocess.run([_SYNC_BIN], check=True, capture_output=True, timeout=settings.subprocess_timeout_seconds)
+        subprocess.run(
+            _with_sudo([_SYNC_BIN]),
+            check=True,
+            capture_output=True,
+            timeout=settings.subprocess_timeout_seconds,
+        )
         return True, None
     except subprocess.TimeoutExpired:
         return False, f"sync timed out after {settings.subprocess_timeout_seconds} seconds"
@@ -325,7 +337,7 @@ def unmount_device(device_path: str) -> Tuple[bool, Optional[str]]:
     for mount_point in sorted_mountpoints:
         try:
             subprocess.run(
-                [_UMOUNT_BIN, mount_point],
+                _with_sudo([_UMOUNT_BIN, mount_point]),
                 check=True,
                 capture_output=True,
                 timeout=settings.subprocess_timeout_seconds,
