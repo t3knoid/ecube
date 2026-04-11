@@ -1,5 +1,10 @@
 import logging
 import subprocess
+import shutil
+import os
+import re
+import pwd
+import grp
 from datetime import datetime, timezone
 from typing import Optional, Tuple
 
@@ -43,37 +48,358 @@ class LinuxMountProvider:
             elif username:
                 cmd += ["-o", f"username={username}"]
 
+        cmd = _with_host_mount_namespace(cmd)
+        logger.info("Executing mount command: %s", " ".join(cmd))
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=settings.subprocess_timeout_seconds)
         if result.returncode == 0:
-            return True, None
+            mounted = self.check_mounted(local_mount_point)
+            if mounted is True:
+                return True, None
+            error = "mount command reported success but mountpoint is not active"
+            logger.warning("Mount command verification failed: %s", error)
+            return False, error
+
         error = (result.stderr or result.stdout or "").strip() or "mount failed"
+        logger.warning("Mount command failed: returncode=%s error=%s", result.returncode, error)
+
+        # Some environments have /etc/fstab entries for the target path with options
+        # that conflict with on-demand API mounts.
+        if "failed to apply fstab options" in error.lower():
+            retry_error = error
+
+            # On some hosts, mount(8) continues to apply local policies for NFS
+            # paths. Try mount.nfs directly to bypass mount(8) option handling.
+            if mount_type == MountType.NFS:
+                nfs_bin = _resolve_mount_nfs_binary()
+                if nfs_bin:
+                    direct_cmd = [nfs_bin, remote_path, local_mount_point]
+                    direct_cmd = _with_host_mount_namespace(direct_cmd)
+                    logger.info("Retrying with direct NFS helper: %s", " ".join(direct_cmd))
+                    direct_result = subprocess.run(
+                        direct_cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=settings.subprocess_timeout_seconds,
+                    )
+                    if direct_result.returncode == 0:
+                        logger.info("Direct NFS helper mount succeeded")
+                        return True, None
+                    direct_error = (direct_result.stderr or direct_result.stdout or "").strip() or "mount failed"
+                    logger.warning(
+                        "Direct NFS helper mount failed: returncode=%s error=%s",
+                        direct_result.returncode,
+                        direct_error,
+                    )
+                    retry_error = direct_error
+
+            # If command flow reports failure but mountpoint is active, treat as success.
+            mounted = self.check_mounted(local_mount_point)
+            if mounted is True:
+                logger.warning(
+                    "Mount commands reported failure but mountpoint is active; treating as mounted: %s",
+                    local_mount_point,
+                )
+                return True, None
+
+            return False, retry_error
+
         return False, error
 
     def os_unmount(self, local_mount_point: str) -> Tuple[bool, Optional[str]]:
         try:
+            cmd = _with_host_mount_namespace([settings.umount_binary_path, local_mount_point])
+            logger.info("Executing unmount command: %s", " ".join(cmd))
             result = subprocess.run(
-                [settings.umount_binary_path, local_mount_point],
+                cmd,
                 capture_output=True, text=True,
                 timeout=settings.subprocess_timeout_seconds,
             )
             if result.returncode != 0:
                 error = (result.stderr or result.stdout or "").strip() or "umount failed"
+                logger.warning("Unmount command failed: returncode=%s error=%s", result.returncode, error)
                 return False, error
+            logger.info("Unmount command succeeded: %s", local_mount_point)
             return True, None
         except Exception as exc:
+            logger.warning("Unmount command raised exception: %s", exc)
             return False, str(exc)
 
     def check_mounted(self, local_mount_point: str, *, timeout_seconds: Optional[float] = None) -> Optional[bool]:
         try:
             default_timeout = settings.subprocess_timeout_seconds
             timeout = default_timeout if timeout_seconds is None or timeout_seconds <= 0 else timeout_seconds
-            result = subprocess.run(
-                [settings.mountpoint_binary_path, "-q", local_mount_point],
-                capture_output=True, timeout=timeout,
-            )
-            return result.returncode == 0
+            if not _in_host_mount_namespace():
+                local_path = os.path.normpath(local_mount_point)
+                cmd = _with_sudo([settings.mount_binary_path, "-N", "/proc/1/ns/mnt"])
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+                if result.returncode != 0:
+                    error = (result.stderr or result.stdout or "").strip() or "mount list check failed"
+                    logger.warning("Host namespace mount list check failed: %s", error)
+                    return self._check_mounted_with_mountpoint(local_mount_point, timeout)
+
+                stdout = result.stdout if isinstance(result.stdout, str) else ""
+                if stdout:
+                    return f" on {local_path} " in stdout
+
+                # Some mocked/test environments don't provide mount output.
+                return self._check_mounted_with_mountpoint(local_mount_point, timeout)
+
+            return self._check_mounted_with_mountpoint(local_mount_point, timeout)
         except Exception:
             return None
+
+    def _check_mounted_with_mountpoint(self, local_mount_point: str, timeout: float) -> Optional[bool]:
+        cmd = _with_sudo([settings.mountpoint_binary_path, "-q", local_mount_point])
+        result = subprocess.run(cmd, capture_output=True, timeout=timeout)
+        return result.returncode == 0
+
+
+def _resolve_mount_nfs_binary() -> Optional[str]:
+    for candidate in ("/sbin/mount.nfs", "/usr/sbin/mount.nfs", "mount.nfs"):
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+    return None
+
+
+def _with_sudo(cmd: list[str]) -> list[str]:
+    # Use non-interactive sudo when configured and not already running as root.
+    if settings.use_sudo and os.geteuid() != 0:
+        return ["sudo", "-n", *cmd]
+    return cmd
+
+
+def _with_mount_namespace_flag(cmd: list[str]) -> Optional[list[str]]:
+    """Add util-linux namespace flag for mount/umount commands when applicable."""
+    if not cmd:
+        return None
+
+    binary = os.path.basename(cmd[0])
+    if binary in ("mount", "umount"):
+        return [cmd[0], "-N", "/proc/1/ns/mnt", *cmd[1:]]
+    return None
+
+
+def _in_host_mount_namespace() -> bool:
+    try:
+        current_ns = os.readlink("/proc/self/ns/mnt")
+    except Exception:
+        # If we cannot read our own namespace, keep existing behavior.
+        return True
+
+    try:
+        host_ns = os.readlink("/proc/1/ns/mnt")
+    except Exception:
+        # If host namespace cannot be read (for example hidepid restrictions),
+        # force host-namespace command path via nsenter.
+        logger.warning("Unable to read host mount namespace; assuming namespace differs")
+        return False
+
+    return current_ns == host_ns
+
+
+def _with_host_mount_namespace(cmd: list[str]) -> list[str]:
+    if _in_host_mount_namespace():
+        return _with_sudo(cmd)
+
+    ns_flag_cmd = _with_mount_namespace_flag(cmd)
+    if ns_flag_cmd is not None:
+        return _with_sudo(ns_flag_cmd)
+
+    nsenter = shutil.which("nsenter")
+    if not nsenter:
+        logger.warning("Mount namespace differs from host but nsenter is unavailable; using current namespace")
+        return _with_sudo(cmd)
+
+    if os.geteuid() != 0:
+        if not settings.use_sudo:
+            logger.warning("Mount namespace differs from host but sudo is disabled; using current namespace")
+            return cmd
+        return ["sudo", "-n", nsenter, "-t", "1", "-m", *cmd]
+
+    return [nsenter, "-t", "1", "-m", *cmd]
+
+
+def _mount_root_for_type(mount_type: MountType) -> str:
+    return "/nfs" if mount_type == MountType.NFS else "/smb"
+
+
+def _extract_remote_leaf(mount_type: MountType, remote_path: str) -> str:
+    path_part = remote_path
+    if mount_type == MountType.NFS:
+        if ":" in remote_path:
+            path_part = remote_path.rsplit(":", 1)[1]
+    else:
+        stripped = remote_path.lstrip("/")
+        smb_parts = [part for part in stripped.split("/") if part]
+        if len(smb_parts) >= 2:
+            path_part = "/".join(smb_parts[1:])
+
+    parts = [part for part in path_part.split("/") if part not in ("", ".", "..")]
+    return parts[-1] if parts else "share"
+
+
+def _slugify_mount_leaf(name: str) -> str:
+    # Keep mount directory names predictable and filesystem-safe.
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-._")
+    return slug or "share"
+
+
+def _generate_local_mount_point(
+    mount_type: MountType,
+    remote_path: str,
+    existing_mount_points: set[str],
+) -> str:
+    root = _mount_root_for_type(mount_type)
+    leaf = _slugify_mount_leaf(_extract_remote_leaf(mount_type, remote_path))
+    candidate = f"{root}/{leaf}"
+    suffix = 2
+    while candidate in existing_mount_points:
+        candidate = f"{root}/{leaf}-{suffix}"
+        suffix += 1
+    return candidate
+
+
+def _managed_mount_root(local_mount_point: str) -> Optional[str]:
+    normalized = os.path.normpath(local_mount_point)
+    if normalized.startswith("/nfs/"):
+        return "/nfs"
+    if normalized.startswith("/smb/"):
+        return "/smb"
+    return None
+
+
+def _service_owner_spec() -> str:
+    uid = os.geteuid()
+    gid = os.getegid()
+    try:
+        user = pwd.getpwuid(uid).pw_name
+    except Exception:
+        user = str(uid)
+    try:
+        group = grp.getgrgid(gid).gr_name
+    except Exception:
+        group = str(gid)
+    return f"{user}:{group}"
+
+
+def _run_sudo_cmd(cmd: list[str]) -> Tuple[bool, str]:
+    result = subprocess.run(
+        ["sudo", "-n", *cmd],
+        capture_output=True,
+        text=True,
+        timeout=settings.subprocess_timeout_seconds,
+    )
+    if result.returncode == 0:
+        return True, ""
+    error = (result.stderr or result.stdout or "").strip() or "sudo command failed"
+    return False, error
+
+
+def _ensure_mount_directory(local_mount_point: str) -> Optional[str]:
+    try:
+        os.makedirs(local_mount_point, exist_ok=True)
+        return None
+    except PermissionError as exc:
+        managed_root = _managed_mount_root(local_mount_point)
+
+        # Bootstrap managed roots and mount leaf as root, then hand ownership
+        # to the service account so future operations are non-root.
+        if managed_root and settings.use_sudo and os.geteuid() != 0:
+            owner_spec = _service_owner_spec()
+            ok, error = _run_sudo_cmd(["mkdir", "-p", managed_root, local_mount_point])
+            if not ok:
+                return f"failed to create local mount point directory: {error}"
+            ok, error = _run_sudo_cmd(["chown", owner_spec, managed_root, local_mount_point])
+            if not ok:
+                return f"failed to set local mount point ownership: {error}"
+            return None
+
+        if managed_root and not os.path.isdir(managed_root):
+            return (
+                f"failed to create local mount point directory: {exc}. "
+                f"Missing managed mount root '{managed_root}'. "
+                f"Create it and set ownership to the ECUBE service account."
+            )
+
+        if managed_root:
+            return (
+                f"failed to create local mount point directory: {exc}. "
+                f"Ensure '{managed_root}' is writable by the ECUBE service account."
+            )
+
+        return f"failed to create local mount point directory: {exc}"
+    except Exception as exc:
+        return f"failed to create local mount point directory: {exc}"
+
+
+def _validate_mount_directory_owner(local_mount_point: str) -> Optional[str]:
+    try:
+        st = os.stat(local_mount_point)
+    except Exception as exc:
+        return f"failed to stat local mount point directory: {exc}"
+
+    # Enforce ownership by the service account; if needed and allowed, repair
+    # ownership for managed mount roots via sudo.
+    if os.geteuid() != 0 and st.st_uid != os.geteuid():
+        managed_root = _managed_mount_root(local_mount_point)
+        if managed_root and settings.use_sudo:
+            owner_spec = _service_owner_spec()
+            ok, error = _run_sudo_cmd(["chown", owner_spec, managed_root, local_mount_point])
+            if not ok:
+                return f"local mount point directory ownership repair failed: {error}"
+            try:
+                st = os.stat(local_mount_point)
+            except Exception as exc:
+                return f"failed to stat local mount point directory: {exc}"
+        if st.st_uid == 0:
+            return "local mount point directory is owned by root; it must be owned by the ECUBE service account"
+        if st.st_uid != os.geteuid():
+            return "local mount point directory is not owned by the ECUBE service account"
+    return None
+
+
+def _is_generated_mount_point(local_mount_point: str) -> bool:
+    return local_mount_point.startswith("/nfs/") or local_mount_point.startswith("/smb/")
+
+
+def _cleanup_target_for_generated_mount_point(local_mount_point: str) -> Optional[str]:
+    normalized = os.path.normpath(local_mount_point)
+    if normalized.startswith("/nfs/"):
+        root = "/nfs"
+    elif normalized.startswith("/smb/"):
+        root = "/smb"
+    else:
+        return None
+
+    rel = os.path.relpath(normalized, root)
+    # Only allow one generated leaf directly under /nfs or /smb.
+    if rel in (".", "..") or rel.startswith("../") or "/" in rel:
+        logger.warning(
+            "Skipping generated mount cleanup for non-leaf managed path: %s",
+            local_mount_point,
+        )
+        return None
+    return os.path.join(root, rel)
+
+
+def _cleanup_generated_mount_directory(local_mount_point: str) -> None:
+    # Only remove one generated leaf directory under managed roots.
+    target = _cleanup_target_for_generated_mount_point(local_mount_point)
+    if not target:
+        return
+
+    try:
+        os.rmdir(target)
+        return
+    except FileNotFoundError:
+        return
+    except PermissionError as exc:
+        logger.warning("Failed to remove generated mount directory %s: %s", target, exc)
+        return
+    except OSError as exc:
+        logger.warning("Failed to remove generated mount directory %s: %s", target, exc)
+        return
 
 
 def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
@@ -83,10 +409,17 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
     audit_repo = AuditRepository(db)
     provider = provider or _default_provider()
 
+    existing_mount_points = {str(m.local_mount_point) for m in mount_repo.list_all()}
+    local_mount_point = _generate_local_mount_point(
+        mount_data.type,
+        mount_data.remote_path,
+        existing_mount_points,
+    )
+
     mount = NetworkMount(
         type=mount_data.type,
         remote_path=mount_data.remote_path,
-        local_mount_point=mount_data.local_mount_point,
+        local_mount_point=local_mount_point,
         status=MountStatus.UNMOUNTED,
     )
     try:
@@ -106,19 +439,59 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
         )
 
     _mount_error = None
+    logger.info(
+        "Mount attempt started: type=%s remote_path=%s local_mount_point=%s actor=%s",
+        mount_data.type.value,
+        mount_data.remote_path,
+        mount.local_mount_point,
+        actor or "system",
+    )
     try:
-        success, error = provider.os_mount(
-            mount_data.type,
-            mount_data.remote_path,
-            mount_data.local_mount_point,
-            credentials_file=mount_data.credentials_file,
-            username=mount_data.username,
-        )
+        create_dir_error = _ensure_mount_directory(mount.local_mount_point)
+        if create_dir_error:
+            logger.warning(
+                "Mountpoint preparation failed: type=%s remote_path=%s local_mount_point=%s actor=%s error=%s",
+                mount_data.type.value,
+                mount_data.remote_path,
+                mount.local_mount_point,
+                actor or "system",
+                create_dir_error,
+            )
+            success, error = False, create_dir_error
+        else:
+            owner_error = _validate_mount_directory_owner(mount.local_mount_point)
+            if owner_error:
+                success, error = False, owner_error
+            else:
+                success, error = provider.os_mount(
+                    mount_data.type,
+                    mount_data.remote_path,
+                    mount.local_mount_point,
+                    credentials_file=mount_data.credentials_file,
+                    username=mount_data.username,
+                )
         if success:
             mount.status = MountStatus.MOUNTED
+            logger.info(
+                "Mount attempt succeeded: mount_id=%s type=%s remote_path=%s local_mount_point=%s actor=%s",
+                mount.id,
+                mount_data.type.value,
+                mount_data.remote_path,
+                mount.local_mount_point,
+                actor or "system",
+            )
         else:
             mount.status = MountStatus.ERROR
             _mount_error = error
+            logger.warning(
+                "Mount attempt failed: mount_id=%s type=%s remote_path=%s local_mount_point=%s actor=%s error=%s",
+                mount.id,
+                mount_data.type.value,
+                mount_data.remote_path,
+                mount.local_mount_point,
+                actor or "system",
+                _mount_error,
+            )
         try:
             mount_repo.save(mount)
         except Exception:
@@ -146,6 +519,14 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
                 mount.id,
             )
         _mount_error = str(exc)
+        logger.exception(
+            "Mount attempt raised exception: mount_id=%s type=%s remote_path=%s local_mount_point=%s actor=%s",
+            mount.id,
+            mount_data.type.value,
+            mount_data.remote_path,
+            mount.local_mount_point,
+            actor or "system",
+        )
 
     try:
         audit_repo.add(
@@ -175,12 +556,26 @@ def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None,
         raise HTTPException(status_code=404, detail="Mount not found")
 
     provider = provider or _default_provider()
+    local_mount_point = str(mount.local_mount_point)
     try:
-        provider.os_unmount(mount.local_mount_point)
-    except Exception:
-        # Unmount failures are non-fatal; the record is still deleted so the
-        # operator can manually clean up the mount point if needed.
-        pass
+        unmount_ok, unmount_error = provider.os_unmount(local_mount_point)
+    except Exception as exc:
+        unmount_ok, unmount_error = False, str(exc)
+
+    if not unmount_ok:
+        error_text = unmount_error or "umount failed"
+        logger.warning(
+            "Mount removal aborted because unmount failed: mount_id=%s local_mount_point=%s error=%s",
+            mount_id,
+            local_mount_point,
+            error_text,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=f"Failed to unmount {local_mount_point}: {error_text}",
+        )
+
+    _cleanup_generated_mount_directory(local_mount_point)
 
     try:
         audit_repo.add(

@@ -4,4 +4,4 @@
 #          sudo chmod 0440 /etc/sudoers.d/ecube-user-mgmt
 #          sudo visudo -cf /etc/sudoers.d/ecube-user-mgmt
 
-ecube ALL=(root) NOPASSWD: /usr/sbin/useradd, /usr/sbin/usermod, /usr/sbin/userdel, /usr/sbin/groupadd, /usr/sbin/groupdel, /usr/sbin/chpasswd
+ecube ALL=(root) NOPASSWD: /usr/sbin/useradd, /usr/sbin/usermod, /usr/sbin/userdel, /usr/sbin/groupadd, /usr/sbin/groupdel, /usr/sbin/chpasswd, /bin/mount, /bin/umount, /sbin/mount.nfs, /usr/sbin/mount.nfs, /bin/sync, /sbin/mkfs.ext4, /sbin/mkfs.exfat, /bin/mkdir, /bin/chown, /usr/bin/chown
