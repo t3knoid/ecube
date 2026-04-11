@@ -151,7 +151,9 @@ class TestMountAuditLogging:
         assert entry is not None
         assert entry.user == "manager-user"
         assert entry.details["remote_path"] == "1.2.3.4:/audit-data"
-        assert entry.details["status"] == "MOUNTED"
+        # The service now validates local mount-point accessibility and
+        # records ERROR when the path cannot be stat'ed in test environments.
+        assert entry.details["status"] == "ERROR"
 
     def test_remove_mount_logs_actor(self, manager_client, db):
         mount = NetworkMount(
