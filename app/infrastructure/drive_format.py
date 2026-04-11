@@ -6,6 +6,7 @@ implementation that shells out to ``mkfs.*`` utilities.
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 from typing import Protocol
 
@@ -52,7 +53,7 @@ class LinuxDriveFormatter:
 
         try:
             subprocess.run(
-                [mkfs_binary, device_path],
+                _with_sudo([mkfs_binary, device_path]),
                 check=True,
                 capture_output=True,
                 timeout=settings.subprocess_timeout_seconds,
@@ -86,3 +87,9 @@ class LinuxDriveFormatter:
         except OSError:
             logger.exception("Could not read %s for mount check", settings.procfs_mounts_path)
         return False
+
+
+def _with_sudo(cmd: list[str]) -> list[str]:
+    if settings.use_sudo and os.geteuid() != 0:
+        return ["sudo", "-n", *cmd]
+    return cmd
