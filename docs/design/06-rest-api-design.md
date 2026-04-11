@@ -146,6 +146,7 @@ Every authenticated request resolves to:
 | Manage OS users/groups (local only) | ✔ | ✖ | ✖ | ✖ |
 | Add/remove mounts | ✔ | ✔ | ✖ | ✖ |
 | List mounts | ✔ | ✔ | ✔ | ✔ |
+| Manage project source bindings | ✔ | ✔ | ✖ | ✖ |
 | Initialize drives | ✔ | ✔ | ✖ | ✖ |
 | Prepare drives for eject | ✔ | ✔ | ✖ | ✖ |
 | Manage USB port enablement | ✔ | ✔ | ✖ | ✖ |
@@ -234,6 +235,114 @@ List all mounts.
 
 - `401 Unauthorized` — Missing/invalid token
 - `403 Forbidden` — Insufficient role
+
+---
+
+## 3.1a Project Source Binding Management
+
+Project source bindings define allowed source boundaries per project (`mount_root[/subfolder]`) and are used by job creation policy enforcement.
+
+### `GET /projects/{project_id}/source-bindings`
+
+List active and inactive source bindings for one project.
+
+**Roles:** `admin`, `manager`, `processor`, `auditor`
+
+**Response (200 OK):**
+
+```json
+[
+    {
+        "id": 21,
+        "project_id": "PROJECT-42",
+        "mount_id": 5,
+        "mount_local_root": "/mnt/evidence",
+        "subfolder": "PROJECT-42",
+        "active": true,
+        "created_at": "2026-04-11T09:00:00Z",
+        "updated_at": "2026-04-11T09:00:00Z"
+    }
+]
+```
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+- `404 Not Found` — Project does not exist
+- `422 Validation Error` — Invalid path parameter
+
+### `POST /projects/{project_id}/source-bindings`
+
+Create a source-binding policy entry for a project.
+
+**Roles:** `admin`, `manager`
+
+**Request body (JSON):**
+
+```json
+{
+    "mount_id": 5,
+    "subfolder": "PROJECT-42",
+    "active": true
+}
+```
+
+**Behavior:**
+
+1. Verifies target project and mount exist.
+2. Normalizes and validates `subfolder` as a relative path component under the selected mount.
+3. Rejects overlapping or duplicate active boundaries for the same project.
+4. Persists binding and emits audit event.
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+- `404 Not Found` — Project or mount not found
+- `409 Conflict` — Duplicate/overlapping binding boundary for the project
+- `422 Validation Error` — Invalid body (for example unsafe path semantics)
+- `500 Internal Server Error` — Database error
+
+### `PATCH /projects/{project_id}/source-bindings/{binding_id}`
+
+Update a source-binding row (for example `subfolder` or `active`).
+
+**Roles:** `admin`, `manager`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+- `404 Not Found` — Project or binding not found
+- `409 Conflict` — Update would create duplicate/overlapping active boundary
+- `422 Validation Error` — Invalid path/body parameters
+- `500 Internal Server Error` — Database error
+
+### `DELETE /projects/{project_id}/source-bindings/{binding_id}`
+
+Delete a source-binding row.
+
+**Roles:** `admin`, `manager`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+- `404 Not Found` — Project or binding not found
+- `422 Validation Error` — Invalid path parameters
+- `500 Internal Server Error` — Database error
+
+### Binding Enforcement Contract for Job Creation
+
+When source bindings exist for a project, `POST /jobs` must validate `source_path` against at least one active binding boundary before drive assignment and before copy begins.
+
+**Binding-specific audit events:**
+
+- `SOURCE_BINDING_CREATED` — Source binding added.
+- `SOURCE_BINDING_UPDATED` — Source binding modified.
+- `SOURCE_BINDING_DELETED` — Source binding removed.
+- `SOURCE_BINDING_VIOLATION` — Job creation rejected due to source-path policy mismatch.
 
 ---
 
@@ -636,9 +745,9 @@ Create a new job.
 **Error responses:**
 
 - `401 Unauthorized` — Missing/invalid credentials
-- `403 Forbidden` — Insufficient role or project isolation violation
+- `403 Forbidden` — Insufficient role, project isolation violation, or source-path policy violation
 - `404 Not Found` — Drive not found
-- `409 Conflict` — Drive already in use
+- `409 Conflict` — Drive already in use, ambiguous auto-assignment, or project source binding configuration conflict
 - `422 Validation Error` — Invalid request body (includes non-HTTPS `callback_url`)
 - `500 Internal Server Error` — Database error
 
