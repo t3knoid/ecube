@@ -46,6 +46,10 @@ The design documents are grouped by role so readers can move from high-level int
 
 17. `17-turnkey-appliance-design.md` — tiered ECUBE appliance hardware profiles (ECUBE-4/8/12), PCIe and USB topology assumptions, thermal and power design, and manufacturing/QA validation skeleton.
 
+### Observability and Metrics
+
+18. `18-metrics-and-observability-design.md` — Prometheus metrics contract (`GET /metrics`), metric catalog, label/cardinality rules, histogram buckets, and periodic copy-throughput sampling behavior.
+
 ## Recommended Reading Order
 
 For most readers, the most efficient path is:
@@ -56,6 +60,7 @@ For most readers, the most efficient path is:
 4. `11` through `13` for quality and runtime-environment design.
 5. `14` through `16` for frontend and UX design.
 6. `17` for turnkey appliance tiering and production-hardware profile design.
+7. `18` for operational observability contract and metrics implementation details.
 
 ## Design Principles
 
