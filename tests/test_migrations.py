@@ -137,6 +137,85 @@ def test_audit_log_details_accepts_json_on_sqlite(migrated_engine):
     assert row[0] is not None, "details column returned NULL"
 
 
+def test_audit_log_has_project_and_drive_columns_and_indexes(migrated_engine):
+    """HEAD migration should expose first-class project/drive audit columns and indexes."""
+    inspector = inspect(migrated_engine)
+    columns = {c["name"] for c in inspector.get_columns("audit_logs")}
+
+    assert "project_id" in columns
+    assert "drive_id" in columns
+
+    index_names = {idx["name"] for idx in inspector.get_indexes("audit_logs")}
+    assert "ix_audit_logs_project_timestamp" in index_names
+    assert "ix_audit_logs_drive_timestamp" in index_names
+
+
+def test_migration_0013_backfills_project_and_drive_from_details(sqlite_db_path):
+    """Migration 0013 should defensively backfill audit_logs.project_id/drive_id from JSON details."""
+    db_url = f"sqlite:///{sqlite_db_path}"
+    env = {**os.environ, "DATABASE_URL": db_url}
+    repo_root = os.path.dirname(os.path.dirname(__file__))
+
+    up_0012 = subprocess.run(
+        ["alembic", "upgrade", "0012"],
+        capture_output=True,
+        text=True,
+        cwd=repo_root,
+        env=env,
+    )
+    assert up_0012.returncode == 0, f"upgrade to 0012 failed:\n{up_0012.stderr}"
+
+    engine = create_engine(db_url)
+    with engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO usb_drives (id, device_identifier, current_state) VALUES (7, 'BACKFILL-7', 'AVAILABLE')"
+        ))
+        conn.execute(text(
+            "INSERT INTO usb_drives (id, device_identifier, current_state) VALUES (42, 'BACKFILL-42', 'AVAILABLE')"
+        ))
+
+        conn.execute(text(
+            "INSERT INTO audit_logs (action, details) VALUES ('A_OK_NUM', :details)"
+        ), {"details": '{"project_id":"PROJ-001","drive_id":7}'})
+
+        conn.execute(text(
+            "INSERT INTO audit_logs (action, details) VALUES ('A_OK_STR', :details)"
+        ), {"details": '{"drive_id":"42"}'})
+
+        conn.execute(text(
+            "INSERT INTO audit_logs (action, details) VALUES ('A_BAD', :details)"
+        ), {"details": '{"project_id":123,"drive_id":"x42"}'})
+    engine.dispose()
+
+    up_head = subprocess.run(
+        ["alembic", "upgrade", "head"],
+        capture_output=True,
+        text=True,
+        cwd=repo_root,
+        env=env,
+    )
+    assert up_head.returncode == 0, f"upgrade to head failed:\n{up_head.stderr}"
+
+    engine = create_engine(db_url)
+    try:
+        with engine.begin() as conn:
+            ok_num = conn.execute(text(
+                "SELECT project_id, drive_id FROM audit_logs WHERE action = 'A_OK_NUM'"
+            )).fetchone()
+            ok_str = conn.execute(text(
+                "SELECT project_id, drive_id FROM audit_logs WHERE action = 'A_OK_STR'"
+            )).fetchone()
+            bad = conn.execute(text(
+                "SELECT project_id, drive_id FROM audit_logs WHERE action = 'A_BAD'"
+            )).fetchone()
+
+        assert ok_num == ("PROJ-001", 7)
+        assert ok_str == (None, 42)
+        assert bad == (None, None)
+    finally:
+        engine.dispose()
+
+
 def test_migration_0008_deduplicates_ports(sqlite_db_path):
     """Migration 0008 must coalesce duplicate system_path rows and keep best values."""
     db_url = f"sqlite:///{sqlite_db_path}"
