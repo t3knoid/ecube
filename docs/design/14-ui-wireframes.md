@@ -4,7 +4,7 @@
 |---|---|
 | Title | ECUBE UI Wireframes |
 | Purpose | Provides reference wireframes illustrating the ECUBE user interface layout and key user interaction flows. |
-| Updated on | 04/08/26 |
+| Updated on | 04/11/26 |
 | Audience | UI designers, developers, and QA teams. |
 
 ## Table of Contents
@@ -21,6 +21,7 @@
 - [Screen 8: User & Role Administration](#screen-8-user--role-administration)
 - [Screen 9: System Monitoring](#screen-9-system-monitoring)
 - [Screen 10: Configuration](#screen-10-configuration)
+- [Screen 11: Help System](#screen-11-help-system)
 - [Modals & Dialogs](#modals--dialogs)
 - [Error States](#error-states)
 - [Use Case to Wireframe Traceability](#use-case--wireframe-traceability)
@@ -29,12 +30,12 @@
 
 ## Global Layout & Navigation
 
-The authenticated application uses a persistent shell with a top header bar containing a logo area and user/logout controls, sidebar navigation, and a footer status bar.
+The authenticated application uses a persistent shell with a top header bar containing a logo area, help access, user/logout controls, sidebar navigation, and a footer status bar.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │  ┌────────┐                                                                  │
-│  │ [LOGO] │  ECUBE                       griffin [admin] ▾  ⏱ 54m  [ Log Out ]│
+│  │ [LOGO] │  ECUBE      [ Help ]         griffin [admin] ▾  ⏱ 54m  [ Log Out ]│
 │  └────────┘                                                                  │
 ├──────────────┬───────────────────────────────────────────────────────────────┤
 │              │                                                               │
@@ -57,13 +58,14 @@ The authenticated application uses a persistent shell with a top header bar cont
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Header bar** (UC-2.3, UC-2.4, UC-2.5):
+**Header bar** (UC-2.3, UC-2.4, UC-2.5, UC-10.1):
 
 | Area | Position | Contents |
 |------|----------|----------|
 | **Logo placeholder** | Left | Reserved space for organization/product logo image (configurable) |
 | **App name** | Left (beside logo) | "ECUBE" label |
 | **User info** | Right | Logged-in username + role badge(s) + dropdown menu |
+| **Help trigger** | Right | Opens in-app Help modal sourced from generated static HTML |
 | **Token expiry** | Right | Countdown timer showing remaining session time (⏱) |
 | **Log Out button** | Far right | Explicit logout action — ends session and redirects to login screen |
 
@@ -1144,6 +1146,56 @@ A single-page admin-only settings panel divided into collapsible sections. Acces
 
 ---
 
+## Screen 11: Help System
+
+### 11a — Help Trigger in Application Shell (UC-10.1)
+
+Help is opened from a persistent trigger in the authenticated shell (header placement shown; footer/sidebar placement allowed by implementation).
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  ┌────────┐                                                                  │
+│  │ [LOGO] │  ECUBE      [ Help ]       griffin [processor] ▾  ⏱ 42m  [ Log Out ]│
+│  └────────┘                                                                  │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 11b — In-App Help Modal (UC-10.2, UC-10.3)
+
+Help opens as a modal without leaving the active page context.
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  (dimmed application background)                                             │
+│                                                                              │
+│   ┌─ Help ────────────────────────────────────────────────────────────────┐  │
+│   │  Source: User Manual (generated static HTML)      [ Open Full ] [×] │  │
+│   ├───────────────────────────────────────────────────────────────────────┤  │
+│   │                                                                       │  │
+│   │  ┌─────────────────────────────────────────────────────────────────┐  │  │
+│   │  │  [ Embedded help document viewport ]                           │  │  │
+│   │  │  - Getting Started                                              │  │  │
+│   │  │  - Roles and Access                                             │  │  │
+│   │  │  - Drives, Mounts, Jobs                                         │  │  │
+│   │  │  - Audit and Troubleshooting                                    │  │  │
+│   │  └─────────────────────────────────────────────────────────────────┘  │  │
+│   │                                                                       │  │
+│   │                                             [ Close Help ]            │  │
+│   └───────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+Key behavior:
+
+- Help content is rendered from generated static HTML derived from `docs/operations/13-user-manual.md`.
+- Modal close returns the user to their current page and state.
+- Missing-asset fallback displays a non-fatal error with retry guidance.
+
+**Use Cases Covered:** UC-10.1, UC-10.2, UC-10.3, UC-10.4
+
+---
+
 ## Modals & Dialogs
 
 ### Confirmation Dialog (destructive actions)
@@ -1284,6 +1336,9 @@ Used for: Format Drive (UC-4.4), Delete User (UC-3.8), Remove Mount (UC-5.4), Re
 | UC-8.7 – UC-8.8 | Screen 9c: Logs Tab |
 | UC-9.1 – UC-9.3 | Screen 10a: Configuration (Logging & Database sections) |
 | UC-9.4 – UC-9.5 | Screen 10a: Configuration (Password Policy section) |
+| UC-10.1 | Screen 11a: Help Trigger in Application Shell |
+| UC-10.2 – UC-10.3 | Screen 11b: In-App Help Modal |
+| UC-10.4 | Screen 11b: Missing-asset fallback behavior |
 
 ## References
 

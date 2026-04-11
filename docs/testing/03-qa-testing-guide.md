@@ -1,10 +1,10 @@
-# ECUBE — QA Testing Guide (Bare-Metal Linux)
+# ECUBE — QA Testing Guide
 
 | Field | Value |
 |---|---|
-| Title | QA Testing Guide (Bare-Metal Linux) |
-| Purpose | Guides QA personnel through setting up a bare-metal Linux environment and running ECUBE with physical hardware for hands-on testing. |
-| Updated on | 04/09/26 |
+| Title | QA Testing Guide |
+| Purpose | Guides QA personnel through manual hands-on ECUBE UI and functional testing in a Linux-based test environment. |
+| Updated on | 04/11/26 |
 | Audience | QA personnel. |
 
 ## Table of Contents
@@ -22,10 +22,11 @@
 11. [API Test Scenarios](#11-api-test-scenarios)
 12. [QA Test Cases](#12-qa-test-cases)
 13. [Environment Reset Between Test Runs](#13-environment-reset-between-test-runs)
-14. [Running the Automated Integration Tests](#14-running-the-automated-integration-tests)
-15. [Service Management](#15-service-management)
-16. [Troubleshooting](#16-troubleshooting)
-17. [Version Compatibility](#17-version-compatibility)
+14. [Service Management](#14-service-management)
+15. [Troubleshooting](#15-troubleshooting)
+16. [Version Compatibility](#16-version-compatibility)
+
+This guide covers manual QA execution driven by UI behavior and functional test cases. Automated test execution is documented separately and is out of scope here.
 
 ---
 
@@ -398,7 +399,7 @@ curl -sk https://localhost:8443/health | jq
 curl -sk https://localhost:8443/introspection/system-health \
   -H "Authorization: Bearer $TOKEN" | jq
 
-# USB topology — should show real hubs/ports on bare metal
+# USB topology — should show real hubs/ports on the QA test host
 curl -sk https://localhost:8443/introspection/usb/topology \
   -H "Authorization: Bearer $TOKEN" | jq
 
@@ -948,9 +949,9 @@ curl -sk -X POST https://localhost:8443/setup/database/test-connection \
 | 16 | Labels survive discovery resync | Set hub `location_hint` and port `friendly_label`, then `POST /drives/refresh` | Labels remain unchanged after resync |
 | 17 | Discovery populates vendor/product IDs | Run `POST /drives/refresh` with USB hardware connected | Hub and port records show `vendor_id` and `product_id` from sysfs |
 
-### 12.5 USB Hardware (Bare-Metal Specific)
+### 12.5 USB Hardware Validation
 
-These tests exercise real hardware paths and are the primary reason to use bare-metal.
+These tests exercise real hardware paths that must be validated during manual QA on systems with attached USB hardware.
 
 | # | Test | Steps | Expected |
 |---|------|-------|----------|
@@ -1183,7 +1184,7 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 
 | # | Test | How | Expected |
 |---|------|-----|----------|
-| 1 | System info — bare-metal defaults | `GET /setup/database/system-info` before setup | 200, `{"in_docker": false, "suggested_db_host": "localhost"}` |
+| 1 | System info — Linux host defaults | `GET /setup/database/system-info` before setup | 200, `{"in_docker": false, "suggested_db_host": "localhost"}` |
 | 2 | Provision status — pre-init public | `GET /setup/database/provision-status` before any admin exists | 200, `{"provisioned": false}` |
 | 3 | Provision status — post-init requires admin | `GET /setup/database/provision-status` without token after setup | 401 |
 | 4 | Provision status — state unknown | Stop PostgreSQL, `GET /setup/database/provision-status` during initial setup | 503, cannot determine provisioning state |
@@ -1255,7 +1256,7 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 
 ### 12.15 Real-World Copy Performance & Hashing Addendum
 
-This addendum defines a reproducible bare-metal QA scenario that exercises ECUBE copy throughput and hashing with publicly available forensic/eDiscovery-style datasets.
+This addendum defines a reproducible manual QA scenario that exercises ECUBE copy throughput and hashing with publicly available forensic/eDiscovery-style datasets.
 
 #### Public Dataset Sources
 
@@ -1419,43 +1420,7 @@ TOKEN=$(curl -sk -X POST https://localhost:8443/auth/token \
 
 ---
 
-## 14. Running the Automated Integration Tests
-
-The project includes an automated integration test suite that runs against a real PostgreSQL database.
-
-### Set up a test database
-
-```bash
-# Create a separate database for integration tests
-sudo -u postgres psql -c "CREATE USER ecube_test WITH PASSWORD 'ecube_test';"
-sudo -u postgres psql -c "CREATE DATABASE ecube_integration OWNER ecube_test;"
-```
-
-### Run the tests
-
-```bash
-cd /opt/ecube
-
-export INTEGRATION_DATABASE_URL="postgresql://ecube_test:ecube_test@localhost:5432/ecube_integration"
-
-/opt/ecube/venv/bin/python -m pytest tests/integration/ -v --run-integration
-```
-
-### Run unit tests (in-memory SQLite; no external DB server)
-
-Unit tests use a pytest fixture–managed in-memory SQLite database (no PostgreSQL instance needed), so DB-related failures can still occur.
-
-```bash
-cd /opt/ecube
-/opt/ecube/venv/bin/python -m pytest tests/ \
-  --ignore=tests/integration \
-  --ignore=tests/hardware \
-  -v
-```
-
----
-
-## 15. Service Management
+## 14. Service Management
 
 ### Systemd Commands
 
@@ -1499,7 +1464,7 @@ sudo ss -tlnp | grep 8443
 
 ---
 
-## 16. Troubleshooting
+## 15. Troubleshooting
 
 | Symptom | Possible Cause | Resolution |
 |---------|---------------|------------|
@@ -1517,7 +1482,7 @@ sudo ss -tlnp | grep 8443
 
 ---
 
-## 17. Version Compatibility
+## 16. Version Compatibility
 
 | Component | Tested Version | Notes |
 |-----------|---------------|-------|
@@ -1534,4 +1499,5 @@ for any version-specific migration steps or breaking changes:
 
 ## References
 
-- [docs/testing/02-automated-test-runbook.md](02-automated-test-runbook.md)
+- [docs/testing/04-ui-use-cases.md](04-ui-use-cases.md)
+- [docs/requirements/04-functional-requirements.md](../requirements/04-functional-requirements.md)

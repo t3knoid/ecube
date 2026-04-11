@@ -4,7 +4,7 @@
 |---|---|
 | Title | Functional Design |
 | Purpose | Describes how ECUBE functional behavior is implemented, covering lifecycle flows, state transitions, endpoint responsibilities, algorithms, and locking strategies. |
-| Updated on | 04/08/26 |
+| Updated on | 04/11/26 |
 | Audience | Engineers, implementers, maintainers, and technical reviewers. |
 
 ## 4.1 Drive Lifecycle Management
@@ -305,6 +305,39 @@ All three passes are fully idempotent — running them multiple times without un
 ### Multi-Worker Safety
 
 The cross-process lock guarantees that exactly one worker runs reconciliation per startup cycle. Workers that do not acquire the lock skip reconciliation, which prevents duplicate correction audit events and conflicting writes during startup.
+
+## 4.12 In-App Help System Design
+
+The Help system is generated from user-facing documentation and rendered in-app through a modal UX.
+
+### 4.12.1 Source of Truth and Curation
+
+- Canonical source: `docs/operations/13-user-manual.md`.
+- A generation step extracts and curates end-user-relevant sections for in-app usage.
+- Operator-only installation/deployment internals are excluded from in-app help output.
+
+### 4.12.2 Help Generation Pipeline
+
+- A dedicated script (for example `scripts/build-help.mjs` or `scripts/build-help.sh`) reads the source manual and emits static HTML.
+- Generated output is deterministic for identical source input and generation options.
+- Output target is a frontend-shipped location (for example `frontend/public/help/manual.html` or equivalent generated path consumed by frontend build).
+
+### 4.12.3 QA and CI Parity Model
+
+- Local QA runs the same dedicated help-generation script before packaging.
+- CI packaging invokes the identical script entrypoint; CI must not maintain a separate help-generation path.
+- This guarantees packaged help content is produced by the same process used for QA validation.
+
+### 4.12.4 Frontend Integration Design
+
+- Authenticated shell exposes a Help trigger (header/footer/sidebar placement per UI design).
+- Trigger opens a modal-style help container without hard navigation away from active workflow.
+- Recommended rendering model is an iframe or isolated container targeting generated static help HTML to minimize style/script interference.
+
+### 4.12.5 Error and Fallback Behavior
+
+- If generated help asset is missing, UI displays a non-fatal error state with retry and operator-facing guidance.
+- Missing-help events are surfaced through frontend diagnostics/logging pathways used for operational troubleshooting.
 
 ## References
 
