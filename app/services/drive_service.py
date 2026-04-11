@@ -46,6 +46,8 @@ def initialize_drive(
             audit_repo.add(
                 action="PROJECT_ISOLATION_VIOLATION",
                 user=actor,
+                project_id=project_id,
+                drive_id=drive_id,
                 details={
                     "actor": actor,
                     "drive_id": drive_id,
