@@ -220,7 +220,7 @@ class TestMountAuthorization:
             mock_run.return_value = MagicMock(returncode=0)
             r = c.post(
                 "/mounts",
-                json={"type": "NFS", "remote_path": "1.2.3.4:/data", "local_mount_point": "/mnt/a"},
+                json={"type": "NFS", "remote_path": "1.2.3.4:/data"},
             )
         assert r.status_code == 200
 
@@ -232,7 +232,7 @@ class TestMountAuthorization:
             mock_run.return_value = MagicMock(returncode=0)
             r = c.post(
                 "/mounts",
-                json={"type": "NFS", "remote_path": "1.2.3.4:/data2", "local_mount_point": "/mnt/b"},
+                json={"type": "NFS", "remote_path": "1.2.3.4:/data2"},
             )
         assert r.status_code == 200
 
@@ -241,7 +241,7 @@ class TestMountAuthorization:
         _assert_forbidden(
             c.post(
                 "/mounts",
-                json={"type": "NFS", "remote_path": "1.2.3.4:/data3", "local_mount_point": "/mnt/c"},
+                json={"type": "NFS", "remote_path": "1.2.3.4:/data3"},
             )
         )
 
@@ -250,7 +250,7 @@ class TestMountAuthorization:
         _assert_forbidden(
             c.post(
                 "/mounts",
-                json={"type": "NFS", "remote_path": "1.2.3.4:/data4", "local_mount_point": "/mnt/d"},
+                json={"type": "NFS", "remote_path": "1.2.3.4:/data4"},
             )
         )
 
