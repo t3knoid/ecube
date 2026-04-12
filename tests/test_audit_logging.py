@@ -76,6 +76,8 @@ class TestDriveAuditLogging:
         entry = _audit_by_action(db, "DRIVE_INITIALIZED")
         assert entry is not None
         assert entry.user == "manager-user"
+        assert entry.drive_id == drive.id
+        assert entry.project_id == "PROJ-AUDIT"
         assert entry.details["drive_id"] == drive.id
         assert entry.details["project_id"] == "PROJ-AUDIT"
 
@@ -97,6 +99,8 @@ class TestDriveAuditLogging:
         entry = _audit_by_action(db, "PROJECT_ISOLATION_VIOLATION")
         assert entry is not None
         assert entry.user == "manager-user"
+        assert entry.drive_id == drive.id
+        assert entry.project_id == "PROJ-B"
         assert entry.details["actor"] == "manager-user"
         assert entry.details["drive_id"] == drive.id
         assert entry.details["existing_project_id"] == "PROJ-A"
@@ -148,7 +152,9 @@ class TestMountAuditLogging:
         assert entry is not None
         assert entry.user == "manager-user"
         assert entry.details["remote_path"] == "1.2.3.4:/audit-data"
-        assert entry.details["status"] == "MOUNTED"
+        # The service now validates local mount-point accessibility and
+        # records ERROR when the path cannot be stat'ed in test environments.
+        assert entry.details["status"] == "ERROR"
 
     def test_remove_mount_logs_actor(self, manager_client, db):
         mount = NetworkMount(
@@ -251,6 +257,7 @@ class TestJobAuditLogging:
         assert entry is not None
         assert entry.user == "test-user"
         assert entry.job_id == job_id
+        assert entry.project_id == "PROJ-AUDIT"
         assert entry.details["project_id"] == "PROJ-AUDIT"
 
     def test_job_create_project_isolation_violation_logs_actor(self, client, db):
@@ -276,9 +283,14 @@ class TestJobAuditLogging:
         entry = _audit_by_action(db, "PROJECT_ISOLATION_VIOLATION")
         assert entry is not None
         assert entry.user == "test-user"
+        assert entry.project_id == "PROJ-DIFFERENT"
+        assert entry.drive_id == drive.id
+        # job_id must be None: the job row was rolled back before the audit write
+        assert entry.job_id is None
         assert entry.details["actor"] == "test-user"
         assert entry.details["existing_project_id"] == "PROJ-OTHER"
         assert entry.details["requested_project_id"] == "PROJ-DIFFERENT"
+        assert entry.details["attempted_project_id"] == "PROJ-DIFFERENT"
 
     def test_start_job_logs_actor(self, client, db):
         self._add_drive(db, "PROJ-AUDIT", "USB-AUDIT-START")
@@ -300,6 +312,10 @@ class TestJobAuditLogging:
         assert entry is not None
         assert entry.user == "test-user"
         assert entry.job_id == job_id
+        assert entry.project_id == "PROJ-AUDIT"
+        assert entry.drive_id is not None
+        assert entry.details["project_id"] == "PROJ-AUDIT"
+        assert entry.details["drive_id"] == entry.drive_id
 
     def test_verify_job_logs_actor(self, client, db):
         self._add_drive(db, "PROJ-AUDIT", "USB-AUDIT-VERIFY")
@@ -321,6 +337,10 @@ class TestJobAuditLogging:
         assert entry is not None
         assert entry.user == "test-user"
         assert entry.job_id == job_id
+        assert entry.project_id == "PROJ-AUDIT"
+        assert entry.drive_id is not None
+        assert entry.details["project_id"] == "PROJ-AUDIT"
+        assert entry.details["drive_id"] == entry.drive_id
 
     def test_create_manifest_logs_actor(self, client, db):
         self._add_drive(db, "PROJ-AUDIT", "USB-AUDIT-MANIFEST")
@@ -341,6 +361,10 @@ class TestJobAuditLogging:
         assert entry is not None
         assert entry.user == "test-user"
         assert entry.job_id == job_id
+        assert entry.project_id == "PROJ-AUDIT"
+        assert entry.drive_id is not None
+        assert entry.details["project_id"] == "PROJ-AUDIT"
+        assert entry.details["drive_id"] == entry.drive_id
 
 
 # ---------------------------------------------------------------------------

@@ -14,6 +14,8 @@ def create_audit_log(
     db: Session,
     action: str,
     user: Optional[str] = None,
+    project_id: Optional[str] = None,
+    drive_id: Optional[int] = None,
     job_id: Optional[int] = None,
     details: Optional[Dict[str, Any]] = None,
     client_ip: Optional[str] = None,
@@ -21,6 +23,8 @@ def create_audit_log(
     return AuditRepository(db).add(
         action=action,
         user=user,
+        project_id=project_id,
+        drive_id=drive_id,
         job_id=job_id,
         details=details,
         client_ip=client_ip,
@@ -79,6 +83,8 @@ def log_and_audit(
     return AuditRepository(db).add(
         action=action,
         user=actor_id,
+        project_id=project_id,
+        drive_id=drive_id,
         job_id=job_id,
         details=details or None,
         client_ip=client_ip,
