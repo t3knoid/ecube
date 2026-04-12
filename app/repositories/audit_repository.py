@@ -165,9 +165,10 @@ def _extract_drive_id(details: Optional[Mapping[str, Any]]) -> Optional[int]:
     if isinstance(value, bool):
         return None
     if isinstance(value, int):
-        return value if value >= 0 else None
-    if isinstance(value, float) and value.is_integer() and value >= 0:
+        return value if value > 0 else None
+    if isinstance(value, float) and value.is_integer() and value > 0:
         return int(value)
     if isinstance(value, str) and value.isdigit():
-        return int(value)
+        parsed = int(value)
+        return parsed if parsed > 0 else None
     return None
