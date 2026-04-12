@@ -183,6 +183,14 @@ def test_migration_0013_backfills_project_and_drive_from_details(sqlite_db_path)
         ), {"details": '{"drive_id":"42"}'})
 
         conn.execute(text(
+            "INSERT INTO audit_logs (action, details) VALUES ('A_OK_REAL', :details)"
+        ), {"details": '{"drive_id":7.0}'})
+
+        conn.execute(text(
+            "INSERT INTO audit_logs (action, details) VALUES ('A_BAD_REAL', :details)"
+        ), {"details": '{"drive_id":7.5}'})
+
+        conn.execute(text(
             "INSERT INTO audit_logs (action, details) VALUES ('A_BAD', :details)"
         ), {"details": '{"project_id":123,"drive_id":"x42"}'})
 
@@ -217,6 +225,12 @@ def test_migration_0013_backfills_project_and_drive_from_details(sqlite_db_path)
             ok_str = conn.execute(text(
                 "SELECT project_id, drive_id FROM audit_logs WHERE action = 'A_OK_STR'"
             )).fetchone()
+            ok_real = conn.execute(text(
+                "SELECT project_id, drive_id FROM audit_logs WHERE action = 'A_OK_REAL'"
+            )).fetchone()
+            bad_real = conn.execute(text(
+                "SELECT project_id, drive_id FROM audit_logs WHERE action = 'A_BAD_REAL'"
+            )).fetchone()
             bad = conn.execute(text(
                 "SELECT project_id, drive_id FROM audit_logs WHERE action = 'A_BAD'"
             )).fetchone()
@@ -232,6 +246,8 @@ def test_migration_0013_backfills_project_and_drive_from_details(sqlite_db_path)
 
         assert ok_num == ("PROJ-001", 7)
         assert ok_str == (None, 42)
+        assert ok_real == (None, 7)
+        assert bad_real == (None, None)
         assert bad == (None, None)
         assert partial == ("PROJ-PARTIAL", None)
         assert orphan == ("PROJ-ORPHAN", None)
