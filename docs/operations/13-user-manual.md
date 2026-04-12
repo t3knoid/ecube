@@ -562,8 +562,8 @@ Typical workflow:
 7. Click `Confirm Handoff`.
 8. Review the **Permanent Archive Warning** modal.
 9. Choose one of the following:
-	- `Cancel`: closes the warning modal and does not record a handoff.
-	- `Yes, archive drive`: records the handoff and archives the drive.
+   - `Cancel`: closes the warning modal and does not record a handoff.
+   - `Yes, archive drive`: records the handoff and archives the drive.
 
 ![Audit page with Chain of Custody panel (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/audit-default-chromium-linux.png)
 
