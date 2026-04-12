@@ -489,6 +489,29 @@ def test_audit_repo_add_multiple(db):
     assert count == 3
 
 
+def test_audit_repo_add_many_project_id_none_sentinel_behavior(db):
+    repo = AuditRepository(db)
+
+    rows = repo.add_many(
+        [
+            {
+                "action": "EVENT_EMPTY_PROJECT",
+                "project_id": "",
+                "details": {"project_id": "PROJ-FROM-DETAILS"},
+            },
+            {
+                "action": "EVENT_FALLBACK_PROJECT",
+                "project_id": None,
+                "details": {"project_id": "PROJ-FROM-DETAILS"},
+            },
+        ]
+    )
+
+    assert rows[0].project_id == ""
+    assert rows[0].details["project_id"] == "PROJ-FROM-DETAILS"
+    assert rows[1].project_id == "PROJ-FROM-DETAILS"
+
+
 # ---------------------------------------------------------------------------
 # PortRepository
 # ---------------------------------------------------------------------------
