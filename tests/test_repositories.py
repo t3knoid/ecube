@@ -512,6 +512,18 @@ def test_audit_repo_add_many_project_id_none_sentinel_behavior(db):
     assert rows[1].project_id == "PROJ-FROM-DETAILS"
 
 
+def test_audit_repo_extracted_drive_id_rejects_zero_values(db):
+    repo = AuditRepository(db)
+
+    zero_int = repo.add(action="EVENT_DRIVE_ZERO_INT", details={"drive_id": 0})
+    zero_float = repo.add(action="EVENT_DRIVE_ZERO_FLOAT", details={"drive_id": 0.0})
+    zero_str = repo.add(action="EVENT_DRIVE_ZERO_STR", details={"drive_id": "0"})
+
+    assert zero_int.drive_id is None
+    assert zero_float.drive_id is None
+    assert zero_str.drive_id is None
+
+
 # ---------------------------------------------------------------------------
 # PortRepository
 # ---------------------------------------------------------------------------
