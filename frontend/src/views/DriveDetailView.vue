@@ -110,15 +110,13 @@ async function runPrepareEject() {
 
 function openChainOfCustody() {
   if (!drive.value) return
-  router.push({
-    name: 'audit',
-    query: {
-      coc: '1',
-      drive_id: String(drive.value.id),
-      drive_sn: drive.value.device_identifier || '',
-      project_id: drive.value.current_project_id || '',
-    },
-  })
+  const query = {
+    coc: '1',
+    drive_id: String(drive.value.id),
+  }
+  if (drive.value.device_identifier) query.drive_sn = drive.value.device_identifier
+  if (drive.value.current_project_id) query.project_id = drive.value.current_project_id
+  router.push({ name: 'audit', query })
 }
 
 onMounted(loadDrive)
