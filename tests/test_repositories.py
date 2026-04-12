@@ -489,6 +489,109 @@ def test_audit_repo_add_multiple(db):
     assert count == 3
 
 
+def test_audit_repo_add_many_project_id_normalizes_blank_to_none(db):
+    repo = AuditRepository(db)
+
+    rows = repo.add_many(
+        [
+            {
+                "action": "EVENT_EMPTY_PROJECT",
+                "project_id": "",
+                "details": {"project_id": "PROJ-FROM-DETAILS"},
+            },
+            {
+                "action": "EVENT_FALLBACK_PROJECT",
+                "project_id": None,
+                "details": {"project_id": "PROJ-FROM-DETAILS"},
+            },
+        ]
+    )
+
+    assert rows[0].project_id == "PROJ-FROM-DETAILS"
+    assert rows[0].details["project_id"] == "PROJ-FROM-DETAILS"
+    assert rows[1].project_id == "PROJ-FROM-DETAILS"
+
+
+def test_audit_repo_extracted_drive_id_rejects_zero_values(db):
+    repo = AuditRepository(db)
+
+    zero_int = repo.add(action="EVENT_DRIVE_ZERO_INT", details={"drive_id": 0})
+    zero_float = repo.add(action="EVENT_DRIVE_ZERO_FLOAT", details={"drive_id": 0.0})
+    zero_str = repo.add(action="EVENT_DRIVE_ZERO_STR", details={"drive_id": "0"})
+
+    assert zero_int.drive_id is None
+    assert zero_float.drive_id is None
+    assert zero_str.drive_id is None
+
+
+def test_audit_repo_explicit_non_positive_drive_id_falls_back_to_details(db):
+    repo = AuditRepository(db)
+
+    from_details = repo.add(
+        action="EVENT_DRIVE_EXPLICIT_ZERO",
+        drive_id=0,
+        details={"drive_id": 7},
+    )
+    negative = repo.add(
+        action="EVENT_DRIVE_EXPLICIT_NEGATIVE",
+        drive_id=-5,
+        details={},
+    )
+
+    assert from_details.drive_id == 7
+    assert negative.drive_id is None
+
+
+def test_audit_repo_add_many_explicit_non_positive_drive_id_falls_back_to_details(db):
+    repo = AuditRepository(db)
+
+    rows = repo.add_many(
+        [
+            {
+                "action": "EVENT_BATCH_DRIVE_ZERO",
+                "drive_id": 0,
+                "details": {"drive_id": 9},
+            },
+            {
+                "action": "EVENT_BATCH_DRIVE_NEGATIVE",
+                "drive_id": -1,
+                "details": {},
+            },
+        ]
+    )
+
+    assert rows[0].drive_id == 9
+    assert rows[1].drive_id is None
+
+
+def test_audit_repo_drive_id_rejects_values_above_int32_max(db):
+    repo = AuditRepository(db)
+    too_large = 2147483648
+
+    explicit = repo.add(
+        action="EVENT_DRIVE_TOO_LARGE_EXPLICIT",
+        drive_id=too_large,
+        details={"drive_id": 7},
+    )
+    extracted_int = repo.add(
+        action="EVENT_DRIVE_TOO_LARGE_INT",
+        details={"drive_id": too_large},
+    )
+    extracted_str = repo.add(
+        action="EVENT_DRIVE_TOO_LARGE_STR",
+        details={"drive_id": str(too_large)},
+    )
+    extracted_float = repo.add(
+        action="EVENT_DRIVE_TOO_LARGE_FLOAT",
+        details={"drive_id": float(too_large)},
+    )
+
+    assert explicit.drive_id == 7
+    assert extracted_int.drive_id is None
+    assert extracted_str.drive_id is None
+    assert extracted_float.drive_id is None
+
+
 # ---------------------------------------------------------------------------
 # PortRepository
 # ---------------------------------------------------------------------------
