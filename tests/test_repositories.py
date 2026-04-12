@@ -564,6 +564,34 @@ def test_audit_repo_add_many_explicit_non_positive_drive_id_falls_back_to_detail
     assert rows[1].drive_id is None
 
 
+def test_audit_repo_drive_id_rejects_values_above_int32_max(db):
+    repo = AuditRepository(db)
+    too_large = 2147483648
+
+    explicit = repo.add(
+        action="EVENT_DRIVE_TOO_LARGE_EXPLICIT",
+        drive_id=too_large,
+        details={"drive_id": 7},
+    )
+    extracted_int = repo.add(
+        action="EVENT_DRIVE_TOO_LARGE_INT",
+        details={"drive_id": too_large},
+    )
+    extracted_str = repo.add(
+        action="EVENT_DRIVE_TOO_LARGE_STR",
+        details={"drive_id": str(too_large)},
+    )
+    extracted_float = repo.add(
+        action="EVENT_DRIVE_TOO_LARGE_FLOAT",
+        details={"drive_id": float(too_large)},
+    )
+
+    assert explicit.drive_id == 7
+    assert extracted_int.drive_id is None
+    assert extracted_str.drive_id is None
+    assert extracted_float.drive_id is None
+
+
 # ---------------------------------------------------------------------------
 # PortRepository
 # ---------------------------------------------------------------------------
