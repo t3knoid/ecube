@@ -27,8 +27,9 @@ class AuditRepository:
     ) -> AuditLog:
         """Create and persist an immutable audit log entry."""
         normalized_project_id = _normalize_project_id(project_id)
+        normalized_drive_id = _normalize_drive_id(drive_id)
         resolved_project_id = normalized_project_id if normalized_project_id is not None else _extract_project_id(details)
-        resolved_drive_id = drive_id if drive_id is not None else _extract_drive_id(details)
+        resolved_drive_id = normalized_drive_id if normalized_drive_id is not None else _extract_drive_id(details)
         entry = AuditLog(
             user=user,
             action=action,
@@ -61,11 +62,12 @@ class AuditRepository:
         for kwargs in entries:
             details = kwargs.get("details") or {}
             project_id = _normalize_project_id(kwargs.get("project_id"))
+            drive_id = _normalize_drive_id(kwargs.get("drive_id"))
             row = AuditLog(
                 action=kwargs["action"],
                 user=kwargs.get("user"),
                 project_id=project_id if project_id is not None else _extract_project_id(details),
-                drive_id=kwargs.get("drive_id") if kwargs.get("drive_id") is not None else _extract_drive_id(details),
+                drive_id=drive_id if drive_id is not None else _extract_drive_id(details),
                 job_id=kwargs.get("job_id"),
                 details=details,
                 client_ip=kwargs.get("client_ip"),
@@ -163,6 +165,18 @@ def _normalize_project_id(project_id: Optional[str]) -> Optional[str]:
     if project_id == "":
         return None
     return project_id
+
+
+def _normalize_drive_id(drive_id: Optional[int]) -> Optional[int]:
+    if drive_id is None:
+        return None
+    if isinstance(drive_id, bool):
+        return None
+    if isinstance(drive_id, int):
+        return drive_id if drive_id > 0 else None
+    if isinstance(drive_id, float) and drive_id.is_integer() and drive_id > 0:
+        return int(drive_id)
+    return None
 
 
 def _extract_drive_id(details: Optional[Mapping[str, Any]]) -> Optional[int]:
