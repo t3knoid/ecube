@@ -193,6 +193,10 @@ def test_migration_0013_backfills_project_and_drive_from_details(sqlite_db_path)
         conn.execute(text(
             "INSERT INTO audit_logs (action, details) VALUES ('A_ORPHAN', :details)"
         ), {"details": '{"project_id":"PROJ-ORPHAN","drive_id":"999"}'})
+
+        conn.execute(text(
+            "INSERT INTO audit_logs (action, details) VALUES ('A_EMPTY_PROJECT', :details)"
+        ), {"details": '{"project_id":"","drive_id":"7"}'})
     engine.dispose()
 
     up_head = subprocess.run(
@@ -222,12 +226,16 @@ def test_migration_0013_backfills_project_and_drive_from_details(sqlite_db_path)
             orphan = conn.execute(text(
                 "SELECT project_id, drive_id FROM audit_logs WHERE action = 'A_ORPHAN'"
             )).fetchone()
+            empty_project = conn.execute(text(
+                "SELECT project_id, drive_id FROM audit_logs WHERE action = 'A_EMPTY_PROJECT'"
+            )).fetchone()
 
         assert ok_num == ("PROJ-001", 7)
         assert ok_str == (None, 42)
         assert bad == (None, None)
         assert partial == ("PROJ-PARTIAL", None)
         assert orphan == ("PROJ-ORPHAN", None)
+        assert empty_project == (None, 7)
     finally:
         engine.dispose()
 

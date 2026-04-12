@@ -16,7 +16,7 @@ depends_on = None
 
 
 def _backfill_sqlite() -> None:
-    # Backfill project_id only when JSON key exists and is text.
+    # Backfill project_id only when JSON key exists, is text, and non-empty.
     op.execute(
         sa.text(
             """
@@ -25,6 +25,7 @@ def _backfill_sqlite() -> None:
             WHERE project_id IS NULL
               AND details IS NOT NULL
               AND json_type(details, '$.project_id') = 'text'
+              AND json_extract(details, '$.project_id') <> ''
             """
         )
     )
@@ -64,6 +65,7 @@ def _backfill_postgresql() -> None:
             WHERE project_id IS NULL
               AND details IS NOT NULL
               AND jsonb_typeof(details::jsonb -> 'project_id') = 'string'
+                            AND details->>'project_id' <> ''
             """
         )
     )
