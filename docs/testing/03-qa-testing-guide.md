@@ -1674,7 +1674,7 @@ COMMIT;
    ```
 
 2. **Verify population via API:**
-   - `GET /audit/chain-of-custody?project_id=CASE-2026-001` — should return 2 drives (one ARCHIVED, one IN_USE)
+  - `GET /audit/chain-of-custody?project_id=CASE-2026-001` — should return 200 with only non-archived drives (for this dataset: 1 IN_USE drive)
    - `GET /audit/chain-of-custody?drive_id=<archived_drive_id>` — should return 410 Gone
    - Inspect lifecycle events in the response
 
