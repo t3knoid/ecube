@@ -22,6 +22,7 @@
 11. [Jobs](#9-jobs)
 12. [Job Detail, Verification, and File Review](#10-job-detail-verification-and-file-review)
 13. [Audit Logs](#11-audit-logs)
+	- [Chain of Custody Workflow](#111-chain-of-custody-workflow)
 14. [Users](#12-users)
 15. [System](#13-system)
    - [Application Logs Tab](#131-application-logs-tab)
@@ -545,6 +546,42 @@ When exporting CSV:
 - Treat exported audit data as sensitive operational evidence
 
 ![Audit page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/audit-default-chromium-linux.png)
+
+### 11.1 Chain of Custody Workflow
+
+Use the Chain of Custody panel on the `Audit` page to generate custody reports, prefill handoff fields, and record final transfer details when physical media leaves active operations.
+
+Typical workflow:
+
+1. Open `Audit`.
+2. In the **Chain of Custody** section, filter by drive ID, drive serial, and/or project ID.
+3. Click `Load CoC` to load custody report data.
+4. Review the report card for the selected drive (drive ID, serial, project, manifest summary, and custody events).
+5. Click `Prefill Handoff` to populate the handoff form from the selected report.
+6. Enter required handoff details (`Possessor` and `Delivery Time`) and any optional receipt fields.
+7. Click `Confirm Handoff`.
+8. Review the **Permanent Archive Warning** modal.
+9. Choose one of the following:
+	- `Cancel`: closes the warning modal and does not record a handoff.
+	- `Yes, archive drive`: records the handoff and archives the drive.
+
+![Audit page with Chain of Custody panel (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/audit-default-chromium-linux.png)
+
+![Drives page (related media lifecycle context, E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/drives-default-chromium-linux.png)
+
+What happens when handoff is confirmed:
+
+- The custody handoff event is written to the immutable audit trail.
+- The selected drive is automatically transitioned to the `ARCHIVED` state.
+- The drive is removed from active circulation workflows.
+- The drive no longer appears in Chain of Custody search results intended for active media.
+- Operational actions for that drive are blocked as part of archival enforcement.
+
+Operational guidance:
+
+- Treat `Yes, archive drive` as a finalization action.
+- Verify drive ID, project, possessor, and delivery timestamp before confirming.
+- Use `Cancel` if any custody detail needs correction before archival.
 
 ---
 
