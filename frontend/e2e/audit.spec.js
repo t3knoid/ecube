@@ -1,9 +1,10 @@
 import { test, expect } from '@playwright/test'
-import { setupAuthenticatedPage } from './helpers/app.js'
+import { setupAuthenticatedPage, stubDrivesApi } from './helpers/app.js'
 import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
 
 test('audit filters and export csv', async ({ page }) => {
   await setupAuthenticatedPage(page, ['auditor'])
+  await stubDrivesApi(page, [])
 
   await page.route('**/api/audit**', async (route) => {
     await route.fulfill({
@@ -47,4 +48,99 @@ test('audit filters and export csv', async ({ page }) => {
   }
 
   await expectNoCriticalA11yViolations(page)
+})
+
+test('chain of custody handoff requires warning confirmation and submits archive handoff', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['manager'])
+
+  await page.route('**/api/audit**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([]),
+    })
+  })
+
+  await page.route('**/api/drives**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        {
+          id: 1,
+          device_identifier: 'sdb',
+          current_project_id: 'PRJ-001',
+        },
+      ]),
+    })
+  })
+
+  let cocLoads = 0
+  await page.route('**/api/audit/chain-of-custody**', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback()
+      return
+    }
+    cocLoads += 1
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        selector_mode: 'all',
+        reports: [
+          {
+            drive_id: 1,
+            drive_sn: 'SN-001',
+            project_id: 'PRJ-001',
+            delivery_time: null,
+            custody_complete: false,
+            manifest_summary: [],
+            chain_of_custody_events: [],
+          },
+        ],
+      }),
+    })
+  })
+
+  let handoffCallCount = 0
+  let lastHandoffBody = null
+  await page.route('**/api/audit/chain-of-custody/handoff', async (route) => {
+    handoffCallCount += 1
+    lastHandoffBody = route.request().postDataJSON()
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true }),
+    })
+  })
+
+  await page.goto('/audit')
+
+  await page.getByRole('button', { name: 'Load CoC' }).click()
+  await expect(page.getByText('Drive #1 (SN-001)')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Prefill Handoff' }).click()
+  await page.getByPlaceholder('Possessor').fill('Officer Jane Doe')
+  await page.getByPlaceholder('Delivery Time').fill('2026-04-01T10:30')
+
+  await page.getByRole('button', { name: 'Confirm Handoff' }).click()
+  await expect(page.getByRole('heading', { name: 'Permanent Archive Warning' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.getByRole('heading', { name: 'Permanent Archive Warning' })).toHaveCount(0)
+  expect(handoffCallCount).toBe(0)
+
+  await page.getByRole('button', { name: 'Confirm Handoff' }).click()
+  await page.getByRole('button', { name: 'Yes, archive drive' }).click()
+
+  expect(handoffCallCount).toBe(1)
+  expect(cocLoads).toBeGreaterThanOrEqual(1)
+  await expect(page.getByRole('heading', { name: 'Permanent Archive Warning' })).toHaveCount(0)
+  await expect(page.getByText('Request conflict, please retry.')).toHaveCount(0)
+  expect(lastHandoffBody).toMatchObject({
+    drive_id: 1,
+    project_id: 'PRJ-001',
+    possessor: 'Officer Jane Doe',
+  })
+  expect(typeof lastHandoffBody.delivery_time).toBe('string')
 })
