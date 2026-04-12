@@ -297,7 +297,7 @@ onMounted(() => {
           <option value="">{{ t('audit.anyDrive') }}</option>
           <option v-for="drive in driveOptions" :key="drive.id" :value="drive.id">{{ drive.label }}</option>
         </select>
-        <input v-model="cocFilters.drive_sn" type="text" :placeholder="t('audit.driveSnFilter')" />
+        <input v-model="cocFilters.drive_sn" type="text" :placeholder="t('audit.driveSnFilter')" :aria-label="t('audit.driveSnFilter')" />
         <select v-model="cocFilters.project_id" :aria-label="t('audit.projectFilter')">
           <option value="">{{ t('audit.anyProject') }}</option>
           <option v-for="projectId in projectOptions" :key="projectId" :value="projectId">{{ projectId }}</option>
