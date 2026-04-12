@@ -22,6 +22,7 @@ const infoMessage = ref('')
 const showFormatDialog = ref(false)
 const showEjectDialog = ref(false)
 const showInitializeDialog = ref(false)
+const showCocPrompt = ref(false)
 
 const filesystemType = ref('ext4')
 const projectId = ref('')
@@ -99,11 +100,25 @@ async function runPrepareEject() {
     drive.value = await prepareEjectDrive(drive.value.id)
     infoMessage.value = t('drives.ejectSuccess')
     showEjectDialog.value = false
+    showCocPrompt.value = true
   } catch {
     error.value = t('common.errors.requestConflict')
   } finally {
     saving.value = false
   }
+}
+
+function openChainOfCustody() {
+  if (!drive.value) return
+  router.push({
+    name: 'audit',
+    query: {
+      coc: '1',
+      drive_id: String(drive.value.id),
+      drive_sn: drive.value.device_identifier || '',
+      project_id: drive.value.current_project_id || '',
+    },
+  })
 }
 
 onMounted(loadDrive)
@@ -122,6 +137,13 @@ onMounted(loadDrive)
     <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
     <p v-if="error" class="error-banner">{{ error }}</p>
     <p v-if="infoMessage" class="ok-banner">{{ infoMessage }}</p>
+    <div v-if="showCocPrompt" class="coc-banner">
+      <p>{{ t('drives.cocPrompt') }}</p>
+      <div class="actions">
+        <button class="btn btn-primary" @click="openChainOfCustody">{{ t('drives.openCocReport') }}</button>
+        <button class="btn" @click="showCocPrompt = false">{{ t('common.actions.close') }}</button>
+      </div>
+    </div>
 
     <article v-if="drive" class="detail-card">
       <div class="detail-grid">
@@ -237,7 +259,8 @@ onMounted(loadDrive)
 }
 
 .error-banner,
-.ok-banner {
+.ok-banner,
+.coc-banner {
   border-radius: var(--border-radius);
   padding: var(--space-sm);
 }
@@ -252,6 +275,16 @@ onMounted(loadDrive)
   color: var(--color-ok-banner-text, #14532d);
   background: color-mix(in srgb, var(--color-success) 14%, var(--color-bg-secondary));
   border: 1px solid color-mix(in srgb, var(--color-success) 45%, var(--color-border));
+}
+
+.coc-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-warning, #f59e0b) 14%, var(--color-bg-secondary));
+  border: 1px solid color-mix(in srgb, var(--color-warning, #f59e0b) 45%, var(--color-border));
 }
 
 .dialog-overlay {
