@@ -311,6 +311,8 @@ class TestJobAuditLogging:
         assert entry.job_id == job_id
         assert entry.project_id == "PROJ-AUDIT"
         assert entry.drive_id is not None
+        assert entry.details["project_id"] == "PROJ-AUDIT"
+        assert entry.details["drive_id"] == entry.drive_id
 
     def test_verify_job_logs_actor(self, client, db):
         self._add_drive(db, "PROJ-AUDIT", "USB-AUDIT-VERIFY")
@@ -334,6 +336,8 @@ class TestJobAuditLogging:
         assert entry.job_id == job_id
         assert entry.project_id == "PROJ-AUDIT"
         assert entry.drive_id is not None
+        assert entry.details["project_id"] == "PROJ-AUDIT"
+        assert entry.details["drive_id"] == entry.drive_id
 
     def test_create_manifest_logs_actor(self, client, db):
         self._add_drive(db, "PROJ-AUDIT", "USB-AUDIT-MANIFEST")
@@ -356,6 +360,8 @@ class TestJobAuditLogging:
         assert entry.job_id == job_id
         assert entry.project_id == "PROJ-AUDIT"
         assert entry.drive_id is not None
+        assert entry.details["project_id"] == "PROJ-AUDIT"
+        assert entry.details["drive_id"] == entry.drive_id
 
 
 # ---------------------------------------------------------------------------

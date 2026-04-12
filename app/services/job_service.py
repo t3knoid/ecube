@@ -292,7 +292,10 @@ def start_job(
             project_id=job.project_id,
             drive_id=active_drive_id,
             job_id=job_id,
-            details={},
+            details={
+                "project_id": job.project_id,
+                "drive_id": active_drive_id,
+            },
             client_ip=client_ip,
         )
     except Exception:
@@ -334,7 +337,10 @@ def verify_job(
             project_id=job.project_id,
             drive_id=active_drive_id,
             job_id=job_id,
-            details={},
+            details={
+                "project_id": job.project_id,
+                "drive_id": active_drive_id,
+            },
             client_ip=client_ip,
         )
     except Exception:
@@ -400,7 +406,12 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
             project_id=job.project_id,
             drive_id=active_drive_id,
             job_id=job_id,
-            details={"manifest_path": manifest_path, "error": manifest_error},
+            details={
+                "project_id": job.project_id,
+                "drive_id": active_drive_id,
+                "manifest_path": manifest_path,
+                "error": manifest_error,
+            },
             client_ip=client_ip,
         )
     except Exception:
