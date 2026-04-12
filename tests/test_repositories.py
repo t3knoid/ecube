@@ -489,7 +489,7 @@ def test_audit_repo_add_multiple(db):
     assert count == 3
 
 
-def test_audit_repo_add_many_project_id_none_sentinel_behavior(db):
+def test_audit_repo_add_many_project_id_normalizes_blank_to_none(db):
     repo = AuditRepository(db)
 
     rows = repo.add_many(
@@ -507,7 +507,7 @@ def test_audit_repo_add_many_project_id_none_sentinel_behavior(db):
         ]
     )
 
-    assert rows[0].project_id == ""
+    assert rows[0].project_id == "PROJ-FROM-DETAILS"
     assert rows[0].details["project_id"] == "PROJ-FROM-DETAILS"
     assert rows[1].project_id == "PROJ-FROM-DETAILS"
 
