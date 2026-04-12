@@ -34,6 +34,10 @@ export async function stubTelemetryApis(page) {
   await routeJson(page, '**/telemetry/ui-navigation', { ok: true })
 }
 
+export async function stubDrivesApi(page, drives = []) {
+  await routeJson(page, '**/api/drives**', drives)
+}
+
 export async function injectAuthToken(page, roles = ['admin']) {
   const exp = Math.floor(Date.now() / 1000) + 3600
   const jwt = makeToken({ sub: 'frank', roles, groups: [], exp })
