@@ -9,6 +9,7 @@ class DriveState(str, enum.Enum):
     EMPTY = "EMPTY"
     AVAILABLE = "AVAILABLE"
     IN_USE = "IN_USE"
+    ARCHIVED = "ARCHIVED"
 
 
 class UsbHub(Base):
