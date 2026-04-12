@@ -285,9 +285,12 @@ class TestJobAuditLogging:
         assert entry.user == "test-user"
         assert entry.project_id == "PROJ-DIFFERENT"
         assert entry.drive_id == drive.id
+        # job_id must be None: the job row was rolled back before the audit write
+        assert entry.job_id is None
         assert entry.details["actor"] == "test-user"
         assert entry.details["existing_project_id"] == "PROJ-OTHER"
         assert entry.details["requested_project_id"] == "PROJ-DIFFERENT"
+        assert entry.details["attempted_project_id"] == "PROJ-DIFFERENT"
 
     def test_start_job_logs_actor(self, client, db):
         self._add_drive(db, "PROJ-AUDIT", "USB-AUDIT-START")
