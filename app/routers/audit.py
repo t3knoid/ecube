@@ -16,7 +16,7 @@ from app.schemas.audit import (
     ChainOfCustodyHandoffResponse,
     ChainOfCustodyReportSchema,
 )
-from app.schemas.errors import R_401, R_403, R_404, R_409, R_422
+from app.schemas.errors import R_401, R_403, R_404, R_409, R_410, R_422
 from app.schemas.types import OptionalDatetimeQuery, OptionalIntQuery
 from app.services import audit_service
 from app.utils.client_ip import get_client_ip
@@ -76,7 +76,7 @@ def list_audit_logs(
     return [_redact_ip(e, current_user) for e in entries]
 
 
-@router.get("/chain-of-custody", response_model=ChainOfCustodyReportSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_422})
+@router.get("/chain-of-custody", response_model=ChainOfCustodyReportSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_410, **R_422})
 def get_chain_of_custody(
     drive_id: Optional[int] = OptionalIntQuery(description="Authoritative drive selector when provided"),
     drive_sn: Optional[str] = Query(default=None, min_length=1, description="Drive device identifier/serial"),
@@ -110,7 +110,7 @@ def get_chain_of_custody(
     )
 
 
-@router.post("/chain-of-custody/handoff", response_model=ChainOfCustodyHandoffResponse, responses={**R_401, **R_403, **R_404, **R_409, **R_422})
+@router.post("/chain-of-custody/handoff", response_model=ChainOfCustodyHandoffResponse, responses={**R_401, **R_403, **R_404, **R_409, **R_410, **R_422})
 def confirm_chain_of_custody_handoff(
     body: ChainOfCustodyHandoffRequest,
     *,
