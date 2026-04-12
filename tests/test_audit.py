@@ -150,6 +150,26 @@ class TestAuditFilters:
         assert len(data) == 2
         assert all(d["project_id"] == "PRJ-1" for d in data)
 
+    def test_filter_by_project_id_sanitizes_invalid_chars(self, admin_client, db):
+        _seed_entries(
+            db,
+            [
+                {"action": "JOB_CREATED", "user": "griffin", "project_id": "PRJ-1", "details": {}},
+                {"action": "JOB_CREATED", "user": "alba", "project_id": "PRJ-2", "details": {}},
+            ],
+        )
+        response = admin_client.get("/audit", params={"project_id": "PRJ-1\x00"})
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["project_id"] == "PRJ-1"
+
+    def test_filter_by_project_id_rejects_empty_after_sanitize(self, admin_client):
+        response = admin_client.get("/audit", params={"project_id": "\x00"})
+        assert response.status_code == 422
+        body = response.json()
+        assert body["code"] == "ENCODING_ERROR"
+
     def test_filter_by_drive_id(self, admin_client, db):
         drive_1 = UsbDrive(device_identifier="AUDIT-FILTER-DRIVE-1", current_state=DriveState.AVAILABLE)
         drive_2 = UsbDrive(device_identifier="AUDIT-FILTER-DRIVE-2", current_state=DriveState.AVAILABLE)
