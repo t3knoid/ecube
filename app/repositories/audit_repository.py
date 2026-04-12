@@ -132,10 +132,11 @@ def best_effort_audit(
     db: Session,
     action: str,
     user: Optional[str] = None,
-    project_id: Optional[str] = None,
-    drive_id: Optional[int] = None,
     details: Optional[Dict[str, Any]] = None,
     client_ip: Optional[str] = None,
+    *,
+    project_id: Optional[str] = None,
+    drive_id: Optional[int] = None,
 ) -> None:
     """Write an audit log entry, silently logging on failure.
 
