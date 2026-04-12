@@ -242,58 +242,65 @@ docs/
 
 ## Running the Application
 
-The ECUBE app and UI always run natively on the host. Docker is used only to provide PostgreSQL by starting the `postgres` service from the platform compose file.
+The ECUBE backend and frontend run natively on the host in development. Choose one PostgreSQL option, then run backend and frontend in separate terminals.
 
-Both compose files publish API port `8000` for development convenience if you choose to run the app container, but this is **not** a typical hardened deployment shape. Typical Docker deployments should expose only `8443` through `ecube-ui`.
+### PostgreSQL Options
 
-### Option A: Dockerized PostgreSQL (Recommended)
-
-Start the PostgreSQL container, then run the app and UI natively:
+#### Option A: Dockerized PostgreSQL (Recommended)
 
 ```bash
 # Ensure local environment file exists and required postgres password is set
 cp .env.example .env
 sed -i.bak 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ecube/' .env
 
-# Start PostgreSQL only
+# Linux/macOS: start PostgreSQL only
 docker compose -f docker-compose.ecube.yml up -d postgres
-
-# Apply migrations (from your local venv)
-alembic upgrade head
-
-# Start the backend API with auto-reload (natively)
-uvicorn app.main:app --reload
-
-# In a separate terminal — start the frontend dev server (natively)
-cd frontend && npm ci && npm run dev
 ```
 
-The backend API is available at `http://localhost:8000` and the frontend at `http://localhost:5173`.
-
-Windows command for postgres-only run:
+Windows equivalent:
 
 ```bash
 docker compose -f docker-compose.ecube-win.yml up -d postgres
 ```
 
-### Option B: Fully Local (No Docker)
+#### Option B: System-Installed PostgreSQL
 
-If you prefer a system-installed PostgreSQL (Linux example):
+Linux example:
 
 ```bash
 sudo systemctl start postgresql
 
-# Create database (first time only)
+# First-time setup only
 sudo -u postgres psql -c "CREATE USER ecube WITH PASSWORD 'ecube';"
 sudo -u postgres psql -c "CREATE DATABASE ecube OWNER ecube;"
+```
 
+For macOS, use your PostgreSQL service manager (for example, Homebrew services) and run the same two commands before migrations.
+
+### Backend Execution
+
+Run from the repository root (with your virtual environment activated):
+
+```bash
 alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-For macOS, use your PostgreSQL service manager (for example, Homebrew services) and create the same `ecube` user/database before running migrations.
+### Frontend Execution
 
-The API is available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
+Run in a separate terminal:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+To access the frontend from another machine, browse to `http://<host-ip>:5173`.
+
+### Access URLs
+
+The backend API is available at `http://localhost:8000`, the frontend at `http://localhost:5173` (or `http://<host-ip>:5173` from another machine), and interactive backend docs at `http://localhost:8000/docs`.
 
 ---
 
@@ -324,6 +331,22 @@ alembic current
 
 # Rollback one step
 alembic downgrade -1
+```
+
+### Reset PostgreSQL Database (Start Fresh)
+
+For local PostgreSQL installs, run a single command block:
+
+```bash
+sudo -u postgres psql -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'ecube' AND pid <> pg_backend_pid();"
+sudo -u postgres psql -c "DROP DATABASE IF EXISTS ecube;"
+sudo -u postgres psql -c "CREATE DATABASE ecube OWNER ecube;"
+```
+
+After recreating the database, apply migrations again:
+
+```bash
+alembic upgrade head
 ```
 
 ### Migration Naming

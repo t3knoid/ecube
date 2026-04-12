@@ -156,8 +156,20 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 | UC-7.5 | Filter audit logs by date range | Admin, Manager, Auditor | admin, manager, auditor |
 | UC-7.6 | View audit entry details (structured JSON metadata) | Admin, Manager, Auditor | admin, manager, auditor |
 | UC-7.7 | Export/download audit logs | Admin, Manager, Auditor | admin, manager, auditor |
+| UC-7.8 | Retrieve chain-of-custody report by drive ID | Admin, Manager, Auditor | admin, manager, auditor |
+| UC-7.9 | Retrieve chain-of-custody report by drive serial number | Admin, Manager, Auditor | admin, manager, auditor |
+| UC-7.10 | Retrieve chain-of-custody report by project ID | Admin, Manager, Auditor | admin, manager, auditor |
+| UC-7.11 | View chain-of-custody events (lifecycle timeline) | Admin, Manager, Auditor | admin, manager, auditor |
+| UC-7.12 | View manifest summary in chain-of-custody report | Admin, Manager, Auditor | admin, manager, auditor |
+| UC-7.13 | Confirm custody handoff with possessor and delivery details | Admin, Manager, Auditor | admin, manager, auditor |
+| UC-7.14 | Acknowledge permanent archive warning before handoff | Admin, Manager, Auditor | admin, manager, auditor |
+| UC-7.15 | Print or save chain-of-custody report for compliance records | Admin, Manager, Auditor | admin, manager, auditor |
 
-**UI Implication:** Audit log viewer with multi-filter sidebar (user, action type dropdown, job ID, date range picker). Paginated table with expandable detail rows showing the JSON `details` payload. Export button for compliance reporting.
+**UI Implication:** The Audit section includes two sub-areas:
+
+1. **Audit Logs** (UC-7.1–7.7): Traditional log viewer with multi-filter sidebar (user, action type dropdown, job ID, date range picker). Paginated table with expandable detail rows showing the JSON `details` payload. Export button for compliance reporting.
+
+2. **Chain of Custody** (UC-7.8–7.15): Compliance-focused CoC report viewer with selector panel (drive ID dropdown, drive serial input, project ID dropdown), lifecycle timeline showing custody events, manifest inventory per job, handoff confirmation form with pre-filled defaults, and permanent-archive warning confirmation modal. Print and save actions generate compliance-ready output. After handoff, drives transition to `ARCHIVED` and are excluded from all CoC searches.
 
 ---
 
@@ -227,8 +239,8 @@ The primary operational workflow combines use cases across groups:
 1. **Setup** (one-time): UC-1.1 → UC-1.2 → UC-1.3 → UC-1.6 → UC-2.1
 2. **Prepare infrastructure**: UC-5.2/5.3 (add mounts) → UC-4.3 (discover drives) → UC-4.8/4.9 (enable ports) → UC-4.4 (format) → UC-4.5 (initialize for project)
 3. **Execute export**: UC-6.1 (create job) → UC-6.2 (start) → UC-6.3 (monitor) → UC-6.5 (verify) → UC-6.6 (manifest)
-4. **Eject & hand off**: UC-4.6 (eject drive)
-5. **Audit trail**: UC-7.1–7.7 (review compliance)
+4. **Eject & chain of custody**: UC-4.6 (prepare eject) → UC-7.8/7.10 (retrieve CoC) → UC-7.13 (confirm handoff) → UC-7.14 (dismiss warning) → UC-7.15 (save report for records) → drive transitions to `ARCHIVED`
+5. **Audit trail**: UC-7.1–7.7 (review operational audit) + UC-7.8–7.12 (validate handoff in compliance record)
 6. **Operational tuning (admin, optional)**: UC-9.1 → UC-9.2/UC-9.4 → UC-9.5 → UC-9.6
 7. **Contextual assistance (optional)**: UC-10.1 → UC-10.2/UC-10.3 during any workflow stage
 
