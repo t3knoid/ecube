@@ -350,10 +350,10 @@ onMounted(() => {
             <option value="">{{ t('audit.selectProject') }}</option>
             <option v-for="projectId in projectOptions" :key="`handoff-project-${projectId}`" :value="projectId">{{ projectId }}</option>
           </select>
-          <input v-model="handoffForm.possessor" type="text" :placeholder="t('audit.possessor')" />
-          <input v-model="handoffForm.delivery_time" type="datetime-local" :placeholder="t('audit.deliveryTime')" />
-          <input v-model="handoffForm.received_by" type="text" :placeholder="t('audit.receivedBy')" />
-          <input v-model="handoffForm.receipt_ref" type="text" :placeholder="t('audit.receiptRef')" />
+          <input v-model="handoffForm.possessor" type="text" :placeholder="t('audit.possessor')" :aria-label="t('audit.possessor')" />
+          <input v-model="handoffForm.delivery_time" type="datetime-local" :placeholder="t('audit.deliveryTime')" :aria-label="t('audit.deliveryTime')" />
+          <input v-model="handoffForm.received_by" type="text" :placeholder="t('audit.receivedBy')" :aria-label="t('audit.receivedBy')" />
+          <input v-model="handoffForm.receipt_ref" type="text" :placeholder="t('audit.receiptRef')" :aria-label="t('audit.receiptRef')" />
         </div>
         <textarea v-model="handoffForm.notes" rows="3" :placeholder="t('audit.notes')" />
         <button class="btn btn-primary" :disabled="handoffSaving" @click="submitHandoff">{{ t('audit.confirmHandoff') }}</button>
