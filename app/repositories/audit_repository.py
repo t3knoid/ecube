@@ -59,10 +59,11 @@ class AuditRepository:
         rows = []
         for kwargs in entries:
             details = kwargs.get("details") or {}
+            project_id = kwargs.get("project_id")
             row = AuditLog(
                 action=kwargs["action"],
                 user=kwargs.get("user"),
-                project_id=kwargs.get("project_id") or _extract_project_id(details),
+                project_id=project_id if project_id is not None else _extract_project_id(details),
                 drive_id=kwargs.get("drive_id") if kwargs.get("drive_id") is not None else _extract_drive_id(details),
                 job_id=kwargs.get("job_id"),
                 details=details,
