@@ -29,7 +29,7 @@ def _backfill_sqlite() -> None:
         )
     )
 
-    # Backfill drive_id for integer JSON values and numeric strings.
+    # Backfill drive_id for integer JSON values and strings containing only digits.
     op.execute(
         sa.text(
             """
@@ -41,8 +41,8 @@ def _backfill_sqlite() -> None:
                     json_type(details, '$.drive_id') = 'integer'
                  OR (
                         json_type(details, '$.drive_id') = 'text'
-                    AND json_extract(details, '$.drive_id') GLOB '[0-9]*'
                     AND json_extract(details, '$.drive_id') <> ''
+                          AND json_extract(details, '$.drive_id') NOT GLOB '*[^0-9]*'
                  )
               )
               AND EXISTS (
