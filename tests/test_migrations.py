@@ -187,6 +187,10 @@ def test_migration_0013_backfills_project_and_drive_from_details(sqlite_db_path)
         ), {"details": '{"project_id":123,"drive_id":"x42"}'})
 
         conn.execute(text(
+            "INSERT INTO audit_logs (action, details) VALUES ('A_PARTIAL', :details)"
+        ), {"details": '{"project_id":"PROJ-PARTIAL","drive_id":"42x"}'})
+
+        conn.execute(text(
             "INSERT INTO audit_logs (action, details) VALUES ('A_ORPHAN', :details)"
         ), {"details": '{"project_id":"PROJ-ORPHAN","drive_id":"999"}'})
     engine.dispose()
@@ -212,6 +216,9 @@ def test_migration_0013_backfills_project_and_drive_from_details(sqlite_db_path)
             bad = conn.execute(text(
                 "SELECT project_id, drive_id FROM audit_logs WHERE action = 'A_BAD'"
             )).fetchone()
+            partial = conn.execute(text(
+                "SELECT project_id, drive_id FROM audit_logs WHERE action = 'A_PARTIAL'"
+            )).fetchone()
             orphan = conn.execute(text(
                 "SELECT project_id, drive_id FROM audit_logs WHERE action = 'A_ORPHAN'"
             )).fetchone()
@@ -219,6 +226,7 @@ def test_migration_0013_backfills_project_and_drive_from_details(sqlite_db_path)
         assert ok_num == ("PROJ-001", 7)
         assert ok_str == (None, 42)
         assert bad == (None, None)
+        assert partial == ("PROJ-PARTIAL", None)
         assert orphan == ("PROJ-ORPHAN", None)
     finally:
         engine.dispose()
