@@ -26,7 +26,8 @@ class AuditRepository:
         client_ip: Optional[str] = None,
     ) -> AuditLog:
         """Create and persist an immutable audit log entry."""
-        resolved_project_id = project_id if project_id is not None else _extract_project_id(details)
+        normalized_project_id = _normalize_project_id(project_id)
+        resolved_project_id = normalized_project_id if normalized_project_id is not None else _extract_project_id(details)
         resolved_drive_id = drive_id if drive_id is not None else _extract_drive_id(details)
         entry = AuditLog(
             user=user,
@@ -59,7 +60,7 @@ class AuditRepository:
         rows = []
         for kwargs in entries:
             details = kwargs.get("details") or {}
-            project_id = kwargs.get("project_id")
+            project_id = _normalize_project_id(kwargs.get("project_id"))
             row = AuditLog(
                 action=kwargs["action"],
                 user=kwargs.get("user"),
@@ -156,6 +157,12 @@ def _extract_project_id(details: Optional[Mapping[str, Any]]) -> Optional[str]:
         return None
     value = details.get("project_id")
     return value if isinstance(value, str) and value else None
+
+
+def _normalize_project_id(project_id: Optional[str]) -> Optional[str]:
+    if project_id == "":
+        return None
+    return project_id
 
 
 def _extract_drive_id(details: Optional[Mapping[str, Any]]) -> Optional[int]:
