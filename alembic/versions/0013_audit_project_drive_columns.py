@@ -82,6 +82,13 @@ def _backfill_postgresql() -> None:
                  OR jsonb_typeof(details::jsonb -> 'drive_id') = 'string'
               )
               AND details->>'drive_id' ~ '^[0-9]+$'
+                  AND (
+                          length(details->>'drive_id') < 10
+                      OR (
+                                length(details->>'drive_id') = 10
+                          AND details->>'drive_id' <= '2147483647'
+                      )
+                  )
               AND EXISTS (
                     SELECT 1
                     FROM usb_drives u
