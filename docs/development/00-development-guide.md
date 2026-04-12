@@ -277,6 +277,16 @@ sudo -u postgres psql -c "CREATE DATABASE ecube OWNER ecube;"
 
 For macOS, use your PostgreSQL service manager (for example, Homebrew services) and run the same two commands before migrations.
 
+### PAM Service Config
+
+The `POST /auth/token` login endpoint authenticates OS credentials via Linux PAM. The `ecube` PAM service config must be installed once:
+
+```bash
+sudo cp deploy/ecube-pam /etc/pam.d/ecube
+```
+
+Without this file, all login attempts return `401 Unauthorized` regardless of credentials.
+
 ### Backend Execution
 
 Run from the repository root (with your virtual environment activated):
