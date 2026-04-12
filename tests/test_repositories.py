@@ -524,6 +524,46 @@ def test_audit_repo_extracted_drive_id_rejects_zero_values(db):
     assert zero_str.drive_id is None
 
 
+def test_audit_repo_explicit_non_positive_drive_id_falls_back_to_details(db):
+    repo = AuditRepository(db)
+
+    from_details = repo.add(
+        action="EVENT_DRIVE_EXPLICIT_ZERO",
+        drive_id=0,
+        details={"drive_id": 7},
+    )
+    negative = repo.add(
+        action="EVENT_DRIVE_EXPLICIT_NEGATIVE",
+        drive_id=-5,
+        details={},
+    )
+
+    assert from_details.drive_id == 7
+    assert negative.drive_id is None
+
+
+def test_audit_repo_add_many_explicit_non_positive_drive_id_falls_back_to_details(db):
+    repo = AuditRepository(db)
+
+    rows = repo.add_many(
+        [
+            {
+                "action": "EVENT_BATCH_DRIVE_ZERO",
+                "drive_id": 0,
+                "details": {"drive_id": 9},
+            },
+            {
+                "action": "EVENT_BATCH_DRIVE_NEGATIVE",
+                "drive_id": -1,
+                "details": {},
+            },
+        ]
+    )
+
+    assert rows[0].drive_id == 9
+    assert rows[1].drive_id is None
+
+
 # ---------------------------------------------------------------------------
 # PortRepository
 # ---------------------------------------------------------------------------
