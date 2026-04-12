@@ -68,8 +68,8 @@
 
 - CoC report generation is modeled as a read over existing records; no new base table is required for the current design.
 - CoC report queries use existing identifiers:
-  - Drive-based retrieval uses drive identifiers recorded in audit context (`audit_logs.details`).
-  - Project-based retrieval uses existing `export_jobs.project_id` linkage plus related audit/job records.
+  - Drive-based retrieval uses first-class `audit_logs.drive_id` and may use `audit_logs.details` for verbose context.
+  - Project-based retrieval uses first-class `audit_logs.project_id` and may join with `export_jobs.project_id` where needed.
 - To satisfy strict CoC output requirements, custody-relevant events must include these fields in structured audit context:
   - `creator` (who created/prepared the USB in ECUBE)
   - `possessor` (who took possession)
@@ -125,7 +125,7 @@ This makes `user_roles` the day-to-day control plane while preserving OS-group f
 - `usb_hubs.system_identifier` and `usb_ports.system_path` carry **unique constraints**, ensuring each hub and port maps to exactly one row. The discovery upsert logic relies on these keys for stable identity across sync cycles.
 - Enumerated statuses should be constrained by check/enum types.
 - Index by `project_id`, `status`, and recent timestamps for UI queries.
-- CoC retrieval performance should be supported by indexes on audit query paths (for example: `audit_logs.action`, `audit_logs.timestamp`, and PostgreSQL expression indexes on frequently queried `audit_logs.details` keys such as `drive_id` and custody fields).
+- CoC retrieval performance should be supported by indexes on audit query paths, including composite indexes on (`audit_logs.project_id`, `audit_logs.timestamp`), (`audit_logs.drive_id`, `audit_logs.timestamp`), and (`audit_logs.action`, `audit_logs.timestamp`).
 
 ## Physical Schema Reference (Current ORM)
 
@@ -237,6 +237,8 @@ This section documents the concrete table layout represented by the SQLAlchemy m
 - `timestamp` (DateTime with timezone, default `now()`)
 - `user` (String, nullable actor identity)
 - `action` (String, required)
+- `project_id` (String, nullable)
+- `drive_id` (Integer, FK → `usb_drives.id`, nullable, `ON DELETE SET NULL`)
 - `job_id` (Integer, FK → `export_jobs.id`, nullable, `ON DELETE SET NULL`)
 - `details` (JSON in ORM, PostgreSQL variant JSONB)
 - `client_ip` (String(45), nullable)
