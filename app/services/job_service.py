@@ -63,12 +63,15 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
                         user=actor,
                         project_id=body.project_id,
                         drive_id=body.drive_id,
-                        job_id=job.id,
+                        # job_id intentionally omitted: the job row was rolled back above
+                        # and audit_logs.job_id is an FK — referencing it would fail on
+                        # PostgreSQL. The attempted job context is preserved in details.
                         details={
                             "actor": actor,
                             "drive_id": body.drive_id,
                             "existing_project_id": drive.current_project_id,
                             "requested_project_id": body.project_id,
+                            "attempted_project_id": body.project_id,
                         },
                         client_ip=client_ip,
                     )
