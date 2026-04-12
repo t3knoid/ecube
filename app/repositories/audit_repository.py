@@ -8,6 +8,8 @@ from app.models.audit import AuditLog
 
 _logger = logging.getLogger(__name__)
 
+_MAX_INT32 = 2_147_483_647
+
 
 class AuditRepository:
     """Data-access layer for :class:`~app.models.audit.AuditLog`."""
@@ -174,9 +176,10 @@ def _normalize_drive_id(drive_id: Optional[int]) -> Optional[int]:
     if isinstance(drive_id, bool):
         return None
     if isinstance(drive_id, int):
-        return drive_id if drive_id > 0 else None
+        return drive_id if 0 < drive_id <= _MAX_INT32 else None
     if isinstance(drive_id, float) and drive_id.is_integer() and drive_id > 0:
-        return int(drive_id)
+        normalized = int(drive_id)
+        return normalized if normalized <= _MAX_INT32 else None
     return None
 
 
@@ -187,10 +190,11 @@ def _extract_drive_id(details: Optional[Mapping[str, Any]]) -> Optional[int]:
     if isinstance(value, bool):
         return None
     if isinstance(value, int):
-        return value if value > 0 else None
+        return value if 0 < value <= _MAX_INT32 else None
     if isinstance(value, float) and value.is_integer() and value > 0:
-        return int(value)
+        normalized = int(value)
+        return normalized if normalized <= _MAX_INT32 else None
     if isinstance(value, str) and value.isdigit():
         parsed = int(value)
-        return parsed if parsed > 0 else None
+        return parsed if 0 < parsed <= _MAX_INT32 else None
     return None
