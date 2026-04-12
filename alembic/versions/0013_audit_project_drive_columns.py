@@ -30,7 +30,8 @@ def _backfill_sqlite() -> None:
         )
     )
 
-    # Backfill drive_id for integer JSON values and strings containing only digits.
+    # Backfill drive_id for integer JSON values, whole-number real values,
+    # and strings containing only digits.
     op.execute(
         sa.text(
             """
@@ -40,6 +41,11 @@ def _backfill_sqlite() -> None:
               AND details IS NOT NULL
               AND (
                     json_type(details, '$.drive_id') = 'integer'
+                      OR (
+                                json_type(details, '$.drive_id') = 'real'
+                          AND json_extract(details, '$.drive_id') > 0
+                          AND json_extract(details, '$.drive_id') = CAST(json_extract(details, '$.drive_id') AS INTEGER)
+                      )
                  OR (
                         json_type(details, '$.drive_id') = 'text'
                     AND json_extract(details, '$.drive_id') <> ''
@@ -74,25 +80,55 @@ def _backfill_postgresql() -> None:
         sa.text(
             """
             UPDATE audit_logs
-            SET drive_id = (details->>'drive_id')::integer
+            SET drive_id = CASE
+                               WHEN jsonb_typeof(details::jsonb -> 'drive_id') = 'number'
+                                   THEN (details->>'drive_id')::numeric::integer
+                               WHEN details->>'drive_id' ~ '^[0-9]+$'
+                                   THEN (details->>'drive_id')::integer
+                               ELSE split_part(details->>'drive_id', '.', 1)::integer
+                           END
             WHERE drive_id IS NULL
               AND details IS NOT NULL
               AND (
-                    jsonb_typeof(details::jsonb -> 'drive_id') = 'number'
-                 OR jsonb_typeof(details::jsonb -> 'drive_id') = 'string'
+                    (
+                        jsonb_typeof(details::jsonb -> 'drive_id') = 'number'
+                        AND (details->>'drive_id')::numeric = trunc((details->>'drive_id')::numeric)
+                        AND (details->>'drive_id')::numeric >= 1
+                        AND (details->>'drive_id')::numeric <= 2147483647
+                    )
+                 OR (
+                        jsonb_typeof(details::jsonb -> 'drive_id') = 'string'
+                        AND details->>'drive_id' ~ '^[0-9]+$'
+                        AND (
+                              length(details->>'drive_id') < 10
+                           OR (
+                                  length(details->>'drive_id') = 10
+                              AND details->>'drive_id' <= '2147483647'
+                           )
+                        )
+                    )
+                 OR (
+                        jsonb_typeof(details::jsonb -> 'drive_id') = 'string'
+                        AND details->>'drive_id' ~ '^[0-9]+\\.0+$'
+                        AND (
+                              length(split_part(details->>'drive_id', '.', 1)) < 10
+                           OR (
+                                  length(split_part(details->>'drive_id', '.', 1)) = 10
+                              AND split_part(details->>'drive_id', '.', 1) <= '2147483647'
+                           )
+                        )
+                    )
               )
-              AND details->>'drive_id' ~ '^[0-9]+$'
-                  AND (
-                          length(details->>'drive_id') < 10
-                      OR (
-                                length(details->>'drive_id') = 10
-                          AND details->>'drive_id' <= '2147483647'
-                      )
-                  )
               AND EXISTS (
                     SELECT 1
                     FROM usb_drives u
-                    WHERE u.id = (details->>'drive_id')::integer
+                    WHERE u.id = CASE
+                                     WHEN jsonb_typeof(details::jsonb -> 'drive_id') = 'number'
+                                         THEN (details->>'drive_id')::numeric::integer
+                                     WHEN details->>'drive_id' ~ '^[0-9]+$'
+                                         THEN (details->>'drive_id')::integer
+                                     ELSE split_part(details->>'drive_id', '.', 1)::integer
+                                 END
               )
             """
         )
