@@ -22,7 +22,7 @@
 11. [Jobs](#9-jobs)
 12. [Job Detail, Verification, and File Review](#10-job-detail-verification-and-file-review)
 13. [Audit Logs](#11-audit-logs)
-	- [Chain of Custody Workflow](#111-chain-of-custody-workflow)
+   - [Chain of Custody Workflow](#111-chain-of-custody-workflow)
 14. [Users](#12-users)
 15. [System](#13-system)
    - [Application Logs Tab](#131-application-logs-tab)
