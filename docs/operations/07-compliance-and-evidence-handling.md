@@ -275,7 +275,49 @@ ECUBE must provide an automated export of chain-of-custody records:
 - The UI must provide an authorized user control to print or save a chain-of-custody report.
 - Printed/saved output must include custody actors and timestamps needed for legal review.
 
-**Endpoint:** `GET /audit/chain-of-custody?job_id={job_id}`
+**Endpoint:** `GET /audit/chain-of-custody`
+
+Supported selectors:
+
+- `drive_id` (authoritative when provided)
+- `drive_sn` (drive device identifier/serial)
+- `project_id` (project-scoped output with per-drive sections)
+
+Selector rules:
+
+- At least one selector is required.
+- If both project and drive selectors are provided, the selected drive must match the project binding or the API returns `409`.
+- `drive_sn` with no matching drive returns `404`.
+- `drive_sn` with ambiguous resolution returns `409`.
+
+Drive-based example:
+
+```http
+GET /audit/chain-of-custody?drive_id=42
+```
+
+Project-based example:
+
+```http
+GET /audit/chain-of-custody?project_id=CASE-2026-0007
+```
+
+Handoff confirmation example:
+
+```http
+POST /audit/chain-of-custody/handoff
+Content-Type: application/json
+
+{
+  "drive_id": 42,
+  "project_id": "CASE-2026-0007",
+  "possessor": "Jane Reviewer",
+  "delivery_time": "2026-04-10T14:22:31Z",
+  "received_by": "External Counsel",
+  "receipt_ref": "COC-2026-0410-07",
+  "notes": "Sealed evidence bag #A771"
+}
+```
 
 **Response:**
 
