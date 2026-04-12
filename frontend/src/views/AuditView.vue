@@ -383,7 +383,7 @@ onMounted(() => {
       <div class="modal-dialog">
         <div class="modal-header">
           <h2>{{ t('audit.handoffWarning') }}</h2>
-          <button class="modal-close" @click="cancelHandoffSubmission" aria-label="Close">×</button>
+          <button class="modal-close" @click="cancelHandoffSubmission" :aria-label="t('common.actions.close')">×</button>
         </div>
         <div class="modal-body">
           <p>{{ t('audit.handoffWarningMessage') }}</p>
