@@ -1,7 +1,9 @@
-from datetime import datetime
-from typing import Any, Dict, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from app.utils.sanitize import SafeStr
 
 
 class AuditLogSchema(BaseModel):
@@ -16,3 +18,70 @@ class AuditLogSchema(BaseModel):
     client_ip: Optional[str] = Field(default=None, description="IP address of the requesting client (null for background tasks or when redacted; 'unknown' when the client address could not be resolved)")
 
     model_config = {"from_attributes": True}
+
+
+class ChainOfCustodyEventSchema(BaseModel):
+    event_id: int = Field(..., description="Audit event ID")
+    event_type: str = Field(..., description="Audit action code")
+    timestamp: datetime = Field(..., description="Event timestamp (ISO 8601)")
+    actor: Optional[str] = Field(default=None, description="Actor who performed the event")
+    action: str = Field(..., description="Human-readable event label")
+    details: Dict[str, Any] = Field(default_factory=dict, description="Structured event metadata")
+
+
+class ManifestSummarySchema(BaseModel):
+    job_id: int = Field(..., description="Related export job ID")
+    total_files: int = Field(..., description="Number of files tracked for the job")
+    total_bytes: int = Field(..., description="Total bytes copied for the job")
+    manifest_count: int = Field(..., description="Number of generated manifests for the job")
+    latest_manifest_path: Optional[str] = Field(default=None, description="Path of most recent manifest")
+    latest_manifest_format: Optional[str] = Field(default=None, description="Format of most recent manifest")
+    latest_manifest_created_at: Optional[datetime] = Field(default=None, description="Creation time of most recent manifest")
+
+
+class ChainOfCustodyDriveReportSchema(BaseModel):
+    drive_id: int = Field(..., description="Target drive ID")
+    drive_sn: str = Field(..., description="Drive serial/device identifier")
+    project_id: Optional[str] = Field(default=None, description="Bound project ID for the drive")
+    custody_complete: bool = Field(..., description="Whether handoff confirmation exists")
+    delivery_time: Optional[datetime] = Field(default=None, description="Physical handoff timestamp if confirmed")
+    chain_of_custody_events: List[ChainOfCustodyEventSchema] = Field(default_factory=list, description="Chronological custody-related audit events")
+    manifest_summary: List[ManifestSummarySchema] = Field(default_factory=list, description="Per-job manifest and size summary")
+
+
+class ChainOfCustodyReportSchema(BaseModel):
+    selector_mode: str = Field(..., description="Resolved selector mode: DRIVE_ID, DRIVE_SN, or PROJECT")
+    project_id: Optional[str] = Field(default=None, description="Project selector when provided")
+    reports: List[ChainOfCustodyDriveReportSchema] = Field(default_factory=list, description="Drive-scoped chain-of-custody reports")
+
+
+class ChainOfCustodyHandoffRequest(BaseModel):
+    drive_id: int = Field(..., ge=1, description="Drive identifier")
+    project_id: Optional[SafeStr] = Field(default=None, min_length=1, description="Expected project identifier")
+    possessor: SafeStr = Field(..., min_length=1, description="Person or entity taking possession")
+    delivery_time: datetime = Field(..., description="Physical handoff time in RFC 3339 UTC")
+    received_by: Optional[SafeStr] = Field(default=None, min_length=1, description="Receiver identity when different from possessor")
+    receipt_ref: Optional[SafeStr] = Field(default=None, min_length=1, description="External receipt/signature reference")
+    notes: Optional[SafeStr] = Field(default=None, description="Optional custody notes")
+
+    @model_validator(mode="after")
+    def _validate_delivery_time_utc(self):
+        if self.delivery_time.tzinfo is None or self.delivery_time.utcoffset() is None:
+            raise ValueError("delivery_time must include timezone information")
+        if self.delivery_time.utcoffset() != timezone.utc.utcoffset(self.delivery_time):
+            raise ValueError("delivery_time must be a UTC timestamp")
+        return self
+
+
+class ChainOfCustodyHandoffResponse(BaseModel):
+    event_id: int = Field(..., description="Audit event ID")
+    event_type: str = Field(..., description="Event type code")
+    drive_id: int = Field(..., description="Drive identifier")
+    project_id: Optional[str] = Field(default=None, description="Project identifier")
+    creator: Optional[str] = Field(default=None, description="Authenticated user who recorded the event")
+    possessor: str = Field(..., description="Person/entity taking possession")
+    delivery_time: datetime = Field(..., description="Physical handoff time in UTC")
+    received_by: Optional[str] = Field(default=None, description="Receiving party")
+    receipt_ref: Optional[str] = Field(default=None, description="Receipt reference")
+    notes: Optional[str] = Field(default=None, description="Optional notes")
+    recorded_at: datetime = Field(..., description="When this event was recorded")
