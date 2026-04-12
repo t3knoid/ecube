@@ -199,7 +199,7 @@ def confirm_chain_of_custody_handoff(
     if existing is not None:
         return _handoff_response_from_audit(existing)
 
-    created = AuditRepository(db).add(
+    created = AuditRepository(db).add_uncommitted(
         action="COC_HANDOFF_CONFIRMED",
         user=actor,
         project_id=effective_project_id,
@@ -220,7 +220,11 @@ def confirm_chain_of_custody_handoff(
 
     # Transition drive to ARCHIVED state after successful handoff to remove from active circulation
     drive.current_state = DriveState.ARCHIVED
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
     return _handoff_response_from_audit(created)
 
