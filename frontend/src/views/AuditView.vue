@@ -355,7 +355,7 @@ onMounted(() => {
           <input v-model="handoffForm.received_by" type="text" :placeholder="t('audit.receivedBy')" :aria-label="t('audit.receivedBy')" />
           <input v-model="handoffForm.receipt_ref" type="text" :placeholder="t('audit.receiptRef')" :aria-label="t('audit.receiptRef')" />
         </div>
-        <textarea v-model="handoffForm.notes" rows="3" :placeholder="t('audit.notes')" />
+        <textarea v-model="handoffForm.notes" rows="3" :placeholder="t('audit.notes')" :aria-label="t('audit.notes')"></textarea>
         <button class="btn btn-primary" :disabled="handoffSaving" @click="submitHandoff">{{ t('audit.confirmHandoff') }}</button>
       </div>
     </section>
