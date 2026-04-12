@@ -10,20 +10,89 @@
 ## Table of Contents
 
 1. [Introduction](#introduction)
-2. [Development Environment Setup](#development-environment-setup)
-3. [Repository Layout](#repository-layout)
-4. [Running the Application](#running-the-application)
-5. [Database and Migrations](#database-and-migrations)
-6. [Testing](#testing)
-7. [Architecture Overview](#architecture-overview)
-8. [Coding Conventions](#coding-conventions)
-9. [Related Documentation](#related-documentation)
+2. [Quick Start](#quick-start)
+3. [Development Environment Setup](#development-environment-setup)
+4. [Repository Layout](#repository-layout)
+5. [Running the Application](#running-the-application)
+6. [Database and Migrations](#database-and-migrations)
+7. [Testing](#testing)
+8. [Architecture Overview](#architecture-overview)
+9. [Coding Conventions](#coding-conventions)
+10. [Related Documentation](#related-documentation)
 
 ---
 
 ## Introduction
 
 This guide is the entry point for developers working on the ECUBE codebase on macOS and Linux. It covers local setup, project structure, testing practices, and key architectural patterns. For Windows development (Docker Desktop + WSL2, including usbipd-win), use the dedicated **[Windows Development Guide](02-windows-development-guide.md)**. For production deployment, see the [Operational Guide](../operations/00-operational-guide.md).
+
+---
+
+## Quick Start
+
+Use this section for a concise startup path; subsequent sections provide more comprehensive instructions, alternatives, and troubleshooting details.
+
+Assumes Python 3.11+, Node.js 20 LTS+, npm 10+, and PostgreSQL 14+ are already installed.
+
+1. Clone the source code
+
+```bash
+git clone https://github.com/t3knoid/ecube.git && cd ecube
+```
+
+2. Configure the Python environment
+
+```bash
+python3.11 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+3. Configure the environment file
+
+Set DATABASE_URL in .env (e.g. DATABASE_URL=postgresql://ecube:ecube@localhost/ecube).
+
+```bash
+cp .env.example .env
+```
+
+4. Create a PostgreSQL admin login for the setup wizard (first time only)
+
+```bash
+sudo -u postgres psql -c "CREATE ROLE ecube_admin WITH LOGIN CREATEDB CREATEROLE PASSWORD 'ecubeadmin';"
+```
+
+5. Install PAM service config (first time only, Linux)
+
+```bash
+sudo cp deploy/ecube-pam /etc/pam.d/ecube
+```
+
+6. Start backend (must run as root for PAM authentication)
+
+```bash
+sudo .venv/bin/uvicorn app.main:app --reload
+```
+
+7. In a second terminal, install dependencies and run the development frontend
+
+```bash
+cd frontend && npm ci && npm run dev
+```
+
+8. Compile the frontend code (production build)
+
+```bash
+cd frontend && npm run build
+```
+
+
+Then open the setup wizard at `http://localhost:5173` to test the database connection using `ecube_admin`, provision the application database/user, run migrations, and create the first ECUBE admin user.
+
+| URL | Purpose |
+|-----|---------|
+| `http://localhost:5173` | Frontend UI |
+| `http://localhost:8000` | Backend API |
+| `http://localhost:8000/docs` | Interactive API docs |
 
 ---
 
@@ -279,13 +348,23 @@ For macOS, use your PostgreSQL service manager (for example, Homebrew services) 
 
 ### PAM Service Config
 
-The `POST /auth/token` login endpoint authenticates OS credentials via Linux PAM. The `ecube` PAM service config must be installed once:
+The `POST /auth/token` login endpoint authenticates OS credentials via Linux PAM. Two one-time setup steps are required.
+
+**1. Install the PAM service config:**
 
 ```bash
 sudo cp deploy/ecube-pam /etc/pam.d/ecube
 ```
 
-Without this file, all login attempts return `401 Unauthorized` regardless of credentials.
+**2. Run the backend as root.**
+
+Linux's `unix_chkpwd` helper (used by `pam_unix` for non-root processes) only allows a process to verify its *own* password. The ECUBE service must run as root to authenticate arbitrary OS users:
+
+```bash
+sudo .venv/bin/uvicorn app.main:app --reload
+```
+
+Without root, all login attempts return `401 Unauthorized` regardless of credentials. In production, the service runs as root via systemd — the same restriction applies.
 
 ### Backend Execution
 
@@ -293,7 +372,7 @@ Run from the repository root (with your virtual environment activated):
 
 ```bash
 alembic upgrade head
-uvicorn app.main:app --reload
+sudo .venv/bin/uvicorn app.main:app --reload
 ```
 
 ### Frontend Execution
