@@ -1494,7 +1494,7 @@ JOIN (VALUES
   (2, 'batch2-file-001.zip', 75000000, 'sha256:11223344556677889900aabbccddee00112233445566778899aabbcc'),
   (2, 'batch2-file-002.jpg', 45000000, 'sha256:aabbccddee00112233445566778899aabbccddee0011223344556677'),
   (3, 'case2-001.tar.gz', 200000000, 'sha256:5566778899aabbccddee00112233445566778899aabbccddee0011'),
-  (3, 'case2-002.iso', 150000000, 'sha256:ddee00112233445566778899aabbccddee00112233445566778899)
+  (3, 'case2-002.iso', 150000000, 'sha256:ddee00112233445566778899aabbccddee00112233445566778899')
 ) AS v (job_id, f_path, f_size, f_hash) ON v.job_id = j.id
 ON CONFLICT DO NOTHING;
 
