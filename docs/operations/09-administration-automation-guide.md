@@ -621,7 +621,7 @@ Key behaviors:
 - **Format** writes a filesystem to the drive (stays `AVAILABLE`) and **clears any existing project binding** (`current_project_id → null`). Required before a drive can be assigned to a new project. A drive with no recognized filesystem cannot be initialized.
 - **Initialize** binds a drive to a project (`AVAILABLE → IN_USE`). See the Initialize Drive section below for state-aware guard rules.
 - **Eject** flushes writes, unmounts, and returns the drive to `AVAILABLE` (`IN_USE → AVAILABLE`). The project binding and filesystem type are **preserved** so the same drive can be re-initialized for the same project without reformatting.
-- **Physical removal** of an `AVAILABLE` drive transitions it back to `EMPTY` on the next discovery sync. An `IN_USE` drive also goes to `EMPTY` when removed and re-inserted; it does **not** automatically return to `IN_USE` — the operator must re-initialize it.
+- **Physical removal** of an `AVAILABLE` drive transitions it back to `EMPTY` on the next discovery sync. An `IN_USE` drive remains `IN_USE` even when physically absent — the project binding is intentionally preserved (project isolation must not be broken by hardware events). The drive resumes normal operation without operator intervention when re-inserted.
 - **Chain-of-custody handoff** permanently archives a drive (`IN_USE / AVAILABLE → ARCHIVED`). No operations are possible on archived drives.
 
 ### List Drives
