@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime
+from sqlalchemy import Boolean, Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -36,6 +36,7 @@ class UsbPort(Base):
     speed = Column(String, nullable=True)
     hub = relationship("UsbHub", back_populates="ports")
     drives = relationship("UsbDrive", back_populates="port")
+    __table_args__ = (UniqueConstraint("system_path", name="uq_usb_ports_system_path"),)
 
 
 class UsbDrive(Base):
