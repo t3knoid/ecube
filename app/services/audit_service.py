@@ -186,6 +186,23 @@ def confirm_chain_of_custody_handoff(
         raise HTTPException(status_code=404, detail="Drive not found")
 
     if payload.project_id and drive.current_project_id and payload.project_id != drive.current_project_id:
+        try:
+            AuditRepository(db).add(
+                action="PROJECT_ISOLATION_VIOLATION",
+                user=actor,
+                project_id=payload.project_id,
+                drive_id=drive.id,
+                details={
+                    "actor": actor,
+                    "drive_id": drive.id,
+                    "existing_project_id": drive.current_project_id,
+                    "requested_project_id": payload.project_id,
+                    "context": "coc_handoff",
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.error("Failed to write audit log for PROJECT_ISOLATION_VIOLATION")
         raise HTTPException(
             status_code=409,
             detail=(
