@@ -139,7 +139,7 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 | UC-6.5 | Verify copied data (post-copy hash verification) | Admin, Manager, Processor | admin, manager, processor |
 | UC-6.6 | Generate manifest on USB drive | Admin, Manager, Processor | admin, manager, processor |
 | UC-6.7 | View file hashes (MD5/SHA-256) for an individual file | Admin, Auditor | admin, auditor |
-| UC-6.8 | Compare two files by hash | Any authenticated user | any |
+| UC-6.8 | Compare two files by hash | Admin, Auditor | admin, auditor |
 
 **UI Implication:** Job creation wizard (select mount → select drive → enter project/evidence metadata → configure threads → submit). Job monitoring dashboard with progress bars, real-time byte counters, and per-file status table. Post-copy action buttons for Verify and Generate Manifest. End-to-end workflow guided experience: Mount → Drive → Job → Copy → Verify → Manifest → Eject.
 
@@ -161,8 +161,8 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 | UC-7.10 | Retrieve chain-of-custody report by project ID | Admin, Manager, Auditor | admin, manager, auditor |
 | UC-7.11 | View chain-of-custody events (lifecycle timeline) | Admin, Manager, Auditor | admin, manager, auditor |
 | UC-7.12 | View manifest summary in chain-of-custody report | Admin, Manager, Auditor | admin, manager, auditor |
-| UC-7.13 | Confirm custody handoff with possessor and delivery details | Admin, Manager, Auditor | admin, manager, auditor |
-| UC-7.14 | Acknowledge permanent archive warning before handoff | Admin, Manager, Auditor | admin, manager, auditor |
+| UC-7.13 | Confirm custody handoff with possessor and delivery details | Admin, Manager | admin, manager |
+| UC-7.14 | Acknowledge permanent archive warning before handoff | Admin, Manager | admin, manager |
 | UC-7.15 | Print or save chain-of-custody report for compliance records | Admin, Manager, Auditor | admin, manager, auditor |
 
 **UI Implication:** The Audit section includes two sub-areas:
@@ -183,8 +183,8 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 | UC-8.4 | View block device metadata | Any authenticated user | any |
 | UC-8.5 | View mounted filesystems | Any authenticated user | any |
 | UC-8.6 | View job debug info | Admin, Auditor | admin, auditor |
-| UC-8.7 | List application log files | Any authenticated user | any |
-| UC-8.8 | Download a specific log file | Any authenticated user | any |
+| UC-8.7 | List application log files | Admin | admin |
+| UC-8.8 | Download a specific log file | Admin | admin |
 
 **UI Implication:** Dashboard/status page showing health indicators, USB topology diagram, and system resource metrics. Log viewer for remote troubleshooting without SSH access.
 
