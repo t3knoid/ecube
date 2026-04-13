@@ -60,6 +60,32 @@ def initialize_drive(
             detail="Drive is archived and cannot be re-initialized.",
         )
 
+    # EMPTY drives are not physically accessible (not present or on a disabled port).
+    # Initialization requires the drive to be AVAILABLE so that a filesystem is
+    # present and the drive is reachable.  Attempting to initialize from EMPTY is
+    # always a precondition failure.
+    if drive.current_state == DriveState.EMPTY:
+        try:
+            audit_repo.add(
+                action="INIT_REJECTED_NOT_AVAILABLE",
+                user=actor,
+                project_id=project_id,
+                drive_id=drive_id,
+                details={
+                    "actor": actor,
+                    "drive_id": drive_id,
+                    "current_state": drive.current_state.value,
+                    "requested_project_id": project_id,
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.error("Failed to write audit log for INIT_REJECTED_NOT_AVAILABLE")
+        raise HTTPException(
+            status_code=409,
+            detail="Drive is EMPTY (not present or port disabled) and cannot be initialized.",
+        )
+
     # Project isolation is state-dependent:
     # - IN_USE + different project: hard deny (403) — cannot steal an active drive.
     # - AVAILABLE + different project: require format first (409) — the previous

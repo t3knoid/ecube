@@ -945,10 +945,11 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 2 | Initialize a drive with `filesystem_type=NULL` | 409, `CONFLICT` — must have recognized filesystem |
 | 3 | Initialize a drive with `filesystem_type=unformatted` | 409, `CONFLICT` — must have recognized filesystem |
 | 4 | Initialize a drive with `filesystem_type=unknown` | 409, `CONFLICT` — must have recognized filesystem |
-| 5 | Prepare-eject an `IN_USE` drive | 200, state → `AVAILABLE` |
-| 6 | Prepare-eject an `AVAILABLE` drive | 409, `CONFLICT` |
-| 7 | Format-then-initialize workflow: discover unformatted → format ext4 → initialize | Each step succeeds; final state `IN_USE` |
-| 8 | Attempt to format an `IN_USE` drive | 409, `CONFLICT` — must be `AVAILABLE` |
+| 5 | Initialize an `EMPTY` drive (not present / disabled port) | 409, `CONFLICT`; audit `INIT_REJECTED_NOT_AVAILABLE` recorded |
+| 6 | Prepare-eject an `IN_USE` drive | 200, state → `AVAILABLE` |
+| 7 | Prepare-eject an `AVAILABLE` drive | 409, `CONFLICT` |
+| 8 | Format-then-initialize workflow: discover unformatted → format ext4 → initialize | Each step succeeds; final state `IN_USE` |
+| 9 | Attempt to format an `IN_USE` drive | 409, `CONFLICT` — must be `AVAILABLE` |
 
 ### 12.4.1 Filesystem Detection
 
