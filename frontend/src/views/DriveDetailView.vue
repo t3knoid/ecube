@@ -123,8 +123,19 @@ async function runEnable() {
         state: driveStateLabel(drive.value.current_state),
       })
     }
-  } catch {
-    error.value = t('common.errors.requestConflict')
+  } catch (err) {
+    const status = err?.response?.status
+    if (!status) {
+      error.value = t('common.errors.networkError')
+    } else if (status === 401 || status === 403) {
+      error.value = t('common.errors.insufficientPermissions')
+    } else if (status === 409) {
+      error.value = t('common.errors.requestConflict')
+    } else if (status >= 500) {
+      error.value = t('common.errors.serverError', { status })
+    } else {
+      error.value = t('common.errors.serverErrorGeneric')
+    }
   } finally {
     saving.value = false
   }

@@ -149,7 +149,7 @@ test('Enable Drive shows error banner when PATCH port call fails', async ({ page
   await page.goto('/drives/2')
   await page.getByRole('button', { name: 'Enable Drive' }).click()
 
-  await expect(page.getByText(/conflict|error/i)).toBeVisible()
+  await expect(page.getByText(/Server error/i)).toBeVisible()
   await expect(page.getByText('Port enabled. Drive is now available.')).toHaveCount(0)
 })
 
