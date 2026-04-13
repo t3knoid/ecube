@@ -79,12 +79,14 @@ test('Enable Drive issues PATCH port + POST refresh and shows success banner whe
 
   // Track which API calls were made
   const patchRequests = []
+  const patchBodies = []
   const refreshRequests = []
 
   await routeJson(page, '**/api/drives', () => [drive])
 
   await page.route('**/api/admin/ports/7', async (route) => {
     patchRequests.push(route.request().method())
+    patchBodies.push(route.request().postDataJSON())
     drive.current_state = 'AVAILABLE'
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 7, enabled: true }) })
   })
@@ -100,6 +102,7 @@ test('Enable Drive issues PATCH port + POST refresh and shows success banner whe
   await expect(page.getByText('Port enabled. Drive is now available.')).toBeVisible()
 
   expect(patchRequests).toContain('PATCH')
+  expect(patchBodies[0]).toEqual({ enabled: true })
   expect(refreshRequests).toContain('POST')
 })
 
