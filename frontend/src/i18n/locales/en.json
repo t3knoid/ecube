@@ -364,6 +364,7 @@
       "networkError": "Unable to reach the server. Check your network connection and try again.",
       "serverError": "Server error ({status}). Please try again later.",
       "invalidRequest": "Invalid request. Please check your input.",
+      "notFound": "The requested resource was not found.",
       "insufficientPermissions": "Insufficient permissions. Your role may not allow this action.",
       "requestConflict": "Request conflict. Please refresh and try again.",
       "validationFailed": "Validation failed. Please review your input.",
