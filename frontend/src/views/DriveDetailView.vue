@@ -24,7 +24,7 @@ const warnMessage = ref('')
 function clearBanners() {
   error.value = ''
   infoMessage.value = ''
-  warnMessage.value = ''  
+  warnMessage.value = ''
 }
 
 const showFormatDialog = ref(false)
