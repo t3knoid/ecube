@@ -165,10 +165,11 @@ def get_chain_of_custody_report(
         _build_drive_report(
             db,
             drive=d,
-            # Use the caller-supplied project_id when present (already validated
-            # to match the drive binding); fall back to the drive's own binding.
-            # This ensures a reformatted+reassigned drive only surfaces events
-            # from the current project lifecycle.
+            # project_id takes precedence so that:
+            # - PROJECT selector: always uses the queried project (even for
+            #   historically-participated drives whose current binding differs).
+            # - DRIVE_ID/DRIVE_SN: uses caller's project_id (already validated
+            #   to match the binding) or falls back to the drive's own binding.
             effective_project_id=project_id or d.current_project_id,
         )
         for d in drives
@@ -229,6 +230,7 @@ def confirm_chain_of_custody_handoff(
         possessor=payload.possessor,
         delivery_time=payload.delivery_time,
         receipt_ref=payload.receipt_ref,
+        project_id=effective_project_id,
     )
     if existing is not None:
         return _handoff_response_from_audit(existing)
@@ -328,11 +330,15 @@ def _resolve_coc_targets(
             .all()
         )
     ]
+    # Include drives that historically participated in this project even if they
+    # have since been reformatted and reassigned (current_project_id differs).
+    # The ARCHIVED exclusion is deliberately kept; an archived drive can still
+    # be queried by drive_id/sn — the PROJECT selector intentionally omits them
+    # to avoid surfacing retired drives in an active-project overview.
     historical_drives = (
         db.query(UsbDrive).filter(
             UsbDrive.id.in_(historical_drive_ids),
-            UsbDrive.current_project_id == project_id,  # guard against reassigned drives
-            UsbDrive.current_state != DriveState.ARCHIVED
+            UsbDrive.current_state != DriveState.ARCHIVED,
         ).all()
         if historical_drive_ids
         else []
@@ -407,7 +413,10 @@ def _build_drive_report(
     return ChainOfCustodyDriveReportSchema(
         drive_id=drive.id,
         drive_sn=drive.device_identifier,
-        project_id=drive.current_project_id,
+        # Report the project scope that was actually used to filter events, not
+        # necessarily the drive's current binding (they diverge for reassigned
+        # drives or when the PROJECT selector requested a specific project).
+        project_id=effective_project_id,
         custody_complete=latest_handoff is not None,
         delivery_time=delivery_time,
         chain_of_custody_events=coc_events,
@@ -454,13 +463,17 @@ def _find_existing_handoff_event(
     possessor: str,
     delivery_time: datetime,
     receipt_ref: Optional[str],
+    project_id: Optional[str] = None,
 ) -> Optional[AuditLog]:
-    candidates = (
+    query = (
         db.query(AuditLog)
         .filter(AuditLog.action == "COC_HANDOFF_CONFIRMED", AuditLog.drive_id == drive_id)
-        .order_by(AuditLog.id.desc())
-        .all()
     )
+    # Scope to the current project lifecycle so that a prior-project handoff
+    # record can never falsely satisfy the idempotency check for a new project.
+    if project_id is not None:
+        query = query.filter(AuditLog.project_id == project_id)
+    candidates = query.order_by(AuditLog.id.desc()).all()
     delivery_iso = delivery_time.isoformat().replace("+00:00", "Z")
     for row in candidates:
         details = row.details or {}
