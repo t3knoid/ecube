@@ -38,6 +38,28 @@ def initialize_drive(
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
 
+    # Archived drives are permanently retired and must never re-enter operational use.
+    if drive.current_state == DriveState.ARCHIVED:
+        try:
+            audit_repo.add(
+                action="INIT_REJECTED_ARCHIVED",
+                user=actor,
+                project_id=project_id,
+                drive_id=drive_id,
+                details={
+                    "actor": actor,
+                    "drive_id": drive_id,
+                    "requested_project_id": project_id,
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.error("Failed to write audit log for INIT_REJECTED_ARCHIVED")
+        raise HTTPException(
+            status_code=409,
+            detail="Drive is archived and cannot be re-initialized.",
+        )
+
     # Project isolation is state-dependent:
     # - IN_USE + different project: hard deny (403) — cannot steal an active drive.
     # - AVAILABLE + different project: require format first (409) — the previous
