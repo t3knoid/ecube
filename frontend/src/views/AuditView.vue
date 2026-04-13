@@ -45,8 +45,47 @@ const handoffForm = ref({
   receipt_ref: '',
   notes: '',
 })
-const driveOptions = ref([])
-const projectOptions = ref([])
+const allActiveDrives = ref([])
+
+// Base: only initialized (IN_USE) drives — used by both CoC filters and handoff form
+const initializedDrives = computed(() =>
+  allActiveDrives.value.filter((drive) => drive.current_state === 'IN_USE')
+)
+
+function _toDriveOption(drive) {
+  return { id: String(drive.id), label: `#${drive.id} (${drive.device_identifier || '-'})` }
+}
+
+function _toProjectList(drives) {
+  return [...new Set(
+    drives
+      .map((drive) => drive.current_project_id)
+      .filter((value) => typeof value === 'string' && value.trim())
+      .map((value) => value.trim())
+  )].sort((a, b) => a.localeCompare(b))
+}
+
+// CoC filter selectors — initialized drives, cross-filtered by selected project
+const driveOptions = computed(() => {
+  const project = cocFilters.value.project_id.trim()
+  const source = project
+    ? initializedDrives.value.filter((d) => d.current_project_id === project)
+    : initializedDrives.value
+  return source.map(_toDriveOption).sort((a, b) => Number(a.id) - Number(b.id))
+})
+
+const projectOptions = computed(() => _toProjectList(initializedDrives.value))
+
+// Handoff form selectors — initialized drives, cross-filtered by selected project
+const handoffDriveOptions = computed(() => {
+  const project = handoffForm.value.project_id.trim()
+  const source = project
+    ? initializedDrives.value.filter((d) => d.current_project_id === project)
+    : initializedDrives.value
+  return source.map(_toDriveOption).sort((a, b) => Number(a.id) - Number(b.id))
+})
+
+const handoffProjectOptions = computed(() => _toProjectList(initializedDrives.value))
 
 const page = ref(1)
 const pageSize = ref(20)
@@ -108,23 +147,9 @@ async function loadAudit() {
 async function loadDriveOptions() {
   try {
     const drives = await getDrives()
-    const activeDrives = drives.filter((drive) => drive.current_state !== 'ARCHIVED')
-    driveOptions.value = activeDrives
-      .map((drive) => ({
-        id: String(drive.id),
-        label: `#${drive.id} (${drive.device_identifier || '-'})`,
-      }))
-      .sort((a, b) => Number(a.id) - Number(b.id))
-
-    projectOptions.value = [...new Set(
-      activeDrives
-        .map((drive) => drive.current_project_id)
-        .filter((value) => typeof value === 'string' && value.trim())
-        .map((value) => value.trim())
-    )].sort((a, b) => a.localeCompare(b))
+    allActiveDrives.value = drives.filter((drive) => drive.current_state !== 'ARCHIVED')
   } catch {
-    driveOptions.value = []
-    projectOptions.value = []
+    allActiveDrives.value = []
   }
 }
 
@@ -355,11 +380,11 @@ onMounted(() => {
         <div class="handoff-grid">
           <select v-model="handoffForm.drive_id" :aria-label="t('audit.driveIdFilter')">
             <option value="">{{ t('audit.selectDrive') }}</option>
-            <option v-for="drive in driveOptions" :key="`handoff-${drive.id}`" :value="drive.id">{{ drive.label }}</option>
+            <option v-for="drive in handoffDriveOptions" :key="`handoff-${drive.id}`" :value="drive.id">{{ drive.label }}</option>
           </select>
           <select v-model="handoffForm.project_id" :aria-label="t('audit.projectFilter')">
             <option value="">{{ t('audit.selectProject') }}</option>
-            <option v-for="projectId in projectOptions" :key="`handoff-project-${projectId}`" :value="projectId">{{ projectId }}</option>
+            <option v-for="projectId in handoffProjectOptions" :key="`handoff-project-${projectId}`" :value="projectId">{{ projectId }}</option>
           </select>
           <input v-model="handoffForm.possessor" type="text" :placeholder="t('audit.possessor')" :aria-label="t('audit.possessor')" />
           <input v-model="handoffForm.delivery_time" type="datetime-local" :placeholder="t('audit.deliveryTime')" :aria-label="t('audit.deliveryTime')" />
