@@ -205,20 +205,22 @@ class TestChainOfCustodyHandoff:
         )
         assert response.status_code == 409
 
-    def test_handoff_requires_audit_read_roles(self, client, db):
+    def test_handoff_requires_manager_or_admin_role(self, client, auditor_client, db):
         drive = _seed_drive(db, device_identifier="COC-ROLE", project_id="CASE-R")
         drive_id = _as_int(drive.id)
 
-        response = client.post(
-            "/audit/chain-of-custody/handoff",
-            json={
-                "drive_id": drive_id,
-                "project_id": "CASE-R",
-                "possessor": "Recipient",
-                "delivery_time": datetime(2026, 4, 10, 14, 22, 31, tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
-            },
-        )
-        assert response.status_code == 403
+        payload = {
+            "drive_id": drive_id,
+            "project_id": "CASE-R",
+            "possessor": "Recipient",
+            "delivery_time": datetime(2026, 4, 10, 14, 22, 31, tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
+        }
+
+        # Unauthenticated
+        assert client.post("/audit/chain-of-custody/handoff", json=payload).status_code == 403
+
+        # Auditor is read-only — write must be denied
+        assert auditor_client.post("/audit/chain-of-custody/handoff", json=payload).status_code == 403
 
     def test_handoff_rejects_non_utc_delivery_time(self, manager_client, db):
         drive = _seed_drive(db, device_identifier="COC-TZ", project_id="CASE-TZ")
