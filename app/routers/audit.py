@@ -114,10 +114,10 @@ def get_chain_of_custody(
 @router.post("/chain-of-custody/handoff", response_model=ChainOfCustodyHandoffResponse, responses={**R_401, **R_403, **R_404, **R_409, **R_410, **R_422})
 def confirm_chain_of_custody_handoff(
     body: ChainOfCustodyHandoffRequest,
+    request: Request,
     *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_WRITE_ALLOWED),
-    request: Request,
 ):
     """Record legal custody transfer as a dedicated append-only audit event.
 
