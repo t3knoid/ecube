@@ -932,8 +932,10 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | # | Test | Expected |
 |---|------|----------|
 | 1 | Initialize an AVAILABLE drive with `PROJ-A` | 200, state → `IN_USE` |
-| 2 | Re-initialize same drive with `PROJ-B` | 403, `FORBIDDEN` — isolation violation |
+| 2 | Re-initialize same drive with `PROJ-B` (drive still `IN_USE`) | 403, `FORBIDDEN` — isolation violation |
 | 3 | Check audit log for `PROJECT_ISOLATION_VIOLATION` | Record present with `requested_project_id: PROJ-B` |
+| 4 | Prepare-eject the drive from step 1 (state → `AVAILABLE`), then initialize with `PROJ-B` | 409, `CONFLICT` — drive is bound to `PROJ-A`; format required before reassigning to a different project |
+| 5 | Check audit log for row 4 | `INIT_REJECTED_PROJECT_MISMATCH` record present with `requested_project_id: PROJ-B` |
 
 ### 12.4 Drive State Machine
 
@@ -1331,7 +1333,7 @@ Chain-of-Custody (CoC) handoff ensures legal custody transfer of evidence is pro
 | 7 | Confirm handoff — project_id mismatch | `POST /audit/chain-of-custody/handoff` with `project_id` that differs from drive binding | 409, `CONFLICT` |
 | 8 | Confirm handoff — drive not found | `POST /audit/chain-of-custody/handoff` with non-existent drive_id | 404, `NOT_FOUND` |
 | 9 | Confirm handoff — processor denied | `POST /audit/chain-of-custody/handoff` with processor token | 403, `FORBIDDEN` |
-| 10 | Confirm handoff — auditor allowed | `POST /audit/chain-of-custody/handoff` with auditor/manager/admin token | 200 |
+| 10 | Confirm handoff — auditor denied | `POST /audit/chain-of-custody/handoff` with auditor token | 403, `FORBIDDEN` |
 | 11 | Audit trail — COC_HANDOFF_CONFIRMED | Query `GET /audit?action=COC_HANDOFF_CONFIRMED` after handoff | Entry includes drive_id, project_id, possessor, delivery_time (ISO), received_by, receipt_ref, actor |
 
 #### 12.12.3 Drive Archival After Handoff
@@ -1342,7 +1344,7 @@ Chain-of-Custody (CoC) handoff ensures legal custody transfer of evidence is pro
 | 2 | Archived drive excluded from CoC by drive_id | Archive a drive, then `GET /audit/chain-of-custody?drive_id=<archived_id>` | 410, `Gone`, message includes "archived" |
 | 3 | Archived drive excluded from CoC by project_id | Archive one of two drives in a project, then `GET /audit/chain-of-custody?project_id=PROJ` | 200, report contains only the non-archived drive |
 | 4 | Archived drive excluded from CoC by drive_sn | Archive a drive, then `GET /audit/chain-of-custody?drive_sn=<sn>` | 410, `Gone` |
-| 5 | Archived drives cannot initialize (prevents reuse) | Archive a drive, attempt `POST /drives/<archived_id>/initialize` | 409, `CONFLICT`, state must be `AVAILABLE` |
+| 5 | Archived drives cannot initialize (prevents reuse) | Archive a drive, attempt `POST /drives/<archived_id>/initialize` | 409, `CONFLICT`, message includes "archived" |
 | 6 | Archived drives cannot format | Archive a drive, attempt `POST /drives/<archived_id>/format` | 409, `CONFLICT` |
 | 7 | Archived drives cannot prepare-eject | Archive a drive, attempt `POST /drives/<archived_id>/prepare-eject` | 409, `CONFLICT` |
 | 8 | Archived audit trail preserved | Review full audit log (without CoC filter) after archival | All audit entries for the archived drive remain visible (CoC filtering is read-side only) |
