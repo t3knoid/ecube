@@ -1338,7 +1338,7 @@ Chain-of-Custody (CoC) handoff ensures legal custody transfer of evidence is pro
 
 | # | Test | How | Expected |
 |---|------|-----|----------|
-| 1 | Drive state post-handoff | Initialize drive (state → IN_USE), confirm handoff | Drive transitions to `current_state: ARCHIVED` |
+| 1 | Drive state post-handoff | Initialize drive (state → IN_USE), run prepare-eject (state → AVAILABLE), confirm handoff | Drive transitions to `current_state: ARCHIVED` |
 | 2 | Archived drive excluded from CoC by drive_id | Archive a drive, then `GET /audit/chain-of-custody?drive_id=<archived_id>` | 410, `Gone`, message includes "archived" |
 | 3 | Archived drive excluded from CoC by project_id | Archive one of two drives in a project, then `GET /audit/chain-of-custody?project_id=PROJ` | 200, report contains only the non-archived drive |
 | 4 | Archived drive excluded from CoC by drive_sn | Archive a drive, then `GET /audit/chain-of-custody?drive_sn=<sn>` | 410, `Gone` |
