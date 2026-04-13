@@ -58,7 +58,7 @@ cp .env.example .env
 4. Create a PostgreSQL admin login for the setup wizard (first time only)
 
 ```bash
-sudo -u postgres psql -c "CREATE ROLE ecube_admin WITH LOGIN CREATEDB CREATEROLE PASSWORD 'ecubeadmin';"
+sudo -u postgres psql -c "CREATE ROLE ecubeadmin WITH LOGIN CREATEDB CREATEROLE PASSWORD 'ecubeadmin';"
 ```
 
 5. Install PAM service config (first time only, Linux)
