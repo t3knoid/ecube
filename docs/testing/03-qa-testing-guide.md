@@ -1330,7 +1330,7 @@ Chain-of-Custody (CoC) handoff ensures legal custody transfer of evidence is pro
 | 3 | Confirm handoff — delivery_time required | `POST /audit/chain-of-custody/handoff` with missing `delivery_time` | 422, validation error |
 | 4 | Confirm handoff — UTC only | `POST /audit/chain-of-custody/handoff` with `delivery_time: "2026-04-12T14:00:00+05:00"` (non-UTC) | 422, must be UTC timezone |
 | 5 | Confirm handoff — drive_id required | `POST /audit/chain-of-custody/handoff` with missing `drive_id` | 422, validation error |
-| 6 | Confirm handoff — idempotent | Submit same handoff twice with identical (drive_id, possessor, delivery_time, receipt_ref) | Both return 200 with same `event_id`; only one `COC_HANDOFF_CONFIRMED` audit entry |
+| 6 | Confirm handoff — idempotent | Submit same handoff twice with identical (drive_id, possessor, delivery_time, receipt_ref, project_id) | Both return 200 with same `event_id`; only one `COC_HANDOFF_CONFIRMED` audit entry. Idempotency is scoped to the resolved `project_id` — a prior-project handoff on the same drive does not match. |
 | 7 | Confirm handoff — project_id mismatch | `POST /audit/chain-of-custody/handoff` with `project_id` that differs from drive binding | 409, `CONFLICT` |
 | 8 | Confirm handoff — drive not found | `POST /audit/chain-of-custody/handoff` with non-existent drive_id | 404, `NOT_FOUND` |
 | 9 | Confirm handoff — processor denied | `POST /audit/chain-of-custody/handoff` with processor token | 403, `FORBIDDEN` |
