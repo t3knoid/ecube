@@ -21,6 +21,12 @@ const error = ref('')
 const infoMessage = ref('')
 const warnMessage = ref('')
 
+function clearBanners() {
+  error.value = ''
+  infoMessage.value = ''
+  warnMessage.value = ''  
+}
+
 const showFormatDialog = ref(false)
 const showEjectDialog = ref(false)
 const showInitializeDialog = ref(false)
@@ -51,9 +57,7 @@ function formatBytes(value) {
 
 async function loadDrive() {
   loading.value = true
-  error.value = ''
-  infoMessage.value = ''
-  warnMessage.value = ''
+  clearBanners()
   try {
     const drives = await getDrives()
     drive.value = drives.find((item) => item.id === driveId.value) || null
@@ -70,7 +74,7 @@ async function loadDrive() {
 async function runFormat() {
   if (!drive.value) return
   saving.value = true
-  error.value = ''
+  clearBanners()
   try {
     drive.value = await formatDrive(drive.value.id, { filesystem_type: filesystemType.value })
     infoMessage.value = t('drives.formatSuccess')
@@ -85,7 +89,7 @@ async function runFormat() {
 async function runInitialize() {
   if (!drive.value || !projectId.value.trim()) return
   saving.value = true
-  error.value = ''
+  clearBanners()
   try {
     drive.value = await initializeDrive(drive.value.id, { project_id: projectId.value.trim() })
     infoMessage.value = t('drives.initializeSuccess')
@@ -101,13 +105,12 @@ async function runInitialize() {
 async function runEnable() {
   if (!drive.value) return
   if (drive.value.port_id == null) {
-    infoMessage.value = ''
+    clearBanners()
     error.value = t('drives.enableNoPort')
     return
   }
   saving.value = true
-  error.value = ''
-  infoMessage.value = ''
+  clearBanners()
   try {
     await enablePort(drive.value.port_id)
     await refreshDrives()
@@ -129,7 +132,7 @@ async function runEnable() {
 async function runPrepareEject() {
   if (!drive.value) return
   saving.value = true
-  error.value = ''
+  clearBanners()
   try {
     drive.value = await prepareEjectDrive(drive.value.id)
     infoMessage.value = t('drives.ejectSuccess')
