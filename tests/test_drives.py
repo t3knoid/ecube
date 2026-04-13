@@ -126,6 +126,8 @@ def test_initialize_archived_drive_is_rejected(manager_client, db):
     assert log is not None
     assert log.details["drive_id"] == drive.id
     assert log.details["requested_project_id"] == "PROJ-NEW"
+    assert log.details["current_state"] == "ARCHIVED"
+    assert log.details["existing_project_id"] == "PROJ-OLD"
 
 
 def test_initialize_empty_drive_is_rejected(manager_client, db):
