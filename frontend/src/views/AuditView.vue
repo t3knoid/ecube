@@ -130,6 +130,18 @@ function asLocalDate(value) {
   return parsed.toLocaleString()
 }
 
+function asUtcDate(value) {
+  if (!value) return '-'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return '-'
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'UTC',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  }).format(parsed) + ' UTC'
+}
+
 function toIsoDate(value) {
   return value ? new Date(value).toISOString() : undefined
 }
@@ -456,7 +468,7 @@ onMounted(() => {
           </header>
           <p class="muted">
             {{ t('dashboard.project') }}: {{ report.project_id || '-' }}
-            | {{ t('audit.deliveryTime') }}: {{ asLocalDate(report.delivery_time) }}
+            | {{ t('audit.deliveryTime') }}: {{ asUtcDate(report.delivery_time) }}
           </p>
 
           <div class="coc-actions">
