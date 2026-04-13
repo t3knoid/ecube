@@ -18,6 +18,10 @@
 7. [Interface Overview](#5-interface-overview)
 8. [Dashboard](#6-dashboard)
 9. [Drives](#7-drives)
+   - [Drive States](#71-drive-states)
+   - [Formatting a Drive](#74-formatting-a-drive)
+   - [Initializing a Drive](#75-initializing-a-drive)
+   - [Prepare Eject](#76-prepare-eject)
 10. [Mounts](#8-mounts)
 11. [Jobs](#9-jobs)
 12. [Job Detail, Verification, and File Review](#10-job-detail-verification-and-file-review)
@@ -313,7 +317,28 @@ Typical drive fields include:
 
 Available actions depend on your role and the selected drive.
 
-### 7.1 Viewing Drives
+### 7.1 Drive States
+
+Every drive moves through a defined set of states. Actions available in the UI depend on the current state.
+
+| State | Meaning | Actions available |
+|-----------|-------------------------------------------------------------------------|-----------------------------------|
+| `EMPTY` | Drive detected but not yet formatted or ready for use. | Enable port, Format |
+| `AVAILABLE` | Drive is formatted and ready. Not currently assigned to a project. | Format, Initialize |
+| `IN_USE` | Drive is assigned to a project. Jobs can target this drive. | Prepare Eject |
+| `ARCHIVED` | Drive has been permanently handed off via the Chain of Custody workflow. | None — drive is read-only. |
+
+State transitions follow this order:
+
+```
+EMPTY → AVAILABLE → IN_USE → AVAILABLE → ARCHIVED
+                       ↑____________|
+                     (re-insert same project)
+```
+
+A drive assigned to one project cannot be re-assigned to a different project without first being formatted. Formatting wipes the drive and clears the project binding.
+
+### 7.2 Viewing Drives
 
 Use the page controls to:
 
@@ -323,7 +348,7 @@ Use the page controls to:
 - Filter by drive state
 - Sort results
 
-### 7.2 Drive Detail Page
+### 7.3 Drive Detail Page
 
 Selecting a drive opens a detail view showing:
 
@@ -332,7 +357,7 @@ Selecting a drive opens a detail view showing:
 - Current status badge
 - Available actions such as format, initialize, and prepare eject
 
-### 7.3 Formatting a Drive
+### 7.4 Formatting a Drive
 
 If your role allows it, you can format a drive from the detail page.
 
@@ -341,22 +366,37 @@ Current UI options include:
 - `ext4`
 - `exfat`
 
-Formatting removes existing data. Confirm the target drive carefully before proceeding.
+Formatting removes all existing data and clears the project binding. After formatting, the drive can be initialized for any project.
 
-### 7.4 Initializing a Drive
+Confirm the target drive carefully before proceeding.
 
-Initialization associates a drive with a project identifier. After a drive is initialized, project isolation rules apply to writes performed through ECUBE.
+### 7.5 Initializing a Drive
+
+Initialization assigns a drive to a project identifier and transitions it to `IN_USE`. Once initialized, project isolation rules apply to all writes performed through ECUBE.
+
+When you open the Initialize dialog:
+
+- If the drive has a previous project assignment, the **Project** field is pre-filled and read-only. The dialog also shows which project the drive was last used for.
+- If the drive has no prior project assignment (for example, it was just formatted), the **Project** field is blank and editable.
 
 Before initializing a drive:
 
-- Confirm the project identifier is correct
-- Confirm the drive is the intended destination media
+- Confirm the project identifier is correct.
+- Confirm the drive is the intended destination media.
+- If you need to assign the drive to a *different* project, format it first to clear the existing binding.
 
-### 7.5 Prepare Eject
+### 7.6 Prepare Eject
 
-Use `Prepare Eject` before physically removing a drive. This allows the system to complete pending operations and safely transition the device for removal.
+Use `Prepare Eject` before physically removing a drive. This flushes pending writes, unmounts the filesystem, and transitions the drive to `AVAILABLE`.
 
-> **Reconnect behavior:** After a successful prepare-eject, the drive returns to `AVAILABLE` and keeps its project binding (`current_project_id`). If the same initialized drive is connected again, discovery restores it to `IN_USE` for that same project.
+After a successful prepare-eject:
+
+- The drive state returns to `AVAILABLE`.
+- The project binding is preserved so the drive can be re-initialized for the same project without reformatting.
+- The drive **cannot** be initialized for a *different* project until it has been formatted.
+- The drive can be physically removed once the operation completes.
+
+> To permanently retire a drive after removal, use the Chain of Custody handoff workflow on the `Audit` page. Confirming a handoff transitions the drive to `ARCHIVED`.
 
 ![Drives page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/drives-default-chromium-linux.png)
 
@@ -752,14 +792,44 @@ Governance note: denied log access attempts by non-admin users are recorded in t
 2. Open `Drives`.
 3. Refresh or rescan the drive list until the new device appears.
 4. Open the drive detail page.
-5. If required, format the drive using the intended filesystem.
-6. Initialize the drive with the correct project identifier.
-7. Confirm the drive now shows the expected project association and state.
+5. If the drive is not yet formatted (state is `EMPTY` or filesystem shows `unformatted`), format it using the intended filesystem.
+6. Click `Initialize`, confirm the project identifier, and submit.
+7. Confirm the drive now shows `IN_USE` and the expected project association.
 
 Notes:
 
 - `processor` and `auditor` users can view drives but cannot perform format or initialize actions in the current UI.
 - Confirm the project identifier carefully before initialization because project isolation is enforced after association.
+
+### 14.1a Re-insert a Drive to Add More Data to the Same Project
+
+**Allowed roles:** `admin`, `manager`
+
+If a drive was previously ejected and needs to receive more data for the same project:
+
+1. Re-insert the drive into the ECUBE host.
+2. Open `Drives` and locate the drive (state will be `AVAILABLE`).
+3. Open the drive detail page.
+4. Click `Initialize`. The **Project** field is pre-filled with the previous project and is read-only.
+5. Confirm and submit.
+6. The drive transitions back to `IN_USE` for the same project.
+
+No format is required when re-using the same project.
+
+### 14.1b Re-assign a Drive to a Different Project
+
+**Allowed roles:** `admin`, `manager`
+
+If a drive must be reassigned to a different project, a format is required to wipe existing data and clear the project binding:
+
+1. Open `Drives` and locate the drive (state must be `AVAILABLE`).
+2. Open the drive detail page.
+3. Click `Format` and select the target filesystem. Confirm the format.
+4. After formatting completes, click `Initialize`.
+5. Enter the new project identifier and confirm.
+6. The drive transitions to `IN_USE` for the new project.
+
+> **Warning:** Formatting permanently deletes all data on the drive. Verify that copies and chain-of-custody records for prior project data are complete before proceeding.
 
 ### 14.2 Prepare a Drive for Removal and Shipment
 
@@ -776,6 +846,8 @@ Notes:
 
 - Use this workflow before final packaging or shipment.
 - Do not remove the drive while a copy or verification step is still active.
+- After ejection the drive returns to `AVAILABLE` with its project binding intact. It can be re-initialized for the same project without reformatting.
+- To permanently retire the drive, complete the Chain of Custody handoff on the `Audit` page after removal.
 
 ### 14.3 Export Evidence to a Drive
 
