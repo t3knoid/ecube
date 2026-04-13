@@ -56,14 +56,30 @@ See the [Installation Guide](docs/operations/01-installation.md) for full instal
 # including PostgreSQL service variables.
 cp .env.example .env
 
-# Optional: set a custom postgres password
-sed -i.bak 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ecube/' .env
+# Optional: override the default postgres password (default is "ecube")
+sed -i.bak 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=mysecretpassword/' .env
 ```
 
 ```powershell
 # Windows (pwsh) equivalent
-Copy-Item .env .env.bak
-(Get-Content .env) -replace '^POSTGRES_PASSWORD=.*', 'POSTGRES_PASSWORD=ecube' | Set-Content .env
+Copy-Item .env.example .env
+# Optional: override the default postgres password
+(Get-Content .env) -replace '^POSTGRES_PASSWORD=.*', 'POSTGRES_PASSWORD=mysecretpassword' | Set-Content .env
+```
+
+```bash
+# Generate a self-signed TLS certificate for local development.
+# The nginx UI container will not start without cert.pem and key.pem.
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout deploy/certs/key.pem \
+  -out deploy/certs/cert.pem \
+  -subj "/CN=localhost"
+```
+
+```powershell
+# Windows: run the openssl command above in Git Bash, WSL, or any shell
+# that has openssl available.  Docker Desktop with WSL2 includes openssl
+# inside the WSL environment.
 ```
 
 ```bash
