@@ -108,7 +108,8 @@ async function loadAudit() {
 async function loadDriveOptions() {
   try {
     const drives = await getDrives()
-    driveOptions.value = drives
+    const activeDrives = drives.filter((drive) => drive.current_state !== 'ARCHIVED')
+    driveOptions.value = activeDrives
       .map((drive) => ({
         id: String(drive.id),
         label: `#${drive.id} (${drive.device_identifier || '-'})`,
@@ -116,7 +117,7 @@ async function loadDriveOptions() {
       .sort((a, b) => Number(a.id) - Number(b.id))
 
     projectOptions.value = [...new Set(
-      drives
+      activeDrives
         .map((drive) => drive.current_project_id)
         .filter((value) => typeof value === 'string' && value.trim())
         .map((value) => value.trim())
