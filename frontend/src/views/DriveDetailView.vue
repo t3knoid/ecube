@@ -43,6 +43,12 @@ const canManage = computed(() => authStore.hasAnyRole(['admin', 'manager']))
 const canEnable = computed(
   () => drive.value?.current_state === 'EMPTY' && drive.value?.port_id != null && canManage.value,
 )
+const canFormat = computed(
+  () => drive.value?.current_state === 'AVAILABLE' && canManage.value,
+)
+const canInitialize = computed(
+  () => drive.value?.current_state === 'AVAILABLE' && canManage.value,
+)
 const canEject = computed(
   () => drive.value?.current_state === 'IN_USE' && canManage.value,
 )
@@ -217,8 +223,8 @@ onMounted(loadDrive)
 
       <div class="action-row">
         <button v-if="canEnable" class="btn btn-primary" :disabled="saving" @click="runEnable">{{ t('drives.enable') }}</button>
-        <button class="btn" :disabled="!canManage || saving" @click="showFormatDialog = true">{{ t('drives.format') }}</button>
-        <button class="btn" :disabled="!canManage || saving" @click="showInitializeDialog = true">{{ t('drives.initialize') }}</button>
+        <button class="btn" :disabled="!canFormat || saving" @click="showFormatDialog = true">{{ t('drives.format') }}</button>
+        <button class="btn" :disabled="!canInitialize || saving" @click="showInitializeDialog = true">{{ t('drives.initialize') }}</button>
         <button class="btn btn-danger" :disabled="!canEject || saving" @click="showEjectDialog = true">{{ t('drives.prepareEject') }}</button>
       </div>
 
