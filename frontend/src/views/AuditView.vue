@@ -143,7 +143,13 @@ function buildCocParams() {
   return params
 }
 
+const hasCocSelector = computed(() => Object.keys(buildCocParams()).length > 0)
+
 async function loadChainOfCustody() {
+  if (!hasCocSelector.value) {
+    cocError.value = t('audit.cocSelectRequired')
+    return
+  }
   cocLoading.value = true
   cocError.value = ''
   cocStatusMessage.value = ''
@@ -303,7 +309,7 @@ onMounted(() => {
           <option value="">{{ t('audit.anyProject') }}</option>
           <option v-for="projectId in projectOptions" :key="projectId" :value="projectId">{{ projectId }}</option>
         </select>
-        <button class="btn" @click="loadChainOfCustody">{{ t('audit.loadCoc') }}</button>
+        <button class="btn" :disabled="!hasCocSelector" @click="loadChainOfCustody">{{ t('audit.loadCoc') }}</button>
       </div>
 
       <p v-if="cocLoading" class="muted">{{ t('common.labels.loading') }}</p>
