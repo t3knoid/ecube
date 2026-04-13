@@ -30,7 +30,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer, primary_key=True),
         sa.Column("hub_id", sa.Integer, sa.ForeignKey("usb_hubs.id"), nullable=False),
         sa.Column("port_number", sa.Integer, nullable=False),
-        sa.Column("system_path", sa.String, nullable=False, unique=True),
+        sa.Column("system_path", sa.String, nullable=False),
         sa.Column("friendly_label", sa.String, nullable=True),
         sa.Column("enabled", sa.Boolean(), nullable=False, server_default="0"),
         sa.Column("vendor_id", sa.String(), nullable=True),
