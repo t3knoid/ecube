@@ -131,6 +131,26 @@ function toIsoDate(value) {
   return value ? new Date(value).toISOString() : undefined
 }
 
+/**
+ * Convert a datetime-local string to a UTC ISO-8601 timestamp.
+ *
+ * <input type="datetime-local"> yields a bare "YYYY-MM-DDTHH:mm" string with no
+ * timezone.  If we pass that directly to `new Date()`, JavaScript interprets it
+ * as local time and toISOString() silently shifts it by the browser's UTC offset
+ * -- recording the wrong physical moment and triggering the backend UTC
+ * validation check.
+ *
+ * The user is entering the handoff time in UTC (field labelled "UTC"), so we
+ * treat the value as-is UTC by appending ":00Z" (or just "Z" when seconds are
+ * already present) without any offset conversion.
+ */
+function localDateTimeAsUtcIso(value) {
+  if (!value) return undefined
+  // datetime-local format: "YYYY-MM-DDTHH:mm" (16 chars) or "YYYY-MM-DDTHH:mm:ss" (19 chars)
+  const withSeconds = value.length === 16 ? value + ':00' : value
+  return withSeconds + 'Z'
+}
+
 async function loadAudit() {
   loading.value = true
   error.value = ''
@@ -256,7 +276,7 @@ async function confirmHandoffSubmission() {
       drive_id: driveId,
       project_id: handoffForm.value.project_id.trim() || undefined,
       possessor: handoffForm.value.possessor.trim(),
-      delivery_time: new Date(handoffForm.value.delivery_time).toISOString(),
+      delivery_time: localDateTimeAsUtcIso(handoffForm.value.delivery_time),
       received_by: handoffForm.value.received_by.trim() || undefined,
       receipt_ref: handoffForm.value.receipt_ref.trim() || undefined,
       notes: handoffForm.value.notes.trim() || undefined,
