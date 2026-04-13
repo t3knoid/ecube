@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from fastapi import HTTPException
 from sqlalchemy import or_
+from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import Session
 
 from app.models.audit import AuditLog
@@ -306,7 +307,13 @@ def _resolve_coc_targets(
         return "DRIVE_ID", [drive]
 
     if drive_sn is not None:
-        drive = db.query(UsbDrive).filter(UsbDrive.device_identifier == drive_sn).one_or_none()
+        try:
+            drive = db.query(UsbDrive).filter(UsbDrive.device_identifier == drive_sn).one_or_none()
+        except MultipleResultsFound:
+            raise HTTPException(
+                status_code=409,
+                detail="drive_sn resolves to multiple drives; provide drive_id to select unambiguously",
+            )
         if drive is None:
             raise HTTPException(status_code=404, detail="No drive found for provided drive_sn")
         if drive.current_state == DriveState.ARCHIVED:
