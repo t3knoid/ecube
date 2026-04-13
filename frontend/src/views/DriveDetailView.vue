@@ -213,9 +213,9 @@ onMounted(loadDrive)
 
       <div class="action-row">
         <button v-if="canEnable" class="btn btn-primary" :disabled="saving" @click="runEnable">{{ t('drives.enable') }}</button>
-        <button class="btn" :disabled="!canManage" @click="showFormatDialog = true">{{ t('drives.format') }}</button>
-        <button class="btn" :disabled="!canManage" @click="showInitializeDialog = true">{{ t('drives.initialize') }}</button>
-        <button class="btn btn-danger" :disabled="!canManage" @click="showEjectDialog = true">{{ t('drives.prepareEject') }}</button>
+        <button class="btn" :disabled="!canManage || saving" @click="showFormatDialog = true">{{ t('drives.format') }}</button>
+        <button class="btn" :disabled="!canManage || saving" @click="showInitializeDialog = true">{{ t('drives.initialize') }}</button>
+        <button class="btn btn-danger" :disabled="!canManage || saving" @click="showEjectDialog = true">{{ t('drives.prepareEject') }}</button>
       </div>
 
       <p v-if="!canManage" class="muted">{{ t('auth.insufficientPermissions') }}</p>
