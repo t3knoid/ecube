@@ -115,11 +115,12 @@ async function runEnable() {
     await enablePort(drive.value.port_id)
     await refreshDrives()
     await loadDrive()
-    if (drive.value?.current_state === 'AVAILABLE') {
+    if (!drive.value) return
+    if (drive.value.current_state === 'AVAILABLE') {
       infoMessage.value = t('drives.enableSuccess')
     } else {
       warnMessage.value = t('drives.enablePending', {
-        state: driveStateLabel(drive.value?.current_state),
+        state: driveStateLabel(drive.value.current_state),
       })
     }
   } catch {
