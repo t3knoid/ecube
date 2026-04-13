@@ -49,8 +49,6 @@ pip install -e ".[dev]"
 
 3. Configure the environment file
 
-Set DATABASE_URL in .env (e.g. DATABASE_URL=postgresql://ecube:ecube@localhost/ecube).
-
 ```bash
 cp .env.example .env
 ```
@@ -58,7 +56,7 @@ cp .env.example .env
 4. Create a PostgreSQL admin login for the setup wizard (first time only)
 
 ```bash
-sudo -u postgres psql -c "CREATE ROLE ecubeadmin WITH LOGIN CREATEDB CREATEROLE PASSWORD 'ecubeadmin';"
+sudo -u postgres psql -c "CREATE ROLE ecubeadmin WITH SUPERUSER LOGIN PASSWORD 'ecubeadmin';"
 ```
 
 5. Install PAM service config (first time only, Linux)
@@ -79,14 +77,7 @@ sudo .venv/bin/uvicorn app.main:app --reload
 cd frontend && npm ci && npm run dev
 ```
 
-8. Compile the frontend code (production build)
-
-```bash
-cd frontend && npm run build
-```
-
-
-Then open the setup wizard at `http://localhost:5173` to test the database connection using `ecube_admin`, provision the application database/user, run migrations, and create the first ECUBE admin user.
+Then open the setup wizard at `http://localhost:5173` to test the database connection using `ecubeadmin`, provision the application database/user, run migrations, and create the first ECUBE admin user.
 
 | URL | Purpose |
 |-----|---------|
@@ -216,25 +207,6 @@ For local development, use the platform compose file to run **PostgreSQL only** 
 - Linux/macOS: `docker-compose.ecube.yml`
 - Windows: `docker-compose.ecube-win.yml`
 
-Set at least:
-
-```env
-POSTGRES_PASSWORD=ecube
-```
-
-Linux/macOS quick setup:
-
-```bash
-sed -i.bak 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ecube/' .env
-```
-
-Windows (pwsh) quick setup:
-
-```powershell
-Copy-Item .env .env.bak
-(Get-Content .env) -replace '^POSTGRES_PASSWORD=.*', 'POSTGRES_PASSWORD=ecube' | Set-Content .env
-```
-
 Key settings for development:
 
 | Variable | Default | Notes |
@@ -340,8 +312,7 @@ Linux example:
 sudo systemctl start postgresql
 
 # First-time setup only
-sudo -u postgres psql -c "CREATE USER ecube WITH PASSWORD 'ecube';"
-sudo -u postgres psql -c "CREATE DATABASE ecube OWNER ecube;"
+sudo -u postgres psql -c "CREATE ROLE ecubeadmin WITH SUPERUSER LOGIN PASSWORD 'ecubeadmin';"
 ```
 
 For macOS, use your PostgreSQL service manager (for example, Homebrew services) and run the same two commands before migrations.
