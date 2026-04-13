@@ -43,6 +43,9 @@ const canManage = computed(() => authStore.hasAnyRole(['admin', 'manager']))
 const canEnable = computed(
   () => drive.value?.current_state === 'EMPTY' && drive.value?.port_id != null && canManage.value,
 )
+const canEject = computed(
+  () => drive.value?.current_state === 'IN_USE' && canManage.value,
+)
 
 function formatBytes(value) {
   if (typeof value !== 'number' || value <= 0) return '-'
@@ -216,7 +219,7 @@ onMounted(loadDrive)
         <button v-if="canEnable" class="btn btn-primary" :disabled="saving" @click="runEnable">{{ t('drives.enable') }}</button>
         <button class="btn" :disabled="!canManage || saving" @click="showFormatDialog = true">{{ t('drives.format') }}</button>
         <button class="btn" :disabled="!canManage || saving" @click="showInitializeDialog = true">{{ t('drives.initialize') }}</button>
-        <button class="btn btn-danger" :disabled="!canManage || saving" @click="showEjectDialog = true">{{ t('drives.prepareEject') }}</button>
+        <button class="btn btn-danger" :disabled="!canEject || saving" @click="showEjectDialog = true">{{ t('drives.prepareEject') }}</button>
       </div>
 
       <p v-if="!canManage" class="muted">{{ t('auth.insufficientPermissions') }}</p>
