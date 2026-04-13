@@ -570,6 +570,7 @@ def _write_env_settings(updates: Dict[str, str]) -> None:
     try:
         with os.fdopen(fd, "w") as f:
             f.writelines(lines)
+        os.chmod(tmp_path, 0o644)
         os.replace(tmp_path, env_path)
     except Exception:
         # Clean up temp file on failure
