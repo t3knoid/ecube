@@ -4,6 +4,8 @@ import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { confirmChainOfCustodyHandoff, getAudit, getChainOfCustody } from '@/api/audit.js'
 import { getDrives } from '@/api/drives.js'
+import { useRoleGuard } from '@/composables/useRoleGuard.js'
+import { COC_HANDOFF_ROLES } from '@/constants/roles.js'
 import { useSettingsStore } from '@/stores/settings.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
@@ -13,6 +15,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 const { t } = useI18n()
 const route = useRoute()
 const settingsStore = useSettingsStore()
+const { canAccess: canConfirmHandoff } = useRoleGuard(COC_HANDOFF_ROLES)
 
 const logs = ref([])
 const loading = ref(false)
@@ -457,7 +460,7 @@ onMounted(() => {
           </p>
 
           <div class="coc-actions">
-            <button class="btn" @click="prepareHandoff(report)">{{ t('audit.prefillHandoff') }}</button>
+            <button v-if="canConfirmHandoff" class="btn" @click="prepareHandoff(report)">{{ t('audit.prefillHandoff') }}</button>
           </div>
 
           <div class="manifest-grid" v-if="report.manifest_summary.length">
@@ -473,7 +476,7 @@ onMounted(() => {
         </article>
       </div>
 
-      <div class="handoff-form">
+      <div v-if="canConfirmHandoff" class="handoff-form">
         <h3>{{ t('audit.handoffTitle') }}</h3>
         <div class="handoff-grid">
           <select v-model="handoffForm.drive_id" :aria-label="t('audit.driveIdFilter')">
