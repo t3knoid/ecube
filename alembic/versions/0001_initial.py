@@ -1,4 +1,4 @@
-"""Initial schema (squashed from 0001–0014)
+"""Initial schema
 
 Revision ID: 0001
 Revises:
