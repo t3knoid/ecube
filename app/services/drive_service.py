@@ -49,6 +49,8 @@ def initialize_drive(
                 details={
                     "actor": actor,
                     "drive_id": drive_id,
+                    "current_state": drive.current_state.value,
+                    "existing_project_id": drive.current_project_id,
                     "requested_project_id": project_id,
                 },
                 client_ip=client_ip,
