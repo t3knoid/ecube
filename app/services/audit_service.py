@@ -320,6 +320,7 @@ def _resolve_coc_targets(
     historical_drives = (
         db.query(UsbDrive).filter(
             UsbDrive.id.in_(historical_drive_ids),
+            UsbDrive.current_project_id == project_id,  # guard against reassigned drives
             UsbDrive.current_state != DriveState.ARCHIVED
         ).all()
         if historical_drive_ids
