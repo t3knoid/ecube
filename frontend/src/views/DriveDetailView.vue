@@ -99,6 +99,7 @@ async function runInitialize() {
 async function runEnable() {
   if (!drive.value) return
   if (drive.value.port_id == null) {
+    infoMessage.value = ''
     error.value = t('drives.enableNoPort')
     return
   }
