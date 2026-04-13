@@ -161,7 +161,18 @@ def get_chain_of_custody_report(
         drive_sn=drive_sn,
         project_id=project_id,
     )
-    reports = [_build_drive_report(db, drive=d) for d in drives]
+    reports = [
+        _build_drive_report(
+            db,
+            drive=d,
+            # Use the caller-supplied project_id when present (already validated
+            # to match the drive binding); fall back to the drive's own binding.
+            # This ensures a reformatted+reassigned drive only surfaces events
+            # from the current project lifecycle.
+            effective_project_id=project_id or d.current_project_id,
+        )
+        for d in drives
+    ]
     return ChainOfCustodyReportSchema(
         selector_mode=selector_mode,
         project_id=project_id,
@@ -337,18 +348,34 @@ def _resolve_coc_targets(
     return "PROJECT", sorted(merged, key=lambda d: d.id)
 
 
-def _build_drive_report(db: Session, *, drive: UsbDrive) -> ChainOfCustodyDriveReportSchema:
-    assignment_rows: Sequence[DriveAssignment] = (
+def _build_drive_report(
+    db: Session, *, drive: UsbDrive, effective_project_id: Optional[str]
+) -> ChainOfCustodyDriveReportSchema:
+    # Scope drive assignments to jobs that belong to the effective project so
+    # that a reformatted-and-reassigned drive does not bleed prior-lifecycle
+    # job/manifest data into the current project's CoC report.
+    assignment_query = (
         db.query(DriveAssignment)
+        .join(ExportJob, ExportJob.id == DriveAssignment.job_id)
         .filter(DriveAssignment.drive_id == drive.id)
+    )
+    if effective_project_id is not None:
+        assignment_query = assignment_query.filter(ExportJob.project_id == effective_project_id)
+    assignment_rows: Sequence[DriveAssignment] = (
+        assignment_query
         .order_by(DriveAssignment.assigned_at.asc(), DriveAssignment.id.asc())
         .all()
     )
     job_ids = {row.job_id for row in assignment_rows}
 
-    filters = [
-        (AuditLog.drive_id == drive.id) & (AuditLog.action.in_(_COC_DRIVE_ACTIONS))
-    ]
+    # Drive-level events are scoped by project_id when one is known, so that
+    # DRIVE_INITIALIZED / DRIVE_EJECT_PREPARED events from a prior project
+    # lifecycle do not appear in the current project's report.
+    drive_event_filter = (AuditLog.drive_id == drive.id) & (AuditLog.action.in_(_COC_DRIVE_ACTIONS))
+    if effective_project_id is not None:
+        drive_event_filter = drive_event_filter & (AuditLog.project_id == effective_project_id)
+
+    filters = [drive_event_filter]
     if job_ids:
         filters.append((AuditLog.job_id.in_(job_ids)) & (AuditLog.action.in_(_COC_JOB_ACTIONS)))
 
