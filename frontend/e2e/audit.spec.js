@@ -86,7 +86,7 @@ test('chain of custody handoff requires warning confirmation and submits archive
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        selector_mode: 'all',
+        selector_mode: 'DRIVE_ID',
         reports: [
           {
             drive_id: 1,
@@ -116,6 +116,7 @@ test('chain of custody handoff requires warning confirmation and submits archive
 
   await page.goto('/audit')
 
+  await page.getByLabel('Filter by drive ID').selectOption({ label: '#1 (sdb)' })
   await page.getByRole('button', { name: 'Load CoC' }).click()
   await expect(page.getByText('Drive #1 (SN-001)')).toBeVisible()
 
