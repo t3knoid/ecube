@@ -59,7 +59,7 @@ cp .env.example .env
 sudo -u postgres psql -c "CREATE ROLE ecubeadmin WITH SUPERUSER LOGIN PASSWORD 'ecubeadmin';"
 ```
 
-5. Install PAM service config (first time only, Linux)
+5. Install PAM service config (first time only)
 
 ```bash
 sudo cp deploy/ecube-pam /etc/pam.d/ecube
