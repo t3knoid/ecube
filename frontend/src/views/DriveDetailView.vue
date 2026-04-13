@@ -3,7 +3,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
-import { getDrives, formatDrive, initializeDrive, prepareEjectDrive } from '@/api/drives.js'
+import { getDrives, formatDrive, initializeDrive, prepareEjectDrive, refreshDrives } from '@/api/drives.js'
+import { enablePort } from '@/api/admin.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -31,6 +32,9 @@ const { driveStateLabel } = useStatusLabels()
 
 const driveId = computed(() => Number(route.params.id))
 const canManage = computed(() => authStore.hasAnyRole(['admin', 'manager']))
+const canEnable = computed(
+  () => drive.value?.current_state === 'EMPTY' && drive.value?.port_id != null && canManage.value,
+)
 
 function formatBytes(value) {
   if (typeof value !== 'number' || value <= 0) return '-'
@@ -85,6 +89,29 @@ async function runInitialize() {
     infoMessage.value = t('drives.initializeSuccess')
     showInitializeDialog.value = false
     projectId.value = ''
+  } catch {
+    error.value = t('common.errors.requestConflict')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function runEnable() {
+  if (!drive.value) return
+  if (drive.value.port_id == null) {
+    error.value = t('drives.enableNoPort')
+    return
+  }
+  saving.value = true
+  error.value = ''
+  infoMessage.value = ''
+  try {
+    await enablePort(drive.value.port_id)
+    await refreshDrives()
+    await loadDrive()
+    if (drive.value?.current_state === 'AVAILABLE') {
+      infoMessage.value = t('drives.enableSuccess')
+    }
   } catch {
     error.value = t('common.errors.requestConflict')
   } finally {
@@ -155,6 +182,7 @@ onMounted(loadDrive)
       </div>
 
       <div class="action-row">
+        <button v-if="canEnable" class="btn btn-primary" :disabled="saving" @click="runEnable">{{ t('drives.enable') }}</button>
         <button class="btn" :disabled="!canManage" @click="showFormatDialog = true">{{ t('drives.format') }}</button>
         <button class="btn" :disabled="!canManage" @click="showInitializeDialog = true">{{ t('drives.initialize') }}</button>
         <button class="btn btn-danger" :disabled="!canManage" @click="showEjectDialog = true">{{ t('drives.prepareEject') }}</button>
