@@ -207,6 +207,37 @@ class TestChainOfCustodyGet:
         # The lone DRIVE_EJECT_PREPARED was for the prior project and must be excluded.
         assert "DRIVE_EJECT_PREPARED" not in event_types
 
+    def test_project_selector_includes_reassigned_drive_with_historical_events(self, auditor_client, db):
+        """A drive reformatted and reassigned away from a project must still appear
+        in that project's PROJECT-scoped CoC report (it historically participated),
+        but only its events tagged to that project are shown."""
+        # Drive was used for CASE-HIST, then reformatted and rebound to CASE-NEW.
+        drive = _seed_drive(db, device_identifier="COC-HIST", project_id="CASE-NEW", state=DriveState.AVAILABLE)
+        drive_id = _as_int(drive.id)
+
+        # Events from the CASE-HIST lifecycle.
+        hist_job = _seed_job_and_assignment(db, drive_id=drive_id, project_id="CASE-HIST")
+        hist_job_id = _as_int(hist_job.id)
+        _seed_audit(db, action="DRIVE_INITIALIZED", drive_id=drive_id, project_id="CASE-HIST")
+        _seed_audit(db, action="JOB_CREATED", drive_id=drive_id, job_id=hist_job_id, project_id="CASE-HIST")
+        _seed_audit(db, action="JOB_COMPLETED", job_id=hist_job_id, project_id="CASE-HIST")
+
+        # The PROJECT selector for CASE-HIST should surface this drive even though
+        # drive.current_project_id is now CASE-NEW.
+        response = auditor_client.get("/audit/chain-of-custody", params={"project_id": "CASE-HIST"})
+        assert response.status_code == 200
+        payload = response.json()
+
+        drive_ids_in_report = [r["drive_id"] for r in payload["reports"]]
+        assert drive_id in drive_ids_in_report
+
+        # The report for this drive must be scoped to CASE-HIST events only.
+        report = next(r for r in payload["reports"] if r["drive_id"] == drive_id)
+        assert report["project_id"] == "CASE-HIST"
+        event_types = [e["event_type"] for e in report["chain_of_custody_events"]]
+        assert "DRIVE_INITIALIZED" in event_types
+        assert hist_job_id in [m["job_id"] for m in report["manifest_summary"]]
+
 
 class TestChainOfCustodyHandoff:
     def test_handoff_is_idempotent_by_contract_tuple(self, manager_client, db):
@@ -235,6 +266,54 @@ class TestChainOfCustodyHandoff:
 
         rows = db.query(AuditLog).filter(AuditLog.action == "COC_HANDOFF_CONFIRMED", AuditLog.drive_id == drive_id).all()
         assert len(rows) == 1
+
+    def test_idempotency_does_not_match_across_projects(self, manager_client, db):
+        """A prior-project handoff record must not satisfy the idempotency check
+        for a new handoff submission scoped to a different project on the same drive."""
+        # The same drive was used for two different projects sequentially.
+        # We seed a COC_HANDOFF_CONFIRMED row manually for CASE-OLD to represent
+        # a prior-lifecycle handoff that happens to share the same contract tuple.
+        drive = _seed_drive(db, device_identifier="COC-IDEMP-PROJ", project_id="CASE-NEW", state=DriveState.IN_USE)
+        drive_id = _as_int(drive.id)
+        delivery_time_str = datetime(2026, 4, 10, 14, 22, 31, tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+
+        # Inject a prior-project handoff record for CASE-OLD with the same
+        # possessor / delivery_time / receipt_ref that the new request will use.
+        _seed_audit(
+            db,
+            action="COC_HANDOFF_CONFIRMED",
+            drive_id=drive_id,
+            project_id="CASE-OLD",
+            details={
+                "drive_id": drive_id,
+                "project_id": "CASE-OLD",
+                "possessor": "Officer Smith",
+                "delivery_time": delivery_time_str,
+                "receipt_ref": "RCP-OLD-001",
+            },
+        )
+
+        payload = {
+            "drive_id": drive_id,
+            "project_id": "CASE-NEW",
+            "possessor": "Officer Smith",
+            "delivery_time": delivery_time_str,
+            "receipt_ref": "RCP-OLD-001",
+        }
+        response = manager_client.post("/audit/chain-of-custody/handoff", json=payload)
+        assert response.status_code == 200
+
+        # Must create a NEW audit event for CASE-NEW, not reuse the CASE-OLD one.
+        rows = (
+            db.query(AuditLog)
+            .filter(AuditLog.action == "COC_HANDOFF_CONFIRMED", AuditLog.drive_id == drive_id)
+            .all()
+        )
+        assert len(rows) == 2
+        new_row = next(r for r in rows if r.project_id == "CASE-NEW")
+        assert new_row is not None
+        # Response project_id must reflect CASE-NEW, not the stale CASE-OLD record.
+        assert response.json()["project_id"] == "CASE-NEW"
 
     def test_handoff_project_mismatch_returns_conflict(self, manager_client, db):
         drive = _seed_drive(db, device_identifier="COC-CONFLICT", project_id="CASE-X")
