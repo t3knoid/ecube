@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib
 import logging
 import os
+import stat
 import re
 import tempfile
 import threading
@@ -570,7 +571,12 @@ def _write_env_settings(updates: Dict[str, str]) -> None:
     try:
         with os.fdopen(fd, "w") as f:
             f.writelines(lines)
-        os.chmod(tmp_path, 0o644)
+        # Preserve the existing file's mode, falling back to owner-only 0o600.
+        try:
+            existing_mode = stat.S_IMODE(os.stat(env_path).st_mode)
+        except OSError:
+            existing_mode = 0o600
+        os.chmod(tmp_path, existing_mode)
         os.replace(tmp_path, env_path)
     except Exception:
         # Clean up temp file on failure
