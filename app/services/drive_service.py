@@ -38,30 +38,59 @@ def initialize_drive(
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
 
-    # Project isolation must be checked first so that IN_USE drives assigned
-    # to a different project always receive a 403 (with audit), regardless of
-    # their filesystem_type.
+    # Project isolation is state-dependent:
+    # - IN_USE + different project: hard deny (403) — cannot steal an active drive.
+    # - AVAILABLE + different project: require format first (409) — the previous
+    #   project's data is still on disk; a wipe is mandatory before re-assignment.
+    # - AVAILABLE + same project, or no prior project: allow (re-insert or fresh drive).
     if drive.current_project_id and drive.current_project_id != project_id:
-        try:
-            audit_repo.add(
-                action="PROJECT_ISOLATION_VIOLATION",
-                user=actor,
-                project_id=project_id,
-                drive_id=drive_id,
-                details={
-                    "actor": actor,
-                    "drive_id": drive_id,
-                    "existing_project_id": drive.current_project_id,
-                    "requested_project_id": project_id,
-                },
-                client_ip=client_ip,
+        if drive.current_state == DriveState.IN_USE:
+            try:
+                audit_repo.add(
+                    action="PROJECT_ISOLATION_VIOLATION",
+                    user=actor,
+                    project_id=project_id,
+                    drive_id=drive_id,
+                    details={
+                        "actor": actor,
+                        "drive_id": drive_id,
+                        "existing_project_id": drive.current_project_id,
+                        "requested_project_id": project_id,
+                    },
+                    client_ip=client_ip,
+                )
+            except Exception:
+                logger.error("Failed to write audit log for PROJECT_ISOLATION_VIOLATION")
+            raise HTTPException(
+                status_code=403,
+                detail=f"Drive is already assigned to project '{drive.current_project_id}'",
             )
-        except Exception:
-            logger.error("Failed to write audit log for PROJECT_ISOLATION_VIOLATION")
-        raise HTTPException(
-            status_code=403,
-            detail=f"Drive is already assigned to project '{drive.current_project_id}'",
-        )
+        else:
+            # Drive is AVAILABLE but still carries data from a different project.
+            # A format (wipe) is required before it can be re-assigned.
+            try:
+                audit_repo.add(
+                    action="INIT_REJECTED_PROJECT_MISMATCH",
+                    user=actor,
+                    project_id=project_id,
+                    drive_id=drive_id,
+                    details={
+                        "actor": actor,
+                        "drive_id": drive_id,
+                        "existing_project_id": drive.current_project_id,
+                        "requested_project_id": project_id,
+                    },
+                    client_ip=client_ip,
+                )
+            except Exception:
+                logger.error("Failed to write audit log for INIT_REJECTED_PROJECT_MISMATCH")
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Drive previously used for project '{drive.current_project_id}'. "
+                    "Format the drive to wipe existing data before assigning to a new project."
+                ),
+            )
 
     # Reject drives without a recognized filesystem.
     _unrecognized_fs = {"unformatted", "unknown", None}
@@ -279,6 +308,9 @@ def format_drive(
         )
 
     drive.filesystem_type = filesystem_type
+    # Formatting wipes all previous data, so the project binding is cleared.
+    # The drive is now clean and can be initialized for any project.
+    drive.current_project_id = None
     try:
         drive_repo.save(drive)
     except Exception:
