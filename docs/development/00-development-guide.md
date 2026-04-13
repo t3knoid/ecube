@@ -379,8 +379,9 @@ After recreating the database, apply migrations again:
 alembic upgrade head
 ```
 
-### Drop 
+### Remove ecubeadmin role
 
+Run this only when cleaning up the setup/admin PostgreSQL role after a local database reset or recreation.
 ```bash
 sudo -u postgres psql -c "DROP OWNED BY ecubeadmin; DROP ROLE IF EXISTS ecubeadmin;"
 ```
