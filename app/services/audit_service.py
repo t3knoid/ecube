@@ -338,9 +338,10 @@ def _resolve_coc_targets(
     ]
     # Include drives that historically participated in this project even if they
     # have since been reformatted and reassigned (current_project_id differs).
-    # The ARCHIVED exclusion is deliberately kept; an archived drive can still
-    # be queried by drive_id/sn — the PROJECT selector intentionally omits them
-    # to avoid surfacing retired drives in an active-project overview.
+    # Archived drives are deliberately excluded here: the drive_id and drive_sn
+    # selector paths reject archived drives with 410, so the PROJECT selector
+    # consistently omits them to avoid surfacing retired drives in an
+    # active-project overview.
     historical_drives = (
         db.query(UsbDrive).filter(
             UsbDrive.id.in_(historical_drive_ids),
@@ -363,9 +364,9 @@ def _resolve_coc_targets(
 def _build_drive_report(
     db: Session, *, drive: UsbDrive, effective_project_id: Optional[str]
 ) -> ChainOfCustodyDriveReportSchema:
-    # Scope drive assignments to jobs that belong to the effective project so
-    # that a reformatted-and-reassigned drive does not bleed prior-lifecycle
-    # job/manifest data into the current project's CoC report.
+    # Scope drive assignments to jobs that belong to the effective project when
+    # one is known, so that a reformatted-and-reassigned drive does not bleed
+    # prior-lifecycle job/manifest data into the current project's CoC report.
     assignment_query = (
         db.query(DriveAssignment)
         .join(ExportJob, ExportJob.id == DriveAssignment.job_id)
