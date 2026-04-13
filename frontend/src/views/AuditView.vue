@@ -255,6 +255,29 @@ async function confirmHandoffSubmission() {
       if (match) {
         match.custody_complete = true
         match.delivery_time = handoffResult.delivery_time
+        // Append the new COC_HANDOFF_CONFIRMED event so the compliance record
+        // is fully visible without reloading (archived drives return 410).
+        match.chain_of_custody_events = [
+          ...match.chain_of_custody_events,
+          {
+            event_id: handoffResult.event_id,
+            event_type: handoffResult.event_type,
+            timestamp: handoffResult.recorded_at,
+            actor: handoffResult.creator,
+            action: 'Custody handoff confirmed',
+            details: {
+              drive_id: handoffResult.drive_id,
+              drive_sn: match.drive_sn,
+              project_id: handoffResult.project_id,
+              creator: handoffResult.creator,
+              possessor: handoffResult.possessor,
+              delivery_time: handoffResult.delivery_time,
+              received_by: handoffResult.received_by,
+              receipt_ref: handoffResult.receipt_ref,
+              notes: handoffResult.notes,
+            },
+          },
+        ]
         // Trigger Vue reactivity by replacing the reports array reference.
         cocReport.value = { ...cocReport.value, reports: [...cocReport.value.reports] }
       }
