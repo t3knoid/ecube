@@ -1322,12 +1322,12 @@ Chain-of-Custody (CoC) handoff ensures legal custody transfer of evidence is pro
 
 | # | Test | How | Expected |
 |---|------|-----|----------|
-| 1 | Confirm handoff — valid | `POST /audit/chain-of-custody/handoff` with drive_id, possessor, delivery_time (UTC ISO), received_by, receipt_ref | 200, response includes all submitted fields + server-generated `handoff_id` |
+| 1 | Confirm handoff — valid | `POST /audit/chain-of-custody/handoff` with drive_id, possessor, delivery_time (UTC ISO), received_by, receipt_ref | 200, response includes all submitted fields + server-generated `event_id` |
 | 2 | Confirm handoff — possessor required | `POST /audit/chain-of-custody/handoff` with missing `possessor` | 422, validation error |
 | 3 | Confirm handoff — delivery_time required | `POST /audit/chain-of-custody/handoff` with missing `delivery_time` | 422, validation error |
 | 4 | Confirm handoff — UTC only | `POST /audit/chain-of-custody/handoff` with `delivery_time: "2026-04-12T14:00:00+05:00"` (non-UTC) | 422, must be UTC timezone |
 | 5 | Confirm handoff — drive_id required | `POST /audit/chain-of-custody/handoff` with missing `drive_id` | 422, validation error |
-| 6 | Confirm handoff — idempotent | Submit same handoff twice with identical (drive_id, possessor, delivery_time, receipt_ref) | Both return 200 with same `handoff_id`; only one `COC_HANDOFF_CONFIRMED` audit entry |
+| 6 | Confirm handoff — idempotent | Submit same handoff twice with identical (drive_id, possessor, delivery_time, receipt_ref) | Both return 200 with same `event_id`; only one `COC_HANDOFF_CONFIRMED` audit entry |
 | 7 | Confirm handoff — project_id mismatch | `POST /audit/chain-of-custody/handoff` with `project_id` that differs from drive binding | 409, `CONFLICT` |
 | 8 | Confirm handoff — drive not found | `POST /audit/chain-of-custody/handoff` with non-existent drive_id | 404, `NOT_FOUND` |
 | 9 | Confirm handoff — processor denied | `POST /audit/chain-of-custody/handoff` with processor token | 403, `FORBIDDEN` |
@@ -1566,7 +1566,7 @@ FROM (VALUES
   
   -- CASE-2026-001, CoC Handoff (only for first drive - archive it)
   (NOW() - INTERVAL '1 day', 'CASE-2026-001', 'COC_HANDOFF_CONFIRMED',
-   '{"drive_id": 1, "project_id": "CASE-2026-001", "possessor": "Officer Smith", "delivery_time": "2026-04-11T14:30:00Z", "received_by": "Evidence Custody", "receipt_ref": "RCP-2026-001", "handoff_id": "hoff-001"}'),
+   '{"drive_id": 1, "project_id": "CASE-2026-001", "possessor": "Officer Smith", "delivery_time": "2026-04-11T14:30:00Z", "received_by": "Evidence Custody", "receipt_ref": "RCP-2026-001"}'),
   
   -- CASE-2026-002, Job 3 lifecycle
   (NOW() - INTERVAL '13 hours', 'CASE-2026-002', 'DRIVE_INITIALIZED',
