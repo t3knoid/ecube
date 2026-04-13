@@ -1533,51 +1533,71 @@ ON CONFLICT DO NOTHING;
 -- 8. Audit Logs Setup (lifecycle events for CoC visibility)
 -- ============================================================================
 
--- Helper: retrieve drive IDs and job IDs to use in audit entries
--- SELECT id FROM usb_drives WHERE current_project_id = 'CASE-2026-001';
--- SELECT id FROM export_jobs WHERE project_id = 'CASE-2026-001';
-
+-- A single-row CTE resolves all drive/job IDs from their known unique
+-- identifiers so that audit_logs.drive_id, audit_logs.job_id, and every
+-- occurrence of those IDs inside the details JSONB are always consistent,
+-- regardless of what other rows already exist in the database.
+WITH ids AS (
+  SELECT
+    (SELECT id FROM usb_drives  WHERE device_identifier = 'coC-test-drive-001') AS d001,
+    (SELECT id FROM usb_drives  WHERE device_identifier = 'coC-test-drive-002') AS d002,
+    (SELECT id FROM usb_drives  WHERE device_identifier = 'coC-test-drive-004') AS d004,
+    (SELECT id FROM export_jobs WHERE evidence_number   = 'EV-2026-001-A')      AS j001a,
+    (SELECT id FROM export_jobs WHERE evidence_number   = 'EV-2026-001-B')      AS j001b,
+    (SELECT id FROM export_jobs WHERE evidence_number   = 'EV-2026-002-A')      AS j002a
+)
 INSERT INTO audit_logs (timestamp, user, action, project_id, drive_id, job_id, details, client_ip)
-SELECT 
-  evt_ts, 'ecube_admin', evt_action, proj_id, 
-  (SELECT id FROM usb_drives WHERE current_project_id = proj_id ORDER BY id LIMIT 1),
-  (SELECT id FROM export_jobs WHERE project_id = proj_id ORDER BY id LIMIT 1),
-  evt_details::JSONB, '192.168.1.50'
-FROM (VALUES
-  -- CASE-2026-001, Job 1 lifecycle
+SELECT evt_ts, 'ecube_admin', evt_action, proj_id, drive_id_col, job_id_col, evt_details, '192.168.1.50'
+FROM ids
+CROSS JOIN LATERAL (VALUES
+  -- CASE-2026-001, Job 1 lifecycle (drive-001 / EV-2026-001-A)
   (NOW() - INTERVAL '2 days 6 hours', 'CASE-2026-001', 'DRIVE_INITIALIZED',
-   '{"drive_id": 1, "project_id": "CASE-2026-001", "state_before": "AVAILABLE", "state_after": "IN_USE"}'),
+   ids.d001, NULL::INT,
+   jsonb_build_object('drive_id', ids.d001, 'project_id', 'CASE-2026-001', 'state_before', 'AVAILABLE', 'state_after', 'IN_USE')),
   (NOW() - INTERVAL '2 days 6 hours', 'CASE-2026-001', 'JOB_CREATED',
-   '{"job_id": 1, "evidence_number": "EV-2026-001-A", "source_path": "/mnt/evidence-001/data-batch-1"}'),
+   NULL::INT, ids.j001a,
+   jsonb_build_object('job_id', ids.j001a, 'evidence_number', 'EV-2026-001-A', 'source_path', '/mnt/evidence-001/data-batch-1')),
   (NOW() - INTERVAL '2 days 5 hours', 'CASE-2026-001', 'JOB_STARTED',
-   '{"job_id": 1, "evidence_number": "EV-2026-001-A", "thread_count": 4}'),
+   NULL::INT, ids.j001a,
+   jsonb_build_object('job_id', ids.j001a, 'evidence_number', 'EV-2026-001-A', 'thread_count', 4)),
   (NOW() - INTERVAL '2 days 3 hours', 'CASE-2026-001', 'JOB_COMPLETED',
-   '{"job_id": 1, "evidence_number": "EV-2026-001-A", "total_bytes": 5000000000, "file_count": 2500, "duration_seconds": 7200}'),
-  
-  -- CASE-2026-001, Job 2 lifecycle
+   NULL::INT, ids.j001a,
+   jsonb_build_object('job_id', ids.j001a, 'evidence_number', 'EV-2026-001-A', 'total_bytes', 5000000000, 'file_count', 2500, 'duration_seconds', 7200)),
+
+  -- CASE-2026-001, Job 2 lifecycle (drive-002 / EV-2026-001-B)
   (NOW() - INTERVAL '1 day 9 hours', 'CASE-2026-001', 'DRIVE_INITIALIZED',
-   '{"drive_id": 2, "project_id": "CASE-2026-001", "state_before": "AVAILABLE", "state_after": "IN_USE"}'),
+   ids.d002, NULL::INT,
+   jsonb_build_object('drive_id', ids.d002, 'project_id', 'CASE-2026-001', 'state_before', 'AVAILABLE', 'state_after', 'IN_USE')),
   (NOW() - INTERVAL '1 day 9 hours', 'CASE-2026-001', 'JOB_CREATED',
-   '{"job_id": 2, "evidence_number": "EV-2026-001-B", "source_path": "/mnt/evidence-001/data-batch-2"}'),
+   NULL::INT, ids.j001b,
+   jsonb_build_object('job_id', ids.j001b, 'evidence_number', 'EV-2026-001-B', 'source_path', '/mnt/evidence-001/data-batch-2')),
   (NOW() - INTERVAL '1 day 8 hours', 'CASE-2026-001', 'JOB_STARTED',
-   '{"job_id": 2, "evidence_number": "EV-2026-001-B", "thread_count": 4}'),
+   NULL::INT, ids.j001b,
+   jsonb_build_object('job_id', ids.j001b, 'evidence_number', 'EV-2026-001-B', 'thread_count', 4)),
   (NOW() - INTERVAL '1 day 6 hours', 'CASE-2026-001', 'JOB_COMPLETED',
-   '{"job_id": 2, "evidence_number": "EV-2026-001-B", "total_bytes": 3500000000, "file_count": 1800, "duration_seconds": 7200}'),
-  
-  -- CASE-2026-001, CoC Handoff (only for first drive - archive it)
+   NULL::INT, ids.j001b,
+   jsonb_build_object('job_id', ids.j001b, 'evidence_number', 'EV-2026-001-B', 'total_bytes', 3500000000, 'file_count', 1800, 'duration_seconds', 7200)),
+
+  -- CASE-2026-001, CoC handoff (drive-001 archived)
   (NOW() - INTERVAL '1 day', 'CASE-2026-001', 'COC_HANDOFF_CONFIRMED',
-   '{"drive_id": 1, "project_id": "CASE-2026-001", "possessor": "Officer Smith", "delivery_time": "2026-04-11T14:30:00Z", "received_by": "Evidence Custody", "receipt_ref": "RCP-2026-001"}'),
-  
-  -- CASE-2026-002, Job 3 lifecycle
+   ids.d001, NULL::INT,
+   jsonb_build_object('drive_id', ids.d001, 'project_id', 'CASE-2026-001', 'possessor', 'Officer Smith',
+                      'delivery_time', '2026-04-11T14:30:00Z', 'received_by', 'Evidence Custody', 'receipt_ref', 'RCP-2026-001')),
+
+  -- CASE-2026-002, Job 3 lifecycle (drive-004 / EV-2026-002-A)
   (NOW() - INTERVAL '13 hours', 'CASE-2026-002', 'DRIVE_INITIALIZED',
-   '{"drive_id": 4, "project_id": "CASE-2026-002", "state_before": "AVAILABLE", "state_after": "IN_USE"}'),
+   ids.d004, NULL::INT,
+   jsonb_build_object('drive_id', ids.d004, 'project_id', 'CASE-2026-002', 'state_before', 'AVAILABLE', 'state_after', 'IN_USE')),
   (NOW() - INTERVAL '13 hours', 'CASE-2026-002', 'JOB_CREATED',
-   '{"job_id": 3, "evidence_number": "EV-2026-002-A", "source_path": "/mnt/evidence-002/data-batch-3"}'),
+   NULL::INT, ids.j002a,
+   jsonb_build_object('job_id', ids.j002a, 'evidence_number', 'EV-2026-002-A', 'source_path', '/mnt/evidence-002/data-batch-3')),
   (NOW() - INTERVAL '12 hours', 'CASE-2026-002', 'JOB_STARTED',
-   '{"job_id": 3, "evidence_number": "EV-2026-002-A", "thread_count": 4}'),
+   NULL::INT, ids.j002a,
+   jsonb_build_object('job_id', ids.j002a, 'evidence_number', 'EV-2026-002-A', 'thread_count', 4)),
   (NOW() - INTERVAL '10 hours', 'CASE-2026-002', 'JOB_COMPLETED',
-   '{"job_id": 3, "evidence_number": "EV-2026-002-A", "total_bytes": 4200000000, "file_count": 2100, "duration_seconds": 7200}')
-) AS v (evt_ts, proj_id, evt_action, evt_details)
+   NULL::INT, ids.j002a,
+   jsonb_build_object('job_id', ids.j002a, 'evidence_number', 'EV-2026-002-A', 'total_bytes', 4200000000, 'file_count', 2100, 'duration_seconds', 7200))
+) AS v (evt_ts, proj_id, evt_action, drive_id_col, job_id_col, evt_details)
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
