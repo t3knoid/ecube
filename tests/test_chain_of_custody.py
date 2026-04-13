@@ -62,7 +62,11 @@ def _seed_audit(db, *, action: str, drive_id: int | None = None, job_id: int | N
 
 
 class TestChainOfCustodyGet:
-    def test_get_requires_audit_read_roles(self, client):
+    def test_get_requires_authentication(self, unauthenticated_client):
+        response = unauthenticated_client.get("/audit/chain-of-custody", params={"project_id": "CASE-R"})
+        assert response.status_code == 401
+
+    def test_get_denies_processor_role(self, client):
         response = client.get("/audit/chain-of-custody", params={"project_id": "CASE-R"})
         assert response.status_code == 403
 
@@ -205,7 +209,7 @@ class TestChainOfCustodyHandoff:
         )
         assert response.status_code == 409
 
-    def test_handoff_requires_manager_or_admin_role(self, client, auditor_client, db):
+    def test_handoff_requires_manager_or_admin_role(self, unauthenticated_client, client, auditor_client, db):
         drive = _seed_drive(db, device_identifier="COC-ROLE", project_id="CASE-R")
         drive_id = _as_int(drive.id)
 
@@ -216,7 +220,10 @@ class TestChainOfCustodyHandoff:
             "delivery_time": datetime(2026, 4, 10, 14, 22, 31, tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
         }
 
-        # Unauthenticated
+        # No token — must get 401
+        assert unauthenticated_client.post("/audit/chain-of-custody/handoff", json=payload).status_code == 401
+
+        # Processor role — insufficient, must get 403
         assert client.post("/audit/chain-of-custody/handoff", json=payload).status_code == 403
 
         # Auditor is read-only — write must be denied
