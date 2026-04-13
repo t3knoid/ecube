@@ -949,7 +949,7 @@ All fields except `drive_id`, `possessor`, and `delivery_time` are optional.
 the backend rejects non-UTC values with 422 and always stores and returns the value
 in `Z` form).
 
-The call is **idempotent**: submitting the same `(drive_id, possessor, delivery_time, receipt_ref)` combination twice returns the same `event_id` without creating a duplicate audit entry.
+The call is **idempotent**: submitting the same `(drive_id, possessor, delivery_time, receipt_ref)` combination twice returns the same `event_id` without creating a duplicate audit entry. Idempotency is scoped to the current project lifecycle — the effective `project_id` (resolved from the request payload or the drive's binding) is included in the match, so a prior-project handoff record on the same drive does not satisfy the idempotency check for a new project.
 
 Response: returns the recorded handoff event including `event_id`, `event_type`, `recorded_at`, and all submitted fields.
 
