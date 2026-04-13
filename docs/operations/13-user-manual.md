@@ -323,8 +323,8 @@ Every drive moves through a defined set of states. Actions available in the UI d
 
 | State | Meaning | Actions available |
 |-----------|-------------------------------------------------------------------------|-----------------------------------|
-| `EMPTY` | Drive detected but not yet formatted or ready for use. | Enable port, Format |
-| `AVAILABLE` | Drive is formatted and ready. Not currently assigned to a project. | Format, Initialize |
+| `EMPTY` | Drive is known to the system but not currently accessible — either not physically present, or present on a disabled port. | Enable port |
+| `AVAILABLE` | Drive is present on an enabled port and ready to be formatted or assigned to a project. | Format, Initialize |
 | `IN_USE` | Drive is assigned to a project. Jobs can target this drive. | Prepare Eject |
 | `ARCHIVED` | Drive has been permanently handed off via the Chain of Custody workflow. | None — drive is read-only. |
 
