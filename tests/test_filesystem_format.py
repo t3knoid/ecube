@@ -568,3 +568,52 @@ class TestInitializeFilesystemGuard:
         )
         assert resp.status_code == 200
         assert resp.json()["current_state"] == "IN_USE"
+
+
+class TestFormatClearsProjectBinding:
+    """Formatting a drive must clear the project binding.
+
+    This is the mechanism that allows a drive to be re-assigned to a different
+    project after a wipe: eject → format (clears binding) → initialize for any project.
+    """
+
+    def test_format_clears_current_project_id(self, admin_client, db):
+        drive = _make_drive(
+            db,
+            current_state=DriveState.AVAILABLE,
+            current_project_id="PROJ-OLD",
+            filesystem_type="exfat",
+        )
+        fake = FakeFormatter()
+        with patch("app.routers.drives.get_drive_formatter", return_value=fake):
+            resp = admin_client.post(
+                f"/drives/{drive.id}/format",
+                json={"filesystem_type": "ext4"},
+            )
+        assert resp.status_code == 200
+        assert resp.json()["current_project_id"] is None
+        db.refresh(drive)
+        assert drive.current_project_id is None
+
+    def test_format_then_initialize_for_new_project(self, admin_client, db):
+        """After format, a drive previously used by PROJ-OLD can be initialized for PROJ-NEW."""
+        drive = _make_drive(
+            db,
+            current_state=DriveState.AVAILABLE,
+            current_project_id="PROJ-OLD",
+            filesystem_type="exfat",
+        )
+        fake = FakeFormatter()
+        with patch("app.routers.drives.get_drive_formatter", return_value=fake):
+            admin_client.post(
+                f"/drives/{drive.id}/format",
+                json={"filesystem_type": "ext4"},
+            )
+
+        resp = admin_client.post(
+            f"/drives/{drive.id}/initialize",
+            json={"project_id": "PROJ-NEW"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["current_project_id"] == "PROJ-NEW"
+

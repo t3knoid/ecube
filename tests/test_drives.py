@@ -142,6 +142,59 @@ def test_prepare_eject(manager_client, db):
     assert response.status_code == 200
     data = response.json()
     assert data["current_state"] == "AVAILABLE"
+    # Project binding is preserved through eject so re-insert for the same
+    # project is allowed without a format, and cross-project reuse is blocked.
+    assert data["current_project_id"] == "PROJ-001"
+
+
+def test_reinitialize_same_project_after_eject(manager_client, db):
+    """A drive can be re-initialized for the same project after eject (adds more data)."""
+    drive = UsbDrive(
+        device_identifier="USB005D",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        filesystem_type="exfat",
+    )
+    db.add(drive)
+    db.commit()
+
+    with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject()):
+        eject_resp = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+    assert eject_resp.status_code == 200
+
+    # Re-initialize for the same project must succeed — user is adding more data.
+    init_resp = manager_client.post(
+        f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-001"}
+    )
+    assert init_resp.status_code == 200
+    assert init_resp.json()["current_state"] == "IN_USE"
+
+
+def test_reinitialize_different_project_after_eject_requires_format(manager_client, db):
+    """Re-initializing an ejected drive for a different project must be rejected (409).
+
+    The previous project's data is still on disk. A format (wipe) is required
+    before the drive can be assigned to a new project.
+    """
+    drive = UsbDrive(
+        device_identifier="USB005E",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-A",
+        filesystem_type="exfat",
+    )
+    db.add(drive)
+    db.commit()
+
+    with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject()):
+        eject_resp = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+    assert eject_resp.status_code == 200
+
+    # Attempt to re-initialize for a different project must be rejected.
+    init_resp = manager_client.post(
+        f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-B"}
+    )
+    assert init_resp.status_code == 409
+    assert "PROJ-A" in init_resp.json()["message"]
 
 
 def test_prepare_eject_with_filesystem_path(manager_client, db):

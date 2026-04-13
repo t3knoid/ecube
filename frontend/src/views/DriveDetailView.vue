@@ -105,11 +105,32 @@ async function runInitialize() {
     infoMessage.value = t('drives.initializeSuccess')
     showInitializeDialog.value = false
     projectId.value = ''
-  } catch {
-    error.value = t('common.errors.requestConflict')
+  } catch (err) {
+    const status = err?.response?.status
+    const detail = normalizeErrorMessage(err?.response?.data, null)
+    if (!status) {
+      error.value = t('common.errors.networkError')
+    } else if (status === 403) {
+      error.value = detail || t('common.errors.insufficientPermissions')
+    } else if (status === 404) {
+      error.value = detail || t('common.errors.notFound')
+    } else if (status === 409) {
+      error.value = detail || t('common.errors.requestConflict')
+    } else if (status === 422) {
+      error.value = detail || t('common.errors.validationFailed')
+    } else if (status >= 500) {
+      error.value = t('common.errors.serverError', { status })
+    } else {
+      error.value = t('common.errors.serverErrorGeneric')
+    }
   } finally {
     saving.value = false
   }
+}
+
+function openInitializeDialog() {
+  projectId.value = drive.value?.current_project_id ?? ''
+  showInitializeDialog.value = true
 }
 
 async function runEnable() {
@@ -224,7 +245,7 @@ onMounted(loadDrive)
       <div class="action-row">
         <button v-if="canEnable" class="btn btn-primary" :disabled="saving" @click="runEnable">{{ t('drives.enable') }}</button>
         <button class="btn" :disabled="!canFormat || saving" @click="showFormatDialog = true">{{ t('drives.format') }}</button>
-        <button class="btn" :disabled="!canInitialize || saving" @click="showInitializeDialog = true">{{ t('drives.initialize') }}</button>
+        <button class="btn" :disabled="!canInitialize || saving" @click="openInitializeDialog">{{ t('drives.initialize') }}</button>
         <button class="btn btn-danger" :disabled="!canEject || saving" @click="showEjectDialog = true">{{ t('drives.prepareEject') }}</button>
       </div>
 
@@ -265,9 +286,12 @@ onMounted(loadDrive)
       <div v-if="showInitializeDialog" class="dialog-overlay" @click.self="showInitializeDialog = false">
         <div class="dialog-panel" role="dialog" aria-modal="true">
           <h3>{{ t('drives.initializeTitle') }}</h3>
-          <p class="muted">{{ t('drives.projectWarning') }}</p>
+          <p class="muted">
+            {{ t('drives.projectWarning') }}
+            <template v-if="drive.current_project_id"> {{ t('drives.initializeProjectHint', { project: drive.current_project_id }) }}</template>
+          </p>
           <label class="field-label" for="project-id">{{ t('dashboard.project') }}</label>
-          <input id="project-id" v-model="projectId" type="text" />
+          <input id="project-id" v-model="projectId" type="text" :readonly="!!drive.current_project_id" />
           <div class="dialog-actions">
             <button class="btn" :disabled="saving" @click="showInitializeDialog = false">{{ t('common.actions.cancel') }}</button>
             <button class="btn btn-primary" :disabled="saving || !projectId.trim()" @click="runInitialize">{{ t('drives.initialize') }}</button>
