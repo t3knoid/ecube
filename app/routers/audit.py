@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/audit", tags=["audit"])
 
 _ALLOWED = require_roles("admin", "manager", "auditor")
+_WRITE_ALLOWED = require_roles("admin", "manager")
 _IP_VISIBLE_ROLES = {"admin", "auditor"}
 
 
@@ -115,12 +116,12 @@ def confirm_chain_of_custody_handoff(
     body: ChainOfCustodyHandoffRequest,
     *,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(_ALLOWED),
+    current_user: CurrentUser = Depends(_WRITE_ALLOWED),
     request: Request,
 ):
     """Record legal custody transfer as a dedicated append-only audit event.
 
-    **Roles:** ``admin``, ``manager``, ``auditor``
+    **Roles:** ``admin``, ``manager``
     """
     return audit_service.confirm_chain_of_custody_handoff(
         db,
