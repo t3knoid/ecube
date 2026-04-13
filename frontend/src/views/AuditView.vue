@@ -184,6 +184,7 @@ async function loadChainOfCustody() {
   cocLoading.value = true
   cocError.value = ''
   cocStatusMessage.value = ''
+  cocReport.value = null
   try {
     cocReport.value = await getChainOfCustody(buildCocParams())
   } catch (err) {
@@ -231,6 +232,7 @@ async function confirmHandoffSubmission() {
   const driveId = Number(handoffForm.value.drive_id)
   handoffSaving.value = true
   cocError.value = ''
+  cocStatusMessage.value = ''
   try {
     const handoffResult = await confirmChainOfCustodyHandoff({
       drive_id: driveId,
