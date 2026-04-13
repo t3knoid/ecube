@@ -155,8 +155,12 @@ async function loadChainOfCustody() {
   cocStatusMessage.value = ''
   try {
     cocReport.value = await getChainOfCustody(buildCocParams())
-  } catch {
-    cocError.value = t('common.errors.requestConflict')
+  } catch (err) {
+    // 410 Gone means the drive has been archived after a handoff — the last
+    // loaded report is still valid; keep it in place and don't show an error.
+    if (err?.response?.status !== 410) {
+      cocError.value = t('common.errors.requestConflict')
+    }
   } finally {
     cocLoading.value = false
   }
