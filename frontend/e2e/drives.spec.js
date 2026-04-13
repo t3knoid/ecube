@@ -2,6 +2,158 @@ import { test, expect } from '@playwright/test'
 import { setupAuthenticatedPage, routeJson } from './helpers/app.js'
 import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
 
+// ---------------------------------------------------------------------------
+// Shared fixture for an EMPTY drive with a known port_id
+// ---------------------------------------------------------------------------
+function makeEmptyDrive(overrides = {}) {
+  return {
+    id: 2,
+    device_identifier: '/dev/sdc',
+    filesystem_path: null,
+    filesystem_type: null,
+    capacity_bytes: 1073741824,
+    current_state: 'EMPTY',
+    current_project_id: null,
+    port_id: 7,
+    ...overrides,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Enable Drive — button visibility
+// ---------------------------------------------------------------------------
+
+test('Enable Drive button is visible for admin on EMPTY drive with port_id', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['admin'])
+  const drive = makeEmptyDrive()
+  await routeJson(page, '**/api/drives', () => [drive])
+
+  await page.goto('/drives/2')
+  await expect(page.getByRole('button', { name: 'Enable Drive' })).toBeVisible()
+})
+
+test('Enable Drive button is visible for manager on EMPTY drive with port_id', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['manager'])
+  const drive = makeEmptyDrive()
+  await routeJson(page, '**/api/drives', () => [drive])
+
+  await page.goto('/drives/2')
+  await expect(page.getByRole('button', { name: 'Enable Drive' })).toBeVisible()
+})
+
+test('Enable Drive button is not visible for processor', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['processor'])
+  const drive = makeEmptyDrive()
+  await routeJson(page, '**/api/drives', () => [drive])
+
+  await page.goto('/drives/2')
+  await expect(page.getByRole('button', { name: 'Enable Drive' })).toHaveCount(0)
+})
+
+test('Enable Drive button is not visible when drive has no port_id', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['admin'])
+  const drive = makeEmptyDrive({ port_id: null })
+  await routeJson(page, '**/api/drives', () => [drive])
+
+  await page.goto('/drives/2')
+  await expect(page.getByRole('button', { name: 'Enable Drive' })).toHaveCount(0)
+})
+
+test('Enable Drive button is not visible when drive is AVAILABLE', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['admin'])
+  const drive = makeEmptyDrive({ current_state: 'AVAILABLE' })
+  await routeJson(page, '**/api/drives', () => [drive])
+
+  await page.goto('/drives/2')
+  await expect(page.getByRole('button', { name: 'Enable Drive' })).toHaveCount(0)
+})
+
+// ---------------------------------------------------------------------------
+// Enable Drive — API calls and success banner
+// ---------------------------------------------------------------------------
+
+test('Enable Drive issues PATCH port + POST refresh and shows success banner when drive becomes AVAILABLE', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['admin'])
+
+  const drive = makeEmptyDrive()
+
+  // Track which API calls were made
+  const patchRequests = []
+  const refreshRequests = []
+
+  await routeJson(page, '**/api/drives', () => [drive])
+
+  await page.route('**/api/admin/ports/7', async (route) => {
+    patchRequests.push(route.request().method())
+    drive.current_state = 'AVAILABLE'
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 7, enabled: true }) })
+  })
+
+  await page.route('**/api/drives/refresh', async (route) => {
+    refreshRequests.push(route.request().method())
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
+  })
+
+  await page.goto('/drives/2')
+  await page.getByRole('button', { name: 'Enable Drive' }).click()
+
+  await expect(page.getByText('Port enabled. Drive is now available.')).toBeVisible()
+
+  expect(patchRequests).toContain('PATCH')
+  expect(refreshRequests).toContain('POST')
+})
+
+// ---------------------------------------------------------------------------
+// Enable Drive — warning banner when drive stays EMPTY after refresh
+// ---------------------------------------------------------------------------
+
+test('Enable Drive shows warning banner when drive does not promote to AVAILABLE', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['admin'])
+
+  const drive = makeEmptyDrive()
+
+  await routeJson(page, '**/api/drives', () => [drive])
+
+  // Port enable succeeds but discovery does not promote the drive
+  await page.route('**/api/admin/ports/7', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 7, enabled: true }) })
+  })
+  await page.route('**/api/drives/refresh', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
+  })
+
+  await page.goto('/drives/2')
+  await page.getByRole('button', { name: 'Enable Drive' }).click()
+
+  await expect(page.getByText(/Port enabled, but drive is still/)).toBeVisible()
+  await expect(page.getByText('Port enabled. Drive is now available.')).toHaveCount(0)
+})
+
+// ---------------------------------------------------------------------------
+// Enable Drive — error banner on API failure
+// ---------------------------------------------------------------------------
+
+test('Enable Drive shows error banner when PATCH port call fails', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['admin'])
+
+  const drive = makeEmptyDrive()
+  await routeJson(page, '**/api/drives', () => [drive])
+
+  await page.route('**/api/admin/ports/7', async (route) => {
+    await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ detail: 'internal error' }) })
+  })
+
+  await page.goto('/drives/2')
+  await page.getByRole('button', { name: 'Enable Drive' }).click()
+
+  await expect(page.getByText(/conflict|error/i)).toBeVisible()
+  await expect(page.getByText('Port enabled. Drive is now available.')).toHaveCount(0)
+})
+
+// ---------------------------------------------------------------------------
+// Original admin flows
+// ---------------------------------------------------------------------------
+
 test('drives list and drive detail admin flows', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
