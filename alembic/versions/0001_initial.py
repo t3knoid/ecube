@@ -1,5 +1,22 @@
 """Initial schema
 
+This is the canonical baseline migration for ECUBE v1.0.  All prior development
+revisions (0002–0013) have been intentionally squashed into this single file
+because the software has not yet been released and no production environment
+carries an alembic_version row pointing at any of those revisions.
+
+Fresh install
+-------------
+Run ``alembic upgrade head`` on a clean database.  This migration creates the
+complete schema from scratch.
+
+Dev environment with an old alembic_version
+-------------------------------------------
+If a local dev database was migrated through the old revision chain, run::
+
+    alembic stamp 0001
+    # schema is already up-to-date; no DDL is replayed
+
 Revision ID: 0001
 Revises:
 Create Date: 2024-01-01 00:00:00.000000
