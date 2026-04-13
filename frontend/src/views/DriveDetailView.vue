@@ -129,7 +129,7 @@ async function runEnable() {
     const detail = normalizeErrorMessage(err?.response?.data, null)
     if (!status) {
       error.value = t('common.errors.networkError')
-    } else if (status === 401 || status === 403) {
+    } else if (status === 403) {
       error.value = t('common.errors.insufficientPermissions')
     } else if (status === 400) {
       error.value = detail || t('common.errors.invalidRequest')
