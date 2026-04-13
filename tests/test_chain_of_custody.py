@@ -295,3 +295,14 @@ class TestChainOfCustodyHandoff:
         report = data["reports"][0]
         assert report["drive_id"] == _as_int(active_drive.id)
         assert _as_int(archived_drive.id) not in [r["drive_id"] for r in data["reports"]]
+
+    def test_archived_drive_excluded_from_coc_by_drive_sn(self, manager_client, db):
+        drive = _seed_drive(db, device_identifier="COC-ARCHIVED-SN", project_id="CASE-ARCHIVED-SN")
+        drive.current_state = DriveState.ARCHIVED
+        db.commit()
+
+        response = manager_client.get(
+            "/audit/chain-of-custody",
+            params={"drive_sn": "COC-ARCHIVED-SN"},
+        )
+        assert response.status_code == 410
