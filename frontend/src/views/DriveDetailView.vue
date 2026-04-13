@@ -133,7 +133,7 @@ async function runEnable() {
     } else if (status === 400) {
       error.value = detail || t('common.errors.invalidRequest')
     } else if (status === 404) {
-      error.value = detail || t('common.errors.serverErrorGeneric')
+      error.value = detail || t('drives.enablePortNotFound')
     } else if (status === 409) {
       error.value = t('common.errors.requestConflict')
     } else if (status === 422) {

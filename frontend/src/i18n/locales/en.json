@@ -59,6 +59,7 @@
     "enable": "Enable Drive",
     "enableSuccess": "Port enabled. Drive is now available.",
     "enableNoPort": "Cannot enable: drive has no associated port.",
+    "enablePortNotFound": "Port not found. The port may have been removed or the drive re-seated.",
     "enablePending": "Port enabled, but drive is still {state}. Discovery may still be in progress.",
     "formatConfirmTitle": "Format drive?",
     "formatConfirmBody": "Formatting destroys all data on this drive.",
