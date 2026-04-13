@@ -156,6 +156,7 @@ async function loadDriveOptions() {
     allActiveDrives.value = drives.filter((drive) => drive.current_state !== 'ARCHIVED')
   } catch {
     allActiveDrives.value = []
+    cocError.value = t('common.errors.networkError')
   }
 }
 
@@ -199,7 +200,20 @@ async function loadChainOfCustody() {
         cocStatusMessage.value = t('audit.driveArchived')
       }
     } else {
-      cocError.value = t('common.errors.requestConflict')
+      const status = err?.response?.status
+      if (status === 404) {
+        cocError.value = t('common.errors.notFound', 'Drive or project not found.')
+      } else if (status === 409) {
+        cocError.value = t('common.errors.requestConflict')
+      } else if (status === 422) {
+        cocError.value = t('common.errors.invalidRequest')
+      } else if (status >= 500) {
+        cocError.value = t('common.errors.serverError', { status })
+      } else if (!status) {
+        cocError.value = t('common.errors.networkError')
+      } else {
+        cocError.value = t('common.errors.serverErrorGeneric')
+      }
     }
   } finally {
     cocLoading.value = false
@@ -218,7 +232,7 @@ function prepareHandoff(report) {
   }
 }
 
-async function submitHandoff() {
+function submitHandoff() {
   const driveId = Number(handoffForm.value.drive_id)
   if (!Number.isInteger(driveId) || driveId <= 0 || !handoffForm.value.possessor.trim() || !handoffForm.value.delivery_time) {
     cocError.value = t('audit.handoffInvalid')
@@ -282,8 +296,21 @@ async function confirmHandoffSubmission() {
         cocReport.value = { ...cocReport.value, reports: [...cocReport.value.reports] }
       }
     }
-  } catch {
-    cocError.value = t('common.errors.requestConflict')
+  } catch (err) {
+    const status = err?.response?.status
+    if (status === 409) {
+      cocError.value = t('common.errors.requestConflict')
+    } else if (status === 410) {
+      cocError.value = t('audit.driveArchived')
+    } else if (status === 422) {
+      cocError.value = t('common.errors.invalidRequest')
+    } else if (status >= 500) {
+      cocError.value = t('common.errors.serverError', { status })
+    } else if (!status) {
+      cocError.value = t('common.errors.networkError')
+    } else {
+      cocError.value = t('common.errors.serverErrorGeneric')
+    }
   } finally {
     handoffSaving.value = false
   }
