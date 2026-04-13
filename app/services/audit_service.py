@@ -224,6 +224,12 @@ def confirm_chain_of_custody_handoff(
 
     effective_project_id = payload.project_id or drive.current_project_id
 
+    if effective_project_id is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Drive has no project binding and no project_id was provided; cannot record handoff",
+        )
+
     existing = _find_existing_handoff_event(
         db,
         drive_id=drive.id,
@@ -463,17 +469,21 @@ def _find_existing_handoff_event(
     possessor: str,
     delivery_time: datetime,
     receipt_ref: Optional[str],
-    project_id: Optional[str] = None,
+    project_id: str,
 ) -> Optional[AuditLog]:
-    query = (
+    # Always scope to the specific project lifecycle so that a prior-project
+    # handoff record can never falsely satisfy the idempotency check for a
+    # new project.  Callers must resolve effective_project_id before calling.
+    candidates = (
         db.query(AuditLog)
-        .filter(AuditLog.action == "COC_HANDOFF_CONFIRMED", AuditLog.drive_id == drive_id)
+        .filter(
+            AuditLog.action == "COC_HANDOFF_CONFIRMED",
+            AuditLog.drive_id == drive_id,
+            AuditLog.project_id == project_id,
+        )
+        .order_by(AuditLog.id.desc())
+        .all()
     )
-    # Scope to the current project lifecycle so that a prior-project handoff
-    # record can never falsely satisfy the idempotency check for a new project.
-    if project_id is not None:
-        query = query.filter(AuditLog.project_id == project_id)
-    candidates = query.order_by(AuditLog.id.desc()).all()
     delivery_iso = delivery_time.isoformat().replace("+00:00", "Z")
     for row in candidates:
         details = row.details or {}

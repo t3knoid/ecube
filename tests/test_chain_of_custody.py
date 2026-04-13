@@ -436,3 +436,20 @@ class TestChainOfCustodyHandoff:
             params={"drive_sn": "COC-ARCHIVED-SN"},
         )
         assert response.status_code == 410
+
+    def test_handoff_rejected_when_drive_has_no_project_binding(self, manager_client, db):
+        """A handoff for a drive with no current_project_id and no caller-supplied
+        project_id must be rejected with 422; without a project context the
+        handoff cannot be scoped and idempotency cannot be safely enforced."""
+        drive = _seed_drive(db, device_identifier="COC-UNBOUND", project_id=None, state=DriveState.AVAILABLE)
+        drive_id = _as_int(drive.id)
+
+        response = manager_client.post(
+            "/audit/chain-of-custody/handoff",
+            json={
+                "drive_id": drive_id,
+                "possessor": "Officer Jones",
+                "delivery_time": datetime(2026, 4, 10, 14, 22, 31, tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
+            },
+        )
+        assert response.status_code == 422
