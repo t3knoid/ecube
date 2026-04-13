@@ -943,8 +943,9 @@ curl -k -X POST https://localhost:8443/audit/chain-of-custody/handoff \
 ```
 
 All fields except `drive_id`, `possessor`, and `delivery_time` are optional.
-`delivery_time` must be a UTC ISO 8601 timestamp (suffix `Z` required — the
-backend rejects non-UTC values with 422).
+`delivery_time` must be a UTC ISO 8601 timestamp (`Z` or `+00:00` offset accepted;
+the backend rejects non-UTC values with 422 and always stores and returns the value
+in `Z` form).
 
 The call is **idempotent**: submitting the same `(drive_id, possessor, delivery_time, receipt_ref)` combination twice returns the same `event_id` without creating a duplicate audit entry.
 
