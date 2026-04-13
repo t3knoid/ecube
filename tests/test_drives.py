@@ -128,6 +128,33 @@ def test_initialize_archived_drive_is_rejected(manager_client, db):
     assert log.details["requested_project_id"] == "PROJ-NEW"
 
 
+def test_initialize_empty_drive_is_rejected(manager_client, db):
+    """EMPTY drives are not accessible; initialization must be rejected with 409."""
+    from app.models.audit import AuditLog
+
+    drive = UsbDrive(
+        device_identifier="USB003E",
+        current_state=DriveState.EMPTY,
+        filesystem_type="ext4",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = manager_client.post(f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-NEW"})
+    assert response.status_code == 409
+    assert "empty" in response.json()["message"].lower()
+
+    # Drive state must remain EMPTY.
+    db.refresh(drive)
+    assert drive.current_state == DriveState.EMPTY
+
+    # Denial must be recorded in the audit trail.
+    log = db.query(AuditLog).filter(AuditLog.action == "INIT_REJECTED_NOT_AVAILABLE").first()
+    assert log is not None
+    assert log.details["drive_id"] == drive.id
+    assert log.details["current_state"] == "EMPTY"
+    assert log.details["requested_project_id"] == "PROJ-NEW"
+
 
 def test_project_isolation_violation(manager_client, db):
     drive = UsbDrive(
