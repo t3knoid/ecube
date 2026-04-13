@@ -306,12 +306,9 @@ def _resolve_coc_targets(
         return "DRIVE_ID", [drive]
 
     if drive_sn is not None:
-        matches = db.query(UsbDrive).filter(UsbDrive.device_identifier == drive_sn).all()
-        if not matches:
+        drive = db.query(UsbDrive).filter(UsbDrive.device_identifier == drive_sn).one_or_none()
+        if drive is None:
             raise HTTPException(status_code=404, detail="No drive found for provided drive_sn")
-        if len(matches) > 1:
-            raise HTTPException(status_code=409, detail="drive_sn resolves to multiple drives; provide drive_id")
-        drive = matches[0]
         if drive.current_state == DriveState.ARCHIVED:
             raise HTTPException(status_code=410, detail="Drive has been archived after handoff and is no longer available for reporting")
         if project_id and drive.current_project_id and drive.current_project_id != project_id:
