@@ -37,7 +37,8 @@
     "states": {
       "empty": "Empty",
       "available": "Available",
-      "inUse": "In Use"
+      "inUse": "In Use",
+      "archived": "Archived"
     },
     "device": "Device",
     "filesystem": "Filesystem",

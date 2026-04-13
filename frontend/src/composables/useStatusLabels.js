@@ -4,6 +4,7 @@ const DRIVE_STATE_KEYS = {
   EMPTY: 'drives.states.empty',
   AVAILABLE: 'drives.states.available',
   IN_USE: 'drives.states.inUse',
+  ARCHIVED: 'drives.states.archived',
 }
 
 const JOB_STATUS_KEYS = {
