@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { getDrives, formatDrive, initializeDrive, prepareEjectDrive, refreshDrives } from '@/api/drives.js'
 import { enablePort } from '@/api/admin.js'
+import { normalizeErrorMessage } from '@/api/client.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -125,7 +126,7 @@ async function runEnable() {
     }
   } catch (err) {
     const status = err?.response?.status
-    const detail = err?.response?.data?.detail || err?.response?.data?.message || null
+    const detail = normalizeErrorMessage(err?.response?.data, null)
     if (!status) {
       error.value = t('common.errors.networkError')
     } else if (status === 401 || status === 403) {
