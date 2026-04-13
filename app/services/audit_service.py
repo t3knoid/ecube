@@ -222,6 +222,15 @@ def confirm_chain_of_custody_handoff(
     if existing is not None:
         return _handoff_response_from_audit(existing)
 
+    # Reject new (non-idempotent) handoff submissions for archived drives.
+    # Idempotent repeats are returned above, so this only fires for genuinely
+    # new submissions after archival.
+    if drive.current_state == DriveState.ARCHIVED:
+        raise HTTPException(
+            status_code=410,
+            detail="Drive has been archived after handoff and is no longer available for new handoff submissions",
+        )
+
     created = AuditRepository(db).add_uncommitted(
         action="COC_HANDOFF_CONFIRMED",
         user=actor,
