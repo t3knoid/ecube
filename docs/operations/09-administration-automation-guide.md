@@ -891,10 +891,12 @@ and `current_project_id` set to the provided project ID.
 >
 > | Condition | Result |
 > |-----------|--------|
+> | Drive is `EMPTY` (not present or port disabled) | 409 — not accessible; insert drive or enable port first |
 > | Drive is `ARCHIVED` | 409 — permanently retired, cannot re-initialize |
 > | Drive is `IN_USE` and `project_id` differs from binding | 403 — project isolation violation |
 > | Drive is `AVAILABLE` and `project_id` differs from binding | 409 — format required before reassigning to a new project |
 > | Drive is `AVAILABLE` and `project_id` matches binding (or drive has no prior binding) | Allowed — transitions to `IN_USE` |
+> | Drive is `IN_USE` and `project_id` matches binding | Allowed — idempotent re-bind |
 >
 > All denials are recorded in the audit log with the actor, drive, requested project, and reason.
 
