@@ -175,7 +175,7 @@
     "handoffInvalid": "Drive ID, possessor, and delivery time are required.",
     "cocSelectRequired": "Select at least one filter (drive, serial number, or project) before loading the chain of custody.",
     "possessor": "Possessor",
-    "deliveryTime": "Delivery Time",
+    "deliveryTime": "Delivery Time (UTC)",
     "receivedBy": "Received By",
     "receiptRef": "Receipt Reference",
     "notes": "Notes",
