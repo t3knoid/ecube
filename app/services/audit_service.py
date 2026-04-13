@@ -10,6 +10,7 @@ from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
 from app.models.jobs import DriveAssignment, ExportJob, Manifest
 from app.repositories.audit_repository import AuditRepository
+from app.repositories.drive_repository import DriveRepository
 from app.schemas.audit import (
     ChainOfCustodyDriveReportSchema,
     ChainOfCustodyEventSchema,
@@ -175,7 +176,12 @@ def confirm_chain_of_custody_handoff(
     actor: Optional[str],
     client_ip: Optional[str],
 ) -> ChainOfCustodyHandoffResponse:
-    drive = db.get(UsbDrive, payload.drive_id)
+    # Acquire a per-drive row lock (SELECT … FOR UPDATE NOWAIT on PostgreSQL;
+    # silently ignored on SQLite used in tests) before the idempotency check
+    # so that two concurrent identical submissions cannot both pass
+    # _find_existing_handoff_event() and insert duplicate COC_HANDOFF_CONFIRMED
+    # rows.  If the row is already locked, ConflictError (HTTP 409) is raised.
+    drive = DriveRepository(db).get_for_update(payload.drive_id)
     if drive is None:
         raise HTTPException(status_code=404, detail="Drive not found")
 
