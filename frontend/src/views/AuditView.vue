@@ -8,6 +8,7 @@ import { useSettingsStore } from '@/stores/settings.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -492,21 +493,17 @@ onMounted(() => {
     <Pagination v-model:page="page" :page-size="pageSize" :total="logs.length" />
 
     <!-- Handoff Warning Modal -->
-    <div v-if="showHandoffWarning" class="modal-overlay">
-      <div class="modal-dialog">
-        <div class="modal-header">
-          <h2>{{ t('audit.handoffWarning') }}</h2>
-          <button class="modal-close" @click="cancelHandoffSubmission" :aria-label="t('common.actions.close')">×</button>
-        </div>
-        <div class="modal-body">
-          <p>{{ t('audit.handoffWarningMessage') }}</p>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="cancelHandoffSubmission">{{ t('audit.handoffWarningCancel') }}</button>
-          <button class="btn btn-danger" :disabled="handoffSaving" @click="confirmHandoffSubmission">{{ t('audit.handoffWarningConfirm') }}</button>
-        </div>
-      </div>
-    </div>
+    <ConfirmDialog
+      v-model="showHandoffWarning"
+      :title="t('audit.handoffWarning')"
+      :message="t('audit.handoffWarningMessage')"
+      :confirm-label="t('audit.handoffWarningConfirm')"
+      :cancel-label="t('audit.handoffWarningCancel')"
+      :dangerous="true"
+      :busy="handoffSaving"
+      @confirm="confirmHandoffSubmission"
+      @cancel="cancelHandoffSubmission"
+    />
   </section>
 </template>
 
@@ -618,94 +615,5 @@ textarea {
   color: var(--color-text-primary);
   border-radius: var(--border-radius);
   padding: var(--space-xs) var(--space-sm);
-}
-
-/* Modal Styles */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-dialog {
-  background: var(--color-bg-primary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  max-width: 500px;
-  width: 90%;
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--space-md);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.modal-header h2 {
-  margin: 0;
-  font-size: 1.25rem;
-}
-
-.modal-close {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  cursor: pointer;
-  color: var(--color-text-secondary);
-  padding: 0;
-  line-height: 1;
-}
-
-.modal-close:hover {
-  color: var(--color-text-primary);
-}
-
-.modal-body {
-  padding: var(--space-md);
-}
-
-.modal-body p {
-  margin: 0;
-  line-height: 1.6;
-  color: var(--color-text-primary);
-}
-
-.modal-footer {
-  display: flex;
-  gap: var(--space-sm);
-  padding: var(--space-md);
-  border-top: 1px solid var(--color-border);
-  justify-content: flex-end;
-}
-
-.btn-danger {
-  background: var(--color-error, #dc2626);
-  color: white;
-  border: 1px solid var(--color-error, #dc2626);
-}
-
-.btn-danger:hover:not(:disabled) {
-  background: var(--color-error-hover, #b91c1c);
-  border-color: var(--color-error-hover, #b91c1c);
-}
-
-.btn-secondary {
-  background: var(--color-bg-secondary);
-  color: var(--color-text-primary);
-  border: 1px solid var(--color-border);
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-bg-secondary) 80%, var(--color-text-primary));
 }
 </style>
