@@ -53,7 +53,7 @@ pip install -e ".[dev]"
 cp .env.example .env
 ```
 
-4. Create a PostgreSQL admin login for the setup wizard (first time only)
+4. Create a PostgreSQL superuser login for the setup wizard (first time only)
 
 ```bash
 sudo -u postgres psql -c "CREATE ROLE ecubeadmin WITH SUPERUSER LOGIN PASSWORD 'ecubeadmin';"
@@ -65,7 +65,7 @@ sudo -u postgres psql -c "CREATE ROLE ecubeadmin WITH SUPERUSER LOGIN PASSWORD '
 sudo cp deploy/ecube-pam /etc/pam.d/ecube
 ```
 
-6. Start backend (must run as root for PAM authentication)
+6. Start backend
 
 ```bash
 sudo .venv/bin/uvicorn app.main:app --reload
@@ -198,22 +198,17 @@ What it does **not** install:
 ECUBE reads settings from environment variables or a `.env` file in the project root.
 
 ```bash
-# Create a .env file (required for docker compose workflows)
 cp .env.example .env
 ```
 
-For local development, use the platform compose file to run **PostgreSQL only** and run the ECUBE app/UI natively on the host:
-
-- Linux/macOS: `docker-compose.ecube.yml`
-- Windows: `docker-compose.ecube-win.yml`
+`DATABASE_URL` is written automatically by the setup wizard after provisioning. No manual edits to `.env` are required for a standard local dev setup.
 
 Key settings for development:
 
 | Variable | Default | Notes |
 |----------|---------|-------|
-| `DATABASE_URL` | `postgresql://ecube:ecube@localhost/ecube` | Matches postgres-only run from `docker-compose.ecube.yml` / `docker-compose.ecube-win.yml` |
+| `DATABASE_URL` | (written by setup wizard) | Set automatically after the wizard provisions the database |
 | `SECRET_KEY` | (built-in dev default) | JWT signing key; change in production |
-| `POSTGRES_PASSWORD` | (none) | Required by compose postgres service |
 | `ROLE_RESOLVER` | `local` | Uses OS group → role mapping |
 
 See [02 — Configuration Reference](../operations/04-configuration-reference.md) for the full list.
@@ -262,7 +257,7 @@ app/
   services/            # Business logic and state machines
 alembic/
   env.py               # Alembic environment configuration
-  versions/            # Migration scripts (0001–0004+)
+  versions/            # Migration scripts
 tests/
   conftest.py          # Shared fixtures (SQLite StaticPool, role-specific clients)
   test_*.py            # Unit and integration tests
@@ -283,68 +278,43 @@ docs/
 
 ## Running the Application
 
-The ECUBE backend and frontend run natively on the host in development. Choose one PostgreSQL option, then run backend and frontend in separate terminals.
+The ECUBE backend and frontend run natively on the host. PostgreSQL must be running before starting the backend.
 
-### PostgreSQL Options
+### Start PostgreSQL
 
-#### Option A: Dockerized PostgreSQL (Recommended)
-
-```bash
-# Ensure local environment file exists and required postgres password is set
-cp .env.example .env
-sed -i.bak 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ecube/' .env
-
-# Linux/macOS: start PostgreSQL only
-docker compose -f docker-compose.ecube.yml up -d postgres
-```
-
-Windows equivalent:
-
-```bash
-docker compose -f docker-compose.ecube-win.yml up -d postgres
-```
-
-#### Option B: System-Installed PostgreSQL
-
-Linux example:
+Linux:
 
 ```bash
 sudo systemctl start postgresql
+```
 
-# First-time setup only
+### Create the Setup Wizard Superuser (First Time Only)
+
+The setup wizard connects to PostgreSQL as `ecubeadmin` to provision the application database and user. Create this role once:
+
+```bash
 sudo -u postgres psql -c "CREATE ROLE ecubeadmin WITH SUPERUSER LOGIN PASSWORD 'ecubeadmin';"
 ```
 
-For macOS, use your PostgreSQL service manager (for example, Homebrew services) and run the same two commands before migrations.
+`SUPERUSER` is required on PostgreSQL 16+ because `CREATEROLE` alone no longer grants implicit `SET ROLE` access to roles it creates.
 
 ### PAM Service Config
 
 The `POST /auth/token` login endpoint authenticates OS credentials via Linux PAM. Two one-time setup steps are required.
 
-**1. Install the PAM service config:**
-
 ```bash
 sudo cp deploy/ecube-pam /etc/pam.d/ecube
 ```
-
-**2. Run the backend as root.**
-
-Linux's `unix_chkpwd` helper (used by `pam_unix` for non-root processes) only allows a process to verify its *own* password. The ECUBE service must run as root to authenticate arbitrary OS users:
-
-```bash
-sudo .venv/bin/uvicorn app.main:app --reload
-```
-
-Without root, all login attempts return `401 Unauthorized` regardless of credentials. In production, the service runs as root via systemd — the same restriction applies.
 
 ### Backend Execution
 
 Run from the repository root (with your virtual environment activated):
 
 ```bash
-alembic upgrade head
 sudo .venv/bin/uvicorn app.main:app --reload
 ```
+
+Without root, all login attempts return `401 Unauthorized` regardless of credentials. In production, the service runs as root via systemd — the same restriction applies.
 
 ### Frontend Execution
 
@@ -407,6 +377,12 @@ After recreating the database, apply migrations again:
 
 ```bash
 alembic upgrade head
+```
+
+### Drop 
+
+```bash
+sudo -u postgres psql -c "DROP OWNED BY ecubeadmin; DROP ROLE IF EXISTS ecubeadmin;"
 ```
 
 ### Migration Naming
