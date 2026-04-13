@@ -165,6 +165,48 @@ class TestChainOfCustodyGet:
         assert report["custody_complete"] is False
         assert report["delivery_time"] is None
 
+    def test_drive_report_excludes_prior_project_events_after_reformat(self, auditor_client, db):
+        """After a drive is reformatted and reassigned, the CoC report for the
+        new project must not include events or jobs from the prior project."""
+        # Simulate a drive that was used for CASE-PRIOR, ejected, reformatted,
+        # then re-initialized for CASE-CURRENT.  We model this purely via DB
+        # state: the drive's current_project_id is CASE-CURRENT.
+        drive = _seed_drive(db, device_identifier="COC-REFORMAT", project_id="CASE-CURRENT", state=DriveState.IN_USE)
+        drive_id = _as_int(drive.id)
+
+        # Prior-lifecycle events (different project).
+        prior_job = _seed_job_and_assignment(db, drive_id=drive_id, project_id="CASE-PRIOR")
+        prior_job_id = _as_int(prior_job.id)
+        _seed_audit(db, action="DRIVE_INITIALIZED", drive_id=drive_id, project_id="CASE-PRIOR")
+        _seed_audit(db, action="JOB_CREATED", drive_id=drive_id, job_id=prior_job_id, project_id="CASE-PRIOR")
+        _seed_audit(db, action="JOB_COMPLETED", job_id=prior_job_id, project_id="CASE-PRIOR")
+        _seed_audit(db, action="DRIVE_EJECT_PREPARED", drive_id=drive_id, project_id="CASE-PRIOR")
+
+        # Current-lifecycle events.
+        current_job = _seed_job_and_assignment(db, drive_id=drive_id, project_id="CASE-CURRENT")
+        current_job_id = _as_int(current_job.id)
+        _seed_audit(db, action="DRIVE_INITIALIZED", drive_id=drive_id, project_id="CASE-CURRENT")
+        _seed_audit(db, action="JOB_CREATED", drive_id=drive_id, job_id=current_job_id, project_id="CASE-CURRENT")
+        _seed_audit(db, action="JOB_COMPLETED", job_id=current_job_id, project_id="CASE-CURRENT")
+
+        response = auditor_client.get("/audit/chain-of-custody", params={"drive_id": drive_id})
+        assert response.status_code == 200
+        report = response.json()["reports"][0]
+
+        event_types = [e["event_type"] for e in report["chain_of_custody_events"]]
+        job_ids_in_report = [m["job_id"] for m in report["manifest_summary"]]
+
+        # Current-lifecycle events must appear.
+        assert event_types.count("DRIVE_INITIALIZED") == 1
+        assert event_types.count("JOB_CREATED") == 1
+        assert current_job_id in job_ids_in_report
+
+        # Prior-lifecycle job must be absent from manifest summary.
+        assert prior_job_id not in job_ids_in_report
+
+        # The lone DRIVE_EJECT_PREPARED was for the prior project and must be excluded.
+        assert "DRIVE_EJECT_PREPARED" not in event_types
+
 
 class TestChainOfCustodyHandoff:
     def test_handoff_is_idempotent_by_contract_tuple(self, manager_client, db):
