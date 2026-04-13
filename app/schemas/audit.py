@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_serializer, model_validator
 
 from app.utils.sanitize import SafeStr
 
@@ -48,6 +48,12 @@ class ChainOfCustodyDriveReportSchema(BaseModel):
     chain_of_custody_events: List[ChainOfCustodyEventSchema] = Field(default_factory=list, description="Chronological custody-related audit events")
     manifest_summary: List[ManifestSummarySchema] = Field(default_factory=list, description="Per-job manifest and size summary")
 
+    @field_serializer("delivery_time")
+    def _serialize_delivery_time(self, dt: Optional[datetime]) -> Optional[str]:
+        if dt is None:
+            return None
+        return dt.isoformat().replace("+00:00", "Z")
+
 
 class ChainOfCustodyReportSchema(BaseModel):
     selector_mode: str = Field(..., description="Resolved selector mode: DRIVE_ID, DRIVE_SN, or PROJECT")
@@ -85,3 +91,7 @@ class ChainOfCustodyHandoffResponse(BaseModel):
     receipt_ref: Optional[str] = Field(default=None, description="Receipt reference")
     notes: Optional[str] = Field(default=None, description="Optional notes")
     recorded_at: datetime = Field(..., description="When this event was recorded")
+
+    @field_serializer("delivery_time", "recorded_at")
+    def _serialize_utc_datetime(self, dt: datetime) -> str:
+        return dt.isoformat().replace("+00:00", "Z")

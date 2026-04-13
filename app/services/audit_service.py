@@ -242,7 +242,7 @@ def confirm_chain_of_custody_handoff(
             "project_id": effective_project_id,
             "creator": actor,
             "possessor": payload.possessor,
-            "delivery_time": payload.delivery_time.isoformat(),
+            "delivery_time": payload.delivery_time.isoformat().replace("+00:00", "Z"),
             "received_by": payload.received_by,
             "receipt_ref": payload.receipt_ref,
             "notes": payload.notes,
@@ -434,12 +434,12 @@ def _find_existing_handoff_event(
         .order_by(AuditLog.id.desc())
         .all()
     )
-    delivery_iso = delivery_time.isoformat()
+    delivery_iso = delivery_time.isoformat().replace("+00:00", "Z")
     for row in candidates:
         details = row.details or {}
         if details.get("possessor") != possessor:
             continue
-        if details.get("delivery_time") != delivery_iso:
+        if (details.get("delivery_time") or "").replace("+00:00", "Z") != delivery_iso:
             continue
         if details.get("receipt_ref") != receipt_ref:
             continue
