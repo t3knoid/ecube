@@ -125,12 +125,19 @@ async function runEnable() {
     }
   } catch (err) {
     const status = err?.response?.status
+    const detail = err?.response?.data?.detail || err?.response?.data?.message || null
     if (!status) {
       error.value = t('common.errors.networkError')
     } else if (status === 401 || status === 403) {
       error.value = t('common.errors.insufficientPermissions')
+    } else if (status === 400) {
+      error.value = detail || t('common.errors.invalidRequest')
+    } else if (status === 404) {
+      error.value = detail || t('common.errors.serverErrorGeneric')
     } else if (status === 409) {
       error.value = t('common.errors.requestConflict')
+    } else if (status === 422) {
+      error.value = detail || t('common.errors.validationFailed')
     } else if (status >= 500) {
       error.value = t('common.errors.serverError', { status })
     } else {
