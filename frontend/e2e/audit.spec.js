@@ -134,8 +134,8 @@ test('chain of custody handoff requires warning confirmation and submits archive
   await expect(page.getByText('Drive #1 (SN-001)')).toBeVisible()
 
   await page.getByRole('button', { name: 'Prefill Handoff' }).click()
-  await page.getByPlaceholder('Possessor').fill('Officer Jane Doe')
-  await page.getByPlaceholder('Delivery Time').fill('2026-04-01T10:30')
+  await page.getByLabel('Possessor').fill('Officer Jane Doe')
+  await page.getByLabel('Delivery Time (UTC)').fill('2026-04-01T10:30')
 
   await page.getByRole('button', { name: 'Confirm Handoff' }).click()
   await expect(page.getByRole('heading', { name: 'Permanent Archive Warning' })).toBeVisible()
