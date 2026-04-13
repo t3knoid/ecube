@@ -19,6 +19,7 @@ const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
 const infoMessage = ref('')
+const warnMessage = ref('')
 
 const showFormatDialog = ref(false)
 const showEjectDialog = ref(false)
@@ -52,6 +53,7 @@ async function loadDrive() {
   loading.value = true
   error.value = ''
   infoMessage.value = ''
+  warnMessage.value = ''
   try {
     const drives = await getDrives()
     drive.value = drives.find((item) => item.id === driveId.value) || null
@@ -112,6 +114,10 @@ async function runEnable() {
     await loadDrive()
     if (drive.value?.current_state === 'AVAILABLE') {
       infoMessage.value = t('drives.enableSuccess')
+    } else {
+      warnMessage.value = t('drives.enablePending', {
+        state: driveStateLabel(drive.value?.current_state),
+      })
     }
   } catch {
     error.value = t('common.errors.requestConflict')
@@ -163,6 +169,7 @@ onMounted(loadDrive)
     <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
     <p v-if="error" class="error-banner">{{ error }}</p>
     <p v-if="infoMessage" class="ok-banner">{{ infoMessage }}</p>
+    <p v-if="warnMessage" class="warn-banner">{{ warnMessage }}</p>
     <div v-if="showCocPrompt" class="coc-banner">
       <p>{{ t('drives.cocPrompt') }}</p>
       <div class="actions">
@@ -287,6 +294,7 @@ onMounted(loadDrive)
 
 .error-banner,
 .ok-banner,
+.warn-banner,
 .coc-banner {
   border-radius: var(--border-radius);
   padding: var(--space-sm);
@@ -302,6 +310,12 @@ onMounted(loadDrive)
   color: var(--color-ok-banner-text, #14532d);
   background: color-mix(in srgb, var(--color-success) 14%, var(--color-bg-secondary));
   border: 1px solid color-mix(in srgb, var(--color-success) 45%, var(--color-border));
+}
+
+.warn-banner {
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-warning, #f59e0b) 14%, var(--color-bg-secondary));
+  border: 1px solid color-mix(in srgb, var(--color-warning, #f59e0b) 45%, var(--color-border));
 }
 
 .coc-banner {
