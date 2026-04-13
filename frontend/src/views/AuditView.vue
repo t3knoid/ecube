@@ -181,9 +181,14 @@ async function loadChainOfCustody() {
   try {
     cocReport.value = await getChainOfCustody(buildCocParams())
   } catch (err) {
-    // 410 Gone means the drive has been archived after a handoff — the last
-    // loaded report is still valid; keep it in place and don't show an error.
-    if (err?.response?.status !== 410) {
+    if (err?.response?.status === 410) {
+      // Drive has been archived after handoff. If a report is already loaded
+      // keep it visible; otherwise surface an informational message so the
+      // user isn't left with a blank panel.
+      if (!cocReport.value) {
+        cocStatusMessage.value = t('audit.driveArchived')
+      }
+    } else {
       cocError.value = t('common.errors.requestConflict')
     }
   } finally {
@@ -216,12 +221,12 @@ async function submitHandoff() {
 
 async function confirmHandoffSubmission() {
   showHandoffWarning.value = false
-  
+
   const driveId = Number(handoffForm.value.drive_id)
   handoffSaving.value = true
   cocError.value = ''
   try {
-    await confirmChainOfCustodyHandoff({
+    const handoffResult = await confirmChainOfCustodyHandoff({
       drive_id: driveId,
       project_id: handoffForm.value.project_id.trim() || undefined,
       possessor: handoffForm.value.possessor.trim(),
@@ -231,7 +236,18 @@ async function confirmHandoffSubmission() {
       notes: handoffForm.value.notes.trim() || undefined,
     })
     cocStatusMessage.value = t('audit.handoffSaved')
-    await loadChainOfCustody()
+    // Patch the loaded report directly — the drive is now ARCHIVED so
+    // reloading via the CoC endpoint returns 410 and would leave the report
+    // showing custody_complete: false with no delivery_time.
+    if (cocReport.value) {
+      const match = cocReport.value.reports.find((r) => r.drive_id === driveId)
+      if (match) {
+        match.custody_complete = true
+        match.delivery_time = handoffResult.delivery_time
+        // Trigger Vue reactivity by replacing the reports array reference.
+        cocReport.value = { ...cocReport.value, reports: [...cocReport.value.reports] }
+      }
+    }
   } catch {
     cocError.value = t('common.errors.requestConflict')
   } finally {

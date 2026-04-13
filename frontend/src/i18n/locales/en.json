@@ -169,6 +169,7 @@
     "handoffWarningConfirm": "Yes, archive drive",
     "handoffWarningCancel": "Cancel",
     "handoffSaved": "Custody handoff recorded.",
+    "driveArchived": "This drive has been archived after handoff and is no longer available for chain-of-custody queries.",
     "handoffInvalid": "Drive ID, possessor, and delivery time are required.",
     "cocSelectRequired": "Select at least one filter (drive, serial number, or project) before loading the chain of custody.",
     "possessor": "Possessor",
