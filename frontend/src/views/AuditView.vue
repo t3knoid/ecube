@@ -202,7 +202,7 @@ async function loadChainOfCustody() {
     } else {
       const status = err?.response?.status
       if (status === 404) {
-        cocError.value = t('common.errors.notFound', 'Drive or project not found.')
+        cocError.value = t('common.errors.notFound')
       } else if (status === 409) {
         cocError.value = t('common.errors.requestConflict')
       } else if (status === 422) {
