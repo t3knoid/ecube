@@ -5,7 +5,7 @@ import { AUTH_RESET_EVENT, EXPIRED_QUERY_KEY, EXPIRED_QUERY_VALUE } from '@/cons
 import { useToast } from '@/composables/useToast.js'
 import i18n from '@/i18n'
 
-function normalizeErrorMessage(data, fallbackMessage) {
+export function normalizeErrorMessage(data, fallbackMessage) {
   if (!data) return fallbackMessage
 
   if (typeof data.message === 'string' && data.message.trim()) {

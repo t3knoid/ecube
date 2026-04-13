@@ -51,3 +51,7 @@ export function downloadLogFile(name) {
 export function getLogLines(params = {}) {
   return toData(apiClient.get(`${API_BASE}/admin/logs/view`, { params }))
 }
+
+export function enablePort(portId) {
+  return toData(apiClient.patch(`${API_BASE}/admin/ports/${portId}`, { enabled: true }))
+}
