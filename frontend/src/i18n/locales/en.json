@@ -69,7 +69,8 @@
     "cocPrompt": "Drive is ready for safe removal. Generate a chain-of-custody report and confirm handoff details.",
     "openCocReport": "Open CoC Report",
     "initializeTitle": "Initialize drive",
-    "projectWarning": "Project binding is enforced for all writes. Use the correct project ID."
+    "projectWarning": "Project binding is enforced for all writes.",
+    "initializeProjectHint": "This drive was last used for project \"{project}\"."
   },
   "jobs": {
     "title": "Jobs",
