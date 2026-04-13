@@ -69,6 +69,7 @@ test('chain of custody handoff requires warning confirmation and submits archive
         {
           id: 1,
           device_identifier: 'sdb',
+          current_state: 'IN_USE',
           current_project_id: 'PRJ-001',
         },
       ]),
