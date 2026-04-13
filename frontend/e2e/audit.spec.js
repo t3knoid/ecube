@@ -111,7 +111,19 @@ test('chain of custody handoff requires warning confirmation and submits archive
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ ok: true }),
+      body: JSON.stringify({
+        event_id: 42,
+        event_type: 'COC_HANDOFF_CONFIRMED',
+        drive_id: 1,
+        project_id: 'PRJ-001',
+        creator: 'manager-user',
+        possessor: 'Officer Jane Doe',
+        delivery_time: '2026-04-01T10:30:00Z',
+        received_by: null,
+        receipt_ref: null,
+        notes: null,
+        recorded_at: '2026-04-01T10:31:00Z',
+      }),
     })
   })
 
@@ -145,4 +157,15 @@ test('chain of custody handoff requires warning confirmation and submits archive
     possessor: 'Officer Jane Doe',
   })
   expect(typeof lastHandoffBody.delivery_time).toBe('string')
+
+  // Verify the report was patched in-place with the handoff response fields.
+  // custody_complete should be true and the new event should appear in the events list.
+  await expect(page.getByText('Custody Complete')).toBeVisible()
+  const eventsJson = await page.locator('pre').first().textContent()
+  const events = JSON.parse(eventsJson)
+  const handoffEvent = events.find((e) => e.event_type === 'COC_HANDOFF_CONFIRMED')
+  expect(handoffEvent).toBeDefined()
+  expect(handoffEvent.event_id).toBe(42)
+  expect(handoffEvent.actor).toBe('manager-user')
+  expect(handoffEvent.details.possessor).toBe('Officer Jane Doe')
 })
