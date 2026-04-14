@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.hardware import UsbDrive
-from app.models.network import NetworkMount
+from app.models.network import MountStatus, NetworkMount
 from app.schemas.browse import BrowseEntry, BrowseResponse
 from app.services.audit_service import log_and_audit
 
@@ -50,7 +50,15 @@ def _lookup_mount_root(path: str, db: Session) -> Optional[str]:
         if p and p.rstrip("/") == normalised:
             return p.rstrip("/")
 
-    net_paths = db.query(NetworkMount.local_mount_point).all()
+    net_paths = (
+        db.query(NetworkMount.local_mount_point)
+        .filter(
+            NetworkMount.status == MountStatus.MOUNTED,
+            NetworkMount.local_mount_point.isnot(None),
+            NetworkMount.local_mount_point != "",
+        )
+        .all()
+    )
     for (p,) in net_paths:
         if p and p.rstrip("/") == normalised:
             return p.rstrip("/")
