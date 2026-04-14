@@ -291,7 +291,7 @@ async def lifespan(application: FastAPI):
         async def _usb_discovery_loop() -> None:
             from app.database import SessionLocal
             from app.services.discovery_service import run_discovery_sync
-            from app.infrastructure import get_filesystem_detector
+            from app.infrastructure import get_filesystem_detector, get_drive_mount
 
             interval = settings.usb_discovery_interval
             while True:
@@ -303,6 +303,7 @@ async def lifespan(application: FastAPI):
                             db,
                             actor="system",
                             filesystem_detector=get_filesystem_detector(),
+                            drive_mount=get_drive_mount(),
                         )
                     finally:
                         db.close()
