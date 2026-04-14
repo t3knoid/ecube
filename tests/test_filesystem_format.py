@@ -317,21 +317,23 @@ class TestFilesystemTypeInResponse:
         resp = client.get("/drives")
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data) == 1
-        assert data[0]["filesystem_type"] == "ext4"
+        match = next(d for d in data if d["device_identifier"] == "USB-FS")
+        assert match["filesystem_type"] == "ext4"
 
     def test_filesystem_type_null(self, client, db):
         _make_drive(db, device_identifier="USB-NULL")
         resp = client.get("/drives")
         assert resp.status_code == 200
-        assert resp.json()[0]["filesystem_type"] is None
+        match = next(d for d in resp.json() if d["device_identifier"] == "USB-NULL")
+        assert match["filesystem_type"] is None
 
     def test_all_roles_see_filesystem_type(self, admin_client, manager_client, auditor_client, client, db):
         _make_drive(db, device_identifier="USB-VIS", filesystem_type="exfat")
         for c in [admin_client, manager_client, auditor_client, client]:
             resp = c.get("/drives")
             assert resp.status_code == 200
-            assert resp.json()[0]["filesystem_type"] == "exfat"
+            match = next(d for d in resp.json() if d["device_identifier"] == "USB-VIS")
+            assert match["filesystem_type"] == "exfat"
 
 
 # ===========================================================================
@@ -356,6 +358,8 @@ class TestFormatDriveEndpoint:
 
         log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_FORMATTED").first()
         assert log is not None
+        assert log.drive_id == drive.id
+        assert log.project_id is None
         assert log.details["drive_id"] == drive.id
         assert log.details["filesystem_type"] == "ext4"
 
@@ -460,6 +464,8 @@ class TestFormatDriveEndpoint:
 
         log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_FORMAT_FAILED").first()
         assert log is not None
+        assert log.drive_id == drive.id
+        assert log.project_id is None
         assert log.details["drive_id"] == drive.id
         assert "simulated error" in log.details["error"]
 
@@ -494,6 +500,8 @@ class TestFormatDriveEndpoint:
             .first()
         )
         assert log is not None
+        assert log.drive_id == drive.id
+        assert log.project_id is None
         assert log.details["drive_id"] == drive.id
         assert log.details["filesystem_type"] == "ext4"
 
@@ -517,6 +525,8 @@ class TestInitializeFilesystemGuard:
 
         log = db.query(AuditLog).filter(AuditLog.action == "INIT_REJECTED_FILESYSTEM").first()
         assert log is not None
+        assert log.drive_id == drive.id
+        assert log.project_id == "PROJ-001"
         assert log.details["drive_id"] == drive.id
         assert log.details["project_id"] == "PROJ-001"
         assert log.details["filesystem_type"] is None
@@ -532,6 +542,8 @@ class TestInitializeFilesystemGuard:
 
         log = db.query(AuditLog).filter(AuditLog.action == "INIT_REJECTED_FILESYSTEM").first()
         assert log is not None
+        assert log.drive_id == drive.id
+        assert log.project_id == "PROJ-001"
         assert log.details["drive_id"] == drive.id
         assert log.details["project_id"] == "PROJ-001"
         assert log.details["filesystem_type"] == "unformatted"
@@ -547,6 +559,8 @@ class TestInitializeFilesystemGuard:
 
         log = db.query(AuditLog).filter(AuditLog.action == "INIT_REJECTED_FILESYSTEM").first()
         assert log is not None
+        assert log.drive_id == drive.id
+        assert log.project_id == "PROJ-001"
         assert log.details["drive_id"] == drive.id
         assert log.details["project_id"] == "PROJ-001"
         assert log.details["filesystem_type"] == "unknown"
@@ -568,3 +582,52 @@ class TestInitializeFilesystemGuard:
         )
         assert resp.status_code == 200
         assert resp.json()["current_state"] == "IN_USE"
+
+
+class TestFormatClearsProjectBinding:
+    """Formatting a drive must clear the project binding.
+
+    This is the mechanism that allows a drive to be re-assigned to a different
+    project after a wipe: eject → format (clears binding) → initialize for any project.
+    """
+
+    def test_format_clears_current_project_id(self, admin_client, db):
+        drive = _make_drive(
+            db,
+            current_state=DriveState.AVAILABLE,
+            current_project_id="PROJ-OLD",
+            filesystem_type="exfat",
+        )
+        fake = FakeFormatter()
+        with patch("app.routers.drives.get_drive_formatter", return_value=fake):
+            resp = admin_client.post(
+                f"/drives/{drive.id}/format",
+                json={"filesystem_type": "ext4"},
+            )
+        assert resp.status_code == 200
+        assert resp.json()["current_project_id"] is None
+        db.refresh(drive)
+        assert drive.current_project_id is None
+
+    def test_format_then_initialize_for_new_project(self, admin_client, db):
+        """After format, a drive previously used by PROJ-OLD can be initialized for PROJ-NEW."""
+        drive = _make_drive(
+            db,
+            current_state=DriveState.AVAILABLE,
+            current_project_id="PROJ-OLD",
+            filesystem_type="exfat",
+        )
+        fake = FakeFormatter()
+        with patch("app.routers.drives.get_drive_formatter", return_value=fake):
+            admin_client.post(
+                f"/drives/{drive.id}/format",
+                json={"filesystem_type": "ext4"},
+            )
+
+        resp = admin_client.post(
+            f"/drives/{drive.id}/initialize",
+            json={"project_id": "PROJ-NEW"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["current_project_id"] == "PROJ-NEW"
+

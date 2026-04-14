@@ -3,7 +3,9 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
-import { getDrives, formatDrive, initializeDrive, prepareEjectDrive } from '@/api/drives.js'
+import { getDrives, formatDrive, initializeDrive, prepareEjectDrive, refreshDrives } from '@/api/drives.js'
+import { enablePort } from '@/api/admin.js'
+import { normalizeErrorMessage } from '@/api/client.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -19,11 +21,19 @@ const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
 const infoMessage = ref('')
+const warnMessage = ref('')
+
+function clearBanners() {
+  error.value = ''
+  infoMessage.value = ''
+  warnMessage.value = ''
+}
 
 const showFormatDialog = ref(false)
 const showEjectDialog = ref(false)
 const showInitializeDialog = ref(false)
 const browseExpanded = ref(false)
+const showCocPrompt = ref(false)
 
 const filesystemType = ref('ext4')
 const projectId = ref('')
@@ -32,6 +42,18 @@ const { driveStateLabel } = useStatusLabels()
 
 const driveId = computed(() => Number(route.params.id))
 const canManage = computed(() => authStore.hasAnyRole(['admin', 'manager']))
+const canEnable = computed(
+  () => drive.value?.current_state === 'EMPTY' && drive.value?.port_id != null && canManage.value,
+)
+const canFormat = computed(
+  () => drive.value?.current_state === 'AVAILABLE' && canManage.value,
+)
+const canInitialize = computed(
+  () => drive.value?.current_state === 'AVAILABLE' && canManage.value,
+)
+const canEject = computed(
+  () => drive.value?.current_state === 'IN_USE' && canManage.value,
+)
 
 function formatBytes(value) {
   if (typeof value !== 'number' || value <= 0) return '-'
@@ -47,8 +69,7 @@ function formatBytes(value) {
 
 async function loadDrive() {
   loading.value = true
-  error.value = ''
-  infoMessage.value = ''
+  clearBanners()
   try {
     const drives = await getDrives()
     drive.value = drives.find((item) => item.id === driveId.value) || null
@@ -65,7 +86,7 @@ async function loadDrive() {
 async function runFormat() {
   if (!drive.value) return
   saving.value = true
-  error.value = ''
+  clearBanners()
   try {
     drive.value = await formatDrive(drive.value.id, { filesystem_type: filesystemType.value })
     infoMessage.value = t('drives.formatSuccess')
@@ -80,14 +101,81 @@ async function runFormat() {
 async function runInitialize() {
   if (!drive.value || !projectId.value.trim()) return
   saving.value = true
-  error.value = ''
+  clearBanners()
   try {
     drive.value = await initializeDrive(drive.value.id, { project_id: projectId.value.trim() })
     infoMessage.value = t('drives.initializeSuccess')
     showInitializeDialog.value = false
     projectId.value = ''
-  } catch {
-    error.value = t('common.errors.requestConflict')
+  } catch (err) {
+    const status = err?.response?.status
+    const detail = normalizeErrorMessage(err?.response?.data, null)
+    if (!status) {
+      error.value = t('common.errors.networkError')
+    } else if (status === 403) {
+      error.value = detail || t('common.errors.insufficientPermissions')
+    } else if (status === 404) {
+      error.value = detail || t('common.errors.notFound')
+    } else if (status === 409) {
+      error.value = detail || t('common.errors.requestConflict')
+    } else if (status === 422) {
+      error.value = detail || t('common.errors.validationFailed')
+    } else if (status >= 500) {
+      error.value = t('common.errors.serverError', { status })
+    } else {
+      error.value = t('common.errors.serverErrorGeneric')
+    }
+  } finally {
+    saving.value = false
+  }
+}
+
+function openInitializeDialog() {
+  projectId.value = drive.value?.current_project_id ?? ''
+  showInitializeDialog.value = true
+}
+
+async function runEnable() {
+  if (!drive.value) return
+  if (drive.value.port_id == null) {
+    clearBanners()
+    error.value = t('drives.enableNoPort')
+    return
+  }
+  saving.value = true
+  clearBanners()
+  try {
+    await enablePort(drive.value.port_id)
+    await refreshDrives()
+    await loadDrive()
+    if (!drive.value) return
+    if (drive.value.current_state === 'AVAILABLE') {
+      infoMessage.value = t('drives.enableSuccess')
+    } else {
+      warnMessage.value = t('drives.enablePending', {
+        state: driveStateLabel(drive.value.current_state),
+      })
+    }
+  } catch (err) {
+    const status = err?.response?.status
+    const detail = normalizeErrorMessage(err?.response?.data, null)
+    if (!status) {
+      error.value = t('common.errors.networkError')
+    } else if (status === 403) {
+      error.value = t('common.errors.insufficientPermissions')
+    } else if (status === 400) {
+      error.value = detail || t('common.errors.invalidRequest')
+    } else if (status === 404) {
+      error.value = detail || t('drives.enablePortNotFound')
+    } else if (status === 409) {
+      error.value = t('common.errors.requestConflict')
+    } else if (status === 422) {
+      error.value = detail || t('common.errors.validationFailed')
+    } else if (status >= 500) {
+      error.value = t('common.errors.serverError', { status })
+    } else {
+      error.value = t('common.errors.serverErrorGeneric')
+    }
   } finally {
     saving.value = false
   }
@@ -96,16 +184,28 @@ async function runInitialize() {
 async function runPrepareEject() {
   if (!drive.value) return
   saving.value = true
-  error.value = ''
+  clearBanners()
   try {
     drive.value = await prepareEjectDrive(drive.value.id)
     infoMessage.value = t('drives.ejectSuccess')
     showEjectDialog.value = false
+    showCocPrompt.value = true
   } catch {
     error.value = t('common.errors.requestConflict')
   } finally {
     saving.value = false
   }
+}
+
+function openChainOfCustody() {
+  if (!drive.value) return
+  const query = {
+    coc: '1',
+    drive_id: String(drive.value.id),
+  }
+  if (drive.value.device_identifier) query.drive_sn = drive.value.device_identifier
+  if (drive.value.current_project_id) query.project_id = drive.value.current_project_id
+  router.push({ name: 'audit', query })
 }
 
 onMounted(loadDrive)
@@ -124,6 +224,14 @@ onMounted(loadDrive)
     <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
     <p v-if="error" class="error-banner">{{ error }}</p>
     <p v-if="infoMessage" class="ok-banner">{{ infoMessage }}</p>
+    <p v-if="warnMessage" class="warn-banner">{{ warnMessage }}</p>
+    <div v-if="showCocPrompt" class="coc-banner">
+      <p>{{ t('drives.cocPrompt') }}</p>
+      <div class="actions">
+        <button class="btn btn-primary" @click="openChainOfCustody">{{ t('drives.openCocReport') }}</button>
+        <button class="btn" @click="showCocPrompt = false">{{ t('common.actions.close') }}</button>
+      </div>
+    </div>
 
     <article v-if="drive" class="detail-card">
       <div class="detail-grid">
@@ -137,9 +245,10 @@ onMounted(loadDrive)
       </div>
 
       <div class="action-row">
-        <button class="btn" :disabled="!canManage" @click="showFormatDialog = true">{{ t('drives.format') }}</button>
-        <button class="btn" :disabled="!canManage" @click="showInitializeDialog = true">{{ t('drives.initialize') }}</button>
-        <button class="btn btn-danger" :disabled="!canManage" @click="showEjectDialog = true">{{ t('drives.prepareEject') }}</button>
+        <button v-if="canEnable" class="btn btn-primary" :disabled="saving" @click="runEnable">{{ t('drives.enable') }}</button>
+        <button class="btn" :disabled="!canFormat || saving" @click="showFormatDialog = true">{{ t('drives.format') }}</button>
+        <button class="btn" :disabled="!canInitialize || saving" @click="openInitializeDialog">{{ t('drives.initialize') }}</button>
+        <button class="btn btn-danger" :disabled="!canEject || saving" @click="showEjectDialog = true">{{ t('drives.prepareEject') }}</button>
       </div>
 
       <p v-if="!canManage" class="muted">{{ t('auth.insufficientPermissions') }}</p>
@@ -193,9 +302,12 @@ onMounted(loadDrive)
       <div v-if="showInitializeDialog" class="dialog-overlay" @click.self="showInitializeDialog = false">
         <div class="dialog-panel" role="dialog" aria-modal="true">
           <h3>{{ t('drives.initializeTitle') }}</h3>
-          <p class="muted">{{ t('drives.projectWarning') }}</p>
+          <p class="muted">
+            {{ t('drives.projectWarning') }}
+            <template v-if="drive.current_project_id"> {{ t('drives.initializeProjectHint', { project: drive.current_project_id }) }}</template>
+          </p>
           <label class="field-label" for="project-id">{{ t('dashboard.project') }}</label>
-          <input id="project-id" v-model="projectId" type="text" />
+          <input id="project-id" v-model="projectId" type="text" :readonly="!!drive.current_project_id" />
           <div class="dialog-actions">
             <button class="btn" :disabled="saving" @click="showInitializeDialog = false">{{ t('common.actions.cancel') }}</button>
             <button class="btn btn-primary" :disabled="saving || !projectId.trim()" @click="runInitialize">{{ t('drives.initialize') }}</button>
@@ -253,7 +365,9 @@ onMounted(loadDrive)
 }
 
 .error-banner,
-.ok-banner {
+.ok-banner,
+.warn-banner,
+.coc-banner {
   border-radius: var(--border-radius);
   padding: var(--space-sm);
 }
@@ -268,6 +382,22 @@ onMounted(loadDrive)
   color: var(--color-ok-banner-text, #14532d);
   background: color-mix(in srgb, var(--color-success) 14%, var(--color-bg-secondary));
   border: 1px solid color-mix(in srgb, var(--color-success) 45%, var(--color-border));
+}
+
+.warn-banner {
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-warning, #f59e0b) 14%, var(--color-bg-secondary));
+  border: 1px solid color-mix(in srgb, var(--color-warning, #f59e0b) 45%, var(--color-border));
+}
+
+.coc-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-warning, #f59e0b) 14%, var(--color-bg-secondary));
+  border: 1px solid color-mix(in srgb, var(--color-warning, #f59e0b) 45%, var(--color-border));
 }
 
 .dialog-overlay {
