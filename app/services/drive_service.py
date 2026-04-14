@@ -150,6 +150,8 @@ def initialize_drive(
             audit_repo.add(
                 action="INIT_REJECTED_FILESYSTEM",
                 user=actor,
+                project_id=project_id,
+                drive_id=drive_id,
                 details={
                     "actor": actor,
                     "drive_id": drive_id,
@@ -182,6 +184,8 @@ def initialize_drive(
         audit_repo.add(
             action="DRIVE_INITIALIZED",
             user=actor,
+            project_id=project_id,
+            drive_id=drive_id,
             details={"drive_id": drive_id, "project_id": project_id},
             client_ip=client_ip,
         )
@@ -258,6 +262,8 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
             audit_repo.add(
                 action="DRIVE_EJECT_PREPARED",
                 user=actor,
+                project_id=drive.current_project_id,
+                drive_id=drive_id,
                 details={
                     "drive_id": drive_id,
                     "filesystem_path": initial_device_path,
@@ -273,6 +279,8 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
             audit_repo.add(
                 action="DRIVE_EJECT_FAILED",
                 user=actor,
+                project_id=drive.current_project_id,
+                drive_id=drive_id,
                 details={
                     "drive_id": drive_id,
                     "filesystem_path": initial_device_path,
@@ -341,6 +349,8 @@ def format_drive(
             audit_repo.add(
                 action="DRIVE_FORMAT_FAILED",
                 user=actor,
+                project_id=drive.current_project_id,
+                drive_id=drive_id,
                 details={
                     "drive_id": drive_id,
                     "filesystem_path": drive.filesystem_path,
@@ -360,6 +370,7 @@ def format_drive(
     drive.filesystem_type = filesystem_type
     # Formatting wipes all previous data, so the project binding is cleared.
     # The drive is now clean and can be initialized for any project.
+    prior_project_id = drive.current_project_id
     drive.current_project_id = None
     try:
         drive_repo.save(drive)
@@ -369,6 +380,8 @@ def format_drive(
             audit_repo.add(
                 action="DRIVE_FORMAT_DB_UPDATE_FAILED",
                 user=actor,
+                project_id=prior_project_id,
+                drive_id=drive_id,
                 details={
                     "drive_id": drive_id,
                     "filesystem_path": drive.filesystem_path,
@@ -388,6 +401,8 @@ def format_drive(
         audit_repo.add(
             action="DRIVE_FORMATTED",
             user=actor,
+            project_id=prior_project_id,
+            drive_id=drive_id,
             details={
                 "drive_id": drive_id,
                 "filesystem_path": drive.filesystem_path,
