@@ -9,8 +9,8 @@
 # To override the PAM service used by ECUBE, set PAM_SERVICE_NAME in /opt/ecube/.env.
 
 auth    sufficient  pam_unix.so nullok
-auth    [success=done ignore=ignore default=die] pam_sss.so use_first_pass
+auth    [success=done ignore=ignore user_unknown=ignore default=die] pam_sss.so use_first_pass
 auth    required    pam_deny.so
 account sufficient  pam_unix.so
-account [success=done ignore=ignore default=die] pam_sss.so
+account [success=done ignore=ignore user_unknown=ignore default=die] pam_sss.so
 account required    pam_deny.so

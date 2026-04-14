@@ -149,6 +149,7 @@ onMounted(loadDrives)
         <option value="EMPTY">{{ t('drives.states.empty') }}</option>
         <option value="AVAILABLE">{{ t('drives.states.available') }}</option>
         <option value="IN_USE">{{ t('drives.states.inUse') }}</option>
+        <option value="ARCHIVED">{{ t('drives.states.archived') }}</option>
       </select>
       <select v-model="sortKey">
         <option value="id">{{ t('common.labels.id') }}</option>

@@ -932,8 +932,10 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | # | Test | Expected |
 |---|------|----------|
 | 1 | Initialize an AVAILABLE drive with `PROJ-A` | 200, state → `IN_USE` |
-| 2 | Re-initialize same drive with `PROJ-B` | 403, `FORBIDDEN` — isolation violation |
+| 2 | Re-initialize same drive with `PROJ-B` (drive still `IN_USE`) | 403, `FORBIDDEN` — isolation violation |
 | 3 | Check audit log for `PROJECT_ISOLATION_VIOLATION` | Record present with `requested_project_id: PROJ-B` |
+| 4 | Prepare-eject the drive from step 1 (state → `AVAILABLE`), then initialize with `PROJ-B` | 409, `CONFLICT` — drive is bound to `PROJ-A`; format required before reassigning to a different project |
+| 5 | Check audit log for row 4 | `INIT_REJECTED_PROJECT_MISMATCH` record present with `requested_project_id: PROJ-B` |
 
 ### 12.4 Drive State Machine
 
@@ -943,10 +945,11 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 2 | Initialize a drive with `filesystem_type=NULL` | 409, `CONFLICT` — must have recognized filesystem |
 | 3 | Initialize a drive with `filesystem_type=unformatted` | 409, `CONFLICT` — must have recognized filesystem |
 | 4 | Initialize a drive with `filesystem_type=unknown` | 409, `CONFLICT` — must have recognized filesystem |
-| 5 | Prepare-eject an `IN_USE` drive | 200, state → `AVAILABLE` |
-| 6 | Prepare-eject an `AVAILABLE` drive | 409, `CONFLICT` |
-| 7 | Format-then-initialize workflow: discover unformatted → format ext4 → initialize | Each step succeeds; final state `IN_USE` |
-| 8 | Attempt to format an `IN_USE` drive | 409, `CONFLICT` — must be `AVAILABLE` |
+| 5 | Initialize an `EMPTY` drive (not present / disabled port) | 409, `CONFLICT`; audit `INIT_REJECTED_NOT_AVAILABLE` recorded |
+| 6 | Prepare-eject an `IN_USE` drive | 200, state → `AVAILABLE` |
+| 7 | Prepare-eject an `AVAILABLE` drive | 409, `CONFLICT` |
+| 8 | Format-then-initialize workflow: discover unformatted → format ext4 → initialize | Each step succeeds; final state `IN_USE` |
+| 9 | Attempt to format an `IN_USE` drive | 409, `CONFLICT` — must be `AVAILABLE` |
 
 ### 12.4.1 Filesystem Detection
 
@@ -1297,9 +1300,425 @@ Setup endpoints are unauthenticated and can only succeed once.
 | 8 | Login as initialized admin | `POST /auth/token` with the admin credentials from step 2 | 200, JWT contains `admin` role |
 | 9 | SYSTEM_INITIALIZED audit log | `GET /audit?action=SYSTEM_INITIALIZED` | Audit entry with actor |
 
-### 12.12 Database Provisioning API
+### 12.12 Chain-of-Custody Handoff
 
-Database provisioning endpoints use a dual-auth model with fail-closed semantics: unauthenticated during initial setup, admin-only after, and 503 when the database server is unreachable without a valid admin JWT.  The following conditions are treated as "not provisioned" (allowing initial provisioning to proceed without `force`):
+Chain-of-Custody (CoC) handoff ensures legal custody transfer of evidence is properly recorded and drives are archived after transfer to prevent accidental reuse or operational confusion.
+
+#### 12.12.1 CoC Report Retrieval
+
+| # | Test | How | Expected |
+|---|------|-----|----------|
+| 1 | Retrieve CoC — by drive_id | `GET /audit/chain-of-custody?drive_id=42` with auditor/manager/admin token | 200, `selector_mode: "DRIVE_ID"`, report contains events for that drive |
+| 2 | Retrieve CoC — by drive_sn | `GET /audit/chain-of-custody?drive_sn=ABC123DEF` with manager token | 200, `selector_mode: "DRIVE_SN"`, report contains events for that drive |
+| 3 | Retrieve CoC — by project_id | `GET /audit/chain-of-custody?project_id=CASE-2026-007` with auditor token | 200, `selector_mode: "PROJECT"`, reports array contains all non-archived drives for project |
+| 4 | CoC — processor denied | `GET /audit/chain-of-custody?drive_id=42` with processor token | 403, `FORBIDDEN` |
+| 5 | CoC — unauthenticated denied | `GET /audit/chain-of-custody?drive_id=42` without token | 401, `UNAUTHORIZED` |
+| 6 | CoC — no selector | `GET /audit/chain-of-custody` with no query parameters | 422, at least one selector required |
+| 7 | CoC — drive_id takes precedence | `GET /audit/chain-of-custody?drive_id=42&drive_sn=ABC&project_id=CASE-X` | 200, `selector_mode: "DRIVE_ID"` (ignores other selectors) |
+| 8 | CoC — project_id mismatch | `GET /audit/chain-of-custody?drive_id=42&project_id=WRONG-PROJECT` where drive is bound to different project | 409, `CONFLICT`, mismatch detail |
+| 9 | CoC report fields | Inspect any `GET /audit/chain-of-custody` response | `reports[].drive_id`, `reports[].drive_sn`, `reports[].project_id`, `reports[].custody_complete`, `reports[].chain_of_custody_events` present |
+| 10 | CoC events include lifecycle | Inspect `chain_of_custody_events` in a report with completed job | Events include `DRIVE_INITIALIZED`, `JOB_CREATED`, `JOB_STARTED`, `JOB_COMPLETED`, `DRIVE_EJECT_PREPARED`, `COC_HANDOFF_CONFIRMED` (if handed off) |
+| 11 | CoC manifest summary | Inspect `manifest_summary` in CoC report | Array of objects with `job_id`, `total_files`, `total_bytes`, `manifest_count` |
+| 12 | CoC — delivery_time absence (no handoff) | Complete a job and eject without handoff, query `GET /audit/chain-of-custody?drive_id=...` | `chain_of_custody_events` do not contain `COC_HANDOFF_CONFIRMED`; `custody_complete` is `false` |
+
+#### 12.12.2 CoC Handoff Confirmation
+
+| # | Test | How | Expected |
+|---|------|-----|----------|
+| 1 | Confirm handoff — valid | `POST /audit/chain-of-custody/handoff` with drive_id, possessor, delivery_time (UTC ISO), received_by, receipt_ref | 200, response includes all submitted fields + server-generated `event_id` |
+| 2 | Confirm handoff — possessor required | `POST /audit/chain-of-custody/handoff` with missing `possessor` | 422, validation error |
+| 3 | Confirm handoff — delivery_time required | `POST /audit/chain-of-custody/handoff` with missing `delivery_time` | 422, validation error |
+| 4 | Confirm handoff — UTC only | `POST /audit/chain-of-custody/handoff` with `delivery_time: "2026-04-12T14:00:00+05:00"` (non-UTC) | 422, must be UTC timezone |
+| 5 | Confirm handoff — drive_id required | `POST /audit/chain-of-custody/handoff` with missing `drive_id` | 422, validation error |
+| 6 | Confirm handoff — idempotent | Submit same handoff twice with identical (drive_id, possessor, delivery_time, receipt_ref, project_id) | Both return 200 with same `event_id`; only one `COC_HANDOFF_CONFIRMED` audit entry. Idempotency is scoped to the resolved `project_id` — a prior-project handoff on the same drive does not match. |
+| 7 | Confirm handoff — project_id mismatch | `POST /audit/chain-of-custody/handoff` with `project_id` that differs from drive binding | 409, `CONFLICT` |
+| 8 | Confirm handoff — drive not found | `POST /audit/chain-of-custody/handoff` with non-existent drive_id | 404, `NOT_FOUND` |
+| 9 | Confirm handoff — processor denied | `POST /audit/chain-of-custody/handoff` with processor token | 403, `FORBIDDEN` |
+| 10 | Confirm handoff — auditor denied | `POST /audit/chain-of-custody/handoff` with auditor token | 403, `FORBIDDEN` |
+| 11 | Audit trail — COC_HANDOFF_CONFIRMED | Query `GET /audit?action=COC_HANDOFF_CONFIRMED` after handoff | Entry includes drive_id, project_id, possessor, delivery_time (ISO), received_by, receipt_ref, actor |
+
+#### 12.12.3 Drive Archival After Handoff
+
+| # | Test | How | Expected |
+|---|------|-----|----------|
+| 1 | Drive state post-handoff | Initialize drive (state → IN_USE), run prepare-eject (state → AVAILABLE), confirm handoff | Drive transitions to `current_state: ARCHIVED` |
+| 2 | Archived drive excluded from CoC by drive_id | Archive a drive, then `GET /audit/chain-of-custody?drive_id=<archived_id>` | 410, `Gone`, message includes "archived" |
+| 3 | Archived drive excluded from CoC by project_id | Archive one of two drives in a project, then `GET /audit/chain-of-custody?project_id=PROJ` | 200, report contains only the non-archived drive |
+| 4 | Archived drive excluded from CoC by drive_sn | Archive a drive, then `GET /audit/chain-of-custody?drive_sn=<sn>` | 410, `Gone` |
+| 5 | Archived drives cannot initialize (prevents reuse) | Archive a drive, attempt `POST /drives/<archived_id>/initialize` | 409, `CONFLICT`, message includes "archived" |
+| 6 | Archived drives cannot format | Archive a drive, attempt `POST /drives/<archived_id>/format` | 409, `CONFLICT` |
+| 7 | Archived drives cannot prepare-eject | Archive a drive, attempt `POST /drives/<archived_id>/prepare-eject` | 409, `CONFLICT` |
+| 8 | Archived audit trail preserved | Review full audit log (without CoC filter) after archival | All audit entries for the archived drive remain visible (CoC filtering is read-side only) |
+| 9 | Archive idempotency | Call handoff endpoint twice with same contract (drive_id, possessor, delivery_time, receipt_ref) | Both succeed; drive transitions to ARCHIVED once (no duplicate operations) |
+
+#### 12.12.4 UI: CoC Wizard Workflow
+
+| # | Test | How | Expected |
+|---|------|-----|----------|
+| 1 | CoC page accessible after job completion | Complete a job, prepare-eject drive, navigate to Audit view | CoC tab/section visible and accessible |
+| 2 | Drive selector is dropdown | In CoC filter panel, click drive selector | Dropdown shows list of existing (non-archived) drives sorted by ID |
+| 3 | Project selector is dropdown | In CoC filter panel, click project selector | Dropdown shows list of unique project IDs from current drive bindings |
+| 4 | Load CoC by drive | Select a drive from dropdown and click "Load CoC" | Report displays lifecycle events and manifest summary for that drive |
+| 5 | CoC prefill handoff form | Click "Prefill Handoff" on a CoC report | Handoff form populates with drive_id and project_id from the report |
+| 6 | Handoff confirmation warning modal appears | After filling handoff form and clicking "Confirm Handoff" | Modal appears with warning text: "This action will permanently archive the drive..." |
+| 7 | Handoff warning shows confirmation buttons | Inspect warning modal | Two buttons: "Yes, archive drive" (danger styling) and "Cancel" |
+| 8 | Cancel handoff from modal | Click "Cancel" in warning modal | Modal closes, form state preserved, no handoff submitted |
+| 9 | Confirm handoff from modal | Click "Yes, archive drive" in warning modal | Modal closes, handoff submitted; upon success, status message "Custody handoff recorded." appears and report reloads |
+| 10 | Archived drive removed from report lists | After handoff, reload page or navigate away/back | Archived drive no longer appears in CoC filter dropdowns or project reports |
+| 11 | Handoff form validation | Submit handoff form with missing possessor or delivery_time | Inline validation error shown (form not submitted) |
+| 12 | Manual archive result | After successful handoff, query drive state via API | Drive state is `ARCHIVED` |
+
+#### 12.12.5 Manual Test Data Setup (SQL)
+
+This section provides SQL scripts to populate the database with realistic chain-of-custody test data, enabling manual QA testing of the CoC workflows without requiring a full copy sequence.
+
+**Prerequisites:**
+- Initialized ECUBE system with at least one admin user (`ecube_admin` in examples below)
+- PostgreSQL database connection via `psql` or equivalent admin tool
+- Audit log entries will be created by the SQL inserts directly (not via API)
+
+**Scenario Summary:**
+The following setup creates two projects with three USB drives each:
+- Project `CASE-2026-001`: Two completed jobs (one with archived drive, one with active drive)
+- Project `CASE-2026-002`: One completed job with a non-archived drive
+- All drives in `IN_USE` state (already initialized), with job lifecycle and manifest records
+- Full audit trail showing `DRIVE_INITIALIZED`, `JOB_CREATED`, `JOB_STARTED`, `JOB_COMPLETED`, and (for one drive) `COC_HANDOFF_CONFIRMED`
+
+**Setup Script (PostgreSQL):**
+
+```sql
+-- ============================================================================
+-- ECUBE Chain-of-Custody Test Data Setup
+-- ============================================================================
+-- This script populates test data for manual CoC testing.
+-- Adjust project IDs, drive serial numbers, and timestamps as needed.
+-- ============================================================================
+
+BEGIN; -- Start transaction; ROLLBACK if errors encountered
+
+-- ============================================================================
+-- 1. Hub and Port Setup
+-- ============================================================================
+
+INSERT INTO usb_hubs (name, system_identifier, location_hint, vendor_id, product_id)
+VALUES
+  ('Test Hub 1', 'test-hub-001', 'Back rack left', '0x1234', '0x5678'),
+  ('Test Hub 2', 'test-hub-002', 'Back rack right', '0xabcd', '0xef00')
+ON CONFLICT (system_identifier) DO NOTHING;
+
+-- Retrieve hub IDs for port insertion
+WITH hub_mapping AS (
+  SELECT id, system_identifier FROM usb_hubs WHERE system_identifier IN ('test-hub-001', 'test-hub-002')
+)
+INSERT INTO usb_ports (hub_id, port_number, system_path, friendly_label, enabled, vendor_id, product_id, speed)
+SELECT h.id, port_num, sys_path, label, true, vendor, product, '480'
+FROM (VALUES
+  ('test-hub-001', 1, '1-1', 'Port 1A', '0xd000', '0x0001'),
+  ('test-hub-001', 2, '1-2', 'Port 1B', '0xd000', '0x0002'),
+  ('test-hub-001', 3, '1-3', 'Port 1C', '0xd000', '0x0003'),
+  ('test-hub-002', 1, '4-1', 'Port 2A', '0xd001', '0x0004'),
+  ('test-hub-002', 2, '4-2', 'Port 2B', '0xd001', '0x0005'),
+  ('test-hub-002', 3, '4-3', 'Port 2C', '0xd001', '0x0006')
+) AS v (hub_sys, port_num, sys_path, label, vendor, product)
+JOIN hub_mapping h ON h.system_identifier = v.hub_sys
+ON CONFLICT (system_path) DO NOTHING;
+
+-- ============================================================================
+-- 2. USB Drives Setup (3 per project, IN_USE state)
+-- ============================================================================
+
+WITH port_mapping AS (
+  SELECT id, hub_id FROM usb_ports WHERE system_path IN ('1-1', '1-2', '1-3', '4-1', '4-2', '4-3')
+)
+INSERT INTO usb_drives (port_id, device_identifier, filesystem_path, capacity_bytes, encryption_status, filesystem_type, current_state, current_project_id, last_seen_at)
+SELECT 
+  (SELECT id FROM usb_ports WHERE system_path = sys_p ORDER BY id LIMIT 1),
+  dev_id, fs_path, 16000000000, 'encrypted', 'exfat', 'IN_USE', proj_id, NOW()
+FROM (VALUES
+  ('1-1', 'coC-test-drive-001', '/dev/sdb', 'CASE-2026-001'),
+  ('1-2', 'coC-test-drive-002', '/dev/sdc', 'CASE-2026-001'),
+  ('1-3', 'coC-test-drive-003', '/dev/sdd', 'CASE-2026-001'),
+  ('4-1', 'coC-test-drive-004', '/dev/sde', 'CASE-2026-002'),
+  ('4-2', 'coC-test-drive-005', '/dev/sdf', 'CASE-2026-002'),
+  ('4-3', 'coC-test-drive-006', '/dev/sdg', 'CASE-2026-002')
+) AS v (sys_p, dev_id, fs_path, proj_id)
+ON CONFLICT (device_identifier) DO NOTHING;
+
+-- ============================================================================
+-- 3. Network Mount Setup (one test mount per project)
+-- ============================================================================
+
+INSERT INTO network_mounts (type, remote_path, local_mount_point, status, last_checked_at)
+VALUES
+  ('NFS', '192.168.1.10:/evidence/case-001', '/mnt/evidence-001', 'MOUNTED', NOW()),
+  ('NFS', '192.168.1.10:/evidence/case-002', '/mnt/evidence-002', 'MOUNTED', NOW())
+ON CONFLICT (local_mount_point) DO NOTHING;
+
+-- ============================================================================
+-- 4. Export Jobs Setup (2 per project, COMPLETED state)
+-- ============================================================================
+
+-- Note: retrieve drive IDs via SELECT * FROM usb_drives WHERE current_project_id = 'CASE-2026-001';
+-- Then use those IDs in subsequent inserts.
+
+INSERT INTO export_jobs (
+  project_id, evidence_number, source_path, target_mount_path, status,
+  total_bytes, copied_bytes, file_count, thread_count, max_file_retries,
+  retry_delay_seconds, started_at, completed_at, created_by, started_by, client_ip, created_at
+)
+VALUES
+  ('CASE-2026-001', 'EV-2026-001-A', '/mnt/evidence-001/data-batch-1', '/mnt/external-001/batch-1',
+   'COMPLETED', 5000000000, 5000000000, 2500, 4, 3, 1, NOW() - INTERVAL '2 days 5 hours', NOW() - INTERVAL '2 days 3 hours',
+   'ecube_admin', 'ecube_admin', '192.168.1.50', NOW() - INTERVAL '2 days 6 hours'),
+  
+  ('CASE-2026-001', 'EV-2026-001-B', '/mnt/evidence-001/data-batch-2', '/mnt/external-002/batch-2',
+   'COMPLETED', 3500000000, 3500000000, 1800, 4, 3, 1, NOW() - INTERVAL '1 day 8 hours', NOW() - INTERVAL '1 day 6 hours',
+   'ecube_admin', 'ecube_admin', '192.168.1.50', NOW() - INTERVAL '1 day 9 hours'),
+  
+  ('CASE-2026-002', 'EV-2026-002-A', '/mnt/evidence-002/data-batch-3', '/mnt/external-003/batch-3',
+   'COMPLETED', 4200000000, 4200000000, 2100, 4, 3, 1, NOW() - INTERVAL '12 hours', NOW() - INTERVAL '10 hours',
+   'ecube_admin', 'ecube_admin', '192.168.1.50', NOW() - INTERVAL '13 hours')
+ON CONFLICT DO NOTHING;
+
+-- ============================================================================
+-- 5. Export Files Setup (sample files per job)
+-- ============================================================================
+
+-- Get job IDs: SELECT id, project_id, evidence_number FROM export_jobs;
+-- Then use in the following (example with assumed IDs 1, 2, 3):
+
+INSERT INTO export_files (job_id, relative_path, size_bytes, checksum, status, error_message, retry_attempts)
+SELECT j.id, f_path, f_size, f_hash, 'COMPLETED', NULL, 0
+FROM export_jobs j
+JOIN (VALUES
+  (1, 'file-001.pdf', 105000000, 'sha256:aabbccdd11223344556677889900aabbccddee00112233445566778899'),
+  (1, 'file-002.xlsx', 52000000, 'sha256:1122334455667788990011223344556677889900aabbccddee00112233'),
+  (1, 'file-003.docx', 8500000, 'sha256:99887766554433221100aabbccddee00112233445566778899aabbccdd'),
+  (2, 'batch2-file-001.zip', 75000000, 'sha256:11223344556677889900aabbccddee00112233445566778899aabbcc'),
+  (2, 'batch2-file-002.jpg', 45000000, 'sha256:aabbccddee00112233445566778899aabbccddee0011223344556677'),
+  (3, 'case2-001.tar.gz', 200000000, 'sha256:5566778899aabbccddee00112233445566778899aabbccddee0011'),
+  (3, 'case2-002.iso', 150000000, 'sha256:ddee00112233445566778899aabbccddee00112233445566778899')
+) AS v (job_id, f_path, f_size, f_hash) ON v.job_id = j.id
+ON CONFLICT DO NOTHING;
+
+-- ============================================================================
+-- 6. Manifests Setup (one per job)
+-- ============================================================================
+
+INSERT INTO manifests (job_id, manifest_path, format, created_at)
+SELECT id, CONCAT('/manifests/job-', id, '-manifest.json'), 'JSON', NOW()
+FROM export_jobs
+ON CONFLICT DO NOTHING;
+
+-- ============================================================================
+-- 7. Drive Assignments Setup (link drives to jobs)
+-- ============================================================================
+
+-- Assign the first drive from each project to its first job, second drive to second job
+INSERT INTO drive_assignments (drive_id, job_id, assigned_at, released_at)
+SELECT d.id, j.id, NOW() - INTERVAL '2 days', NOW() - INTERVAL '2 days'
+FROM export_jobs j
+JOIN usb_drives d ON j.project_id = d.current_project_id
+WHERE j.project_id = 'CASE-2026-001'
+LIMIT 2
+ON CONFLICT DO NOTHING;
+
+-- Assign third job's drive
+INSERT INTO drive_assignments (drive_id, job_id, assigned_at, released_at)
+SELECT d.id, j.id, NOW() - INTERVAL '12 hours', NOW() - INTERVAL '12 hours'
+FROM export_jobs j
+JOIN usb_drives d ON j.project_id = d.current_project_id
+WHERE j.project_id = 'CASE-2026-002'
+LIMIT 1
+ON CONFLICT DO NOTHING;
+
+-- ============================================================================
+-- 8. Audit Logs Setup (lifecycle events for CoC visibility)
+-- ============================================================================
+
+-- A single-row CTE resolves all drive/job IDs from their known unique
+-- identifiers so that audit_logs.drive_id, audit_logs.job_id, and every
+-- occurrence of those IDs inside the details JSONB are always consistent,
+-- regardless of what other rows already exist in the database.
+WITH ids AS (
+  SELECT
+    (SELECT id FROM usb_drives  WHERE device_identifier = 'coC-test-drive-001') AS d001,
+    (SELECT id FROM usb_drives  WHERE device_identifier = 'coC-test-drive-002') AS d002,
+    (SELECT id FROM usb_drives  WHERE device_identifier = 'coC-test-drive-004') AS d004,
+    (SELECT id FROM export_jobs WHERE evidence_number   = 'EV-2026-001-A')      AS j001a,
+    (SELECT id FROM export_jobs WHERE evidence_number   = 'EV-2026-001-B')      AS j001b,
+    (SELECT id FROM export_jobs WHERE evidence_number   = 'EV-2026-002-A')      AS j002a
+)
+INSERT INTO audit_logs (timestamp, user, action, project_id, drive_id, job_id, details, client_ip)
+SELECT evt_ts, 'ecube_admin', evt_action, proj_id, drive_id_col, job_id_col, evt_details, '192.168.1.50'
+FROM ids
+CROSS JOIN LATERAL (VALUES
+  -- CASE-2026-001, Job 1 lifecycle (drive-001 / EV-2026-001-A)
+  (NOW() - INTERVAL '2 days 6 hours', 'CASE-2026-001', 'DRIVE_INITIALIZED',
+   ids.d001, NULL::INT,
+   jsonb_build_object('drive_id', ids.d001, 'project_id', 'CASE-2026-001', 'state_before', 'AVAILABLE', 'state_after', 'IN_USE')),
+  (NOW() - INTERVAL '2 days 6 hours', 'CASE-2026-001', 'JOB_CREATED',
+   NULL::INT, ids.j001a,
+   jsonb_build_object('job_id', ids.j001a, 'evidence_number', 'EV-2026-001-A', 'source_path', '/mnt/evidence-001/data-batch-1')),
+  (NOW() - INTERVAL '2 days 5 hours', 'CASE-2026-001', 'JOB_STARTED',
+   NULL::INT, ids.j001a,
+   jsonb_build_object('job_id', ids.j001a, 'evidence_number', 'EV-2026-001-A', 'thread_count', 4)),
+  (NOW() - INTERVAL '2 days 3 hours', 'CASE-2026-001', 'JOB_COMPLETED',
+   NULL::INT, ids.j001a,
+   jsonb_build_object('job_id', ids.j001a, 'evidence_number', 'EV-2026-001-A', 'total_bytes', 5000000000, 'file_count', 2500, 'duration_seconds', 7200)),
+
+  -- CASE-2026-001, Job 2 lifecycle (drive-002 / EV-2026-001-B)
+  (NOW() - INTERVAL '1 day 9 hours', 'CASE-2026-001', 'DRIVE_INITIALIZED',
+   ids.d002, NULL::INT,
+   jsonb_build_object('drive_id', ids.d002, 'project_id', 'CASE-2026-001', 'state_before', 'AVAILABLE', 'state_after', 'IN_USE')),
+  (NOW() - INTERVAL '1 day 9 hours', 'CASE-2026-001', 'JOB_CREATED',
+   NULL::INT, ids.j001b,
+   jsonb_build_object('job_id', ids.j001b, 'evidence_number', 'EV-2026-001-B', 'source_path', '/mnt/evidence-001/data-batch-2')),
+  (NOW() - INTERVAL '1 day 8 hours', 'CASE-2026-001', 'JOB_STARTED',
+   NULL::INT, ids.j001b,
+   jsonb_build_object('job_id', ids.j001b, 'evidence_number', 'EV-2026-001-B', 'thread_count', 4)),
+  (NOW() - INTERVAL '1 day 6 hours', 'CASE-2026-001', 'JOB_COMPLETED',
+   NULL::INT, ids.j001b,
+   jsonb_build_object('job_id', ids.j001b, 'evidence_number', 'EV-2026-001-B', 'total_bytes', 3500000000, 'file_count', 1800, 'duration_seconds', 7200)),
+
+  -- CASE-2026-001, CoC handoff (drive-001 archived)
+  (NOW() - INTERVAL '1 day', 'CASE-2026-001', 'COC_HANDOFF_CONFIRMED',
+   ids.d001, NULL::INT,
+   jsonb_build_object('drive_id', ids.d001, 'project_id', 'CASE-2026-001', 'possessor', 'Officer Smith',
+                      'delivery_time', '2026-04-11T14:30:00Z', 'received_by', 'Evidence Custody', 'receipt_ref', 'RCP-2026-001')),
+
+  -- CASE-2026-002, Job 3 lifecycle (drive-004 / EV-2026-002-A)
+  (NOW() - INTERVAL '13 hours', 'CASE-2026-002', 'DRIVE_INITIALIZED',
+   ids.d004, NULL::INT,
+   jsonb_build_object('drive_id', ids.d004, 'project_id', 'CASE-2026-002', 'state_before', 'AVAILABLE', 'state_after', 'IN_USE')),
+  (NOW() - INTERVAL '13 hours', 'CASE-2026-002', 'JOB_CREATED',
+   NULL::INT, ids.j002a,
+   jsonb_build_object('job_id', ids.j002a, 'evidence_number', 'EV-2026-002-A', 'source_path', '/mnt/evidence-002/data-batch-3')),
+  (NOW() - INTERVAL '12 hours', 'CASE-2026-002', 'JOB_STARTED',
+   NULL::INT, ids.j002a,
+   jsonb_build_object('job_id', ids.j002a, 'evidence_number', 'EV-2026-002-A', 'thread_count', 4)),
+  (NOW() - INTERVAL '10 hours', 'CASE-2026-002', 'JOB_COMPLETED',
+   NULL::INT, ids.j002a,
+   jsonb_build_object('job_id', ids.j002a, 'evidence_number', 'EV-2026-002-A', 'total_bytes', 4200000000, 'file_count', 2100, 'duration_seconds', 7200))
+) AS v (evt_ts, proj_id, evt_action, drive_id_col, job_id_col, evt_details)
+ON CONFLICT DO NOTHING;
+
+-- ============================================================================
+-- 9. Manually Archive Drive 1 (CASE-2026-001) via state transition
+-- ============================================================================
+-- This simulates the automatic state transition that occurs on CoC handoff.
+-- Drive 1 should now be ARCHIVED.
+
+UPDATE usb_drives
+SET current_state = 'ARCHIVED'
+WHERE device_identifier = 'coC-test-drive-001' AND current_state = 'IN_USE';
+
+-- ============================================================================
+-- 10. Verify Setup
+-- ============================================================================
+
+SELECT 'Hubs created:' AS check_point;
+SELECT COUNT(*) AS hub_count FROM usb_hubs WHERE system_identifier LIKE 'test-hub-%';
+
+SELECT 'Ports created:' AS check_point;
+SELECT COUNT(*) AS port_count FROM usb_ports WHERE system_path IN ('1-1', '1-2', '1-3', '4-1', '4-2', '4-3');
+
+SELECT 'Drives (IN_USE and ARCHIVED):' AS check_point;
+SELECT current_project_id, current_state, COUNT(*) AS count FROM usb_drives WHERE current_project_id IN ('CASE-2026-001', 'CASE-2026-002') GROUP BY current_project_id, current_state;
+
+SELECT 'Jobs COMPLETED:' AS check_point;
+SELECT project_id, COUNT(*) AS job_count FROM export_jobs WHERE status = 'COMPLETED' GROUP BY project_id;
+
+SELECT 'Audit entries by action:' AS check_point;
+SELECT action, COUNT(*) AS count FROM audit_logs WHERE project_id IN ('CASE-2026-001', 'CASE-2026-002') GROUP BY action;
+
+COMMIT;
+```
+
+**Cleanup Script (PostgreSQL):**
+
+```sql
+-- ============================================================================
+-- ECUBE Test Data Cleanup
+-- ============================================================================
+-- Remove all test data in reverse dependency order (respecting FKs).
+-- This script is idempotent and safe to run multiple times.
+-- ============================================================================
+
+BEGIN; -- Wrap in transaction for safety
+
+-- Delete audit logs first (no dependents, but clears history)
+DELETE FROM audit_logs WHERE project_id IN ('CASE-2026-001', 'CASE-2026-002');
+
+-- Delete drive assignments (FK to drives and jobs)
+DELETE FROM drive_assignments WHERE job_id IN (
+  SELECT id FROM export_jobs WHERE project_id IN ('CASE-2026-001', 'CASE-2026-002')
+);
+
+-- Delete manifests (FK to jobs)
+DELETE FROM manifests WHERE job_id IN (
+  SELECT id FROM export_jobs WHERE project_id IN ('CASE-2026-001', 'CASE-2026-002')
+);
+
+-- Delete export files (FK to jobs)
+DELETE FROM export_files WHERE job_id IN (
+  SELECT id FROM export_jobs WHERE project_id IN ('CASE-2026-001', 'CASE-2026-002')
+);
+
+-- Delete export jobs (FK to nothing, but cascades above)
+DELETE FROM export_jobs WHERE project_id IN ('CASE-2026-001', 'CASE-2026-002');
+
+-- Delete network mounts
+DELETE FROM network_mounts WHERE local_mount_point LIKE '/mnt/evidence-%';
+
+-- Delete USB drives (FK to ports)
+DELETE FROM usb_drives WHERE current_project_id IN ('CASE-2026-001', 'CASE-2026-002');
+
+-- Delete USB ports (FK to hubs)
+DELETE FROM usb_ports WHERE system_path IN ('1-1', '1-2', '1-3', '4-1', '4-2', '4-3');
+
+-- Delete USB hubs
+DELETE FROM usb_hubs WHERE system_identifier LIKE 'test-hub-%';
+
+-- Verify cleanup
+SELECT 'Cleanup verification:' AS status;
+SELECT 'Remaining CASE-2026 drives:', COUNT(*) FROM usb_drives WHERE current_project_id LIKE 'CASE-2026%';
+SELECT 'Remaining test hubs:', COUNT(*) FROM usb_hubs WHERE system_identifier LIKE 'test-hub%';
+SELECT 'Remaining test jobs:', COUNT(*) FROM export_jobs WHERE project_id LIKE 'CASE-2026%';
+
+COMMIT;
+```
+
+**Manual Testing Workflow:**
+
+1. **Run setup script:**
+   ```bash
+   psql -h localhost -U ecube_admin -d ecube < setup-coc-testdata.sql
+   ```
+
+2. **Verify population via API:**
+  - `GET /audit/chain-of-custody?project_id=CASE-2026-001` — should return 200 with only non-archived drives (for this dataset: 1 IN_USE drive)
+   - `GET /audit/chain-of-custody?drive_id=<archived_drive_id>` — should return 410 Gone
+   - Inspect lifecycle events in the response
+
+3. **Test CoC UI:**
+   - Navigate to Audit view
+   - Filter by project `CASE-2026-001` — verify archived drive is hidden
+   - Filter by project `CASE-2026-002` — verify active drive is shown
+   - Attempt handoff on active drive; verify modal appears and archival succeeds
+
+4. **Run cleanup script before next test run:**
+   ```bash
+   psql -h localhost -U ecube_admin -d ecube < cleanup-coc-testdata.sql
+   ```
+
+**Notes:**
+- Adjust timestamps (`NOW() - INTERVAL`) to reflect your test timing preferences.
+- Replace `192.168.1.50` with your actual QA machine IP if needed.
+- The `ON CONFLICT DO NOTHING` clauses make the script idempotent; safe to re-run.
+- For SQLite-based test suites, use equivalent SQL syntax or rely on the Python test fixtures in `tests/conftest.py`.
+
+
 
 - The target database does not exist yet (PostgreSQL SQLSTATE `3D000`).
 - The application role does not exist yet (PostgreSQL SQLSTATE `28000`).
@@ -1345,7 +1764,7 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 | 34 | Provision — .env write failure | `POST /setup/database/provision` after making `.env` read-only (or disk full) | 500, "failed to persist" message; engine not swapped |
 | 35 | Provision — engine reinit failure | `POST /setup/database/provision` while another reinit is in progress (lock contention) | 500, "engine could not be switched" message; `.env` already written |
 
-### 12.13 Startup State Reconciliation
+### 12.14 Startup State Reconciliation
 
 | # | Test | How | Expected |
 |---|------|-----|----------|
@@ -1362,7 +1781,7 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 | 11 | Stale lock reclaim | Insert a stale lock row (`locked_at` > 5 minutes ago) via SQL, restart the service | Service reclaims the stale lock, reconciliation runs normally |
 | 12 | Lock released after failure | Disconnect NFS, restart the service, reconnect NFS, restart again | Second restart acquires lock and runs reconciliation; lock table is empty after startup completes |
 
-### 12.14 System Health
+### 12.15 System Health
 
 `GET /introspection/system-health` requires any authenticated role.
 
@@ -1379,7 +1798,7 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 | 9 | Unauthenticated rejected | `GET /introspection/system-health` without token | 401 |
 | 10 | Processor role allowed | `GET /introspection/system-health` with processor token | 200 |
 
-### 12.14.1 Liveness, Readiness, and Version
+### 12.15.1 Liveness, Readiness, and Version
 
 | # | Test | How | Expected |
 |---|------|-----|----------|
@@ -1390,7 +1809,7 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 | 5 | Version endpoint is public | `GET /introspection/version` without token | 200, returns version/application metadata |
 | 6 | Readiness remains separate from authenticated system health | Compare `GET /health/ready` and authenticated `GET /introspection/system-health` | Readiness stays public and fail-fast; system health returns richer operational metrics |
 
-### 12.15 Real-World Copy Performance & Hashing Addendum
+### 12.16 Real-World Copy Performance & Hashing Addendum
 
 This addendum defines a reproducible manual QA scenario that exercises ECUBE copy throughput and hashing with publicly available forensic/eDiscovery-style datasets.
 
