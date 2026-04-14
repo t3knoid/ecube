@@ -18,7 +18,7 @@ import logging
 import os
 import stat
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -32,14 +32,14 @@ from app.services.audit_service import log_and_audit
 logger = logging.getLogger(__name__)
 
 
-def _collect_active_mount_roots(db: Session) -> List[str]:
-    """Return a deduplicated list of all active mount roots from the database.
+def _lookup_mount_root(path: str, db: Session) -> Optional[str]:
+    """Return the DB-stored mount root that matches *path*, or ``None``.
 
-    Includes:
-    - USB drive mount paths (``usb_drives.mount_path`` where not null).
-    - Network mount local mount points (``network_mounts.local_mount_point``).
+    Matching is done by normalising both sides (strip trailing slash).  Returns
+    the **DB-stored** value so that subsequent filesystem operations are derived
+    from a trusted source rather than from the raw user-provided string.
     """
-    roots: List[str] = []
+    normalised = path.rstrip("/")
 
     usb_paths = (
         db.query(UsbDrive.mount_path)
@@ -47,32 +47,35 @@ def _collect_active_mount_roots(db: Session) -> List[str]:
         .all()
     )
     for (p,) in usb_paths:
-        if p:
-            roots.append(p)
+        if p and p.rstrip("/") == normalised:
+            return p.rstrip("/")
 
     net_paths = db.query(NetworkMount.local_mount_point).all()
     for (p,) in net_paths:
-        if p:
-            roots.append(p)
+        if p and p.rstrip("/") == normalised:
+            return p.rstrip("/")
 
-    return roots
+    return None
 
 
 def _resolve_and_validate(
-    mount_root: str,
+    db_mount_root: str,
     subdir: str,
 ) -> Tuple[str, str]:
     """Return ``(real_root, real_target)`` after safety checks.
+
+    Both values are derived from *db_mount_root* (a DB-stored trusted value)
+    combined with the user-supplied *subdir* after strict containment
+    verification.
 
     Raises:
         HTTPException(400): path-traversal detected.
         HTTPException(403): resolved path not under an allowed prefix.
     """
-    real_root = os.path.realpath(mount_root)
+    real_root = os.path.realpath(db_mount_root)
 
-    # Build target path without following symlinks
+    # Build target path; strip leading slashes so subdir is always relative
     if subdir:
-        # Strip leading slashes to ensure subdir is treated as relative
         relative = subdir.lstrip("/")
         target = os.path.join(real_root, relative)
     else:
@@ -80,8 +83,9 @@ def _resolve_and_validate(
 
     real_target = os.path.realpath(target)
 
-    # Containment check
-    if not real_target.startswith(real_root.rstrip("/") + "/") and real_target != real_root:
+    # Containment check — real_target must be real_root or a descendant
+    safe_root_prefix = real_root.rstrip("/") + "/"
+    if real_target != real_root and not real_target.startswith(safe_root_prefix):
         raise HTTPException(
             status_code=400,
             detail="Path traversal detected: subdir resolves outside mount root.",
@@ -171,11 +175,11 @@ def list_directory(
     HTTPException(500):
         When the target directory cannot be listed due to a filesystem error.
     """
-    # 1. Validate mount root against DB
-    active_roots = _collect_active_mount_roots(db)
-    # Normalise for comparison (strip trailing slashes)
-    normalised_path = path.rstrip("/")
-    if normalised_path not in [r.rstrip("/") for r in active_roots]:
+    # 1. Validate mount root against DB — returns the DB-stored (trusted) value
+    #    or None.  Using the DB-stored value means all subsequent filesystem
+    #    operations are derived from a trusted source, not from user input.
+    db_mount_root = _lookup_mount_root(path, db)
+    if db_mount_root is None:
         log_and_audit(
             db,
             "BROWSE_DENIED",
@@ -189,12 +193,14 @@ def list_directory(
             detail="The requested path is not a registered active mount root.",
         )
 
-    # 2 & 3. Resolve and validate containment + allowlist
-    real_root, real_target = _resolve_and_validate(normalised_path, subdir)
+    # 2 & 3. Resolve path from the trusted DB root + user subdir; validate
+    #         containment (anti-traversal) and allowlist (defence-in-depth).
+    real_root, real_target = _resolve_and_validate(db_mount_root, subdir)
 
-    # 4. List directory
+    # 4. List directory — path is derived from the DB-stored trusted root after
+    #    realpath containment validation above.
     try:
-        names = sorted(os.listdir(real_target))
+        names = sorted(os.listdir(real_target))  # noqa: S605  — path validated above
     except PermissionError:
         raise HTTPException(
             status_code=403,
@@ -218,7 +224,8 @@ def list_directory(
 
     entries = []
     for name in page_names:
-        entry = _stat_entry(real_target, name)
+        # name comes from os.listdir() (filesystem-provided), not from user
+        entry = _stat_entry(real_target, name)  # noqa: S605
         if entry is not None:
             entries.append(entry)
 
@@ -239,7 +246,7 @@ def list_directory(
     )
 
     return BrowseResponse(
-        path=normalised_path,
+        path=db_mount_root,
         subdir=subdir,
         entries=entries,
         total=total,
