@@ -37,6 +37,7 @@ const cocFilters = ref({
 const cocLoading = ref(false)
 const cocError = ref('')
 const cocReport = ref(null)
+const expandedCocEvents = ref(new Set())
 const cocStatusMessage = ref('')
 const handoffSaving = ref(false)
 const showHandoffWarning = ref(false)
@@ -121,6 +122,15 @@ function toggleDetails(id) {
     expanded.value.add(id)
   }
   expanded.value = new Set(expanded.value)
+}
+
+function toggleCocEvents(driveId) {
+  if (expandedCocEvents.value.has(driveId)) {
+    expandedCocEvents.value.delete(driveId)
+  } else {
+    expandedCocEvents.value.add(driveId)
+  }
+  expandedCocEvents.value = new Set(expandedCocEvents.value)
 }
 
 function asLocalDate(value) {
@@ -224,6 +234,7 @@ async function loadChainOfCustody() {
   const previousReport = cocReport.value
   const requestedParams = buildCocParams()
   cocReport.value = null
+  expandedCocEvents.value = new Set()
   try {
     cocReport.value = await getChainOfCustody(requestedParams)
   } catch (err) {
@@ -499,7 +510,29 @@ onMounted(() => {
             </div>
           </div>
 
-          <pre>{{ JSON.stringify(report.chain_of_custody_events, null, 2) }}</pre>
+          <div class="coc-events">
+            <p v-if="!report.chain_of_custody_events.length" class="muted">{{ t('audit.cocEventsEmpty') }}</p>
+            <table v-else class="coc-events-table" :aria-label="t('audit.cocDriveHeader', { driveId: report.drive_id, driveSn: report.drive_sn })">
+              <thead>
+                <tr>
+                  <th>{{ t('audit.action') }}</th>
+                  <th>{{ t('common.labels.date') }}</th>
+                  <th>{{ t('auth.username') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="event in report.chain_of_custody_events" :key="event.event_id">
+                  <td>{{ event.action }}</td>
+                  <td>{{ asUtcDate(event.timestamp) }}</td>
+                  <td>{{ event.actor || '-' }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <button class="btn" @click="toggleCocEvents(report.drive_id)">
+              {{ expandedCocEvents.has(report.drive_id) ? t('audit.hideDetails') : t('audit.showDetails') }}
+            </button>
+            <pre v-if="expandedCocEvents.has(report.drive_id)">{{ JSON.stringify(report.chain_of_custody_events, null, 2) }}</pre>
+          </div>
         </article>
       </div>
 
@@ -642,9 +675,28 @@ pre {
 .coc-results,
 .handoff-grid,
 .manifest-grid,
-.coc-actions {
+.coc-actions,
+.coc-events {
   display: grid;
   gap: var(--space-sm);
+}
+
+.coc-events-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-xs);
+}
+
+.coc-events-table th,
+.coc-events-table td {
+  text-align: left;
+  padding: var(--space-xs) var(--space-sm);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.coc-events-table th {
+  color: var(--color-text-secondary);
+  font-weight: 600;
 }
 
 .handoff-grid {

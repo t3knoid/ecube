@@ -183,6 +183,7 @@
     "dateFrom": "From Date",
     "dateTo": "To Date",
     "empty": "No audit entries found",
+    "cocEventsEmpty": "No events recorded",
     "showDetails": "Show",
     "hideDetails": "Hide"
   },
