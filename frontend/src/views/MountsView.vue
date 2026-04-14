@@ -26,6 +26,13 @@ const search = ref('')
 /** Mount ID currently being browsed (null = none open). */
 const browsingMountId = ref(null)
 
+/** The currently-browsed mount object (computed from browsingMountId). */
+const activeBrowsedMount = computed(() =>
+  browsingMountId.value !== null
+    ? mounts.value.find((m) => m.id === browsingMountId.value) || null
+    : null
+)
+
 const form = ref({
   type: 'SMB',
   remote_path: '',
@@ -160,10 +167,6 @@ function toggleBrowse(mountId) {
   browsingMountId.value = browsingMountId.value === mountId ? null : mountId
 }
 
-function browsedMount(mountId) {
-  return mounts.value.find((m) => m.id === mountId) || null
-}
-
 onMounted(loadMounts)
 </script>
 
@@ -204,15 +207,15 @@ onMounted(loadMounts)
 
     <!-- Inline directory browser panels (one per browsed mount) -->
     <section
-      v-if="browsingMountId !== null && browsedMount(browsingMountId)"
+      v-if="activeBrowsedMount"
       class="browse-panel"
       aria-label="browse-panel"
     >
       <h3 class="browse-panel-title">
-        {{ t('browse.browseMountContents') }}: {{ browsedMount(browsingMountId).local_mount_point }}
+        {{ t('browse.browseMountContents') }}: {{ activeBrowsedMount.local_mount_point }}
       </h3>
       <DirectoryBrowser
-        :mount-path="browsedMount(browsingMountId).local_mount_point"
+        :mount-path="activeBrowsedMount.local_mount_point"
         :readonly="true"
       />
     </section>
