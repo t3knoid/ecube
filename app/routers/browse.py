@@ -41,6 +41,7 @@ _DEFAULT_PAGE_SIZE = 100
     responses={**R_400, **R_401, **R_403, **R_422, **R_500},
 )
 def browse_directory(
+    request: Request,
     path: StrictSafeStr = Query(
         ...,
         description=(
@@ -63,7 +64,6 @@ def browse_directory(
         le=_MAX_PAGE_SIZE,
         description=f"Number of entries per page. Maximum: {_MAX_PAGE_SIZE}.",
     ),
-    request: Request = None,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ALL_ROLES),
 ):
@@ -89,5 +89,5 @@ def browse_directory(
         page_size=page_size,
         db=db,
         actor=current_user.username,
-        client_ip=get_client_ip(request) if request else None,
+        client_ip=get_client_ip(request),
     )
