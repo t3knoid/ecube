@@ -20,10 +20,17 @@ def _default_eject_provider() -> DriveEjectProvider:
     return get_drive_eject()
 
 
-def get_all_drives(db: Session, project_id: Optional[str] = None) -> List[UsbDrive]:
+def get_all_drives(
+    db: Session,
+    project_id: Optional[str] = None,
+    states: Optional[List[str]] = None,
+) -> List[UsbDrive]:
     repo = DriveRepository(db)
     if project_id is not None:
         return repo.list_by_project(project_id)
+    if states:
+        parsed = [DriveState(s) for s in states]
+        return repo.list_by_states(parsed)
     return repo.list_all()
 
 
