@@ -42,28 +42,35 @@ def _lookup_mount_root(path: str, db: Session) -> Optional[str]:
     from a trusted source rather than from the raw user-provided string.
     """
     normalised = path.rstrip("/")
+    candidates = [normalised]
+    if normalised:
+        candidates.append(f"{normalised}/")
+    else:
+        candidates.append("/")
 
-    usb_paths = (
+    usb_path = (
         db.query(UsbDrive.mount_path)
-        .filter(UsbDrive.mount_path.isnot(None))
-        .all()
+        .filter(
+            UsbDrive.mount_path.isnot(None),
+            UsbDrive.mount_path.in_(candidates),
+        )
+        .first()
     )
-    for (p,) in usb_paths:
-        if p and p.rstrip("/") == normalised:
-            return p.rstrip("/")
+    if usb_path and usb_path[0]:
+        return usb_path[0].rstrip("/")
 
-    net_paths = (
+    net_path = (
         db.query(NetworkMount.local_mount_point)
         .filter(
             NetworkMount.status == MountStatus.MOUNTED,
             NetworkMount.local_mount_point.isnot(None),
             NetworkMount.local_mount_point != "",
+            NetworkMount.local_mount_point.in_(candidates),
         )
-        .all()
+        .first()
     )
-    for (p,) in net_paths:
-        if p and p.rstrip("/") == normalised:
-            return p.rstrip("/")
+    if net_path and net_path[0]:
+        return net_path[0].rstrip("/")
 
     return None
 
