@@ -201,7 +201,10 @@ async def lifespan(application: FastAPI):
 
     db_runtime_ready = False
     if not (settings.database_url or "").strip():
-        logger.info("DATABASE_URL is not configured; skipping DB startup tasks")
+        logger.info(
+            "DATABASE_URL is not configured; skipping DB startup tasks. "
+            "Visit the setup wizard at /setup to provision the database."
+        )
     else:
         try:
             from app.services import database_service
