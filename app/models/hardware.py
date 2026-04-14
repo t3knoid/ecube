@@ -50,6 +50,7 @@ class UsbDrive(Base):
         Enum(DriveState, native_enum=False), default=DriveState.AVAILABLE
     )
     current_project_id = Column(String)
+    mount_path = Column(String, nullable=True)
     last_seen_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

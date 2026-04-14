@@ -7,6 +7,7 @@ import { getDrives, formatDrive, initializeDrive, prepareEjectDrive } from '@/ap
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -22,6 +23,7 @@ const infoMessage = ref('')
 const showFormatDialog = ref(false)
 const showEjectDialog = ref(false)
 const showInitializeDialog = ref(false)
+const browseExpanded = ref(false)
 
 const filesystemType = ref('ext4')
 const projectId = ref('')
@@ -162,6 +164,20 @@ onMounted(loadDrive)
       </div>
     </ConfirmDialog>
 
+    <!-- Browse section — shown when drive has an active mount_path -->
+    <section v-if="drive && drive.mount_path" class="browse-section">
+      <button
+        class="browse-toggle btn"
+        :aria-expanded="browseExpanded"
+        @click="browseExpanded = !browseExpanded"
+      >
+        {{ browseExpanded ? '▼' : '▶' }} {{ t('browse.browseContents') }}
+      </button>
+      <div v-if="browseExpanded" class="browse-panel">
+        <DirectoryBrowser :mount-path="drive.mount_path" :readonly="true" />
+      </div>
+    </section>
+
     <ConfirmDialog
       v-model="showEjectDialog"
       :title="t('drives.ejectConfirmTitle')"
@@ -296,5 +312,21 @@ select {
 .format-selector {
   display: grid;
   gap: var(--space-xs);
+}
+
+.browse-section {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.browse-toggle {
+  justify-self: start;
+}
+
+.browse-panel {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-bg-secondary);
+  padding: var(--space-md);
 }
 </style>
