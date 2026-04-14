@@ -334,12 +334,14 @@ def reconcile_drives(
     Returns a summary dict with counts from the discovery sync.
     """
     from app.services.discovery_service import run_discovery_sync
+    from app.infrastructure import get_drive_mount
 
     summary = run_discovery_sync(
         db,
         actor="system",
         topology_source=topology_source,
         filesystem_detector=filesystem_detector,
+        drive_mount=get_drive_mount(),
     )
 
     return summary
