@@ -817,6 +817,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
         403: "FORBIDDEN",
         404: "NOT_FOUND",
         409: "CONFLICT",
+        410: "GONE",
         413: "PAYLOAD_TOO_LARGE",
     }
     code = code_map.get(exc.status_code, f"HTTP_{exc.status_code}")

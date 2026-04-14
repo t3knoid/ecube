@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib
 import logging
 import os
+import stat
 import re
 import tempfile
 import threading
@@ -570,6 +571,34 @@ def _write_env_settings(updates: Dict[str, str]) -> None:
     try:
         with os.fdopen(fd, "w") as f:
             f.writelines(lines)
+        # Preserve the existing file's permission bits and ownership so that
+        # a root-owned process (e.g. sudo uvicorn) does not leave the .env
+        # unreadable for non-root service users or test runners.
+        try:
+            orig_stat = os.stat(env_path)
+            existing_mode = stat.S_IMODE(orig_stat.st_mode)
+            existing_uid = orig_stat.st_uid
+            existing_gid = orig_stat.st_gid
+        except OSError:
+            existing_mode = 0o600
+            existing_uid = None
+            existing_gid = None
+        # Enforce a ceiling of 0o600 so group/world-readable .env files
+        # (e.g. an accidental 0644) never keep credentials exposed.
+        safe_mode = existing_mode & 0o600
+        os.chmod(tmp_path, safe_mode)
+        # Restore original ownership so root-spawned rewrites don't lock
+        # out the normal service user.
+        if existing_uid is not None:
+            try:
+                os.chown(tmp_path, existing_uid, existing_gid)
+            except OSError:
+                logger.debug(
+                    "Could not restore .env ownership (uid=%s, gid=%s); "
+                    "file will be owned by the current process user.",
+                    existing_uid,
+                    existing_gid,
+                )
         os.replace(tmp_path, env_path)
     except Exception:
         # Clean up temp file on failure
