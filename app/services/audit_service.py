@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException
 from sqlalchemy import or_
@@ -162,19 +162,15 @@ def get_chain_of_custody_report(
         drive_sn=drive_sn,
         project_id=project_id,
     )
-    reports = [
-        _build_drive_report(
-            db,
-            drive=d,
-            # project_id takes precedence so that:
-            # - PROJECT selector: always uses the queried project (even for
-            #   historically-participated drives whose current binding differs).
-            # - DRIVE_ID/DRIVE_SN: uses caller's project_id (already validated
-            #   to match the binding) or falls back to the drive's own binding.
-            effective_project_id=project_id or d.current_project_id,
-        )
-        for d in drives
-    ]
+    # project_id takes precedence so that:
+    # - PROJECT selector: always uses the queried project (even for
+    #   historically-participated drives whose current binding differs).
+    # - DRIVE_ID/DRIVE_SN: uses caller's project_id (already validated
+    #   to match the binding) or falls back to the drive's own binding.
+    effective_project_ids: Dict[int, Optional[str]] = {
+        d.id: (project_id or d.current_project_id) for d in drives
+    }
+    reports = _build_all_drive_reports(db, drives, effective_project_ids)
     return ChainOfCustodyReportSchema(
         selector_mode=selector_mode,
         project_id=project_id,
@@ -365,91 +361,144 @@ def _resolve_coc_targets(
     return "PROJECT", sorted(merged, key=lambda d: d.id)
 
 
-def _build_drive_report(
-    db: Session, *, drive: UsbDrive, effective_project_id: Optional[str]
-) -> ChainOfCustodyDriveReportSchema:
-    # Scope drive assignments to jobs that belong to the effective project when
-    # one is known, so that a reformatted-and-reassigned drive does not bleed
-    # prior-lifecycle job/manifest data into the current project's CoC report.
-    assignment_query = (
-        db.query(DriveAssignment)
+def _build_all_drive_reports(
+    db: Session,
+    drives: List[UsbDrive],
+    effective_project_ids: Dict[int, Optional[str]],
+) -> List[ChainOfCustodyDriveReportSchema]:
+    """Assemble CoC reports for all target drives in 4 queries.
+
+    Instead of issuing 4 queries per drive (assignments, events, jobs,
+    manifests), this function prefetches all relevant rows for every drive in
+    a single round-trip each and partitions results in memory.  This prevents
+    O(N) query growth when a project has many drives.
+    """
+    if not drives:
+        return []
+
+    drive_ids = [d.id for d in drives]
+
+    # 1. Batch-fetch all drive assignments together with their job's project_id
+    #    so we can apply per-drive project scoping in Python.
+    raw_assignments = (
+        db.query(DriveAssignment, ExportJob.project_id)
         .join(ExportJob, ExportJob.id == DriveAssignment.job_id)
-        .filter(DriveAssignment.drive_id == drive.id)
-    )
-    if effective_project_id is not None:
-        assignment_query = assignment_query.filter(ExportJob.project_id == effective_project_id)
-    assignment_rows: Sequence[DriveAssignment] = (
-        assignment_query
+        .filter(DriveAssignment.drive_id.in_(drive_ids))
         .order_by(DriveAssignment.assigned_at.asc(), DriveAssignment.id.asc())
         .all()
     )
-    job_ids = {row.job_id for row in assignment_rows}
+    job_ids_per_drive: Dict[int, set] = {d.id: set() for d in drives}
+    for assignment, job_project_id in raw_assignments:
+        eff_pid = effective_project_ids.get(assignment.drive_id)
+        if eff_pid is None or job_project_id == eff_pid:
+            job_ids_per_drive[assignment.drive_id].add(assignment.job_id)
 
-    # Drive-level events are scoped by project_id when one is known, so that
-    # DRIVE_INITIALIZED / DRIVE_EJECT_PREPARED events from a prior project
-    # lifecycle do not appear in the current project's report.
-    drive_event_filter = (AuditLog.drive_id == drive.id) & (AuditLog.action.in_(_COC_DRIVE_ACTIONS))
-    if effective_project_id is not None:
-        drive_event_filter = drive_event_filter & (AuditLog.project_id == effective_project_id)
+    all_job_ids: List[int] = sorted({jid for jids in job_ids_per_drive.values() for jid in jids})
 
-    filters = [drive_event_filter]
-    if job_ids:
-        filters.append((AuditLog.job_id.in_(job_ids)) & (AuditLog.action.in_(_COC_JOB_ACTIONS)))
+    # Reverse map: job_id → owning drive_id (used to route job-level events).
+    job_id_to_drive_id: Dict[int, int] = {
+        jid: did
+        for did, jids in job_ids_per_drive.items()
+        for jid in jids
+    }
 
-    events = (
+    # 2. Batch-fetch all relevant audit events in one query, then partition by
+    #    drive in Python.  Drive-level events are project-scoped after fetch;
+    #    job-level events are already implicitly scoped via job_ids_per_drive.
+    event_filters = [
+        (AuditLog.drive_id.in_(drive_ids)) & (AuditLog.action.in_(_COC_DRIVE_ACTIONS)),
+    ]
+    if all_job_ids:
+        event_filters.append(
+            (AuditLog.job_id.in_(all_job_ids)) & (AuditLog.action.in_(_COC_JOB_ACTIONS))
+        )
+    all_events: List[AuditLog] = (
         db.query(AuditLog)
-        .filter(or_(*filters))
+        .filter(or_(*event_filters))
         .order_by(AuditLog.timestamp.asc(), AuditLog.id.asc())
         .all()
     )
 
-    coc_events: List[ChainOfCustodyEventSchema] = [
-        ChainOfCustodyEventSchema(
-            event_id=e.id,
-            event_type=e.action,
-            timestamp=e.timestamp,
-            actor=e.user,
-            action=_ACTION_LABELS.get(e.action, e.action.replace("_", " ").title()),
-            details=e.details or {},
+    events_per_drive: Dict[int, List[AuditLog]] = {d.id: [] for d in drives}
+    for event in all_events:
+        if event.action in _COC_DRIVE_ACTIONS:
+            if event.drive_id not in events_per_drive:
+                continue
+            eff_pid = effective_project_ids.get(event.drive_id)
+            if eff_pid is None or event.project_id == eff_pid:
+                events_per_drive[event.drive_id].append(event)
+        elif event.action in _COC_JOB_ACTIONS and event.job_id is not None:
+            owner = job_id_to_drive_id.get(event.job_id)
+            if owner is not None:
+                events_per_drive[owner].append(event)
+
+    # 3–4. Batch-fetch jobs and manifests for manifest summary assembly.
+    jobs_by_id: Dict[int, ExportJob] = {}
+    manifests_by_job: Dict[int, List[Manifest]] = {}
+    if all_job_ids:
+        for job in db.query(ExportJob).filter(ExportJob.id.in_(all_job_ids)).all():
+            jobs_by_id[job.id] = job
+        for manifest in db.query(Manifest).filter(Manifest.job_id.in_(all_job_ids)).all():
+            manifests_by_job.setdefault(manifest.job_id, []).append(manifest)
+
+    # Assemble one report per drive from the pre-fetched data.
+    drive_map = {d.id: d for d in drives}
+    reports: List[ChainOfCustodyDriveReportSchema] = []
+    for drive_id_key in sorted(drive_map):
+        drive = drive_map[drive_id_key]
+        events = events_per_drive[drive_id_key]
+
+        coc_events: List[ChainOfCustodyEventSchema] = [
+            ChainOfCustodyEventSchema(
+                event_id=e.id,
+                event_type=e.action,
+                timestamp=e.timestamp,
+                actor=e.user,
+                action=_ACTION_LABELS.get(e.action, e.action.replace("_", " ").title()),
+                details=e.details or {},
+            )
+            for e in events
+        ]
+
+        handoff_events = [e for e in events if e.action == "COC_HANDOFF_CONFIRMED"]
+        latest_handoff = handoff_events[-1] if handoff_events else None
+        delivery_time = (
+            _parse_iso_datetime((latest_handoff.details or {}).get("delivery_time"))
+            if latest_handoff else None
         )
-        for e in events
-    ]
 
-    handoff_events = [e for e in events if e.action == "COC_HANDOFF_CONFIRMED"]
-    latest_handoff = handoff_events[-1] if handoff_events else None
-    delivery_time = _parse_iso_datetime((latest_handoff.details or {}).get("delivery_time")) if latest_handoff else None
-
-    manifest_summary = _build_manifest_summary(db, sorted(job_ids))
-
-    return ChainOfCustodyDriveReportSchema(
-        drive_id=drive.id,
-        drive_sn=drive.device_identifier,
         # Report the project scope that was actually used to filter events, not
         # necessarily the drive's current binding (they diverge for reassigned
         # drives or when the PROJECT selector requested a specific project).
-        project_id=effective_project_id,
-        custody_complete=latest_handoff is not None,
-        delivery_time=delivery_time,
-        chain_of_custody_events=coc_events,
-        manifest_summary=manifest_summary,
-    )
+        reports.append(
+            ChainOfCustodyDriveReportSchema(
+                drive_id=drive.id,
+                drive_sn=drive.device_identifier,
+                project_id=effective_project_ids[drive_id_key],
+                custody_complete=latest_handoff is not None,
+                delivery_time=delivery_time,
+                chain_of_custody_events=coc_events,
+                manifest_summary=_assemble_manifest_summary(
+                    sorted(job_ids_per_drive[drive_id_key]), jobs_by_id, manifests_by_job
+                ),
+            )
+        )
+
+    return reports
 
 
-def _build_manifest_summary(db: Session, job_ids: List[int]) -> List[ManifestSummarySchema]:
-    if not job_ids:
-        return []
-
-    jobs = db.query(ExportJob).filter(ExportJob.id.in_(job_ids)).all()
-    manifests = db.query(Manifest).filter(Manifest.job_id.in_(job_ids)).all()
-
-    manifests_by_job: Dict[int, List[Manifest]] = {}
-    for manifest in manifests:
-        manifests_by_job.setdefault(manifest.job_id, []).append(manifest)
-
+def _assemble_manifest_summary(
+    job_ids: List[int],
+    jobs_by_id: Dict[int, ExportJob],
+    manifests_by_job: Dict[int, List[Manifest]],
+) -> List[ManifestSummarySchema]:
     summaries: List[ManifestSummarySchema] = []
-    for job in sorted(jobs, key=lambda row: row.id):
+    for jid in job_ids:
+        job = jobs_by_id.get(jid)
+        if job is None:
+            continue
         rows = sorted(
-            manifests_by_job.get(job.id, []),
+            manifests_by_job.get(jid, []),
             key=lambda row: ((row.created_at or datetime.min.replace(tzinfo=timezone.utc)), row.id),
         )
         latest = rows[-1] if rows else None
