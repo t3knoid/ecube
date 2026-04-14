@@ -98,7 +98,8 @@ async function loadEntries() {
     const result = await getDirectory(props.mountPath, subdir.value, page.value, pageSize.value)
     entries.value = result.entries
     total.value = result.total
-  } catch {
+  } catch (err) {
+    console.error('[DirectoryBrowser] Failed to load directory listing:', err)
     error.value = t('browse.loadError')
   } finally {
     loading.value = false

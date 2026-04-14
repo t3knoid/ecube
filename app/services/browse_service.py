@@ -107,8 +107,17 @@ def _stat_entry(dirpath: str, name: str) -> Optional[BrowseEntry]:
 
     Uses ``lstat`` so that symlinks are reported as-is without following them.
     Returns ``None`` when the entry cannot be stat'd (e.g. race condition).
+
+    Security: ``dirpath`` is the validated ``real_target`` (contained within the
+    DB-registered mount root).  ``name`` comes from ``os.listdir()`` — it is a
+    filesystem-provided entry name, not user input.  The join of two safe values
+    is therefore safe; the ``os.lstat`` call below is intentional (false-positive
+    path-injection: path is validated by the caller via realpath containment check).
     """
-    full_path = os.path.join(dirpath, name)
+    # Limit name to a bare filename component (no directory separators).
+    # This is a defence-in-depth measure against unexpected os.listdir results.
+    safe_name = os.path.basename(name)
+    full_path = os.path.join(dirpath, safe_name)
     try:
         entry_stat = os.lstat(full_path)
     except OSError:
@@ -128,7 +137,7 @@ def _stat_entry(dirpath: str, name: str) -> Optional[BrowseEntry]:
     modified_at = datetime.fromtimestamp(entry_stat.st_mtime, tz=timezone.utc)
 
     return BrowseEntry(
-        name=name,
+        name=safe_name,
         type=entry_type,
         size_bytes=size_bytes,
         modified_at=modified_at,
@@ -197,10 +206,10 @@ def list_directory(
     #         containment (anti-traversal) and allowlist (defence-in-depth).
     real_root, real_target = _resolve_and_validate(db_mount_root, subdir)
 
-    # 4. List directory — path is derived from the DB-stored trusted root after
+    # 4. List directory -- path is derived from the DB-stored trusted root after
     #    realpath containment validation above.
     try:
-        names = sorted(os.listdir(real_target))  # noqa: S605  — path validated above
+        names = sorted(os.listdir(real_target))  # noqa: S605 -- path validated above
     except PermissionError:
         raise HTTPException(
             status_code=403,
@@ -224,8 +233,8 @@ def list_directory(
 
     entries = []
     for name in page_names:
-        # name comes from os.listdir() (filesystem-provided), not from user
-        entry = _stat_entry(real_target, name)  # noqa: S605
+        # name comes from os.listdir() (filesystem-provided), not from user input
+        entry = _stat_entry(real_target, name)  # noqa: S605 -- path validated above
         if entry is not None:
             entries.append(entry)
 
