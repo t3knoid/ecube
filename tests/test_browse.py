@@ -300,3 +300,43 @@ class TestBrowseParameterValidation:
         # even if it reaches the service layer it gets 403 (unknown mount root).
         response = client.get("/browse?path=/nfs/ev%00idence")
         assert response.status_code in (403, 422)
+
+
+# ---------------------------------------------------------------------------
+# Filesystem error handling
+# ---------------------------------------------------------------------------
+
+
+class TestBrowseFilesystemErrors:
+    def test_permission_denied_returns_403(self, client, db, tmp_path):
+        """When os.listdir raises PermissionError, the endpoint returns 403."""
+        mount_point = str(tmp_path)
+        _make_network_mount(db, mount_point)
+
+        with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]), \
+             patch("os.listdir", side_effect=PermissionError("Permission denied")):
+            response = client.get(f"/browse?path={mount_point}")
+
+        assert response.status_code == 403
+
+    def test_not_a_directory_returns_400(self, client, db, tmp_path):
+        """When os.listdir raises NotADirectoryError, the endpoint returns 400."""
+        mount_point = str(tmp_path)
+        _make_network_mount(db, mount_point)
+
+        with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]), \
+             patch("os.listdir", side_effect=NotADirectoryError("Not a directory")):
+            response = client.get(f"/browse?path={mount_point}")
+
+        assert response.status_code == 400
+
+    def test_os_error_returns_500(self, client, db, tmp_path):
+        """When os.listdir raises a generic OSError, the endpoint returns 500."""
+        mount_point = str(tmp_path)
+        _make_network_mount(db, mount_point)
+
+        with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]), \
+             patch("os.listdir", side_effect=OSError("I/O error")):
+            response = client.get(f"/browse?path={mount_point}")
+
+        assert response.status_code == 500
