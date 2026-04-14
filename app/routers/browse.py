@@ -63,9 +63,9 @@ def browse_directory(
         le=_MAX_PAGE_SIZE,
         description=f"Number of entries per page. Maximum: {_MAX_PAGE_SIZE}.",
     ),
+    request: Request = None,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ALL_ROLES),
-    request: Request = None,
 ):
     """List directory contents of an active USB drive or network share mount.
 
