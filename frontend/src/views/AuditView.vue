@@ -549,7 +549,10 @@ onMounted(() => {
             <option v-for="projectId in handoffProjectOptions" :key="`handoff-project-${projectId}`" :value="projectId">{{ projectId }}</option>
           </select>
           <input v-model="handoffForm.possessor" type="text" :placeholder="t('audit.possessor')" :aria-label="t('audit.possessor')" />
-          <input v-model="handoffForm.delivery_time" type="datetime-local" :placeholder="t('audit.deliveryTime')" :aria-label="t('audit.deliveryTime')" />
+          <div class="datetime-field">
+            <input v-model="handoffForm.delivery_time" type="datetime-local" :placeholder="t('audit.deliveryTime')" :aria-label="t('audit.deliveryTime')" />
+            <small class="field-hint">{{ t('audit.deliveryTimeHint') }}</small>
+          </div>
           <input v-model="handoffForm.received_by" type="text" :placeholder="t('audit.receivedBy')" :aria-label="t('audit.receivedBy')" />
           <input v-model="handoffForm.receipt_ref" type="text" :placeholder="t('audit.receiptRef')" :aria-label="t('audit.receiptRef')" />
         </div>
@@ -702,6 +705,16 @@ pre {
 
 .handoff-grid {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.datetime-field {
+  display: grid;
+  gap: 2px;
+}
+
+.field-hint {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
 }
 
 .manifest-item {
