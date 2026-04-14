@@ -126,7 +126,28 @@
     "remove": "Remove",
     "credentialsFile": "Credentials File",
     "removeConfirmTitle": "Remove mount?",
-    "removeConfirmBody": "Removing a mount may impact in-progress jobs."
+    "removeConfirmBody": "Removing a mount may impact in-progress jobs.",
+    "browse": "Browse"
+  },
+  "browse": {
+    "title": "Browse",
+    "browseContents": "Browse Drive Contents",
+    "browseMountContents": "Browse Mount Contents",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "loadError": "Failed to load directory listing. Please try again.",
+    "empty": "This directory is empty.",
+    "columns": {
+      "name": "Name",
+      "type": "Type",
+      "size": "Size",
+      "modified": "Modified"
+    },
+    "types": {
+      "file": "File",
+      "directory": "Directory",
+      "symlink": "Symlink"
+    }
   },
   "audit": {
     "title": "Audit",

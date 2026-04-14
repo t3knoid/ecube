@@ -282,6 +282,18 @@ class Settings(BaseSettings):
     sysfs_block_path: str = "/sys/block"
 
     # ---------------------------------------------------------------------------
+    # Directory browse settings
+    # ---------------------------------------------------------------------------
+
+    #: Allowlist of filesystem path prefixes that are permitted as browse roots.
+    #: Only paths whose realpath starts with one of these prefixes (after DB
+    #: validation) are served.  Provides a secondary defence-in-depth layer on
+    #: top of the database-backed mount root validation.
+    browse_allowed_prefixes: List[str] = Field(
+        default=["/mnt/ecube/", "/nfs/", "/smb/"]
+    )
+
+    # ---------------------------------------------------------------------------
     # Audit log pagination
     # ---------------------------------------------------------------------------
 
