@@ -345,15 +345,39 @@ def _resolve_coc_targets(
         UsbDrive.current_project_id == project_id,
         UsbDrive.current_state != DriveState.ARCHIVED
     ).all()
-    historical_drive_ids = [
+
+    # Derive historical drive IDs from two authoritative sources:
+    # 1. CoC-relevant audit events (lifecycle actions only — not denials like
+    #    INIT_REJECTED_* or PROJECT_ISOLATION_VIOLATION which record a drive_id
+    #    that was *denied* participation, not one that actually participated).
+    # 2. DriveAssignment → ExportJob for the project (captures drives that
+    #    had copy jobs even if the audit trail has been purged).
+    _COC_HISTORY_ACTIONS = _COC_DRIVE_ACTIONS | _COC_JOB_ACTIONS
+    audit_drive_ids = {
         row[0]
         for row in (
             db.query(AuditLog.drive_id)
-            .filter(AuditLog.project_id == project_id, AuditLog.drive_id.isnot(None))
+            .filter(
+                AuditLog.project_id == project_id,
+                AuditLog.drive_id.isnot(None),
+                AuditLog.action.in_(_COC_HISTORY_ACTIONS),
+            )
             .distinct()
             .all()
         )
-    ]
+    }
+    assignment_drive_ids = {
+        row[0]
+        for row in (
+            db.query(DriveAssignment.drive_id)
+            .join(ExportJob, ExportJob.id == DriveAssignment.job_id)
+            .filter(ExportJob.project_id == project_id)
+            .distinct()
+            .all()
+        )
+    }
+    historical_drive_ids = audit_drive_ids | assignment_drive_ids
+
     # Include drives that historically participated in this project even if they
     # have since been reformatted and reassigned (current_project_id differs).
     # Archived drives are deliberately excluded here: the drive_id and drive_sn
