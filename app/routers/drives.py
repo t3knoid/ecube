@@ -29,13 +29,18 @@ def list_drives(
         min_length=1,
         description="Filter drives by project. When provided, only drives bound to this project are returned.",
     ),
+    state: Optional[List[str]] = Query(
+        default=None,
+        description="Filter drives by state (repeatable). Valid values: EMPTY, AVAILABLE, IN_USE, ARCHIVED.",
+    ),
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_ALL_ROLES),
 ):
     """List all USB drives with their current state and project assignments.
 
     When *project_id* is provided, only drives bound to that project are
-    returned.  When omitted, all drives are returned.
+    returned.  When *state* is provided, only drives in one of the given
+    states are returned.  When omitted, all drives are returned.
 
     **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
     """
@@ -44,7 +49,7 @@ def list_drives(
         if not sanitized:
             raise EncodingError("project_id is empty after removing invalid characters")   
         project_id = sanitized
-    return drive_service.get_all_drives(db, project_id=project_id)
+    return drive_service.get_all_drives(db, project_id=project_id, states=state)
 
 @router.post("/{drive_id}/initialize", response_model=UsbDriveSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
 def initialize_drive(

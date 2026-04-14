@@ -199,8 +199,8 @@ async function loadAudit() {
 
 async function loadDriveOptions() {
   try {
-    const drives = await getDrives()
-    allActiveDrives.value = drives.filter((drive) => drive.current_state !== 'ARCHIVED')
+    const drives = await getDrives({ state: ['IN_USE', 'AVAILABLE'] })
+    allActiveDrives.value = drives
   } catch {
     allActiveDrives.value = []
     cocError.value = t('common.errors.networkError')

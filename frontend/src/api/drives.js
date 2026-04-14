@@ -2,8 +2,8 @@ import apiClient from './client.js'
 import { toData } from './data.js'
 import { API_BASE } from '@/constants/routes.js'
 
-export function getDrives() {
-  return toData(apiClient.get(`${API_BASE}/drives`))
+export function getDrives(params = {}) {
+  return toData(apiClient.get(`${API_BASE}/drives`, { params }))
 }
 
 export function refreshDrives() {
