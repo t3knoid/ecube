@@ -77,12 +77,14 @@ def upgrade() -> None:
             nullable=True,
         ),
         sa.Column("current_project_id", sa.String, nullable=True),
+        sa.Column("mount_path", sa.String(), nullable=True),
         sa.Column(
             "last_seen_at",
             sa.DateTime(timezone=True),
             server_default=sa.func.now(),
         ),
     )
+    op.create_index("ix_usb_drives_mount_path", "usb_drives", ["mount_path"])
 
     op.create_table(
         "network_mounts",
@@ -275,6 +277,7 @@ def downgrade() -> None:
     op.drop_table("export_files")
     op.drop_table("export_jobs")
     op.drop_table("network_mounts")
+    op.drop_index("ix_usb_drives_mount_path", table_name="usb_drives")
     op.drop_table("usb_drives")
     op.drop_table("usb_ports")
     op.drop_table("usb_hubs")
