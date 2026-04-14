@@ -6,7 +6,7 @@ test('audit filters and export csv', async ({ page }) => {
   await setupAuthenticatedPage(page, ['auditor'])
   await stubDrivesApi(page, [])
 
-  await page.route('**/api/audit**', async (route) => {
+  await page.route(/\/api\/audit(?!\/)/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -53,7 +53,7 @@ test('audit filters and export csv', async ({ page }) => {
 test('chain of custody handoff requires warning confirmation and submits archive handoff', async ({ page }) => {
   await setupAuthenticatedPage(page, ['manager'])
 
-  await page.route('**/api/audit**', async (route) => {
+  await page.route(/\/api\/audit(?!\/)/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
