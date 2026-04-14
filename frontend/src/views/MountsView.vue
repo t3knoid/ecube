@@ -6,6 +6,7 @@ import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 
 const { t } = useI18n()
 
@@ -21,6 +22,9 @@ const removeTarget = ref(null)
 const page = ref(1)
 const pageSize = ref(10)
 const search = ref('')
+
+/** Mount ID currently being browsed (null = none open). */
+const browsingMountId = ref(null)
 
 const form = ref({
   type: 'SMB',
@@ -139,6 +143,9 @@ async function runRemove() {
   error.value = ''
   try {
     await deleteMount(removeTarget.value.id)
+    if (browsingMountId.value === removeTarget.value.id) {
+      browsingMountId.value = null
+    }
     removeTarget.value = null
     showRemoveDialog.value = false
     await loadMounts()
@@ -147,6 +154,14 @@ async function runRemove() {
   } finally {
     saving.value = false
   }
+}
+
+function toggleBrowse(mountId) {
+  browsingMountId.value = browsingMountId.value === mountId ? null : mountId
+}
+
+function browsedMount(mountId) {
+  return mounts.value.find((m) => m.id === mountId) || null
 }
 
 onMounted(loadMounts)
@@ -174,10 +189,35 @@ onMounted(loadMounts)
       <template #cell-actions="{ row }">
         <div class="row-actions">
           <button class="btn" @click="runValidateOne(row.id)">{{ t('mounts.test') }}</button>
+          <button
+            class="btn"
+            :aria-expanded="browsingMountId === row.id"
+            :aria-label="t('mounts.browse') + ' ' + row.local_mount_point"
+            @click="toggleBrowse(row.id)"
+          >
+            {{ t('mounts.browse') }}
+          </button>
           <button class="btn btn-danger" @click="removeTarget = row; showRemoveDialog = true">{{ t('mounts.remove') }}</button>
         </div>
       </template>
     </DataTable>
+
+    <!-- Inline directory browser panels (one per browsed mount) -->
+    <template v-if="browsingMountId !== null">
+      <section
+        v-for="mount in [browsedMount(browsingMountId)]"
+        :key="mount ? mount.id : 'none'"
+        class="browse-panel"
+        aria-label="browse-panel"
+      >
+        <template v-if="mount">
+          <h3 class="browse-panel-title">
+            {{ t('browse.browseMountContents') }}: {{ mount.local_mount_point }}
+          </h3>
+          <DirectoryBrowser :mount-path="mount.local_mount_point" :readonly="true" />
+        </template>
+      </section>
+    </template>
 
     <Pagination v-model:page="page" :page-size="pageSize" :total="filtered.length" />
 
@@ -286,5 +326,19 @@ select {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-sm);
+}
+
+.browse-panel {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-bg-secondary);
+  padding: var(--space-md);
+}
+
+.browse-panel-title {
+  font-size: 1rem;
+  font-weight: var(--font-weight-bold, 600);
+  margin-bottom: var(--space-sm);
+  color: var(--color-text-primary);
 }
 </style>

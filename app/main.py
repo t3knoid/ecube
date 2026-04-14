@@ -27,7 +27,7 @@ from app.exceptions import AuthenticationError, AuthorizationError, ConflictErro
 from app.utils.sanitize import is_encoding_error
 from app.logging_config import configure_logging
 from app.models.network import NetworkMount
-from app.routers import admin, audit, auth, configuration, database_setup, drives, files, introspection, jobs, mounts, setup, telemetry, users
+from app.routers import admin, audit, auth, browse, configuration, database_setup, drives, files, introspection, jobs, mounts, setup, telemetry, users
 from app.schemas.errors import ErrorResponse
 from app.schemas.introspection import HealthLiveResponse, HealthNotReadyResponse, HealthReadyResponse, HealthResponse, VersionResponse
 from app.session import close_session_backend, init_session_backend, mount_session_middleware
@@ -183,6 +183,10 @@ tags_metadata = [
     {
         "name": "admin",
         "description": "Administration — log file access, OS user and group management.",
+    },
+    {
+        "name": "browse",
+        "description": "Directory browsing — paginated listing of files and folders within active mount points.",
     },
     {
         "name": "setup",
@@ -708,6 +712,7 @@ app.include_router(database_setup.router)
 
 app.include_router(drives.router, dependencies=[Depends(get_current_user)])
 app.include_router(mounts.router, dependencies=[Depends(get_current_user)])
+app.include_router(browse.router, dependencies=[Depends(get_current_user)])
 app.include_router(jobs.router, dependencies=[Depends(get_current_user)])
 app.include_router(files.router, dependencies=[Depends(get_current_user)])
 app.include_router(introspection.router, dependencies=[Depends(get_current_user)])
