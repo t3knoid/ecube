@@ -200,6 +200,8 @@ onMounted(loadMounts)
           <button class="btn" @click="runValidateOne(row.id)">{{ t('mounts.test') }}</button>
           <button
             class="btn"
+            :disabled="row.status !== 'MOUNTED' || !row.local_mount_point"
+            :title="row.status !== 'MOUNTED' || !row.local_mount_point ? t('mounts.browseUnavailable') : ''"
             :aria-expanded="browsingMountId === row.id"
             :aria-label="t('mounts.browse') + ' ' + row.local_mount_point"
             @click="toggleBrowse(row.id)"
