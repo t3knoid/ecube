@@ -97,6 +97,52 @@ class TestChainOfCustodyGet:
         response = auditor_client.get("/audit/chain-of-custody", params={"drive_sn": "missing-sn"})
         assert response.status_code == 404
 
+    def test_drive_id_unbound_without_project_id_returns_422(self, auditor_client, db):
+        """A drive with no current_project_id (e.g. freshly formatted) must require
+        an explicit project_id for DRIVE_ID selectors to prevent cross-lifecycle bleed."""
+        drive = _seed_drive(db, device_identifier="COC-UNBOUND-ID", project_id=None, state=DriveState.AVAILABLE)
+        drive_id = _as_int(drive.id)
+
+        response = auditor_client.get("/audit/chain-of-custody", params={"drive_id": drive_id})
+        assert response.status_code == 422
+        assert "project_id" in response.json()["message"].lower()
+
+    def test_drive_sn_unbound_without_project_id_returns_422(self, auditor_client, db):
+        """Same guard via DRIVE_SN selector path."""
+        drive = _seed_drive(db, device_identifier="COC-UNBOUND-SN", project_id=None, state=DriveState.AVAILABLE)
+
+        response = auditor_client.get("/audit/chain-of-custody", params={"drive_sn": drive.device_identifier})
+        assert response.status_code == 422
+        assert "project_id" in response.json()["message"].lower()
+
+    def test_drive_id_unbound_with_explicit_project_id_scopes_to_historical_lifecycle(self, auditor_client, db):
+        """An unbound drive with an explicit project_id must return events scoped to
+        that project only — covering the post-format historical lookup use case."""
+        # Drive has been reformatted (current_project_id cleared to None).
+        drive = _seed_drive(db, device_identifier="COC-UNBOUND-HIST", project_id=None, state=DriveState.AVAILABLE)
+        drive_id = _as_int(drive.id)
+
+        # Seed prior-lifecycle events (CASE-OLD) and an unrelated project (CASE-OTHER).
+        _seed_audit(db, action="DRIVE_INITIALIZED", drive_id=drive_id, project_id="CASE-OLD")
+        _seed_audit(db, action="DRIVE_EJECT_PREPARED", drive_id=drive_id, project_id="CASE-OLD")
+        _seed_audit(db, action="DRIVE_INITIALIZED", drive_id=drive_id, project_id="CASE-OTHER")
+
+        response = auditor_client.get(
+            "/audit/chain-of-custody",
+            params={"drive_id": drive_id, "project_id": "CASE-OLD"},
+        )
+        assert response.status_code == 200
+        report = response.json()["reports"][0]
+        assert report["project_id"] == "CASE-OLD"
+        event_types = [e["event_type"] for e in report["chain_of_custody_events"]]
+        assert "DRIVE_INITIALIZED" in event_types
+        assert "DRIVE_EJECT_PREPARED" in event_types
+        # Events tagged to CASE-OTHER must not appear.
+        project_ids_in_events = {
+            e["details"].get("project_id") for e in report["chain_of_custody_events"] if e["details"]
+        }
+        assert "CASE-OTHER" not in project_ids_in_events
+
     def test_project_selector_returns_per_drive_sections(self, auditor_client, db):
         drive_one = _seed_drive(db, device_identifier="COC-PROJECT-A", project_id="CASE-1")
         drive_two = _seed_drive(db, device_identifier="COC-PROJECT-B", project_id="CASE-1")
