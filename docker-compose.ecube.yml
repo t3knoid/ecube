@@ -19,7 +19,7 @@ services:
     ports:
       - "${API_PORT:-8000}:8000"
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-ecube}:${POSTGRES_PASSWORD:-ecube}@postgres:5432/${POSTGRES_DB:-ecube}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ecube}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-ecube}
       PYTHONUNBUFFERED: "1"
       TRUST_PROXY_HEADERS: "true"
       ECUBE_RUN_MIGRATIONS_ON_START: "true"
