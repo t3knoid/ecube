@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime
+from sqlalchemy import Boolean, Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -9,6 +9,7 @@ class DriveState(str, enum.Enum):
     EMPTY = "EMPTY"
     AVAILABLE = "AVAILABLE"
     IN_USE = "IN_USE"
+    ARCHIVED = "ARCHIVED"
 
 
 class UsbHub(Base):
@@ -27,7 +28,7 @@ class UsbPort(Base):
     id = Column(Integer, primary_key=True)
     hub_id = Column(Integer, ForeignKey("usb_hubs.id"), nullable=False)
     port_number = Column(Integer, nullable=False)
-    system_path = Column(String, unique=True, nullable=False)
+    system_path = Column(String, nullable=False)
     friendly_label = Column(String)
     enabled = Column(Boolean, nullable=False, default=False, server_default="0")
     vendor_id = Column(String, nullable=True)
@@ -35,6 +36,7 @@ class UsbPort(Base):
     speed = Column(String, nullable=True)
     hub = relationship("UsbHub", back_populates="ports")
     drives = relationship("UsbDrive", back_populates="port")
+    __table_args__ = (UniqueConstraint("system_path", name="uq_usb_ports_system_path"),)
 
 
 class UsbDrive(Base):

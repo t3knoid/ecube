@@ -124,6 +124,8 @@ class TestDriveAuditLogging:
         entry = _audit_by_action(db, "DRIVE_EJECT_PREPARED")
         assert entry is not None
         assert entry.user == "manager-user"
+        assert entry.drive_id == drive.id
+        assert entry.project_id == "PROJ-AUDIT"
         assert entry.details["drive_id"] == drive.id
         assert entry.details["flush_ok"] is True
         assert entry.details["unmount_ok"] is True

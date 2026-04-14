@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
@@ -16,6 +16,14 @@ class DriveRepository:
     def list_all(self) -> List[UsbDrive]:
         """Return all drives."""
         return self.db.query(UsbDrive).all()
+
+    def list_by_states(self, states: Sequence[DriveState]) -> List[UsbDrive]:
+        """Return drives whose ``current_state`` is one of *states*."""
+        return (
+            self.db.query(UsbDrive)
+            .filter(UsbDrive.current_state.in_(states))
+            .all()
+        )
 
     def list_by_project(self, project_id: str) -> List[UsbDrive]:
         """Return drives whose ``current_project_id`` matches *project_id*."""
