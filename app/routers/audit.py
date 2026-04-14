@@ -20,7 +20,7 @@ from app.schemas.errors import R_401, R_403, R_404, R_409, R_410, R_422
 from app.schemas.types import OptionalDatetimeQuery, OptionalIntQuery
 from app.services import audit_service
 from app.utils.client_ip import get_client_ip
-from app.utils.sanitize import sanitize_string
+from app.utils.sanitize import sanitize_string, strict_sanitize_string
 
 logger = logging.getLogger(__name__)
 
@@ -92,10 +92,10 @@ def get_chain_of_custody(
     **Roles:** ``admin``, ``manager``, ``auditor``
     """
     if drive_sn is not None:
-        sanitized_drive_sn: str = sanitize_string(drive_sn)
-        if not sanitized_drive_sn:
-            raise EncodingError("drive_sn is empty after removing invalid characters")
-        drive_sn = sanitized_drive_sn
+        try:
+            strict_sanitize_string(drive_sn)
+        except ValueError:
+            raise EncodingError("drive_sn contains invalid characters")
 
     if project_id is not None:
         sanitized_project: str = sanitize_string(project_id)
