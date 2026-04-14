@@ -20,10 +20,17 @@ def _default_eject_provider() -> DriveEjectProvider:
     return get_drive_eject()
 
 
-def get_all_drives(db: Session, project_id: Optional[str] = None) -> List[UsbDrive]:
+def get_all_drives(
+    db: Session,
+    project_id: Optional[str] = None,
+    states: Optional[List[str]] = None,
+) -> List[UsbDrive]:
     repo = DriveRepository(db)
     if project_id is not None:
         return repo.list_by_project(project_id)
+    if states:
+        parsed = [DriveState(s) for s in states]
+        return repo.list_by_states(parsed)
     return repo.list_all()
 
 
@@ -38,30 +45,109 @@ def initialize_drive(
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
 
-    # Project isolation must be checked first so that IN_USE drives assigned
-    # to a different project always receive a 403 (with audit), regardless of
-    # their filesystem_type.
-    if drive.current_project_id and drive.current_project_id != project_id:
+    # Archived drives are permanently retired and must never re-enter operational use.
+    if drive.current_state == DriveState.ARCHIVED:
         try:
             audit_repo.add(
-                action="PROJECT_ISOLATION_VIOLATION",
+                action="INIT_REJECTED_ARCHIVED",
                 user=actor,
                 project_id=project_id,
                 drive_id=drive_id,
                 details={
                     "actor": actor,
                     "drive_id": drive_id,
+                    "current_state": drive.current_state.value,
                     "existing_project_id": drive.current_project_id,
                     "requested_project_id": project_id,
                 },
                 client_ip=client_ip,
             )
         except Exception:
-            logger.error("Failed to write audit log for PROJECT_ISOLATION_VIOLATION")
+            logger.error("Failed to write audit log for INIT_REJECTED_ARCHIVED")
         raise HTTPException(
-            status_code=403,
-            detail=f"Drive is already assigned to project '{drive.current_project_id}'",
+            status_code=409,
+            detail="Drive is archived and cannot be re-initialized.",
         )
+
+    # EMPTY drives are not physically accessible (not present or on a disabled port).
+    # Initialization requires the drive to be AVAILABLE so that a filesystem is
+    # present and the drive is reachable.  Attempting to initialize from EMPTY is
+    # always a precondition failure.
+    if drive.current_state == DriveState.EMPTY:
+        try:
+            audit_repo.add(
+                action="INIT_REJECTED_NOT_AVAILABLE",
+                user=actor,
+                project_id=project_id,
+                drive_id=drive_id,
+                details={
+                    "actor": actor,
+                    "drive_id": drive_id,
+                    "current_state": drive.current_state.value,
+                    "requested_project_id": project_id,
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.error("Failed to write audit log for INIT_REJECTED_NOT_AVAILABLE")
+        raise HTTPException(
+            status_code=409,
+            detail="Drive is EMPTY (not present or port disabled) and cannot be initialized.",
+        )
+
+    # Project isolation is state-dependent:
+    # - IN_USE + different project: hard deny (403) — cannot steal an active drive.
+    # - AVAILABLE + different project: require format first (409) — the previous
+    #   project's data is still on disk; a wipe is mandatory before re-assignment.
+    # - AVAILABLE + same project, or no prior project: allow (re-insert or fresh drive).
+    if drive.current_project_id and drive.current_project_id != project_id:
+        if drive.current_state == DriveState.IN_USE:
+            try:
+                audit_repo.add(
+                    action="PROJECT_ISOLATION_VIOLATION",
+                    user=actor,
+                    project_id=project_id,
+                    drive_id=drive_id,
+                    details={
+                        "actor": actor,
+                        "drive_id": drive_id,
+                        "existing_project_id": drive.current_project_id,
+                        "requested_project_id": project_id,
+                    },
+                    client_ip=client_ip,
+                )
+            except Exception:
+                logger.error("Failed to write audit log for PROJECT_ISOLATION_VIOLATION")
+            raise HTTPException(
+                status_code=403,
+                detail=f"Drive is already assigned to project '{drive.current_project_id}'",
+            )
+        else:
+            # Drive is AVAILABLE but still carries data from a different project.
+            # A format (wipe) is required before it can be re-assigned.
+            try:
+                audit_repo.add(
+                    action="INIT_REJECTED_PROJECT_MISMATCH",
+                    user=actor,
+                    project_id=project_id,
+                    drive_id=drive_id,
+                    details={
+                        "actor": actor,
+                        "drive_id": drive_id,
+                        "existing_project_id": drive.current_project_id,
+                        "requested_project_id": project_id,
+                    },
+                    client_ip=client_ip,
+                )
+            except Exception:
+                logger.error("Failed to write audit log for INIT_REJECTED_PROJECT_MISMATCH")
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Drive previously used for project '{drive.current_project_id}'. "
+                    "Format the drive to wipe existing data before assigning to a new project."
+                ),
+            )
 
     # Reject drives without a recognized filesystem.
     _unrecognized_fs = {"unformatted", "unknown", None}
@@ -71,6 +157,8 @@ def initialize_drive(
             audit_repo.add(
                 action="INIT_REJECTED_FILESYSTEM",
                 user=actor,
+                project_id=project_id,
+                drive_id=drive_id,
                 details={
                     "actor": actor,
                     "drive_id": drive_id,
@@ -103,6 +191,8 @@ def initialize_drive(
         audit_repo.add(
             action="DRIVE_INITIALIZED",
             user=actor,
+            project_id=project_id,
+            drive_id=drive_id,
             details={"drive_id": drive_id, "project_id": project_id},
             client_ip=client_ip,
         )
@@ -179,6 +269,8 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
             audit_repo.add(
                 action="DRIVE_EJECT_PREPARED",
                 user=actor,
+                project_id=drive.current_project_id,
+                drive_id=drive_id,
                 details={
                     "drive_id": drive_id,
                     "filesystem_path": initial_device_path,
@@ -194,6 +286,8 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
             audit_repo.add(
                 action="DRIVE_EJECT_FAILED",
                 user=actor,
+                project_id=drive.current_project_id,
+                drive_id=drive_id,
                 details={
                     "drive_id": drive_id,
                     "filesystem_path": initial_device_path,
@@ -262,6 +356,8 @@ def format_drive(
             audit_repo.add(
                 action="DRIVE_FORMAT_FAILED",
                 user=actor,
+                project_id=drive.current_project_id,
+                drive_id=drive_id,
                 details={
                     "drive_id": drive_id,
                     "filesystem_path": drive.filesystem_path,
@@ -279,6 +375,10 @@ def format_drive(
         )
 
     drive.filesystem_type = filesystem_type
+    # Formatting wipes all previous data, so the project binding is cleared.
+    # The drive is now clean and can be initialized for any project.
+    prior_project_id = drive.current_project_id
+    drive.current_project_id = None
     try:
         drive_repo.save(drive)
     except Exception:
@@ -287,6 +387,8 @@ def format_drive(
             audit_repo.add(
                 action="DRIVE_FORMAT_DB_UPDATE_FAILED",
                 user=actor,
+                project_id=prior_project_id,
+                drive_id=drive_id,
                 details={
                     "drive_id": drive_id,
                     "filesystem_path": drive.filesystem_path,
@@ -306,6 +408,8 @@ def format_drive(
         audit_repo.add(
             action="DRIVE_FORMATTED",
             user=actor,
+            project_id=prior_project_id,
+            drive_id=drive_id,
             details={
                 "drive_id": drive_id,
                 "filesystem_path": drive.filesystem_path,

@@ -404,3 +404,47 @@ def test_start_job_transitions_to_running_atomically(manager_client, db):
     db.expire_all()
     db.refresh(job)
     assert job.status == JobStatus.RUNNING
+
+
+def test_handoff_lock_conflict_returns_409(manager_client, db):
+    """A lock conflict while acquiring the per-drive handoff lock returns HTTP 409.
+
+    ``confirm_chain_of_custody_handoff`` calls ``DriveRepository.get_for_update``
+    before the idempotency check so that two concurrent identical submissions
+    cannot both pass ``_find_existing_handoff_event`` and insert duplicate
+    COC_HANDOFF_CONFIRMED rows.  When the row is already locked by another
+    transaction the repository raises ``ConflictError``; the exception handler
+    must surface this as HTTP 409.
+    """
+    from datetime import datetime, timezone
+
+    drive = UsbDrive(
+        device_identifier="USB-HANDOFF-LOCK",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-HANDOFF",
+        filesystem_type="ext4",
+    )
+    db.add(drive)
+    db.commit()
+
+    with patch(
+        "app.repositories.drive_repository.DriveRepository.get_for_update",
+        side_effect=ConflictError("Drive is currently locked by another operation."),
+    ):
+        response = manager_client.post(
+            "/audit/chain-of-custody/handoff",
+            json={
+                "drive_id": drive.id,
+                "project_id": "PROJ-HANDOFF",
+                "possessor": "Officer Smith",
+                "delivery_time": "2026-04-01T10:00:00Z",
+                "received_by": None,
+                "receipt_ref": None,
+                "notes": None,
+            },
+        )
+
+    assert response.status_code == 409
+    data = response.json()
+    assert data["code"] == "CONFLICT"
+    assert "locked" in data["message"].lower()

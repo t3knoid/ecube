@@ -10,20 +10,80 @@
 ## Table of Contents
 
 1. [Introduction](#introduction)
-2. [Development Environment Setup](#development-environment-setup)
-3. [Repository Layout](#repository-layout)
-4. [Running the Application](#running-the-application)
-5. [Database and Migrations](#database-and-migrations)
-6. [Testing](#testing)
-7. [Architecture Overview](#architecture-overview)
-8. [Coding Conventions](#coding-conventions)
-9. [Related Documentation](#related-documentation)
+2. [Quick Start](#quick-start)
+3. [Development Environment Setup](#development-environment-setup)
+4. [Repository Layout](#repository-layout)
+5. [Running the Application](#running-the-application)
+6. [Database and Migrations](#database-and-migrations)
+7. [Testing](#testing)
+8. [Architecture Overview](#architecture-overview)
+9. [Coding Conventions](#coding-conventions)
+10. [Related Documentation](#related-documentation)
 
 ---
 
 ## Introduction
 
 This guide is the entry point for developers working on the ECUBE codebase on macOS and Linux. It covers local setup, project structure, testing practices, and key architectural patterns. For Windows development (Docker Desktop + WSL2, including usbipd-win), use the dedicated **[Windows Development Guide](02-windows-development-guide.md)**. For production deployment, see the [Operational Guide](../operations/00-operational-guide.md).
+
+---
+
+## Quick Start
+
+Use this section for a concise startup path; subsequent sections provide more comprehensive instructions, alternatives, and troubleshooting details.
+
+Assumes Python 3.11+, Node.js 20 LTS+, npm 10+, and PostgreSQL 14+ are already installed.
+
+1. Clone the source code
+
+```bash
+git clone https://github.com/t3knoid/ecube.git && cd ecube
+```
+
+2. Configure the Python environment
+
+```bash
+python3.11 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+3. Configure the environment file
+
+```bash
+cp .env.example .env
+```
+
+4. Create a PostgreSQL superuser login for the setup wizard (first time only)
+
+```bash
+sudo -u postgres psql -c "CREATE ROLE ecubeadmin WITH SUPERUSER LOGIN PASSWORD 'ecubeadmin';"
+```
+
+5. Install PAM service config (first time only)
+
+```bash
+sudo cp deploy/ecube-pam /etc/pam.d/ecube
+```
+
+6. Start backend
+
+```bash
+sudo .venv/bin/uvicorn app.main:app --reload
+```
+
+7. In a second terminal, install dependencies and run the development frontend
+
+```bash
+cd frontend && npm ci && npm run dev
+```
+
+Then open the setup wizard at `http://localhost:5173` to test the database connection using `ecubeadmin`, provision the application database/user, run migrations, and create the first ECUBE admin user.
+
+| URL | Purpose |
+|-----|---------|
+| `http://localhost:5173` | Frontend UI |
+| `http://localhost:8000` | Backend API |
+| `http://localhost:8000/docs` | Interactive API docs |
 
 ---
 
@@ -138,41 +198,17 @@ What it does **not** install:
 ECUBE reads settings from environment variables or a `.env` file in the project root.
 
 ```bash
-# Create a .env file (required for docker compose workflows)
 cp .env.example .env
 ```
 
-For local development, use the platform compose file to run **PostgreSQL only** and run the ECUBE app/UI natively on the host:
-
-- Linux/macOS: `docker-compose.ecube.yml`
-- Windows: `docker-compose.ecube-win.yml`
-
-Set at least:
-
-```env
-POSTGRES_PASSWORD=ecube
-```
-
-Linux/macOS quick setup:
-
-```bash
-sed -i.bak 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ecube/' .env
-```
-
-Windows (pwsh) quick setup:
-
-```powershell
-Copy-Item .env .env.bak
-(Get-Content .env) -replace '^POSTGRES_PASSWORD=.*', 'POSTGRES_PASSWORD=ecube' | Set-Content .env
-```
+`DATABASE_URL` is written automatically by the setup wizard after provisioning. No manual edits to `.env` are required for a standard local dev setup.
 
 Key settings for development:
 
 | Variable | Default | Notes |
 |----------|---------|-------|
-| `DATABASE_URL` | `postgresql://ecube:ecube@localhost/ecube` | Matches postgres-only run from `docker-compose.ecube.yml` / `docker-compose.ecube-win.yml` |
+| `DATABASE_URL` | (written by setup wizard) | Set automatically after the wizard provisions the database |
 | `SECRET_KEY` | (built-in dev default) | JWT signing key; change in production |
-| `POSTGRES_PASSWORD` | (none) | Required by compose postgres service |
 | `ROLE_RESOLVER` | `local` | Uses OS group → role mapping |
 
 See [02 — Configuration Reference](../operations/04-configuration-reference.md) for the full list.
@@ -221,7 +257,7 @@ app/
   services/            # Business logic and state machines
 alembic/
   env.py               # Alembic environment configuration
-  versions/            # Migration scripts (0001–0004+)
+  versions/            # Migration scripts
 tests/
   conftest.py          # Shared fixtures (SQLite StaticPool, role-specific clients)
   test_*.py            # Unit and integration tests
@@ -242,58 +278,59 @@ docs/
 
 ## Running the Application
 
-The ECUBE app and UI always run natively on the host. Docker is used only to provide PostgreSQL by starting the `postgres` service from the platform compose file.
+The ECUBE backend and frontend run natively on the host. PostgreSQL must be running before starting the backend.
 
-Both compose files publish API port `8000` for development convenience if you choose to run the app container, but this is **not** a typical hardened deployment shape. Typical Docker deployments should expose only `8443` through `ecube-ui`.
+### Start PostgreSQL
 
-### Option A: Dockerized PostgreSQL (Recommended)
-
-Start the PostgreSQL container, then run the app and UI natively:
-
-```bash
-# Ensure local environment file exists and required postgres password is set
-cp .env.example .env
-sed -i.bak 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ecube/' .env
-
-# Start PostgreSQL only
-docker compose -f docker-compose.ecube.yml up -d postgres
-
-# Apply migrations (from your local venv)
-alembic upgrade head
-
-# Start the backend API with auto-reload (natively)
-uvicorn app.main:app --reload
-
-# In a separate terminal — start the frontend dev server (natively)
-cd frontend && npm ci && npm run dev
-```
-
-The backend API is available at `http://localhost:8000` and the frontend at `http://localhost:5173`.
-
-Windows command for postgres-only run:
-
-```bash
-docker compose -f docker-compose.ecube-win.yml up -d postgres
-```
-
-### Option B: Fully Local (No Docker)
-
-If you prefer a system-installed PostgreSQL (Linux example):
+Linux:
 
 ```bash
 sudo systemctl start postgresql
-
-# Create database (first time only)
-sudo -u postgres psql -c "CREATE USER ecube WITH PASSWORD 'ecube';"
-sudo -u postgres psql -c "CREATE DATABASE ecube OWNER ecube;"
-
-alembic upgrade head
-uvicorn app.main:app --reload
 ```
 
-For macOS, use your PostgreSQL service manager (for example, Homebrew services) and create the same `ecube` user/database before running migrations.
+### Create the Setup Wizard Superuser (First Time Only)
 
-The API is available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
+The setup wizard connects to PostgreSQL as `ecubeadmin` to provision the application database and user. Create this role once:
+
+```bash
+sudo -u postgres psql -c "CREATE ROLE ecubeadmin WITH SUPERUSER LOGIN PASSWORD 'ecubeadmin';"
+```
+
+`SUPERUSER` is required on PostgreSQL 16+ because `CREATEROLE` alone no longer grants implicit `SET ROLE` access to roles it creates.
+
+### PAM Service Config
+
+The `POST /auth/token` login endpoint authenticates OS credentials via Linux PAM. Two one-time setup steps are required.
+
+```bash
+sudo cp deploy/ecube-pam /etc/pam.d/ecube
+```
+
+### Backend Execution
+
+Run from the repository root (with your virtual environment activated):
+
+```bash
+sudo .venv/bin/uvicorn app.main:app --reload
+```
+
+Without root, all login attempts return `401 Unauthorized` regardless of credentials. In production, the service runs as root via systemd — the same restriction applies.
+
+### Frontend Execution
+
+Run in a separate terminal:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+To access the frontend from another machine, browse to `http://<host-ip>:5173`.
+
+### Access URLs
+
+The backend API is available at `http://localhost:8000`, the frontend at `http://localhost:5173` (or `http://<host-ip>:5173` from another machine), and interactive backend docs at `http://localhost:8000/docs`.
 
 ---
 
@@ -324,6 +361,29 @@ alembic current
 
 # Rollback one step
 alembic downgrade -1
+```
+
+### Reset PostgreSQL Database (Start Fresh)
+
+For local PostgreSQL installs, run a single command block:
+
+```bash
+sudo -u postgres psql -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'ecube' AND pid <> pg_backend_pid();"
+sudo -u postgres psql -c "DROP DATABASE IF EXISTS ecube;"
+sudo -u postgres psql -c "CREATE DATABASE ecube OWNER ecube;"
+```
+
+After recreating the database, apply migrations again:
+
+```bash
+alembic upgrade head
+```
+
+### Remove ecubeadmin role
+
+Run this only when cleaning up the setup/admin PostgreSQL role after a local database reset or recreation.
+```bash
+sudo -u postgres psql -c "DROP OWNED BY ecubeadmin; DROP ROLE IF EXISTS ecubeadmin;"
 ```
 
 ### Migration Naming
