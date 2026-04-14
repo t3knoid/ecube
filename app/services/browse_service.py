@@ -223,77 +223,94 @@ def list_directory(
     #    or None.  Using the DB-stored value means all subsequent filesystem
     #    operations are derived from a trusted source, not from user input.
     db_mount_root = _lookup_mount_root(path, db)
-    if db_mount_root is None:
+    try:
+        if db_mount_root is None:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "message": "The requested path is not a registered active mount root.",
+                    "reason": "unknown_mount_root",
+                },
+            )
+
+        # 2 & 3. Resolve path from the trusted DB root + user subdir; validate
+        #         containment (anti-traversal) and allowlist (defence-in-depth).
+        real_root, real_target = _resolve_and_validate(db_mount_root, subdir)
+
+        # 4. List directory -- path is derived from the DB-stored trusted root after
+        #    realpath containment validation above.
+        try:
+            names = sorted(os.listdir(real_target))  # noqa: S605 -- path validated above
+        except PermissionError:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "message": "Permission denied listing the requested directory.",
+                    "reason": "permission_denied",
+                },
+            )
+        except NotADirectoryError:
+            raise HTTPException(
+                status_code=400,
+                detail="The resolved path is not a directory.",
+            )
+        except OSError as exc:
+            logger.error("Failed to list directory %s: %s", real_target, exc)
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to list the directory due to a filesystem error.",
+            )
+
+        total = len(names)
+        start = (page - 1) * page_size
+        page_names = names[start : start + page_size]
+
+        entries = []
+        for name in page_names:
+            # name comes from os.listdir() (filesystem-provided), not from user input
+            entry = _stat_entry(real_target, name)  # noqa: S605 -- path validated above
+            if entry is not None:
+                entries.append(entry)
+
+        # 5. Audit log
         log_and_audit(
             db,
-            "BROWSE_DENIED",
+            "BROWSE_DIRECTORY",
             actor_id=actor,
-            level=logging.WARNING,
-            metadata={"path": path, "subdir": subdir, "reason": "unknown_mount_root"},
+            metadata={
+                "path": path,
+                "subdir": subdir,
+                "page": page,
+                "page_size": page_size,
+                "total": total,
+                "entry_count": len(entries),
+            },
             client_ip=client_ip,
         )
-        raise HTTPException(
-            status_code=403,
-            detail="The requested path is not a registered active mount root.",
+
+        return BrowseResponse(
+            path=db_mount_root,
+            subdir=subdir,
+            entries=entries,
+            total=total,
+            page=page,
+            page_size=page_size,
         )
+    except HTTPException as exc:
+        if exc.status_code == 403:
+            reason = "browse_forbidden"
+            detail = exc.detail
+            if isinstance(detail, dict):
+                reason = str(detail.get("reason") or detail.get("message") or reason)
+            elif detail:
+                reason = str(detail)
 
-    # 2 & 3. Resolve path from the trusted DB root + user subdir; validate
-    #         containment (anti-traversal) and allowlist (defence-in-depth).
-    real_root, real_target = _resolve_and_validate(db_mount_root, subdir)
-
-    # 4. List directory -- path is derived from the DB-stored trusted root after
-    #    realpath containment validation above.
-    try:
-        names = sorted(os.listdir(real_target))  # noqa: S605 -- path validated above
-    except PermissionError:
-        raise HTTPException(
-            status_code=403,
-            detail="Permission denied listing the requested directory.",
-        )
-    except NotADirectoryError:
-        raise HTTPException(
-            status_code=400,
-            detail="The resolved path is not a directory.",
-        )
-    except OSError as exc:
-        logger.error("Failed to list directory %s: %s", real_target, exc)
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to list the directory due to a filesystem error.",
-        )
-
-    total = len(names)
-    start = (page - 1) * page_size
-    page_names = names[start : start + page_size]
-
-    entries = []
-    for name in page_names:
-        # name comes from os.listdir() (filesystem-provided), not from user input
-        entry = _stat_entry(real_target, name)  # noqa: S605 -- path validated above
-        if entry is not None:
-            entries.append(entry)
-
-    # 5. Audit log
-    log_and_audit(
-        db,
-        "BROWSE_DIRECTORY",
-        actor_id=actor,
-        metadata={
-            "path": path,
-            "subdir": subdir,
-            "page": page,
-            "page_size": page_size,
-            "total": total,
-            "entry_count": len(entries),
-        },
-        client_ip=client_ip,
-    )
-
-    return BrowseResponse(
-        path=db_mount_root,
-        subdir=subdir,
-        entries=entries,
-        total=total,
-        page=page,
-        page_size=page_size,
-    )
+            log_and_audit(
+                db,
+                "BROWSE_DENIED",
+                actor_id=actor,
+                level=logging.WARNING,
+                metadata={"path": path, "subdir": subdir, "reason": reason},
+                client_ip=client_ip,
+            )
+        raise
