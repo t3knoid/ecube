@@ -222,15 +222,30 @@ async function loadChainOfCustody() {
   cocError.value = ''
   cocStatusMessage.value = ''
   const previousReport = cocReport.value
+  const requestedParams = buildCocParams()
   cocReport.value = null
   try {
-    cocReport.value = await getChainOfCustody(buildCocParams())
+    cocReport.value = await getChainOfCustody(requestedParams)
   } catch (err) {
     if (err?.response?.status === 410) {
-      // Drive has been archived after handoff. Restore the previously loaded
-      // report if one exists so the panel stays visible; otherwise surface an
-      // informational message so the user isn't left with a blank panel.
-      if (previousReport) {
+      // Drive has been archived after handoff. Only restore the previous report
+      // if it actually corresponds to the selectors that just produced the 410
+      // — a stale report from a different drive or project must not be shown.
+      const prevMatchesRequest =
+        previousReport &&
+        (() => {
+          if (requestedParams.drive_id != null) {
+            return previousReport.reports?.some((r) => r.drive_id === requestedParams.drive_id)
+          }
+          if (requestedParams.drive_sn != null) {
+            return previousReport.reports?.some((r) => r.drive_sn === requestedParams.drive_sn)
+          }
+          if (requestedParams.project_id != null) {
+            return previousReport.project_id === requestedParams.project_id
+          }
+          return false
+        })()
+      if (prevMatchesRequest) {
         cocReport.value = previousReport
       } else {
         cocStatusMessage.value = t('audit.driveArchived')
