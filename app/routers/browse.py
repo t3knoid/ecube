@@ -23,7 +23,7 @@ from app.schemas.browse import BrowseResponse
 from app.schemas.errors import R_400, R_401, R_403, R_422, R_500
 from app.services import browse_service
 from app.utils.client_ip import get_client_ip
-from app.utils.sanitize import SafeStr, StrictSafeStr
+from app.utils.sanitize import StrictSafeStr
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ def browse_directory(
             "or network mount local mount point registered in the system."
         ),
     ),
-    subdir: SafeStr = Query(
+    subdir: StrictSafeStr = Query(
         default="",
         description="Relative subdirectory within the mount root. Defaults to the root of the mount.",
     ),
