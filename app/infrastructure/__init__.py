@@ -22,6 +22,7 @@ from app.infrastructure.drive_eject import (
     EjectError,
     EjectResult,
 )
+from app.infrastructure.drive_mount import DriveMountProvider
 from app.infrastructure.mount_protocol import MountProvider
 from app.infrastructure.os_user_protocol import OsUserProvider
 from app.infrastructure.pam_protocol import PamAuthenticator
@@ -33,6 +34,7 @@ __all__ = [
     "DriveEjectProvider",
     "EjectError",
     "EjectResult",
+    "DriveMountProvider",
     "MountProvider",
     "OsUserProvider",
     "PamAuthenticator",
@@ -40,6 +42,7 @@ __all__ = [
     "get_drive_formatter",
     "get_drive_discovery",
     "get_drive_eject",
+    "get_drive_mount",
     "get_mount_provider",
     "get_os_user_provider",
     "get_authenticator",
@@ -68,6 +71,10 @@ def _linux_drive_eject() -> type[DriveEjectProvider]:
     from app.infrastructure.drive_eject import LinuxDriveEject
     return LinuxDriveEject
 
+def _linux_drive_mount() -> type[DriveMountProvider]:
+    from app.infrastructure.drive_mount import LinuxDriveMount
+    return LinuxDriveMount
+
 def _linux_mount_provider() -> type[MountProvider]:
     from app.services.mount_service import LinuxMountProvider
     return LinuxMountProvider
@@ -95,6 +102,10 @@ _DRIVE_DISCOVERY_REGISTRY: dict[str, Callable[[], type[DriveDiscoveryProvider]]]
 
 _DRIVE_EJECT_REGISTRY: dict[str, Callable[[], type[DriveEjectProvider]]] = {
     "linux": _linux_drive_eject,
+}
+
+_DRIVE_MOUNT_REGISTRY: dict[str, Callable[[], type[DriveMountProvider]]] = {
+    "linux": _linux_drive_mount,
 }
 
 _MOUNT_PROVIDER_REGISTRY: dict[str, Callable[[], type[MountProvider]]] = {
@@ -136,6 +147,11 @@ def get_drive_discovery() -> DriveDiscoveryProvider:
 def get_drive_eject() -> DriveEjectProvider:
     """Return the platform-appropriate :class:`DriveEjectProvider`."""
     return _resolve(_DRIVE_EJECT_REGISTRY, "DriveEjectProvider")
+
+
+def get_drive_mount() -> DriveMountProvider:
+    """Return the platform-appropriate :class:`DriveMountProvider`."""
+    return _resolve(_DRIVE_MOUNT_REGISTRY, "DriveMountProvider")
 
 
 def get_mount_provider() -> MountProvider:
