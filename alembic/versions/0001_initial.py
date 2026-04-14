@@ -1,19 +1,24 @@
 """Initial schema
 
-This is the canonical baseline migration for ECUBE v1.0. 
+This is the canonical baseline migration for ECUBE v1.0.
 
 Fresh install
 -------------
-Run ``alembic upgrade head`` on a clean database.  This migration creates the
+Run ``alembic upgrade head`` on a clean database. This migration creates the
 complete schema from scratch.
 
 Dev environment with an old alembic_version
 -------------------------------------------
-If a local dev database was migrated through the old revision chain, run::
+Only stamp this baseline if the database schema already matches it exactly,
+for example because the database was previously migrated all the way to the
+old head revision before the history was collapsed. In that case, run::
 
     alembic stamp 0001
-    # schema is already up-to-date; no DDL is replayed
+    # marks the existing schema as this baseline; no DDL is replayed
 
+Do not run ``alembic stamp 0001`` against a partially migrated or otherwise
+schema-drifted database. For those environments, recreate the database from
+scratch and then run ``alembic upgrade head``.
 Revision ID: 0001
 Revises:
 Create Date: 2024-01-01 00:00:00.000000
