@@ -356,6 +356,8 @@ class TestFormatDriveEndpoint:
 
         log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_FORMATTED").first()
         assert log is not None
+        assert log.drive_id == drive.id
+        assert log.project_id is None
         assert log.details["drive_id"] == drive.id
         assert log.details["filesystem_type"] == "ext4"
 
@@ -460,6 +462,8 @@ class TestFormatDriveEndpoint:
 
         log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_FORMAT_FAILED").first()
         assert log is not None
+        assert log.drive_id == drive.id
+        assert log.project_id is None
         assert log.details["drive_id"] == drive.id
         assert "simulated error" in log.details["error"]
 
@@ -494,6 +498,8 @@ class TestFormatDriveEndpoint:
             .first()
         )
         assert log is not None
+        assert log.drive_id == drive.id
+        assert log.project_id is None
         assert log.details["drive_id"] == drive.id
         assert log.details["filesystem_type"] == "ext4"
 
@@ -517,6 +523,8 @@ class TestInitializeFilesystemGuard:
 
         log = db.query(AuditLog).filter(AuditLog.action == "INIT_REJECTED_FILESYSTEM").first()
         assert log is not None
+        assert log.drive_id == drive.id
+        assert log.project_id == "PROJ-001"
         assert log.details["drive_id"] == drive.id
         assert log.details["project_id"] == "PROJ-001"
         assert log.details["filesystem_type"] is None
@@ -532,6 +540,8 @@ class TestInitializeFilesystemGuard:
 
         log = db.query(AuditLog).filter(AuditLog.action == "INIT_REJECTED_FILESYSTEM").first()
         assert log is not None
+        assert log.drive_id == drive.id
+        assert log.project_id == "PROJ-001"
         assert log.details["drive_id"] == drive.id
         assert log.details["project_id"] == "PROJ-001"
         assert log.details["filesystem_type"] == "unformatted"
@@ -547,6 +557,8 @@ class TestInitializeFilesystemGuard:
 
         log = db.query(AuditLog).filter(AuditLog.action == "INIT_REJECTED_FILESYSTEM").first()
         assert log is not None
+        assert log.drive_id == drive.id
+        assert log.project_id == "PROJ-001"
         assert log.details["drive_id"] == drive.id
         assert log.details["project_id"] == "PROJ-001"
         assert log.details["filesystem_type"] == "unknown"
