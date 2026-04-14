@@ -68,6 +68,9 @@
     "ejectConfirmBody": "Ensure no active copy operation is running before eject.",
     "cocPrompt": "Drive is ready for safe removal. Generate a chain-of-custody report and confirm handoff details.",
     "openCocReport": "Open CoC Report",
+    "browse": "Browse",
+    "localMountPoint": "Local Mount Point",
+    "notMounted": "This drive is not currently mounted. Run a rescan to auto-mount available drives.",
     "initializeTitle": "Initialize drive",
     "projectWarning": "Project binding is enforced for all writes.",
     "initializeProjectHint": "This drive was last used for project \"{project}\"."

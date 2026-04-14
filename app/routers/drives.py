@@ -9,7 +9,7 @@ from app.database import get_db
 from app.exceptions import EncodingError
 from app.schemas.hardware import DiscoverySyncResponse, DriveFormatRequest, DriveInitialize, UsbDriveSchema
 from app.services import drive_service, discovery_service
-from app.infrastructure import get_drive_eject, get_drive_formatter, get_filesystem_detector
+from app.infrastructure import get_drive_eject, get_drive_formatter, get_drive_mount, get_filesystem_detector
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500
 from app.utils.client_ip import get_client_ip
 from app.utils.sanitize import sanitize_string
@@ -110,6 +110,7 @@ def refresh_drives(
         db,
         actor=current_user.username,
         filesystem_detector=get_filesystem_detector(),
+        drive_mount=get_drive_mount(),
         client_ip=get_client_ip(request),
     )
 
