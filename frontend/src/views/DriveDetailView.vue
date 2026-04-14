@@ -174,7 +174,7 @@ onMounted(loadDrive)
         {{ browseExpanded ? '▼' : '▶' }} {{ t('browse.browseContents') }}
       </button>
       <div v-if="browseExpanded" class="browse-panel">
-        <DirectoryBrowser :mount-path="drive.mount_path" :readonly="true" />
+        <DirectoryBrowser :mount-path="drive.mount_path" />
       </div>
     </section>
 

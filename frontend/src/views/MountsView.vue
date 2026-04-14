@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getMounts, createMount, deleteMount, validateAllMounts, validateMount } from '@/api/mounts.js'
 import DataTable from '@/components/common/DataTable.vue'
@@ -163,8 +163,14 @@ async function runRemove() {
   }
 }
 
-function toggleBrowse(mountId) {
+const browsePanelRef = ref(null)
+
+async function toggleBrowse(mountId) {
   browsingMountId.value = browsingMountId.value === mountId ? null : mountId
+  if (browsingMountId.value !== null) {
+    await nextTick()
+    browsePanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }
 }
 
 onMounted(loadMounts)
@@ -208,15 +214,15 @@ onMounted(loadMounts)
     <!-- Inline directory browser panels (one per browsed mount) -->
     <section
       v-if="activeBrowsedMount"
+      ref="browsePanelRef"
       class="browse-panel"
-      aria-label="browse-panel"
+      :aria-label="t('browse.browseMountContents') + ': ' + activeBrowsedMount.local_mount_point"
     >
       <h3 class="browse-panel-title">
         {{ t('browse.browseMountContents') }}: {{ activeBrowsedMount.local_mount_point }}
       </h3>
       <DirectoryBrowser
         :mount-path="activeBrowsedMount.local_mount_point"
-        :readonly="true"
       />
     </section>
 
