@@ -202,12 +202,11 @@ class TestBrowseSecurity:
 
         assert response.status_code == 400
 
-    def test_path_traversal_absolute_subdir_returns_400(self, client, db, tmp_path):
-        """Subdir that resolves to /etc even via absolute path is rejected."""
+    def test_path_traversal_relative_dotdot_subdir_returns_400(self, client, db, tmp_path):
+        """Subdir using multiple ../ levels that resolves outside the mount root returns 400."""
         mount_point = str(tmp_path)
         _make_network_mount(db, mount_point)
 
-        # Try an absolute path subdir that would escape the root after realpath
         with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]):
             response = client.get(f"/browse?path={mount_point}&subdir=../../../tmp")
 
