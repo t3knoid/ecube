@@ -130,7 +130,7 @@ def _resolve_and_validate(
             raise HTTPException(
                 status_code=403,
                 detail="Mount root is not in the configured allowed-prefix list.",
-        )
+            )
 
     return real_root, real_target
 
