@@ -499,3 +499,36 @@ class TestChainOfCustodyHandoff:
             },
         )
         assert response.status_code == 422
+
+    def test_project_selector_excludes_denial_events(self, manager_client, db):
+        """Denial audit events (e.g. PROJECT_ISOLATION_VIOLATION) record the
+        drive_id of a drive that was *denied* access.  These must NOT cause the
+        drive to appear in a PROJECT-scoped CoC report."""
+        # Drive actually participating in project P-REAL
+        real_drive = _seed_drive(db, device_identifier="COC-REAL", project_id="P-REAL")
+        real_drive_id = _as_int(real_drive.id)
+        _seed_job_and_assignment(db, drive_id=real_drive_id, project_id="P-REAL")
+        _seed_audit(db, action="DRIVE_INITIALIZED", drive_id=real_drive_id, project_id="P-REAL")
+
+        # A totally different drive that got a denial event logged against P-REAL
+        denied_drive = _seed_drive(db, device_identifier="COC-DENIED", project_id="P-OTHER")
+        denied_drive_id = _as_int(denied_drive.id)
+        _seed_audit(
+            db,
+            action="PROJECT_ISOLATION_VIOLATION",
+            drive_id=denied_drive_id,
+            project_id="P-REAL",
+            details={"reason": "drive bound to P-OTHER"},
+        )
+
+        response = manager_client.get(
+            "/audit/chain-of-custody",
+            params={"project_id": "P-REAL"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        returned_ids = {r["drive_id"] for r in data["reports"]}
+        assert real_drive_id in returned_ids
+        assert denied_drive_id not in returned_ids, (
+            "Denial events must not pull unrelated drives into a project CoC report"
+        )
