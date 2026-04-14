@@ -41,6 +41,7 @@ Enum drive_state {
   EMPTY
   AVAILABLE
   IN_USE
+  ARCHIVED
 }
 
 Table export_jobs {
@@ -106,16 +107,6 @@ Table user_roles {
   }
 }
 
-Table audit_logs {
-  id int [pk, not null]
-  timestamp timestamptz
-  user varchar
-  action varchar [not null]
-  job_id int
-  details json
-  client_ip varchar(45)
-}
-
 Table export_files {
   id int [pk, not null]
   job_id int [not null]
@@ -139,12 +130,16 @@ Table usb_ports {
   id int [pk, not null]
   hub_id int [not null]
   port_number int [not null]
-  system_path varchar [not null, unique]
+  system_path varchar [not null]
   friendly_label varchar
   enabled boolean [not null, default: false]
   vendor_id varchar
   product_id varchar
   speed varchar
+
+  indexes {
+    system_path [unique, name: 'uq_usb_ports_system_path']
+  }
 }
 
 Table usb_drives {
@@ -160,6 +155,18 @@ Table usb_drives {
   last_seen_at timestamptz
 }
 
+Table audit_logs {
+  id int [pk, not null]
+  timestamp timestamptz
+  user varchar
+  action varchar [not null]
+  project_id varchar
+  drive_id int
+  job_id int
+  details json
+  client_ip varchar(45)
+}
+
 Table drive_assignments {
   id int [pk, not null]
   drive_id int [not null]
@@ -168,6 +175,7 @@ Table drive_assignments {
   released_at timestamptz
 }
 
+Ref: audit_logs.drive_id > usb_drives.id
 Ref: audit_logs.job_id > export_jobs.id
 Ref: drive_assignments.drive_id > usb_drives.id
 Ref: drive_assignments.job_id > export_jobs.id
