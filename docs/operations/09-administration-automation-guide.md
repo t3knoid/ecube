@@ -591,7 +591,7 @@ covers every drive operation from discovery through ejection.
 
 ### Drive Lifecycle
 
-Every USB drive passes through three states:
+Every USB drive passes through four states:
 
 ```text
   ┌───────────┐    discovery    ┌──────────────┐   initialize   ┌──────────┐
@@ -600,7 +600,12 @@ Every USB drive passes through three states:
         ▲                           ╭─╮ ▲                            │
         │        drive removed      │ │ │       prepare-eject        │
         └───────────────────────────┘ │ └◄───────────────────────────┘
-                               format ╯
+                               format ╯                              │
+                                                                     │ CoC handoff
+                                                                     ▼
+                                                              ┌──────────────┐
+                                                              │   ARCHIVED   │
+                                                              └──────────────┘
 ```
 
 | State | Meaning |
@@ -608,14 +613,16 @@ Every USB drive passes through three states:
 | `EMPTY` | Drive known to the database but not physically present |
 | `AVAILABLE` | Drive is present and ready to be formatted (if needed) and assigned to a project |
 | `IN_USE` | Drive is bound to a project and actively receiving evidence |
+| `ARCHIVED` | Drive permanently retired after chain-of-custody handoff; no further operations permitted |
 
 Key behaviors:
 
 - **Discovery sync** detects newly inserted drives and transitions `EMPTY → AVAILABLE` — but only if the drive's USB port is **enabled**. Drives on disabled ports remain in `EMPTY` state until the port is enabled and a subsequent discovery sync runs. If a port is disabled while a drive is already `AVAILABLE`, the next sync demotes the drive to `EMPTY`. Drives with no associated port (`port_id = NULL`) are treated as disabled and remain `EMPTY`. Drives in `IN_USE` state are never affected by port enablement — project isolation takes priority.
-- **Format** writes a filesystem to the drive (stays `AVAILABLE`). Required before initialize — a drive with no recognized filesystem cannot be initialized.
-- **Initialize** binds a drive to a project (`AVAILABLE → IN_USE`).
-- **Eject** flushes writes, unmounts, and returns the drive to `AVAILABLE` (`IN_USE → AVAILABLE`). The project binding is preserved.
-- **Physical removal** of an `AVAILABLE` drive transitions it back to `EMPTY`. An `IN_USE` drive retains its state and project binding across removal and reinsertion.
+- **Format** writes a filesystem to the drive (stays `AVAILABLE`) and **clears any existing project binding** (`current_project_id → null`). Required before a drive can be assigned to a new project. A drive with no recognized filesystem cannot be initialized.
+- **Initialize** binds a drive to a project (`AVAILABLE → IN_USE`). See the Initialize Drive section below for state-aware guard rules.
+- **Eject** flushes writes, unmounts, and returns the drive to `AVAILABLE` (`IN_USE → AVAILABLE`). The project binding and filesystem type are **preserved** so the same drive can be re-initialized for the same project without reformatting.
+- **Physical removal** of an `AVAILABLE` drive transitions it back to `EMPTY` on the next discovery sync. An `IN_USE` drive remains `IN_USE` even when physically absent — the project binding is intentionally preserved (project isolation must not be broken by hardware events). The drive resumes normal operation without operator intervention when re-inserted.
+- **Chain-of-custody handoff** permanently archives a drive (`IN_USE / AVAILABLE → ARCHIVED`). No operations are possible on archived drives.
 
 ### List Drives
 
@@ -861,8 +868,7 @@ Response: returns the updated drive object with `filesystem_type` set to the
 new value and `current_state` unchanged (`AVAILABLE`).
 
 > **Note:** The drive must be in `AVAILABLE` state and not currently mounted.
-> Formatting erases all data on the drive. Replace `1` with the actual drive
-> ID from `GET /drives`.
+> Formatting erases all data on the drive and **clears the project binding** (`current_project_id` is set to `null`). This is required when reassigning a used drive to a new project. Replace `1` with the actual drive ID from `GET /drives`.
 
 ### Initialize Drive
 
@@ -881,9 +887,18 @@ curl -k -X POST https://localhost:8443/drives/1/initialize \
 Response: returns the updated drive object with `current_state: "IN_USE"`
 and `current_project_id` set to the provided project ID.
 
-> **Note:** The drive must be in `AVAILABLE` state and have a recognized
-> filesystem. The project binding is enforced at copy time — any attempt
-> to write data from a different project will be rejected and audited.
+> **Note:** The drive must have a recognized filesystem. Initialize enforces the following state-aware guards:
+>
+> | Condition | Result |
+> |-----------|--------|
+> | Drive is `EMPTY` (not present or port disabled) | 409 — not accessible; insert drive or enable port first |
+> | Drive is `ARCHIVED` | 409 — permanently retired, cannot re-initialize |
+> | Drive is `IN_USE` and `project_id` differs from binding | 403 — project isolation violation |
+> | Drive is `AVAILABLE` and `project_id` differs from binding | 409 — format required before reassigning to a new project |
+> | Drive is `AVAILABLE` and `project_id` matches binding (or drive has no prior binding) | Allowed — transitions to `IN_USE` |
+> | Drive is `IN_USE` and `project_id` matches binding | Allowed — idempotent re-bind |
+>
+> All denials are recorded in the audit log with the actor, drive, requested project, and reason.
 
 ### Eject Drive
 
@@ -901,8 +916,58 @@ The `current_project_id` field remains set.
 
 > **Note:** The drive must be in `IN_USE` state. After a successful response
 > the drive can be safely physically removed. The project binding
-> (`current_project_id`) is preserved — reinserting the same drive will
-> restore it as `IN_USE` for the same project on the next discovery sync.
+> (`current_project_id`) and filesystem type are preserved after eject.
+> If the drive is reinserted, discovery brings it back to `AVAILABLE` (not
+> directly to `IN_USE`). Because the project binding is intact, the operator
+> can re-initialize it for the same project without reformatting. To assign
+> the drive to a **different** project, format it first (which clears the
+> binding), then initialize with the new project ID.
+
+### Chain-of-Custody Handoff
+
+Confirms the legal transfer of a drive to a recipient and permanently archives
+the drive. After a successful handoff, the drive transitions to `ARCHIVED` and
+cannot be initialized, formatted, or ejected. The audit trail is preserved.
+
+```bash
+# Requires admin or manager role
+curl -k -X POST https://localhost:8443/audit/chain-of-custody/handoff \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "drive_id": 1,
+    "project_id": "PROJECT-42",
+    "possessor": "Officer Jane Doe",
+    "delivery_time": "2026-04-13T14:30:00Z",
+    "received_by": "Evidence Custody Unit",
+    "receipt_ref": "RCP-2026-042"
+  }'
+```
+
+All fields except `drive_id`, `possessor`, and `delivery_time` are optional.
+`delivery_time` must be a UTC ISO 8601 timestamp (`Z` or `+00:00` offset accepted;
+the backend rejects non-UTC values with 422 and always stores and returns the value
+in `Z` form).
+
+The call is **idempotent**: submitting the same `(drive_id, possessor, delivery_time, receipt_ref)` combination twice returns the same `event_id` without creating a duplicate audit entry. Idempotency is scoped to the current project lifecycle — the effective `project_id` (resolved from the request payload or the drive's binding) is included in the match, so a prior-project handoff record on the same drive does not satisfy the idempotency check for a new project.
+
+Response: returns the recorded handoff event including `event_id`, `event_type`, `recorded_at`, and all submitted fields.
+
+To retrieve the chain-of-custody report for a drive before or after handoff:
+
+```bash
+# By drive ID
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  "https://localhost:8443/audit/chain-of-custody?drive_id=1"
+
+# By project ID (returns all non-archived drives for the project)
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  "https://localhost:8443/audit/chain-of-custody?project_id=PROJECT-42"
+```
+
+> **Note:** After archival, querying a drive by `drive_id` or `drive_sn` returns
+> `410 Gone`. Project-level queries automatically exclude archived drives.
+> Full audit history for the drive remains visible via `GET /audit`.
 
 ---
 
