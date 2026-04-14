@@ -203,21 +203,19 @@ onMounted(loadMounts)
     </DataTable>
 
     <!-- Inline directory browser panels (one per browsed mount) -->
-    <template v-if="browsingMountId !== null">
-      <section
-        v-for="mount in [browsedMount(browsingMountId)]"
-        :key="mount ? mount.id : 'none'"
-        class="browse-panel"
-        aria-label="browse-panel"
-      >
-        <template v-if="mount">
-          <h3 class="browse-panel-title">
-            {{ t('browse.browseMountContents') }}: {{ mount.local_mount_point }}
-          </h3>
-          <DirectoryBrowser :mount-path="mount.local_mount_point" :readonly="true" />
-        </template>
-      </section>
-    </template>
+    <section
+      v-if="browsingMountId !== null && browsedMount(browsingMountId)"
+      class="browse-panel"
+      aria-label="browse-panel"
+    >
+      <h3 class="browse-panel-title">
+        {{ t('browse.browseMountContents') }}: {{ browsedMount(browsingMountId).local_mount_point }}
+      </h3>
+      <DirectoryBrowser
+        :mount-path="browsedMount(browsingMountId).local_mount_point"
+        :readonly="true"
+      />
+    </section>
 
     <Pagination v-model:page="page" :page-size="pageSize" :total="filtered.length" />
 
