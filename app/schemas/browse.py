@@ -5,8 +5,6 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from app.utils.sanitize import SafeStr, StrictSafeStr
-
 
 class BrowseEntry(BaseModel):
     """A single entry returned by ``GET /browse``."""
