@@ -117,12 +117,17 @@ def _resolve_and_validate(
                     detail="Symlink traversal denied: a path component is a symbolic link.",
                 )
 
-    # Allowlist check (secondary defence)
+    # Allowlist check (secondary defence).  Normalize each configured prefix
+    # and enforce a path-separator boundary so that prefix "/mnt/ecube" does
+    # not accidentally match "/mnt/ecube2/...".
     allowed = settings.browse_allowed_prefixes
-    if allowed and not any(real_root.startswith(p) for p in allowed):
-        raise HTTPException(
-            status_code=403,
-            detail="Mount root is not in the configured allowed-prefix list.",
+    if allowed:
+        normalised_prefixes = [os.path.realpath(p).rstrip("/") + "/" for p in allowed]
+        root_with_sep = real_root.rstrip("/") + "/"
+        if not any(root_with_sep.startswith(np) or real_root == np.rstrip("/") for np in normalised_prefixes):
+            raise HTTPException(
+                status_code=403,
+                detail="Mount root is not in the configured allowed-prefix list.",
         )
 
     return real_root, real_target
