@@ -5,13 +5,15 @@ Security model:
    or network ``local_mount_point``).  Arbitrary filesystem paths are rejected
    with 403.
 2. The resolved ``realpath(mount_root / subdir)`` must start with
-   ``realpath(mount_root)``.  Path-traversal via ``../`` or symlinks is
-   rejected with 400.
-3. The resolved path must start with one of the configured
+   ``realpath(mount_root)``.  Path-traversal via ``../`` is rejected with 400.
+3. Each component of the user-supplied *subdir* is checked with ``islink``;
+   symlink traversal is rejected with 400 even when the resolved path
+   stays inside the mount root.
+4. The resolved path must start with one of the configured
    ``settings.browse_allowed_prefixes`` as a secondary defence layer.
-4. Symlinks are *not* followed — they are reported as ``type: "symlink"`` but
+5. Symlinks are *not* followed — they are reported as ``type: "symlink"`` but
    never dereferenced.
-5. An ``BROWSE_DIRECTORY`` audit record is written on every call.
+6. A ``BROWSE_DIRECTORY`` audit record is written on every call.
 """
 
 import logging
