@@ -126,3 +126,44 @@ Select all that apply:
 - [ ] No keyboard traps
 - [ ] ARIA roles used correctly when needed
 - [ ] Directory browser and tree view fully operable with keyboard only
+
+# 10. Code Quality & Maintainability
+- [ ] No unused imports or unused variables
+- [ ] No duplicated logic or copy‑paste blocks
+- [ ] No dead code or commented‑out code left behind
+- [ ] No leftover debug statements (console.log, print, pdb, debugger)
+- [ ] Functions and components are small, focused, and readable
+- [ ] Shared logic extracted into utilities/composables/services where appropriate
+- [ ] Naming conventions are consistent across backend and frontend
+- [ ] Imports are clean, sorted, and minimal
+- [ ] No unused dependencies in requirements.txt or package.json
+- [ ] Linting and formatting rules are followed (Black, Ruff, ESLint, Prettier)
+
+## Security & System Safety
+- [ ] No insecure use of user input (paths, shell commands, API calls)
+- [ ] No directory traversal risks; paths are validated and normalized
+- [ ] No unsafe subprocess or shell=True usage
+- [ ] No sensitive data logged (tokens, passwords, internal paths)
+- [ ] All endpoints enforce authentication and authorization
+- [ ] No bypass of system-layer boundaries (UI never touches hardware directly)
+- [ ] No insecure defaults (debug=True, permissive CORS, weak permissions)
+- [ ] No dynamic code execution (eval, exec, Function)
+
+## System Performance & Stability
+- [ ] No long-running synchronous work inside FastAPI endpoints
+- [ ] No CPU/IO-heavy work on the event loop
+- [ ] No unbounded loops, recursion, or polling
+- [ ] No unbounded ThreadPoolExecutor usage
+- [ ] No N+1 queries or inefficient ORM patterns
+- [ ] No repeated expensive operations that should be cached
+- [ ] No unnecessary Vue reactivity triggers or excessive watchers
+- [ ] Directory browsing is efficient and safe for deep/wide trees
+- [ ] No memory leaks or unbounded in-memory growth
+- [ ] Background tasks cleaned up properly (temp files, state, logs)
+
+## ECUBE-Specific Safety
+- [ ] Copy/verify/manifest tasks cannot degrade system performance
+- [ ] Drive lifecycle transitions remain safe and atomic
+- [ ] System-layer APIs cannot be called in unsafe states
+- [ ] Chain-of-custody integrity preserved in all code paths
+
