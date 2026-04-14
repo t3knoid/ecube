@@ -41,5 +41,7 @@ export default defineConfig(({ mode }) => ({
         rewrite: (path) => path.replace(/^\/api(\/|$)/, '/'),
       },
     },
+    allowedHosts: ['www.ecube.one', 'ecube.one'],
   },
+  
 }))
