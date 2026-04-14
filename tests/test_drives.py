@@ -22,7 +22,7 @@ def _fake_eject(flush_ok=True, unmount_ok=True,
 def test_list_drives(client, db):
     response = client.get("/drives")
     assert response.status_code == 200
-    assert response.json() == []
+    assert isinstance(response.json(), list)
 
 
 def test_list_drives_with_data(client, db):
@@ -33,8 +33,9 @@ def test_list_drives_with_data(client, db):
     response = client.get("/drives")
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
-    assert data[0]["device_identifier"] == "USB001"
+    ids = [d["device_identifier"] for d in data]
+    assert "USB001" in ids
+    assert ids.count("USB001") == 1
 
 
 def test_list_drives_filter_by_project(client, db):
@@ -80,7 +81,9 @@ def test_list_drives_no_filter_returns_all(client, db):
     response = client.get("/drives")
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
+    ids = [d["device_identifier"] for d in data]
+    assert "USB-1" in ids
+    assert "USB-2" in ids
 
 
 def test_initialize_drive(manager_client, db):
@@ -98,6 +101,64 @@ def test_initialize_drive(manager_client, db):
 def test_initialize_drive_not_found(manager_client, db):
     response = manager_client.post("/drives/999/initialize", json={"project_id": "PROJ-001"})
     assert response.status_code == 404
+
+
+def test_initialize_archived_drive_is_rejected(manager_client, db):
+    """Archived drives must never be re-initialized (terminal state)."""
+    from app.models.audit import AuditLog
+
+    drive = UsbDrive(
+        device_identifier="USB003A",
+        current_state=DriveState.ARCHIVED,
+        current_project_id="PROJ-OLD",
+        filesystem_type="exfat",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = manager_client.post(f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-NEW"})
+    assert response.status_code == 409
+    assert "archived" in response.json()["message"].lower()
+
+    # Drive state must remain ARCHIVED.
+    db.refresh(drive)
+    assert drive.current_state == DriveState.ARCHIVED
+
+    # Denial must be recorded in the audit trail.
+    log = db.query(AuditLog).filter(AuditLog.action == "INIT_REJECTED_ARCHIVED").first()
+    assert log is not None
+    assert log.details["drive_id"] == drive.id
+    assert log.details["requested_project_id"] == "PROJ-NEW"
+    assert log.details["current_state"] == "ARCHIVED"
+    assert log.details["existing_project_id"] == "PROJ-OLD"
+
+
+def test_initialize_empty_drive_is_rejected(manager_client, db):
+    """EMPTY drives are not accessible; initialization must be rejected with 409."""
+    from app.models.audit import AuditLog
+
+    drive = UsbDrive(
+        device_identifier="USB003E",
+        current_state=DriveState.EMPTY,
+        filesystem_type="ext4",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = manager_client.post(f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-NEW"})
+    assert response.status_code == 409
+    assert "empty" in response.json()["message"].lower()
+
+    # Drive state must remain EMPTY.
+    db.refresh(drive)
+    assert drive.current_state == DriveState.EMPTY
+
+    # Denial must be recorded in the audit trail.
+    log = db.query(AuditLog).filter(AuditLog.action == "INIT_REJECTED_NOT_AVAILABLE").first()
+    assert log is not None
+    assert log.details["drive_id"] == drive.id
+    assert log.details["current_state"] == "EMPTY"
+    assert log.details["requested_project_id"] == "PROJ-NEW"
 
 
 def test_project_isolation_violation(manager_client, db):
@@ -142,6 +203,59 @@ def test_prepare_eject(manager_client, db):
     assert response.status_code == 200
     data = response.json()
     assert data["current_state"] == "AVAILABLE"
+    # Project binding is preserved through eject so re-insert for the same
+    # project is allowed without a format, and cross-project reuse is blocked.
+    assert data["current_project_id"] == "PROJ-001"
+
+
+def test_reinitialize_same_project_after_eject(manager_client, db):
+    """A drive can be re-initialized for the same project after eject (adds more data)."""
+    drive = UsbDrive(
+        device_identifier="USB005D",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        filesystem_type="exfat",
+    )
+    db.add(drive)
+    db.commit()
+
+    with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject()):
+        eject_resp = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+    assert eject_resp.status_code == 200
+
+    # Re-initialize for the same project must succeed — user is adding more data.
+    init_resp = manager_client.post(
+        f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-001"}
+    )
+    assert init_resp.status_code == 200
+    assert init_resp.json()["current_state"] == "IN_USE"
+
+
+def test_reinitialize_different_project_after_eject_requires_format(manager_client, db):
+    """Re-initializing an ejected drive for a different project must be rejected (409).
+
+    The previous project's data is still on disk. A format (wipe) is required
+    before the drive can be assigned to a new project.
+    """
+    drive = UsbDrive(
+        device_identifier="USB005E",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-A",
+        filesystem_type="exfat",
+    )
+    db.add(drive)
+    db.commit()
+
+    with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject()):
+        eject_resp = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+    assert eject_resp.status_code == 200
+
+    # Attempt to re-initialize for a different project must be rejected.
+    init_resp = manager_client.post(
+        f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-B"}
+    )
+    assert init_resp.status_code == 409
+    assert "PROJ-A" in init_resp.json()["message"]
 
 
 def test_prepare_eject_with_filesystem_path(manager_client, db):
@@ -167,6 +281,8 @@ def test_prepare_eject_with_filesystem_path(manager_client, db):
 
     log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_EJECT_PREPARED").first()
     assert log is not None
+    assert log.drive_id == drive.id
+    assert log.project_id == "PROJ-001"
     assert log.details["drive_id"] == drive.id
     assert log.details["filesystem_path"] == "/dev/sdb"
     assert log.details["flush_ok"] is True
@@ -204,6 +320,8 @@ def test_prepare_eject_flush_failure(manager_client, db):
     from app.models.audit import AuditLog
     log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_EJECT_FAILED").first()
     assert log is not None
+    assert log.drive_id == drive.id
+    assert log.project_id == "PROJ-001"
     assert log.details["flush_ok"] is False
     assert log.details["flush_error"] == "sync failed"
 

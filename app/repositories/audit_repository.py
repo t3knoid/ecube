@@ -28,6 +28,37 @@ class AuditRepository:
         client_ip: Optional[str] = None,
     ) -> AuditLog:
         """Create and persist an immutable audit log entry."""
+        entry = self.add_uncommitted(
+            action=action,
+            user=user,
+            project_id=project_id,
+            drive_id=drive_id,
+            job_id=job_id,
+            details=details,
+            client_ip=client_ip,
+        )
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+        return entry
+
+    def add_uncommitted(
+        self,
+        action: str,
+        user: Optional[str] = None,
+        project_id: Optional[str] = None,
+        drive_id: Optional[int] = None,
+        job_id: Optional[int] = None,
+        details: Optional[Dict[str, Any]] = None,
+        client_ip: Optional[str] = None,
+    ) -> AuditLog:
+        """Create and stage an immutable audit log entry without committing.
+
+        This is intended for callers that need to include audit writes in a
+        wider atomic transaction before issuing a single commit.
+        """
         normalized_project_id = _normalize_project_id(project_id)
         normalized_drive_id = _normalize_drive_id(drive_id)
         resolved_project_id = normalized_project_id if normalized_project_id is not None else _extract_project_id(details)
@@ -42,11 +73,7 @@ class AuditRepository:
             client_ip=client_ip,
         )
         self.db.add(entry)
-        try:
-            self.db.commit()
-        except Exception:
-            self.db.rollback()
-            raise
+        self.db.flush()
         self.db.refresh(entry)
         return entry
 

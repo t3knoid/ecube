@@ -5,7 +5,7 @@ import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
 async function commonRoutes(page) {
   await routeJson(page, '**/api/drives', [{ id: 1, current_state: 'AVAILABLE', device_identifier: '/dev/sdb', filesystem_type: 'ext4', capacity_bytes: 1000 }])
   await routeJson(page, '**/api/jobs**', [])
-  await routeJson(page, '**/api/audit**', [])
+  await routeJson(page, /\/api\/audit(?!\/)/, [])
 }
 
 test('processor cannot access admin views/actions', async ({ page }) => {

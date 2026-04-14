@@ -175,6 +175,9 @@ If operators require SSH access and ECUBE access on the same account, do not use
 # Restrict .env file to ecube user only
 sudo chmod 600 /opt/ecube/.env
 sudo chown ecube:ecube /opt/ecube/.env
+```
+
+The application's `.env` rewrite logic (triggered by database provisioning or settings updates via the API) preserves the original file's ownership and permission mode. Operators do not need to re-apply `chown`/`chmod` after configuration changes made through the API.
 
 # Restrict certificate files for backend-only TLS termination
 sudo chmod 600 /opt/ecube/certs/key.pem
