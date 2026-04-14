@@ -42,7 +42,6 @@ class AuditRepository:
         except Exception:
             self.db.rollback()
             raise
-        self.db.refresh(entry)
         return entry
 
     def add_uncommitted(
