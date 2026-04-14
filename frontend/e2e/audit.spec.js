@@ -161,7 +161,10 @@ test('chain of custody handoff requires warning confirmation and submits archive
   // Verify the report was patched in-place with the handoff response fields.
   // custody_complete should be true and the new event should appear in the events list.
   await expect(page.getByText('Custody Complete')).toBeVisible()
-  const eventsJson = await page.locator('pre').first().textContent()
+
+  // Expand the raw events panel (collapsed by default) then read from it.
+  await page.locator('.coc-events').getByRole('button', { name: 'Show' }).click()
+  const eventsJson = await page.locator('.coc-events pre').textContent()
   const events = JSON.parse(eventsJson)
   const handoffEvent = events.find((e) => e.event_type === 'COC_HANDOFF_CONFIRMED')
   expect(handoffEvent).toBeDefined()
