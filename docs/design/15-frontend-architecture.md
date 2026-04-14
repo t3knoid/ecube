@@ -130,6 +130,7 @@ frontend/
 │   │   └── index.js               # Route definitions + navigation guards
 │   ├── stores/
 │   │   ├── auth.js                # Authentication state + token lifecycle
+│   │   ├── settings.js            # User-configurable app settings (persisted to localStorage)
 │   │   └── theme.js               # Theme loading, switching, persistence
 │   └── views/                     # One per wireframe screen
 │       ├── SetupWizardView.vue    # Screen 1: First-time setup
@@ -251,6 +252,15 @@ Token is stored in `sessionStorage` (not `localStorage`) so it does not persist 
 
 See [Section 7](#7-theme--styling-system) for the theme CSS contract.
 
+### 5.3 Settings Store (`stores/settings.js`)
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `auditExportFilename` | `string` | `"audit-log-export"` | Base filename for CSV audit exports |
+| `downloadRevokeDelayMs` | `number` | `1500` | Delay (ms) before revoking blob URLs after triggering a download. Increase on slow machines where downloads fail to start within the default window. |
+
+All properties are persisted to `localStorage` under the `STORAGE_SETTINGS_KEY` constant and restored on page load. Invalid or missing values fall back to defaults defined in `constants/exports.js`.
+
 ---
 
 ## 6. API Client Layer
@@ -282,7 +292,7 @@ Each module exports thin wrapper functions around Axios calls. Modules map 1:1 t
 |--------|------------------|---------|
 | `auth.js` | `POST /auth/token` | LoginView, auth store |
 | `setup.js` | `GET /setup/status`, `POST /setup/initialize`, `POST /setup/database/test-connection`, `POST /setup/database/provision`, `GET /setup/database/provision-status`, `GET /setup/database/system-info`, `GET /setup/database/status`, `PUT /setup/database/settings` | SetupWizardView |
-| `drives.js` | `GET /drives`, `POST /drives/{drive_id}/initialize`, `POST /drives/{drive_id}/format`, `POST /drives/{drive_id}/prepare-eject` | DrivesView, DriveDetailView, DashboardView |
+| `drives.js` | `GET /drives`, `POST /drives/{drive_id}/initialize`, `POST /drives/{drive_id}/format`, `POST /drives/{drive_id}/prepare-eject` | DrivesView, DriveDetailView, DashboardView, AuditView |
 | `mounts.js` | `GET /mounts`, `POST /mounts`, `DELETE /mounts/{mount_id}` | MountsView |
 | `jobs.js` | `POST /jobs`, `POST /jobs/{job_id}/start`, `GET /jobs/{job_id}`, `POST /jobs/{job_id}/verify`, `POST /jobs/{job_id}/manifest` | JobsView, JobDetailView, DashboardView |
 | `audit.js` | `GET /audit`, `GET /audit/chain-of-custody` | AuditView |
@@ -439,7 +449,7 @@ Vue I18n 9.x provides the localization infrastructure. All user-visible strings 
 | `MountsView.vue` | Screen 5 | UC-5.1 – UC-5.6 | Mount list with test/unmount/remove actions; add-mount dialog |
 | `JobsView.vue` | Screen 6a | UC-6.1, UC-6.3 | Job list with status/progress; create-job button |
 | `JobDetailView.vue` | Screen 6b–d | UC-6.2 – UC-6.8 | Progress bar with polling; file list table; start/verify/manifest actions; hash viewer; file compare |
-| `AuditView.vue` | Screen 7 | UC-7.1 – UC-7.7 | Filterable audit log table; date range, user, action filters; CSV export; CoC report retrieval by drive/project (drive default) with print/save controls |
+| `AuditView.vue` | Screen 7 | UC-7.1 – UC-7.7 | Filterable audit log table; date range, user, action filters; CSV export; CoC report retrieval by drive/project (drive default) with print/save controls. Drive selector populated server-side via `GET /drives?state=IN_USE&state=AVAILABLE` to exclude EMPTY and ARCHIVED drives. |
 | `UsersView.vue` | Screen 8 | UC-3.1 – UC-3.9 | Single editable users table: role selection, per-user save, password reset, and create-user flow; admin-only |
 | `SystemView.vue` | Screen 9 | UC-8.1 – UC-8.8 | Tabbed: Health, USB Topology, Block Devices, Mounts, Logs, Job Debug |
 

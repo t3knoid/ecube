@@ -357,6 +357,7 @@ List all drives with state and project assignment.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `project_id` | string | No | When provided, return only drives bound to this project. When omitted, return all drives. |
+| `state` | string (repeatable) | No | Filter by drive state. May be specified multiple times (e.g. `?state=IN_USE&state=AVAILABLE`). Valid values: `EMPTY`, `AVAILABLE`, `IN_USE`, `ARCHIVED`. When omitted, all states are returned. |
 
 **Roles:** `admin`, `manager`, `processor`, `auditor`
 
@@ -1541,7 +1542,7 @@ Create the application database user, database, and run Alembic migrations.
 }
 ```
 
-**Side effects:** Writes `DATABASE_URL` to `.env`, reinitializes the database engine and in-memory settings.
+**Side effects:** Writes `DATABASE_URL` to `.env`, reinitializes the database engine and in-memory settings. The `.env` rewrite preserves the original file's ownership and permission mode so that a privileged (root/sudo) process does not lock out the normal service user.
 
 **Error responses:**
 
@@ -1655,7 +1656,7 @@ Partially update database connection settings.  All fields are optional — only
 }
 ```
 
-**Side effects:** Tests the new settings before committing, writes `.env`, reinitializes the connection pool, and updates in-memory settings.
+**Side effects:** Tests the new settings before committing, writes `.env`, reinitializes the connection pool, and updates in-memory settings. The `.env` rewrite preserves the original file's ownership and permission mode.
 
 **Error responses:**
 
