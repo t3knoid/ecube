@@ -36,7 +36,7 @@ async function mockCoreApis(page) {
   await routeJson(page, '**/api/users', { users: [{ username: 'frank', roles: ['admin'] }] })
   await routeJson(page, '**/api/admin/os-users', { users: [{ uid: 1001, username: 'frank', groups: ['ecube-admin'] }] })
   await routeJson(page, '**/api/jobs**', [{ id: 55, project_id: 'PRJ', status: 'RUNNING', copied_bytes: 20, total_bytes: 100 }])
-  await routeJson(page, '**/api/audit**', [{ id: 1, user: 'frank', action: 'LOGIN', timestamp: '2026-03-29T00:00:00Z', details: {} }])
+  await routeJson(page, /\/api\/audit(?!\/)/, [{ id: 1, user: 'frank', action: 'LOGIN', timestamp: '2026-03-29T00:00:00Z', details: {} }])
   await routeJson(page, '**/api/introspection/system-health', {
     status: 'ok',
     database: 'ok',

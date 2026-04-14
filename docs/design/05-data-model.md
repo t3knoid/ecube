@@ -42,8 +42,11 @@
   - `current_project_id` (nullable string) — set during initialization to
     bind the drive to a project for isolation enforcement. Remains `NULL`
     until the drive is initialized via `POST /drives/{drive_id}/initialize`.
-  - `current_state` — FSM column (`EMPTY`, `AVAILABLE`, `IN_USE`);
-    transitions to `IN_USE` when `current_project_id` is bound.
+  - `current_state` — FSM column (`EMPTY`, `AVAILABLE`, `IN_USE`, `ARCHIVED`);
+    transitions to `IN_USE` when `current_project_id` is bound, then to
+    `ARCHIVED` upon successful chain-of-custody handoff confirmation to
+    remove the drive from active circulation and exclude it from CoC searches
+    and all operational endpoints.
 - `usb_drives.filesystem_type` stores the detected filesystem label (e.g., `ext4`, `exfat`, `ntfs`, `fat32`, `unformatted`, `unknown`). Updated during discovery and after formatting operations. Nullable; `NULL` means detection has not yet been attempted.
 
 ### Mount Domain
@@ -76,6 +79,10 @@
   - `delivery_time` (when physical custody was delivered, UTC)
 - `delivery_time` is populated only by a custody handoff confirmation event, not by prepare-eject.
 - This confirmation event should carry a distinct action type in `audit_logs.action` so reports can distinguish safe-removal from legal custody transfer.
+- **Drive Archival:** After a successful chain-of-custody handoff confirmation, the drive's `current_state` is automatically transitioned to `ARCHIVED`. Archived drives are:
+  - Excluded from all CoC searches (by drive_id, drive_sn, or project_id selectors) → returns HTTP 410 if directly queried
+  - Excluded from all operational endpoints (no new jobs, no format/eject operations)
+  - Preserved in the audit log for historical record-keeping but removed from active circulation
 - UI print/save is a presentation/export concern and does not require schema changes.
 
 ### User & System Domain
@@ -163,7 +170,9 @@ This section documents the concrete table layout represented by the SQLAlchemy m
 - `capacity_bytes` (BigInteger, nullable)
 - `encryption_status` (String, nullable)
 - `filesystem_type` (String, nullable)
-- `current_state` (Enum `DriveState`, `native_enum=False`, default `AVAILABLE`)
+- `current_state` (Enum `DriveState: EMPTY | AVAILABLE | IN_USE | ARCHIVED`, `native_enum=False`, default `AVAILABLE`)
+  - Transitions: `EMPTY ↔ AVAILABLE` (discovery), `AVAILABLE → IN_USE` (init), `IN_USE → ARCHIVED` (CoC handoff)
+  - **ARCHIVED state:** Drive is removed from active circulation after legal custody transfer; excluded from all CoC searches and operational endpoints
 - `current_project_id` (String, nullable)
 - `last_seen_at` (DateTime with timezone, auto-updated on change)
 
