@@ -115,7 +115,9 @@ def _stat_entry(dirpath: str, name: str) -> Optional[BrowseEntry]:
     path-injection: path is validated by the caller via realpath containment check).
     """
     # Limit name to a bare filename component (no directory separators).
-    # This is a defence-in-depth measure against unexpected os.listdir results.
+    # On POSIX, os.listdir() always returns bare names, so this is a
+    # defence-in-depth guard against unexpected platform behaviour or
+    # filesystem corruption rather than a defence against user input.
     safe_name = os.path.basename(name)
     full_path = os.path.join(dirpath, safe_name)
     try:
