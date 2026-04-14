@@ -22,7 +22,7 @@ def _fake_eject(flush_ok=True, unmount_ok=True,
 def test_list_drives(client, db):
     response = client.get("/drives")
     assert response.status_code == 200
-    assert isinstance(response.json(), list)
+    assert response.json() == []
 
 
 def test_list_drives_with_data(client, db):
