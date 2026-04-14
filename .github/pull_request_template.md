@@ -53,6 +53,11 @@ Select all that apply:
 - [ ] Styles follow project conventions; no excessive inline CSS
 - [ ] No sensitive data exposed in UI
 - [ ] E2E tests updated if UI behavior changed
+- [ ] Interactive elements use proper semantics:
+      - No clickable <tr>, <div>, or <span> without tabindex + keyboard handlers
+      - Prefer <button> or <a> for interactive actions
+      - Keyboard navigation works for directory rows, tree items, and file browser entries
+      - Focus states are visible and not removed
 
 ---
 
@@ -112,3 +117,12 @@ Select all that apply:
 # 8. Directory Browser & Mount Point Safety
 - [ ] Directory traversal protections in place
 - [ ] No exposure
+
+# 9. Accessibility (A11y)
+
+- [ ] All interactive elements are keyboard-focusable
+- [ ] Clickable rows or divs replaced with <button>/<a> or made accessible with tabindex + key handlers
+- [ ] Focus order is logical and preserved
+- [ ] No keyboard traps
+- [ ] ARIA roles used correctly when needed
+- [ ] Directory browser and tree view fully operable with keyboard only
