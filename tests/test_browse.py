@@ -1,5 +1,6 @@
 """Tests for ``GET /browse`` — directory browser endpoint."""
 
+import os
 from unittest.mock import patch
 
 import pytest
@@ -235,6 +236,19 @@ class TestBrowseSecurity:
 
         # Restrict allowed prefixes to something that does NOT include tmp_path
         with patch("app.config.settings.browse_allowed_prefixes", ["/mnt/ecube/", "/nfs/", "/smb/"]):
+            response = client.get(f"/browse?path={mount_point}")
+
+        assert response.status_code == 403
+
+    def test_prefix_boundary_bypass_returns_403(self, client, db, tmp_path):
+        """A mount root whose name starts with an allowed prefix but is a different directory is rejected."""
+        # e.g. allowed = /tmp/ecube  but mount root = /tmp/ecube2
+        allowed_prefix = str(tmp_path) + "allowed"
+        mount_point = str(tmp_path) + "allowed2"  # overlaps but is a different dir
+        os.makedirs(mount_point, exist_ok=True)
+        _make_network_mount(db, mount_point)
+
+        with patch("app.config.settings.browse_allowed_prefixes", [allowed_prefix]):
             response = client.get(f"/browse?path={mount_point}")
 
         assert response.status_code == 403
