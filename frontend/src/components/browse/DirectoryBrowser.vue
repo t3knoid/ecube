@@ -209,13 +209,17 @@ function isNavigable(entry) {
           v-for="entry in sortedEntries"
           :key="entry.name"
           :class="['dir-row', { 'dir-row--navigable': isNavigable(entry) }]"
-          @click="isNavigable(entry) ? navigateInto(entry.name) : undefined"
         >
           <td class="col-name">
             <span class="entry-icon" aria-hidden="true">
               {{ entry.type === 'directory' ? '📁' : entry.type === 'symlink' ? '🔗' : '📄' }}
             </span>
-            <span :class="['entry-name', { 'entry-name--link': isNavigable(entry) }]">{{ entry.name }}</span>
+            <button
+              v-if="isNavigable(entry)"
+              class="entry-nav-btn"
+              @click="navigateInto(entry.name)"
+            >{{ entry.name }}</button>
+            <span v-else>{{ entry.name }}</span>
           </td>
           <td class="col-type">{{ t(`browse.types.${entry.type}`) }}</td>
           <td class="col-size">{{ formatSize(entry.size_bytes) }}</td>
@@ -320,10 +324,23 @@ function isNavigable(entry) {
   margin-right: var(--space-xs);
 }
 
-.entry-name--link {
+.entry-nav-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
   color: var(--color-accent, inherit);
   text-decoration: underline;
   text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.entry-nav-btn:hover,
+.entry-nav-btn:focus-visible {
+  color: var(--color-accent-hover, var(--color-accent, inherit));
+  outline: 2px solid var(--color-accent, currentColor);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 .col-size,
