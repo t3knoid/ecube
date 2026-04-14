@@ -571,12 +571,15 @@ def _write_env_settings(updates: Dict[str, str]) -> None:
     try:
         with os.fdopen(fd, "w") as f:
             f.writelines(lines)
-        # Preserve the existing file's mode, falling back to owner-only 0o600.
+        # Preserve the existing file's owner-permission bits but enforce a
+        # ceiling of 0o600 so that group/world-readable .env files (e.g. an
+        # accidental 0644) never keep credentials exposed after a rewrite.
         try:
             existing_mode = stat.S_IMODE(os.stat(env_path).st_mode)
         except OSError:
             existing_mode = 0o600
-        os.chmod(tmp_path, existing_mode)
+        safe_mode = existing_mode & 0o600
+        os.chmod(tmp_path, safe_mode)
         os.replace(tmp_path, env_path)
     except Exception:
         # Clean up temp file on failure
