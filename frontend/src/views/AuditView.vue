@@ -52,12 +52,13 @@ const handoffForm = ref({
 })
 const allActiveDrives = ref([])
 
-// Base: any non-archived drive with a project binding — covers IN_USE (active job)
-// and AVAILABLE (after prepare-eject), the two states that need CoC and handoff.
+// Drives in IN_USE (active job) or AVAILABLE (after prepare-eject) with a project
+// binding — the two states that need CoC and handoff selectors.  EMPTY drives that
+// retain a stale project_id after removal/port-disable are intentionally excluded.
 const initializedDrives = computed(() =>
   allActiveDrives.value.filter(
     (drive) =>
-      drive.current_state !== 'ARCHIVED' &&
+      (drive.current_state === 'IN_USE' || drive.current_state === 'AVAILABLE') &&
       typeof drive.current_project_id === 'string' &&
       drive.current_project_id.trim() !== ''
   )
