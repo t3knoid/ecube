@@ -1,14 +1,9 @@
 """Tests for ``GET /browse`` — directory browser endpoint."""
 
-import os
-import stat
-import time
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
-import jwt
 import pytest
 
-from app.config import settings
 from app.models.hardware import UsbDrive
 from app.models.network import NetworkMount, MountStatus, MountType
 
@@ -42,18 +37,6 @@ def _make_network_mount(db, local_mount_point: str) -> NetworkMount:
     db.commit()
     db.refresh(mount)
     return mount
-
-
-def _make_entry(name: str, is_dir: bool = False, is_link: bool = False, size: int = 1024):
-    """Return a fake ``os.DirEntry``-style stat result tuple for mocking."""
-    entry = MagicMock()
-    entry.name = name
-    mode = stat.S_IFDIR if is_dir else (stat.S_IFLNK if is_link else stat.S_IFREG)
-    entry_stat = MagicMock()
-    entry_stat.st_mode = mode
-    entry_stat.st_size = size if not (is_dir or is_link) else 0
-    entry_stat.st_mtime = 1_700_000_000.0
-    return entry, entry_stat
 
 
 # ---------------------------------------------------------------------------
