@@ -212,6 +212,22 @@ class TestBrowseSecurity:
 
         assert response.status_code == 400
 
+    def test_symlink_subdir_navigation_returns_400(self, client, db, tmp_path):
+        """Subdir that traverses a symlink directory is rejected even if it stays inside the root."""
+        mount_point = str(tmp_path)
+        real_dir = tmp_path / "real"
+        real_dir.mkdir()
+        (real_dir / "secret.txt").write_text("data")
+        link = tmp_path / "link"
+        link.symlink_to(real_dir)
+        _make_network_mount(db, mount_point)
+
+        with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]):
+            response = client.get(f"/browse?path={mount_point}&subdir=link")
+
+        assert response.status_code == 400
+        assert "symbolic link" in response.json()["message"].lower()
+
     def test_not_allowed_prefix_returns_403(self, client, db, tmp_path):
         """A valid DB mount root outside the allowed prefix list returns 403."""
         mount_point = str(tmp_path)

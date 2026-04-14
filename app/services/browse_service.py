@@ -78,6 +78,7 @@ def _resolve_and_validate(
 
     Raises:
         HTTPException(400): path-traversal detected.
+        HTTPException(400): symlink encountered on the path from root to target.
         HTTPException(403): resolved path not under an allowed prefix.
     """
     real_root = os.path.realpath(db_mount_root)
@@ -98,6 +99,23 @@ def _resolve_and_validate(
             status_code=400,
             detail="Path traversal detected: subdir resolves outside mount root.",
         )
+
+    # Symlink check — walk each component of the *unresolved* subdir path
+    # from real_root to ensure no intermediate or leaf component is a symlink.
+    # This prevents API-level navigation through symlinked directories even
+    # when the resolved target stays inside the mount root.
+    if subdir:
+        components = relative.split("/")
+        current = real_root
+        for component in components:
+            if not component:
+                continue
+            current = os.path.join(current, component)
+            if os.path.islink(current):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Symlink traversal denied: a path component is a symbolic link.",
+                )
 
     # Allowlist check (secondary defence)
     allowed = settings.browse_allowed_prefixes
