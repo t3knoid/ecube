@@ -164,6 +164,7 @@ test('chain of custody handoff requires warning confirmation and submits archive
 
   // Expand the raw events panel (collapsed by default) then read from it.
   await page.locator('.coc-events').getByRole('button', { name: 'Show' }).click()
+  await expect(page.locator('.coc-events pre')).toBeVisible()
   const eventsJson = await page.locator('.coc-events pre').textContent()
   const events = JSON.parse(eventsJson)
   const handoffEvent = events.find((e) => e.event_type === 'COC_HANDOFF_CONFIRMED')
