@@ -44,6 +44,8 @@ from sqlalchemy.orm import Session
 
 from app.infrastructure.usb_discovery import DiscoveredTopology
 from app.infrastructure import FilesystemDetector
+from app.infrastructure.drive_mount import DriveMountProvider
+from app.config import settings as app_settings
 from app.models.hardware import DriveState, UsbDrive, UsbPort
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
@@ -68,12 +70,60 @@ def _default_topology_source() -> DiscoveredTopology:
     return discover_usb_topology()
 
 
+def _auto_mount_drive(
+    drive: UsbDrive,
+    drive_mount: DriveMountProvider,
+    db: Session,
+) -> None:
+    """Mount an AVAILABLE drive under ``settings.usb_mount_base_path``.
+
+    On success the drive's ``mount_path`` is updated and committed.
+    Failures are logged and silently swallowed so that a mount error does
+    not prevent the rest of the discovery sync from completing.
+    """
+    mount_point = f"{app_settings.usb_mount_base_path}/{drive.id}"
+    try:
+        ok, err = drive_mount.mount_drive(drive.filesystem_path, mount_point)
+    except Exception:
+        logger.exception(
+            "Unexpected error mounting drive %s at %s",
+            drive.device_identifier,
+            mount_point,
+        )
+        return
+    if ok:
+        drive.mount_path = mount_point
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception(
+                "DB commit failed setting mount_path for drive %s",
+                drive.device_identifier,
+            )
+        else:
+            db.refresh(drive)
+            logger.info(
+                "AUTO_MOUNT_OK drive=%s mount_path=%s",
+                drive.device_identifier,
+                mount_point,
+            )
+    else:
+        logger.warning(
+            "AUTO_MOUNT_FAILED drive=%s mount_point=%s error=%s",
+            drive.device_identifier,
+            mount_point,
+            err,
+        )
+
+
 def run_discovery_sync(
     db: Session,
     actor: Optional[str] = None,
     *,
     topology_source: Callable[[], DiscoveredTopology] = _default_topology_source,
     filesystem_detector: FilesystemDetector,
+    drive_mount: Optional[DriveMountProvider] = None,
     client_ip: Optional[str] = None,
 ) -> dict:
     """Discover USB hardware state and synchronise the database.
@@ -95,6 +145,10 @@ def run_discovery_sync(
         must supply an instance explicitly; production routers pass the result
         of :func:`get_filesystem_detector`, while tests inject a lightweight
         fake.
+    drive_mount:
+        Optional :class:`DriveMountProvider` for auto-mounting drives.  When
+        supplied, newly AVAILABLE drives are mounted under
+        ``settings.usb_mount_base_path``.
 
     Returns
     -------
@@ -186,6 +240,7 @@ def run_discovery_sync(
                 filesystem_path=discovered_drive.filesystem_path,
                 capacity_bytes=discovered_drive.capacity_bytes,
                 current_state=initial_state,
+                mount_path=discovered_drive.mount_path,
             )
             # Detect filesystem type for newly discovered drives.
             if discovered_drive.filesystem_path:
@@ -211,6 +266,15 @@ def run_discovery_sync(
                 continue
             db.refresh(drive)
             drives_inserted.append(discovered_drive.device_identifier)
+
+            # Auto-mount newly AVAILABLE drives that are not already mounted.
+            if (
+                drive_mount
+                and drive.current_state == DriveState.AVAILABLE
+                and drive.filesystem_path
+                and not drive.mount_path
+            ):
+                _auto_mount_drive(drive, drive_mount, db)
         else:
             # Existing drive — update mutable fields.
             changed = False
@@ -222,6 +286,9 @@ def run_discovery_sync(
                 changed = True
             if discovered_drive.capacity_bytes is not None and existing.capacity_bytes != discovered_drive.capacity_bytes:
                 existing.capacity_bytes = discovered_drive.capacity_bytes
+                changed = True
+            if existing.mount_path != discovered_drive.mount_path:
+                existing.mount_path = discovered_drive.mount_path
                 changed = True
 
             # Detect filesystem type on every refresh cycle.
@@ -244,12 +311,31 @@ def run_discovery_sync(
             if existing.current_state == DriveState.EMPTY and _port_is_enabled(port_id or existing.port_id):
                 existing.current_state = DriveState.AVAILABLE
                 changed = True
+                # Auto-mount on re-activation when not already mounted.
+                if (
+                    drive_mount
+                    and existing.filesystem_path
+                    and not existing.mount_path
+                ):
+                    _auto_mount_drive(existing, drive_mount, db)
 
             # Demote AVAILABLE → EMPTY when the port has been disabled.
             # IN_USE drives are left untouched to preserve project isolation.
             if existing.current_state == DriveState.AVAILABLE and not _port_is_enabled(port_id or existing.port_id):
                 existing.current_state = DriveState.EMPTY
+                existing.mount_path = None
                 changed = True
+
+            # Auto-mount any AVAILABLE drive that still lacks a mount_path.
+            if (
+                drive_mount
+                and existing.current_state == DriveState.AVAILABLE
+                and existing.filesystem_path
+                and not existing.mount_path
+            ):
+                _auto_mount_drive(existing, drive_mount, db)
+                if existing.mount_path:
+                    changed = True
 
             if changed:
                 try:
@@ -271,6 +357,7 @@ def run_discovery_sync(
         if drive.device_identifier not in discovered_ids:
             if drive.current_state == DriveState.AVAILABLE:
                 drive.current_state = DriveState.EMPTY
+                drive.mount_path = None
                 try:
                     db.commit()
                 except Exception:

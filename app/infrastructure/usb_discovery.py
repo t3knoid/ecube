@@ -62,6 +62,9 @@ class DiscoveredDrive:
     """Block device node, e.g. ``"/dev/sdb"``."""
     capacity_bytes: Optional[int] = None
     """Total capacity in bytes as reported by the kernel."""
+    mount_path: Optional[str] = None
+    """Active mount point from ``/proc/mounts``, e.g. ``"/mnt/ecube/7"``.
+    ``None`` when the device is not currently mounted."""
 
 
 @dataclass
@@ -139,6 +142,45 @@ def _read_capacity_bytes(dev_path: str) -> Optional[int]:
     return None
 
 
+def _read_mount_points() -> dict[str, str]:
+    """Return a mapping of device path → mount point from ``/proc/mounts``.
+
+    Each key is a block device (e.g. ``"/dev/sdb1"``) and each value is the
+    corresponding mount point (e.g. ``"/mnt/ecube/7"``).  If the file cannot
+    be read (non-Linux, container, etc.) an empty dict is returned.
+    """
+    mounts: dict[str, str] = {}
+    try:
+        with open(settings.procfs_mounts_path, "r") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 2 and parts[0].startswith("/dev/"):
+                    mounts[parts[0]] = parts[1]
+    except OSError:
+        pass
+    return mounts
+
+
+def _find_mount_point(
+    device_path: str, mount_map: dict[str, str]
+) -> Optional[str]:
+    """Return the mount point for *device_path* or any of its partitions.
+
+    Checks the exact path first (e.g. ``/dev/sdb``), then any partition
+    variant (``/dev/sdb1``, ``/dev/sdb2``, …).  Returns ``None`` when no
+    match is found.
+    """
+    if device_path in mount_map:
+        return mount_map[device_path]
+    # Check partitions like /dev/sdb1, /dev/sdb2, …
+    base = os.path.basename(device_path)  # e.g. "sdb"
+    for dev, mnt in mount_map.items():
+        dev_base = os.path.basename(dev)
+        if dev_base.startswith(base) and len(dev_base) > len(base):
+            return mnt
+    return None
+
+
 def discover_usb_topology() -> DiscoveredTopology:
     """Read the current USB topology from ``/sys/bus/usb/devices``.
 
@@ -149,6 +191,7 @@ def discover_usb_topology() -> DiscoveredTopology:
     """
     usb_path = settings.sysfs_usb_devices_path
     topology = DiscoveredTopology()
+    mount_map = _read_mount_points()
 
     try:
         entries = os.listdir(usb_path)
@@ -219,6 +262,7 @@ def discover_usb_topology() -> DiscoveredTopology:
                             port_system_path=dev,
                             filesystem_path=block_node,
                             capacity_bytes=capacity,
+                            mount_path=_find_mount_point(block_node, mount_map) if block_node else None,
                         )
                     )
 

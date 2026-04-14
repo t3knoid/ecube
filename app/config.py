@@ -227,6 +227,10 @@ class Settings(BaseSettings):
     #: Path to the ``mkfs.exfat`` binary.
     mkfs_exfat_path: str = "/sbin/mkfs.exfat"
 
+    #: Base directory for USB drive mount points.  Each drive is mounted at
+    #: ``<usb_mount_base_path>/<drive_db_id>``, e.g. ``/mnt/ecube/7``.
+    usb_mount_base_path: str = "/mnt/ecube"
+
     # ---------------------------------------------------------------------------
     # OS user/group management binary paths
     # ---------------------------------------------------------------------------
