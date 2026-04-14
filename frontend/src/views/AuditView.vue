@@ -365,7 +365,7 @@ function saveCocReport() {
   const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
   anchor.download = `chain-of-custody-${timestamp}.json`
   anchor.click()
-  URL.revokeObjectURL(url)
+  setTimeout(() => URL.revokeObjectURL(url), 100)
 }
 
 function printCocReport() {
@@ -404,7 +404,7 @@ function exportCsv() {
   const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
   anchor.download = `${settingsStore.auditExportFilename}-${timestamp}.csv`
   anchor.click()
-  URL.revokeObjectURL(url)
+  setTimeout(() => URL.revokeObjectURL(url), 100)
 }
 
 onMounted(() => {
