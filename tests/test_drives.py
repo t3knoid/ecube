@@ -35,6 +35,7 @@ def test_list_drives_with_data(client, db):
     data = response.json()
     ids = [d["device_identifier"] for d in data]
     assert "USB001" in ids
+    assert ids.count("USB001") == 1
 
 
 def test_list_drives_filter_by_project(client, db):
