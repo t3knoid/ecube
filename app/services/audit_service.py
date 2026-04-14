@@ -165,8 +165,10 @@ def get_chain_of_custody_report(
     # project_id takes precedence so that:
     # - PROJECT selector: always uses the queried project (even for
     #   historically-participated drives whose current binding differs).
-    # - DRIVE_ID/DRIVE_SN: uses caller's project_id (already validated
-    #   to match the binding) or falls back to the drive's own binding.
+    # - DRIVE_ID/DRIVE_SN: uses caller's project_id (already validated to match
+    #   the binding) or falls back to the drive's own binding.  _resolve_coc_targets
+    #   guarantees that at least one is non-None for drive selectors, so
+    #   effective_project_id is never None here — preventing cross-lifecycle bleed.
     effective_project_ids: Dict[int, Optional[str]] = {
         d.id: (project_id or d.current_project_id) for d in drives
     }
@@ -300,6 +302,14 @@ def _resolve_coc_targets(
                     f"Provided project_id '{project_id}' does not match drive binding '{drive.current_project_id}'"
                 ),
             )
+        if project_id is None and drive.current_project_id is None:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Drive has no project binding; provide project_id to scope "
+                    "the report to a specific project lifecycle"
+                ),
+            )
         return "DRIVE_ID", [drive]
 
     if drive_sn is not None:
@@ -319,6 +329,14 @@ def _resolve_coc_targets(
                 status_code=409,
                 detail=(
                     f"Provided project_id '{project_id}' does not match drive binding '{drive.current_project_id}'"
+                ),
+            )
+        if project_id is None and drive.current_project_id is None:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Drive has no project binding; provide project_id to scope "
+                    "the report to a specific project lifecycle"
                 ),
             )
         return "DRIVE_SN", [drive]
