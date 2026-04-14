@@ -317,21 +317,23 @@ class TestFilesystemTypeInResponse:
         resp = client.get("/drives")
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data) == 1
-        assert data[0]["filesystem_type"] == "ext4"
+        match = next(d for d in data if d["device_identifier"] == "USB-FS")
+        assert match["filesystem_type"] == "ext4"
 
     def test_filesystem_type_null(self, client, db):
         _make_drive(db, device_identifier="USB-NULL")
         resp = client.get("/drives")
         assert resp.status_code == 200
-        assert resp.json()[0]["filesystem_type"] is None
+        match = next(d for d in resp.json() if d["device_identifier"] == "USB-NULL")
+        assert match["filesystem_type"] is None
 
     def test_all_roles_see_filesystem_type(self, admin_client, manager_client, auditor_client, client, db):
         _make_drive(db, device_identifier="USB-VIS", filesystem_type="exfat")
         for c in [admin_client, manager_client, auditor_client, client]:
             resp = c.get("/drives")
             assert resp.status_code == 200
-            assert resp.json()[0]["filesystem_type"] == "exfat"
+            match = next(d for d in resp.json() if d["device_identifier"] == "USB-VIS")
+            assert match["filesystem_type"] == "exfat"
 
 
 # ===========================================================================
