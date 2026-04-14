@@ -1,9 +1,6 @@
 """Initial schema
 
-This is the canonical baseline migration for ECUBE v1.0.  All prior development
-revisions (0002–0013) have been intentionally squashed into this single file
-because the software has not yet been released and no production environment
-carries an alembic_version row pointing at any of those revisions.
+This is the canonical baseline migration for ECUBE v1.0. 
 
 Fresh install
 -------------
