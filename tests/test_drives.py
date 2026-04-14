@@ -278,6 +278,8 @@ def test_prepare_eject_with_filesystem_path(manager_client, db):
 
     log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_EJECT_PREPARED").first()
     assert log is not None
+    assert log.drive_id == drive.id
+    assert log.project_id == "PROJ-001"
     assert log.details["drive_id"] == drive.id
     assert log.details["filesystem_path"] == "/dev/sdb"
     assert log.details["flush_ok"] is True
@@ -315,6 +317,8 @@ def test_prepare_eject_flush_failure(manager_client, db):
     from app.models.audit import AuditLog
     log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_EJECT_FAILED").first()
     assert log is not None
+    assert log.drive_id == drive.id
+    assert log.project_id == "PROJ-001"
     assert log.details["flush_ok"] is False
     assert log.details["flush_error"] == "sync failed"
 
