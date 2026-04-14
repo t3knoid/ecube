@@ -139,7 +139,8 @@
     "credentialsFile": "Credentials File",
     "removeConfirmTitle": "Remove mount?",
     "removeConfirmBody": "Removing a mount may impact in-progress jobs.",
-    "browse": "Browse"
+    "browse": "Browse",
+    "browseUnavailable": "Browse is only available for mounted shares"
   },
   "browse": {
     "title": "Browse",
