@@ -1,11 +1,12 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getDrives, refreshDrives } from '@/api/drives.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
 
 const { t } = useI18n()
@@ -23,11 +24,22 @@ const sortDir = ref('asc')
 const page = ref(1)
 const pageSize = ref(10)
 
+/** Drive ID currently being browsed (null = none open). */
+const browsingDriveId = ref(null)
+
+/** The currently-browsed drive object. */
+const activeBrowsedDrive = computed(() =>
+  browsingDriveId.value !== null
+    ? drives.value.find((d) => d.id === browsingDriveId.value) || null
+    : null
+)
+
 const columns = computed(() => [
   { key: 'id', label: t('common.labels.id'), align: 'right' },
   { key: 'device_identifier', label: t('drives.device') },
   { key: 'filesystem_type', label: t('drives.filesystem') },
   { key: 'capacity_bytes', label: t('common.labels.size'), align: 'right' },
+  { key: 'mount_path', label: t('drives.localMountPoint') },
   { key: 'current_state', label: t('common.labels.status') },
   { key: 'current_project_id', label: t('dashboard.project') },
   { key: 'actions', label: t('common.actions.edit'), align: 'center' },
@@ -55,6 +67,7 @@ const filtered = computed(() => {
       drive.filesystem_type,
       drive.current_project_id,
       drive.filesystem_path,
+      drive.mount_path,
       String(drive.id),
     ]
       .filter(Boolean)
@@ -125,6 +138,16 @@ function openDrive(drive) {
   router.push({ name: 'drive-detail', params: { id: drive.id } })
 }
 
+const browsePanelRef = ref(null)
+
+async function toggleBrowse(driveId) {
+  browsingDriveId.value = browsingDriveId.value === driveId ? null : driveId
+  if (browsingDriveId.value !== null) {
+    await nextTick()
+    browsePanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }
+}
+
 onMounted(loadDrives)
 </script>
 
@@ -170,9 +193,39 @@ onMounted(loadDrives)
         {{ formatBytes(row.capacity_bytes) }}
       </template>
       <template #cell-actions="{ row }">
-        <button class="btn" @click="openDrive(row)">{{ t('drives.open') }}</button>
+        <div class="row-actions">
+          <button class="btn" @click="openDrive(row)">{{ t('drives.open') }}</button>
+          <button
+            v-if="row.current_state === 'AVAILABLE' || row.current_state === 'IN_USE'"
+            class="btn"
+            :aria-expanded="browsingDriveId === row.id"
+            :aria-label="t('drives.browse') + ' ' + row.device_identifier"
+            @click="toggleBrowse(row.id)"
+          >
+            {{ t('drives.browse') }}
+          </button>
+        </div>
       </template>
     </DataTable>
+
+    <!-- Inline directory browser panel -->
+    <section
+      v-if="activeBrowsedDrive"
+      ref="browsePanelRef"
+      class="browse-panel"
+      :aria-label="t('browse.browseContents') + ': ' + activeBrowsedDrive.device_identifier"
+    >
+      <h3 class="browse-panel-title">
+        {{ t('browse.browseContents') }}: {{ activeBrowsedDrive.device_identifier }}
+      </h3>
+      <p v-if="!activeBrowsedDrive.mount_path" class="browse-not-mounted">
+        {{ t('drives.notMounted') }}
+      </p>
+      <DirectoryBrowser
+        v-else
+        :mount-path="activeBrowsedDrive.mount_path"
+      />
+    </section>
 
     <Pagination v-model:page="page" :page-size="pageSize" :total="sorted.length" />
   </section>
@@ -186,7 +239,8 @@ onMounted(loadDrives)
 
 .header-row,
 .actions,
-.filters {
+.filters,
+.row-actions {
   display: flex;
   gap: var(--space-sm);
 }
@@ -215,5 +269,25 @@ select {
   border: 1px solid var(--color-alert-danger-border);
   border-radius: var(--border-radius);
   padding: var(--space-sm);
+}
+
+.browse-panel {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-bg-secondary);
+  padding: var(--space-md);
+}
+
+.browse-panel-title {
+  font-size: 1rem;
+  font-weight: var(--font-weight-bold, 600);
+  margin-bottom: var(--space-sm);
+  color: var(--color-text-primary);
+}
+
+.browse-not-mounted {
+  color: var(--color-text-secondary);
+  font-style: italic;
+  padding: var(--space-sm) 0;
 }
 </style>
