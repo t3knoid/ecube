@@ -98,6 +98,13 @@ async function loadEntries() {
   }
 }
 
+watch(
+  () => props.mountPath,
+  () => {
+    subdir.value = ''
+    page.value = 1
+  },
+)
 watch([() => props.mountPath, subdir, page], loadEntries, { immediate: true })
 
 // --- Helpers ---
