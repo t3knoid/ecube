@@ -10,14 +10,6 @@ const props = defineProps({
     type: String,
     required: true,
   },
-  /**
-   * When true, selection checkboxes are hidden (read-only view).
-   * @default false
-   */
-  readonly: {
-    type: Boolean,
-    default: false,
-  },
 })
 
 const { t } = useI18n()
@@ -159,45 +151,45 @@ function isNavigable(entry) {
     <table v-if="!loading && !error" class="dir-table">
       <thead>
         <tr>
-          <th
-            class="col-name sortable"
+          <th class="col-name"
             :aria-sort="sortKey === 'name' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'"
-            @click="toggleSort('name')"
           >
-            {{ t('browse.columns.name') }}
-            <span class="sort-indicator" aria-hidden="true">
-              {{ sortKey === 'name' ? (sortDir === 'asc' ? '▲' : '▼') : '⇅' }}
-            </span>
+            <button class="sort-btn" @click="toggleSort('name')">
+              {{ t('browse.columns.name') }}
+              <span class="sort-indicator" aria-hidden="true">
+                {{ sortKey === 'name' ? (sortDir === 'asc' ? '▲' : '▼') : '⇅' }}
+              </span>
+            </button>
           </th>
-          <th
-            class="col-type sortable"
+          <th class="col-type"
             :aria-sort="sortKey === 'type' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'"
-            @click="toggleSort('type')"
           >
-            {{ t('browse.columns.type') }}
-            <span class="sort-indicator" aria-hidden="true">
-              {{ sortKey === 'type' ? (sortDir === 'asc' ? '▲' : '▼') : '⇅' }}
-            </span>
+            <button class="sort-btn" @click="toggleSort('type')">
+              {{ t('browse.columns.type') }}
+              <span class="sort-indicator" aria-hidden="true">
+                {{ sortKey === 'type' ? (sortDir === 'asc' ? '▲' : '▼') : '⇅' }}
+              </span>
+            </button>
           </th>
-          <th
-            class="col-size sortable"
+          <th class="col-size"
             :aria-sort="sortKey === 'size_bytes' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'"
-            @click="toggleSort('size_bytes')"
           >
-            {{ t('browse.columns.size') }}
-            <span class="sort-indicator" aria-hidden="true">
-              {{ sortKey === 'size_bytes' ? (sortDir === 'asc' ? '▲' : '▼') : '⇅' }}
-            </span>
+            <button class="sort-btn" @click="toggleSort('size_bytes')">
+              {{ t('browse.columns.size') }}
+              <span class="sort-indicator" aria-hidden="true">
+                {{ sortKey === 'size_bytes' ? (sortDir === 'asc' ? '▲' : '▼') : '⇅' }}
+              </span>
+            </button>
           </th>
-          <th
-            class="col-modified sortable"
+          <th class="col-modified"
             :aria-sort="sortKey === 'modified_at' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'"
-            @click="toggleSort('modified_at')"
           >
-            {{ t('browse.columns.modified') }}
-            <span class="sort-indicator" aria-hidden="true">
-              {{ sortKey === 'modified_at' ? (sortDir === 'asc' ? '▲' : '▼') : '⇅' }}
-            </span>
+            <button class="sort-btn" @click="toggleSort('modified_at')">
+              {{ t('browse.columns.modified') }}
+              <span class="sort-indicator" aria-hidden="true">
+                {{ sortKey === 'modified_at' ? (sortDir === 'asc' ? '▲' : '▼') : '⇅' }}
+              </span>
+            </button>
           </th>
         </tr>
       </thead>
@@ -297,13 +289,27 @@ function isNavigable(entry) {
   vertical-align: middle;
 }
 
-.sortable {
+.sort-btn {
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: inherit;
+  color: inherit;
   cursor: pointer;
-  user-select: none;
+  white-space: nowrap;
 }
 
-.sortable:hover {
-  background: var(--color-bg-hover, var(--color-bg-primary));
+.sort-btn:hover {
+  color: var(--color-accent, inherit);
+}
+
+.sort-btn:focus-visible {
+  outline: 2px solid var(--color-accent, currentColor);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 .sort-indicator {
