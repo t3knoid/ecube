@@ -260,6 +260,7 @@ Operational notes:
 | `PROCFS_DISKSTATS_PATH`      | `/proc/diskstats`      | Path to `/proc/diskstats` for block-device I/O statistics. |
 | `SYSFS_USB_DEVICES_PATH`     | `/sys/bus/usb/devices` | Sysfs USB devices directory.                                   |
 | `SYSFS_BLOCK_PATH`           | `/sys/block`           | Sysfs block devices directory.                                 |
+| `USB_MOUNT_BASE_PATH`        | `/mnt/ecube`           | Base directory for USB drive mount points. Each drive is mounted at `<USB_MOUNT_BASE_PATH>/<drive_db_id>`. |
 
 ---
 
@@ -279,6 +280,14 @@ Operational notes:
 | `TRUST_PROXY_HEADERS` | `false` | When `true`, extract client IP from `X-Forwarded-For` / `X-Real-IP` headers for audit logging. Only enable when ECUBE runs behind a trusted reverse proxy that sets these headers. When `false`, the direct TCP connection address is used. |
 | `API_ROOT_PATH`       | *(empty)* | ASGI root path passed to FastAPI. Set to `/api` when an external reverse proxy strips the `/api` prefix before forwarding requests to uvicorn (the standard Docker configuration). This ensures Swagger UI generates correct server URLs when accessed through the proxy. Leave empty for native installs where FastAPI serves the frontend directly. |
 | `SERVE_FRONTEND_PATH` | *(empty)* | Path to the pre-built frontend directory (e.g. `/opt/ecube/www`). When set, FastAPI serves the SPA directly and enables an `/api` prefix-stripping middleware so the frontend's `/api/...` requests reach the correct routes. Leave empty when an external reverse proxy or separate web server handles frontend serving. |
+
+---
+
+## Directory Browsing
+
+| Variable                    | Default                            | Description |
+| --------------------------- | ---------------------------------- | ----------- |
+| `BROWSE_ALLOWED_PREFIXES`   | `["/mnt/ecube/", "/nfs/", "/smb/"]` | JSON array of filesystem path prefixes permitted as browse roots. Only paths whose `realpath` starts with one of these prefixes are served by `GET /browse`. Override via environment variable to match the actual mount hierarchy on your deployment. |
 
 ---
 
