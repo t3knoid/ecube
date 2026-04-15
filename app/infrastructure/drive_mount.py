@@ -45,16 +45,18 @@ def _find_mountable_device(device_path: str) -> str:
 def _find_current_mount_point(device_path: str) -> Optional[str]:
     """Return the mount point for *device_path* from ``/proc/mounts``, or ``None``.
 
-    Parses ``/proc/mounts`` (space-separated: device mountpoint fstype options ...)
-    and returns the first mount point whose device field matches *device_path*
-    after resolving symlinks on both sides.
+    Parses the mounts file (``settings.procfs_mounts_path``, space-separated:
+    device mountpoint fstype options ...) and returns the first mount point
+    whose device field matches *device_path* after resolving symlinks on both
+    sides.
     """
     try:
         real_device = os.path.realpath(device_path)
     except (OSError, ValueError):
         real_device = device_path
+    mounts_path = settings.procfs_mounts_path
     try:
-        with open("/proc/mounts", encoding="utf-8", errors="replace") as fh:
+        with open(mounts_path, encoding="utf-8", errors="replace") as fh:
             for line in fh:
                 parts = line.split()
                 if len(parts) < 2:
@@ -67,7 +69,7 @@ def _find_current_mount_point(device_path: str) -> Optional[str]:
                 if real_dev == real_device:
                     return mnt
     except OSError:
-        logger.debug("Unable to read /proc/mounts")
+        logger.debug("Unable to read %s", mounts_path)
     return None
 
 
@@ -121,7 +123,7 @@ class LinuxDriveMount:
                         f"{mountable} is already mounted at {actual}, "
                         f"not at requested {mount_point}"
                     )
-                return False, f"{mountable} reported already mounted but not found in /proc/mounts"
+                return False, f"{mountable} reported already mounted but not found in {settings.procfs_mounts_path}"
             msg = f"mount failed for {mountable}"
             if stderr:
                 msg += f": {stderr}"
