@@ -28,7 +28,7 @@
 
 ## 1. Purpose & Scope
 
-This document defines the architecture for the ECUBE web frontend — a Vue 3 single-page application (SPA) served from a dedicated nginx Docker container.
+This document defines the architecture for the ECUBE web frontend — a Vue 3 single-page application (SPA) bundled into the `ecube-app` Docker image and served by FastAPI.
 
 ### In Scope
 
@@ -37,7 +37,7 @@ This document defines the architecture for the ECUBE web frontend — a Vue 3 si
 - API client design and error handling
 - Theme system with user-customizable CSS
 - Localization framework
-- Deployment topology (nginx container, Docker Compose integration)
+- Deployment topology (Docker Compose integration, FastAPI SPA serving)
 - Testing strategy
 
 ### Out of Scope
@@ -154,9 +154,7 @@ frontend/
 ├── index.html                     # Vite entry HTML
 ├── vite.config.js                 # Vite configuration
 ├── package.json                   # Dependencies and scripts
-├── .gitignore
-├── nginx.conf                     # nginx site configuration
-└── Dockerfile                     # Multi-stage build: npm build → nginx
+└── .gitignore
 ```
 
 ---
@@ -268,7 +266,7 @@ All properties are persisted to `localStorage` under the `STORAGE_SETTINGS_KEY` 
 ### 6.1 Axios Instance (`api/client.js`)
 
 ```text
-Base URL:  '' (same-origin; nginx proxies /api/* to backend)
+Base URL:  '' (same-origin; /api/* prefix stripped by FastAPI middleware)
 Timeout:   30 seconds
 Headers:   Content-Type: application/json
 ```
@@ -560,43 +558,42 @@ Actions are hidden (not just disabled) when the user's role cannot perform them.
 ### 11.1 Container Topology
 
 ```text
-┌──────────────┐       ┌───────────────┐       ┌──────────────┐
-│              │  :443  │               │ :8000  │              │
-│   Browser    │───────▶│   ecube-ui    │───────▶│  ecube-app   │
-│              │  TLS   │   (nginx)     │  proxy │  (FastAPI)   │
-│              │        │               │        │              │
-└──────────────┘        └───────────────┘        └──────┬───────┘
-                                                        │
-                                                 ┌──────▼───────┐
-                                                 │   postgres   │
-                                                 │  (PostgreSQL)│
-                                                 └──────────────┘
+┌──────────────┐       ┌──────────────┐       ┌──────────────┐
+│              │ :8443  │              │        │              │
+│   Browser    │───────▶│  ecube-app   │───────▶│   postgres   │
+│              │  TLS   │  (FastAPI)   │  SQL   │  (PostgreSQL)│
+│              │        │  + Vue SPA   │        │              │
+└──────────────┘        └──────┬───────┘        └──────────────┘
+                               │
+                        ┌──────▼───────┐
+                        │  USB Drives  │
+                        └──────────────┘
 ```
 
-### 11.2 nginx Configuration
+### 11.2 Request Routing
 
-At the architectural level, the frontend web tier is responsible for:
+The `ecube-app` container serves both the API and the frontend SPA with TLS:
 
 | Request Path | Action |
 |-------------|--------|
-| `/api/*` | Proxy to `http://ecube-app:8000/*` (strip `/api` prefix) |
-| `/docs`, `/redoc`, `/openapi.json` | Proxy to `http://ecube-app:8000/` (API docs passthrough) |
-| `/themes/*.css` | Serve from `/usr/share/nginx/html/themes/` |
-| `/*` (everything else) | Serve SPA; fall back to `index.html` for client-side routing |
+| `/api/*` | Stripped to `/*` by the prefix-stripping middleware and routed to FastAPI |
+| `/docs`, `/redoc`, `/openapi.json` | Served directly by FastAPI |
+| `/themes/*.css` | Served from the themes volume mount |
+| `/*` (everything else) | Serve SPA from the bundled frontend dist; fall back to `index.html` for client-side routing |
 
-This separation keeps static asset serving and browser-facing TLS concerns out of the FastAPI runtime.
+This unified approach eliminates the need for a separate reverse proxy container.
 
 ### 11.3 Deployment Shape
 
-The frontend is packaged as a separate UI service that depends on the backend API service and optionally consumes mounted certificate and theme assets from deployment-managed paths.
+The frontend is bundled into the `ecube-app` Docker image via a multi-stage build. The Dockerfile compiles the Vue SPA with Node.js and copies the dist into the Python runtime image. In production, FastAPI serves the static assets and handles SPA fallback routing.
 
 ### 11.4 Dockerfile (Multi-Stage)
 
-The UI image uses a multi-stage build so dependency-heavy frontend compilation remains separate from the lean nginx runtime image.
+The application image uses a multi-stage build: a Node.js stage compiles the Vue frontend, and the resulting dist is copied into the Python runtime image alongside the backend code.
 
 ### 11.5 Backend CORS Requirement
 
-When the frontend and API are not presented through a single browser origin, the backend must support an explicit CORS policy. In same-origin reverse-proxy deployments, this concern is largely absorbed by the proxy layer.
+When the frontend and API are not presented through a single browser origin, the backend must support an explicit CORS policy. In the standard deployment (FastAPI serving both API and SPA), this concern does not apply since everything shares the same origin.
 
 ---
 

@@ -11,7 +11,7 @@ ECUBE (Evidence Copying & USB Based Export) is a secure evidence export platform
 - **ORM:** SQLAlchemy with Alembic migrations
 - **Database:** PostgreSQL 14+ (production), SQLite in-memory (tests)
 - **Background jobs:** FastAPI `BackgroundTasks` + bounded `ThreadPoolExecutor` (copy/verify/manifest tasks)
-- **UI layer:** Vue 3 SPA (Vite build); served by FastAPI in standalone mode or by nginx in Docker deployments. Communicates via HTTPS API only.
+- **UI layer:** Vue 3 SPA (Vite build); bundled into the `ecube-app` Docker image and served by FastAPI in both native and Docker deployments. Communicates via HTTPS API only.
 - **Testing:** pytest with SQLite `StaticPool` in-memory database
 
 ## Repository Layout
@@ -131,7 +131,7 @@ All design details live under `docs/design/`:
 CI workflows are configured in `.github/workflows/`. Key pipelines:
 
 1. **Tests** — backend (pytest), frontend (Vitest), integration (PostgreSQL), E2E (Playwright)
-2. **Docker Build** — `ghcr.io/t3knoid/ecube-app` and `ghcr.io/t3knoid/ecube-ui`
+2. **Docker Build** — `ghcr.io/t3knoid/ecube-app`
 3. **Security Scan** — static analysis and dependency vulnerability checks
 4. **Schemathesis API Fuzz** — auto-generated requests from the OpenAPI schema
 5. **Newman API Smoke** — Postman collection-based API smoke validation
