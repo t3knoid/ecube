@@ -336,18 +336,4 @@ select {
   justify-content: flex-end;
   gap: var(--space-sm);
 }
-
-.browse-panel {
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  background: var(--color-bg-secondary);
-  padding: var(--space-md);
-}
-
-.browse-panel-title {
-  font-size: 1rem;
-  font-weight: var(--font-weight-bold, 600);
-  margin-bottom: var(--space-sm);
-  color: var(--color-text-primary);
-}
 </style>
