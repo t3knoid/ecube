@@ -452,11 +452,4 @@ select {
 .browse-toggle {
   justify-self: start;
 }
-
-.browse-panel {
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  background: var(--color-bg-secondary);
-  padding: var(--space-md);
-}
 </style>
