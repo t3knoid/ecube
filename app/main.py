@@ -905,6 +905,9 @@ if settings.serve_frontend_path:
                 _assets_dir,
             )
 
+        # Resolve the frontend root once at startup for containment checks.
+        _frontend_root_resolved = _frontend_dir.resolve()
+
         # Serve other root-level static files (favicon.ico, manifest, etc.)
         # via a catch-all StaticFiles mount that falls back to index.html
         # for SPA client-side routing.
@@ -912,8 +915,10 @@ if settings.serve_frontend_path:
         async def _spa_fallback(request: Request, full_path: str):
             # If the path matches an actual file in the dist dir, serve it.
             file_path = (_frontend_dir / full_path).resolve()
-            # Guard against path traversal (e.g. ../../etc/passwd)
-            if full_path and file_path.is_file() and str(file_path).startswith(str(_frontend_dir.resolve())):
+            # Guard against path traversal (e.g. ../../etc/passwd).
+            # is_relative_to() is a proper path-hierarchy check that avoids
+            # prefix-string false positives (e.g. /opt/ecube/www_malicious).
+            if full_path and file_path.is_file() and file_path.is_relative_to(_frontend_root_resolved):
                 return FileResponse(str(file_path))
             # Otherwise, serve index.html for SPA client-side routing.
             return FileResponse(str(_index_html))
