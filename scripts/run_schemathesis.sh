@@ -192,7 +192,7 @@ fi
 
 # The test needs DATABASE_URL so the app connects to the compose postgres
 # service and reports /health/ready as 200 instead of 503.
-_smoke_db_url="postgresql+psycopg2://ecube:ecube@postgres:5432/ecube"
+_smoke_db_url="postgresql://ecube:ecube@postgres:5432/ecube"
 _current_db_url=$(sed -n 's/^DATABASE_URL=//p' "$_env_file" | head -1)
 # Strip one layer of surrounding quotes.
 _current_db_url="${_current_db_url#\"}" ; _current_db_url="${_current_db_url%\"}"
