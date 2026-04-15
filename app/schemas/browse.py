@@ -1,16 +1,25 @@
 """Pydantic schemas for the directory browse endpoint."""
 
 from datetime import datetime
-from typing import List, Literal, Optional
+from enum import StrEnum
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
+
+
+class EntryType(StrEnum):
+    """Filesystem entry type returned by the browse endpoint."""
+
+    FILE = "file"
+    DIRECTORY = "directory"
+    SYMLINK = "symlink"
 
 
 class BrowseEntry(BaseModel):
     """A single entry returned by ``GET /browse``."""
 
     name: str = Field(..., description="File or directory name (basename only)")
-    type: Literal["file", "directory", "symlink"] = Field(
+    type: EntryType = Field(
         ..., description="Entry type: file, directory, or symlink (symlinks are not dereferenced)"
     )
     size_bytes: Optional[int] = Field(
