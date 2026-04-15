@@ -42,6 +42,35 @@ def _find_mountable_device(device_path: str) -> str:
     return device_path
 
 
+def _find_current_mount_point(device_path: str) -> Optional[str]:
+    """Return the mount point for *device_path* from ``/proc/mounts``, or ``None``.
+
+    Parses ``/proc/mounts`` (space-separated: device mountpoint fstype options ...)
+    and returns the first mount point whose device field matches *device_path*
+    after resolving symlinks on both sides.
+    """
+    try:
+        real_device = os.path.realpath(device_path)
+    except (OSError, ValueError):
+        real_device = device_path
+    try:
+        with open("/proc/mounts", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                parts = line.split()
+                if len(parts) < 2:
+                    continue
+                dev, mnt = parts[0], parts[1]
+                try:
+                    real_dev = os.path.realpath(dev)
+                except (OSError, ValueError):
+                    real_dev = dev
+                if real_dev == real_device:
+                    return mnt
+    except OSError:
+        logger.debug("Unable to read /proc/mounts")
+    return None
+
+
 class DriveMountProvider(Protocol):
     """Mount a USB block device to a local directory."""
 
@@ -83,9 +112,16 @@ class LinuxDriveMount:
             return False, f"mount timed out after {settings.subprocess_timeout_seconds}s"
         except subprocess.CalledProcessError as exc:
             stderr = (exc.stderr or b"").decode(errors="replace").strip()
-            # "already mounted" means desired state already achieved.
             if stderr and "already mounted" in stderr.lower():
-                return True, None
+                actual = _find_current_mount_point(mountable)
+                if actual == mount_point:
+                    return True, None
+                if actual:
+                    return False, (
+                        f"{mountable} is already mounted at {actual}, "
+                        f"not at requested {mount_point}"
+                    )
+                return False, f"{mountable} reported already mounted but not found in /proc/mounts"
             msg = f"mount failed for {mountable}"
             if stderr:
                 msg += f": {stderr}"
