@@ -1,7 +1,12 @@
 """Tests for the SPA fallback and strip_api_prefix middleware (app/main.py)."""
 
-from fastapi import FastAPI, Request
+import pathlib
+import textwrap
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.staticfiles import StaticFiles
 from fastapi.testclient import TestClient
+from starlette.responses import FileResponse
 
 
 # ---------------------------------------------------------------------------
@@ -130,3 +135,175 @@ class TestStripApiPrefixMiddleware:
         body = resp.json()
         assert body["path"] == "/echo"
         assert body["raw_path"] is None
+
+
+# ---------------------------------------------------------------------------
+# G – SPA frontend serving (SERVE_FRONTEND_PATH mode)
+# ---------------------------------------------------------------------------
+
+def _make_spa_app(frontend_dir: pathlib.Path):
+    """Build a minimal app with the same SPA fallback logic as app/main.py.
+
+    Mirrors the ``if settings.serve_frontend_path:`` block so we can test
+    static-file serving, index.html fallback, and path-traversal rejection
+    without needing to set the global config at import time.
+    """
+    spa_app = FastAPI()
+
+    # A dummy API route to confirm API paths still take priority.
+    @spa_app.get("/health")
+    def health():
+        return {"status": "ok"}
+
+    _assets_dir = frontend_dir / "assets"
+    if _assets_dir.is_dir():
+        spa_app.mount(
+            "/assets",
+            StaticFiles(directory=str(_assets_dir)),
+            name="frontend-assets",
+        )
+
+    _frontend_root_resolved = frontend_dir.resolve()
+    _index_html = frontend_dir / "index.html"
+
+    @spa_app.get("/{full_path:path}", include_in_schema=False)
+    async def _spa_fallback(request: Request, full_path: str):
+        if full_path.startswith(("api/", "api-")):
+            raise HTTPException(status_code=404, detail="Not Found")
+        file_path = (frontend_dir / full_path).resolve()
+        if full_path and file_path.is_relative_to(_frontend_root_resolved) and file_path.is_file():
+            return FileResponse(str(file_path))
+        return FileResponse(str(_index_html))
+
+    return spa_app
+
+
+class TestSpaFrontendServing:
+    """Integration tests for the SPA static-file + fallback mode.
+
+    Each test gets a temporary directory tree that mimics a Vite ``dist/``
+    build output::
+
+        dist/
+          index.html
+          favicon.ico
+          assets/
+            app-abc123.js
+            style-def456.css
+    """
+
+    @staticmethod
+    def _build_dist(tmp_path: pathlib.Path) -> pathlib.Path:
+        dist = tmp_path / "dist"
+        dist.mkdir()
+        (dist / "index.html").write_text(
+            "<!doctype html><html><body>SPA</body></html>"
+        )
+        (dist / "favicon.ico").write_bytes(b"\x00\x00\x01\x00")
+        assets = dist / "assets"
+        assets.mkdir()
+        (assets / "app-abc123.js").write_text("console.log('app');")
+        (assets / "style-def456.css").write_text("body{margin:0}")
+        return dist
+
+    # -- index.html fallback for SPA client-side routes --------------------
+
+    def test_root_returns_index_html(self, tmp_path):
+        dist = self._build_dist(tmp_path)
+        client = TestClient(_make_spa_app(dist))
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert "SPA" in resp.text
+
+    def test_unknown_client_route_returns_index_html(self, tmp_path):
+        """SPA client routes (e.g. /projects/123) should serve index.html."""
+        dist = self._build_dist(tmp_path)
+        client = TestClient(_make_spa_app(dist))
+        resp = client.get("/projects/123/files")
+        assert resp.status_code == 200
+        assert "SPA" in resp.text
+
+    # -- Static file serving -----------------------------------------------
+
+    def test_favicon_served_directly(self, tmp_path):
+        dist = self._build_dist(tmp_path)
+        client = TestClient(_make_spa_app(dist))
+        resp = client.get("/favicon.ico")
+        assert resp.status_code == 200
+        assert resp.content == b"\x00\x00\x01\x00"
+
+    def test_assets_js_served(self, tmp_path):
+        dist = self._build_dist(tmp_path)
+        client = TestClient(_make_spa_app(dist))
+        resp = client.get("/assets/app-abc123.js")
+        assert resp.status_code == 200
+        assert "console.log" in resp.text
+
+    def test_assets_css_served(self, tmp_path):
+        dist = self._build_dist(tmp_path)
+        client = TestClient(_make_spa_app(dist))
+        resp = client.get("/assets/style-def456.css")
+        assert resp.status_code == 200
+        assert "margin" in resp.text
+
+    def test_missing_asset_returns_404(self, tmp_path):
+        """A request for a non-existent file under /assets/ should 404."""
+        dist = self._build_dist(tmp_path)
+        client = TestClient(_make_spa_app(dist))
+        resp = client.get("/assets/does-not-exist.js")
+        assert resp.status_code == 404
+
+    # -- API paths must not fall through to the SPA ------------------------
+
+    def test_api_prefix_rejected(self, tmp_path):
+        """Paths starting with api/ must 404, not silently return index.html."""
+        dist = self._build_dist(tmp_path)
+        client = TestClient(_make_spa_app(dist))
+        resp = client.get("/api/v1/drives")
+        assert resp.status_code == 404
+
+    def test_api_dash_prefix_rejected(self, tmp_path):
+        """Paths starting with api-* must 404."""
+        dist = self._build_dist(tmp_path)
+        client = TestClient(_make_spa_app(dist))
+        resp = client.get("/api-docs")
+        assert resp.status_code == 404
+
+    def test_real_api_route_takes_priority(self, tmp_path):
+        """Explicit API routes must still be reachable, not shadowed by the SPA."""
+        dist = self._build_dist(tmp_path)
+        client = TestClient(_make_spa_app(dist))
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok"}
+
+    # -- Path traversal rejection ------------------------------------------
+
+    def test_traversal_dot_dot_returns_index_html(self, tmp_path):
+        """../../etc/passwd must NOT escape the dist root."""
+        dist = self._build_dist(tmp_path)
+        # Place a sentinel outside dist to confirm it's never served.
+        (tmp_path / "secret.txt").write_text("LEAKED")
+        client = TestClient(_make_spa_app(dist))
+        resp = client.get("/../secret.txt")
+        assert resp.status_code == 200
+        assert "LEAKED" not in resp.text
+        assert "SPA" in resp.text
+
+    def test_encoded_traversal_returns_index_html(self, tmp_path):
+        """Percent-encoded traversal (..%2F) must not escape the dist root."""
+        dist = self._build_dist(tmp_path)
+        (tmp_path / "secret.txt").write_text("LEAKED")
+        client = TestClient(_make_spa_app(dist))
+        resp = client.get("/..%2Fsecret.txt")
+        assert resp.status_code == 200
+        assert "LEAKED" not in resp.text
+
+    def test_deep_traversal_returns_index_html(self, tmp_path):
+        """Multiple ../ levels must still be contained."""
+        dist = self._build_dist(tmp_path)
+        client = TestClient(_make_spa_app(dist))
+        resp = client.get("/assets/../../../../../../etc/passwd")
+        assert resp.status_code == 200
+        # Should get index.html, not /etc/passwd content
+        assert "SPA" in resp.text
