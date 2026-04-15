@@ -24,6 +24,10 @@ ECUBE_DB_WAIT_SECONDS="${ECUBE_DB_WAIT_SECONDS:-2}"
 # ---------------------------------------------------------------------------
 if [ -z "${DATABASE_URL:-}" ] && [ -f /opt/ecube/.env ]; then
   _env_db_url=$(sed -n 's/^DATABASE_URL=//p' /opt/ecube/.env | head -1 || true)
+  # Strip one layer of surrounding quotes (single or double) in case
+  # the operator hand-edited .env with quotes around the value.
+  _env_db_url="${_env_db_url#\"}" ; _env_db_url="${_env_db_url%\"}"
+  _env_db_url="${_env_db_url#\'}" ; _env_db_url="${_env_db_url%\'}"
   if [ -n "${_env_db_url}" ]; then
     export DATABASE_URL="${_env_db_url}"
   fi
