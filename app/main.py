@@ -924,9 +924,11 @@ if settings.serve_frontend_path:
             # If the path matches an actual file in the dist dir, serve it.
             file_path = (_frontend_dir / full_path).resolve()
             # Guard against path traversal (e.g. ../../etc/passwd).
-            # is_relative_to() is a proper path-hierarchy check that avoids
-            # prefix-string false positives (e.g. /opt/ecube/www_malicious).
-            if full_path and file_path.is_file() and file_path.is_relative_to(_frontend_root_resolved):
+            # Check containment BEFORE any filesystem stat to avoid probing
+            # paths outside the frontend root.  is_relative_to() is a proper
+            # path-hierarchy check that avoids prefix-string false positives
+            # (e.g. /opt/ecube/www_malicious).
+            if full_path and file_path.is_relative_to(_frontend_root_resolved) and file_path.is_file():
                 return FileResponse(str(file_path))
             # Otherwise, serve index.html for SPA client-side routing.
             return FileResponse(str(_index_html))
