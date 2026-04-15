@@ -78,7 +78,7 @@ fi
 # When the default CMD is "uvicorn …", append --port and optional TLS flags.
 # If the user overrides CMD (e.g. "bash"), skip this logic entirely.
 if [ "$1" = "uvicorn" ]; then
-  if [ "${ECUBE_NO_TLS}" = "true" ]; then
+  if [ "${ECUBE_NO_TLS:-false}" = "true" ]; then
     set -- "$@" --port "${ECUBE_PORT:-8000}"
     echo "[entrypoint] Starting uvicorn (no TLS, port ${ECUBE_PORT:-8000})"
   else
