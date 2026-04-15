@@ -1405,7 +1405,12 @@ _write_env_file() {
 
     if grep -Eq '^[[:space:]]*API_ROOT_PATH=' "${env_file}"; then
       local _old_root_path
-      _old_root_path="$(grep -E '^[[:space:]]*API_ROOT_PATH=' "${env_file}" | head -1 | cut -d= -f2-)"
+      _old_root_path="$(grep -E '^[[:space:]]*API_ROOT_PATH=' "${env_file}" | head -1 | sed 's/^[^=]*=//')"
+      # Strip leading/trailing whitespace and surrounding quotes.
+      _old_root_path="${_old_root_path#"${_old_root_path%%[![:space:]]*}"}"   # trim leading
+      _old_root_path="${_old_root_path%"${_old_root_path##*[![:space:]]}"}"   # trim trailing
+      _old_root_path="${_old_root_path#\"}" ; _old_root_path="${_old_root_path%\"}"  # strip double quotes
+      _old_root_path="${_old_root_path#\'}" ; _old_root_path="${_old_root_path%\'}"  # strip single quotes
       if [[ -n "${_old_root_path}" ]]; then
         warn "API_ROOT_PATH is set to '${_old_root_path}' in .env."
         warn "The standalone topology serves the API at the root — a stale"
