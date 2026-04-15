@@ -40,7 +40,7 @@ sudo ./install.sh
 
 Before running the installer, ensure PostgreSQL is installed and running. The installer does not install the PostgreSQL server itself.
 
-The installer performs pre-flight checks, creates/updates a PostgreSQL superuser for setup-wizard provisioning, writes `.env` (with `DATABASE_URL` left blank and `SECRET_KEY` generated), configures `ecube.service`, and (in full install mode) configures nginx.
+The installer performs pre-flight checks, creates/updates a PostgreSQL superuser for setup-wizard provisioning, writes `.env` (with `DATABASE_URL` left blank and `SECRET_KEY` generated), configures `ecube.service`, deploys the frontend to `<install-dir>/www`, and optionally configures the host firewall.
 
 Immediate next step: open the ECUBE web UI and complete setup at `https://<hostname>:<ui-port>/setup`.
 
