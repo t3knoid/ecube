@@ -68,9 +68,9 @@ Only the Application Layer interacts with the database and hardware. The UI Laye
 | | Profile A | Profile B | Profile C |
 |---|---|---|---|
 | **Name** | Air-Gapped Appliance | Enterprise Separated | Containerized All-in-One |
-| **Hosts** | 1 physical machine | 3+ (DB VM, bare-metal app, UI VM) | 1 host, 3 Docker containers |
+| **Hosts** | 1 physical machine | 3+ (DB VM, native app, UI VM) | 1 host, 3 Docker containers |
 | **Network** | Isolated / air-gapped | Segmented VLANs | Single-host Docker network |
-| **USB Access** | Direct (bare-metal) | Direct (bare-metal app host) | Passed through to container |
+| **USB Access** | Direct (native) | Direct (native app host) | Passed through to container |
 | **Hardware Tiers** | Standard / Professional / Enterprise | Standard / Professional / Enterprise | Standard / Professional / Enterprise |
 | **Best For** | Walled-off projects, portable ops | Corporate data centers, compliance-heavy orgs | Quick evaluation, lab environments, small teams |
 | **Complexity** | Low | High | Low–Medium |
@@ -94,7 +94,7 @@ This profile is built for chain-of-custody scenarios where physical security rep
 │  Secured Room / Evidence Processing Area                       │
 │                                                                │
 │  ┌──────────────────────────────────────────────────────────┐  │
-│  │  Dedicated Linux Host (bare-metal)                       │  │
+│  │  Dedicated Linux Host (native)                       │  │
 │  │                                                          │  │
 │  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐    │  │
 │  │  │  ecube-ui    │  │  ecube-app   │  │  postgres    │    │  │
@@ -127,7 +127,7 @@ Services can run as Docker containers (using `docker-compose.ecube.yml`) or as n
 |---|---|
 | **Physical security** | Machine resides in a locked, access-controlled room. Physical access replaces most network controls. |
 | **Network posture** | Minimal or zero external connectivity. Evidence source may be available via a dedicated NFS/SMB mount on an isolated switch or pre-staged to local disk. |
-| **USB access** | Direct bare-metal access to USB controllers — no virtualization layer to traverse. |
+| **USB access** | Direct native access to USB controllers — no virtualization layer to traverse. |
 | **Authentication** | Local PAM authentication (OS users). LDAP/OIDC not required since the machine is isolated. |
 | **Audit chain** | All operations logged to the local PostgreSQL database. Audit records can be exported to read-only media alongside the evidence. |
 | **Portability** | The machine can be transported to different sites. Evidence data remains physically co-located with the operator. |
@@ -166,7 +166,7 @@ This model is suited to established corporate data centers where infrastructure 
  │  VLAN: Application                 │                │
  │                                    ▼                │
  │  ┌─────────────────────────────────────────────┐    │
- │  │  Application Host (bare-metal Linux)        │    │
+ │  │  Application Host (native Linux)        │    │
  │  │  FastAPI + Uvicorn (systemd service)        │    │
  │  │  USB controllers attached directly          │    │
  │  │  NFS/SMB client for evidence source mounts  │    │
@@ -187,7 +187,7 @@ This model is suited to established corporate data centers where infrastructure 
 
 ### Deployment Method
 
-- **Application Host:** Package deployment as a systemd service on bare-metal Linux. See [02-manual-installation.md](operations/02-manual-installation.md).
+- **Application Host:** Package deployment as a systemd service on native Linux. See [02-manual-installation.md](operations/02-manual-installation.md).
 - **Database Host:** Standard PostgreSQL installation on a hardened VM (or managed database service).
 - **UI Host:** nginx serving the Vue SPA, either as a Docker container or installed directly.
 
@@ -196,11 +196,11 @@ This model is suited to established corporate data centers where infrastructure 
 | Aspect | Detail |
 |---|---|
 | **Network segmentation** | Each layer on its own VLAN. Firewall rules restrict traffic to the minimum required ports and directions. |
-| **USB access** | Bare-metal application host — no hypervisor or container USB passthrough needed. Best possible hardware reliability. |
+| **USB access** | Native application host — no hypervisor or container USB passthrough needed. Best possible hardware reliability. |
 | **Authentication** | LDAP or OIDC integration recommended. PAM with SSSD/Kerberos also supported. Centralized identity management. |
 | **Database hardening** | PostgreSQL on a dedicated VM with encrypted storage, restricted network access (Application VLAN only), and regular backups. |
 | **Monitoring** | Each host can forward logs and metrics to centralized SIEM/monitoring (syslog, Prometheus, ELK). |
-| **Scalability** | If copy throughput is the bottleneck, add a second bare-metal application host with its own USB bank (each registers independently with the same database). |
+| **Scalability** | If copy throughput is the bottleneck, add a second native application host with its own USB bank (each registers independently with the same database). |
 
 ### When to Use
 
@@ -221,7 +221,7 @@ All three layers run as Docker containers on a single Linux host, managed with D
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│  Single Linux Host (bare-metal or VM)                       │
+│  Single Linux Host (native or VM)                       │
 │                                                             │
 │  ┌ Docker Compose ────────────────────────────────────────┐ │
 │  │                                                        │ │
@@ -259,7 +259,7 @@ When running on a VM, USB devices must be passed from the physical host to the V
 1. **Physical host → VM:** Configure hypervisor USB passthrough (device filters by vendor/product ID or serial).
 2. **VM → Container:** The compose file mounts `/dev/bus/usb`, `/run/udev`, and `/sys/bus/usb` into the `ecube-app` container.
 
-If the host is bare-metal, only the second hop applies (Docker handles device access directly).
+If the host is native, only the second hop applies (Docker handles device access directly).
 
 For full USB passthrough setup, see [12-runtime-environment-and-usb-visibility.md](design/12-runtime-environment-and-usb-visibility.md).
 
@@ -324,7 +324,7 @@ The tier specifications above assume a single-host deployment (Profile A or C). 
 
 | Host | Standard (4 ports) | Professional (8 ports) | Enterprise (12 ports) |
 |---|---|---|---|
-| **Application** (bare-metal) | 4 cores, 4 GB RAM, 128 GB SSD | 8 cores, 8 GB RAM, 256 GB SSD | 12+ cores, 16 GB RAM, 256 GB SSD |
+| **Application** (native) | 4 cores, 4 GB RAM, 128 GB SSD | 8 cores, 8 GB RAM, 256 GB SSD | 12+ cores, 16 GB RAM, 256 GB SSD |
 | **Database** (VM) | 2 cores, 4 GB RAM, 256 GB SSD | 4 cores, 8 GB RAM, 512 GB SSD | 4 cores, 16 GB RAM, 512 GB+ SSD |
 | **UI** (VM) | 1–2 cores, 1 GB RAM, 32 GB | 1–2 cores, 2 GB RAM, 32 GB | 2 cores, 2 GB RAM, 32 GB |
 
@@ -462,7 +462,7 @@ The ECUBE turnkey appliance is designed around the **StarTech.com 4 Port USB 3.0
 - Each port has dedicated bandwidth — no contention between simultaneous copies.
 - Deterministic sysfs topology — port identity is stable across reboots and does not change when drives are inserted or removed.
 - Better power delivery compared to bus-powered hubs.
-- Ideal for the bare-metal Application Host in Profile A and Profile B deployments.
+- Ideal for the native Application Host in Profile A and Profile B deployments.
 
 **Considerations:**
 - Requires PCIe x4 (or wider) slots — slot count limits the maximum tier for a given chassis.
@@ -473,8 +473,8 @@ The ECUBE turnkey appliance is designed around the **StarTech.com 4 Port USB 3.0
 | Profile | Standard (4 ports) | Professional (8 ports) | Enterprise (12 ports) |
 |---|---|---|---|
 | **A — Air-Gapped Appliance** | 1 × PEXUSB3S44V | 2 × PEXUSB3S44V | 3 × PEXUSB3S44V |
-| **B — Enterprise Separated** | 1 × PEXUSB3S44V on bare-metal app host | 2 × PEXUSB3S44V on bare-metal app host | 3 × PEXUSB3S44V on bare-metal app host |
-| **C — Containerized All-in-One** | USB hub (VM) or 1 × PEXUSB3S44V (bare-metal) | 2 × PEXUSB3S44V (bare-metal recommended) | 3 × PEXUSB3S44V (bare-metal required) |
+| **B — Enterprise Separated** | 1 × PEXUSB3S44V on native app host | 2 × PEXUSB3S44V on native app host | 3 × PEXUSB3S44V on native app host |
+| **C — Containerized All-in-One** | USB hub (VM) or 1 × PEXUSB3S44V (native) | 2 × PEXUSB3S44V (native recommended) | 3 × PEXUSB3S44V (native required) |
 
 ---
 
@@ -507,7 +507,7 @@ A 1 Gbps NIC caps at ~115 MB/s — below even a single fast USB drive's sustaine
 | Profile | Recommendation |
 |---|---|
 | **A — Air-Gapped Appliance** | Match NIC to tier. If evidence data is pre-staged to local storage, NIC speed is only relevant for the UI and may remain at 1 Gbps. |
-| **B — Enterprise Separated** | 10 Gbps (or higher per tier) on the bare-metal application host. Evidence source file server should also be on a matching network segment. |
+| **B — Enterprise Separated** | 10 Gbps (or higher per tier) on the native application host. Evidence source file server should also be on a matching network segment. |
 | **C — Containerized All-in-One** | Match host NIC to tier. The container inherits the host's network interface. |
 
 ### Implementation Notes
