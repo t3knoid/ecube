@@ -331,11 +331,12 @@ class Settings(BaseSettings):
     trust_proxy_headers: bool = False
 
     #: Path prefix this application is mounted at behind a reverse proxy.
-    #: Set to ``"/api"`` when a proxy strips the ``/api`` prefix before
-    #: forwarding requests (e.g. the bundled nginx config and the native
-    #: installer).  Leave empty for direct deployments where no prefix is
-    #: stripped.  Controls the ``servers`` entry in the OpenAPI spec so that
-    #: Swagger UI "Try it out" generates correct request paths.
+    #: Set to ``"/api"`` when an external reverse proxy (e.g. nginx in a
+    #: Docker Compose deployment) strips the ``/api`` prefix before
+    #: forwarding requests.  Leave empty for native standalone installs
+    #: and any deployment where no prefix is stripped.  Controls the
+    #: ``servers`` entry in the OpenAPI spec so that Swagger UI "Try it
+    #: out" generates correct request paths.
     api_root_path: str = ""
 
     #: Absolute path to a directory containing the pre-built frontend
