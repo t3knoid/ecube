@@ -293,6 +293,10 @@ class Settings(BaseSettings):
     #: Only paths whose realpath starts with one of these prefixes (after DB
     #: validation) are served.  Provides a secondary defence-in-depth layer on
     #: top of the database-backed mount root validation.
+    #:
+    #: The defaults cover common ECUBE layouts.  Operators should override this
+    #: via the ``BROWSE_ALLOWED_PREFIXES`` environment variable (JSON array) to
+    #: match the actual mount hierarchy on their deployment.
     browse_allowed_prefixes: List[str] = Field(
         default=["/mnt/ecube/", "/nfs/", "/smb/"]
     )
