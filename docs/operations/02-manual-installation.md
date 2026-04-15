@@ -15,36 +15,35 @@
    - [2.2 External Services](#22-external-services)
    - [2.3 Required Tools](#23-required-tools)
    - [2.4 Service Account Requirement (Backend)](#24-service-account-requirement-backend)
-3. [Deployment Topologies](#3-deployment-topologies)
-4. [Package Contents and Verification](#4-package-contents-and-verification)
-5. [Single-Host Manual Deployment (DB + Backend + Frontend)](#5-single-host-manual-deployment-db--backend--frontend)
-   - [5.1 Install OS packages](#51-install-os-packages)
-   - [5.2 Create backend service account and directories](#52-create-backend-service-account-and-directories)
-   - [5.3 Install sudoers Policy](#53-install-sudoers-policy)
-   - [5.4 Install PAM Configuration](#54-install-pam-configuration)
-   - [5.5 Extract package](#55-extract-package)
-   - [5.6 Prepare PostgreSQL](#56-prepare-postgresql)
-   - [5.7 Build backend runtime](#57-build-backend-runtime)
-   - [5.8 Write backend `.env`](#58-write-backend-env)
-   - [5.9 Generate TLS certificates](#59-generate-tls-certificates)
-   - [5.10 Deploy frontend](#510-deploy-frontend)
-   - [5.11 Create systemd unit](#511-create-systemd-unit)
-   - [5.12 Production certificate replacement (recommended)](#512-production-certificate-replacement-recommended)
-   - [5.13 Validate](#513-validate)
-   - [5.14 Continue in web UI (required)](#514-continue-in-web-ui-required)
-6. [Enterprise Split-Host Deployment (DB + Backend on Separate Hosts)](#6-enterprise-split-host-deployment-db--backend-on-separate-hosts)
-   - [6.1 DB host](#61-db-host)
-   - [6.2 Backend host](#62-backend-host)
-   - [6.3 Continue in web UI (required)](#63-continue-in-web-ui-required)
-7. [Host Firewall Hardening](#7-host-firewall-hardening)
-   - [7.1 Single-host mode](#71-single-host-mode)
-   - [7.2 Split-host mode](#72-split-host-mode)
-8. [Operations and Upgrades](#8-operations-and-upgrades)
-   - [8.1 Service operations](#81-service-operations)
-   - [8.2 Manual package upgrade](#82-manual-package-upgrade)
-   - [8.3 Uninstall / cleanup](#83-uninstall--cleanup)
-  - [8.3.1 Manual Teardown (Step-by-Step)](#831-manual-teardown-step-by-step)
-9. [Advanced: Hosting UI with Another Web Frontend](#9-advanced-hosting-ui-with-another-web-frontend)
+3. [Package Contents and Verification](#3-package-contents-and-verification)
+4. [Single-Host Manual Deployment (DB + Backend + Frontend)](#4-single-host-manual-deployment-db--backend--frontend)
+   - [4.1 Install OS packages](#41-install-os-packages)
+   - [4.2 Create backend service account and directories](#42-create-backend-service-account-and-directories)
+   - [4.3 Install sudoers Policy](#43-install-sudoers-policy)
+   - [4.4 Install PAM Configuration](#44-install-pam-configuration)
+   - [4.5 Extract package](#45-extract-package)
+   - [4.6 Prepare PostgreSQL](#46-prepare-postgresql)
+   - [4.7 Build backend runtime](#47-build-backend-runtime)
+   - [4.8 Write backend `.env`](#48-write-backend-env)
+   - [4.9 Generate TLS certificates](#49-generate-tls-certificates)
+   - [4.10 Deploy frontend](#410-deploy-frontend)
+   - [4.11 Create systemd unit](#411-create-systemd-unit)
+   - [4.12 Production certificate replacement (recommended)](#412-production-certificate-replacement-recommended)
+   - [4.13 Validate](#413-validate)
+   - [4.14 Continue in web UI (required)](#414-continue-in-web-ui-required)
+5. [Enterprise Split-Host Deployment (DB + Backend on Separate Hosts)](#5-enterprise-split-host-deployment-db--backend-on-separate-hosts)
+   - [5.1 DB host](#51-db-host)
+   - [5.2 Backend host](#52-backend-host)
+   - [5.3 Continue in web UI (required)](#53-continue-in-web-ui-required)
+6. [Host Firewall Hardening](#6-host-firewall-hardening)
+   - [6.1 Single-host mode](#61-single-host-mode)
+   - [6.2 Split-host mode](#62-split-host-mode)
+7. [Operations and Upgrades](#7-operations-and-upgrades)
+   - [7.1 Service operations](#71-service-operations)
+   - [7.2 Manual package upgrade](#72-manual-package-upgrade)
+   - [7.3 Uninstall / cleanup](#73-uninstall--cleanup)
+  - [7.3.1 Manual Teardown (Step-by-Step)](#731-manual-teardown-step-by-step)
+8. [Advanced: Hosting UI with Another Web Frontend](#8-advanced-hosting-ui-with-another-web-frontend)
 
 ---
 
@@ -110,36 +109,11 @@ The backend must run as a dedicated non-login service account (`ecube`) with own
 
 ---
 
-## 3. Deployment Topologies
-
-### Topology A: Single Host (recommended for small/medium installs)
-
-One host runs:
-
-- PostgreSQL
-- ECUBE backend + frontend (`ecube.service`)
-
-Behavior target (same as automated installer):
-
-- Uvicorn terminates TLS and serves both the API and the SPA frontend
-- Single process, single port (default `8443`)
-- Frontend sends API calls to `/api/...`; the application middleware strips the prefix before routing
-
-### Topology B: Enterprise Split Host
-
-Two dedicated hosts:
-
-- DB host: PostgreSQL only
-- Backend host: ECUBE backend + frontend (`ecube.service`)
-
-Behavior target:
-
-- Backend host serves frontend and API on a single port
-- DB host is isolated from client networks
+For supported deployment topologies (single-host and enterprise split-host), see [01-installation.md § Deployment Topologies](01-installation.md#deployment-topologies).
 
 ---
 
-## 4. Package Contents and Verification
+## 3. Package Contents and Verification
 
 Release package assets:
 
@@ -169,9 +143,9 @@ sha256sum -c "ecube-package-${LATEST_TAG}.sha256"
 
 ---
 
-## 5. Single-Host Manual Deployment (DB + Backend + Frontend)
+## 4. Single-Host Manual Deployment (DB + Backend + Frontend)
 
-### 5.1 Install OS packages
+### 4.1 Install OS packages
 
 ```bash
 sudo apt-get update
@@ -181,7 +155,7 @@ sudo apt-get install -y \
   curl openssl
 ```
 
-### 5.2 Create backend service account and directories
+### 4.2 Create backend service account and directories
 
 ```bash
 sudo useradd --system --create-home --home-dir /opt/ecube --shell /usr/sbin/nologin ecube
@@ -207,7 +181,7 @@ The `shadow` group membership allows the non-root `ecube` service process to
 perform local PAM (`pam_unix`) authentication consistently on hosts where
 helper privilege transitions are restricted by host security policy.
 
-### 5.3 Install sudoers Policy
+### 4.3 Install sudoers Policy
 Install the sudoers policy required for setup-time OS user/group management, mount operations, and managed mount-root bootstrap/ownership:
 
 ```bash
@@ -221,7 +195,7 @@ sudo chmod 0440 /etc/sudoers.d/ecube-user-mgmt
 sudo visudo -cf /etc/sudoers.d/ecube-user-mgmt
 ```
 
-### 5.4 Install PAM Configuration
+### 4.4 Install PAM Configuration
 
 Install PAM configuration by selecting one of the two options below.
 
@@ -230,13 +204,13 @@ To detect whether SSSD support is installed on the host:
 ```bash
 if command -v sssd >/dev/null 2>&1 || \
    [[ -f /lib/security/pam_sss.so || -f /lib/x86_64-linux-gnu/security/pam_sss.so ]]; then
-  echo "SSSD support detected: use 5.4.1"
+  echo "SSSD support detected: use 4.4.1"
 else
-  echo "SSSD support not detected: use 5.4.2"
+  echo "SSSD support not detected: use 4.4.2"
 fi
 ```
 
-#### 5.4.1 Install PAM with SSSD support (local + domain users)
+#### 4.4.1 Install PAM with SSSD support (local + domain users)
 
 Use this option only when SSSD and `pam_sss.so` are installed and operational on the host.
 
@@ -258,7 +232,7 @@ EOF_PAM
 sudo chmod 0644 /etc/pam.d/ecube
 ```
 
-#### 5.4.2 Install PAM without SSSD support (local users only)
+#### 4.4.2 Install PAM without SSSD support (local users only)
 
 Use this option when the host does not use SSSD for directory authentication.
 
@@ -277,34 +251,26 @@ EOF_PAM
 sudo chmod 0644 /etc/pam.d/ecube
 ```
 
-### 5.5 Extract package
+### 4.5 Extract package
 
 ```bash
 sudo tar -xzf "/tmp/ecube-package-${LATEST_TAG}.tar.gz" -C /opt/ecube --strip-components=1
 sudo chown -R ecube:ecube /opt/ecube
 ```
 
-### 5.6 Prepare PostgreSQL
+### 4.6 Prepare PostgreSQL
 
-Create a PostgreSQL superuser that the setup wizard uses to provision the ECUBE application role and database. 
+Ensure PostgreSQL is installed and running. No manual superuser creation is required — the automated installer creates a PostgreSQL superuser automatically using the same default credentials as Docker Compose (`POSTGRES_USER`/`POSTGRES_PASSWORD`, falling back to `ecube`/`ecube`). The credentials are written to `.env` so the setup wizard can auto-fill them.
 
-#### Create the PostgreSQL superuser 
-
-This role is used only by the ECUBE setup wizard to create the application role
-and database. Choose a name and password that match what you will enter in the
-setup wizard (`/setup` → database provisioning step).
+If you are performing a fully manual installation (without `install.sh`), create a superuser for the setup wizard:
 
 ```bash
 sudo -u postgres psql <<'SQL'
-CREATE ROLE ecubeadmin WITH SUPERUSER LOGIN PASSWORD 'change-me-strong';
+CREATE ROLE ecube WITH SUPERUSER LOGIN PASSWORD 'ecube';
 SQL
 ```
 
-If the role already exists:
-
-```bash
-sudo -u postgres psql -c "ALTER ROLE ecubeadmin WITH SUPERUSER LOGIN PASSWORD 'change-me-strong';"
-```
+Then set `PG_SUPERUSER_NAME` and `PG_SUPERUSER_PASS` in `.env` to match.
 
 #### Create the ECUBE application role and database
 
@@ -319,15 +285,15 @@ CREATE DATABASE ecube OWNER ecube;
 SQL
 ```
 
-### 5.7 Build backend runtime
+### 4.7 Build backend runtime
 
 ```bash
 sudo -u ecube python3.11 -m venv /opt/ecube/venv
 sudo -u ecube /opt/ecube/venv/bin/pip install --upgrade pip setuptools wheel
-sudo -u ecube /opt/ecube/venv/bin/pip install -e /opt/ecube
+sudo -u ecube /opt/ecube/venv/bin/pip install /opt/ecube
 ```
 
-### 5.8 Write backend `.env`
+### 4.8 Write backend `.env`
 
 Installer-equivalent path (wizard-managed DB provisioning):
 
@@ -335,7 +301,8 @@ Installer-equivalent path (wizard-managed DB provisioning):
 sudo tee /opt/ecube/.env > /dev/null <<'EOF_ENV'
 SECRET_KEY=replace-with-random-hex
 DATABASE_URL=
-SETUP_DEFAULT_ADMIN_USERNAME=<superuser-name-used-in-5.6>
+PG_SUPERUSER_NAME=ecube
+PG_SUPERUSER_PASS=ecube
 TRUST_PROXY_HEADERS=false
 SERVE_FRONTEND_PATH=/opt/ecube/www
 EOF_ENV
@@ -350,7 +317,6 @@ Alternative manual path (operator-managed DB connection):
 sudo tee /opt/ecube/.env > /dev/null <<'EOF_ENV'
 SECRET_KEY=replace-with-random-hex
 DATABASE_URL=postgresql://ecube:change-me-strong@localhost:5432/ecube
-SETUP_DEFAULT_ADMIN_USERNAME=<superuser-name-used-in-5.6>
 TRUST_PROXY_HEADERS=false
 SERVE_FRONTEND_PATH=/opt/ecube/www
 EOF_ENV
@@ -359,12 +325,13 @@ sudo chown ecube:ecube /opt/ecube/.env
 sudo chmod 600 /opt/ecube/.env
 ```
 
-After service start, open `/setup` and enter the PostgreSQL superuser
-credentials (for example, `ecubeadmin`) in the database provisioning step.
+After service start, open `/setup` to complete database provisioning. The
+wizard auto-fills superuser credentials from `PG_SUPERUSER_NAME`/`PG_SUPERUSER_PASS`
+in `.env` and clears them after successful provisioning.
 
 > **Note:** `SERVE_FRONTEND_PATH` tells FastAPI to serve the SPA directly and enables the `/api` prefix-stripping middleware so the frontend's `/api/...` requests reach the correct routes. Set `TRUST_PROXY_HEADERS=true` only when an external reverse proxy (load balancer, CDN) sits in front of ECUBE.
 
-### 5.9 Generate TLS certificates
+### 4.9 Generate TLS certificates
 
 The command below creates a **self-signed** certificate with `CN=$(hostname -f)`.
 This means clients should access ECUBE using that hostname (for example,
@@ -399,7 +366,7 @@ Notes:
 - This mirrors installer defaults (`--cert-validity 730`).
 - If you use an IP literal for host identity (especially IPv6), use IP SAN entries instead of `DNS:` SAN entries.
 
-### 5.10 Deploy frontend
+### 4.10 Deploy frontend
 
 Copy the pre-built SPA assets to the directory referenced by `SERVE_FRONTEND_PATH`:
 
@@ -410,7 +377,7 @@ sudo cp -r /opt/ecube/frontend/dist/. /opt/ecube/www/
 sudo chown -R ecube:ecube /opt/ecube/www
 ```
 
-### 5.11 Create systemd unit
+### 4.11 Create systemd unit
 
 #### HTTPS (default)
 
@@ -485,7 +452,7 @@ sudo systemctl enable --now ecube.service
 
 > **Note:** `AmbientCapabilities=CAP_NET_BIND_SERVICE` is required only for ports below 1024. For ports ≥ 1024, omit this line.
 
-### 5.12 Production certificate replacement (recommended)
+### 4.12 Production certificate replacement (recommended)
 
 Replace self-signed certificates with CA-signed certificates before production cutover.
 
@@ -494,7 +461,7 @@ split-host notes, and permissions), see:
 
 - [05-tls-certificates-and-letsencrypt.md](05-tls-certificates-and-letsencrypt.md)
 
-### 5.13 Validate
+### 4.13 Validate
 
 ```bash
 curl -fsk https://localhost:8443/health
@@ -512,7 +479,7 @@ For plain HTTP installs, use:
 curl -fs http://localhost:80/health
 ```
 
-### 5.14 Continue in web UI (required)
+### 4.14 Continue in web UI (required)
 
 After the service validates successfully, open the web UI and complete initial configuration:
 
@@ -532,9 +499,9 @@ Current ECUBE builds recover this automatically: when DB admin rows exist but th
 
 ---
 
-## 6. Enterprise Split-Host Deployment (DB + Backend on Separate Hosts)
+## 5. Enterprise Split-Host Deployment (DB + Backend on Separate Hosts)
 
-### 6.1 DB host
+### 5.1 DB host
 
 - Install and harden PostgreSQL.
 - Create DB/user for ECUBE backend.
@@ -547,16 +514,16 @@ CREATE ROLE ecube LOGIN PASSWORD 'change-me-strong';
 CREATE DATABASE ecube OWNER ecube;
 ```
 
-### 6.2 Backend host
+### 5.2 Backend host
 
-Follow sections 5.1 to 5.7 (skipping 5.6 PostgreSQL setup) with these differences:
+Follow sections 4.1 to 4.7 (skipping 4.6 PostgreSQL setup) with these differences:
 
 - Skip local PostgreSQL installation; point `DATABASE_URL` in `.env` to the remote DB host.
 - For wizard-managed DB configuration: leave `DATABASE_URL=` blank and configure it in `/setup` after starting the service.
 
 The backend serves both the API and the frontend on a single port, same as a single-host install. TLS is terminated by uvicorn directly.
 
-### 6.3 Continue in web UI (required)
+### 5.3 Continue in web UI (required)
 
 After backend connectivity to the remote DB is validated, open the web UI and complete setup:
 
@@ -566,11 +533,11 @@ https://<backend-hostname>:8443/setup
 
 ---
 
-## 7. Host Firewall Hardening
+## 6. Host Firewall Hardening
 
 Use local firewall policy on each host. Example with `ufw`:
 
-### 7.1 Single-host mode
+### 6.1 Single-host mode
 
 ```bash
 sudo ufw default deny incoming
@@ -580,7 +547,7 @@ sudo ufw allow from <admin-cidr> to any port 22 proto tcp
 sudo ufw enable
 ```
 
-### 7.2 Split-host mode
+### 6.2 Split-host mode
 
 DB host:
 
@@ -603,9 +570,9 @@ General rule:
 
 ---
 
-## 8. Operations and Upgrades
+## 7. Operations and Upgrades
 
-### 8.1 Service operations
+### 7.1 Service operations
 
 ```bash
 sudo systemctl status ecube
@@ -613,12 +580,12 @@ sudo systemctl restart ecube
 sudo journalctl -u ecube -n 200 -f
 ```
 
-### 8.2 Manual package upgrade
+### 7.2 Manual package upgrade
 
 ```bash
 sudo tar -xzf "/tmp/ecube-package-${LATEST_TAG}.tar.gz" -C /opt/ecube --strip-components=1
 sudo chown -R ecube:ecube /opt/ecube
-sudo -u ecube /opt/ecube/venv/bin/pip install -e /opt/ecube
+sudo -u ecube /opt/ecube/venv/bin/pip install /opt/ecube
 sudo systemctl restart ecube
 ```
 
@@ -626,7 +593,7 @@ Then complete setup so migrations are applied:
 
 - UI-based flow: open `https://<frontend-hostname>/setup`
 
-### 8.3 Uninstall / cleanup
+### 7.3 Uninstall / cleanup
 
 If the host was installed using the ECUBE installer package, you can run:
 
@@ -647,7 +614,7 @@ If the original install used a custom `--install-dir`, run the script from that 
 > `pg_dump` backup restored successfully in a test environment).
 >
 > **Remote Database Note:** When `--drop-database` targets a remote PostgreSQL instance, superuser-role cleanup may require credentials for `SETUP_DEFAULT_ADMIN_USERNAME` (from `.env`) via `.pgpass` or `PGPASSWORD`. Ensure these credentials are available on the host where `install.sh --uninstall` is run.
-### 8.3.1 Manual Teardown (Step-by-Step)
+### 7.3.1 Manual Teardown (Step-by-Step)
 
 If for any reason the installer script is not available or you prefer manual removal, follow these steps:
 
@@ -735,7 +702,7 @@ psql -h db.example.com -U ecubeadmin -d postgres \
 
 ---
 
-## 9. Advanced: Hosting UI with Another Web Frontend
+## 8. Advanced: Hosting UI with Another Web Frontend
 
 You can host `frontend/dist` with another web server/CDN/load balancer instead of letting FastAPI serve the frontend directly.
 
