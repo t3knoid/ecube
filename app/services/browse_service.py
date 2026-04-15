@@ -143,26 +143,18 @@ def _resolve_and_validate(
     return real_root, real_target
 
 
-def _stat_entry(dirpath: str, name: str) -> Optional[BrowseEntry]:
-    """Build a :class:`BrowseEntry` for ``name`` inside ``dirpath``.
+def _stat_entry(dir_entry: os.DirEntry) -> Optional[BrowseEntry]:
+    """Build a :class:`BrowseEntry` from an :class:`os.DirEntry`.
 
-    Uses ``lstat`` so that symlinks are reported as-is without following them.
-    Returns ``None`` when the entry cannot be stat'd (e.g. race condition).
+    Reuses the stat result cached by ``os.scandir()`` via
+    ``dir_entry.stat(follow_symlinks=False)`` instead of issuing a separate
+    ``lstat`` syscall, halving the syscall count for the served page.
 
-    Security: ``dirpath`` is the validated ``real_target`` (contained within the
-    DB-registered mount root).  ``name`` comes from ``os.listdir()`` — it is a
-    filesystem-provided entry name, not user input.  The join of two safe values
-    is therefore safe; the ``os.lstat`` call below is intentional (false-positive
-    path-injection: path is validated by the caller via realpath containment check).
+    Returns ``None`` when the entry cannot be stat'd (e.g. race condition
+    where the file was removed between ``scandir`` and ``stat``).
     """
-    # Limit name to a bare filename component (no directory separators).
-    # On POSIX, os.listdir() always returns bare names, so this is a
-    # defence-in-depth guard against unexpected platform behaviour or
-    # filesystem corruption rather than a defence against user input.
-    safe_name = os.path.basename(name)
-    full_path = os.path.join(dirpath, safe_name)
     try:
-        entry_stat = os.lstat(full_path)
+        entry_stat = dir_entry.stat(follow_symlinks=False)
     except OSError:
         return None
 
@@ -180,7 +172,7 @@ def _stat_entry(dirpath: str, name: str) -> Optional[BrowseEntry]:
     modified_at = datetime.fromtimestamp(entry_stat.st_mtime, tz=timezone.utc)
 
     return BrowseEntry(
-        name=safe_name,
+        name=dir_entry.name,
         type=entry_type,
         size_bytes=size_bytes,
         modified_at=modified_at,
@@ -242,13 +234,13 @@ def list_directory(
         #         containment (anti-traversal) and allowlist (defence-in-depth).
         real_root, real_target = _resolve_and_validate(db_mount_root, subdir)
 
-        # 4. List directory -- use os.scandir() to collect only entry names,
-        #    sort them, then stat only the requested page.  This avoids
-        #    materialising full BrowseEntry objects for every file in large
-        #    directories; only the page slice is stat'd.
+        # 4. List directory -- use os.scandir() to collect DirEntry objects,
+        #    sort by name, then stat only the requested page.  DirEntry.stat()
+        #    reuses the kernel-cached result from scandir, avoiding a second
+        #    lstat syscall per file.
         try:
             with os.scandir(real_target) as it:  # noqa: S605 -- path validated above
-                names = sorted(entry.name for entry in it)
+                dir_entries = sorted(it, key=lambda e: e.name)
         except PermissionError:
             raise HTTPException(
                 status_code=403,
@@ -266,14 +258,13 @@ def list_directory(
                 detail="Failed to list the directory due to a filesystem error.",
             )
 
-        total = len(names)
+        total = len(dir_entries)
         start = (page - 1) * page_size
-        page_names = names[start : start + page_size]
+        page_slice = dir_entries[start : start + page_size]
 
         entries = []
-        for name in page_names:
-            # name comes from os.listdir() (filesystem-provided), not from user input
-            entry = _stat_entry(real_target, name)  # noqa: S605 -- path validated above
+        for de in page_slice:
+            entry = _stat_entry(de)  # noqa: S605 -- path validated above
             if entry is not None:
                 entries.append(entry)
 
