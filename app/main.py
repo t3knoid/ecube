@@ -921,6 +921,13 @@ if settings.serve_frontend_path:
         # for SPA client-side routing.
         @app.get("/{full_path:path}", include_in_schema=False)
         async def _spa_fallback(request: Request, full_path: str):
+            # Reject paths that look like API requests — these should never
+            # fall through to the SPA and silently return HTML instead of 404.
+            if full_path.startswith(("api/", "api-")):
+                return JSONResponse(
+                    status_code=404,
+                    content={"detail": "Not Found"},
+                )
             # If the path matches an actual file in the dist dir, serve it.
             file_path = (_frontend_dir / full_path).resolve()
             # Guard against path traversal (e.g. ../../etc/passwd).
