@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getDirectory } from '@/api/browse.js'
 import Pagination from '@/components/common/Pagination.vue'
+import { logger } from '@/utils/logger.js'
 
 const props = defineProps({
   /** The mount root path (USB mount_path or network local_mount_point). */
@@ -91,7 +92,7 @@ async function loadEntries() {
     entries.value = result.entries
     total.value = result.total
   } catch (err) {
-    console.error('[DirectoryBrowser] Failed to load directory listing:', err)
+    logger.error('[DirectoryBrowser] Failed to load directory listing:', err)
     error.value = t('browse.loadError')
   } finally {
     loading.value = false
