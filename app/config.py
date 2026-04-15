@@ -439,7 +439,12 @@ class Settings(BaseSettings):
     @field_validator("serve_frontend_path", mode="before")
     @classmethod
     def _normalise_serve_frontend_path(cls, v: str) -> str:  # noqa: N805
-        """Ensure ``serve_frontend_path`` is empty or an absolute path."""
+        """Ensure ``serve_frontend_path`` is empty or an absolute path.
+
+        Rejects dangerous system roots (``/``, ``/etc``, …) so a
+        misconfiguration fails fast at startup rather than silently
+        exposing host files through the SPA fallback.
+        """
         if not isinstance(v, str) or v.strip() == "":
             return ""
         import os
@@ -448,7 +453,21 @@ class Settings(BaseSettings):
             raise ValueError(
                 f"SERVE_FRONTEND_PATH must be an absolute path, got: {v!r}"
             )
-        return os.path.normpath(v)
+        normalised = os.path.normpath(v)
+        # Reject well-known system roots — mirrors the installer's
+        # _protected list so runtime and install-time share the same
+        # safety boundary.
+        _DANGEROUS_ROOTS = frozenset((
+            "/", "/bin", "/boot", "/dev", "/etc", "/home", "/lib",
+            "/lib64", "/media", "/mnt", "/opt", "/proc", "/root",
+            "/run", "/sbin", "/srv", "/sys", "/tmp", "/usr", "/var",
+        ))
+        if normalised in _DANGEROUS_ROOTS:
+            raise ValueError(
+                f"SERVE_FRONTEND_PATH must not be a system root directory, "
+                f"got: {normalised!r}"
+            )
+        return normalised
 
     @field_validator("session_cookie_domain", mode="before")
     @classmethod
