@@ -899,6 +899,21 @@ if settings.serve_frontend_path:
     _frontend_dir = pathlib.Path(settings.serve_frontend_path)
     _index_html = _frontend_dir / "index.html"
 
+    if not _frontend_dir.is_dir():
+        logger.error(
+            "SERVE_FRONTEND_PATH=%s does not exist or is not a directory — "
+            "frontend will NOT be served. Requests to / will return 404. "
+            "Run the installer to deploy the frontend, or check the path.",
+            settings.serve_frontend_path,
+        )
+    elif not _index_html.is_file():
+        logger.error(
+            "SERVE_FRONTEND_PATH=%s exists but index.html is missing — "
+            "frontend will NOT be served. Requests to / will return 404. "
+            "Ensure the pre-built frontend was deployed to this directory.",
+            settings.serve_frontend_path,
+        )
+
     if _frontend_dir.is_dir() and _index_html.is_file():
         # Serve Vite hashed assets (js/, css/, etc.) with StaticFiles so
         # they get proper content-type headers and directory traversal is
@@ -937,8 +952,22 @@ if settings.serve_frontend_path:
             # path-hierarchy check that avoids prefix-string false positives
             # (e.g. /opt/ecube/www_malicious).
             if full_path and file_path.is_relative_to(_frontend_root_resolved) and file_path.is_file():
+                logger.debug("SPA fallback: serving file %s for /%s", file_path, full_path)
                 return FileResponse(str(file_path))
             # Otherwise, serve index.html for SPA client-side routing.
+            logger.debug("SPA fallback: serving index.html for /%s (file_path=%s, exists=%s)",
+                         full_path, file_path, file_path.is_file() if file_path.is_relative_to(_frontend_root_resolved) else "BLOCKED")
             return FileResponse(str(_index_html))
 
         logger.info("Serving frontend from %s (standalone mode)", _frontend_dir)
+        _themes_dir = _frontend_dir / "themes"
+        if _themes_dir.is_dir():
+            _theme_files = sorted(f.name for f in _themes_dir.iterdir() if f.is_file())
+            logger.info("Theme files found in %s: %s", _themes_dir, _theme_files)
+        else:
+            logger.warning("No themes/ directory found at %s", _themes_dir)
+else:
+    logger.warning(
+        "SERVE_FRONTEND_PATH is not set — frontend will NOT be served. "
+        "API-only mode; requests to / will return 404.",
+    )

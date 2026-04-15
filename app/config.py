@@ -14,6 +14,16 @@ class Settings(BaseSettings):
     # database connectivity is configured.
     database_url: str = ""
 
+    #: PostgreSQL superuser (or CREATEDB-privileged role) name used by the
+    #: setup wizard to provision the application database.  Set via
+    #: ``PG_SUPERUSER_NAME`` in ``.env``.  Cleared automatically after
+    #: successful provisioning.
+    pg_superuser_name: str = ""
+
+    #: Password for :attr:`pg_superuser_name`.  Cleared automatically from
+    #: ``.env`` after successful database provisioning.
+    pg_superuser_pass: str = ""
+
     #: PostgreSQL hostname suggested to the setup wizard when the application
     #: is detected to be running inside a Docker container.  In a standard
     #: Docker Compose deployment this matches the ``postgres`` service name.
@@ -22,7 +32,8 @@ class Settings(BaseSettings):
     setup_docker_db_host: str = "postgres"
 
     #: PostgreSQL admin username suggested to the setup wizard for the
-    #: database provisioning step. The installer can persist this in `.env`
+    #: database provisioning step.  Falls back to :attr:`pg_superuser_name`
+    #: when set.  The installer can persist this in ``.env``
     #: (``SETUP_DEFAULT_ADMIN_USERNAME=...``) to keep UI defaults aligned
     #: with the superuser it created.
     setup_default_admin_username: str = "ecubeadmin"
@@ -316,7 +327,7 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------------------
 
     #: Origins permitted for cross-origin requests.  Empty by default
-    #: (CORS disabled).  In production, nginx proxies everything on the
+    #: (CORS disabled).  In production, FastAPI serves the SPA on the
     #: same origin so CORS is not triggered.  For local development, set
     #: via the ``CORS_ALLOWED_ORIGINS`` env var as a JSON list, e.g.:
     #:
@@ -335,19 +346,19 @@ class Settings(BaseSettings):
     trust_proxy_headers: bool = False
 
     #: Path prefix this application is mounted at behind a reverse proxy.
-    #: Set to ``"/api"`` when an external reverse proxy (e.g. nginx in a
-    #: Docker Compose deployment) strips the ``/api`` prefix before
-    #: forwarding requests.  Leave empty for native standalone installs
-    #: and any deployment where no prefix is stripped.  Controls the
-    #: ``servers`` entry in the OpenAPI spec so that Swagger UI "Try it
-    #: out" generates correct request paths.
+    #: Set to ``"/api"`` when an external reverse proxy (e.g. nginx)
+    #: strips the ``/api`` prefix before forwarding requests.  Leave
+    #: empty for standard deployments (both native and Docker) and any
+    #: deployment where no prefix is stripped.  Controls the ``servers``
+    #: entry in the OpenAPI spec so that Swagger UI "Try it out" generates
+    #: correct request paths.
     api_root_path: str = ""
 
     #: Absolute path to a directory containing the pre-built frontend
     #: (Vue/Vite ``dist/`` output).  When set and the directory exists,
-    #: FastAPI serves these static files and provides SPA fallback — no
-    #: separate nginx installation is required.  Leave empty (default) when
-    #: nginx or another reverse proxy serves the frontend.
+    #: FastAPI serves these static files and provides SPA fallback.  Set
+    #: automatically in Docker images.  Leave empty (default) only when
+    #: an external reverse proxy serves the frontend.
     serve_frontend_path: str = ""
 
     # ---------------------------------------------------------------------------

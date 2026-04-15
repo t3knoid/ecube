@@ -93,13 +93,13 @@ Add an entry to `manifest.json`:
 
 ### 3.3 Deploy Theme Files
 
-For Docker deployments, mount theme files into the UI container theme path:
+For Docker deployments, mount theme files into the application container theme path:
 
 ```yaml
 services:
-  ecube-ui:
+  ecube-app:
     volumes:
-      - ${ECUBE_THEMES_DIR:-./deploy/themes}:/usr/share/nginx/html/themes:ro
+      - ${ECUBE_THEMES_DIR:-./deploy/themes}:/opt/ecube/www/themes:ro
 ```
 
 Then place:
@@ -371,7 +371,7 @@ Use this table when a configured logo does not appear or behaves unexpectedly.
 | Symptom | Likely Cause | What to Check | Fix |
 |---------|--------------|---------------|-----|
 | Logo does not appear; placeholder text is shown | `logo` filename in `manifest.json` does not match file on disk | Exact filename, extension, and case sensitivity | Update manifest entry or rename file so names match exactly |
-| Logo works in dev but not in Docker deployment | Theme directory not mounted into nginx container | `ECUBE_THEMES_DIR` value and compose volume mapping | Mount correct host path to `/usr/share/nginx/html/themes` and restart UI container |
+| Logo works in dev but not in Docker deployment | Theme directory not mounted into application container | `ECUBE_THEMES_DIR` value and compose volume mapping | Mount correct host path to `/opt/ecube/www/themes` and restart ecube-app container |
 | Logo appears broken after theme switch | Theme entry missing `logo` or file is missing for one theme | Per-theme `manifest.json` entries | Add `logo` for each theme or expect fallback to placeholder |
 | Browser shows stale old logo | Browser cache holding prior asset | Hard refresh and response headers | Rename logo file (cache bust) and update manifest reference |
 | Animated GIF is distracting or hard to read | Motion too fast or artwork too detailed at header size | Visual readability at `32px` target render height | Use slower animation, fewer frames, or switch to static SVG/PNG |
