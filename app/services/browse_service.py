@@ -146,9 +146,11 @@ def _resolve_and_validate(
 def _stat_entry(dir_entry: os.DirEntry) -> Optional[BrowseEntry]:
     """Build a :class:`BrowseEntry` from an :class:`os.DirEntry`.
 
-    Reuses the stat result cached by ``os.scandir()`` via
-    ``dir_entry.stat(follow_symlinks=False)`` instead of issuing a separate
-    ``lstat`` syscall, halving the syscall count for the served page.
+    Accepts an ``os.DirEntry`` so the caller can sort by name before
+    stat'ing only the page slice.  Note: ``DirEntry.stat()`` still
+    performs a real ``lstat`` syscall on the first call (it is **not**
+    served from the ``scandir`` d_type cache); however, the result is
+    cached on the ``DirEntry`` for any subsequent ``.stat()`` calls.
 
     Returns ``None`` when the entry cannot be stat'd (e.g. race condition
     where the file was removed between ``scandir`` and ``stat``).
@@ -235,9 +237,8 @@ def list_directory(
         real_root, real_target = _resolve_and_validate(db_mount_root, subdir)
 
         # 4. List directory -- use os.scandir() to collect DirEntry objects,
-        #    sort by name, then stat only the requested page.  DirEntry.stat()
-        #    reuses the kernel-cached result from scandir, avoiding a second
-        #    lstat syscall per file.
+        #    sort by name, then stat only the requested page.  This avoids
+        #    stat'ing entries outside the page window.
         try:
             with os.scandir(real_target) as it:  # noqa: S605 -- path validated above
                 dir_entries = sorted(it, key=lambda e: e.name)
