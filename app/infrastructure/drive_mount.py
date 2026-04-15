@@ -96,6 +96,20 @@ class LinuxDriveMount:
         if not validate_device_path(device_path):
             return False, f"invalid device path: {device_path!r}"
 
+        # Validate mount_point: must be an absolute path that resolves to a
+        # direct child of the configured usb_mount_base_path.  This prevents
+        # callers from creating arbitrary directories or mounting outside the
+        # expected tree.
+        if not os.path.isabs(mount_point):
+            return False, f"mount_point must be an absolute path, got {mount_point!r}"
+        expected_base = os.path.realpath(settings.usb_mount_base_path)
+        real_mp = os.path.realpath(mount_point)
+        if not real_mp.startswith(expected_base + "/"):
+            return False, (
+                f"mount_point must be under {expected_base}, "
+                f"got {mount_point!r} (resolves to {real_mp!r})"
+            )
+
         mountable = _find_mountable_device(device_path)
 
         try:
