@@ -26,17 +26,16 @@
    - [5.6 Prepare PostgreSQL](#56-prepare-postgresql)
    - [5.7 Build backend runtime](#57-build-backend-runtime)
    - [5.8 Write backend `.env`](#58-write-backend-env)
-   - [5.9 Generate certificates (nginx TLS terminator)](#59-generate-certificates-nginx-tls-terminator)
-   - [5.10 Create backend systemd unit (HTTP loopback behind nginx)](#510-create-backend-systemd-unit-http-loopback-behind-nginx)
-   - [5.11 Configure frontend and reverse proxy (same host)](#511-configure-frontend-and-reverse-proxy-same-host)
+   - [5.9 Generate TLS certificates](#59-generate-tls-certificates)
+   - [5.10 Deploy frontend](#510-deploy-frontend)
+   - [5.11 Create systemd unit](#511-create-systemd-unit)
    - [5.12 Production certificate replacement (recommended)](#512-production-certificate-replacement-recommended)
    - [5.13 Validate](#513-validate)
    - [5.14 Continue in web UI (required)](#514-continue-in-web-ui-required)
-6. [Enterprise Split-Host Deployment (DB, Backend, Frontend on Separate Hosts)](#6-enterprise-split-host-deployment-db-backend-frontend-on-separate-hosts)
+6. [Enterprise Split-Host Deployment (DB + Backend on Separate Hosts)](#6-enterprise-split-host-deployment-db--backend-on-separate-hosts)
    - [6.1 DB host](#61-db-host)
-   - [6.2 Backend host (no nginx/UI)](#62-backend-host-no-nginxui)
-   - [6.3 Frontend host (no backend service)](#63-frontend-host-no-backend-service)
-   - [6.4 Continue in web UI (required)](#64-continue-in-web-ui-required)
+   - [6.2 Backend host](#62-backend-host)
+   - [6.3 Continue in web UI (required)](#63-continue-in-web-ui-required)
 7. [Host Firewall Hardening](#7-host-firewall-hardening)
    - [7.1 Single-host mode](#71-single-host-mode)
    - [7.2 Split-host mode](#72-split-host-mode)
@@ -53,9 +52,8 @@
 
 This document describes manual installation for:
 
-- Bare-metal / VM Linux hosts
-- systemd-managed ECUBE backend service
-- frontend static bundle hosting and API reverse proxying
+- Native / VM Linux hosts
+- systemd-managed ECUBE backend service with integrated frontend serving
 
 ---
 
@@ -84,28 +82,26 @@ Minimum required on backend host:
 
 Recommended:
 
-- `nginx` (if hosting frontend/UI on same or dedicated frontend host)
 - `ufw` (host firewall hardening)
 - `psql` (DB credential verification and troubleshooting)
 
-Quick install (Debian/Ubuntu) for web and database components:
+Quick install (Debian/Ubuntu) for database components:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y nginx postgresql postgresql-contrib
+sudo apt-get install -y postgresql postgresql-contrib
 ```
 
-Enable and start both services:
+Enable and start PostgreSQL:
 
 ```bash
-sudo systemctl enable --now postgresql nginx
+sudo systemctl enable --now postgresql
 ```
 
 Repository source note:
 
-- The commands above install `nginx` and `postgresql` from the host's configured Ubuntu/Debian APT repositories.
+- The commands above install `postgresql` from the host's configured Ubuntu/Debian APT repositories.
 - For enterprise production environments, prefer the official vendor distribution channels and lifecycle guidance for tighter control of patch cadence, compatibility testing, and upgrade windows:
-  - nginx: official nginx packages/repository guidance
   - PostgreSQL: official PostgreSQL (PGDG) packages/repository guidance
 
 ### 2.4 Service Account Requirement (Backend)
@@ -121,29 +117,25 @@ The backend must run as a dedicated non-login service account (`ecube`) with own
 One host runs:
 
 - PostgreSQL
-- ECUBE backend (`ecube.service`)
-- Web frontend + reverse proxy (nginx)
+- ECUBE backend + frontend (`ecube.service`)
 
-Behavior target (same as installer full mode):
+Behavior target (same as automated installer):
 
-- nginx terminates external TLS
-- backend serves HTTP on `127.0.0.1:<api-port>`
-- nginx proxies `/api/` to backend
+- Uvicorn terminates TLS and serves both the API and the SPA frontend
+- Single process, single port (default `8443`)
+- Frontend sends API calls to `/api/...`; the application middleware strips the prefix before routing
 
 ### Topology B: Enterprise Split Host
 
-Three dedicated hosts:
+Two dedicated hosts:
 
 - DB host: PostgreSQL only
-- Backend host: ECUBE backend only
-- Frontend host: static UI + reverse proxy to backend
+- Backend host: ECUBE backend + frontend (`ecube.service`)
 
-Behavior target (same as installer frontend-only + remote backend mode):
+Behavior target:
 
-- frontend proxies `/api/` to backend over HTTPS
-- backend `.env` explicitly sets:
-  - `TRUST_PROXY_HEADERS=true`
-  - `API_ROOT_PATH=/api`
+- Backend host serves frontend and API on a single port
+- DB host is isolated from client networks
 
 ---
 
@@ -186,7 +178,7 @@ sudo apt-get update
 sudo apt-get install -y \
   python3.11 python3.11-venv \
   postgresql postgresql-contrib \
-  nginx curl openssl
+  curl openssl
 ```
 
 ### 5.2 Create backend service account and directories
@@ -344,8 +336,8 @@ sudo tee /opt/ecube/.env > /dev/null <<'EOF_ENV'
 SECRET_KEY=replace-with-random-hex
 DATABASE_URL=
 SETUP_DEFAULT_ADMIN_USERNAME=<superuser-name-used-in-5.6>
-TRUST_PROXY_HEADERS=true
-API_ROOT_PATH=/api
+TRUST_PROXY_HEADERS=false
+SERVE_FRONTEND_PATH=/opt/ecube/www
 EOF_ENV
 
 sudo chown ecube:ecube /opt/ecube/.env
@@ -359,8 +351,8 @@ sudo tee /opt/ecube/.env > /dev/null <<'EOF_ENV'
 SECRET_KEY=replace-with-random-hex
 DATABASE_URL=postgresql://ecube:change-me-strong@localhost:5432/ecube
 SETUP_DEFAULT_ADMIN_USERNAME=<superuser-name-used-in-5.6>
-TRUST_PROXY_HEADERS=true
-API_ROOT_PATH=/api
+TRUST_PROXY_HEADERS=false
+SERVE_FRONTEND_PATH=/opt/ecube/www
 EOF_ENV
 
 sudo chown ecube:ecube /opt/ecube/.env
@@ -370,7 +362,9 @@ sudo chmod 600 /opt/ecube/.env
 After service start, open `/setup` and enter the PostgreSQL superuser
 credentials (for example, `ecubeadmin`) in the database provisioning step.
 
-### 5.9 Generate certificates (nginx TLS terminator)
+> **Note:** `SERVE_FRONTEND_PATH` tells FastAPI to serve the SPA directly and enables the `/api` prefix-stripping middleware so the frontend's `/api/...` requests reach the correct routes. Set `TRUST_PROXY_HEADERS=true` only when an external reverse proxy (load balancer, CDN) sits in front of ECUBE.
+
+### 5.9 Generate TLS certificates
 
 The command below creates a **self-signed** certificate with `CN=$(hostname -f)`.
 This means clients should access ECUBE using that hostname (for example,
@@ -380,6 +374,8 @@ certificate is self-signed.
 
 Use this only for lab/testing or temporary bring-up. For production, use a
 public/enterprise CA-signed certificate (recommended), such as Let's Encrypt.
+
+Skip this step if you plan to use `--no-tls` (plain HTTP).
 
 ```bash
 HOST_NAME="$(hostname -f)"
@@ -393,9 +389,8 @@ sudo openssl req -x509 -nodes -days 730 -newkey rsa:2048 \
   -subj "/CN=${HOST_NAME}" \
   -addext "subjectAltName=DNS:${HOST_NAME},IP:${HOST_IP}"
 
-sudo chown root:root /opt/ecube/certs/key.pem
+sudo chown ecube:ecube /opt/ecube/certs/key.pem /opt/ecube/certs/cert.pem
 sudo chmod 600 /opt/ecube/certs/key.pem
-sudo chown ecube:ecube /opt/ecube/certs/cert.pem
 sudo chmod 644 /opt/ecube/certs/cert.pem
 ```
 
@@ -404,7 +399,20 @@ Notes:
 - This mirrors installer defaults (`--cert-validity 730`).
 - If you use an IP literal for host identity (especially IPv6), use IP SAN entries instead of `DNS:` SAN entries.
 
-### 5.10 Create backend systemd unit (HTTP loopback behind nginx)
+### 5.10 Deploy frontend
+
+Copy the pre-built SPA assets to the directory referenced by `SERVE_FRONTEND_PATH`:
+
+```bash
+sudo mkdir -p /opt/ecube/www
+sudo rm -rf /opt/ecube/www/*
+sudo cp -r /opt/ecube/frontend/dist/. /opt/ecube/www/
+sudo chown -R ecube:ecube /opt/ecube/www
+```
+
+### 5.11 Create systemd unit
+
+#### HTTPS (default)
 
 ```bash
 sudo tee /etc/systemd/system/ecube.service > /dev/null <<'EOF_UNIT'
@@ -420,8 +428,10 @@ Group=ecube
 WorkingDirectory=/opt/ecube
 EnvironmentFile=-/opt/ecube/.env
 ExecStart=/opt/ecube/venv/bin/uvicorn \
-  --host 127.0.0.1 \
+  --host 0.0.0.0 \
   --port 8443 \
+  --ssl-keyfile=/opt/ecube/certs/key.pem \
+  --ssl-certfile=/opt/ecube/certs/cert.pem \
   app.main:app
 Restart=on-failure
 RestartSec=10
@@ -437,61 +447,43 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now ecube.service
 ```
 
-### 5.11 Configure frontend and reverse proxy (same host)
+#### Plain HTTP (lab/testing)
+
+For plain HTTP on port 80, omit the TLS flags and add `AmbientCapabilities` for the privileged port:
 
 ```bash
-sudo mkdir -p /opt/ecube/www
-sudo rm -rf /opt/ecube/www/*
-sudo cp -r /opt/ecube/frontend/dist/. /opt/ecube/www/
-sudo chown -R root:root /opt/ecube/www
-sudo find /opt/ecube/www -type d -exec chmod 755 {} +
-sudo find /opt/ecube/www -type f -exec chmod 644 {} +
+sudo tee /etc/systemd/system/ecube.service > /dev/null <<'EOF_UNIT'
+[Unit]
+Description=ECUBE Evidence Export Service
+After=network-online.target
+Wants=network-online.target
 
-# Match installer behavior: let nginx traverse /opt/ecube without granting
-# world execute on the whole install tree.
-sudo groupadd --system ecube-www 2>/dev/null || true
-sudo usermod -aG ecube-www www-data
-sudo chown ecube:ecube-www /opt/ecube
-sudo chmod 710 /opt/ecube
+[Service]
+Type=simple
+User=ecube
+Group=ecube
+WorkingDirectory=/opt/ecube
+EnvironmentFile=-/opt/ecube/.env
+ExecStart=/opt/ecube/venv/bin/uvicorn \
+  --host 0.0.0.0 \
+  --port 80 \
+  app.main:app
+Restart=on-failure
+RestartSec=10
+PrivateTmp=yes
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+# Required for setup endpoints that invoke tightly scoped sudoers commands.
+NoNewPrivileges=false
+
+[Install]
+WantedBy=multi-user.target
+EOF_UNIT
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now ecube.service
 ```
 
-```bash
-sudo tee /etc/nginx/sites-available/ecube > /dev/null <<'EOF_NGINX'
-server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
-
-    server_name _;
-
-    ssl_certificate     /opt/ecube/certs/cert.pem;
-    ssl_certificate_key /opt/ecube/certs/key.pem;
-
-    root /opt/ecube/www;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    location = /api {
-        return 301 /api/;
-    }
-
-    location /api/ {
-        proxy_pass http://127.0.0.1:8443/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-EOF_NGINX
-
-sudo ln -sf /etc/nginx/sites-available/ecube /etc/nginx/sites-enabled/ecube
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t
-sudo systemctl enable --now nginx
-sudo systemctl reload nginx
-```
+> **Note:** `AmbientCapabilities=CAP_NET_BIND_SERVICE` is required only for ports below 1024. For ports ≥ 1024, omit this line.
 
 ### 5.12 Production certificate replacement (recommended)
 
@@ -505,7 +497,7 @@ split-host notes, and permissions), see:
 ### 5.13 Validate
 
 ```bash
-curl -fsk https://localhost/api/health
+curl -fsk https://localhost:8443/health
 ```
 
 This should return the following if everything has been configured.
@@ -514,12 +506,18 @@ This should return the following if everything has been configured.
 {"status":"ok"}
 ```
 
+For plain HTTP installs, use:
+
+```bash
+curl -fs http://localhost:80/health
+```
+
 ### 5.14 Continue in web UI (required)
 
-After the service and nginx validate successfully, open the web UI and complete initial configuration:
+After the service validates successfully, open the web UI and complete initial configuration:
 
 ```text
-https://<frontend-hostname>/setup
+https://<hostname>:8443/setup
 ```
 
 Operator troubleshooting note (admin step skipped): if setup flashes past admin creation, check whether an admin DB role exists without a matching OS user:
@@ -532,11 +530,9 @@ sudo -u postgres psql -d postgres -c "SELECT * FROM system_initialization;"
 
 Current ECUBE builds recover this automatically: when DB admin rows exist but the OS admin account is missing, setup stays available and recreates the OS user on the next `/setup/initialize` run.
 
-If this host is backend-only and does not serve the UI, complete setup from a frontend-enabled ECUBE deployment URL.
-
 ---
 
-## 6. Enterprise Split-Host Deployment (DB, Backend, Frontend on Separate Hosts)
+## 6. Enterprise Split-Host Deployment (DB + Backend on Separate Hosts)
 
 ### 6.1 DB host
 
@@ -551,61 +547,21 @@ CREATE ROLE ecube LOGIN PASSWORD 'change-me-strong';
 CREATE DATABASE ecube OWNER ecube;
 ```
 
-### 6.2 Backend host (no nginx/UI)
+### 6.2 Backend host
 
-Follow sections 5.1 to 5.6 with these differences:
+Follow sections 5.1 to 5.7 (skipping 5.6 PostgreSQL setup) with these differences:
 
-- For manual DB configuration: set `DATABASE_URL` to the DB host.
-- For wizard-managed DB configuration: leave `DATABASE_URL=` blank and configure it in `/setup` from a frontend-enabled host.
-- backend serves HTTPS directly (no local nginx).
-- **Required for split-host operation:** backend `.env` must include:
-  - `TRUST_PROXY_HEADERS=true` (so backend trusts `X-Forwarded-*` headers from frontend proxy)
-  - `API_ROOT_PATH=/api` (so OpenAPI schema reflects the mount prefix)
+- Skip local PostgreSQL installation; point `DATABASE_URL` in `.env` to the remote DB host.
+- For wizard-managed DB configuration: leave `DATABASE_URL=` blank and configure it in `/setup` after starting the service.
 
-Use TLS in systemd unit:
+The backend serves both the API and the frontend on a single port, same as a single-host install. TLS is terminated by uvicorn directly.
 
-```ini
-ExecStart=/opt/ecube/venv/bin/uvicorn \
-  --host 0.0.0.0 \
-  --port 8443 \
-  --ssl-keyfile=/opt/ecube/certs/key.pem \
-  --ssl-certfile=/opt/ecube/certs/cert.pem \
-  app.main:app
-```
+### 6.3 Continue in web UI (required)
 
-Set certificate ownership for backend TLS termination:
-
-- `/opt/ecube/certs/key.pem` -> `ecube:ecube`, mode `600`
-- `/opt/ecube/certs/cert.pem` -> `ecube:ecube`, mode `644`
-
-### 6.3 Frontend host (no backend service)
-
-- Deploy `frontend/dist` to web root.
-- Configure reverse proxy from `/api/` to `https://<backend-host>:8443/`.
-- Prefer verified TLS (`proxy_ssl_verify on`) with either:
-  - system CA trust, or
-  - explicit `proxy_ssl_trusted_certificate`.
-
-Nginx essentials for remote backend:
-
-```nginx
-location /api/ {
-    proxy_pass https://backend.example.com:8443/;
-    proxy_ssl_verify on;
-    proxy_ssl_server_name on;
-    proxy_ssl_name backend.example.com;
-    proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-}
-```
-
-### 6.4 Continue in web UI (required)
-
-After frontend and backend connectivity is validated, open the frontend host URL and complete setup:
+After backend connectivity to the remote DB is validated, open the web UI and complete setup:
 
 ```text
-https://<frontend-hostname>/setup
+https://<backend-hostname>:8443/setup
 ```
 
 ---
@@ -619,8 +575,7 @@ Use local firewall policy on each host. Example with `ufw`:
 ```bash
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
-sudo ufw allow 443/tcp
-sudo ufw deny 8443/tcp
+sudo ufw allow 8443/tcp
 sudo ufw allow from <admin-cidr> to any port 22 proto tcp
 sudo ufw enable
 ```
@@ -637,15 +592,7 @@ sudo ufw deny 5432/tcp
 Backend host:
 
 ```bash
-sudo ufw allow from <frontend-host-ip-or-cidr> to any port 8443 proto tcp
-sudo ufw deny 8443/tcp
-```
-
-Frontend host:
-
-```bash
-sudo ufw allow 443/tcp
-sudo ufw deny 8443/tcp
+sudo ufw allow 8443/tcp
 ```
 
 General rule:
@@ -726,29 +673,20 @@ sudo visudo -cf /etc/sudoers.d  # optional validation
 sudo rm -f /etc/pam.d/ecube
 ```
 
-#### 4. Stop nginx (if running) and remove ECUBE site config
-
-```bash
-sudo systemctl stop nginx  # optional; may be used by other services
-sudo rm -f /etc/nginx/sites-enabled/ecube
-sudo rm -f /etc/nginx/sites-available/ecube
-sudo systemctl reload nginx  # reload if still running
-```
-
-#### 5. Remove application installation directory
+#### 4. Remove application installation directory
 
 ```bash
 sudo rm -rf /opt/ecube
 ```
 
-#### 6. Remove runtime and log directories
+#### 5. Remove runtime and log directories
 
 ```bash
 sudo rm -rf /var/lib/ecube
 sudo rm -rf /var/log/ecube
 ```
 
-#### 7. Remove managed mount roots (optional)
+#### 6. Remove managed mount roots (optional)
 
 Only remove if these directories were created solely for ECUBE and are no longer needed:
 
@@ -756,22 +694,20 @@ Only remove if these directories were created solely for ECUBE and are no longer
 sudo rm -rf /nfs /smb
 ```
 
-#### 8. Remove service account and group
+#### 7. Remove service account and group
 
 ```bash
 sudo userdel -r ecube  # -r removes home directory
-sudo groupdel ecube-www 2>/dev/null || true  # optional group if created
 ```
 
-#### 9. Clean up firewall rules (if using `ufw`)
+#### 8. Clean up firewall rules (if using `ufw`)
 
 ```bash
-sudo ufw delete allow 443/tcp  # if configured
 sudo ufw delete allow 8443/tcp  # if configured
 sudo ufw delete allow from <admin-cidr> to any port 22 proto tcp  # if configured
 ```
 
-#### 10. PostgreSQL cleanup (optional, after verified backup)
+#### 9. PostgreSQL cleanup (optional, after verified backup)
 
 ```bash
 # Back up the database first
@@ -801,27 +737,27 @@ psql -h db.example.com -U ecubeadmin -d postgres \
 
 ## 9. Advanced: Hosting UI with Another Web Frontend
 
-You can host `frontend/dist` with another web server/CDN/load balancer instead of nginx.
+You can host `frontend/dist` with another web server/CDN/load balancer instead of letting FastAPI serve the frontend directly.
 
 Requirements for alternative frontend hosting:
 
 1. Serve SPA static files with fallback to `index.html` for client routes.
 2. Expose UI over HTTPS.
-3. Reverse proxy `/api/` to ECUBE backend and strip `/api` prefix before forwarding.
+3. Reverse proxy `/api/` to the ECUBE backend and strip the `/api` prefix before forwarding.
 4. Forward `Host`, `X-Forwarded-For`, and `X-Forwarded-Proto` headers.
 5. For split-host backend over HTTPS, enable upstream certificate verification.
 
-Backend requirements remain the same:
+Backend `.env` requirements when behind an external reverse proxy:
 
 - `TRUST_PROXY_HEADERS=true`
 - `API_ROOT_PATH=/api`
+- `SERVE_FRONTEND_PATH=` (leave empty — the external server handles frontend serving)
 
 Validation checklist:
 
 - UI loads at `https://<ui-host>/`
-- OpenAPI works at `https://<ui-host>/api/docs`
-- API schema loads from `https://<ui-host>/api/openapi.json`
-- "Try it out" in Swagger uses `/api/...` URLs (not backend-internal paths)
+- API health check works at `https://<ui-host>/api/health`
+- OpenAPI docs work at `https://<ui-host>/api/docs`
 
 ## References
 

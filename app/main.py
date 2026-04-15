@@ -375,6 +375,23 @@ if settings.cors_allowed_origins:
     )
 
 
+# ---------------------------------------------------------------------------
+# /api prefix stripping (standalone mode)
+# ---------------------------------------------------------------------------
+# When serving the frontend directly (no nginx), the UI sends all API requests
+# to /api/... because that's what nginx used to proxy.  Rewrite them to /...
+# so they match the actual FastAPI routes.
+# ---------------------------------------------------------------------------
+if settings.serve_frontend_path:
+    @app.middleware("http")
+    async def strip_api_prefix(request: Request, call_next):
+        if request.url.path.startswith("/api/"):
+            request.scope["path"] = request.url.path[4:]  # "/api/foo" → "/foo"
+        elif request.url.path == "/api":
+            request.scope["path"] = "/"
+        return await call_next(request)
+
+
 @app.middleware("http")
 async def fallback_status_logging(request: Request, call_next):
     """Log 405 and 413 responses that bypass exception handlers.
@@ -853,3 +870,44 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
         traceback.format_exc(),
     )
     return _error_response(500, "INTERNAL_ERROR", "An unexpected error occurred.", trace_id)
+
+
+# ---------------------------------------------------------------------------
+# Optional embedded frontend (--no-nginx / standalone mode)
+# ---------------------------------------------------------------------------
+# When SERVE_FRONTEND_PATH points to a Vite dist/ directory, serve the
+# pre-built SPA directly from FastAPI — no nginx required.  Mounted last
+# so all API routes take priority.
+# ---------------------------------------------------------------------------
+if settings.serve_frontend_path:
+    import pathlib
+    from fastapi.staticfiles import StaticFiles
+    from starlette.responses import FileResponse
+
+    _frontend_dir = pathlib.Path(settings.serve_frontend_path)
+    _index_html = _frontend_dir / "index.html"
+
+    if _frontend_dir.is_dir() and _index_html.is_file():
+        # Serve Vite hashed assets (js/, css/, etc.) with StaticFiles so
+        # they get proper content-type headers and directory traversal is
+        # handled safely by Starlette.
+        app.mount(
+            "/assets",
+            StaticFiles(directory=str(_frontend_dir / "assets")),
+            name="frontend-assets",
+        )
+
+        # Serve other root-level static files (favicon.ico, manifest, etc.)
+        # via a catch-all StaticFiles mount that falls back to index.html
+        # for SPA client-side routing.
+        @app.get("/{full_path:path}", include_in_schema=False)
+        async def _spa_fallback(request: Request, full_path: str):
+            # If the path matches an actual file in the dist dir, serve it.
+            file_path = (_frontend_dir / full_path).resolve()
+            # Guard against path traversal (e.g. ../../etc/passwd)
+            if full_path and file_path.is_file() and str(file_path).startswith(str(_frontend_dir.resolve())):
+                return FileResponse(str(file_path))
+            # Otherwise, serve index.html for SPA client-side routing.
+            return FileResponse(str(_index_html))
+
+        logger.info("Serving frontend from %s (standalone mode)", _frontend_dir)
