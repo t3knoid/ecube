@@ -80,9 +80,9 @@ class LinuxDriveMount:
             return False, f"mount_point must be an absolute path, got {mount_point!r}"
         expected_base = os.path.realpath(settings.usb_mount_base_path)
         real_mp = os.path.realpath(mount_point)
-        if not real_mp.startswith(expected_base + "/"):
+        if os.path.dirname(real_mp) != expected_base:
             return False, (
-                f"mount_point must be under {expected_base}, "
+                f"mount_point must be a direct child of {expected_base}, "
                 f"got {mount_point!r} (resolves to {real_mp!r})"
             )
 
