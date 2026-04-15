@@ -33,8 +33,9 @@ services:
     volumes:
       - ./.env:/opt/ecube/.env
       - ecube_runtime_data:/var/lib/ecube
-      # The image includes a self-signed TLS certificate.  To use your own
-      # cert, set ECUBE_CERTS_DIR in .env and uncomment the line below.
+      # A self-signed TLS cert is generated on first start if none exists.
+      # To use your own cert, mount it read-only and set TLS_KEYFILE /
+      # TLS_CERTFILE, or set ECUBE_CERTS_DIR and uncomment the line below.
       # - ${ECUBE_CERTS_DIR}:/opt/ecube/certs:ro
       # To override built-in themes, set ECUBE_THEMES_DIR in .env and
       # uncomment the line below.
