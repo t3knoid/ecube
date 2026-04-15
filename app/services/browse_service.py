@@ -249,9 +249,8 @@ def list_directory(
         #    materialising full BrowseEntry objects for every file in large
         #    directories; only the page slice is stat'd.
         try:
-            names = sorted(
-                entry.name for entry in os.scandir(real_target)  # noqa: S605 -- path validated above
-            )
+            with os.scandir(real_target) as it:  # noqa: S605 -- path validated above
+                names = sorted(entry.name for entry in it)
         except PermissionError:
             raise HTTPException(
                 status_code=403,
