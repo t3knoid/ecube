@@ -33,7 +33,7 @@ class Settings(BaseSettings):
 
     #: PostgreSQL admin username suggested to the setup wizard for the
     #: database provisioning step.  Falls back to :attr:`pg_superuser_name`
-    #: when set.  The installer can persist this in ``.env``
+    #: when this field is not configured.  The installer can persist this in ``.env``
     #: (``SETUP_DEFAULT_ADMIN_USERNAME=...``) to keep UI defaults aligned
     #: with the superuser it created.
     setup_default_admin_username: str = "ecubeadmin"

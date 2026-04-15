@@ -43,7 +43,7 @@ services:
       - /sys/bus/usb:/sys/bus/usb:ro
       - /run/udev:/run/udev:ro
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsk https://localhost:${ECUBE_PORT:-8443}/health/live || exit 1"]
+      test: ["CMD-SHELL", "curl -fsk -m5 https://localhost:${ECUBE_PORT:-8443}/health/live 2>/dev/null || curl -fs -m5 http://localhost:${ECUBE_PORT:-8443}/health/live 2>/dev/null || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
