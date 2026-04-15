@@ -315,13 +315,6 @@ def run_discovery_sync(
             if existing.current_state == DriveState.EMPTY and _port_is_enabled(port_id or existing.port_id):
                 existing.current_state = DriveState.AVAILABLE
                 changed = True
-                # Auto-mount on re-activation when not already mounted.
-                if (
-                    drive_mount
-                    and existing.filesystem_path
-                    and not existing.mount_path
-                ):
-                    _auto_mount_drive(existing, drive_mount)
 
             # Demote AVAILABLE → EMPTY when the port has been disabled.
             # IN_USE drives are left untouched to preserve project isolation.
