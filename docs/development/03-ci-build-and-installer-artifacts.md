@@ -3,13 +3,13 @@
 | Field | Value |
 |---|---|
 | Title | CI Build and Installer Artifact Contract |
-| Purpose | Defines the contract between GitHub Actions build workflows and the bare-metal installer, including expected artifacts and naming conventions. |
+| Purpose | Defines the contract between GitHub Actions build workflows and the native installer, including expected artifacts and naming conventions. |
 | Updated on | 04/11/26 |
 | Audience | Developers, release engineers. |
 
 ## Purpose
 
-This document defines the contract between GitHub Actions build workflows and the bare-metal installer (`install.sh`).
+This document defines the contract between GitHub Actions build workflows and the native installer (`install.sh`).
 
 CI and local artifact packaging are intentionally aligned through a single external entrypoint: `scripts/package-local.sh`.
 
