@@ -12,6 +12,7 @@ from typing import Optional, Protocol, Tuple
 
 from app.config import settings
 from app.infrastructure.device_path import validate_device_path
+from app.infrastructure.mount_info import find_device_mount_point
 
 logger = logging.getLogger(__name__)
 
@@ -47,35 +48,7 @@ def _find_mountable_device(device_path: str) -> str:
     return device_path
 
 
-def _find_current_mount_point(device_path: str) -> Optional[str]:
-    """Return the mount point for *device_path* from ``/proc/mounts``, or ``None``.
-
-    Parses the mounts file (``settings.procfs_mounts_path``, space-separated:
-    device mountpoint fstype options ...) and returns the first mount point
-    whose device field matches *device_path* after resolving symlinks on both
-    sides.
-    """
-    try:
-        real_device = os.path.realpath(device_path)
-    except (OSError, ValueError):
-        real_device = device_path
-    mounts_path = settings.procfs_mounts_path
-    try:
-        with open(mounts_path, encoding="utf-8", errors="replace") as fh:
-            for line in fh:
-                parts = line.split()
-                if len(parts) < 2:
-                    continue
-                dev, mnt = parts[0], parts[1]
-                try:
-                    real_dev = os.path.realpath(dev)
-                except (OSError, ValueError):
-                    real_dev = dev
-                if real_dev == real_device:
-                    return mnt
-    except OSError:
-        logger.debug("Unable to read %s", mounts_path)
-    return None
+# Mount-point lookup moved to app.infrastructure.mount_info
 
 
 class DriveMountProvider(Protocol):
@@ -134,7 +107,7 @@ class LinuxDriveMount:
         except subprocess.CalledProcessError as exc:
             stderr = (exc.stderr or b"").decode(errors="replace").strip()
             if stderr and "already mounted" in stderr.lower():
-                actual = _find_current_mount_point(mountable)
+                actual = find_device_mount_point(mountable)
                 if actual == mount_point:
                     return True, None
                 if actual:
