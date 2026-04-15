@@ -16,8 +16,6 @@ from app.infrastructure.mount_info import find_device_mount_point
 
 logger = logging.getLogger(__name__)
 
-_MOUNT_BIN = settings.mount_binary_path
-
 
 def _with_sudo(cmd: list[str]) -> list[str]:
     if settings.use_sudo and os.geteuid() != 0:
@@ -97,7 +95,7 @@ class LinuxDriveMount:
 
         try:
             subprocess.run(
-                _with_sudo([_MOUNT_BIN, mountable, mount_point]),
+                _with_sudo([settings.mount_binary_path, mountable, mount_point]),
                 check=True,
                 capture_output=True,
                 timeout=settings.subprocess_timeout_seconds,
