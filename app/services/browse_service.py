@@ -13,7 +13,8 @@ Security model:
    ``settings.browse_allowed_prefixes`` as a secondary defence layer.
 5. Symlinks are *not* followed — they are reported as ``type: "symlink"`` but
    never dereferenced.
-6. A ``BROWSE_DIRECTORY`` audit record is written on every call.
+6. A ``BROWSE_DIRECTORY`` audit record is written on success; a
+   ``BROWSE_DENIED`` record is written when the request is rejected with 403.
 """
 
 import logging
