@@ -21,10 +21,10 @@
 
 ## 1. Network Isolation
 
-- **Database (bare-metal):** Keep PostgreSQL reachable only from the ECUBE system layer or trusted admin hosts. Do not expose PostgreSQL broadly.
+- **Database (native):** Keep PostgreSQL reachable only from the ECUBE system layer or trusted admin hosts. Do not expose PostgreSQL broadly.
 - **Database (Docker Compose):** PostgreSQL is published to the host by default via `POSTGRES_HOST_PORT` in the Compose file. For hardened deployments, remove the port mapping entirely or bind it to `127.0.0.1` only.
 - **API (external access):** Expose HTTPS only to clients.
-- **API (internal architecture):** nginx-fronted and Docker deployments use internal HTTP between the reverse proxy and backend; this is acceptable only when that backend port is not externally exposed.
+- **API (internal architecture):** Docker deployments may use internal HTTP between a reverse proxy container and the backend; this is acceptable only when that backend port is not externally exposed. Native installs serve HTTPS directly from uvicorn.
 - **Mounts:** NFS/SMB shares on isolated VLAN if possible
 - **USB:** Local USB hub, not exposed over network
 
@@ -34,11 +34,10 @@ Use the table below to determine which ports should exist in each deployment and
 
 | Port / Protocol | Service | When Used | Exposure Guidance |
 | --- | --- | --- | --- |
-| `443/tcp` | nginx / `ecube-ui` HTTPS ingress | Bare-metal full install and Docker UI ingress when using standard HTTPS frontend publishing | Primary client-facing ingress. Allow from trusted client networks. |
-| `8443/tcp` | ECUBE backend HTTPS or alternate published UI port | Bare-metal backend-only installs, or deployments where UI/API HTTPS is intentionally published on 8443 instead of 443 | Expose only when this is the intentional client ingress port. Do not expose publicly if nginx already fronts the service on 443. |
-| `8000/tcp` | FastAPI backend HTTP | Internal-only backend port in Docker Compose and some reverse-proxy topologies | Do not publish externally. Keep reachable only from the local reverse proxy or container network. |
-| `5432/tcp` | PostgreSQL | Bare-metal local/remote DB, Docker Compose postgres service | Restrict to ECUBE backend host(s) and approved admin paths only. Avoid broad exposure. |
-| `80/tcp` | HTTP challenge endpoint | Optional for Let's Encrypt HTTP-01 certificate issuance | Open only when needed for ACME validation or redirect-to-HTTPS behavior. |
+| `8443/tcp` | ECUBE service HTTPS | Default native install port; also used as alternate published UI port in Docker | Primary client-facing ingress. Allow from trusted client networks. |
+| `80/tcp` | ECUBE service HTTP | Native `--no-tls` installs; also optional for Let's Encrypt HTTP-01 certificate issuance | Expose only in lab/testing or when TLS is terminated by an external load balancer. |
+| `8000/tcp` | FastAPI backend HTTP | Internal-only backend port in Docker Compose | Do not publish externally. Keep reachable only from the Docker container network. |
+| `5432/tcp` | PostgreSQL | Native local/remote DB, Docker Compose postgres service | Restrict to ECUBE backend host(s) and approved admin paths only. Avoid broad exposure. |
 | `22/tcp` | SSH | Administrative access to host(s) | Restrict to management networks or VPN only. |
 | `2049/tcp` | NFS | Evidence source mounts when using NFS | Allow only between ECUBE host(s) and approved file servers. |
 | `445/tcp` / `139/tcp` | SMB/CIFS | Evidence source mounts when using SMB | Allow only between ECUBE host(s) and approved file servers. |
@@ -72,13 +71,16 @@ DATABASE_URL=postgresql://ecube:strong-pass@db.internal:5432/ecube?sslmode=requi
 
 #### Reverse proxy ingress
 
-- Prefer a reverse proxy such as nginx as the only client-facing ingress point.
-- Terminate TLS at the reverse proxy for full installs and Docker UI ingress.
+When deploying ECUBE behind an external reverse proxy (load balancer, CDN, or Docker UI container):
+
+- Terminate TLS at the reverse proxy.
 - Keep backend application ports non-public and reachable only from the reverse proxy.
-- When proxying ECUBE behind `/api`, ensure the backend is configured with `TRUST_PROXY_HEADERS=true` only when the proxy is trusted and `API_ROOT_PATH=/api` when the proxy strips the prefix.
+- Set `TRUST_PROXY_HEADERS=true` only when the proxy is trusted, and `API_ROOT_PATH=/api` when the proxy strips the prefix.
 - Use the reverse proxy to enforce HTTPS, constrain TLS versions, and centralize certificate rotation.
 
-Recommended posture:
+For native installs (the default), ECUBE serves the frontend directly and does not require a reverse proxy.
+
+Recommended posture (when using a reverse proxy):
 
 - Clients -> reverse proxy over HTTPS
 - Reverse proxy -> backend over localhost or private container network
@@ -96,17 +98,19 @@ Preferred certificate sources:
 
 For full issuance and renewal procedures, see [05-tls-certificates-and-letsencrypt.md](05-tls-certificates-and-letsencrypt.md).
 
-Example certbot command for nginx-based deployments:
+Example certbot command for deployments behind an nginx reverse proxy:
 
 ```bash
 sudo certbot --nginx -d ecube.example.com
 ```
 
-If you manage nginx TLS settings directly, enforce modern TLS versions explicitly in the reverse proxy configuration, for example:
+If you manage TLS settings directly (e.g. in an external reverse proxy), enforce modern TLS versions explicitly:
 
 ```nginx
 ssl_protocols TLSv1.2 TLSv1.3;
 ```
+
+For native installs where uvicorn terminates TLS, replace the self-signed certificate in `<install-dir>/certs/` with a CA-signed certificate and restart the service.
 
 ## 3. Credential Management
 
@@ -188,10 +192,10 @@ sudo chmod 750 /opt/ecube/venv
 sudo chown -R ecube:ecube /opt/ecube
 ```
 
-Certificate ownership depends on topology:
+Certificate ownership:
 
-- nginx/fronted deployments: private key is typically `root:root` with mode `600`
-- backend-only TLS termination: private key and cert can be owned by `ecube:ecube`
+- Native installs: private key and cert are owned by `ecube:ecube` (`600` for key, `644` for cert) since uvicorn terminates TLS directly.
+- Docker deployments with a UI container: private key ownership depends on the container configuration.
 
 Follow the topology-specific guidance in [01-installation.md](01-installation.md), [02-manual-installation.md](02-manual-installation.md), and [05-tls-certificates-and-letsencrypt.md](05-tls-certificates-and-letsencrypt.md).
 
@@ -221,7 +225,7 @@ Notes:
 ## 7. Firewall Configuration
 
 ```bash
-# Bare-metal backend-only deployment: allow direct API TLS
+# Native deployment: allow the ECUBE service port
 sudo ufw allow 8443/tcp
 
 # Deny all other inbound by default
@@ -232,7 +236,8 @@ sudo ufw enable
 
 Topology-specific notes:
 
-- Bare-metal full install / nginx-fronted deployment: allow `443/tcp`; do not expose backend `8443/tcp` publicly.
+- Native install (default HTTPS): allow `8443/tcp` (or the configured `--api-port`).
+- Native `--no-tls` install: allow `80/tcp` (or the configured `--api-port`).
 - Docker Compose deployment: allow only the published UI HTTPS port (`8443` by default). The backend port `8000` should remain unpublished.
 - Docker Compose PostgreSQL: if you do not need host access to PostgreSQL, remove the port mapping. If host access is required, bind it to localhost only instead of all interfaces.
 

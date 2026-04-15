@@ -237,7 +237,7 @@ class Settings(BaseSettings):
 
     #: Whether to prepend ``sudo`` to OS management commands.  Set to
     #: ``false`` when the process already runs as root (e.g. inside a
-    #: Docker container).  Defaults to ``true`` for bare-metal deployments
+    #: Docker container).  Defaults to ``true`` for native deployments
     #: where the service runs as a non-root ``ecube`` account.
     use_sudo: bool = True
 
@@ -332,11 +332,18 @@ class Settings(BaseSettings):
 
     #: Path prefix this application is mounted at behind a reverse proxy.
     #: Set to ``"/api"`` when a proxy strips the ``/api`` prefix before
-    #: forwarding requests (e.g. the bundled nginx config and the bare-metal
+    #: forwarding requests (e.g. the bundled nginx config and the native
     #: installer).  Leave empty for direct deployments where no prefix is
     #: stripped.  Controls the ``servers`` entry in the OpenAPI spec so that
     #: Swagger UI "Try it out" generates correct request paths.
     api_root_path: str = ""
+
+    #: Absolute path to a directory containing the pre-built frontend
+    #: (Vue/Vite ``dist/`` output).  When set and the directory exists,
+    #: FastAPI serves these static files and provides SPA fallback — no
+    #: separate nginx installation is required.  Leave empty (default) when
+    #: nginx or another reverse proxy serves the frontend.
+    serve_frontend_path: str = ""
 
     # ---------------------------------------------------------------------------
     # Webhook callback settings

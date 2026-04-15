@@ -21,12 +21,11 @@ The table below lists the software components required at runtime, where they ex
 |-------------------|------------|----------------|
 | Linux (Debian/Ubuntu) | Application host (system layer) | Base operating system for ECUBE service execution, USB hardware access, mount operations, and service management. |
 | Python 3.11+ | System layer process | Runtime for the ECUBE application code, API endpoints, domain services, and infrastructure adapters. |
-| FastAPI + Uvicorn | System layer API service (`ecube.service`) | Serves HTTPS/HTTP API endpoints, enforces authz and project isolation, and coordinates copy/export workflows. |
+| FastAPI + Uvicorn | System layer API service (`ecube.service`) | Serves HTTPS/HTTP API endpoints and the SPA frontend, enforces authz and project isolation, and coordinates copy/export workflows. |
 | SQLAlchemy ORM | System layer data access layer | Maps application models to database tables and executes transactional reads/writes through repositories/services. |
 | Alembic | System layer setup/provisioning paths | Applies schema migrations (`upgrade head`) during provisioning/setup to create and evolve DB schema. |
 | PostgreSQL 14+ | Private database host/segment | Source-of-truth datastore for drives, jobs, mounts, user roles, and audit logs. |
-| nginx (when frontend is deployed) | UI host or same host reverse proxy | Serves built frontend assets and proxies `/api/` requests to FastAPI backend; may terminate TLS in nginx-fronted deployments. |
-| Vue SPA static assets (`frontend/dist`) | Browser + nginx static hosting | Runtime user interface rendered in the browser; calls backend API over HTTPS and never accesses DB/hardware directly. |
+| Vue SPA static assets (`frontend/dist`) | Browser + FastAPI static hosting | Runtime user interface rendered in the browser; calls backend API over HTTPS and never accesses DB/hardware directly. FastAPI serves the pre-built SPA in standalone mode. |
 | PAM (`python-pam`) | System layer local auth provider | Validates local OS credentials when `ROLE_RESOLVER=local` authentication flow is enabled. |
 | Systemd | Linux host service manager | Manages ECUBE process lifecycle (start/stop/restart, boot enablement, service logs via journald). |
 
