@@ -235,10 +235,7 @@ def list_directory(
         if db_mount_root is None:
             raise HTTPException(
                 status_code=403,
-                detail={
-                    "message": "The requested path is not a registered active mount root.",
-                    "reason": "unknown_mount_root",
-                },
+                detail="The requested path is not a registered active mount root.",
             )
 
         # 2 & 3. Resolve path from the trusted DB root + user subdir; validate
@@ -255,10 +252,7 @@ def list_directory(
         except PermissionError:
             raise HTTPException(
                 status_code=403,
-                detail={
-                    "message": "Permission denied listing the requested directory.",
-                    "reason": "permission_denied",
-                },
+                detail="Permission denied listing the requested directory.",
             )
         except NotADirectoryError:
             raise HTTPException(
@@ -309,12 +303,7 @@ def list_directory(
         )
     except HTTPException as exc:
         if exc.status_code == 403:
-            reason = "browse_forbidden"
-            detail = exc.detail
-            if isinstance(detail, dict):
-                reason = str(detail.get("reason") or detail.get("message") or reason)
-            elif detail:
-                reason = str(detail)
+            reason = str(exc.detail) if exc.detail else "browse_forbidden"
 
             log_and_audit(
                 db,
