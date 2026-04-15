@@ -29,7 +29,14 @@ def get_all_drives(
     if project_id is not None:
         return repo.list_by_project(project_id)
     if states:
-        parsed = [DriveState(s) for s in states]
+        try:
+            parsed = [DriveState(s) for s in states]
+        except ValueError:
+            valid = ", ".join(e.value for e in DriveState)
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid state filter. Valid values: {valid}",
+            )
         return repo.list_by_states(parsed)
     return repo.list_all()
 
