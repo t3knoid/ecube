@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, require_roles
@@ -56,6 +56,24 @@ def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
         schema.drive = DriveInfoSchema.model_validate(active.drive)
 
     return schema
+
+
+@router.get("", response_model=list[ExportJobSchema], responses={**R_401, **R_403})
+def list_jobs(
+    limit: int = Query(default=200, ge=1, le=1000, description="Maximum number of jobs to return"),
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ALL_ROLES),
+):
+    """List the most recent export jobs, ordered by creation time descending.
+
+    Returns up to *limit* jobs.  Each job includes status, progress, and
+    drive assignment metadata.
+
+    **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
+    """
+    jobs = job_service.list_jobs(db, limit=limit)
+    return [_redact_ip(job, current_user, db) for job in jobs]
 
 
 @router.post("", response_model=ExportJobSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500})

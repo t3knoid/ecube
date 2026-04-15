@@ -85,6 +85,15 @@ class JobRepository:
             .count()
         )
 
+    def list_recent(self, limit: int = 200) -> List[ExportJob]:
+        """Return the most recent jobs ordered by creation time descending."""
+        return (
+            self.db.query(ExportJob)
+            .order_by(ExportJob.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
 
 class FileRepository:
     """Data-access layer for :class:`~app.models.jobs.ExportFile`."""
