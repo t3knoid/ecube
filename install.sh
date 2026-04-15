@@ -123,56 +123,49 @@ Options:
 EOF
 }
 
-_extract_database_url_from_env() {
-  local env_file="$1"
+# ---------------------------------------------------------------------------
+# _extract_env_value  ENV_FILE  VAR_NAME
+#
+# Reads the last occurrence of VAR_NAME=... from ENV_FILE, strips
+# leading/trailing whitespace and a single layer of matched surrounding
+# quotes (double or single).  Prints the cleaned value to stdout.
+# Returns 1 (with no output) when the file is missing, the variable is
+# absent, the value is empty, or it looks like an unfilled placeholder
+# (i.e. "<...>").
+# ---------------------------------------------------------------------------
+_extract_env_value() {
+  local env_file="$1" var_name="$2"
   [[ -f "${env_file}" ]] || return 1
 
-  local db_line
-  db_line="$(grep -E '^[[:space:]]*DATABASE_URL=' "${env_file}" 2>/dev/null | tail -1 || true)"
-  [[ -n "${db_line}" ]] || return 1
+  local _line
+  _line="$(grep -E "^[[:space:]]*${var_name}=" "${env_file}" 2>/dev/null | tail -1 || true)"
+  [[ -n "${_line}" ]] || return 1
 
-  local db_value="${db_line#*=}"
-  db_value="${db_value#"${db_value%%[![:space:]]*}"}"
-  db_value="${db_value%"${db_value##*[![:space:]]}"}"
-  if (( ${#db_value} >= 2 )); then
-    local _first_char="${db_value:0:1}"
-    local _last_char="${db_value: -1}"
-    if [[ "${_first_char}" == '"' && "${_last_char}" == '"' ]] ||
-       [[ "${_first_char}" == "'" && "${_last_char}" == "'" ]]; then
-      db_value="${db_value:1:${#db_value}-2}"
+  local _val="${_line#*=}"
+  # Trim leading/trailing whitespace.
+  _val="${_val#"${_val%%[![:space:]]*}"}"
+  _val="${_val%"${_val##*[![:space:]]}"}"
+  # Strip one layer of matched surrounding quotes.
+  if (( ${#_val} >= 2 )); then
+    local _fc="${_val:0:1}" _lc="${_val: -1}"
+    if [[ "${_fc}" == '"' && "${_lc}" == '"' ]] ||
+       [[ "${_fc}" == "'" && "${_lc}" == "'" ]]; then
+      _val="${_val:1:${#_val}-2}"
     fi
   fi
-  [[ -n "${db_value}" ]] || return 1
-  [[ "${db_value}" == "<"*">" ]] && return 1
+  [[ -n "${_val}" ]] || return 1
+  [[ "${_val}" == "<"*">" ]] && return 1
 
-  printf '%s' "${db_value}"
+  printf '%s' "${_val}"
   return 0
 }
 
+_extract_database_url_from_env() {
+  _extract_env_value "$1" "DATABASE_URL"
+}
+
 _extract_setup_admin_username_from_env() {
-  local env_file="$1"
-  [[ -f "${env_file}" ]] || return 1
-
-  local admin_line
-  admin_line="$(grep -E '^[[:space:]]*SETUP_DEFAULT_ADMIN_USERNAME=' "${env_file}" 2>/dev/null | tail -1 || true)"
-  [[ -n "${admin_line}" ]] || return 1
-
-  local admin_value="${admin_line#*=}"
-  admin_value="${admin_value#"${admin_value%%[![:space:]]*}"}"
-  admin_value="${admin_value%"${admin_value##*[![:space:]]}"}"
-  if (( ${#admin_value} >= 2 )); then
-    local _first_char="${admin_value:0:1}"
-    local _last_char="${admin_value: -1}"
-    if [[ "${_first_char}" == '"' && "${_last_char}" == '"' ]] ||
-       [[ "${_first_char}" == "'" && "${_last_char}" == "'" ]]; then
-      admin_value="${admin_value:1:${#admin_value}-2}"
-    fi
-  fi
-  [[ -n "${admin_value}" ]] || return 1
-  [[ "${admin_value}" == "<"*">" ]] && return 1
-
-  printf '%s' "${admin_value}"
-  return 0
+  _extract_env_value "$1" "SETUP_DEFAULT_ADMIN_USERNAME"
 }
 
 _cleanup_pg_superuser_role() {
@@ -1403,25 +1396,17 @@ _write_env_file() {
       ok "TRUST_PROXY_HEADERS reset to false"
     fi
 
-    if grep -Eq '^[[:space:]]*API_ROOT_PATH=' "${env_file}"; then
-      local _old_root_path
-      _old_root_path="$(grep -E '^[[:space:]]*API_ROOT_PATH=' "${env_file}" | head -1 | sed 's/^[^=]*=//')"
-      # Strip leading/trailing whitespace and surrounding quotes.
-      _old_root_path="${_old_root_path#"${_old_root_path%%[![:space:]]*}"}"   # trim leading
-      _old_root_path="${_old_root_path%"${_old_root_path##*[![:space:]]}"}"   # trim trailing
-      _old_root_path="${_old_root_path#\"}" ; _old_root_path="${_old_root_path%\"}"  # strip double quotes
-      _old_root_path="${_old_root_path#\'}" ; _old_root_path="${_old_root_path%\'}"  # strip single quotes
-      if [[ -n "${_old_root_path}" ]]; then
-        warn "API_ROOT_PATH is set to '${_old_root_path}' in .env."
-        warn "The standalone topology serves the API at the root — a stale"
-        warn "API_ROOT_PATH can break OpenAPI/Swagger URLs.  Clearing it."
-        warn "If you run behind a reverse proxy with a path prefix, restore"
-        warn "API_ROOT_PATH in ${env_file} after installation."
-        if [[ "${DRY_RUN}" != true ]]; then
-          sed -i 's/^[[:space:]]*API_ROOT_PATH=.*/API_ROOT_PATH=/' "${env_file}"
-        fi
-        ok "API_ROOT_PATH cleared"
+    local _old_root_path
+    if _old_root_path="$(_extract_env_value "${env_file}" "API_ROOT_PATH")"; then
+      warn "API_ROOT_PATH is set to '${_old_root_path}' in .env."
+      warn "The standalone topology serves the API at the root — a stale"
+      warn "API_ROOT_PATH can break OpenAPI/Swagger URLs.  Clearing it."
+      warn "If you run behind a reverse proxy with a path prefix, restore"
+      warn "API_ROOT_PATH in ${env_file} after installation."
+      if [[ "${DRY_RUN}" != true ]]; then
+        sed -i 's/^[[:space:]]*API_ROOT_PATH=.*/API_ROOT_PATH=/' "${env_file}"
       fi
+      ok "API_ROOT_PATH cleared"
     fi
 
     return
@@ -1566,19 +1551,10 @@ _deploy_frontend() {
 
   local www_dir="${INSTALL_DIR}/www"
   local env_file="${INSTALL_DIR}/.env"
-  if [[ -f "${env_file}" ]]; then
-    local _env_val
-    _env_val=$(grep -E '^[[:space:]]*SERVE_FRONTEND_PATH=' "${env_file}" | tail -1 | sed 's/^[^=]*=//')
-    # Strip leading/trailing whitespace and surrounding quotes without
-    # mangling interior spaces (xargs would collapse them).
-    _env_val="${_env_val#"${_env_val%%[![:space:]]*}"}"   # trim leading
-    _env_val="${_env_val%"${_env_val##*[![:space:]]}"}"   # trim trailing
-    _env_val="${_env_val#\"}" ; _env_val="${_env_val%\"}"  # strip double quotes
-    _env_val="${_env_val#\'}" ; _env_val="${_env_val%\'}"  # strip single quotes
-    if [[ -n "${_env_val}" ]]; then
-      www_dir="${_env_val}"
-      info "Using SERVE_FRONTEND_PATH from .env: ${www_dir}"
-    fi
+  local _env_val
+  if _env_val="$(_extract_env_value "${env_file}" "SERVE_FRONTEND_PATH")"; then
+    www_dir="${_env_val}"
+    info "Using SERVE_FRONTEND_PATH from .env: ${www_dir}"
   fi
 
   # Validate www_dir before any destructive operations.  A misconfigured
