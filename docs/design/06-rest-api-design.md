@@ -154,12 +154,14 @@ Every authenticated request resolves to:
 | Create jobs | ✔ | ✔ | ✔ | ✖ |
 | Start copy jobs | ✔ | ✔ | ✔ | ✖ |
 | View job status | ✔ | ✔ | ✔ | ✔ |
+| List jobs (`GET /jobs`) | ✔ | ✔ | ✔ | ✔ |
 | View job file status rows (`GET /jobs/{job_id}/files`) | ✔ | ✔ | ✔ | ✔ |
 | Regenerate manifest | ✔ | ✔ | ✔ | ✖ |
 | Verify job | ✔ | ✔ | ✔ | ✖ |
 | Read audit logs | ✔ | ✔ | ✖ | ✔ |
 | Read chain-of-custody reports | ✔ | ✔ | ✖ | ✔ |
 | Introspection (read-only) | ✔ | ✔ | ✔ | ✔ |
+| Browse mount directories (`GET /browse`) | ✔ | ✔ | ✔ | ✔ |
 | File hash/compare | ✔ | ✖ | ✖ | ✔ |
 
 ---
@@ -730,6 +732,26 @@ All job endpoints that return a single job use the `ExportJobSchema` response, w
   "client_ip": "192.168.1.50"
 }
 ```
+
+### `GET /jobs`
+
+List the most recent export jobs, ordered by creation time descending.
+
+**Roles:** `admin`, `manager`, `processor`, `auditor`
+
+**Query parameters:**
+
+| Parameter | Type | Default | Constraints | Description |
+|-----------|------|---------|-------------|-------------|
+| `limit` | integer | `200` | `1 ≤ limit ≤ 1000` | Maximum number of jobs to return |
+
+**Response:** `200 OK` — JSON array of `ExportJobSchema` objects. Each job includes `files_succeeded`, `files_failed`, `error_summary`, and the nested `drive` object, populated via bulk queries (no N+1).
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid credentials
+- `403 Forbidden` — Insufficient role
+- `422 Validation Error` — `limit` out of range
 
 ### `POST /jobs`
 
@@ -1792,6 +1814,44 @@ Internal worker state.
 - `401 Unauthorized` — Missing/invalid token
 - `403 Forbidden` — Insufficient role
 - `404 Not Found` — Job ID does not exist
+
+---
+
+## 3.10 Directory Browsing
+
+### `GET /browse`
+
+Return a paginated directory listing for an active USB drive mount path or network share mount point.
+
+**Roles:** `admin`, `manager`, `processor`, `auditor`
+
+**Query parameters:**
+
+| Parameter | Type | Default | Constraints | Description |
+|-----------|------|---------|-------------|-------------|
+| `path` | string | *(required)* | `StrictSafeStr` | Mount root to browse. Must be an active USB drive `mount_path` or a network mount `local_mount_point` registered in the system. |
+| `subdir` | string | `""` | `StrictSafeStr` | Relative subdirectory within the mount root. |
+| `page` | integer | `1` | `≥ 1` | Page number (1-based). |
+| `page_size` | integer | `100` | `1 ≤ page_size ≤ 500` | Entries per page. |
+
+**Security model:**
+
+1. `path` must match a registered, active mount root from the database.
+2. `subdir` containment is verified via `realpath` — path-traversal attempts (e.g. `../../etc`) are rejected with `400`.
+3. The resolved path must start with one of the configured `BROWSE_ALLOWED_PREFIXES`.
+4. Every call is audit-logged with action `BROWSE_DIRECTORY`.
+
+**Response:** `200 OK` — `BrowseResponse` object containing `entries` (array of `{name, type, size, modified_at}`), `total`, `page`, `page_size`, `path`, `subdir`.
+
+Entry `type` values: `"file"`, `"directory"`, `"symlink"`. Symlinks are listed but not followed.
+
+**Error responses:**
+
+- `400 Bad Request` — Path-traversal detected or unresolvable path
+- `401 Unauthorized` — Missing/invalid credentials
+- `403 Forbidden` — Path is not a registered active mount root, or fails prefix allowlist check
+- `422 Validation Error` — Invalid query parameters
+- `500 Internal Server Error` — Filesystem error
 
 ---
 

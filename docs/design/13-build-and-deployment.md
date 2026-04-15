@@ -21,9 +21,9 @@ The build and deployment design exists to satisfy these goals:
 
 ECUBE supports two primary deployment models.
 
-### Package-Based Deployment
+### Package-Based Deployment (Native Standalone)
 
-In the package-based model, ECUBE runs as a host-managed Python application under Linux service management.
+In the default package-based model, ECUBE runs as a host-managed Python application under Linux service management. The application serves the frontend SPA directly — no separate web server (nginx) is required. The installer configures TLS termination in Uvicorn and deploys the pre-built frontend to `<install-dir>/www`.
 
 This model is appropriate when:
 
@@ -31,9 +31,18 @@ This model is appropriate when:
 - operators want direct host-level service control,
 - local integration with OS facilities is preferred over container orchestration.
 
+### Package-Based Deployment (Behind Reverse Proxy)
+
+Same host-managed application, but an external reverse proxy (nginx, HAProxy, etc.) terminates TLS and serves the frontend. The application runs behind the proxy with `TRUST_PROXY_HEADERS=true` and `API_ROOT_PATH=/api`. `SERVE_FRONTEND_PATH` is left empty.
+
+This model is appropriate when:
+
+- centralized TLS termination or load balancing is required,
+- the frontend is served from a separate host or CDN.
+
 ### Container-Based Deployment
 
-In the container-based model, ECUBE runs as one or more containers with PostgreSQL and, when applicable, a separate UI container.
+In the container-based model, ECUBE runs as one or more containers with PostgreSQL and, when applicable, a separate UI container (nginx).
 
 This model is appropriate when:
 
