@@ -385,10 +385,18 @@ if settings.cors_allowed_origins:
 if settings.serve_frontend_path:
     @app.middleware("http")
     async def strip_api_prefix(request: Request, call_next):
-        if request.url.path.startswith("/api/"):
-            request.scope["path"] = request.url.path[4:]  # "/api/foo" → "/foo"
-        elif request.url.path == "/api":
+        path = request.scope["path"]
+        raw_path = request.scope.get("raw_path")
+
+        if path.startswith("/api/"):
+            request.scope["path"] = path[4:]  # "/api/foo" → "/foo"
+            if raw_path is not None and raw_path.startswith(b"/api/"):
+                request.scope["raw_path"] = raw_path[4:]
+            else:
+                request.scope["raw_path"] = request.scope["path"].encode("utf-8")
+        elif path == "/api":
             request.scope["path"] = "/"
+            request.scope["raw_path"] = b"/"
         return await call_next(request)
 
 
