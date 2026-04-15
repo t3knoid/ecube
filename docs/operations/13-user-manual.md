@@ -83,7 +83,7 @@ What users should expect:
 
 ### 1.2 Manual Installation
 
-An administrator deploys ECUBE manually as systemd-managed services with nginx or another reverse proxy. This is used when the installer cannot be used or when tighter enterprise controls are required.
+An administrator deploys ECUBE manually as a systemd-managed service. This is used when the installer cannot be used or when tighter enterprise controls are required. An optional external reverse proxy can be placed in front of ECUBE for additional TLS termination or load balancing.
 
 What users should expect:
 

@@ -56,7 +56,7 @@ cp .env.example .env
 4. Create a PostgreSQL superuser login for the setup wizard (first time only)
 
 ```bash
-sudo -u postgres psql -c "CREATE ROLE ecubeadmin WITH SUPERUSER LOGIN PASSWORD 'ecubeadmin';"
+sudo -u postgres psql -c "CREATE ROLE ecube WITH SUPERUSER LOGIN PASSWORD 'ecube';"
 ```
 
 5. Install PAM service config (first time only)
@@ -77,7 +77,7 @@ sudo .venv/bin/uvicorn app.main:app --reload
 cd frontend && npm ci && npm run dev
 ```
 
-Then open the setup wizard at `http://localhost:5173` to test the database connection using `ecubeadmin`, provision the application database/user, run migrations, and create the first ECUBE admin user.
+Then open the setup wizard at `http://localhost:5173` to provision the application database/user, run migrations, and create the first ECUBE admin user. The wizard auto-fills superuser credentials from `PG_SUPERUSER_NAME`/`PG_SUPERUSER_PASS` in `.env` (defaulting to `ecube`/`ecube`).
 
 | URL | Purpose |
 |-----|---------|
@@ -290,10 +290,10 @@ sudo systemctl start postgresql
 
 ### Create the Setup Wizard Superuser (First Time Only)
 
-The setup wizard connects to PostgreSQL as `ecubeadmin` to provision the application database and user. Create this role once:
+The setup wizard connects to PostgreSQL using the credentials from `PG_SUPERUSER_NAME`/`PG_SUPERUSER_PASS` in `.env` (defaulting to `ecube`/`ecube`). Create this role once:
 
 ```bash
-sudo -u postgres psql -c "CREATE ROLE ecubeadmin WITH SUPERUSER LOGIN PASSWORD 'ecubeadmin';"
+sudo -u postgres psql -c "CREATE ROLE ecube WITH SUPERUSER LOGIN PASSWORD 'ecube';"
 ```
 
 `SUPERUSER` is required on PostgreSQL 16+ because `CREATEROLE` alone no longer grants implicit `SET ROLE` access to roles it creates.

@@ -40,7 +40,7 @@ sudo ./install.sh
 
 Before running the installer, ensure PostgreSQL is installed and running. The installer does not install the PostgreSQL server itself.
 
-The installer performs pre-flight checks, creates/updates a PostgreSQL superuser for setup-wizard provisioning, writes `.env` (with `DATABASE_URL` left blank and `SECRET_KEY` generated), configures `ecube.service`, deploys the frontend to `<install-dir>/www`, and optionally configures the host firewall.
+The installer performs pre-flight checks, creates/updates a PostgreSQL superuser using default credentials (`POSTGRES_USER`/`POSTGRES_PASSWORD`, falling back to `ecube`/`ecube`), writes `.env` (with `DATABASE_URL` left blank and `SECRET_KEY` generated), configures `ecube.service`, deploys the frontend to `<install-dir>/www`, and optionally configures the host firewall. Both native and Docker deployments share the same credential defaulting cascade and setup wizard flow.
 
 Immediate next step: open the ECUBE web UI and complete setup at `https://<hostname>:<ui-port>/setup`.
 
@@ -68,27 +68,14 @@ Copy-Item .env.example .env
 ```
 
 ```bash
-# Generate a self-signed TLS certificate for local development.
-# The nginx UI container will not start without cert.pem and key.pem.
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout deploy/certs/key.pem \
-  -out deploy/certs/cert.pem \
-  -subj "/CN=localhost"
-```
-
-```powershell
-# Windows: run the openssl command above in Git Bash, WSL, or any shell
-# that has openssl available.  Docker Desktop with WSL2 includes openssl
-# inside the WSL environment.
-```
-
-```bash
-# Linux/macOS: start full stack (postgres, ecube-app, ecube-ui)
+# Linux/macOS: start full stack (postgres, ecube-app)
+# The image includes a self-signed TLS certificate — no manual cert
+# generation is required.  To use your own cert, see the TLS docs.
 docker compose -f docker-compose.ecube.yml up -d --build
 ```
 
 ```powershell
-# Windows: start full stack (postgres, ecube-app, ecube-ui)
+# Windows: start full stack (postgres, ecube-app)
 docker compose -f docker-compose.ecube-win.yml up -d --build
 ```
 
@@ -102,9 +89,8 @@ After startup, open the web frontend and complete first-run setup:
 ECUBE release images are published to GitHub Container Registry (GHCR):
 
 - `ghcr.io/t3knoid/ecube-app`
-- `ghcr.io/t3knoid/ecube-ui`
 
-For each published GitHub Release, both images are tagged with the release version (for example `v0.2.0`) and with `latest`.
+For each published GitHub Release, the image is tagged with the release version (for example `v0.2.0`) and with `latest`.
 
 The easiest production-like path is to download the release `docker-compose.yml` asset from [GitHub Releases](https://github.com/t3knoid/ecube/releases/latest), place it in an empty deployment directory with your `.env` file, and start the stack:
 
@@ -117,7 +103,6 @@ If you want to pull specific tags manually:
 
 ```bash
 docker pull ghcr.io/t3knoid/ecube-app:v0.2.0
-docker pull ghcr.io/t3knoid/ecube-ui:v0.2.0
 ```
 
 ## API Documentation
@@ -128,9 +113,7 @@ For native development (recommended), interactive API docs are available at:
 - **ReDoc:** `http://localhost:8000/redoc`
 - **OpenAPI Schema:** `http://localhost:8000/openapi.json`
 
-If you run the full Docker app + UI stack, docs are available through the nginx proxy at `https://localhost:8443/docs`.
-
-> **Note:** In the full-stack compose setup, API port 8000 is published for development convenience. This is not a typical hardened deployment shape; production-style Docker should expose only port 8443 through the nginx UI proxy.
+If you run the Docker stack, docs are available at `https://localhost:8443/docs`.
 
 All endpoints except the public routes (`/health`, `/health/live`, `/health/ready`, `/auth/token`, `/setup/status`, `/setup/initialize`, `/introspection/version`, `/setup/database/system-info`) and documentation routes (`/docs`, `/redoc`, `/openapi.json`) require authentication via JWT bearer tokens. During initial setup, `/setup/database/test-connection`, `/setup/database/provision`, and `/setup/database/provision-status` also allow unauthenticated access; after setup, these endpoints require an `admin` token. See the [REST API Design](docs/design/06-rest-api-design.md) and [Security & Access Control](docs/design/10-security-and-access-control.md) for details.
 
@@ -147,7 +130,7 @@ The five badges at the top of this file reflect the current state of automated C
 Installer/package artifact workflows (`build-artifact.yml` and `tag-release.yml`) now call the shared script `scripts/package-local.sh` so local and CI packaging behavior stays aligned.
 
 - **Tests** — four test suites run on every push: backend unit tests (pytest, SQLite in-memory, cross-platform), backend integration tests (pytest against a live PostgreSQL instance), frontend unit tests (Vitest with coverage), and frontend end-to-end tests (Playwright). See [docs/testing/01-automated-test-requirements.md](docs/testing/01-automated-test-requirements.md) for test conventions.
-- **Docker Build** — container images are built and smoke-tested on version bumps (when `pyproject.toml` version changes), `workflow_dispatch`, or release events. Pre-built images are pushed to `ghcr.io/t3knoid/ecube-app` and `ghcr.io/t3knoid/ecube-ui`. See [Using Pre-built Release Images](docs/operations/03-docker-deployment.md#using-pre-built-release-images) for deployment options.
+- **Docker Build** — container images are built and smoke-tested on version bumps (when `pyproject.toml` version changes), `workflow_dispatch`, or release events. The pre-built image is pushed to `ghcr.io/t3knoid/ecube-app`. See [Using Pre-built Release Images](docs/operations/03-docker-deployment.md#using-pre-built-release-images) for deployment options.
 - **Security Scan** — static analysis and dependency vulnerability checks. Triggered manually via GitHub Actions (`workflow_dispatch`). See [docs/testing/05-security-scanning.md](docs/testing/05-security-scanning.md) for details.
 - **Schemathesis API Fuzz** — auto-generated requests from the OpenAPI schema to detect schema violations, server errors, and undocumented status codes. Triggered manually via GitHub Actions (`workflow_dispatch`). See the [Schemathesis Local Guide](docs/testing/06-schemathesis-local.md) for running the scan locally.
 - **Newman API Smoke** — Postman collection-based API smoke validation. Triggered manually via GitHub Actions (`workflow_dispatch`). See the [Newman Local Guide](docs/testing/07-newman-local.md) for local usage.

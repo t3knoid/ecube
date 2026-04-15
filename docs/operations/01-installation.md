@@ -10,16 +10,17 @@
 ## Table of Contents
 
 1. [Deployment Options](#deployment-options)
-2. [Prerequisites](#prerequisites)
-3. [Quick Start (native)](#quick-start-native)
-4. [CLI Flags Reference](#cli-flags-reference)
-5. [Install Modes](#install-modes)
-6. [Prepare PostgreSQL](#prepare-postgresql)
-7. [Database Configuration](#database-configuration)
-8. [TLS Certificates](#tls-certificates)
-9. [Post-Install: Setup Wizard](#post-install-setup-wizard)
-10. [Upgrade Procedure](#upgrade-procedure)
-11. [Uninstall Procedure](#uninstall-procedure)
+2. [Deployment Topologies](#deployment-topologies)
+3. [Prerequisites](#prerequisites)
+4. [Quick Start (native)](#quick-start-native)
+5. [CLI Flags Reference](#cli-flags-reference)
+6. [Install Modes](#install-modes)
+7. [Prepare PostgreSQL](#prepare-postgresql)
+8. [Database Configuration](#database-configuration)
+9. [TLS Certificates](#tls-certificates)
+10. [Post-Install: Setup Wizard](#post-install-setup-wizard)
+11. [Upgrade Procedure](#upgrade-procedure)
+12. [Uninstall Procedure](#uninstall-procedure)
 
 ---
 
@@ -30,6 +31,37 @@
 | **Automated Installer (`install.sh`)** | Recommended for most deployments on a dedicated Linux host or VM. |
 | **Manual installation** | Advanced administrators who want full control of the installation and host provisioning steps instead of using the automated installer. See [02-manual-installation.md](02-manual-installation.md). |
 | **Docker Compose** | Dev/lab environments or container-native ops. See [03-docker-deployment.md](03-docker-deployment.md). |
+
+---
+
+## Deployment Topologies
+
+### Topology A: Single Host (recommended for small/medium installs)
+
+One host runs:
+
+- PostgreSQL
+- ECUBE backend + frontend (`ecube.service`)
+
+Behavior:
+
+- Uvicorn terminates TLS and serves both the API and the SPA frontend
+- Single process, single port (default `8443`)
+- Frontend sends API calls to `/api/...`; the application middleware strips the prefix before routing
+
+### Topology B: Enterprise Split Host
+
+Two dedicated hosts:
+
+- DB host: PostgreSQL only
+- Backend host: ECUBE backend + frontend (`ecube.service`)
+
+Behavior:
+
+- Backend host serves frontend and API on a single port
+- DB host is isolated from client networks
+
+For detailed manual deployment steps for each topology, see [02-manual-installation.md](02-manual-installation.md).
 
 ---
 
@@ -99,9 +131,7 @@ At the end it prints a summary with the UI URL, API URL, and service management 
 
 ECUBE supports domain-backed user login through the host PAM stack when SSSD is installed and configured on the host. In that case, the installer writes an SSSD-enabled PAM configuration so both local accounts and domain accounts can authenticate to ECUBE.
 
-When PostgreSQL is available locally, the installer also creates (or updates)
-a PostgreSQL superuser for setup-wizard database provisioning and prints those
-credentials in the summary.
+When PostgreSQL is available locally, the installer also creates (or updates) a PostgreSQL superuser for setup-wizard database provisioning. By default it uses the same credentials as Docker Compose (`POSTGRES_USER`/`POSTGRES_PASSWORD`, falling back to `ecube`/`ecube`). Override with `--pg-superuser-name` and `--pg-superuser-pass`.
 
 **Immediate next step:** open the ECUBE web UI and complete setup:
 
@@ -117,8 +147,8 @@ credentials in the summary.
 | `--install-dir DIR` | `/opt/ecube` | Root installation directory |
 | `--api-port PORT` | `8443` | Port for the service (default: `8443`, or `80` with `--no-tls`) |
 | `--no-tls` | — | Disable TLS entirely (plain HTTP, default port 80). Suitable for lab/testing only. |
-| `--pg-superuser-name NAME` | `ecubeadmin` | Name for the PostgreSQL superuser created during installation. Skips the interactive prompt when supplied. |
-| `--pg-superuser-pass PASS` | — | Password for the PostgreSQL superuser. Skips the interactive prompt when supplied. Must be non-empty and contain no whitespace. |
+| `--pg-superuser-name NAME` | `POSTGRES_USER` or `ecube` | Name for the PostgreSQL superuser created during installation. |
+| `--pg-superuser-pass PASS` | `POSTGRES_PASSWORD` or `ecube` | Password for the PostgreSQL superuser. |
 | `--hostname HOST` | `$(hostname -f)` | Hostname/IP for TLS cert CN |
 | `--cert-validity DAYS` | `730` | Self-signed cert validity |
 | `--yes`, `-y` | off | Non-interactive / unattended mode. Firewall rules are skipped unless `--firewall-cidr` is provided. |
@@ -159,18 +189,17 @@ Before running the setup wizard, ensure PostgreSQL is installed, running, and
 reachable from the ECUBE host.
 
 In current installer flow, `install.sh` creates (or updates) a PostgreSQL
-superuser for setup-wizard provisioning and prints its credentials in the
-install summary. The setup wizard then uses those admin credentials to:
+superuser for setup-wizard provisioning. By default this uses `POSTGRES_USER`/`POSTGRES_PASSWORD` (falling back to `ecube`/`ecube`) — the same defaulting cascade as Docker Compose. The credentials are written to `.env` so the setup wizard can auto-fill them. The setup wizard then uses those admin credentials to:
 
 1. Create/update the ECUBE application role.
 2. Create the ECUBE application database.
 3. Run Alembic migrations.
 
-You can pre-seed the installer and avoid interactive prompts:
+You can override the defaults with CLI flags:
 
 ```bash
 sudo ./install.sh \
-  --pg-superuser-name ecubeadmin \
+  --pg-superuser-name myadmin \
   --pg-superuser-pass '<strong-password>' \
   --firewall-cidr 192.168.1.0/24
 ```
@@ -179,8 +208,6 @@ For fully unattended installs, add `--yes`.  Without `--firewall-cidr`, the fire
 
 ```bash
 sudo ./install.sh --yes \
-  --pg-superuser-name ecubeadmin \
-  --pg-superuser-pass '<strong-password>' \
   --firewall-cidr 10.0.0.0/8
 ```
 

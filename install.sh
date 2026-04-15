@@ -1178,38 +1178,21 @@ _provision_pg_superuser() {
     fi
   fi
 
-  # Superuser name — use command-line value if provided, otherwise prompt.
+  # Superuser name — cascade: CLI flag → POSTGRES_USER → "ecube"
+  # (mirrors Docker Compose: PG_SUPERUSER_NAME:-${POSTGRES_USER:-ecube})
   local su_name="${PG_SUPERUSER_NAME}"
   if [[ -z "${su_name}" ]]; then
-    while ! _is_valid_db_user "${su_name}"; do
-      if [[ -n "${su_name}" ]]; then
-        error "Username must be non-empty and contain only alphanumerics and underscores."
-      fi
-      read -r -p "$(echo -e "${C_YELLOW}PostgreSQL superuser name to create [ecubeadmin]:${C_RESET} ")" su_name
-      su_name="${su_name:-ecubeadmin}"
-    done
+    su_name="${POSTGRES_USER:-ecube}"
+    info "Defaulting PostgreSQL superuser name to '${su_name}'"
   else
     info "Using --pg-superuser-name: ${su_name}"
   fi
 
-  # Superuser password — use command-line value if provided, otherwise prompt.
+  # Superuser password — cascade: CLI flag → POSTGRES_PASSWORD → "ecube"
   local su_pass="${PG_SUPERUSER_PASS}"
   if [[ -z "${su_pass}" ]]; then
-    local su_pass2="x"
-    while true; do
-      read -r -s -p "$(echo -e "${C_YELLOW}Password for '${su_name}':${C_RESET} ")" su_pass; echo
-      if ! _is_valid_db_pass "${su_pass}"; then
-        error "Password must be non-empty and contain no whitespace."
-        su_pass=""
-        continue
-      fi
-      read -r -s -p "$(echo -e "${C_YELLOW}Confirm password:${C_RESET} ")" su_pass2; echo
-      if [[ "${su_pass}" != "${su_pass2}" ]]; then
-        error "Passwords do not match. Try again."
-        continue
-      fi
-      break
-    done
+    su_pass="${POSTGRES_PASSWORD:-ecube}"
+    info "Defaulting PostgreSQL superuser password from POSTGRES_PASSWORD"
   else
     info "Using --pg-superuser-pass: <provided>"
   fi
@@ -1253,6 +1236,21 @@ _provision_pg_superuser() {
     else
       printf '\nSETUP_DEFAULT_ADMIN_USERNAME=%s\n' "${su_name}" >> "${env_file}"
     fi
+
+    # Write PG_SUPERUSER_NAME and PG_SUPERUSER_PASS so the setup wizard can
+    # auto-fill them — same behaviour as Docker Compose.  The wizard clears
+    # both values from .env after successful provisioning.
+    if grep -qE '^PG_SUPERUSER_NAME=' "${env_file}"; then
+      sed -i "s|^PG_SUPERUSER_NAME=.*|PG_SUPERUSER_NAME=${su_name}|" "${env_file}"
+    else
+      printf 'PG_SUPERUSER_NAME=%s\n' "${su_name}" >> "${env_file}"
+    fi
+    if grep -qE '^PG_SUPERUSER_PASS=' "${env_file}"; then
+      sed -i "s|^PG_SUPERUSER_PASS=.*|PG_SUPERUSER_PASS=${su_pass}|" "${env_file}"
+    else
+      printf 'PG_SUPERUSER_PASS=%s\n' "${su_pass}" >> "${env_file}"
+    fi
+
     chown ecube:ecube "${env_file}" 2>/dev/null || true
     chmod 600 "${env_file}" 2>/dev/null || true
   fi
@@ -1329,23 +1327,26 @@ install_backend() {
   # 7. .env file
   _write_env_file
 
-  # 8. Systemd unit
+  # 8. Deploy the pre-built frontend bundle so FastAPI can serve the SPA.
+  #    Must run before the service starts because the SPA fallback route is
+  #    registered at import time — if the www/ directory does not exist when
+  #    uvicorn loads the app, the route is never created.
+  _deploy_frontend
+
+  # 9. Systemd unit
   _write_systemd_unit
 
-  # 9. Reload and start
+  # 10. Reload and start
   run systemctl daemon-reload
   run systemctl enable ecube.service
   run systemctl restart ecube.service
   ok "ecube.service started and enabled"
 
-  # 10. Health check
+  # 11. Health check
   _wait_for_healthy
 
-  # 11. Create a PostgreSQL superuser for use in the setup wizard.
+  # 12. Create a PostgreSQL superuser for use in the setup wizard.
   _provision_pg_superuser
-
-  # 12. Deploy the pre-built frontend bundle so FastAPI serves the SPA.
-  _deploy_frontend
 }
 
 _write_env_file() {
@@ -1354,14 +1355,21 @@ _write_env_file() {
     info ".env already exists — preserving operator secrets."
     info "DATABASE_URL is managed by the setup wizard and is not modified by install.sh."
 
-    # Idempotently add SERVE_FRONTEND_PATH if absent from an older .env so
-    # that upgrades from a previous version enable standalone frontend serving.
+    # Idempotently add or populate SERVE_FRONTEND_PATH so that upgrades from
+    # a previous version (or a copied .env.example) enable frontend serving.
     if ! grep -Eq '^[[:space:]]*SERVE_FRONTEND_PATH=' "${env_file}"; then
       info "Adding missing SERVE_FRONTEND_PATH to existing .env..."
       if [[ "${DRY_RUN}" != true ]]; then
         printf '\n# Path to the pre-built frontend served by FastAPI (standalone mode).\nSERVE_FRONTEND_PATH=%s/www\n' "${INSTALL_DIR}" >> "${env_file}"
       fi
       ok "SERVE_FRONTEND_PATH added to .env"
+    elif ! _extract_env_value "${env_file}" "SERVE_FRONTEND_PATH" >/dev/null 2>&1; then
+      # Key exists but value is empty or commented — fill it in.
+      info "SERVE_FRONTEND_PATH is empty in .env — setting to ${INSTALL_DIR}/www..."
+      if [[ "${DRY_RUN}" != true ]]; then
+        sed -i "s|^\([[:space:]]*SERVE_FRONTEND_PATH=\).*|\1${INSTALL_DIR}/www|" "${env_file}"
+      fi
+      ok "SERVE_FRONTEND_PATH updated in .env"
     fi
 
     if ! grep -Eq '^[[:space:]]*TRUST_PROXY_HEADERS=' "${env_file}"; then
