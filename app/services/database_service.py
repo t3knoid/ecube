@@ -563,8 +563,23 @@ def _write_env_settings(updates: Dict[str, str]) -> None:
     """Atomically write or update one or more settings in the .env file.
 
     All *updates* are applied in a single read/modify/write pass so the
-    file is never left in a partially-updated state.  Uses a
-    write-to-temp-then-rename strategy (``os.replace``) for crash safety.
+    file is never left in a partially-updated state.
+
+    **Native (non-Docker):** Uses a write-to-temp-then-rename strategy
+    (``os.replace``) for true atomicity — the old file is replaced in a
+    single filesystem operation.
+
+    **Docker (bind-mount):** ``os.replace`` would create a new inode,
+    breaking the bind-mount so the host never sees the update.  Instead
+    the new content is written and ``fsync``-ed to a temp file first,
+    then copied back into the original file (preserving its inode) and
+    ``fsync``-ed again.  If the process crashes *before* the copy-back
+    the original .env is untouched and the temp file serves as a
+    recovery artefact; if it crashes *during* the copy-back the file
+    may be incomplete — the temp file still holds the full content.
+
+    In both paths the file's permission bits are clamped to ``0o600``
+    and original ownership is restored when possible.
     """
     if not updates:
         return
@@ -588,44 +603,38 @@ def _write_env_settings(updates: Dict[str, str]) -> None:
     for key, value in remaining.items():
         lines.append(f"{key}={value}\n")
 
-    # Atomic write via temp file + rename.
-    # Inside Docker the .env is typically a bind-mounted file; replacing it
-    # (which changes the inode) would break the mount.  Fall back to an
-    # in-place truncate-and-rewrite when running in a container.
     from app.utils.docker import is_running_in_docker
 
     in_docker = is_running_in_docker()
     dir_name = os.path.dirname(env_path) or "."
 
-    if in_docker:
-        # In-place rewrite — preserves the bind-mount inode.
-        # Capture existing ownership before writing so we can restore it.
-        try:
-            orig_stat = os.stat(env_path)
-            existing_mode = stat.S_IMODE(orig_stat.st_mode)
-            existing_uid = orig_stat.st_uid
-            existing_gid = orig_stat.st_gid
-        except OSError:
-            existing_mode = 0o600
-            existing_uid = None
-            existing_gid = None
+    # Capture existing ownership/mode before any write so we can restore it.
+    try:
+        orig_stat = os.stat(env_path)
+        existing_mode = stat.S_IMODE(orig_stat.st_mode)
+        existing_uid = orig_stat.st_uid
+        existing_gid = orig_stat.st_gid
+    except OSError:
+        existing_mode = 0o600
+        existing_uid = None
+        existing_gid = None
 
-        with open(env_path, "w") as f:
+    # Enforce a ceiling of 0o600 so group/world-readable .env files
+    # (e.g. an accidental 0644) never keep credentials exposed.
+    safe_mode = existing_mode & 0o600
+
+    # --- write new content to a temp file (both paths need this) ----------
+    fd, tmp_path = tempfile.mkstemp(dir=dir_name, prefix=".env.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
             f.writelines(lines)
+            f.flush()
+            os.fsync(f.fileno())
 
-        # Enforce the same permission ceiling as the atomic path so
-        # bind-mounted credentials don't stay world-readable on the host.
-        safe_mode = existing_mode & 0o600
-        try:
-            os.chmod(env_path, safe_mode)
-        except OSError:
-            logger.debug(
-                "Could not clamp .env permissions to %o; continuing.",
-                safe_mode,
-            )
+        os.chmod(tmp_path, safe_mode)
         if existing_uid is not None:
             try:
-                os.chown(env_path, existing_uid, existing_gid)
+                os.chown(tmp_path, existing_uid, existing_gid)
             except OSError:
                 logger.debug(
                     "Could not restore .env ownership (uid=%s, gid=%s); "
@@ -633,32 +642,26 @@ def _write_env_settings(updates: Dict[str, str]) -> None:
                     existing_uid,
                     existing_gid,
                 )
-    else:
-        fd, tmp_path = tempfile.mkstemp(dir=dir_name, prefix=".env.", suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w") as f:
-                f.writelines(lines)
-            # Preserve the existing file's permission bits and ownership so that
-            # a root-owned process (e.g. sudo uvicorn) does not leave the .env
-            # unreadable for non-root service users or test runners.
+
+        if in_docker:
+            # Copy temp contents into the original file to preserve the
+            # bind-mount inode.  The temp file remains on disk until the
+            # copy-back is fully synced, acting as a recovery artefact.
+            with open(tmp_path, "r") as src, open(env_path, "w") as dst:
+                dst.writelines(src.readlines())
+                dst.flush()
+                os.fsync(dst.fileno())
+
             try:
-                orig_stat = os.stat(env_path)
-                existing_mode = stat.S_IMODE(orig_stat.st_mode)
-                existing_uid = orig_stat.st_uid
-                existing_gid = orig_stat.st_gid
+                os.chmod(env_path, safe_mode)
             except OSError:
-                existing_mode = 0o600
-                existing_uid = None
-                existing_gid = None
-            # Enforce a ceiling of 0o600 so group/world-readable .env files
-            # (e.g. an accidental 0644) never keep credentials exposed.
-            safe_mode = existing_mode & 0o600
-            os.chmod(tmp_path, safe_mode)
-            # Restore original ownership so root-spawned rewrites don't lock
-            # out the normal service user.
+                logger.debug(
+                    "Could not clamp .env permissions to %o; continuing.",
+                    safe_mode,
+                )
             if existing_uid is not None:
                 try:
-                    os.chown(tmp_path, existing_uid, existing_gid)
+                    os.chown(env_path, existing_uid, existing_gid)
                 except OSError:
                     logger.debug(
                         "Could not restore .env ownership (uid=%s, gid=%s); "
@@ -666,14 +669,16 @@ def _write_env_settings(updates: Dict[str, str]) -> None:
                         existing_uid,
                         existing_gid,
                     )
+        else:
+            # Native path: atomic rename replaces the old file.
             os.replace(tmp_path, env_path)
-        except Exception:
-            # Clean up temp file on failure
+            tmp_path = None  # prevent cleanup — file was consumed
+    finally:
+        if tmp_path is not None:
             try:
                 os.unlink(tmp_path)
             except OSError:
                 pass
-            raise
 
 
 def _reinitialize_engine(
