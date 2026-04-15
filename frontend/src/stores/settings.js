@@ -20,9 +20,7 @@ export const useSettingsStore = defineStore('settings', () => {
         }
       }
     } catch (err) {
-      if (import.meta.env.DEV) {
-        console.debug('[settings] corrupt storage, ignoring:', err)
-      }
+      console.debug('[settings] corrupt storage, ignoring:', err)
     }
   }
 

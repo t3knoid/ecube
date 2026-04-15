@@ -39,7 +39,7 @@ Every ECUBE deployment consists of three logical layers. The profiles described 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
 │  UI Layer                                                   │
-│  Vue 3 SPA served by nginx; HTTPS only                      │
+│  Vue 3 SPA served by FastAPI; HTTPS only                    │
 │  Communicates exclusively via the REST API                  │
 └────────────────────┬────────────────────────────────────────┘
                      │ HTTPS (REST API)
@@ -68,7 +68,7 @@ Only the Application Layer interacts with the database and hardware. The UI Laye
 | | Profile A | Profile B | Profile C |
 |---|---|---|---|
 | **Name** | Air-Gapped Appliance | Enterprise Separated | Containerized All-in-One |
-| **Hosts** | 1 physical machine | 3+ (DB VM, native app, UI VM) | 1 host, 3 Docker containers |
+| **Hosts** | 1 physical machine | 2+ (DB VM, native app host) | 1 host, 2 Docker containers |
 | **Network** | Isolated / air-gapped | Segmented VLANs | Single-host Docker network |
 | **USB Access** | Direct (native) | Direct (native app host) | Passed through to container |
 | **Hardware Tiers** | Standard / Professional / Enterprise | Standard / Professional / Enterprise | Standard / Professional / Enterprise |
@@ -96,11 +96,12 @@ This profile is built for chain-of-custody scenarios where physical security rep
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │  Dedicated Linux Host (native)                       │  │
 │  │                                                          │  │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐    │  │
-│  │  │  ecube-ui    │  │  ecube-app   │  │  postgres    │    │  │
-│  │  │  (nginx)     │─▶│  (FastAPI)   │─▶│  (PostgreSQL)│    │  │
-│  │  │  :443        │  │  :8000       │  │  :5432       │    │  │
-│  │  └──────────────┘  └──────┬───────┘  └──────────────┘    │  │
+│  │  ┌──────────────┐  ┌──────────────┐                      │  │
+│  │  │  ecube-app   │  │  postgres    │                      │  │
+│  │  │  (FastAPI    │─▶│  (PostgreSQL)│                      │  │
+│  │  │   + Vue SPA) │  │  :5432       │                      │  │
+│  │  │  :8443       │  └──────────────┘                      │  │
+│  │  └──────┬───────┘                                        │  │
 │  │                           │                              │  │
 │  │                    ┌──────▼───────┐                      │  │
 │  │                    │  PCIe USB    │                      │  │
@@ -118,7 +119,7 @@ This profile is built for chain-of-custody scenarios where physical security rep
 
 Services can run as Docker containers (using `docker-compose.ecube.yml`) or as native systemd services via package deployment. Both approaches are supported:
 
-- **Docker Compose:** Three containers (`ecube-ui`, `ecube-app`, `postgres`) managed with a single compose file.
+- **Docker Compose:** Two containers (`ecube-app`, `postgres`) managed with a single compose file.
 - **Package Deployment:** ECUBE installed as a systemd service alongside a local or containerized PostgreSQL instance. See [02-manual-installation.md](operations/02-manual-installation.md).
 
 ### Characteristics
@@ -145,7 +146,7 @@ Services can run as Docker containers (using `docker-compose.ecube.yml`) or as n
 
 ### Overview
 
-Each ECUBE layer runs on its own host, connected through network-segmented VLANs. This profile maximizes separation of concerns: the database sits on a hardened VM, the application runs on bare metal for direct USB hardware access, and the UI runs behind a reverse proxy on a separate VM.
+Each ECUBE layer runs on its own host, connected through network-segmented VLANs. This profile maximizes separation of concerns: the database sits on a hardened VM while the application runs on bare metal for direct USB hardware access, serving both the API and the Vue SPA with TLS.
 
 This model is suited to established corporate data centers where infrastructure teams maintain network segmentation, host hardening, and centralized monitoring.
 
@@ -153,21 +154,20 @@ This model is suited to established corporate data centers where infrastructure 
 
 ```text
  ┌─────────────────────────────────────────────────────┐
- │  VLAN: Management / User Access                     │
+ │  VLAN: User Access                                  │
  │                                                     │
- │  ┌──────────────┐     ┌──────────────────────────┐  │
- │  │  Browser     │────▶│  UI Host (VM)            │  │
- │  │  (Operator)  │     │  nginx reverse proxy     │  │
- │  └──────────────┘     │  :443 (TLS termination)  │  │
- │                       └────────────┬─────────────┘  │
- └────────────────────────────────────┼────────────────┘
-                             Firewall │ (HTTPS only)
- ┌────────────────────────────────────┼────────────────┐
- │  VLAN: Application                 │                │
- │                                    ▼                │
+ │  ┌──────────────┐                                   │
+ │  │  Browser     │───────────────────┐               │
+ │  │  (Operator)  │                   │               │
+ │  └──────────────┘                   │               │
+ └─────────────────────────────────────┼───────────────┘
+                              Firewall │ (HTTPS only)
+ ┌─────────────────────────────────────┼───────────────┐
+ │  VLAN: Application                  │               │
+ │                                     ▼               │
  │  ┌─────────────────────────────────────────────┐    │
- │  │  Application Host (native Linux)        │    │
- │  │  FastAPI + Uvicorn (systemd service)        │    │
+ │  │  Application Host (native Linux)            │    │
+ │  │  FastAPI + Uvicorn + Vue SPA (:8443)        │    │
  │  │  USB controllers attached directly          │    │
  │  │  NFS/SMB client for evidence source mounts  │    │
  │  └─────────────────────┬───────────────────────┘    │
@@ -187,9 +187,9 @@ This model is suited to established corporate data centers where infrastructure 
 
 ### Deployment Method
 
-- **Application Host:** Package deployment as a systemd service on native Linux. See [02-manual-installation.md](operations/02-manual-installation.md).
+- **Application Host:** Package deployment as a systemd service on native Linux. FastAPI serves both the API and the Vue SPA with TLS. See [02-manual-installation.md](operations/02-manual-installation.md).
 - **Database Host:** Standard PostgreSQL installation on a hardened VM (or managed database service).
-- **UI Host:** nginx serving the Vue SPA, either as a Docker container or installed directly.
+- **Reverse Proxy (optional):** An external reverse proxy (e.g. nginx, HAProxy) can be placed in front of the application host for additional TLS termination, load balancing, or WAF integration. This is not required for standard deployments.
 
 ### Characteristics
 
@@ -215,7 +215,7 @@ This model is suited to established corporate data centers where infrastructure 
 
 ### Overview
 
-All three layers run as Docker containers on a single Linux host, managed with Docker Compose. This profile requires the least infrastructure and is ideal for evaluation, lab testing, proof-of-concept deployments, and smaller teams that do not need physical network segmentation.
+All ECUBE components run as two Docker containers (`ecube-app` and `postgres`) on a single Linux host, managed with Docker Compose. This profile requires the least infrastructure and is ideal for evaluation, lab testing, proof-of-concept deployments, and smaller teams that do not need physical network segmentation.
 
 ### Topology
 
@@ -225,11 +225,12 @@ All three layers run as Docker containers on a single Linux host, managed with D
 │                                                             │
 │  ┌ Docker Compose ────────────────────────────────────────┐ │
 │  │                                                        │ │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │ │
-│  │  │  ecube-ui    │  │  ecube-app   │  │  postgres    │  │ │
-│  │  │  nginx       │─▶│  FastAPI     │─▶│  PostgreSQL  │  │ │
-│  │  │  :443        │  │  :8000       │  │  :5432       │  │ │
-│  │  └──────────────┘  └──────┬───────┘  └──────────────┘  │ │
+│  │  ┌──────────────┐  ┌──────────────┐                    │ │
+│  │  │  ecube-app   │  │  postgres    │                    │ │
+│  │  │  FastAPI     │─▶│  PostgreSQL  │                    │ │
+│  │  │  + Vue SPA   │  │  :5432       │                    │ │
+│  │  │  :8443       │  └──────────────┘                    │ │
+│  │  └──────┬───────┘                                      │ │
 │  │                           │                            │ │
 │  └───────────────────────────┼────────────────────────────┘ │
 │                              │ USB passthrough              │
@@ -271,7 +272,7 @@ For full USB passthrough setup, see [12-runtime-environment-and-usb-visibility.m
 | **Network isolation** | Docker internal network. PostgreSQL is not exposed on the host network by default. |
 | **USB access** | Passed through via Docker volume mounts. The `ecube-app` container runs with elevated privileges for hardware access. |
 | **Authentication** | Local PAM (container-internal users) or OIDC/LDAP if the host has network access to the identity provider. |
-| **Resource sharing** | All three layers share host CPU, memory, and disk I/O. For ECUBE's typical workload (sequential copy tasks, SHA-256 hashing, modest database writes), contention is minimal on recommended hardware. |
+| **Resource sharing** | Both containers share host CPU, memory, and disk I/O. For ECUBE's typical workload (sequential copy tasks, SHA-256 hashing, modest database writes), contention is minimal on recommended hardware. |
 | **Upgrades** | Rebuild and restart containers. Database volume persists across upgrades. |
 
 ### When to Use
@@ -523,7 +524,7 @@ A 1 Gbps NIC caps at ~115 MB/s — below even a single fast USB drive's sustaine
 
 ### TLS Everywhere
 
-All client-facing traffic must be encrypted with TLS 1.2 or later. In Profiles A and C, TLS terminates at the nginx container. In Profile B, TLS terminates at the UI host reverse proxy, and internal VLAN traffic may optionally use mTLS between network segments.
+All client-facing traffic must be encrypted with TLS 1.2 or later. In Profiles A and C, TLS terminates at the `ecube-app` container (uvicorn with built-in TLS). In Profile B, TLS terminates at the UI host reverse proxy, and internal VLAN traffic may optionally use mTLS between network segments.
 
 ### Database Access
 
@@ -546,8 +547,8 @@ All deployment profiles generate identical audit records in the PostgreSQL `audi
 
 | Source VLAN | Destination VLAN | Port | Protocol | Purpose |
 |---|---|---|---|---|
-| User / Management | UI | 443 | HTTPS | Browser → nginx |
-| UI | Application | 8000 | HTTP | nginx → FastAPI |
+| User / Management | UI | 443 | HTTPS | Browser → reverse proxy |
+| UI | Application | 8443 | HTTPS | Reverse proxy → FastAPI |
 | Application | Data | 5432 | TCP | FastAPI → PostgreSQL |
 | Application | Evidence Source | 2049 / 445 | NFS / SMB | Mount evidence shares |
 
@@ -603,7 +604,7 @@ The ECUBE application is identical in all profiles. Only the host topology, netw
 | [design/10-security-and-access-control.md](design/10-security-and-access-control.md) | Role model, authorization matrix, authentication flows |
 | [design/12-runtime-environment-and-usb-visibility.md](design/12-runtime-environment-and-usb-visibility.md) | Runtime environment and USB visibility |
 | [design/13-build-and-deployment.md](design/13-build-and-deployment.md) | Build pipeline, package and Docker deployment paths |
-| [design/15-frontend-architecture.md](design/15-frontend-architecture.md) | UI container topology and nginx configuration |
+| [design/15-frontend-architecture.md](design/15-frontend-architecture.md) | UI architecture, deployment topology, and SPA serving |
 | [operations/01-installation.md](operations/01-installation.md) | Prerequisite software and hardware requirements |
 | [operations/02-manual-installation.md](operations/02-manual-installation.md) | Systemd-based package deployment (Profile A/B application host) |
 | [operations/03-docker-deployment.md](operations/03-docker-deployment.md) | Docker Compose deployment (Profile A/C) |
