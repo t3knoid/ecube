@@ -71,6 +71,7 @@ DRY_RUN=false
 VERSION_TAG=""
 DROP_DATABASE=false
 BACKEND_NO_TLS=false
+FIREWALL_CIDR=""
 
 # Credentials for the PostgreSQL superuser created during installation.
 # Populated by _provision_pg_superuser and printed in the post-install summary
@@ -106,6 +107,10 @@ Options:
   --hostname HOST        Hostname/IP for TLS cert CN  (default: \$(hostname -f))
   --cert-validity DAYS   Self-signed cert validity    (default: 730, max: 730 — 2 years)
   --yes, -y              Non-interactive / unattended mode
+  --firewall-cidr CIDR   Source CIDR to allow through ufw for the API port
+                         (e.g. 192.168.1.0/24).  In --yes mode, if this is not
+                         provided the firewall rule is SKIPPED (safe default).
+                         Use 'any' to explicitly open to all sources.
   --version TAG          Download and install a specific GitHub release tag.
                          Must be exact format: v<major>.<minor>.<patch> (e.g. v0.2.0).
                          Pre-releases, build metadata, and tags without a leading v
@@ -593,6 +598,9 @@ while [[ $# -gt 0 ]]; do
       fi
       CERT_VALIDITY="$2"; shift 2 ;;
     --yes|-y)         YES=true;  shift ;;
+    --firewall-cidr)
+      _require_arg "$1" "${2-}"
+      FIREWALL_CIDR="$2"; shift 2 ;;
     --version)
       _require_arg "$1" "${2-}"
       if [[ ! "$2" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -1647,13 +1655,32 @@ configure_firewall() {
   # answer opens the port to all sources, but only after a clear warning.
   local cidr=""
   if [[ "${YES}" == true ]]; then
-    warn "Skipping source-CIDR prompt in --yes mode. Opening port ${API_PORT}/tcp to all sources."
-    warn "If this host is network-exposed, restrict access after install:"
-    warn "  sudo ufw delete allow ${API_PORT}/tcp"
-    warn "  sudo ufw allow from <trusted-cidr> to any port ${API_PORT} proto tcp"
-    if _confirm "Allow TCP port ${API_PORT} through ufw?"; then
+    if [[ -z "${FIREWALL_CIDR}" ]]; then
+      # --yes without --firewall-cidr: safe default — skip rule creation.
+      info "Skipping ufw rule in --yes mode (no --firewall-cidr provided)."
+      info "To open the API port after install, run:"
+      info "  sudo ufw allow from <trusted-cidr> to any port ${API_PORT} proto tcp"
+      return
+    fi
+
+    if [[ "${FIREWALL_CIDR,,}" == "any" ]]; then
+      # Operator explicitly chose to open to all sources.
       run ufw allow "${API_PORT}/tcp"
       ok "ufw: allowed ${API_PORT}/tcp (all sources)"
+      warn "TIP — restrict to a trusted subnet later:"
+      warn "  sudo ufw delete allow ${API_PORT}/tcp"
+      warn "  sudo ufw allow from <trusted-cidr> to any port ${API_PORT} proto tcp"
+    else
+      if ! _is_valid_cidr "${FIREWALL_CIDR}"; then
+        warn "Invalid --firewall-cidr '${FIREWALL_CIDR}' — skipping ufw rule."
+        warn "To configure manually: sudo ufw allow from <cidr> to any port ${API_PORT} proto tcp"
+        return
+      fi
+      if run ufw allow from "${FIREWALL_CIDR}" to any port "${API_PORT}" proto tcp; then
+        ok "ufw: allowed ${FIREWALL_CIDR} → port ${API_PORT}/tcp"
+      else
+        warn "ufw: failed to add rule for '${FIREWALL_CIDR}' — configure manually: sudo ufw allow from ${FIREWALL_CIDR} to any port ${API_PORT} proto tcp"
+      fi
     fi
   else
     echo ""
