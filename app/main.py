@@ -935,9 +935,8 @@ if settings.serve_frontend_path:
         # Resolve the frontend root once at startup for containment checks.
         _frontend_root_resolved = _frontend_dir.resolve()
 
-        # Serve other root-level static files (favicon.ico, manifest, etc.)
-        # via a catch-all StaticFiles mount that falls back to index.html
-        # for SPA client-side routing.
+        # Catch-all route that serves static files from the frontend
+        # directory, falling back to index.html for SPA client-side routing.
         @app.get("/{full_path:path}", include_in_schema=False)
         async def _spa_fallback(request: Request, full_path: str):
             # Reject paths that look like API requests — these should never

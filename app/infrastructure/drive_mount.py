@@ -29,6 +29,9 @@ def _find_mountable_device(device_path: str) -> str:
     Checks ``/sys/block/<dev>/`` for partition sub-directories (e.g. ``sdb1``,
     ``nvme0n1p1``).  Returns ``/dev/<partition>`` when found, otherwise returns
     the original *device_path* so the caller can attempt a whole-device mount.
+
+    If sysfs access fails (``OSError``), silently falls back to the raw
+    device path.
     """
     base = os.path.basename(device_path)  # e.g. "sdb"
     block_dir = os.path.join(settings.sysfs_block_path, base)
