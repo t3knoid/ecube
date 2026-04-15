@@ -51,6 +51,7 @@ All OS-specific operations are isolated behind abstract interfaces in `app/infra
 | `DriveDiscoveryBackend` | Enumerate USB hubs, ports, and drives | Reads `/sys/bus/usb/devices` (sysfs) |
 | `FilesystemDetector` | Probe a block device for filesystem type | `blkid`, fallback `lsblk --json` |
 | `DriveFormatter` | Format a block device with a specified filesystem | `mkfs.ext4`, `mkfs.exfat` |
+| `DriveMountProvider` | Mount a USB block device to a local directory | `mount(8)` with partition auto-detection via sysfs |
 | `MountManager` | Mount/unmount network shares and block devices | `mount`, `umount`, `/proc/mounts` |
 | `DriveEjectBackend` | Flush writes and unmount all partitions of a device | `sync(1)`, `umount`, `/proc/mounts`, sysfs `/sys/block/*/slaves/` |
 | `PamAuthenticator` | Validate local credentials | PAM via `python-pam` |

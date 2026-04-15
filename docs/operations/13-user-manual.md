@@ -444,6 +444,28 @@ Remove a mount only if it is no longer needed. If existing workflows depend on i
 
 ---
 
+## 8.4 Directory Browser
+
+The directory browser allows users to explore the contents of active mount points (USB drives and network shares) before creating an export job.
+
+**Accessing the browser:**
+
+- **From Drive Detail:** Click the mount path link on any mounted drive to open the directory browser rooted at that drive's mount point.
+- **From Mounts:** Click the mount point path on any active network mount.
+
+**Navigating:**
+
+- Click a folder name to descend into it. The breadcrumb trail at the top shows the current path.
+- Click any breadcrumb segment to navigate back up.
+- Symlinks appear with a link icon and are not navigable.
+- Results are paginated; use the page controls at the bottom to navigate large directories.
+
+**Roles:** All authenticated roles (`admin`, `manager`, `processor`, `auditor`) can browse directories.
+
+> **Note:** Only active, registered mount points can be browsed. Arbitrary filesystem paths are not accessible through this feature.
+
+---
+
 ## 9. Jobs
 
 > **Access Summary**

@@ -16,6 +16,7 @@
 5. [File Permissions](#5-file-permissions)
 6. [Audit Log Monitoring](#6-audit-log-monitoring)
 7. [Firewall Configuration](#7-firewall-configuration)
+8. [Directory Browse Hardening](#8-directory-browse-hardening)
 
 ---
 
@@ -245,3 +246,20 @@ Topology-specific notes:
 
 - [docs/operations/05-tls-certificates-and-letsencrypt.md](05-tls-certificates-and-letsencrypt.md)
 - [docs/requirements/10-security-and-access-control.md](../requirements/10-security-and-access-control.md)
+
+---
+
+## 8. Directory Browse Hardening
+
+The `GET /browse` endpoint allows authenticated users to list directory contents of active mount points (USB drives and network shares). Three layers protect against unauthorized filesystem access:
+
+1. **Database validation:** The `path` parameter must match a registered, active mount root in the database. Arbitrary paths are rejected with `403`.
+2. **Realpath containment:** The `subdir` parameter is resolved via `os.path.realpath` and checked to be within the mount root. Path-traversal attempts (`../../etc`) are rejected with `400`.
+3. **Prefix allowlist:** The resolved path must start with one of the `BROWSE_ALLOWED_PREFIXES` values. This provides defence-in-depth against mount-root misconfiguration.
+
+**Recommendations:**
+
+- Override `BROWSE_ALLOWED_PREFIXES` to match your actual mount hierarchy. The default (`/mnt/ecube/`, `/nfs/`, `/smb/`) covers common layouts but may be broader than needed.
+- Avoid adding broad prefixes like `/` or `/home` to the allowlist.
+- Symlinks within browsed directories are listed as `type: "symlink"` but are not followed or navigable.
+- All browse requests are audit-logged with action `BROWSE_DIRECTORY`, including the actor, resolved path, and client IP.
