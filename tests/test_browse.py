@@ -266,7 +266,7 @@ class TestBrowseSecurity:
 
         entry = db.query(AuditLog).filter(AuditLog.action == "BROWSE_DENIED").first()
         assert entry is not None
-        assert entry.details["reason"] == "unknown_mount_root"
+        assert "not a registered active mount root" in entry.details["reason"]
 
 
 # ---------------------------------------------------------------------------
