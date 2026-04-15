@@ -27,6 +27,18 @@ logger = logging.getLogger(__name__)
 _ADMIN_CONNECT_TIMEOUT = 10   # For admin/provisioning operations
 _STATUS_CONNECT_TIMEOUT = 5   # For lightweight status-check queries
 
+
+def _strip_sqlalchemy_dialect(url: str) -> str:
+    """Convert a SQLAlchemy URL to a plain libpq-compatible DSN.
+
+    ``psycopg2.connect()`` does not understand SQLAlchemy dialect suffixes
+    such as ``postgresql+psycopg2://``.  This helper strips any ``+driver``
+    portion so the URL starts with ``postgresql://``.
+    """
+    if url.startswith("postgresql+"):
+        return "postgresql" + url[url.index("://"):]
+    return url
+
 # Guards engine/session-factory replacement so concurrent requests cannot
 # observe a half-swapped state.  Also exposes "reinitialization in progress"
 # to the router layer so it can return 503.
@@ -340,7 +352,11 @@ def _get_current_revision(database_url: str) -> Optional[str]:
     })
 
     try:
-        conn = psycopg2.connect(database_url, connect_timeout=_STATUS_CONNECT_TIMEOUT)
+        # psycopg2.connect() expects a plain libpq DSN or a postgresql://
+        # URL.  SQLAlchemy URLs use a dialect suffix (e.g.
+        # "postgresql+psycopg2://…") that libpq cannot parse.  Strip it.
+        dsn = _strip_sqlalchemy_dialect(database_url)
+        conn = psycopg2.connect(dsn, connect_timeout=_STATUS_CONNECT_TIMEOUT)
     except psycopg2.OperationalError as exc:
         pgcode = getattr(exc, "pgcode", None)
         if pgcode in _NOT_PROVISIONED_PGCODES:
@@ -391,7 +407,7 @@ def get_database_status() -> Dict[str, Any]:
 
     try:
         conn = psycopg2.connect(
-            settings.database_url,
+            _strip_sqlalchemy_dialect(settings.database_url),
             connect_timeout=_STATUS_CONNECT_TIMEOUT,
         )
         try:
