@@ -212,6 +212,25 @@ class TestSettingsDefaults:
             with patch.dict("os.environ", {"SERVE_FRONTEND_PATH": "relative/path"}):
                 Settings(database_url="sqlite://")
 
+    def test_serve_frontend_path_root_rejected(self):
+        with pytest.raises(ValueError, match="system root"):
+            Settings(database_url="sqlite://", serve_frontend_path="/")
+
+    def test_serve_frontend_path_system_dir_rejected(self):
+        for dangerous in ("/etc", "/var", "/tmp", "/usr", "/home"):
+            with pytest.raises(ValueError, match="system root"):
+                Settings(database_url="sqlite://", serve_frontend_path=dangerous)
+
+    def test_serve_frontend_path_system_dir_trailing_slash_rejected(self):
+        """normpath strips trailing slashes, so '/etc/' should also be caught."""
+        with pytest.raises(ValueError, match="system root"):
+            Settings(database_url="sqlite://", serve_frontend_path="/etc/")
+
+    def test_serve_frontend_path_under_system_dir_allowed(self):
+        """Subdirectories of system roots are fine (e.g. /opt/ecube/www)."""
+        s = Settings(database_url="sqlite://", serve_frontend_path="/opt/ecube/www")
+        assert s.serve_frontend_path == "/opt/ecube/www"
+
 
 # ---------------------------------------------------------------------------
 # Audit log retention cleanup
