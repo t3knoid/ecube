@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
@@ -209,6 +209,11 @@ function openChainOfCustody() {
 }
 
 onMounted(loadDrive)
+
+watch(driveId, () => {
+  browseExpanded.value = false
+  loadDrive()
+})
 </script>
 
 <template>
