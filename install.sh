@@ -1271,6 +1271,7 @@ install_backend() {
   # Install the dedicated PAM config so both local and domain users can authenticate.
   _install_pam_config
 
+  # 2. Add ecube to required system groups
   # 'shadow' membership allows PAM local password checks to work on hardened
   # hosts where unix_chkpwd helper privilege transitions are restricted.
   for grp in plugdev dialout shadow; do
