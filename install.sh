@@ -1755,9 +1755,18 @@ do_uninstall() {
 
   # Remove ecube-www bridge group (legacy; may exist from an earlier nginx install).
   if getent group ecube-www &>/dev/null; then
+    # Remove any lingering members so groupdel can succeed.
+    if command -v gpasswd &>/dev/null; then
+      for _member in $(getent group ecube-www 2>/dev/null | cut -d: -f4 | tr ',' ' '); do
+        gpasswd -d "${_member}" ecube-www 2>/dev/null || true
+      done
+    fi
     if command -v groupdel &>/dev/null; then
-      run groupdel ecube-www 2>/dev/null || true
-      ok "Group 'ecube-www' removed (legacy)"
+      if groupdel ecube-www 2>/dev/null; then
+        ok "Group 'ecube-www' removed (legacy)"
+      else
+        warn "Could not remove legacy group 'ecube-www' — remove manually: sudo groupdel ecube-www"
+      fi
     fi
   fi
 
