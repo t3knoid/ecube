@@ -1521,6 +1521,27 @@ _deploy_frontend() {
       info "Using SERVE_FRONTEND_PATH from .env: ${www_dir}"
     fi
   fi
+
+  # Validate www_dir before any destructive operations.  A misconfigured
+  # SERVE_FRONTEND_PATH (e.g. "/" or "/etc") would otherwise cause rm -rf
+  # to wipe critical system paths.
+  if [[ "${www_dir}" != /* ]]; then
+    error "SERVE_FRONTEND_PATH must be an absolute path (got '${www_dir}')."
+    exit 1
+  fi
+  local _www_canonical
+  _www_canonical="$(realpath -m "${www_dir}" 2>/dev/null || echo "${www_dir}")"
+  local _protected=("/" "/bin" "/boot" "/dev" "/etc" "/home" "/lib" "/lib64"
+                    "/media" "/mnt" "/opt" "/proc" "/root" "/run" "/sbin"
+                    "/srv" "/sys" "/tmp" "/usr" "/var")
+  local _p
+  for _p in "${_protected[@]}"; do
+    if [[ "${_www_canonical}" == "${_p}" ]]; then
+      error "SERVE_FRONTEND_PATH '${www_dir}' resolves to protected system path '${_p}' — refusing to deploy."
+      exit 1
+    fi
+  done
+
   local dist_src=""
   for candidate in \
       "${INSTALL_DIR}/frontend/dist" \
@@ -1538,8 +1559,14 @@ _deploy_frontend() {
   fi
   info "Using frontend bundle from ${dist_src}"
 
-  run rm -rf "${www_dir:?}"
+  # Clear existing contents rather than removing the directory itself to
+  # reduce blast radius if www_dir is unexpectedly shared or bind-mounted.
   run mkdir -p "${www_dir}"
+  if [[ "${DRY_RUN}" != true ]]; then
+    find "${www_dir}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+  else
+    echo "[DRY-RUN] Would clear contents of ${www_dir}"
+  fi
   run cp -r "${dist_src}/." "${www_dir}/"
   if [[ "${DRY_RUN}" != true ]]; then
     chown -R ecube:ecube "${www_dir}"
