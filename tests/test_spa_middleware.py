@@ -1,7 +1,6 @@
 """Tests for the SPA fallback and strip_api_prefix middleware (app/main.py)."""
 
 import pathlib
-import textwrap
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
@@ -280,11 +279,24 @@ class TestSpaFrontendServing:
     # -- Path traversal rejection ------------------------------------------
 
     def test_traversal_dot_dot_returns_index_html(self, tmp_path):
-        """../../etc/passwd must NOT escape the dist root."""
+        """../ traversal must NOT escape the dist root.
+
+        httpx normalises ``/../secret.txt`` to ``/secret.txt`` before it
+        reaches the ASGI app, so we inject the un-normalised path directly
+        into the ASGI scope to exercise the ``is_relative_to()`` guard.
+        """
         dist = self._build_dist(tmp_path)
-        # Place a sentinel outside dist to confirm it's never served.
+        # Place a sentinel *outside* dist/ that a naive join would reach.
         (tmp_path / "secret.txt").write_text("LEAKED")
-        client = TestClient(_make_spa_app(dist))
+        inner = _make_spa_app(dist)
+
+        async def inject_traversal(scope, receive, send):
+            if scope["type"] == "http":
+                scope["path"] = "/../secret.txt"
+                scope["raw_path"] = b"/../secret.txt"
+            await inner(scope, receive, send)
+
+        client = TestClient(inject_traversal)
         resp = client.get("/../secret.txt")
         assert resp.status_code == 200
         assert "LEAKED" not in resp.text
@@ -300,10 +312,25 @@ class TestSpaFrontendServing:
         assert "LEAKED" not in resp.text
 
     def test_deep_traversal_returns_index_html(self, tmp_path):
-        """Multiple ../ levels must still be contained."""
+        """Multiple ../ levels must still be contained.
+
+        httpx normalises the deep traversal before it reaches the ASGI app,
+        so we inject the raw path directly into the scope.  The path does
+        NOT start with ``/assets/`` to avoid hitting the ``StaticFiles``
+        mount (which would 404 on its own before reaching the catch-all).
+        """
         dist = self._build_dist(tmp_path)
-        client = TestClient(_make_spa_app(dist))
-        resp = client.get("/assets/../../../../../../etc/passwd")
+        traversal = "/img/../../../../../../../etc/passwd"
+        inner = _make_spa_app(dist)
+
+        async def inject_traversal(scope, receive, send):
+            if scope["type"] == "http":
+                scope["path"] = traversal
+                scope["raw_path"] = traversal.encode()
+            await inner(scope, receive, send)
+
+        client = TestClient(inject_traversal)
+        resp = client.get(traversal)
         assert resp.status_code == 200
         # Should get index.html, not /etc/passwd content
         assert "SPA" in resp.text
