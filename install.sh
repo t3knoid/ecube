@@ -395,6 +395,23 @@ _is_valid_port() {
   [[ "${val}" =~ ^[0-9]+$ && "${val}" -ge 1 && "${val}" -le 65535 ]]
 }
 
+# Pure predicate: returns 0 if val is a valid CIDR block, 1 otherwise.
+# Accepts IPv4 (e.g. 192.168.1.0/24, prefix 0-32) and IPv6
+# (e.g. 2001:db8::/32, prefix 0-128).  Intentionally rejects bare IPs
+# (no prefix length) since ufw requires the /prefix form.
+_is_valid_cidr() {
+  local val="$1"
+  # IPv4 CIDR
+  if [[ "${val}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/([0-9]|[12][0-9]|3[0-2])$ ]]; then
+    return 0
+  fi
+  # IPv6 CIDR — loose check: hex/colon chars followed by /0-128
+  if [[ "${val}" =~ ^[0-9A-Fa-f:]+/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$ ]]; then
+    return 0
+  fi
+  return 1
+}
+
 # Pure predicate: returns 0 if val is a valid PostgreSQL database name
 # (alphanumerics and underscores only, non-empty), 1 otherwise.
 _is_valid_db_name() {
@@ -1514,9 +1531,54 @@ configure_firewall() {
     return
   fi
 
-  if _confirm "Allow TCP port ${API_PORT} through ufw?"; then
-    run ufw allow "${API_PORT}/tcp"
-    ok "ufw: allowed ${API_PORT}/tcp"
+  # Prompt for an optional source CIDR to scope the allow rule.  A blank
+  # answer opens the port to all sources, but only after a clear warning.
+  local cidr=""
+  if [[ "${YES}" == true ]]; then
+    warn "Skipping source-CIDR prompt in --yes mode. Opening port ${API_PORT}/tcp to all sources."
+    warn "If this host is network-exposed, restrict access after install:"
+    warn "  sudo ufw delete allow ${API_PORT}/tcp"
+    warn "  sudo ufw allow from <trusted-cidr> to any port ${API_PORT} proto tcp"
+    if _confirm "Allow TCP port ${API_PORT} through ufw?"; then
+      run ufw allow "${API_PORT}/tcp"
+      ok "ufw: allowed ${API_PORT}/tcp (all sources)"
+    fi
+  else
+    echo ""
+    warn "SECURITY: opening port ${API_PORT}/tcp to all sources allows any host to"
+    warn "connect. If this machine is network-exposed, restrict access to a trusted"
+    warn "subnet by entering a CIDR block (e.g. 192.168.1.0/24 or 10.0.0.0/8)."
+    echo ""
+    while true; do
+      read -r -p "$(echo -e "${C_YELLOW}Source CIDR to allow for port ${API_PORT} (leave blank for all sources, 'skip' to add no rule):${C_RESET} ")" cidr
+      if [[ -z "${cidr}" ]]; then
+        break
+      elif [[ "${cidr,,}" == "skip" ]]; then
+        info "Skipping ufw rule — configure manually if needed:"
+        info "  sudo ufw allow from <cidr> to any port ${API_PORT} proto tcp"
+        return
+      elif ! _is_valid_cidr "${cidr}"; then
+        warn "Invalid CIDR '${cidr}' — expected n.n.n.n/prefix (IPv4) or hex::/prefix (IPv6). Leave blank for all, or 'skip'."
+      else
+        break
+      fi
+    done
+
+    if [[ -n "${cidr}" ]]; then
+      if run ufw allow from "${cidr}" to any port "${API_PORT}" proto tcp; then
+        ok "ufw: allowed ${cidr} → port ${API_PORT}/tcp"
+      else
+        warn "ufw: failed to add rule for '${cidr}' — configure manually: sudo ufw allow from ${cidr} to any port ${API_PORT} proto tcp"
+      fi
+    else
+      if _confirm "Allow TCP port ${API_PORT} from ALL sources through ufw?"; then
+        run ufw allow "${API_PORT}/tcp"
+        ok "ufw: allowed ${API_PORT}/tcp (all sources)"
+        warn "TIP — restrict to a trusted subnet later:"
+        warn "  sudo ufw delete allow ${API_PORT}/tcp"
+        warn "  sudo ufw allow from <trusted-cidr> to any port ${API_PORT} proto tcp"
+      fi
+    fi
   fi
 }
 
@@ -1641,9 +1703,14 @@ do_uninstall() {
   fi
 
   # Revoke ufw rules that configure_firewall may have added.
+  # Removes the blanket allow rule; CIDR-scoped rules cannot be deleted without
+  # the original source address, so warn the operator if any rule remains.
   if command -v ufw &>/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
     ufw delete allow "${API_PORT}/tcp" 2>/dev/null || true
-    ok "ufw: rule for ${API_PORT}/tcp removed (if present)"
+    ok "ufw: blanket allow rule for ${API_PORT}/tcp removed (if present)"
+    if ufw status 2>/dev/null | grep -q "^${API_PORT}"; then
+      warn "ufw: CIDR-scoped rule(s) for port ${API_PORT} may still be active — review with: sudo ufw status numbered"
+    fi
   fi
 
   # Remove installer log file if present.
