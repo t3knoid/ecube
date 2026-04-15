@@ -146,8 +146,6 @@ def test_start_job(client, db):
 
 
 def test_start_already_running_job(client, db):
-    from app.models.jobs import ExportJob, JobStatus
-
     job = ExportJob(
         project_id="PROJ-001",
         evidence_number="EV-001",
