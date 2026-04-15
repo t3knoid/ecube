@@ -1363,6 +1363,14 @@ _write_env_file() {
       ok "SERVE_FRONTEND_PATH added to .env"
     fi
 
+    if ! grep -Eq '^[[:space:]]*TRUST_PROXY_HEADERS=' "${env_file}"; then
+      info "Adding missing TRUST_PROXY_HEADERS to existing .env..."
+      if [[ "${DRY_RUN}" != true ]]; then
+        printf '\n# Set to true if a reverse proxy sits in front of uvicorn.\nTRUST_PROXY_HEADERS=false\n' >> "${env_file}"
+      fi
+      ok "TRUST_PROXY_HEADERS added to .env"
+    fi
+
     return
   fi
   info "Writing .env file..."
