@@ -390,10 +390,14 @@ if settings.serve_frontend_path:
 
         if path.startswith("/api/"):
             request.scope["path"] = path[4:]  # "/api/foo" → "/foo"
-            if raw_path is not None and raw_path.startswith(b"/api/"):
-                request.scope["raw_path"] = raw_path[4:]
-            else:
-                request.scope["raw_path"] = request.scope["path"].encode("utf-8")
+            if raw_path is not None:
+                if raw_path.startswith(b"/api/"):
+                    request.scope["raw_path"] = raw_path[4:]
+                else:
+                    # raw_path doesn't carry the expected prefix — drop it
+                    # rather than re-encoding the decoded path, which would
+                    # lose the original percent-encoding.
+                    request.scope.pop("raw_path", None)
         elif path == "/api":
             request.scope["path"] = "/"
             request.scope["raw_path"] = b"/"
