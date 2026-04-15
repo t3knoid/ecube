@@ -1,8 +1,9 @@
-from typing import List, Optional, Tuple
+from collections import defaultdict
+from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy import case, func, update
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.exceptions import ConflictError
 from app.models.jobs import (
@@ -219,6 +220,70 @@ class FileRepository:
         )
         return [(r.error_message, r.relative_path) for r in rows]
 
+    def bulk_count_done_and_errors(
+        self, job_ids: List[int]
+    ) -> Dict[int, Tuple[int, int]]:
+        """Return ``{job_id: (done_count, error_count)}`` for all *job_ids* in one query."""
+        if not job_ids:
+            return {}
+        rows = (
+            self.db.query(
+                ExportFile.job_id,
+                func.count(case((ExportFile.status == FileStatus.DONE, 1))),
+                func.count(case((ExportFile.status == FileStatus.ERROR, 1))),
+            )
+            .filter(ExportFile.job_id.in_(job_ids))
+            .group_by(ExportFile.job_id)
+            .all()
+        )
+        return {r[0]: (r[1], r[2]) for r in rows}
+
+    def bulk_list_error_messages(
+        self, job_ids: List[int], *, limit_per_job: int = 5
+    ) -> Dict[int, List[Tuple[str, str]]]:
+        """Return ``{job_id: [(error_message, relative_path), ...]}``.
+
+        Uses a window function to fetch at most *limit_per_job* error rows
+        per job in a single query.
+        """
+        if not job_ids:
+            return {}
+        row_num = (
+            func.row_number()
+            .over(
+                partition_by=ExportFile.job_id,
+                order_by=ExportFile.id,
+            )
+            .label("rn")
+        )
+        subq = (
+            self.db.query(
+                ExportFile.job_id,
+                ExportFile.error_message,
+                ExportFile.relative_path,
+                row_num,
+            )
+            .filter(
+                ExportFile.job_id.in_(job_ids),
+                ExportFile.status == FileStatus.ERROR,
+                ExportFile.error_message.isnot(None),
+            )
+            .subquery()
+        )
+        rows = (
+            self.db.query(
+                subq.c.job_id,
+                subq.c.error_message,
+                subq.c.relative_path,
+            )
+            .filter(subq.c.rn <= limit_per_job)
+            .all()
+        )
+        result: Dict[int, List[Tuple[str, str]]] = defaultdict(list)
+        for job_id, msg, path in rows:
+            result[job_id].append((msg, path))
+        return dict(result)
+
     def increment_job_bytes(self, job_id: int, size_bytes: int) -> None:
         """Atomically increment the ``copied_bytes`` counter on the parent job."""
         self.db.execute(
@@ -261,6 +326,37 @@ class DriveAssignmentRepository:
             .order_by(DriveAssignment.assigned_at.desc(), DriveAssignment.id.desc())
             .first()
         )
+
+    def bulk_get_active_for_jobs(
+        self, job_ids: List[int]
+    ) -> Dict[int, DriveAssignment]:
+        """Return ``{job_id: DriveAssignment}`` for unreleased assignments.
+
+        When a job has multiple unreleased rows (rare), the most recent is
+        kept — matching the single-job ``get_active_for_job`` semantics.
+        """
+        if not job_ids:
+            return {}
+        rows = (
+            self.db.query(DriveAssignment)
+            .options(joinedload(DriveAssignment.drive))
+            .filter(
+                DriveAssignment.job_id.in_(job_ids),
+                DriveAssignment.released_at.is_(None),
+            )
+            .order_by(
+                DriveAssignment.job_id,
+                DriveAssignment.assigned_at.desc(),
+                DriveAssignment.id.desc(),
+            )
+            .all()
+        )
+        result: Dict[int, DriveAssignment] = {}
+        for assignment in rows:
+            # First seen per job_id wins (most recent due to ORDER BY)
+            if assignment.job_id not in result:
+                result[assignment.job_id] = assignment
+        return result
 
 
 class ManifestRepository:
