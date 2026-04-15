@@ -1563,7 +1563,13 @@ _deploy_frontend() {
   local env_file="${INSTALL_DIR}/.env"
   if [[ -f "${env_file}" ]]; then
     local _env_val
-    _env_val=$(grep -E '^[[:space:]]*SERVE_FRONTEND_PATH=' "${env_file}" | tail -1 | sed 's/^[^=]*=//' | xargs 2>/dev/null || true)
+    _env_val=$(grep -E '^[[:space:]]*SERVE_FRONTEND_PATH=' "${env_file}" | tail -1 | sed 's/^[^=]*=//')
+    # Strip leading/trailing whitespace and surrounding quotes without
+    # mangling interior spaces (xargs would collapse them).
+    _env_val="${_env_val#"${_env_val%%[![:space:]]*}"}"   # trim leading
+    _env_val="${_env_val%"${_env_val##*[![:space:]]}"}"   # trim trailing
+    _env_val="${_env_val#\"}" ; _env_val="${_env_val%\"}"  # strip double quotes
+    _env_val="${_env_val#\'}" ; _env_val="${_env_val%\'}"  # strip single quotes
     if [[ -n "${_env_val}" ]]; then
       www_dir="${_env_val}"
       info "Using SERVE_FRONTEND_PATH from .env: ${www_dir}"
