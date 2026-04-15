@@ -1371,6 +1371,46 @@ _write_env_file() {
       ok "TRUST_PROXY_HEADERS added to .env"
     fi
 
+    # --- Standalone-topology safety: normalise proxy-era settings ----------
+    #
+    # Previous installations behind nginx may have TRUST_PROXY_HEADERS=true
+    # and/or API_ROOT_PATH=/api.  In the new standalone topology the service
+    # is exposed directly, so:
+    #   • TRUST_PROXY_HEADERS=true  → enables client-IP spoofing via
+    #     X-Forwarded-For / X-Real-IP.
+    #   • A stale API_ROOT_PATH     → breaks OpenAPI/Swagger URLs.
+    #
+    # Reset both to safe defaults and warn loudly so the operator can opt back
+    # in if they deliberately run behind a reverse proxy.
+
+    if grep -Eq '^[[:space:]]*TRUST_PROXY_HEADERS=[[:space:]]*true' "${env_file}"; then
+      warn "TRUST_PROXY_HEADERS is set to 'true' in .env."
+      warn "The standalone topology exposes uvicorn directly — trusting proxy"
+      warn "headers allows client-IP spoofing.  Resetting to 'false'."
+      warn "If you run behind a reverse proxy, set TRUST_PROXY_HEADERS=true"
+      warn "in ${env_file} after installation."
+      if [[ "${DRY_RUN}" != true ]]; then
+        sed -i 's/^[[:space:]]*TRUST_PROXY_HEADERS=.*/TRUST_PROXY_HEADERS=false/' "${env_file}"
+      fi
+      ok "TRUST_PROXY_HEADERS reset to false"
+    fi
+
+    if grep -Eq '^[[:space:]]*API_ROOT_PATH=' "${env_file}"; then
+      local _old_root_path
+      _old_root_path="$(grep -E '^[[:space:]]*API_ROOT_PATH=' "${env_file}" | head -1 | cut -d= -f2-)"
+      if [[ -n "${_old_root_path}" ]]; then
+        warn "API_ROOT_PATH is set to '${_old_root_path}' in .env."
+        warn "The standalone topology serves the API at the root — a stale"
+        warn "API_ROOT_PATH can break OpenAPI/Swagger URLs.  Clearing it."
+        warn "If you run behind a reverse proxy with a path prefix, restore"
+        warn "API_ROOT_PATH in ${env_file} after installation."
+        if [[ "${DRY_RUN}" != true ]]; then
+          sed -i 's/^[[:space:]]*API_ROOT_PATH=.*/API_ROOT_PATH=/' "${env_file}"
+        fi
+        ok "API_ROOT_PATH cleared"
+      fi
+    fi
+
     return
   fi
   info "Writing .env file..."
