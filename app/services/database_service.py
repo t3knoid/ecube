@@ -583,8 +583,40 @@ def _write_env_settings(updates: Dict[str, str]) -> None:
 
     if in_docker:
         # In-place rewrite — preserves the bind-mount inode.
+        # Capture existing ownership before writing so we can restore it.
+        try:
+            orig_stat = os.stat(env_path)
+            existing_mode = stat.S_IMODE(orig_stat.st_mode)
+            existing_uid = orig_stat.st_uid
+            existing_gid = orig_stat.st_gid
+        except OSError:
+            existing_mode = 0o600
+            existing_uid = None
+            existing_gid = None
+
         with open(env_path, "w") as f:
             f.writelines(lines)
+
+        # Enforce the same permission ceiling as the atomic path so
+        # bind-mounted credentials don't stay world-readable on the host.
+        safe_mode = existing_mode & 0o600
+        try:
+            os.chmod(env_path, safe_mode)
+        except OSError:
+            logger.debug(
+                "Could not clamp .env permissions to %o; continuing.",
+                safe_mode,
+            )
+        if existing_uid is not None:
+            try:
+                os.chown(env_path, existing_uid, existing_gid)
+            except OSError:
+                logger.debug(
+                    "Could not restore .env ownership (uid=%s, gid=%s); "
+                    "file will be owned by the current process user.",
+                    existing_uid,
+                    existing_gid,
+                )
     else:
         fd, tmp_path = tempfile.mkstemp(dir=dir_name, prefix=".env.", suffix=".tmp")
         try:
