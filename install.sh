@@ -1542,6 +1542,19 @@ _deploy_frontend() {
     fi
   done
 
+  # Guard against deploying into INSTALL_DIR itself or a parent of it.
+  # Clearing such a path would destroy the app, venv, configs, etc.
+  local _install_canonical
+  _install_canonical="$(realpath -m "${INSTALL_DIR}" 2>/dev/null || echo "${INSTALL_DIR}")"
+  if [[ "${_www_canonical}" == "${_install_canonical}" ]]; then
+    error "SERVE_FRONTEND_PATH '${www_dir}' resolves to INSTALL_DIR '${INSTALL_DIR}' — refusing to deploy."
+    exit 1
+  fi
+  if [[ "${_install_canonical}" == "${_www_canonical}"/* ]]; then
+    error "SERVE_FRONTEND_PATH '${www_dir}' is a parent of INSTALL_DIR '${INSTALL_DIR}' — refusing to deploy."
+    exit 1
+  fi
+
   local dist_src=""
   for candidate in \
       "${INSTALL_DIR}/frontend/dist" \
@@ -1563,7 +1576,7 @@ _deploy_frontend() {
   # reduce blast radius if www_dir is unexpectedly shared or bind-mounted.
   run mkdir -p "${www_dir}"
   if [[ "${DRY_RUN}" != true ]]; then
-    find "${www_dir}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+    find "${www_dir}" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
   else
     echo "[DRY-RUN] Would clear contents of ${www_dir}"
   fi
