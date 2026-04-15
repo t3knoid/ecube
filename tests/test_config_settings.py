@@ -198,9 +198,19 @@ class TestSettingsDefaults:
             s = Settings(database_url="sqlite://")
         assert s.serve_frontend_path == ""
 
+    def test_serve_frontend_path_from_env(self):
+        with patch.dict("os.environ", {"SERVE_FRONTEND_PATH": "/srv/ecube/www"}):
+            s = Settings(database_url="sqlite://")
+        assert s.serve_frontend_path == "/srv/ecube/www"
+
     def test_serve_frontend_path_relative_rejected(self):
         with pytest.raises(ValueError, match="absolute path"):
             Settings(database_url="sqlite://", serve_frontend_path="relative/path")
+
+    def test_serve_frontend_path_relative_from_env_rejected(self):
+        with pytest.raises(ValueError, match="absolute path"):
+            with patch.dict("os.environ", {"SERVE_FRONTEND_PATH": "relative/path"}):
+                Settings(database_url="sqlite://")
 
 
 # ---------------------------------------------------------------------------
