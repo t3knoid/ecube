@@ -891,11 +891,19 @@ if settings.serve_frontend_path:
         # Serve Vite hashed assets (js/, css/, etc.) with StaticFiles so
         # they get proper content-type headers and directory traversal is
         # handled safely by Starlette.
-        app.mount(
-            "/assets",
-            StaticFiles(directory=str(_frontend_dir / "assets")),
-            name="frontend-assets",
-        )
+        _assets_dir = _frontend_dir / "assets"
+        if _assets_dir.is_dir():
+            app.mount(
+                "/assets",
+                StaticFiles(directory=str(_assets_dir)),
+                name="frontend-assets",
+            )
+        else:
+            logger.warning(
+                "Frontend assets/ directory not found at %s — "
+                "/assets requests will fall through to the SPA fallback",
+                _assets_dir,
+            )
 
         # Serve other root-level static files (favicon.ico, manifest, etc.)
         # via a catch-all StaticFiles mount that falls back to index.html
