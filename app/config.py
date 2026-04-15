@@ -431,6 +431,20 @@ class Settings(BaseSettings):
     #: Enable TCP keepalive on the Redis socket to detect dead connections.
     redis_socket_keepalive: bool = True
 
+    @field_validator("serve_frontend_path", mode="before")
+    @classmethod
+    def _normalise_serve_frontend_path(cls, v: str) -> str:  # noqa: N805
+        """Ensure ``serve_frontend_path`` is empty or an absolute path."""
+        if not isinstance(v, str) or v.strip() == "":
+            return ""
+        import os
+        v = v.strip()
+        if not os.path.isabs(v):
+            raise ValueError(
+                f"SERVE_FRONTEND_PATH must be an absolute path, got: {v!r}"
+            )
+        return os.path.normpath(v)
+
     @field_validator("session_cookie_domain", mode="before")
     @classmethod
     def _normalise_domain(cls, v: str | None) -> str | None:  # noqa: N805
