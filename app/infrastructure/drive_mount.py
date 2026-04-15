@@ -36,7 +36,12 @@ def _find_mountable_device(device_path: str) -> str:
     try:
         for entry in sorted(os.listdir(block_dir)):
             if entry.startswith(base) and entry != base:
-                return f"/dev/{entry}"
+                # Verify this is actually a partition, not an unrelated sysfs
+                # attribute directory (e.g. power, queue, holders).  Real
+                # partitions have a "partition" file inside their sysfs dir.
+                partition_marker = os.path.join(block_dir, entry, "partition")
+                if os.path.exists(partition_marker):
+                    return f"/dev/{entry}"
     except OSError:
         pass
     return device_path
