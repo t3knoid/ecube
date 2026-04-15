@@ -10,8 +10,8 @@ ECUBE (Evidence Copying & USB Based Export) is a secure evidence export platform
 - **Web framework:** FastAPI (REST API + OpenAPI generation)
 - **ORM:** SQLAlchemy with Alembic migrations
 - **Database:** PostgreSQL 14+ (production), SQLite in-memory (tests)
-- **Background jobs:** Celery or RQ (copy/verify/manifest tasks)
-- **UI layer:** React/Vue or server-rendered templates (presentation only; communicates via HTTPS API)
+- **Background jobs:** FastAPI `BackgroundTasks` + bounded `ThreadPoolExecutor` (copy/verify/manifest tasks)
+- **UI layer:** Vue 3 SPA (Vite build); served by FastAPI in standalone mode or by nginx in Docker deployments. Communicates via HTTPS API only.
 - **Testing:** pytest with SQLite `StaticPool` in-memory database
 
 ## Repository Layout
@@ -22,29 +22,24 @@ ECUBE (Evidence Copying & USB Based Export) is a secure evidence export platform
 docs/
   requirements/             # Requirements documents (00–10)
   design/                   # Design documents (00–10, mirrors requirements)
-README.md
+app/
+  routers/        # FastAPI routers (one per domain: drives, jobs, mounts, browse, audit, …)
+  models/         # SQLAlchemy ORM models
+  services/       # Domain service modules (business logic, state machines)
+  schemas/        # Pydantic request/response schemas
+  repositories/   # Data-access layer (one class per aggregate)
+  infrastructure/ # Platform abstraction interfaces + concrete implementations (Linux reference)
+  utils/          # Shared helpers (sanitize, client_ip, docker detection)
+alembic/
+  versions/       # Alembic migration scripts
+tests/
+  conftest.py     # Shared fixtures; uses SQLite StaticPool
+frontend/         # Vue 3 SPA (Vite build)
+install.sh        # Automated native Linux installer
+pyproject.toml    # Project metadata and dependencies
 ```
 
-> **Note:** The application source code has not yet been scaffolded. When implementation begins, the expected layout is:
->
-> ```
-> app/
->   api/          # FastAPI routers (one per domain: mounts, drives, jobs, audit, introspection)
->   models/       # SQLAlchemy ORM models
->   services/     # Domain service modules (business logic, state machines)
->   schemas/      # Pydantic request/response schemas
->   infrastructure/  # Platform abstraction interfaces + concrete implementations (Linux reference)
->   migrations/   # Alembic migration scripts
-> tests/
->   conftest.py   # Shared fixtures; uses SQLite StaticPool
-> pyproject.toml  # Project metadata and dependencies
-> ```
-
 ## Bootstrap & Development Setup
-
-> Until `pyproject.toml` exists, use `pip install fastapi sqlalchemy alembic pytest httpx` to bootstrap.
-
-Once `pyproject.toml` is present:
 
 ```bash
 # Install the project and all dev dependencies
@@ -94,7 +89,7 @@ Use the `require_roles(*roles)` decorator pattern (see `docs/design/10-security-
 
 ### Platform Abstraction
 
-- All OS-specific operations (drive discovery, filesystem detection, formatting, mount/unmount, eject, user management) are defined as `typing.Protocol` or `abc.ABC` interfaces in `app/infrastructure/`.
+- All OS-specific operations (drive discovery, filesystem detection, formatting, drive mounting, mount/unmount of network shares, eject, user management) are defined as `typing.Protocol` or `abc.ABC` interfaces in `app/infrastructure/`.
 - Concrete implementations satisfy those interfaces for a specific platform. Linux is the reference implementation.
 - Services depend on the interface, not the implementation. Tests inject fakes/mocks via `dependency_overrides` or constructor arguments.
 - When adding new OS-level functionality, define the interface first, then implement the Linux concrete class.
@@ -103,7 +98,7 @@ Use the `require_roles(*roles)` decorator pattern (see `docs/design/10-security-
 
 | Domain | Key Tables |
 |--------|-----------|
-| Hardware | `usb_hubs`, `usb_ports`, `usb_drives` |
+| Hardware | `usb_hubs`, `usb_ports`, `usb_drives` (includes `mount_path` for auto-mounted drives) |
 | Mounts | `network_mounts` |
 | Jobs | `export_jobs`, `export_files`, `manifests`, `drive_assignments` |
 | Audit | `audit_logs` (append-only, immutable timestamps) |
@@ -119,7 +114,7 @@ All design details live under `docs/design/`:
 - `03-system-architecture.md` — component view and interaction pattern
 - `04-functional-design.md` — drive FSM, project isolation, copy engine, audit
 - `05-data-model.md` — table design notes and integrity constraints
-- `06-rest-api-requirements.md` — normative API behavior, role expectations, constraints, and acceptance criteria
+- `06-rest-api-design.md` — normative API behavior, role expectations, constraints, and acceptance criteria
 - `10-security-and-access-control.md` — role model, authorization matrix, `require_roles` pattern
 
 ## Coding Conventions
@@ -133,8 +128,10 @@ All design details live under `docs/design/`:
 
 ## Continuous Integration
 
-No CI pipeline is configured yet. When adding one, validate:
-1. `pip install -e ".[dev]"`
-2. `alembic upgrade head` (against a test SQLite or PostgreSQL instance)
-3. `python -m pytest tests/ -v`
-4. A linter such as `ruff` or `flake8`
+CI workflows are configured in `.github/workflows/`. Key pipelines:
+
+1. **Tests** — backend (pytest), frontend (Vitest), integration (PostgreSQL), E2E (Playwright)
+2. **Docker Build** — `ghcr.io/t3knoid/ecube-app` and `ghcr.io/t3knoid/ecube-ui`
+3. **Security Scan** — static analysis and dependency vulnerability checks
+4. **Schemathesis API Fuzz** — auto-generated requests from the OpenAPI schema
+5. **Newman API Smoke** — Postman collection-based API smoke validation
