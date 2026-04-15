@@ -867,7 +867,9 @@ _check_port() {
 _resolve_host() {
   HOST="${HOSTNAME_OVERRIDE:-$(hostname -f 2>/dev/null || hostname)}"
 
-  # Validate HOST before it is embedded in an OpenSSL -subj field.\n  # --hostname is already validated at parse time, so\n  # this guard primarily catches unsafe values returned by `hostname -f`.", "oldString": "  # Validate HOST before it is embedded in an OpenSSL -subj field or an nginx\n  # server_name directive.  --hostname is already validated at parse time, so\n  # this guard primarily catches unsafe values returned by `hostname -f`.
+  # Validate HOST before it is embedded in an OpenSSL -subj field.
+  # --hostname is already validated at parse time, so
+  # this guard primarily catches unsafe values returned by `hostname -f`.
   if ! _is_valid_host "${HOST}"; then
     warn "Resolved hostname '${HOST}' contains characters unsafe for OpenSSL — falling back to 'localhost'."
     HOST="localhost"
