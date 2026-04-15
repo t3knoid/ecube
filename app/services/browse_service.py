@@ -29,7 +29,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.hardware import UsbDrive
 from app.models.network import MountStatus, NetworkMount
-from app.schemas.browse import BrowseEntry, BrowseResponse
+from app.schemas.browse import BrowseEntry, BrowseResponse, EntryType
 from app.services.audit_service import log_and_audit
 
 logger = logging.getLogger(__name__)
@@ -168,13 +168,13 @@ def _stat_entry(dirpath: str, name: str) -> Optional[BrowseEntry]:
 
     mode = entry_stat.st_mode
     if stat.S_ISLNK(mode):
-        entry_type = "symlink"
+        entry_type = EntryType.SYMLINK
         size_bytes = None
     elif stat.S_ISDIR(mode):
-        entry_type = "directory"
+        entry_type = EntryType.DIRECTORY
         size_bytes = None
     else:
-        entry_type = "file"
+        entry_type = EntryType.FILE
         size_bytes = entry_stat.st_size
 
     modified_at = datetime.fromtimestamp(entry_stat.st_mtime, tz=timezone.utc)
