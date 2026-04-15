@@ -211,8 +211,15 @@ def provision_database(
         ) from exc
 
     # Step 3: Write DATABASE_URL to .env — only after migrations succeed.
+    #         Also clear PG superuser credentials so they are not left on disk.
     try:
-        _write_env_setting("DATABASE_URL", new_url)
+        env_updates: Dict[str, str] = {"DATABASE_URL": new_url}
+        from app.config import settings as _cfg
+        if _cfg.pg_superuser_pass:
+            env_updates["PG_SUPERUSER_PASS"] = ""
+        if _cfg.pg_superuser_name:
+            env_updates["PG_SUPERUSER_NAME"] = ""
+        _write_env_settings(env_updates)
     except Exception as exc:
         logger.error("Failed to write DATABASE_URL to .env: %s", exc)
         raise RuntimeError(
@@ -565,48 +572,60 @@ def _write_env_settings(updates: Dict[str, str]) -> None:
     for key, value in remaining.items():
         lines.append(f"{key}={value}\n")
 
-    # Atomic write via temp file + rename
+    # Atomic write via temp file + rename.
+    # Inside Docker the .env is typically a bind-mounted file; replacing it
+    # (which changes the inode) would break the mount.  Fall back to an
+    # in-place truncate-and-rewrite when running in a container.
+    from app.utils.docker import is_running_in_docker
+
+    in_docker = is_running_in_docker()
     dir_name = os.path.dirname(env_path) or "."
-    fd, tmp_path = tempfile.mkstemp(dir=dir_name, prefix=".env.", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w") as f:
+
+    if in_docker:
+        # In-place rewrite — preserves the bind-mount inode.
+        with open(env_path, "w") as f:
             f.writelines(lines)
-        # Preserve the existing file's permission bits and ownership so that
-        # a root-owned process (e.g. sudo uvicorn) does not leave the .env
-        # unreadable for non-root service users or test runners.
+    else:
+        fd, tmp_path = tempfile.mkstemp(dir=dir_name, prefix=".env.", suffix=".tmp")
         try:
-            orig_stat = os.stat(env_path)
-            existing_mode = stat.S_IMODE(orig_stat.st_mode)
-            existing_uid = orig_stat.st_uid
-            existing_gid = orig_stat.st_gid
-        except OSError:
-            existing_mode = 0o600
-            existing_uid = None
-            existing_gid = None
-        # Enforce a ceiling of 0o600 so group/world-readable .env files
-        # (e.g. an accidental 0644) never keep credentials exposed.
-        safe_mode = existing_mode & 0o600
-        os.chmod(tmp_path, safe_mode)
-        # Restore original ownership so root-spawned rewrites don't lock
-        # out the normal service user.
-        if existing_uid is not None:
+            with os.fdopen(fd, "w") as f:
+                f.writelines(lines)
+            # Preserve the existing file's permission bits and ownership so that
+            # a root-owned process (e.g. sudo uvicorn) does not leave the .env
+            # unreadable for non-root service users or test runners.
             try:
-                os.chown(tmp_path, existing_uid, existing_gid)
+                orig_stat = os.stat(env_path)
+                existing_mode = stat.S_IMODE(orig_stat.st_mode)
+                existing_uid = orig_stat.st_uid
+                existing_gid = orig_stat.st_gid
             except OSError:
-                logger.debug(
-                    "Could not restore .env ownership (uid=%s, gid=%s); "
-                    "file will be owned by the current process user.",
-                    existing_uid,
-                    existing_gid,
-                )
-        os.replace(tmp_path, env_path)
-    except Exception:
-        # Clean up temp file on failure
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
+                existing_mode = 0o600
+                existing_uid = None
+                existing_gid = None
+            # Enforce a ceiling of 0o600 so group/world-readable .env files
+            # (e.g. an accidental 0644) never keep credentials exposed.
+            safe_mode = existing_mode & 0o600
+            os.chmod(tmp_path, safe_mode)
+            # Restore original ownership so root-spawned rewrites don't lock
+            # out the normal service user.
+            if existing_uid is not None:
+                try:
+                    os.chown(tmp_path, existing_uid, existing_gid)
+                except OSError:
+                    logger.debug(
+                        "Could not restore .env ownership (uid=%s, gid=%s); "
+                        "file will be owned by the current process user.",
+                        existing_uid,
+                        existing_gid,
+                    )
+            os.replace(tmp_path, env_path)
+        except Exception:
+            # Clean up temp file on failure
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
 
 def _reinitialize_engine(

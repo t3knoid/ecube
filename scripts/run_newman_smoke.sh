@@ -36,19 +36,27 @@ else
   ecube_compose_down() {
     echo ""
     echo "==> Stopping containers…"
-    $ECUBE_SUDO $ECUBE_COMPOSE_CMD -p "$ECUBE_COMPOSE_PROJECT" -f "$ECUBE_COMPOSE_FILE" down -v --rmi all 2>/dev/null || true
+    $ECUBE_SUDO env \
+      SECRET_KEY="${ECUBE_SECRET_KEY:-dummy}" \
+      POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-dummy}" \
+      $ECUBE_COMPOSE_CMD -p "$ECUBE_COMPOSE_PROJECT" -f "$ECUBE_COMPOSE_FILE" down -v --rmi all 2>/dev/null || true
   }
 
   ecube_compose_up() {
     echo "==> Starting ECUBE stack (port $ECUBE_HOST_PORT)…"
-    HOST_PORT="$ECUBE_HOST_PORT" \
-    POSTGRES_HOST_PORT="$ECUBE_POSTGRES_HOST_PORT" \
-    USB_DISCOVERY_INTERVAL=0 \
-    LOCAL_GROUP_ROLE_MAP='{"evidence-admins": ["admin"]}' \
-    SECRET_KEY="$ECUBE_SECRET_KEY" \
-    $ECUBE_SUDO $ECUBE_COMPOSE_CMD -p "$ECUBE_COMPOSE_PROJECT" -f "$ECUBE_COMPOSE_FILE" up -d --build \
-      --force-recreate \
-      2>&1
+    $ECUBE_SUDO env \
+      UI_PORT="$ECUBE_HOST_PORT" \
+      ECUBE_PORT="$ECUBE_HOST_PORT" \
+      ECUBE_NO_TLS=true \
+      HOST_PORT="$ECUBE_HOST_PORT" \
+      POSTGRES_HOST_PORT="$ECUBE_POSTGRES_HOST_PORT" \
+      USB_DISCOVERY_INTERVAL=0 \
+      LOCAL_GROUP_ROLE_MAP='{"evidence-admins": ["admin"]}' \
+      SECRET_KEY="$ECUBE_SECRET_KEY" \
+      POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-ecube}" \
+      $ECUBE_COMPOSE_CMD -p "$ECUBE_COMPOSE_PROJECT" -f "$ECUBE_COMPOSE_FILE" up -d --build \
+        --force-recreate \
+        2>&1
   }
 
   ecube_wait_for_health() {
@@ -129,6 +137,30 @@ fi
 if [[ -z "$ECUBE_TOKEN" ]] && ! "$PYTHON" -c "import jwt" 2>/dev/null; then
   echo "ERROR: PyJWT is required to generate an ECUBE token. Install it with: pip install PyJWT" >&2
   exit 1
+fi
+
+# Ensure .env exists on the host so the bind mount works correctly.
+# The compose file mounts ./.env into the container.
+_env_file="$PROJECT_ROOT/.env"
+if [[ ! -f "$_env_file" ]]; then
+  cat > "$_env_file" <<ENVEOF
+SECRET_KEY=$SECRET_KEY
+POSTGRES_PASSWORD=ecube
+POSTGRES_USER=ecube
+POSTGRES_DB=ecube
+ENVEOF
+fi
+
+# The smoke test needs DATABASE_URL so the app connects to the compose
+# postgres service and reports /health/ready as 200 instead of 503.
+_smoke_db_url="postgresql+psycopg2://ecube:ecube@postgres:5432/ecube"
+_current_db_url=$(sed -n 's/^DATABASE_URL=//p' "$_env_file" | head -1)
+if [[ -z "$_current_db_url" ]]; then
+  if grep -q '^DATABASE_URL=' "$_env_file" 2>/dev/null; then
+    sed -i "s|^DATABASE_URL=.*|DATABASE_URL=$_smoke_db_url|" "$_env_file"
+  else
+    echo "DATABASE_URL=$_smoke_db_url" >> "$_env_file"
+  fi
 fi
 
 ecube_compose_up
