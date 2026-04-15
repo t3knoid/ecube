@@ -73,7 +73,7 @@ ECUBE is commonly provided in one of three ways:
 
 ### 1.1 Packaged Installation
 
-An administrator installs ECUBE directly on a Linux host using the provided installer. This is the standard bare-metal or VM deployment for production-style environments.
+An administrator installs ECUBE directly on a Linux host using the provided installer. This is the standard native or VM deployment for production-style environments.
 
 What users should expect:
 

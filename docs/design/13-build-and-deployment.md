@@ -70,7 +70,7 @@ At deployment time, ECUBE depends on:
 - Python runtime and application dependencies,
 - PostgreSQL for persistent state,
 - OS-level utilities required by the trusted system layer,
-- optional frontend and reverse-proxy runtime when the web UI is deployed.
+- pre-built frontend assets served by FastAPI in native mode, or by an optional UI container in Docker deployments.
 
 Cryptographic JWT validation support is a required part of the dependency model because OIDC token verification depends on asymmetric signature algorithms.
 
@@ -78,9 +78,9 @@ Cryptographic JWT validation support is a required part of the dependency model 
 
 In the container deployment model, the system is logically split into:
 
-- API/runtime container,
+- API/runtime container (serves both backend API and frontend SPA),
 - PostgreSQL database container,
-- optional UI container for static asset serving and reverse proxying,
+- optional standalone UI container for custom reverse-proxy topologies,
 - optional Redis container when server-side session storage is selected.
 
 This separation preserves the trust boundary between the UI and the hardware-aware system layer while allowing the UI to remain a conventional web workload.

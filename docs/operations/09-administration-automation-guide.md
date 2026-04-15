@@ -149,7 +149,7 @@ Updates the database connection string and reinitializes the connection pool.
 ### Check Initialization Status
 
 ```bash
-# Bare-metal (HTTPS on port 8443)
+# Native (HTTPS on port 8443)
 curl -k https://localhost:8443/setup/status
 
 # Docker (HTTP on port 8000)
@@ -170,7 +170,7 @@ The `username` and `password` you provide will be used to create a **real Linux 
 alphanumeric, hyphens, underscores — no spaces or uppercase). The password becomes the OS account password and is also used to authenticate via `POST /auth/token` after setup.
 
 ```bash
-# Bare-metal
+# Native
 curl -k -X POST https://localhost:8443/setup/initialize \
   -H "Content-Type: application/json" \
   -d '{"username": "ecube-admin", "password": "s3cret"}'
@@ -193,7 +193,7 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8000/setup/initialize \
 #### Option B: CLI setup script
 
 ```bash
-# Bare-metal
+# Native
 sudo /opt/ecube/venv/bin/ecube-setup
 
 # Docker

@@ -23,7 +23,7 @@
 ## Overview
 
 Docker Compose is the recommended method for quick testing and evaluation.
-For production bare-metal deployments, see [02-manual-installation.md](02-manual-installation.md).
+For production native deployments, see [02-manual-installation.md](02-manual-installation.md).
 
 In the Compose deployment, only the HTTPS frontend port is published to the host by default. The FastAPI backend listens on port `8000` inside the `ecube-app` container and is reached externally through the `ecube-ui` nginx reverse proxy:
 

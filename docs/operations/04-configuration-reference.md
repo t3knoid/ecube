@@ -122,13 +122,15 @@ Used when `ROLE_RESOLVER=oidc`.
 
 ## UI Container (Docker Compose)
 
-These are deployment variables from Docker Compose (not `app/config.py` settings).
+These are deployment variables from Docker Compose (not `app/config.py` settings). They apply only to Docker-based deployments that use a separate `ecube-ui` nginx container.
 
 | Variable           | Default           | Description                                                                                                         |
 | ------------------ | ----------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `UI_PORT`          | `8443`            | Host port mapped to the `ecube-ui` HTTPS listener (port 443 inside the container).                                  |
 | `ECUBE_CERTS_DIR`  | `./deploy/certs`  | Host directory containing `cert.pem` and `key.pem` for nginx TLS termination. Use `/opt/ecube/certs` in production. |
 | `ECUBE_THEMES_DIR` | `./deploy/themes` | Host directory for optional CSS theme overrides served by nginx. Use `/opt/ecube/themes` in production.             |
+
+> **Note:** Native installations do not use a separate UI container. FastAPI serves the frontend directly when `SERVE_FRONTEND_PATH` is set.
 
 For off-the-shelf themes, custom theme creation, default-theme behavior, and logo configuration details, see [11-theme-and-branding-guide.md](11-theme-and-branding-guide.md).
 
@@ -275,7 +277,8 @@ Operational notes:
 | Variable  | Default | Description |
 | --------- | ------- | ----------- |
 | `TRUST_PROXY_HEADERS` | `false` | When `true`, extract client IP from `X-Forwarded-For` / `X-Real-IP` headers for audit logging. Only enable when ECUBE runs behind a trusted reverse proxy that sets these headers. When `false`, the direct TCP connection address is used. |
-| `API_ROOT_PATH`       | *(empty)* | ASGI root path passed to FastAPI. Set to `/api` when a reverse proxy strips the `/api` prefix before forwarding requests to uvicorn (the standard Docker and nginx configuration). This ensures Swagger UI generates correct server URLs when accessed through the proxy. Leave empty when uvicorn is accessed directly. |
+| `API_ROOT_PATH`       | *(empty)* | ASGI root path passed to FastAPI. Set to `/api` when an external reverse proxy strips the `/api` prefix before forwarding requests to uvicorn (the standard Docker configuration). This ensures Swagger UI generates correct server URLs when accessed through the proxy. Leave empty for native installs where FastAPI serves the frontend directly. |
+| `SERVE_FRONTEND_PATH` | *(empty)* | Path to the pre-built frontend directory (e.g. `/opt/ecube/www`). When set, FastAPI serves the SPA directly and enables an `/api` prefix-stripping middleware so the frontend's `/api/...` requests reach the correct routes. Leave empty when an external reverse proxy or separate web server handles frontend serving. |
 
 ---
 
