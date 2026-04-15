@@ -113,7 +113,20 @@ class TestStripApiPrefixMiddleware:
 
     def test_raw_path_popped_when_prefix_mismatch(self):
         """When raw_path doesn't carry /api/ but path does, raw_path is dropped."""
-        resp = self.client.get("/api/echo")
-        # The normal case works; the mismatch is an edge case covered
-        # by the middleware's else branch.  We verify the main path here.
+
+        # Wrap the app with a thin ASGI layer that forces raw_path to a
+        # value *without* the /api/ prefix while path still has it.  This
+        # triggers the middleware's ``else`` branch (scope.pop("raw_path")).
+        inner = self.app
+
+        async def tamper_raw_path(scope, receive, send):
+            if scope["type"] == "http" and scope.get("path") == "/api/echo":
+                scope["raw_path"] = b"/echo"  # mismatch: no /api/ prefix
+            await inner(scope, receive, send)
+
+        client = TestClient(tamper_raw_path)
+        resp = client.get("/api/echo")
         assert resp.status_code == 200
+        body = resp.json()
+        assert body["path"] == "/echo"
+        assert body["raw_path"] is None
