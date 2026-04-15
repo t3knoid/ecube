@@ -113,14 +113,6 @@ class TestStripApiPrefixMiddleware:
 
     def test_raw_path_popped_when_prefix_mismatch(self):
         """When raw_path doesn't carry /api/ but path does, raw_path is dropped."""
-        async def send(scope, receive, send_fn):
-            # Simulate a mismatch: path has /api/ but raw_path does not
-            scope["path"] = "/api/echo"
-            scope["raw_path"] = b"/echo"  # No /api/ prefix
-            await self.app(scope, receive, send_fn)
-
-        from starlette.testclient import TestClient as _TC
-        # Use a lower-level call to inject the mismatched scope
         resp = self.client.get("/api/echo")
         # The normal case works; the mismatch is an edge case covered
         # by the middleware's else branch.  We verify the main path here.
