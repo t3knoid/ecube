@@ -668,3 +668,345 @@ def test_auto_assign_409_no_unbound_when_no_project_match(client, db):
     )
     assert response.status_code == 409
     assert "No available drive" in response.json()["message"]
+
+
+# ---------------------------------------------------------------------------
+# GET /jobs — list endpoint
+# ---------------------------------------------------------------------------
+
+
+def test_list_jobs_returns_empty_when_no_jobs(client, db):
+    """GET /jobs should return an empty list when no jobs exist."""
+    response = client.get("/jobs")
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_jobs_returns_created_jobs(client, db):
+    """GET /jobs should return jobs that have been created."""
+    for i in range(3):
+        db.add(ExportJob(
+            project_id=f"PROJ-LIST-{i}",
+            evidence_number=f"EV-LIST-{i}",
+            source_path="/data",
+            status=JobStatus.PENDING,
+        ))
+    db.commit()
+
+    response = client.get("/jobs")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 3
+
+
+def test_list_jobs_default_limit(client, db):
+    """Default limit is 200 — creating fewer should return all."""
+    for i in range(5):
+        db.add(ExportJob(
+            project_id="PROJ-LIM",
+            evidence_number=f"EV-LIM-{i}",
+            source_path="/data",
+            status=JobStatus.PENDING,
+        ))
+    db.commit()
+
+    response = client.get("/jobs")
+    assert response.status_code == 200
+    assert len(response.json()) == 5
+
+
+def test_list_jobs_custom_limit(client, db):
+    """GET /jobs?limit=2 should return at most 2 jobs."""
+    for i in range(5):
+        db.add(ExportJob(
+            project_id="PROJ-CL",
+            evidence_number=f"EV-CL-{i}",
+            source_path="/data",
+            status=JobStatus.PENDING,
+        ))
+    db.commit()
+
+    response = client.get("/jobs", params={"limit": 2})
+    assert response.status_code == 200
+    assert len(response.json()) == 2
+
+
+def test_list_jobs_limit_below_minimum_returns_422(client, db):
+    """limit=0 violates ge=1 constraint and should return 422."""
+    response = client.get("/jobs", params={"limit": 0})
+    assert response.status_code == 422
+
+
+def test_list_jobs_limit_above_maximum_returns_422(client, db):
+    """limit=1001 violates le=1000 constraint and should return 422."""
+    response = client.get("/jobs", params={"limit": 1001})
+    assert response.status_code == 422
+
+
+def test_list_jobs_includes_files_succeeded_and_failed(client, db):
+    """Bulk enrichment should populate files_succeeded and files_failed."""
+    job = ExportJob(
+        project_id="PROJ-BULK-FC",
+        evidence_number="EV-BULK-FC",
+        source_path="/data",
+        status=JobStatus.COMPLETED,
+    )
+    db.add(job)
+    db.flush()
+    db.add(ExportFile(job_id=job.id, relative_path="a.txt", status=FileStatus.DONE))
+    db.add(ExportFile(job_id=job.id, relative_path="b.txt", status=FileStatus.DONE))
+    db.add(ExportFile(job_id=job.id, relative_path="c.txt", status=FileStatus.ERROR, error_message="fail"))
+    db.commit()
+
+    response = client.get("/jobs")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["files_succeeded"] == 2
+    assert data[0]["files_failed"] == 1
+
+
+def test_list_jobs_includes_error_summary_for_failed_jobs(client, db):
+    """Bulk enrichment should produce error_summary when files have errors."""
+    job = ExportJob(
+        project_id="PROJ-BULK-ES",
+        evidence_number="EV-BULK-ES",
+        source_path="/data",
+        status=JobStatus.FAILED,
+    )
+    db.add(job)
+    db.flush()
+    db.add(ExportFile(
+        job_id=job.id, relative_path="bad.bin",
+        status=FileStatus.ERROR, error_message="checksum mismatch",
+    ))
+    db.commit()
+
+    response = client.get("/jobs")
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["error_summary"] is not None
+    assert "1 file failed" in data[0]["error_summary"]
+    assert "checksum mismatch" in data[0]["error_summary"]
+
+
+def test_list_jobs_includes_drive_info(client, db):
+    """Bulk enrichment should include nested drive info."""
+    drive = UsbDrive(
+        device_identifier="USB-BULK-DRV",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-BULK-DRV",
+        capacity_bytes=32_000_000_000,
+        filesystem_type="exfat",
+    )
+    db.add(drive)
+    db.flush()
+    job = ExportJob(
+        project_id="PROJ-BULK-DRV",
+        evidence_number="EV-BULK-DRV",
+        source_path="/data",
+        status=JobStatus.RUNNING,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    response = client.get("/jobs")
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["drive"] is not None
+    assert data[0]["drive"]["device_identifier"] == "USB-BULK-DRV"
+    assert data[0]["drive"]["capacity_bytes"] == 32_000_000_000
+
+
+def test_list_jobs_no_drive_returns_null_drive(client, db):
+    """Jobs without assignments should have drive=null in list."""
+    db.add(ExportJob(
+        project_id="PROJ-NODRIVE-LIST",
+        evidence_number="EV-NODRIVE-LIST",
+        source_path="/data",
+        status=JobStatus.PENDING,
+    ))
+    db.commit()
+
+    response = client.get("/jobs")
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["drive"] is None
+
+
+def test_list_jobs_mixed_success_and_failure(client, db):
+    """List response should correctly enrich a mix of successful and failed jobs."""
+    job_ok = ExportJob(
+        project_id="PROJ-MIX",
+        evidence_number="EV-MIX-OK",
+        source_path="/data",
+        status=JobStatus.COMPLETED,
+    )
+    job_fail = ExportJob(
+        project_id="PROJ-MIX",
+        evidence_number="EV-MIX-FAIL",
+        source_path="/data",
+        status=JobStatus.FAILED,
+    )
+    db.add_all([job_ok, job_fail])
+    db.flush()
+    db.add(ExportFile(job_id=job_ok.id, relative_path="ok.txt", status=FileStatus.DONE))
+    db.add(ExportFile(job_id=job_fail.id, relative_path="err.txt", status=FileStatus.ERROR, error_message="io error"))
+    db.commit()
+
+    response = client.get("/jobs")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+
+    by_evidence = {j["evidence_number"]: j for j in data}
+    assert by_evidence["EV-MIX-OK"]["files_succeeded"] == 1
+    assert by_evidence["EV-MIX-OK"]["files_failed"] == 0
+    assert by_evidence["EV-MIX-OK"]["error_summary"] is None
+    assert by_evidence["EV-MIX-FAIL"]["files_succeeded"] == 0
+    assert by_evidence["EV-MIX-FAIL"]["files_failed"] == 1
+    assert by_evidence["EV-MIX-FAIL"]["error_summary"] is not None
+
+
+def test_list_jobs_processor_client_ip_redacted(client, db):
+    """Processor role (default client) should see client_ip=null in list."""
+    job = ExportJob(
+        project_id="PROJ-REDACT-LIST",
+        evidence_number="EV-REDACT-LIST",
+        source_path="/data",
+        status=JobStatus.PENDING,
+        client_ip="10.0.0.42",
+    )
+    db.add(job)
+    db.commit()
+
+    response = client.get("/jobs")
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["client_ip"] is None
+
+
+def test_list_jobs_admin_client_ip_visible(admin_client, db):
+    """Admin role should see actual client_ip in list."""
+    job = ExportJob(
+        project_id="PROJ-ADMIN-LIST",
+        evidence_number="EV-ADMIN-LIST",
+        source_path="/data",
+        status=JobStatus.PENDING,
+        client_ip="10.0.0.42",
+    )
+    db.add(job)
+    db.commit()
+
+    response = admin_client.get("/jobs")
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["client_ip"] == "10.0.0.42"
+
+
+def test_list_jobs_unauthenticated_returns_401(unauthenticated_client, db):
+    """GET /jobs without auth should return 401."""
+    response = unauthenticated_client.get("/jobs")
+    assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# _build_error_summary edge cases
+# ---------------------------------------------------------------------------
+
+
+def test_error_summary_singular_file_failed(client, db):
+    """Error summary should use singular 'file' for exactly 1 failure."""
+    job = ExportJob(
+        project_id="PROJ-SINGULAR",
+        evidence_number="EV-SINGULAR",
+        source_path="/data",
+        status=JobStatus.FAILED,
+    )
+    db.add(job)
+    db.flush()
+    db.add(ExportFile(
+        job_id=job.id, relative_path="one.bin",
+        status=FileStatus.ERROR, error_message="bad sector",
+    ))
+    db.commit()
+
+    response = client.get(f"/jobs/{job.id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert "1 file failed" in data["error_summary"]
+    # Verify it does NOT say "1 files failed"
+    assert "1 files failed" not in data["error_summary"]
+
+
+def test_error_summary_truncates_at_1024_chars(client, db):
+    """Error summary must not exceed 1024 characters."""
+    job = ExportJob(
+        project_id="PROJ-TRUNC",
+        evidence_number="EV-TRUNC",
+        source_path="/data",
+        status=JobStatus.FAILED,
+    )
+    db.add(job)
+    db.flush()
+    # Create 5 error files with very long messages to force truncation
+    for i in range(5):
+        db.add(ExportFile(
+            job_id=job.id, relative_path=f"{'x' * 80}_{i}.bin",
+            status=FileStatus.ERROR,
+            error_message=f"{'A' * 200} error {i}",
+        ))
+    db.commit()
+
+    response = client.get(f"/jobs/{job.id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["error_summary"] is not None
+    assert len(data["error_summary"]) <= 1024
+
+
+def test_error_summary_shows_unreported_count(client, db):
+    """When more errors exist than the limit, show '... and N more'."""
+    job = ExportJob(
+        project_id="PROJ-MORE",
+        evidence_number="EV-MORE",
+        source_path="/data",
+        status=JobStatus.FAILED,
+    )
+    db.add(job)
+    db.flush()
+    # Create 8 error files; the limit is 5 so 3 should be unreported
+    for i in range(8):
+        db.add(ExportFile(
+            job_id=job.id, relative_path=f"f{i}.bin",
+            status=FileStatus.ERROR, error_message=f"err{i}",
+        ))
+    db.commit()
+
+    response = client.get(f"/jobs/{job.id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert "and 3 more" in data["error_summary"]
+
+
+def test_error_summary_no_error_rows_still_shows_count(client, db):
+    """Error files with null error_message produce count-only summary."""
+    job = ExportJob(
+        project_id="PROJ-NULLMSG",
+        evidence_number="EV-NULLMSG",
+        source_path="/data",
+        status=JobStatus.FAILED,
+    )
+    db.add(job)
+    db.flush()
+    db.add(ExportFile(job_id=job.id, relative_path="a.bin", status=FileStatus.ERROR))
+    db.add(ExportFile(job_id=job.id, relative_path="b.bin", status=FileStatus.ERROR))
+    db.commit()
+
+    response = client.get(f"/jobs/{job.id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["error_summary"] is not None
+    assert "2 files failed" in data["error_summary"]
