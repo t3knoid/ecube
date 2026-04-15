@@ -121,7 +121,8 @@ credentials in the summary.
 | `--pg-superuser-pass PASS` | — | Password for the PostgreSQL superuser. Skips the interactive prompt when supplied. Must be non-empty and contain no whitespace. |
 | `--hostname HOST` | `$(hostname -f)` | Hostname/IP for TLS cert CN |
 | `--cert-validity DAYS` | `730` | Self-signed cert validity |
-| `--yes`, `-y` | off | Non-interactive / unattended mode |
+| `--yes`, `-y` | off | Non-interactive / unattended mode. Firewall rules are skipped unless `--firewall-cidr` is provided. |
+| `--firewall-cidr CIDR` | *(skip)* | Source CIDR to allow through ufw for the API port (e.g. `192.168.1.0/24`). In `--yes` mode, if omitted the firewall rule is **skipped** (safe default). Use `any` to explicitly open to all sources. |
 | `--version TAG` | *(current package)* | Download and install a specific GitHub release tag. Must be exact format: v<major>.<minor>.<patch> (e.g. v0.2.0). Pre-releases, build metadata, and tags without a leading v are not supported. |
 | `--uninstall` | — | Remove ECUBE from this host |
 | `--drop-database` | — | With --uninstall, also drop the configured application database (best-effort; requires sufficient DB privileges) |
@@ -170,7 +171,17 @@ You can pre-seed the installer and avoid interactive prompts:
 ```bash
 sudo ./install.sh \
   --pg-superuser-name ecubeadmin \
-  --pg-superuser-pass '<strong-password>'
+  --pg-superuser-pass '<strong-password>' \
+  --firewall-cidr 192.168.1.0/24
+```
+
+For fully unattended installs, add `--yes`.  Without `--firewall-cidr`, the firewall step is safely skipped in `--yes` mode:
+
+```bash
+sudo ./install.sh --yes \
+  --pg-superuser-name ecubeadmin \
+  --pg-superuser-pass '<strong-password>' \
+  --firewall-cidr 10.0.0.0/8
 ```
 
 If local PostgreSQL access via `sudo -u postgres psql` is not available,
