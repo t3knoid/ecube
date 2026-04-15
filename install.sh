@@ -1352,6 +1352,17 @@ _write_env_file() {
   if [[ -f "${env_file}" ]]; then
     info ".env already exists — preserving operator secrets."
     info "DATABASE_URL is managed by the setup wizard and is not modified by install.sh."
+
+    # Idempotently add SERVE_FRONTEND_PATH if absent from an older .env so
+    # that upgrades from a previous version enable standalone frontend serving.
+    if ! grep -Eq '^[[:space:]]*SERVE_FRONTEND_PATH=' "${env_file}"; then
+      info "Adding missing SERVE_FRONTEND_PATH to existing .env..."
+      if [[ "${DRY_RUN}" != true ]]; then
+        printf '\n# Path to the pre-built frontend served by FastAPI (standalone mode).\nSERVE_FRONTEND_PATH=%s/www\n' "${INSTALL_DIR}" >> "${env_file}"
+      fi
+      ok "SERVE_FRONTEND_PATH added to .env"
+    fi
+
     return
   fi
   info "Writing .env file..."
@@ -1484,13 +1495,24 @@ _wait_for_healthy() {
 # ===========================================================================
 # FRONTEND DEPLOYMENT
 # ===========================================================================
-# Copies the pre-built frontend bundle into ${INSTALL_DIR}/www so FastAPI
-# serves the SPA directly (SERVE_FRONTEND_PATH is set in .env by _write_env_file).
+# Copies the pre-built frontend bundle into the directory that FastAPI serves
+# at runtime (SERVE_FRONTEND_PATH).  Reads the path from the existing .env so
+# that an operator-customised SERVE_FRONTEND_PATH is respected on upgrades;
+# falls back to ${INSTALL_DIR}/www for fresh installs.
 # ===========================================================================
 _deploy_frontend() {
   header "\n── Frontend deployment ─────────────────────────────────────────"
 
   local www_dir="${INSTALL_DIR}/www"
+  local env_file="${INSTALL_DIR}/.env"
+  if [[ -f "${env_file}" ]]; then
+    local _env_val
+    _env_val=$(grep -E '^[[:space:]]*SERVE_FRONTEND_PATH=' "${env_file}" | tail -1 | sed 's/^[^=]*=//' | xargs 2>/dev/null || true)
+    if [[ -n "${_env_val}" ]]; then
+      www_dir="${_env_val}"
+      info "Using SERVE_FRONTEND_PATH from .env: ${www_dir}"
+    fi
+  fi
   local dist_src=""
   for candidate in \
       "${INSTALL_DIR}/frontend/dist" \
