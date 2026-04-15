@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
-from typing import Optional, Protocol, Tuple
+from typing import Protocol
 
 from app.config import settings
 from app.infrastructure.device_path import validate_device_path
@@ -54,7 +54,7 @@ class DriveMountProvider(Protocol):
 
     def mount_drive(
         self, device_path: str, mount_point: str
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         """Mount *device_path* (or its first partition) at *mount_point*.
 
         Creates *mount_point* if it does not exist.  Returns
@@ -68,7 +68,7 @@ class LinuxDriveMount:
 
     def mount_drive(
         self, device_path: str, mount_point: str
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         if not validate_device_path(device_path):
             return False, f"invalid device path: {device_path!r}"
 
