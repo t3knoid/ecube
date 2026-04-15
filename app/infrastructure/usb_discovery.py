@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Protocol
 
 from app.config import settings
+from app.infrastructure.mount_info import read_mount_points
 
 
 @dataclass
@@ -142,23 +143,7 @@ def _read_capacity_bytes(dev_path: str) -> Optional[int]:
     return None
 
 
-def _read_mount_points() -> dict[str, str]:
-    """Return a mapping of device path → mount point from ``/proc/mounts``.
-
-    Each key is a block device (e.g. ``"/dev/sdb1"``) and each value is the
-    corresponding mount point (e.g. ``"/mnt/ecube/7"``).  If the file cannot
-    be read (non-Linux, container, etc.) an empty dict is returned.
-    """
-    mounts: dict[str, str] = {}
-    try:
-        with open(settings.procfs_mounts_path, "r") as f:
-            for line in f:
-                parts = line.split()
-                if len(parts) >= 2 and parts[0].startswith("/dev/"):
-                    mounts[parts[0]] = parts[1]
-    except OSError:
-        pass
-    return mounts
+# Mount-point parsing moved to app.infrastructure.mount_info
 
 
 def _find_mount_point(
@@ -191,7 +176,7 @@ def discover_usb_topology() -> DiscoveredTopology:
     """
     usb_path = settings.sysfs_usb_devices_path
     topology = DiscoveredTopology()
-    mount_map = _read_mount_points()
+    mount_map = read_mount_points()
 
     try:
         entries = os.listdir(usb_path)
