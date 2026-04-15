@@ -42,15 +42,11 @@ RUN chmod +x /usr/local/bin/ecube-entrypoint.sh
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
     && pip install --no-cache-dir .
 
-# Generate a self-signed TLS certificate for out-of-the-box HTTPS.
-# Override by mounting a volume with real certs to /opt/ecube/certs.
-RUN mkdir -p /opt/ecube/certs \
-    && openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-       -keyout /opt/ecube/certs/key.pem \
-       -out    /opt/ecube/certs/cert.pem \
-       -subj   "/CN=localhost" 2>/dev/null \
-    && chmod 600 /opt/ecube/certs/key.pem \
-    && chmod 644 /opt/ecube/certs/cert.pem
+# Create the certs directory for TLS.  A self-signed certificate is
+# generated on first container start (not at build time) so each
+# deployment gets a unique private key.  Mount real certs to
+# /opt/ecube/certs or set TLS_KEYFILE / TLS_CERTFILE to override.
+RUN mkdir -p /opt/ecube/certs
 
 # Seed an empty .env so the bind mount target is always a file.
 # If the host mounts its own .env, it overlays this default.
