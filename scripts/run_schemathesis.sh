@@ -23,13 +23,19 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+ECUBE_HELPER_PATH="$PROJECT_ROOT/scripts/lib/ecube_compose.sh"
+if [[ -f "$ECUBE_HELPER_PATH" ]]; then
+  . "$ECUBE_HELPER_PATH"
+else
+  echo "WARNING: $ECUBE_HELPER_PATH not found. Using built-in compose helper fallback." >&2
+
 ecube_require_compose() {
   ECUBE_COMPOSE_FILE="${ECUBE_COMPOSE_FILE:-$PROJECT_ROOT/docker-compose.ecube.yml}"
   if [[ ! -f "$ECUBE_COMPOSE_FILE" ]]; then
     echo "ERROR: Compose file not found at $ECUBE_COMPOSE_FILE" >&2
     exit 1
   fi
-  if docker compose version &>/dev/null 2>&1; then
+  if docker compose version &>/dev/null; then
     ECUBE_COMPOSE_CMD="docker compose"
   elif command -v docker-compose &>/dev/null; then
     ECUBE_COMPOSE_CMD="docker-compose"
@@ -37,7 +43,7 @@ ecube_require_compose() {
     echo "ERROR: Neither 'docker compose' nor 'docker-compose' found." >&2
     exit 1
   fi
-  if docker info &>/dev/null 2>&1; then
+  if docker info &>/dev/null; then
     ECUBE_SUDO=""
   else
     ECUBE_SUDO="sudo"
@@ -94,6 +100,8 @@ ecube_assert_health() {
     return 1
   fi
 }
+
+fi  # end built-in compose helper fallback
 
 # ---- Configurable defaults ----
 HOST_PORT="${HOST_PORT:-8000}"
@@ -186,6 +194,9 @@ fi
 # service and reports /health/ready as 200 instead of 503.
 _smoke_db_url="postgresql+psycopg2://ecube:ecube@postgres:5432/ecube"
 _current_db_url=$(sed -n 's/^DATABASE_URL=//p' "$_env_file" | head -1)
+# Strip one layer of surrounding quotes.
+_current_db_url="${_current_db_url#\"}" ; _current_db_url="${_current_db_url%\"}"
+_current_db_url="${_current_db_url#\'}" ; _current_db_url="${_current_db_url%\'}"
 if [[ -z "$_current_db_url" ]]; then
   if grep -q '^DATABASE_URL=' "$_env_file" 2>/dev/null; then
     sed -i "s|^DATABASE_URL=.*|DATABASE_URL=$_smoke_db_url|" "$_env_file"
