@@ -159,18 +159,10 @@ elif [[ -n "${VIRTUAL_ENV:-}" ]] && [[ -x "$VIRTUAL_ENV/bin/st" ]]; then
 elif [[ -x "$PROJECT_ROOT/.venv/bin/st" ]]; then
   ST_CMD="$PROJECT_ROOT/.venv/bin/st"
 else
-  echo "==> Schemathesis CLI ('st') not found. Installing…"
-  "$PYTHON" -m pip install schemathesis
-  if command -v st &>/dev/null; then
-    ST_CMD="st"
-  elif [[ -n "${VIRTUAL_ENV:-}" ]] && [[ -x "$VIRTUAL_ENV/bin/st" ]]; then
-    ST_CMD="$VIRTUAL_ENV/bin/st"
-  elif [[ -x "$PROJECT_ROOT/.venv/bin/st" ]]; then
-    ST_CMD="$PROJECT_ROOT/.venv/bin/st"
-  else
-    echo "ERROR: Failed to install schemathesis." >&2
-    exit 1
-  fi
+  echo "ERROR: Schemathesis CLI ('st') not found." >&2
+  echo "       Install it with:  pip install schemathesis" >&2
+  echo "       Or with pipx:     pipx install schemathesis" >&2
+  exit 1
 fi
 
 # ---- Tear-down helper ----
