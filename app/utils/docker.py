@@ -11,7 +11,7 @@ def is_running_in_docker() -> bool:
     Two complementary checks are used:
 
     1. ``/.dockerenv`` — Docker creates this empty marker file in every
-       container; it is absent on bare-metal and most VM hosts.
+       container; it is absent on native and most VM hosts.
     2. ``/proc/self/cgroup`` — on cgroup v1 (Linux < 4.5 and most Docker
        images still using it) the cgroup paths contain "docker" or
        "containerd".  On cgroup v2, ``/.dockerenv`` is the reliable signal.
