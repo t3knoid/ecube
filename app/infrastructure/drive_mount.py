@@ -52,6 +52,20 @@ def _find_mountable_device(device_path: str) -> str:
 # Mount-point lookup moved to app.infrastructure.mount_info
 
 
+def _validate_managed_mount_point(mount_point: str) -> str | None:
+    """Validate that the mount point is a managed direct child of the base path."""
+    if not os.path.isabs(mount_point):
+        return f"mount_point must be an absolute path, got {mount_point!r}"
+    expected_base = os.path.realpath(settings.usb_mount_base_path)
+    real_mp = os.path.realpath(mount_point)
+    if os.path.dirname(real_mp) != expected_base:
+        return (
+            f"mount_point must be a direct child of {expected_base}, "
+            f"got {mount_point!r} (resolves to {real_mp!r})"
+        )
+    return None
+
+
 class DriveMountProvider(Protocol):
     """Mount a USB block device to a local directory."""
 
@@ -65,6 +79,15 @@ class DriveMountProvider(Protocol):
         """
         ...
 
+    def unmount_drive(
+        self, mount_point: str
+    ) -> tuple[bool, str | None]:
+        """Unmount a previously managed mount point.
+
+        Returns ``(True, None)`` on success or ``(False, error_message)`` on failure.
+        """
+        ...
+
 
 class LinuxDriveMount:
     """Linux implementation using ``mount(8)``."""
@@ -75,19 +98,9 @@ class LinuxDriveMount:
         if not validate_device_path(device_path):
             return False, f"invalid device path: {device_path!r}"
 
-        # Validate mount_point: must be an absolute path that resolves to a
-        # direct child of the configured usb_mount_base_path.  This prevents
-        # callers from creating arbitrary directories or mounting outside the
-        # expected tree.
-        if not os.path.isabs(mount_point):
-            return False, f"mount_point must be an absolute path, got {mount_point!r}"
-        expected_base = os.path.realpath(settings.usb_mount_base_path)
-        real_mp = os.path.realpath(mount_point)
-        if os.path.dirname(real_mp) != expected_base:
-            return False, (
-                f"mount_point must be a direct child of {expected_base}, "
-                f"got {mount_point!r} (resolves to {real_mp!r})"
-            )
+        mount_point_error = _validate_managed_mount_point(mount_point)
+        if mount_point_error:
+            return False, mount_point_error
 
         mountable = _find_mountable_device(device_path)
 
@@ -123,5 +136,32 @@ class LinuxDriveMount:
             return False, msg
         except OSError as exc:
             return False, f"mount error: {exc}"
+
+        return True, None
+
+    def unmount_drive(
+        self, mount_point: str
+    ) -> tuple[bool, str | None]:
+        mount_point_error = _validate_managed_mount_point(mount_point)
+        if mount_point_error:
+            return False, mount_point_error
+
+        try:
+            subprocess.run(
+                _with_sudo([settings.umount_binary_path, mount_point]),
+                check=True,
+                capture_output=True,
+                timeout=settings.subprocess_timeout_seconds,
+            )
+        except subprocess.TimeoutExpired:
+            return False, f"unmount timed out after {settings.subprocess_timeout_seconds}s"
+        except subprocess.CalledProcessError as exc:
+            stderr = (exc.stderr or b"").decode(errors="replace").strip()
+            msg = "unmount failed"
+            if stderr:
+                msg += f": {stderr}"
+            return False, msg
+        except OSError as exc:
+            return False, f"unmount error: {exc}"
 
         return True, None
