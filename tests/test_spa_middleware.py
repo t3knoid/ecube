@@ -172,6 +172,8 @@ def _make_spa_app(frontend_dir: pathlib.Path):
         original_path = request.scope.get("_original_path", "")
         if full_path.startswith(("api/", "api-")) or original_path.startswith("/api"):
             raise HTTPException(status_code=404, detail="Not Found")
+        if ".." in pathlib.PurePosixPath(full_path).parts:
+            return FileResponse(str(_index_html))
         file_path = (frontend_dir / full_path).resolve()
         if full_path and file_path.is_relative_to(_frontend_root_resolved) and file_path.is_file():
             return FileResponse(str(file_path))
