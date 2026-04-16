@@ -15,7 +15,11 @@ def test_list_mounts_empty(integration_client):
 
 @pytest.mark.integration
 def test_add_mount_success_persists_and_audits(integration_client, integration_db):
-    with patch("subprocess.run") as mock_run:
+    with (
+        patch("subprocess.run") as mock_run,
+        patch("app.services.mount_service._ensure_mount_directory", return_value=None),
+        patch("app.services.mount_service._validate_mount_directory_owner", return_value=None),
+    ):
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         response = integration_client.post(
             "/mounts",
