@@ -189,7 +189,7 @@ test('drives list and drive detail admin flows', async ({ page }) => {
 
   await page.goto('/drives')
   await expect(page.getByRole('heading', { name: 'Drives' })).toBeVisible()
-  await page.getByRole('button', { name: 'Open' }).click()
+  await page.getByRole('button', { name: 'Details' }).click()
 
   await expect(page).toHaveURL(/\/drives\/1$/)
   await page.getByRole('button', { name: 'Format' }).click()
