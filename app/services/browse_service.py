@@ -96,6 +96,22 @@ def _resolve_and_validate(
     """
     real_root = os.path.realpath(db_mount_root)
 
+    # Reject null bytes — they cause ValueError in os.path.realpath and
+    # can be used for truncation attacks.
+    if subdir and "\x00" in subdir:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid subdir: contains null byte.",
+        )
+
+    # Reject absolute subdir paths — the caller should only supply relative
+    # directory names within the mount root.
+    if subdir and subdir.startswith("/"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid subdir: absolute paths are not allowed.",
+        )
+
     # Build target path; strip leading slashes so subdir is always relative
     if subdir:
         relative = subdir.lstrip("/")
