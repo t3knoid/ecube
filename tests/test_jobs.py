@@ -10,6 +10,7 @@ def test_create_job(client, db):
         device_identifier="USB-CREATE-001",
         current_state=DriveState.AVAILABLE,
         current_project_id="PROJ-001",
+        mount_path="/mnt/ecube/create-001",
     )
     db.add(drive)
     db.commit()
@@ -28,6 +29,31 @@ def test_create_job(client, db):
     data = response.json()
     assert data["project_id"] == "PROJ-001"
     assert data["status"] == "PENDING"
+    assert data["target_mount_path"] == "/mnt/ecube/create-001"
+
+
+def test_create_job_conflict_when_assigned_drive_not_mounted(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-NOT-MOUNTED-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-001",
+        mount_path=None,
+    )
+    db.add(drive)
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-001",
+            "evidence_number": "EV-NOMOUNT",
+            "source_path": "/data/evidence",
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 409
+    assert "not mounted" in response.json()["message"].lower()
 
 
 def test_get_job(client, db):
@@ -35,6 +61,7 @@ def test_get_job(client, db):
         device_identifier="USB-GET-001",
         current_state=DriveState.AVAILABLE,
         current_project_id="PROJ-001",
+        mount_path="/mnt/ecube/get-001",
     ))
     db.commit()
 
@@ -125,6 +152,7 @@ def test_start_job(client, db):
         device_identifier="USB-START-001",
         current_state=DriveState.AVAILABLE,
         current_project_id="PROJ-001",
+        mount_path="/mnt/ecube/start-001",
     ))
     db.commit()
 
@@ -208,6 +236,7 @@ def test_verify_job(client, db):
         device_identifier="USB-VERIFY-001",
         current_state=DriveState.AVAILABLE,
         current_project_id="PROJ-001",
+        mount_path="/mnt/ecube/verify-001",
     ))
     db.commit()
 
@@ -240,6 +269,7 @@ def test_job_response_includes_timestamps(client, db):
         device_identifier="USB-TS-001",
         current_state=DriveState.AVAILABLE,
         current_project_id="PROJ-TS",
+        mount_path="/mnt/ecube/ts-001",
     ))
     db.commit()
 
@@ -265,6 +295,7 @@ def test_job_response_includes_started_by(client, db):
         device_identifier="USB-SB-001",
         current_state=DriveState.AVAILABLE,
         current_project_id="PROJ-SB",
+        mount_path="/mnt/ecube/sb-001",
     ))
     db.commit()
 
@@ -474,6 +505,7 @@ def test_auto_assign_single_project_bound_drive(client, db):
         device_identifier="USB-AUTO-001",
         current_state=DriveState.AVAILABLE,
         current_project_id="PROJ-AUTO",
+        mount_path="/mnt/ecube/auto-001",
     )
     db.add(drive)
     db.commit()
@@ -505,6 +537,7 @@ def test_auto_assign_unbound_fallback(client, db):
         device_identifier="USB-UNBOUND-001",
         current_state=DriveState.AVAILABLE,
         current_project_id=None,
+        mount_path="/mnt/ecube/unbound-001",
     )
     db.add(drive)
     db.commit()
@@ -599,6 +632,7 @@ def test_explicit_drive_id_still_works(client, db):
         device_identifier="USB-EXPLICIT-001",
         current_state=DriveState.AVAILABLE,
         current_project_id="PROJ-EXPLICIT",
+        mount_path="/mnt/ecube/explicit-001",
     )
     db.add(drive)
     db.commit()
@@ -624,11 +658,13 @@ def test_auto_assign_prefers_project_bound_over_unbound(client, db):
         device_identifier="USB-BOUND-PREF",
         current_state=DriveState.AVAILABLE,
         current_project_id="PROJ-PREF",
+        mount_path="/mnt/ecube/bound-pref",
     )
     unbound = UsbDrive(
         device_identifier="USB-UNBOUND-PREF",
         current_state=DriveState.AVAILABLE,
         current_project_id=None,
+        mount_path="/mnt/ecube/unbound-pref",
     )
     db.add_all([bound, unbound])
     db.commit()
@@ -653,6 +689,7 @@ def test_auto_assign_409_no_unbound_when_no_project_match(client, db):
         device_identifier="USB-OTHER-PROJ",
         current_state=DriveState.AVAILABLE,
         current_project_id="PROJ-OTHER",
+        mount_path="/mnt/ecube/other-proj",
     ))
     db.commit()
 
