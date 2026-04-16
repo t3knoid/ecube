@@ -464,6 +464,7 @@ class TestSystemInfoEndpoint:
             "in_docker": False,
             "suggested_db_host": "localhost",
             "suggested_admin_username": "ecubeadmin",
+            "has_configured_credentials": False,
         }
         mock_is_running_in_docker.assert_called_once_with()
 
@@ -482,6 +483,7 @@ class TestSystemInfoEndpoint:
             "in_docker": True,
             "suggested_db_host": "postgres-service",
             "suggested_admin_username": "ecubeadmin",
+            "has_configured_credentials": False,
         }
         mock_is_running_in_docker.assert_called_once_with()
 
@@ -527,8 +529,6 @@ class TestSystemInfoEndpoint:
         self, mock_provisioned, mock_provision, admin_client, db
     ):
         """Setting force=true allows re-provisioning (admin-only)."""
-        from app.models.users import UserRole
-
         db.add(UserRole(username="admin-user", role="admin"))
         db.commit()
 
@@ -986,15 +986,12 @@ class TestFailClosedBehavior:
         from app.repositories.user_role_repository import UserRoleRepository
         from sqlalchemy.exc import ProgrammingError
 
-        original_has_any_admin = UserRoleRepository.has_any_admin
-
         def _raise_missing_table(self):
             raise ProgrammingError(
                 "SELECT", {}, Exception('relation "user_roles" does not exist')
             )
 
-        UserRoleRepository.has_any_admin = _raise_missing_table
-        try:
+        with patch.object(UserRoleRepository, "has_any_admin", _raise_missing_table):
             resp = unauthenticated_client.post(
                 "/setup/database/test-connection",
                 json={
@@ -1007,8 +1004,6 @@ class TestFailClosedBehavior:
 
             # Should be treated as initial setup (200), not 503
             assert resp.status_code == 200
-        finally:
-            UserRoleRepository.has_any_admin = original_has_any_admin
 
     @patch("app.services.database_service.test_connection", return_value="16.2")
     def test_operational_error_fails_closed(
@@ -1019,15 +1014,12 @@ class TestFailClosedBehavior:
         from app.repositories.user_role_repository import UserRoleRepository
         from sqlalchemy.exc import OperationalError as SAOperationalError
 
-        original_has_any_admin = UserRoleRepository.has_any_admin
-
         def _raise_operational(self):
             raise SAOperationalError(
                 "SELECT", {}, Exception("permission denied for table user_roles")
             )
 
-        UserRoleRepository.has_any_admin = _raise_operational
-        try:
+        with patch.object(UserRoleRepository, "has_any_admin", _raise_operational):
             resp = unauthenticated_client.post(
                 "/setup/database/test-connection",
                 json={
@@ -1040,8 +1032,6 @@ class TestFailClosedBehavior:
             # Must NOT return 200; unauthenticated requests should be
             # rejected because we couldn't confirm there are no admins.
             assert resp.status_code in (401, 403, 503)
-        finally:
-            UserRoleRepository.has_any_admin = original_has_any_admin
 
     @patch("app.services.database_service.test_connection", return_value="16.2")
     def test_unexpected_error_fails_closed(
@@ -1051,13 +1041,10 @@ class TestFailClosedBehavior:
         must NOT be treated as initial setup — fail closed."""
         from app.repositories.user_role_repository import UserRoleRepository
 
-        original_has_any_admin = UserRoleRepository.has_any_admin
-
         def _raise_unexpected(self):
             raise AttributeError("some coding bug")
 
-        UserRoleRepository.has_any_admin = _raise_unexpected
-        try:
+        with patch.object(UserRoleRepository, "has_any_admin", _raise_unexpected):
             resp = unauthenticated_client.post(
                 "/setup/database/test-connection",
                 json={
@@ -1069,8 +1056,6 @@ class TestFailClosedBehavior:
             )
             # Must NOT return 200
             assert resp.status_code in (401, 403, 500, 503)
-        finally:
-            UserRoleRepository.has_any_admin = original_has_any_admin
 
 
 # ---------------------------------------------------------------------------
@@ -1188,7 +1173,7 @@ class TestDatabaseService:
     @patch("app.services.database_service._reinitialize_engine")
     @patch("app.services.database_service.psycopg2")
     def test_update_settings_updates_in_memory_config(
-        self, mock_psycopg2, mock_reinit, mock_write
+        self, mock_psycopg2, mock_reinit, mock_write, monkeypatch
     ):
         """Verify settings object is updated so subsequent reads are consistent."""
         from app.config import settings
@@ -1198,29 +1183,23 @@ class TestDatabaseService:
         mock_psycopg2.connect.return_value = mock_conn
         mock_psycopg2.OperationalError = Exception
 
-        original_url = settings.database_url
-        original_pool = settings.db_pool_size
-        original_overflow = settings.db_pool_max_overflow
+        monkeypatch.setattr(settings, "database_url", settings.database_url)
+        monkeypatch.setattr(settings, "db_pool_size", settings.db_pool_size)
+        monkeypatch.setattr(settings, "db_pool_max_overflow", settings.db_pool_max_overflow)
 
-        try:
-            update_database_settings(
-                host="newhost.test",
-                port=5433,
-                app_database="newdb",
-                app_username="newuser",
-                app_password="newpass",
-                pool_size=20,
-                pool_max_overflow=40,
-            )
+        update_database_settings(
+            host="newhost.test",
+            port=5433,
+            app_database="newdb",
+            app_username="newuser",
+            app_password="newpass",
+            pool_size=20,
+            pool_max_overflow=40,
+        )
 
-            assert settings.database_url == "postgresql://newuser:newpass@newhost.test:5433/newdb"
-            assert settings.db_pool_size == 20
-            assert settings.db_pool_max_overflow == 40
-        finally:
-            # Restore original values to avoid polluting other tests
-            settings.database_url = original_url
-            settings.db_pool_size = original_pool
-            settings.db_pool_max_overflow = original_overflow
+        assert settings.database_url == "postgresql://newuser:newpass@newhost.test:5433/newdb"
+        assert settings.db_pool_size == 20
+        assert settings.db_pool_max_overflow == 40
 
     def test_write_env_settings_batch_atomic(self, tmp_path):
         """All keys are written in a single pass - no partial updates."""
@@ -1274,12 +1253,27 @@ class TestDatabaseService:
         result_mode = stat.S_IMODE(env_file.stat().st_mode)
         assert result_mode == 0o600
 
+    def test_write_env_settings_readonly_file_gets_owner_rw(self, tmp_path):
+        """A read-only .env (0o400) must be upgraded to 0o600 so future writes succeed."""
+        from app.services.database_service import _write_env_settings
+
+        env_file = tmp_path / ".env"
+        env_file.write_text("DB=old\n")
+        env_file.chmod(0o400)
+
+        with patch("app.services.database_service._get_env_file_path", return_value=str(env_file)):
+            _write_env_settings({"DB": "new"})
+
+        result_mode = stat.S_IMODE(env_file.stat().st_mode)
+        assert result_mode == 0o600, f"Expected 0o600, got {oct(result_mode)}"
+        assert env_file.read_text() == "DB=new\n"
+
     @patch("app.services.database_service._write_env_setting")
     @patch("app.services.database_service._reinitialize_engine")
     @patch("app.services.database_service._run_migrations", return_value=4)
     @patch("app.services.database_service.psycopg2")
     def test_provision_reinitializes_engine_and_settings(
-        self, mock_psycopg2, mock_migrations, mock_reinit, mock_write
+        self, mock_psycopg2, mock_migrations, mock_reinit, mock_write, monkeypatch
     ):
         """provision_database() must update in-memory settings and reinitialize the engine."""
         from app.config import settings
@@ -1295,26 +1289,24 @@ class TestDatabaseService:
         mock_psycopg2.Error = Exception
         mock_psycopg2.sql = __import__("psycopg2").sql
 
-        original_url = settings.database_url
-        try:
-            result = provision_database(
-                host="provhost",
-                port=5434,
-                admin_username="postgres",
-                admin_password="adminpw",
-                app_database="newecube",
-                app_username="appuser",
-                app_password="apppw",
-            )
+        monkeypatch.setattr(settings, "database_url", settings.database_url)
 
-            expected_url = "postgresql://appuser:apppw@provhost:5434/newecube"
-            assert result == 4
-            assert settings.database_url == expected_url
-            mock_reinit.assert_called_once_with(
-                expected_url, settings.db_pool_size, settings.db_pool_max_overflow
-            )
-        finally:
-            settings.database_url = original_url
+        result = provision_database(
+            host="provhost",
+            port=5434,
+            admin_username="postgres",
+            admin_password="adminpw",
+            app_database="newecube",
+            app_username="appuser",
+            app_password="apppw",
+        )
+
+        expected_url = "postgresql://appuser:apppw@provhost:5434/newecube"
+        assert result == 4
+        assert settings.database_url == expected_url
+        mock_reinit.assert_called_once_with(
+            expected_url, settings.db_pool_size, settings.db_pool_max_overflow
+        )
 
     def test_get_current_revision_returns_none_when_database_missing(self):
         """pgcode 3D000 (database does not exist) → None, not 503."""
@@ -1407,7 +1399,7 @@ class TestDatabaseService:
 
     @patch("app.services.database_service._reinitialize_engine")
     @patch("app.services.database_service._run_migrations", return_value=4)
-    @patch("app.services.database_service._write_env_setting", side_effect=OSError("disk full"))
+    @patch("app.services.database_service._write_env_settings", side_effect=OSError("disk full"))
     @patch("app.services.database_service.psycopg2")
     def test_provision_env_write_failure_skips_engine(
         self, mock_psycopg2, mock_write, mock_migrations, mock_reinit
@@ -1432,7 +1424,7 @@ class TestDatabaseService:
 
         mock_reinit.assert_not_called()
 
-    @patch("app.services.database_service._write_env_setting")
+    @patch("app.services.database_service._write_env_settings")
     @patch("app.services.database_service._run_migrations", return_value=4)
     @patch("app.services.database_service._reinitialize_engine",
            side_effect=RuntimeError("lock contention"))

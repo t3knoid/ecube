@@ -138,17 +138,23 @@ if [[ "${BUILD_ONLY}" == true ]]; then
 fi
 
 echo "==> Creating dist/${ARTIFACT_NAME}.tar.gz"
+
+# Use a staging symlink so the archive root directory is portable across
+# GNU tar (--transform) and BSD tar (no --transform).
+staging_link="dist/${ARTIFACT_NAME}"
+ln -snf "${REPO_ROOT}" "${staging_link}"
+trap 'rm -f "${staging_link}"' EXIT
 tar -czf "dist/${ARTIFACT_NAME}.tar.gz" \
-  --transform "s|^|${ARTIFACT_NAME}/|" \
-  install.sh \
-  app \
-  alembic \
-  deploy \
-  pyproject.toml \
-  alembic.ini \
-  frontend/dist \
-  README.md \
-  LICENSE
+  -C dist \
+  "${ARTIFACT_NAME}/install.sh" \
+  "${ARTIFACT_NAME}/app" \
+  "${ARTIFACT_NAME}/alembic" \
+  "${ARTIFACT_NAME}/deploy" \
+  "${ARTIFACT_NAME}/pyproject.toml" \
+  "${ARTIFACT_NAME}/alembic.ini" \
+  "${ARTIFACT_NAME}/frontend/dist" \
+  "${ARTIFACT_NAME}/README.md" \
+  "${ARTIFACT_NAME}/LICENSE"
 
 echo "==> Generating dist/${ARTIFACT_NAME}.sha256"
 (

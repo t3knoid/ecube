@@ -1,11 +1,12 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getMounts, createMount, deleteMount, validateAllMounts, validateMount } from '@/api/mounts.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 
 const { t } = useI18n()
 
@@ -21,6 +22,16 @@ const removeTarget = ref(null)
 const page = ref(1)
 const pageSize = ref(10)
 const search = ref('')
+
+/** Mount ID currently being browsed (null = none open). */
+const browsingMountId = ref(null)
+
+/** The currently-browsed mount object (computed from browsingMountId). */
+const activeBrowsedMount = computed(() =>
+  browsingMountId.value !== null
+    ? mounts.value.find((m) => m.id === browsingMountId.value) || null
+    : null
+)
 
 const form = ref({
   type: 'SMB',
@@ -139,6 +150,9 @@ async function runRemove() {
   error.value = ''
   try {
     await deleteMount(removeTarget.value.id)
+    if (browsingMountId.value === removeTarget.value.id) {
+      browsingMountId.value = null
+    }
     removeTarget.value = null
     showRemoveDialog.value = false
     await loadMounts()
@@ -146,6 +160,16 @@ async function runRemove() {
     error.value = t('common.errors.requestConflict')
   } finally {
     saving.value = false
+  }
+}
+
+const browsePanelRef = ref(null)
+
+async function toggleBrowse(mountId) {
+  browsingMountId.value = browsingMountId.value === mountId ? null : mountId
+  if (browsingMountId.value !== null) {
+    await nextTick()
+    browsePanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }
 }
 
@@ -166,7 +190,7 @@ onMounted(loadMounts)
     <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
     <p v-if="error" class="error-banner">{{ error }}</p>
 
-    <input v-model="search" type="text" :placeholder="t('mounts.searchPlaceholder')" />
+    <input v-model="search" type="text" :placeholder="t('mounts.searchPlaceholder')" :aria-label="t('mounts.searchPlaceholder')" />
 
     <DataTable :columns="columns" :rows="paged" :empty-text="t('mounts.empty')">
       <template #cell-status="{ row }"><StatusBadge :status="row.status" /></template>
@@ -174,10 +198,35 @@ onMounted(loadMounts)
       <template #cell-actions="{ row }">
         <div class="row-actions">
           <button class="btn" @click="runValidateOne(row.id)">{{ t('mounts.test') }}</button>
+          <button
+            class="btn"
+            :disabled="row.status !== 'MOUNTED' || !row.local_mount_point"
+            :title="row.status !== 'MOUNTED' || !row.local_mount_point ? t('mounts.browseUnavailable') : ''"
+            :aria-expanded="browsingMountId === row.id"
+            :aria-label="row.local_mount_point ? t('mounts.browse') + ' ' + row.local_mount_point : t('mounts.browse')"
+            @click="toggleBrowse(row.id)"
+          >
+            {{ t('mounts.browse') }}
+          </button>
           <button class="btn btn-danger" @click="removeTarget = row; showRemoveDialog = true">{{ t('mounts.remove') }}</button>
         </div>
       </template>
     </DataTable>
+
+    <!-- Inline directory browser panels (one per browsed mount) -->
+    <section
+      v-if="activeBrowsedMount"
+      ref="browsePanelRef"
+      class="browse-panel"
+      :aria-label="t('browse.browseMountContents') + ': ' + activeBrowsedMount.local_mount_point"
+    >
+      <h3 class="browse-panel-title">
+        {{ t('browse.browseMountContents') }}: {{ activeBrowsedMount.local_mount_point }}
+      </h3>
+      <DirectoryBrowser
+        :mount-path="activeBrowsedMount.local_mount_point"
+      />
+    </section>
 
     <Pagination v-model:page="page" :page-size="pageSize" :total="filtered.length" />
 
