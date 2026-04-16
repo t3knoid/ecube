@@ -1,11 +1,11 @@
-"""Tests for the SPA fallback and strip_api_prefix middleware (app/main.py)."""
+"""Tests for the SPA fallback and strip_api_prefix middleware (app/spa.py)."""
 
 import pathlib
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
-from starlette.responses import FileResponse
+
+from app.spa import add_strip_api_prefix_middleware, mount_spa_frontend
 
 
 # ---------------------------------------------------------------------------
@@ -39,24 +39,7 @@ def _make_test_app():
     """Build a minimal app with strip_api_prefix to test path rewriting."""
     test_app = FastAPI()
 
-    @test_app.middleware("http")
-    async def strip_api_prefix(request: Request, call_next):
-        path = request.scope["path"]
-        raw_path = request.scope.get("raw_path")
-
-        if path.startswith("/api/"):
-            request.scope["_original_path"] = path
-            request.scope["path"] = path[4:]
-            if raw_path is not None:
-                if raw_path.startswith(b"/api/"):
-                    request.scope["raw_path"] = raw_path[4:]
-                else:
-                    request.scope.pop("raw_path", None)
-        elif path == "/api":
-            request.scope["_original_path"] = path
-            request.scope["path"] = "/"
-            request.scope["raw_path"] = b"/"
-        return await call_next(request)
+    add_strip_api_prefix_middleware(test_app)
 
     @test_app.get("/echo")
     async def echo(request: Request):
@@ -143,12 +126,7 @@ class TestStripApiPrefixMiddleware:
 # ---------------------------------------------------------------------------
 
 def _make_spa_app(frontend_dir: pathlib.Path):
-    """Build a minimal app with the same SPA fallback logic as app/main.py.
-
-    Mirrors the ``if settings.serve_frontend_path:`` block so we can test
-    static-file serving, index.html fallback, and path-traversal rejection
-    without needing to set the global config at import time.
-    """
+    """Build a minimal app with the production SPA fallback from app.spa."""
     spa_app = FastAPI()
 
     # A dummy API route to confirm API paths still take priority.
@@ -156,28 +134,7 @@ def _make_spa_app(frontend_dir: pathlib.Path):
     def health():
         return {"status": "ok"}
 
-    _assets_dir = frontend_dir / "assets"
-    if _assets_dir.is_dir():
-        spa_app.mount(
-            "/assets",
-            StaticFiles(directory=str(_assets_dir)),
-            name="frontend-assets",
-        )
-
-    _frontend_root_resolved = frontend_dir.resolve()
-    _index_html = frontend_dir / "index.html"
-
-    @spa_app.get("/{full_path:path}", include_in_schema=False)
-    async def _spa_fallback(request: Request, full_path: str):
-        original_path = request.scope.get("_original_path", "")
-        if full_path.startswith(("api/", "api-")) or original_path.startswith("/api"):
-            raise HTTPException(status_code=404, detail="Not Found")
-        if ".." in pathlib.PurePosixPath(full_path).parts:
-            return FileResponse(str(_index_html))
-        file_path = (frontend_dir / full_path).resolve()
-        if full_path and file_path.is_relative_to(_frontend_root_resolved) and file_path.is_file():
-            return FileResponse(str(file_path))
-        return FileResponse(str(_index_html))
+    mount_spa_frontend(spa_app, frontend_dir)
 
     return spa_app
 
@@ -192,24 +149,7 @@ def _make_spa_app_with_strip(frontend_dir: pathlib.Path):
     """
     app = _make_spa_app(frontend_dir)
 
-    @app.middleware("http")
-    async def strip_api_prefix(request: Request, call_next):
-        path = request.scope["path"]
-        raw_path = request.scope.get("raw_path")
-
-        if path.startswith("/api/"):
-            request.scope["_original_path"] = path
-            request.scope["path"] = path[4:]
-            if raw_path is not None:
-                if raw_path.startswith(b"/api/"):
-                    request.scope["raw_path"] = raw_path[4:]
-                else:
-                    request.scope.pop("raw_path", None)
-        elif path == "/api":
-            request.scope["_original_path"] = path
-            request.scope["path"] = "/"
-            request.scope["raw_path"] = b"/"
-        return await call_next(request)
+    add_strip_api_prefix_middleware(app)
 
     return app
 
