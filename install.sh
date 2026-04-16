@@ -1370,7 +1370,7 @@ _write_env_file() {
 
 SECRET_KEY=${secret_key}
 DATABASE_URL=
-SETUP_DEFAULT_ADMIN_USERNAME=ecubeadmin
+SETUP_DEFAULT_ADMIN_USERNAME=
 
 # Set to true if a reverse proxy sits in front of uvicorn.
 TRUST_PROXY_HEADERS=false

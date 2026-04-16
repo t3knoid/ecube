@@ -37,11 +37,11 @@ class Settings(BaseSettings):
     setup_docker_db_host: str = "postgres"
 
     #: PostgreSQL admin username suggested to the setup wizard for the
-    #: database provisioning step.  Falls back to :attr:`pg_superuser_name`
-    #: when this field is not configured.  The installer can persist this in ``.env``
+    #: database provisioning step.  The installer persists this in ``.env``
     #: (``SETUP_DEFAULT_ADMIN_USERNAME=...``) to keep UI defaults aligned
-    #: with the superuser it created.
-    setup_default_admin_username: str = "ecubeadmin"
+    #: with the superuser it created.  Left empty by default so the wizard
+    #: falls back through the cascade (PG_SUPERUSER_NAME → POSTGRES_USER).
+    setup_default_admin_username: str = ""
     
     #: Target platform for infrastructure implementations.  Factory functions
     #: in ``app.infrastructure`` use this to select concrete Protocol
