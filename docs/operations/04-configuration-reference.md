@@ -295,6 +295,7 @@ Operational notes:
 | Variable                    | Default                            | Description |
 | --------------------------- | ---------------------------------- | ----------- |
 | `BROWSE_ALLOWED_PREFIXES`   | `["/mnt/ecube/", "/nfs/", "/smb/"]` | JSON array of filesystem path prefixes permitted as browse roots. Only paths whose `realpath` starts with one of these prefixes are served by `GET /browse`. Override via environment variable to match the actual mount hierarchy on your deployment. |
+| `BROWSE_MAX_DIR_ENTRIES`    | `50000`                            | Maximum number of entries a directory may contain before the browse endpoint rejects the request with HTTP 400. Prevents denial-of-service from directories with hundreds of thousands of files. Set to `0` to disable the limit. |
 
 ---
 
