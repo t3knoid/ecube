@@ -151,15 +151,32 @@ def _find_mount_point(
 ) -> Optional[str]:
     """Return the mount point for *device_path* or any of its partitions.
 
+    Both *device_path* and mount-map keys are resolved via
+    ``os.path.realpath`` so that symlinked device paths (e.g.
+    ``/dev/disk/by-uuid/…``) are matched correctly.
+
     Checks the exact path first (e.g. ``/dev/sdb``), then any partition
     variant (``/dev/sdb1``, ``/dev/sdb2``, …).  Returns ``None`` when no
     match is found.
     """
-    if device_path in mount_map:
-        return mount_map[device_path]
-    # Check partitions like /dev/sdb1, /dev/sdb2, …
-    base = os.path.basename(device_path)  # e.g. "sdb"
+    try:
+        real_device = os.path.realpath(device_path)
+    except (OSError, ValueError):
+        real_device = device_path
+
+    # Build a realpath-keyed view so symlinked /proc/mounts entries match.
+    real_map: dict[str, str] = {}
     for dev, mnt in mount_map.items():
+        try:
+            real_map[os.path.realpath(dev)] = mnt
+        except (OSError, ValueError):
+            real_map[dev] = mnt
+
+    if real_device in real_map:
+        return real_map[real_device]
+    # Check partitions like /dev/sdb1, /dev/sdb2, …
+    base = os.path.basename(real_device)  # e.g. "sdb"
+    for dev, mnt in real_map.items():
         dev_base = os.path.basename(dev)
         if dev_base.startswith(base) and len(dev_base) > len(base):
             return mnt
