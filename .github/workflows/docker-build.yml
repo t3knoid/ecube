@@ -230,9 +230,14 @@ jobs:
           docker push "${{ env.APP_IMAGE }}:${{ needs.build-and-smoke-test.outputs.tag }}"
           docker push "${{ env.APP_IMAGE }}:latest"
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - name: Generate production docker-compose
         run: |
-          pip install --quiet pyyaml
+          python3 -m pip install --quiet pyyaml
           mkdir -p dist
           TAG="${{ needs.build-and-smoke-test.outputs.tag }}"
           IMAGE="${{ env.APP_IMAGE }}:${TAG}"
