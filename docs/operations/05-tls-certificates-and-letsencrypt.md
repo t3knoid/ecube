@@ -70,7 +70,7 @@ Use only for non-production or temporary bootstrap.
 
 ### Docker
 
-The Docker image includes a baked-in self-signed certificate (`/opt/ecube/certs/key.pem` and `cert.pem`) generated at build time. No manual steps are required — `docker compose up` works out of the box with HTTPS.
+On first start, if no certificate files exist at `/opt/ecube/certs/key.pem` and `cert.pem`, the container automatically generates a self-signed certificate and logs a warning. No manual steps are required — `docker compose up` works out of the box with HTTPS.
 
 To use your own certificate, place `key.pem` and `cert.pem` in a host directory, set `ECUBE_CERTS_DIR` in `.env`, and uncomment the certs volume line in `docker-compose.ecube.yml`.
 
