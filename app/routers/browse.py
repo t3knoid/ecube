@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
 from app.schemas.browse import BrowseResponse
-from app.schemas.errors import R_400, R_401, R_403, R_422, R_500
+from app.schemas.errors import R_400, R_401, R_403, R_404, R_422, R_500
 from app.services import browse_service
 from app.utils.client_ip import get_client_ip
 from app.utils.sanitize import StrictSafeStr
@@ -38,7 +38,7 @@ _DEFAULT_PAGE_SIZE = 100
 @router.get(
     "",
     response_model=BrowseResponse,
-    responses={**R_400, **R_401, **R_403, **R_422, **R_500},
+    responses={**R_400, **R_401, **R_403, **R_404, **R_422, **R_500},
 )
 def browse_directory(
     request: Request,
