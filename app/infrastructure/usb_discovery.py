@@ -9,6 +9,7 @@ without requiring physical hardware.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from typing import List, Optional, Protocol
 
@@ -174,11 +175,16 @@ def _find_mount_point(
 
     if real_device in real_map:
         return real_map[real_device]
-    # Check partitions like /dev/sdb1, /dev/sdb2, …
+    # Check partitions — match only valid partition suffixes:
+    #   sdX  → sdX1, sdX2, …       (SCSI/SATA/USB)
+    #   nvmeNnM → nvmeNnMp1, …     (NVMe)
+    #   mmcblkN → mmcblkNp1, …     (MMC/SD)
     base = os.path.basename(real_device)  # e.g. "sdb"
+    partition_re = re.compile(
+        r"^" + re.escape(base) + r"(?:p?\d+)$"
+    )
     for dev, mnt in real_map.items():
-        dev_base = os.path.basename(dev)
-        if dev_base.startswith(base) and len(dev_base) > len(base):
+        if partition_re.match(os.path.basename(dev)):
             return mnt
     return None
 
