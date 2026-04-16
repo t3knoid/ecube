@@ -232,13 +232,30 @@ jobs:
 
       - name: Generate production docker-compose
         run: |
+          pip install --quiet pyyaml
           mkdir -p dist
           TAG="${{ needs.build-and-smoke-test.outputs.tag }}"
-          # Start from the dev compose file, strip the build: block, and
-          # replace the local image tag with the registry image reference.
-          sed -e '/^    build:/,/^    image:/{ /^    image:/!d }' \
-              -e "s|image: ecube-app|image: ${{ env.APP_IMAGE }}:${TAG}|" \
-              docker-compose.ecube.yml > dist/docker-compose.yml
+          IMAGE="${{ env.APP_IMAGE }}:${TAG}"
+          # YAML-aware transform: drop the build: key and rewrite image: to
+          # the registry reference.  Safer than sed range-deletes which break
+          # when indentation or key ordering changes.
+          python3 -c "
+          import sys, yaml
+
+          with open('docker-compose.ecube.yml') as f:
+              doc = yaml.safe_load(f)
+
+          svc = doc.get('services', {}).get('ecube-app')
+          if svc is None:
+              print('ERROR: ecube-app service not found in compose file', file=sys.stderr)
+              sys.exit(1)
+
+          svc.pop('build', None)
+          svc['image'] = '${IMAGE}'
+
+          with open('dist/docker-compose.yml', 'w') as f:
+              yaml.dump(doc, f, default_flow_style=False, sort_keys=False)
+          "
 
       - name: Upload production docker-compose to GitHub Release
         uses: softprops/action-gh-release@v2
