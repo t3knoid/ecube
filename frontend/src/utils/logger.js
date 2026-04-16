@@ -6,6 +6,7 @@ function _formatMessage(message) {
 
 export const logger = {
   debug(message, context = undefined) {
+    if (!import.meta.env.DEV) return
     if (context === undefined) {
       console.debug(_formatMessage(message))
       return
