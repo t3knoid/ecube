@@ -578,8 +578,9 @@ def _write_env_settings(updates: Dict[str, str]) -> None:
     recovery artefact; if it crashes *during* the copy-back the file
     may be incomplete — the temp file still holds the full content.
 
-    In both paths the file's permission bits are clamped to ``0o600``
-    and original ownership is restored when possible.
+    In both paths the file's permission bits are set to ``0o600``
+    (owner read+write only) and original ownership is restored when
+    possible.
     """
     if not updates:
         return
@@ -619,9 +620,11 @@ def _write_env_settings(updates: Dict[str, str]) -> None:
         existing_uid = None
         existing_gid = None
 
-    # Enforce a ceiling of 0o600 so group/world-readable .env files
-    # (e.g. an accidental 0644) never keep credentials exposed.
-    safe_mode = existing_mode & 0o600
+    # Always set owner read+write and strip group/world bits.
+    # A dynamic mask (``existing_mode & 0o600``) could yield 0o400 or
+    # 0o200 if the original was read-only or write-only, blocking future
+    # .env updates (e.g. the setup wizard writing DATABASE_URL).
+    safe_mode = 0o600
 
     # --- write new content to a temp file (both paths need this) ----------
     fd, tmp_path = tempfile.mkstemp(dir=dir_name, prefix=".env.", suffix=".tmp")
