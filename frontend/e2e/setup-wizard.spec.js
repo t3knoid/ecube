@@ -6,8 +6,8 @@ test('setup wizard full step flow on uninitialized system', async ({ page }) => 
   const setupMocks = [
     ['**/api/setup/status', { initialized: false }],
     ['**/setup/status', { initialized: false }],
-    ['**/api/setup/database/system-info', { in_docker: false, suggested_db_host: 'localhost' }],
-    ['**/setup/database/system-info', { in_docker: false, suggested_db_host: 'localhost' }],
+    ['**/api/setup/database/system-info', { in_docker: false, suggested_db_host: 'localhost', suggested_admin_username: 'postgres' }],
+    ['**/setup/database/system-info', { in_docker: false, suggested_db_host: 'localhost', suggested_admin_username: 'postgres' }],
     ['**/api/setup/database/provision-status', { provisioned: false }],
     ['**/setup/database/provision-status', { provisioned: false }],
     ['**/api/setup/database/test-connection', { ok: true }],
@@ -25,6 +25,7 @@ test('setup wizard full step flow on uninitialized system', async ({ page }) => 
 
   await page.goto('/setup')
 
+  await page.getByLabel('DB Admin User').fill('postgres')
   await page.getByLabel('DB Admin Password').fill('testpassword')
   await page.getByRole('button', { name: /connect to database|test database connection/i }).click()
   await expect(page.getByText('Database connection succeeded.')).toBeVisible()
