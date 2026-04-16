@@ -69,9 +69,28 @@ PY
 # PG_SUPERUSER fallback: when compose passes empty PG_SUPERUSER_NAME/PASS,
 # fall back to POSTGRES_USER / POSTGRES_PASSWORD so the setup wizard has
 # working defaults without requiring nested variable expansion in compose.
+#
+# The pair is treated as all-or-nothing: only fall back to POSTGRES_* when
+# BOTH are empty.  If exactly one is set, emit an error — mixing a custom
+# username with the default password (or vice-versa) causes confusing
+# setup-wizard failures.
 # ---------------------------------------------------------------------------
-export PG_SUPERUSER_NAME="${PG_SUPERUSER_NAME:-${POSTGRES_USER:-}}"
-export PG_SUPERUSER_PASS="${PG_SUPERUSER_PASS:-${POSTGRES_PASSWORD:-}}"
+if [ -n "${PG_SUPERUSER_NAME:-}" ] && [ -z "${PG_SUPERUSER_PASS:-}" ]; then
+  echo "[entrypoint] ERROR: PG_SUPERUSER_NAME is set but PG_SUPERUSER_PASS is empty." >&2
+  echo "             Set both PG_SUPERUSER_NAME and PG_SUPERUSER_PASS, or leave both unset" >&2
+  echo "             to fall back to POSTGRES_USER / POSTGRES_PASSWORD." >&2
+  exit 1
+fi
+if [ -z "${PG_SUPERUSER_NAME:-}" ] && [ -n "${PG_SUPERUSER_PASS:-}" ]; then
+  echo "[entrypoint] ERROR: PG_SUPERUSER_PASS is set but PG_SUPERUSER_NAME is empty." >&2
+  echo "             Set both PG_SUPERUSER_NAME and PG_SUPERUSER_PASS, or leave both unset" >&2
+  echo "             to fall back to POSTGRES_USER / POSTGRES_PASSWORD." >&2
+  exit 1
+fi
+if [ -z "${PG_SUPERUSER_NAME:-}" ] && [ -z "${PG_SUPERUSER_PASS:-}" ]; then
+  export PG_SUPERUSER_NAME="${POSTGRES_USER:-}"
+  export PG_SUPERUSER_PASS="${POSTGRES_PASSWORD:-}"
+fi
 
 if [ -z "${DATABASE_URL:-}" ]; then
   echo "[entrypoint] DATABASE_URL not configured — starting in setup wizard mode"
