@@ -158,6 +158,7 @@ def _stat_entry(dir_entry: os.DirEntry) -> Optional[BrowseEntry]:
     try:
         entry_stat = dir_entry.stat(follow_symlinks=False)
     except OSError:
+        logger.debug("stat failed for %s (entry may have been removed)", dir_entry.name)
         return None
 
     mode = entry_stat.st_mode
