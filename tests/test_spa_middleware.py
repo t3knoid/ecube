@@ -293,8 +293,8 @@ class TestSpaFrontendServing:
 
     # -- Path traversal rejection ------------------------------------------
 
-    def test_traversal_dot_dot_returns_index_html(self, tmp_path):
-        """../ traversal must NOT escape the dist root.
+    def test_traversal_dot_dot_returns_400(self, tmp_path):
+        """../ traversal must return 400 and NOT escape the dist root.
 
         httpx normalises ``/../secret.txt`` to ``/secret.txt`` before it
         reaches the ASGI app, so we inject the un-normalised path directly
@@ -313,21 +313,20 @@ class TestSpaFrontendServing:
 
         client = TestClient(inject_traversal)
         resp = client.get("/../secret.txt")
-        assert resp.status_code == 200
+        assert resp.status_code == 400
         assert "LEAKED" not in resp.text
-        assert "SPA" in resp.text
 
-    def test_encoded_traversal_returns_index_html(self, tmp_path):
-        """Percent-encoded traversal (..%2F) must not escape the dist root."""
+    def test_encoded_traversal_returns_400(self, tmp_path):
+        """Percent-encoded traversal (..%2F) must return 400, not escape the dist root."""
         dist = self._build_dist(tmp_path)
         (tmp_path / "secret.txt").write_text("LEAKED")
         client = TestClient(_make_spa_app(dist))
         resp = client.get("/..%2Fsecret.txt")
-        assert resp.status_code == 200
+        assert resp.status_code == 400
         assert "LEAKED" not in resp.text
 
-    def test_deep_traversal_returns_index_html(self, tmp_path):
-        """Multiple ../ levels must still be contained.
+    def test_deep_traversal_returns_400(self, tmp_path):
+        """Multiple ../ levels must return 400 and remain contained.
 
         httpx normalises the deep traversal before it reaches the ASGI app,
         so we inject the raw path directly into the scope.  The path does
@@ -346,6 +345,5 @@ class TestSpaFrontendServing:
 
         client = TestClient(inject_traversal)
         resp = client.get(traversal)
-        assert resp.status_code == 200
-        # Should get index.html, not /etc/passwd content
-        assert "SPA" in resp.text
+        assert resp.status_code == 400
+        assert "passwd" not in resp.text
