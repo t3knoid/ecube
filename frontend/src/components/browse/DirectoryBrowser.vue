@@ -151,10 +151,16 @@ function onRowArrowKey(event) {
       <button class="crumb-btn" @click="navigateToCrumb(-1)">{{ mountPath }}</button>
       <template v-for="(crumb, index) in breadcrumbs" :key="index">
         <span class="crumb-sep" aria-hidden="true">/</span>
+        <span
+          v-if="index === breadcrumbs.length - 1"
+          class="crumb-btn crumb-current"
+          aria-current="page"
+        >
+          {{ crumb }}
+        </span>
         <button
+          v-else
           class="crumb-btn"
-          :class="{ 'crumb-current': index === breadcrumbs.length - 1 }"
-          :aria-current="index === breadcrumbs.length - 1 ? 'page' : undefined"
           @click="navigateToCrumb(index)"
         >
           {{ crumb }}
@@ -163,11 +169,14 @@ function onRowArrowKey(event) {
     </nav>
 
     <!-- Status messages -->
-    <p v-if="loading" class="status-msg muted">{{ t('common.labels.loading') }}</p>
-    <p v-else-if="error" class="status-msg error-banner">{{ error }}</p>
+    <div aria-live="polite">
+      <p v-if="loading" class="status-msg muted">{{ t('common.labels.loading') }}</p>
+      <p v-else-if="error" class="status-msg error-banner" role="alert">{{ error }}</p>
+    </div>
 
     <!-- Directory table -->
-    <table v-if="!loading && !error" class="dir-table" :aria-label="t('browse.tableLabel')">
+    <div v-if="!loading && !error" class="dir-table-scroll">
+    <table class="dir-table" :aria-label="t('browse.tableLabel')">
       <thead>
         <tr>
           <th class="col-name"
@@ -248,6 +257,7 @@ function onRowArrowKey(event) {
         </tr>
       </tbody>
     </table>
+    </div>
 
     <!-- Pagination -->
     <Pagination v-if="total > pageSize" v-model:page="page" :page-size="pageSize" :total="total" />
@@ -298,12 +308,14 @@ function onRowArrowKey(event) {
 }
 
 /* Table */
+.dir-table-scroll {
+  overflow-x: auto;
+}
+
 .dir-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.875rem;
-  overflow-x: auto;
-  display: block;
 }
 
 .dir-table th {
@@ -389,7 +401,6 @@ function onRowArrowKey(event) {
 }
 
 .dir-row--navigable {
-  cursor: pointer;
 }
 
 .dir-row--navigable:hover td {
