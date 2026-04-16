@@ -133,13 +133,13 @@ function isNavigable(entry) {
 }
 
 function onRowArrowKey(event) {
-  const rows = Array.from(event.currentTarget.closest('tbody').querySelectorAll('tr[tabindex]'))
-  const idx = rows.indexOf(event.currentTarget)
+  const buttons = Array.from(event.currentTarget.closest('tbody').querySelectorAll('.entry-nav-btn'))
+  const idx = buttons.indexOf(event.currentTarget)
   if (idx < 0) return
   const next = event.key === 'ArrowDown' ? idx + 1 : idx - 1
-  if (next >= 0 && next < rows.length) {
+  if (next >= 0 && next < buttons.length) {
     event.preventDefault()
-    rows[next].focus()
+    buttons[next].focus()
   }
 }
 </script>
@@ -228,12 +228,6 @@ function onRowArrowKey(event) {
           v-for="entry in sortedEntries"
           :key="entry.name"
           :class="['dir-row', { 'dir-row--navigable': isNavigable(entry) }]"
-          :role="isNavigable(entry) ? 'button' : undefined"
-          :tabindex="isNavigable(entry) ? 0 : undefined"
-          @click="isNavigable(entry) && navigateInto(entry.name)"
-          @keydown.enter="isNavigable(entry) && navigateInto(entry.name)"
-          @keydown.arrow-down="isNavigable(entry) && onRowArrowKey($event)"
-          @keydown.arrow-up="isNavigable(entry) && onRowArrowKey($event)"
         >
           <td class="col-name">
             <span class="entry-icon" aria-hidden="true">
@@ -243,6 +237,8 @@ function onRowArrowKey(event) {
               v-if="isNavigable(entry)"
               class="entry-nav-btn"
               @click="navigateInto(entry.name)"
+              @keydown.arrow-down="onRowArrowKey($event)"
+              @keydown.arrow-up="onRowArrowKey($event)"
             >{{ entry.name }}</button>
             <span v-else>{{ entry.name }}</span>
           </td>
