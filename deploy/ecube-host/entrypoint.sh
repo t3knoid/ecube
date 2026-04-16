@@ -99,7 +99,8 @@ if [ "$1" = "uvicorn" ]; then
       openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
         -keyout "${TLS_KEYFILE}" \
         -out    "${TLS_CERTFILE}" \
-        -subj   "/CN=localhost" 2>/dev/null
+        -subj   "/CN=localhost" \
+        -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" 2>/dev/null
       chmod 600 "${TLS_KEYFILE}"
       chmod 644 "${TLS_CERTFILE}"
       echo "[entrypoint] WARNING: Using auto-generated self-signed certificate." \
