@@ -143,6 +143,7 @@ echo "==> Creating dist/${ARTIFACT_NAME}.tar.gz"
 # GNU tar (--transform) and BSD tar (no --transform).
 staging_link="dist/${ARTIFACT_NAME}"
 ln -snf "${REPO_ROOT}" "${staging_link}"
+trap 'rm -f "${staging_link}"' EXIT
 tar -czf "dist/${ARTIFACT_NAME}.tar.gz" \
   -C dist \
   "${ARTIFACT_NAME}/install.sh" \
@@ -154,7 +155,6 @@ tar -czf "dist/${ARTIFACT_NAME}.tar.gz" \
   "${ARTIFACT_NAME}/frontend/dist" \
   "${ARTIFACT_NAME}/README.md" \
   "${ARTIFACT_NAME}/LICENSE"
-rm -f "${staging_link}"
 
 echo "==> Generating dist/${ARTIFACT_NAME}.sha256"
 (
