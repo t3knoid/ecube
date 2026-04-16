@@ -312,6 +312,11 @@ class Settings(BaseSettings):
         default=["/mnt/ecube/", "/nfs/", "/smb/"]
     )
 
+    #: Maximum number of entries a single directory may contain before the
+    #: browse endpoint rejects the request with 400.  Prevents DoS from
+    #: directories with hundreds of thousands of files.  Set to 0 to disable.
+    browse_max_dir_entries: int = Field(default=50_000, ge=0)
+
     # ---------------------------------------------------------------------------
     # Audit log pagination
     # ---------------------------------------------------------------------------

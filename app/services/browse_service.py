@@ -143,22 +143,20 @@ def _resolve_and_validate(
     return real_root, real_target
 
 
-def _stat_entry(dir_entry: os.DirEntry) -> Optional[BrowseEntry]:
-    """Build a :class:`BrowseEntry` from an :class:`os.DirEntry`.
+def _stat_entry(parent: str, name: str) -> Optional[BrowseEntry]:
+    """Build a :class:`BrowseEntry` by ``lstat``-ing *name* inside *parent*.
 
-    Accepts an ``os.DirEntry`` so the caller can sort by name before
-    stat'ing only the page slice.  Note: ``DirEntry.stat()`` still
-    performs a real ``lstat`` syscall on the first call (it is **not**
-    served from the ``scandir`` d_type cache); however, the result is
-    cached on the ``DirEntry`` for any subsequent ``.stat()`` calls.
+    Only the page-slice entries are stat'd; the caller collects lightweight
+    name strings via :func:`os.listdir`, sorts them, and passes in only
+    the names for the requested page.
 
     Returns ``None`` when the entry cannot be stat'd (e.g. race condition
-    where the file was removed between ``scandir`` and ``stat``).
+    where the file was removed between ``listdir`` and ``lstat``).
     """
     try:
-        entry_stat = dir_entry.stat(follow_symlinks=False)
+        entry_stat = os.lstat(os.path.join(parent, name))
     except OSError:
-        logger.debug("stat failed for %s (entry may have been removed)", dir_entry.name)
+        logger.debug("stat failed for %s (entry may have been removed)", name)
         return None
 
     mode = entry_stat.st_mode
@@ -175,7 +173,7 @@ def _stat_entry(dir_entry: os.DirEntry) -> Optional[BrowseEntry]:
     modified_at = datetime.fromtimestamp(entry_stat.st_mtime, tz=timezone.utc)
 
     return BrowseEntry(
-        name=dir_entry.name,
+        name=name,
         type=entry_type,
         size_bytes=size_bytes,
         modified_at=modified_at,
@@ -237,12 +235,12 @@ def list_directory(
         #         containment (anti-traversal) and allowlist (defence-in-depth).
         real_root, real_target = _resolve_and_validate(db_mount_root, subdir)
 
-        # 4. List directory -- use os.scandir() to collect DirEntry objects,
-        #    sort by name, then stat only the requested page.  This avoids
-        #    stat'ing entries outside the page window.
+        # 4. List directory -- os.listdir() returns only name strings (no
+        #    stat, no file-descriptor overhead), so sorting + slicing is
+        #    O(n log n) on lightweight strings.  Only the page slice is
+        #    then stat'd, keeping per-request I/O proportional to page_size.
         try:
-            with os.scandir(real_target) as it:  # noqa: S605 -- path validated above
-                dir_entries = sorted(it, key=lambda e: e.name)
+            all_names = sorted(os.listdir(real_target))
         except FileNotFoundError:
             raise HTTPException(
                 status_code=404,
@@ -265,13 +263,26 @@ def list_directory(
                 detail="Failed to list the directory due to a filesystem error.",
             )
 
-        total = len(dir_entries)
+        total = len(all_names)
+
+        # Guard against extremely large directories that could become a DoS
+        # vector.  The cap is configurable via BROWSE_MAX_DIR_ENTRIES.
+        max_entries = settings.browse_max_dir_entries
+        if max_entries and total > max_entries:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Directory contains {total} entries which exceeds the "
+                    f"configured limit of {max_entries}. Use a more specific subdir."
+                ),
+            )
+
         start = (page - 1) * page_size
-        page_slice = dir_entries[start : start + page_size]
+        page_names = all_names[start : start + page_size]
 
         entries = []
-        for de in page_slice:
-            entry = _stat_entry(de)  # noqa: S605 -- path validated above
+        for name in page_names:
+            entry = _stat_entry(real_target, name)
             if entry is not None:
                 entries.append(entry)
 
