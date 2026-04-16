@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# ECUBE Bare-Metal Installer
-# Installs the ECUBE backend service and/or the frontend (nginx) on Debian/Ubuntu.
+# ECUBE Native Installer
+# Installs the ECUBE service (API + frontend) on Debian/Ubuntu.
 #
 # Usage:
 #   sudo ./install.sh [OPTIONS]
@@ -63,7 +63,6 @@ _on_error() {
 INSTALL_DIR="/opt/ecube"
 API_PORT="8443"
 _EXPLICIT_API_PORT=false   # set when --api-port is passed explicitly
-UI_PORT="443"
 HOSTNAME_OVERRIDE=""
 CERT_VALIDITY="730"
 YES=false
@@ -71,14 +70,8 @@ UNINSTALL=false
 DRY_RUN=false
 VERSION_TAG=""
 DROP_DATABASE=false
-
-INSTALL_BACKEND=true
-INSTALL_FRONTEND=true
-BACKEND_HOST="127.0.0.1"
-ALLOW_INSECURE_BACKEND=true
-_EXPLICIT_INSECURE=false   # set when --allow-insecure-backend is passed explicitly
-_EXPLICIT_SECURE=false    # set when --secure-backend is passed explicitly
-BACKEND_CA_FILE=""
+BACKEND_NO_TLS=false
+FIREWALL_CIDR=""
 
 # Credentials for the PostgreSQL superuser created during installation.
 # Populated by _provision_pg_superuser and printed in the post-install summary
@@ -98,28 +91,11 @@ usage() {
   cat <<EOF
 Usage: sudo ./install.sh [OPTIONS]
 
-Component selection (default: install both):
-  --backend-only         Install the backend service and systemd unit only
-  --frontend-only        Install nginx and the pre-built frontend only
-
 Options:
   --install-dir DIR      Root installation directory  (default: /opt/ecube)
-  --api-port PORT        HTTPS port for the backend   (default: 8443)
-  --ui-port PORT         HTTPS port for nginx         (default: 443)
-  --backend-host HOST    Hostname/IP of the backend   (default: 127.0.0.1)
-                         Set this when the backend is on a separate host.
-  --allow-insecure-backend
-                         Disable TLS certificate verification (proxy_ssl_verify
-                         off) when proxying to a remote backend. Default: on.
-                         A warning is printed when this is in effect.
-  --secure-backend       Enable TLS certificate verification against the system
-                         trust store (proxy_ssl_verify on). Use when the remote
-                         backend has a CA-signed cert trusted by the OS and you
-                         want strict verification without supplying a CA file.
-                         Mutually exclusive with --allow-insecure-backend.
-  --backend-ca-file FILE Path to a PEM CA certificate used to verify the remote
-                         backend's TLS certificate (proxy_ssl_trusted_certificate).
-                         Implies proxy_ssl_verify on. Ignored for loopback backends.
+  --api-port PORT        Port for the service          (default: 8443, or 80 with --no-tls)
+  --no-tls               Disable TLS entirely (plain HTTP, default port 80).
+                         WARNING: all traffic is unencrypted.
   --pg-superuser-name NAME
                          Name for the PostgreSQL superuser created during
                          installation (default: ecubeadmin). Skips the
@@ -131,6 +107,10 @@ Options:
   --hostname HOST        Hostname/IP for TLS cert CN  (default: \$(hostname -f))
   --cert-validity DAYS   Self-signed cert validity    (default: 730, max: 730 — 2 years)
   --yes, -y              Non-interactive / unattended mode
+  --firewall-cidr CIDR   Source CIDR to allow through ufw for the API port
+                         (e.g. 192.168.1.0/24).  In --yes mode, if this is not
+                         provided the firewall rule is SKIPPED (safe default).
+                         Use 'any' to explicitly open to all sources.
   --version TAG          Download and install a specific GitHub release tag.
                          Must be exact format: v<major>.<minor>.<patch> (e.g. v0.2.0).
                          Pre-releases, build metadata, and tags without a leading v
@@ -143,56 +123,49 @@ Options:
 EOF
 }
 
-_extract_database_url_from_env() {
-  local env_file="$1"
+# ---------------------------------------------------------------------------
+# _extract_env_value  ENV_FILE  VAR_NAME
+#
+# Reads the last occurrence of VAR_NAME=... from ENV_FILE, strips
+# leading/trailing whitespace and a single layer of matched surrounding
+# quotes (double or single).  Prints the cleaned value to stdout.
+# Returns 1 (with no output) when the file is missing, the variable is
+# absent, the value is empty, or it looks like an unfilled placeholder
+# (i.e. "<...>").
+# ---------------------------------------------------------------------------
+_extract_env_value() {
+  local env_file="$1" var_name="$2"
   [[ -f "${env_file}" ]] || return 1
 
-  local db_line
-  db_line="$(grep -E '^[[:space:]]*DATABASE_URL=' "${env_file}" 2>/dev/null | tail -1 || true)"
-  [[ -n "${db_line}" ]] || return 1
+  local _line
+  _line="$(grep -E "^[[:space:]]*${var_name}=" "${env_file}" 2>/dev/null | tail -1 || true)"
+  [[ -n "${_line}" ]] || return 1
 
-  local db_value="${db_line#*=}"
-  db_value="${db_value#"${db_value%%[![:space:]]*}"}"
-  db_value="${db_value%"${db_value##*[![:space:]]}"}"
-  if (( ${#db_value} >= 2 )); then
-    local _first_char="${db_value:0:1}"
-    local _last_char="${db_value: -1}"
-    if [[ "${_first_char}" == '"' && "${_last_char}" == '"' ]] ||
-       [[ "${_first_char}" == "'" && "${_last_char}" == "'" ]]; then
-      db_value="${db_value:1:${#db_value}-2}"
+  local _val="${_line#*=}"
+  # Trim leading/trailing whitespace.
+  _val="${_val#"${_val%%[![:space:]]*}"}"
+  _val="${_val%"${_val##*[![:space:]]}"}"
+  # Strip one layer of matched surrounding quotes.
+  if (( ${#_val} >= 2 )); then
+    local _fc="${_val:0:1}" _lc="${_val: -1}"
+    if [[ "${_fc}" == '"' && "${_lc}" == '"' ]] ||
+       [[ "${_fc}" == "'" && "${_lc}" == "'" ]]; then
+      _val="${_val:1:${#_val}-2}"
     fi
   fi
-  [[ -n "${db_value}" ]] || return 1
-  [[ "${db_value}" == "<"*">" ]] && return 1
+  [[ -n "${_val}" ]] || return 1
+  [[ "${_val}" == "<"*">" ]] && return 1
 
-  printf '%s' "${db_value}"
+  printf '%s' "${_val}"
   return 0
 }
 
+_extract_database_url_from_env() {
+  _extract_env_value "$1" "DATABASE_URL"
+}
+
 _extract_setup_admin_username_from_env() {
-  local env_file="$1"
-  [[ -f "${env_file}" ]] || return 1
-
-  local admin_line
-  admin_line="$(grep -E '^[[:space:]]*SETUP_DEFAULT_ADMIN_USERNAME=' "${env_file}" 2>/dev/null | tail -1 || true)"
-  [[ -n "${admin_line}" ]] || return 1
-
-  local admin_value="${admin_line#*=}"
-  admin_value="${admin_value#"${admin_value%%[![:space:]]*}"}"
-  admin_value="${admin_value%"${admin_value##*[![:space:]]}"}"
-  if (( ${#admin_value} >= 2 )); then
-    local _first_char="${admin_value:0:1}"
-    local _last_char="${admin_value: -1}"
-    if [[ "${_first_char}" == '"' && "${_last_char}" == '"' ]] ||
-       [[ "${_first_char}" == "'" && "${_last_char}" == "'" ]]; then
-      admin_value="${admin_value:1:${#admin_value}-2}"
-    fi
-  fi
-  [[ -n "${admin_value}" ]] || return 1
-  [[ "${admin_value}" == "<"*">" ]] && return 1
-
-  printf '%s' "${admin_value}"
-  return 0
+  _extract_env_value "$1" "SETUP_DEFAULT_ADMIN_USERNAME"
 }
 
 _cleanup_pg_superuser_role() {
@@ -420,6 +393,23 @@ _is_valid_port() {
   [[ "${val}" =~ ^[0-9]+$ && "${val}" -ge 1 && "${val}" -le 65535 ]]
 }
 
+# Pure predicate: returns 0 if val is a valid CIDR block, 1 otherwise.
+# Accepts IPv4 (e.g. 192.168.1.0/24, prefix 0-32) and IPv6
+# (e.g. 2001:db8::/32, prefix 0-128).  Intentionally rejects bare IPs
+# (no prefix length) since ufw requires the /prefix form.
+_is_valid_cidr() {
+  local val="$1"
+  # IPv4 CIDR
+  if [[ "${val}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/([0-9]|[12][0-9]|3[0-2])$ ]]; then
+    return 0
+  fi
+  # IPv6 CIDR — loose check: hex/colon chars followed by /0-128
+  if [[ "${val}" =~ ^[0-9A-Fa-f:]+/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$ ]]; then
+    return 0
+  fi
+  return 1
+}
+
 # Pure predicate: returns 0 if val is a valid PostgreSQL database name
 # (alphanumerics and underscores only, non-empty), 1 otherwise.
 _is_valid_db_name() {
@@ -440,23 +430,6 @@ _is_valid_db_user() {
 _is_valid_db_pass() {
   local val="$1"
   [[ -n "${val}" && ! "${val}" =~ [[:space:]] ]]
-}
-
-# Pure predicate: returns 0 if val is a valid CIDR block, 1 otherwise.
-# Accepts IPv4 (e.g. 192.168.1.0/24, prefix 0-32) and IPv6
-# (e.g. 2001:db8::/32, prefix 0-128).  Intentionally rejects bare IPs
-# (no prefix length) since ufw requires the /prefix form.
-_is_valid_cidr() {
-  local val="$1"
-  # IPv4 CIDR
-  if [[ "${val}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/([0-9]|[12][0-9]|3[0-2])$ ]]; then
-    return 0
-  fi
-  # IPv6 CIDR — loose check: hex/colon chars followed by /0-128
-  if [[ "${val}" =~ ^[0-9A-Fa-f:]+/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$ ]]; then
-    return 0
-  fi
-  return 1
 }
 
 # Full RFC 3986 percent-encoder: encodes every character outside the unreserved
@@ -514,25 +487,6 @@ _url_host() {
   fi
 }
 
-# Pure predicate: returns 0 if val is a loopback address, 1 otherwise.
-# Matches the full 127.0.0.0/8 range, the DNS name "localhost" (case-insensitive),
-# the IPv6 loopback "::1", and the bracketed form "[::1]".
-# Used by the post-parse normalisation step to canonicalise --backend-host so that
-# every downstream same-host comparison (BACKEND_HOST == "127.0.0.1") is reliable.
-_is_loopback() {
-  local val="${1}"
-  # Strip surrounding brackets from IPv6 literals ([::1] → ::1).
-  val="${val#[}"
-  val="${val%]}"
-  # IPv4 loopback: entire 127.0.0.0/8 range.
-  [[ "${val}" =~ ^127\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && return 0
-  # DNS loopback name (case-insensitive).
-  [[ "${val,,}" == "localhost" ]] && return 0
-  # IPv6 loopback.
-  [[ "${val}" == "::1" ]] && return 0
-  return 1
-}
-
 # Pure predicate: returns 0 if val is an IPv4 or IPv6 address literal, 1 if it
 # is a DNS name.  Surrounding brackets on IPv6 (e.g. [::1]) are stripped before
 # the test.  Used by cert generation to decide whether to emit an IP SAN or a
@@ -580,38 +534,6 @@ _require_arg() {
   fi
 }
 
-# Validate a file-path argument intended for use inside an nginx config directive.
-# Requires an absolute path and rejects any character that could break a directive
-# (whitespace, newlines, semicolons, braces, quotes, backslashes, pipes, null bytes,
-# '#' which starts an nginx comment and would silently truncate the directive,
-# and '$' which nginx treats as a variable-expansion sigil).
-# Also verifies the file exists and is readable so the installer fails fast with
-# a clear message rather than letting nginx -t produce a cryptic error later.
-_validate_ca_file_arg() {
-  local flag="$1" val="$2"
-  if [[ "${val}" != /* ]]; then
-    echo "ERROR: ${flag} must be an absolute path (starting with /)." >&2
-    exit 1
-  fi
-  if [[ "${val}" =~ [[:space:]\;\{\}\'\"\\|\#\$] ]]; then
-    echo "ERROR: ${flag} path contains characters not allowed in an nginx config directive (whitespace, ;, {}, quotes, backslash, |, # or \$)." >&2
-    exit 1
-  fi
-  if [[ ! -f "${val}" ]]; then
-    echo "ERROR: ${flag} '${val}' does not exist or is not a regular file." >&2
-    exit 1
-  fi
-  if [[ ! -r "${val}" ]]; then
-    echo "ERROR: ${flag} '${val}' exists but is not readable by the current user." >&2
-    exit 1
-  fi
-}
-
-# Validate a directory path intended for use inside nginx configs and systemd
-# unit files.  Restricts to the safe allowlist [A-Za-z0-9_./-] so characters
-# that break config parsing (;, {}, #, quotes, backslashes, whitespace, etc.)
-# are rejected at argument-parse time.  Also blocks / and common system roots
-# so the installer cannot accidentally clobber critical paths.
 _validate_install_dir_arg() {
   local flag="$1" val="$2"
   if [[ "${val}" != /* ]]; then
@@ -637,18 +559,7 @@ _validate_install_dir_arg() {
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --backend-only)   INSTALL_FRONTEND=false; shift ;;
-    --frontend-only)  INSTALL_BACKEND=false;  shift ;;
-    --backend-host)
-      _require_arg "$1" "${2-}"
-      _validate_host_arg "--backend-host" "$2"
-      BACKEND_HOST="$2"; shift 2 ;;
-    --allow-insecure-backend)  ALLOW_INSECURE_BACKEND=true;  _EXPLICIT_INSECURE=true; shift ;;
-    --secure-backend)          ALLOW_INSECURE_BACKEND=false; _EXPLICIT_SECURE=true;  shift ;;
-    --backend-ca-file)
-      _require_arg "$1" "${2-}"
-      _validate_ca_file_arg "$1" "$2"
-      BACKEND_CA_FILE="$2"; shift 2 ;;
+    --no-tls)         BACKEND_NO_TLS=true; shift ;;
     --pg-superuser-name)
       _require_arg "$1" "${2-}"
       if ! _is_valid_db_user "$2"; then
@@ -669,10 +580,6 @@ while [[ $# -gt 0 ]]; do
       _require_arg "$1" "${2-}"
       _validate_port_arg "$1" "$2"
       API_PORT="$2"; _EXPLICIT_API_PORT=true; shift 2 ;;
-    --ui-port)
-      _require_arg "$1" "${2-}"
-      _validate_port_arg "$1" "$2"
-      UI_PORT="$2"; shift 2 ;;
     --hostname)
       _require_arg "$1" "${2-}"
       _validate_host_arg "--hostname" "$2"
@@ -684,6 +591,9 @@ while [[ $# -gt 0 ]]; do
       fi
       CERT_VALIDITY="$2"; shift 2 ;;
     --yes|-y)         YES=true;  shift ;;
+    --firewall-cidr)
+      _require_arg "$1" "${2-}"
+      FIREWALL_CIDR="$2"; shift 2 ;;
     --version)
       _require_arg "$1" "${2-}"
       if [[ ! "$2" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -700,30 +610,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ---------------------------------------------------------------------------
-# Post-parse: reject conflicting TLS backend flag combinations
+# Post-parse: --no-tls port defaults
 # ---------------------------------------------------------------------------
-if [[ "${_EXPLICIT_INSECURE}" == true && "${_EXPLICIT_SECURE}" == true ]]; then
-  error "--allow-insecure-backend and --secure-backend are mutually exclusive."
-  exit 1
-fi
-if [[ "${_EXPLICIT_INSECURE}" == true && -n "${BACKEND_CA_FILE}" ]]; then
-  error "--allow-insecure-backend and --backend-ca-file are mutually exclusive: supplying a CA file implies verification should be enabled."
-  exit 1
+if [[ "${BACKEND_NO_TLS}" == true ]]; then
+  [[ "${_EXPLICIT_API_PORT}" == false ]] && API_PORT="80"
 fi
 # ---------------------------------------------------------------------------
-# Post-parse: canonicalise loopback variants of --backend-host to 127.0.0.1
-# ---------------------------------------------------------------------------
-# localhost, ::1, [::1], and the full 127.0.0.0/8 range are all equivalent to
-# 127.0.0.1 for same-host detection.  Normalising here means every downstream
-# comparison ([[ "${BACKEND_HOST}" == "127.0.0.1" ]]) works uniformly without
-# needing to enumerate loopback variants at each call site.
-if _is_loopback "${BACKEND_HOST}"; then
-  if [[ "${BACKEND_HOST}" != "127.0.0.1" ]]; then
-    warn "--backend-host '${BACKEND_HOST}' is a loopback address; treating as same-host (127.0.0.1)."
-  fi
-  BACKEND_HOST="127.0.0.1"
-fi
-# ---------------------------------------------------------------------------
+
 run() {
   if [[ "${DRY_RUN}" == true ]]; then
     echo -e "${C_YELLOW}[DRY-RUN]${C_RESET} $*"
@@ -829,9 +722,6 @@ preflight() {
 
   # Required commands
   local required_cmds=("curl" "openssl" "systemctl")
-  if [[ "${INSTALL_FRONTEND}" == true ]]; then
-    required_cmds+=("nginx")
-  fi
   # VERSION_TAG triggers _maybe_download_release, which unconditionally uses
   # mktemp, sha256sum, tar, and awk.  Catch missing tools here rather than
   # mid-run with a cryptic trap failure.
@@ -840,12 +730,8 @@ preflight() {
   fi
   for cmd in "${required_cmds[@]}"; do
     if ! command -v "${cmd}" &>/dev/null; then
-      if [[ "${cmd}" == "nginx" ]]; then
-        info "nginx not found; it will be installed via apt."
-      else
-        error "Required command not found: ${cmd}"
-        exit 1
-      fi
+      error "Required command not found: ${cmd}"
+      exit 1
     else
       ok "Command found: ${cmd}"
     fi
@@ -858,9 +744,8 @@ preflight() {
     ok "Command found: ip"
   fi
 
-  # Python 3.11 — only needed for backend installs
-  if [[ "${INSTALL_BACKEND}" == true ]]; then
-    # Privilege-drop tool: runuser (preferred) or sudo
+  # Python 3.11
+  # Privilege-drop tool: runuser (preferred) or sudo
     if ! command -v runuser &>/dev/null && ! command -v sudo &>/dev/null; then
       error "Neither 'runuser' nor 'sudo' was found. One of these is required to"
       error "run the Python venv/pip steps as the 'ecube' user."
@@ -952,15 +837,9 @@ preflight() {
         fi
       fi
     fi
-  fi
 
   # Port availability
-  if [[ "${INSTALL_BACKEND}" == true ]]; then
-    _check_port "${API_PORT}" "API"
-  fi
-  if [[ "${INSTALL_FRONTEND}" == true ]]; then
-    _check_port "${UI_PORT}" "UI"
-  fi
+  _check_port "${API_PORT}" "API"
 
   ok "Pre-flight checks passed"
 }
@@ -989,11 +868,11 @@ _check_port() {
 _resolve_host() {
   HOST="${HOSTNAME_OVERRIDE:-$(hostname -f 2>/dev/null || hostname)}"
 
-  # Validate HOST before it is embedded in an OpenSSL -subj field or an nginx
-  # server_name directive.  --hostname is already validated at parse time, so
+  # Validate HOST before it is embedded in an OpenSSL -subj field.
+  # --hostname is already validated at parse time, so
   # this guard primarily catches unsafe values returned by `hostname -f`.
   if ! _is_valid_host "${HOST}"; then
-    warn "Resolved hostname '${HOST}' contains characters unsafe for OpenSSL/nginx — falling back to 'localhost'."
+    warn "Resolved hostname '${HOST}' contains characters unsafe for OpenSSL — falling back to 'localhost'."
     HOST="localhost"
   fi
 
@@ -1021,29 +900,14 @@ _reconcile_cert_permissions() {
   local cert_dir="$1"
 
   if [[ "${DRY_RUN}" == true ]]; then
-    if [[ "${INSTALL_FRONTEND:-false}" == true ]]; then
-      echo "[DRY-RUN] Would set ${cert_dir}/key.pem mode 600 owner root:root (nginx TLS terminator)"
-      echo "[DRY-RUN] Would set ${cert_dir}/cert.pem mode 644 owner ecube:ecube"
-    else
-      echo "[DRY-RUN] Would set ${cert_dir}/key.pem mode 600 owner ecube:ecube (backend TLS terminator)"
-      echo "[DRY-RUN] Would set ${cert_dir}/cert.pem mode 644 owner ecube:ecube"
-    fi
+    echo "[DRY-RUN] Would set ${cert_dir}/key.pem mode 600 owner ecube:ecube"
+    echo "[DRY-RUN] Would set ${cert_dir}/cert.pem mode 644 owner ecube:ecube"
     return
   fi
 
   chmod 600 "${cert_dir}/key.pem"
   chmod 644 "${cert_dir}/cert.pem"
-
-  # Keep ownership aligned with the selected runtime topology so re-running the
-  # installer with different component flags remains safe and idempotent.
-  if [[ "${INSTALL_FRONTEND:-false}" == true ]]; then
-    # nginx terminates TLS: key stays root-owned; cert can be ecube-owned.
-    chown root:root "${cert_dir}/key.pem"
-    chown ecube:ecube "${cert_dir}/cert.pem"
-  else
-    # backend-only: uvicorn terminates TLS and must read both files as ecube.
-    chown ecube:ecube "${cert_dir}/key.pem" "${cert_dir}/cert.pem"
-  fi
+  chown ecube:ecube "${cert_dir}/key.pem" "${cert_dir}/cert.pem"
 }
 
 _generate_certs() {
@@ -1089,8 +953,6 @@ _generate_certs() {
 
 # ===========================================================================
 # ENSURE ECUBE SYSTEM USER 
-# Called by both install_backend and install_frontend so that chown operations
-# succeed regardless of which component is being installed.
 # ===========================================================================
 _ensure_ecube_user() {
   if ! id -u ecube &>/dev/null; then
@@ -1316,38 +1178,21 @@ _provision_pg_superuser() {
     fi
   fi
 
-  # Superuser name — use command-line value if provided, otherwise prompt.
+  # Superuser name — cascade: CLI flag → POSTGRES_USER → "ecube"
+  # (mirrors Docker Compose: PG_SUPERUSER_NAME:-${POSTGRES_USER:-ecube})
   local su_name="${PG_SUPERUSER_NAME}"
   if [[ -z "${su_name}" ]]; then
-    while ! _is_valid_db_user "${su_name}"; do
-      if [[ -n "${su_name}" ]]; then
-        error "Username must be non-empty and contain only alphanumerics and underscores."
-      fi
-      read -r -p "$(echo -e "${C_YELLOW}PostgreSQL superuser name to create [ecubeadmin]:${C_RESET} ")" su_name
-      su_name="${su_name:-ecubeadmin}"
-    done
+    su_name="${POSTGRES_USER:-ecube}"
+    info "Defaulting PostgreSQL superuser name to '${su_name}'"
   else
     info "Using --pg-superuser-name: ${su_name}"
   fi
 
-  # Superuser password — use command-line value if provided, otherwise prompt.
+  # Superuser password — cascade: CLI flag → POSTGRES_PASSWORD → "ecube"
   local su_pass="${PG_SUPERUSER_PASS}"
   if [[ -z "${su_pass}" ]]; then
-    local su_pass2="x"
-    while true; do
-      read -r -s -p "$(echo -e "${C_YELLOW}Password for '${su_name}':${C_RESET} ")" su_pass; echo
-      if ! _is_valid_db_pass "${su_pass}"; then
-        error "Password must be non-empty and contain no whitespace."
-        su_pass=""
-        continue
-      fi
-      read -r -s -p "$(echo -e "${C_YELLOW}Confirm password:${C_RESET} ")" su_pass2; echo
-      if [[ "${su_pass}" != "${su_pass2}" ]]; then
-        error "Passwords do not match. Try again."
-        continue
-      fi
-      break
-    done
+    su_pass="${POSTGRES_PASSWORD:-ecube}"
+    info "Defaulting PostgreSQL superuser password from POSTGRES_PASSWORD"
   else
     info "Using --pg-superuser-pass: <provided>"
   fi
@@ -1391,6 +1236,21 @@ _provision_pg_superuser() {
     else
       printf '\nSETUP_DEFAULT_ADMIN_USERNAME=%s\n' "${su_name}" >> "${env_file}"
     fi
+
+    # Write PG_SUPERUSER_NAME and PG_SUPERUSER_PASS so the setup wizard can
+    # auto-fill them — same behaviour as Docker Compose.  The wizard clears
+    # both values from .env after successful provisioning.
+    if grep -qE '^PG_SUPERUSER_NAME=' "${env_file}"; then
+      sed -i "s|^PG_SUPERUSER_NAME=.*|PG_SUPERUSER_NAME=${su_name}|" "${env_file}"
+    else
+      printf 'PG_SUPERUSER_NAME=%s\n' "${su_name}" >> "${env_file}"
+    fi
+    if grep -qE '^PG_SUPERUSER_PASS=' "${env_file}"; then
+      sed -i "s|^PG_SUPERUSER_PASS=.*|PG_SUPERUSER_PASS=${su_pass}|" "${env_file}"
+    else
+      printf 'PG_SUPERUSER_PASS=%s\n' "${su_pass}" >> "${env_file}"
+    fi
+
     chown ecube:ecube "${env_file}" 2>/dev/null || true
     chmod 600 "${env_file}" 2>/dev/null || true
   fi
@@ -1411,6 +1271,7 @@ install_backend() {
   # Install the dedicated PAM config so both local and domain users can authenticate.
   _install_pam_config
 
+  # 2. Add ecube to required system groups
   # 'shadow' membership allows PAM local password checks to work on hardened
   # hosts where unix_chkpwd helper privilege transitions are restricted.
   for grp in plugdev dialout shadow; do
@@ -1458,54 +1319,35 @@ install_backend() {
   ok "Python environment ready at ${venv_dir}"
 
   # 6. TLS certificates
-  _generate_certs
+  if [[ "${BACKEND_NO_TLS}" == true ]]; then
+    info "--no-tls: skipping TLS certificate generation."
+  else
+    _generate_certs
+  fi
 
   # 7. .env file
   _write_env_file
 
-  # 8. Systemd unit
+  # 8. Deploy the pre-built frontend bundle so FastAPI can serve the SPA.
+  #    Must run before the service starts because the SPA fallback route is
+  #    registered at import time — if the www/ directory does not exist when
+  #    uvicorn loads the app, the route is never created.
+  _deploy_frontend
+
+  # 9. Systemd unit
   _write_systemd_unit
 
-  # 9. Reload and start
+  # 10. Reload and start
   run systemctl daemon-reload
   run systemctl enable ecube.service
   run systemctl restart ecube.service
   ok "ecube.service started and enabled"
 
-  # 10. Health check
+  # 11. Health check
   _wait_for_healthy
 
-  # 11. Create a PostgreSQL superuser for use in the setup wizard.
+  # 12. Create a PostgreSQL superuser for use in the setup wizard.
   _provision_pg_superuser
-}
-
-_patch_env_proxy_keys() {
-  # Idempotently set/update proxy-related keys in an existing .env without
-  # touching secrets (SECRET_KEY, DATABASE_URL, etc.).
-  local env_file="${1}"
-  local trust_val="${2}"   # "true" or "false"
-  local root_path="${3}"   # "/api" or ""
-
-  if [[ "${DRY_RUN}" == true ]]; then
-    echo "[DRY-RUN] Would patch ${env_file}: TRUST_PROXY_HEADERS=${trust_val}, API_ROOT_PATH=${root_path}"
-    return
-  fi
-
-  # sed -i: replace existing key if present, then add if still absent.
-  for key_val in "TRUST_PROXY_HEADERS=${trust_val}" "API_ROOT_PATH=${root_path}"; do
-    local key="${key_val%%=*}"
-    local val="${key_val#*=}"
-    if grep -q "^${key}=" "${env_file}" 2>/dev/null; then
-      # Update in-place (GNU sed; escape val for sed replacement string)
-      local escaped_val
-      escaped_val=$(printf '%s\n' "${val}" | sed 's/[\/&]/\\&/g')
-      sed -i "s|^${key}=.*|${key}=${escaped_val}|" "${env_file}"
-    else
-      # Append
-      printf '\n%s=%s\n' "${key}" "${val}" >> "${env_file}"
-    fi
-  done
-  ok ".env proxy keys patched (TRUST_PROXY_HEADERS=${trust_val}, API_ROOT_PATH=${root_path})"
 }
 
 _write_env_file() {
@@ -1513,16 +1355,69 @@ _write_env_file() {
   if [[ -f "${env_file}" ]]; then
     info ".env already exists — preserving operator secrets."
     info "DATABASE_URL is managed by the setup wizard and is not modified by install.sh."
-    # Preserve existing proxy-related keys (TRUST_PROXY_HEADERS, API_ROOT_PATH)
-    # in an existing .env so operator-provided settings are not silently
-    # overwritten on upgrade or installer re-runs.
-    # Exception: when the frontend is being installed (co-install or upgrade
-    # from backend-only), ensure the proxy keys are present and correct so
-    # uvicorn trusts nginx's forwarded headers.  _patch_env_proxy_keys is
-    # idempotent — it only writes each key if it is absent or needs updating.
-    if [[ "${INSTALL_FRONTEND}" == true ]]; then
-      _patch_env_proxy_keys "${env_file}" "true" "/api"
+
+    # Idempotently add or populate SERVE_FRONTEND_PATH so that upgrades from
+    # a previous version (or a copied .env.example) enable frontend serving.
+    if ! grep -Eq '^[[:space:]]*SERVE_FRONTEND_PATH=' "${env_file}"; then
+      info "Adding missing SERVE_FRONTEND_PATH to existing .env..."
+      if [[ "${DRY_RUN}" != true ]]; then
+        printf '\n# Path to the pre-built frontend served by FastAPI (standalone mode).\nSERVE_FRONTEND_PATH=%s/www\n' "${INSTALL_DIR}" >> "${env_file}"
+      fi
+      ok "SERVE_FRONTEND_PATH added to .env"
+    elif ! _extract_env_value "${env_file}" "SERVE_FRONTEND_PATH" >/dev/null 2>&1; then
+      # Key exists but value is empty or commented — fill it in.
+      info "SERVE_FRONTEND_PATH is empty in .env — setting to ${INSTALL_DIR}/www..."
+      if [[ "${DRY_RUN}" != true ]]; then
+        sed -i "s|^\([[:space:]]*SERVE_FRONTEND_PATH=\).*|\1${INSTALL_DIR}/www|" "${env_file}"
+      fi
+      ok "SERVE_FRONTEND_PATH updated in .env"
     fi
+
+    if ! grep -Eq '^[[:space:]]*TRUST_PROXY_HEADERS=' "${env_file}"; then
+      info "Adding missing TRUST_PROXY_HEADERS to existing .env..."
+      if [[ "${DRY_RUN}" != true ]]; then
+        printf '\n# Set to true if a reverse proxy sits in front of uvicorn.\nTRUST_PROXY_HEADERS=false\n' >> "${env_file}"
+      fi
+      ok "TRUST_PROXY_HEADERS added to .env"
+    fi
+
+    # --- Standalone-topology safety: normalise proxy-era settings ----------
+    #
+    # Previous installations behind nginx may have TRUST_PROXY_HEADERS=true
+    # and/or API_ROOT_PATH=/api.  In the new standalone topology the service
+    # is exposed directly, so:
+    #   • TRUST_PROXY_HEADERS=true  → enables client-IP spoofing via
+    #     X-Forwarded-For / X-Real-IP.
+    #   • A stale API_ROOT_PATH     → breaks OpenAPI/Swagger URLs.
+    #
+    # Reset both to safe defaults and warn loudly so the operator can opt back
+    # in if they deliberately run behind a reverse proxy.
+
+    if grep -Eq '^[[:space:]]*TRUST_PROXY_HEADERS=[[:space:]]*true' "${env_file}"; then
+      warn "TRUST_PROXY_HEADERS is set to 'true' in .env."
+      warn "The standalone topology exposes uvicorn directly — trusting proxy"
+      warn "headers allows client-IP spoofing.  Resetting to 'false'."
+      warn "If you run behind a reverse proxy, set TRUST_PROXY_HEADERS=true"
+      warn "in ${env_file} after installation."
+      if [[ "${DRY_RUN}" != true ]]; then
+        sed -i 's/^[[:space:]]*TRUST_PROXY_HEADERS=.*/TRUST_PROXY_HEADERS=false/' "${env_file}"
+      fi
+      ok "TRUST_PROXY_HEADERS reset to false"
+    fi
+
+    local _old_root_path
+    if _old_root_path="$(_extract_env_value "${env_file}" "API_ROOT_PATH")"; then
+      warn "API_ROOT_PATH is set to '${_old_root_path}' in .env."
+      warn "The standalone topology serves the API at the root — a stale"
+      warn "API_ROOT_PATH can break OpenAPI/Swagger URLs.  Clearing it."
+      warn "If you run behind a reverse proxy with a path prefix, restore"
+      warn "API_ROOT_PATH in ${env_file} after installation."
+      if [[ "${DRY_RUN}" != true ]]; then
+        sed -i 's/^[[:space:]]*API_ROOT_PATH=.*/API_ROOT_PATH=/' "${env_file}"
+      fi
+      ok "API_ROOT_PATH cleared"
+    fi
+
     return
   fi
   info "Writing .env file..."
@@ -1531,15 +1426,6 @@ _write_env_file() {
     secret_key="<random-hex-32>"
   else
     secret_key="$(openssl rand -hex 32)"
-  fi
-
-  local trust_proxy="false"
-  local api_root_path=""
-  if [[ "${INSTALL_FRONTEND}" == true ]]; then
-    trust_proxy="true"
-    # When nginx fronts uvicorn, set API_ROOT_PATH so FastAPI knows its
-    # mount prefix for Swagger UI and the OpenAPI servers list.
-    api_root_path="/api"
   fi
 
   if [[ "${DRY_RUN}" != true ]]; then
@@ -1551,29 +1437,32 @@ SECRET_KEY=${secret_key}
 DATABASE_URL=
 SETUP_DEFAULT_ADMIN_USERNAME=ecubeadmin
 
-# Set to true if a reverse proxy (nginx) sits in front of uvicorn.
-TRUST_PROXY_HEADERS=${trust_proxy}
+# Set to true if a reverse proxy sits in front of uvicorn.
+TRUST_PROXY_HEADERS=false
 
-# Mount prefix used by nginx to proxy /api/* to the backend.
-# Affects Swagger UI and OpenAPI schema server URL.
-API_ROOT_PATH=${api_root_path}
+# Path to the pre-built frontend served by FastAPI (standalone mode).
+SERVE_FRONTEND_PATH=${INSTALL_DIR}/www
 EOF
     chmod 600 "${env_file}"
     chown ecube:ecube "${env_file}"
   else
-    echo "[DRY-RUN] Would write ${env_file} with SECRET_KEY, DATABASE_URL=<set later by setup wizard>, TRUST_PROXY_HEADERS=${trust_proxy}, API_ROOT_PATH=${api_root_path}"
+    echo "[DRY-RUN] Would write ${env_file} with SECRET_KEY, DATABASE_URL=<set later by setup wizard>, SERVE_FRONTEND_PATH=${INSTALL_DIR}/www"
   fi
   ok ".env written"
 }
 
 _write_systemd_unit() {
   info "Writing systemd unit /etc/systemd/system/ecube.service..."
-  local bind_host="127.0.0.1"
-  [[ "${INSTALL_FRONTEND}" == false ]] && bind_host="0.0.0.0"
+
+  # Ports below 1024 require CAP_NET_BIND_SERVICE for non-root users.
+  local cap_section=""
+  if [[ "${API_PORT}" -lt 1024 ]]; then
+    cap_section=$'\nAmbientCapabilities=CAP_NET_BIND_SERVICE'
+  fi
 
   if [[ "${DRY_RUN}" != true ]]; then
-    if [[ "${INSTALL_FRONTEND}" == false ]]; then
-      # Backend-only: uvicorn terminates TLS itself; reachable directly from the network.
+    if [[ "${BACKEND_NO_TLS}" == true ]]; then
+      # Plain HTTP.
       cat > /etc/systemd/system/ecube.service <<EOF
 [Unit]
 Description=ECUBE Evidence Export Service
@@ -1587,14 +1476,12 @@ Group=ecube
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=-${INSTALL_DIR}/.env
 ExecStart=${INSTALL_DIR}/venv/bin/uvicorn \
-  --host ${bind_host} \
+  --host 0.0.0.0 \
   --port ${API_PORT} \
-  --ssl-keyfile=${INSTALL_DIR}/certs/key.pem \
-  --ssl-certfile=${INSTALL_DIR}/certs/cert.pem \
   app.main:app
 Restart=on-failure
 RestartSec=10
-PrivateTmp=yes
+PrivateTmp=yes${cap_section}
 # ECUBE setup endpoints use tightly scoped sudoers rules for OS user/group
 # management. NoNewPrivileges must be disabled so sudo can elevate.
 NoNewPrivileges=false
@@ -1603,7 +1490,7 @@ NoNewPrivileges=false
 WantedBy=multi-user.target
 EOF
     else
-      # nginx-fronted: uvicorn serves plain HTTP on loopback; TLS terminated at nginx.
+      # HTTPS — uvicorn terminates TLS.
       cat > /etc/systemd/system/ecube.service <<EOF
 [Unit]
 Description=ECUBE Evidence Export Service
@@ -1617,12 +1504,14 @@ Group=ecube
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=-${INSTALL_DIR}/.env
 ExecStart=${INSTALL_DIR}/venv/bin/uvicorn \
-  --host ${bind_host} \
+  --host 0.0.0.0 \
   --port ${API_PORT} \
+  --ssl-keyfile=${INSTALL_DIR}/certs/key.pem \
+  --ssl-certfile=${INSTALL_DIR}/certs/cert.pem \
   app.main:app
 Restart=on-failure
 RestartSec=10
-PrivateTmp=yes
+PrivateTmp=yes${cap_section}
 # ECUBE setup endpoints use tightly scoped sudoers rules for OS user/group
 # management. NoNewPrivileges must be disabled so sudo can elevate.
 NoNewPrivileges=false
@@ -1632,16 +1521,15 @@ WantedBy=multi-user.target
 EOF
     fi
   else
-    local proto; proto="$( [[ "${INSTALL_FRONTEND}" == false ]] && echo https || echo http)"
-    echo "[DRY-RUN] Would write /etc/systemd/system/ecube.service (bind=${proto}://${bind_host}:${API_PORT})"
+    local proto; proto="$( [[ "${BACKEND_NO_TLS}" == true ]] && echo http || echo https)"
+    echo "[DRY-RUN] Would write /etc/systemd/system/ecube.service (bind=${proto}://0.0.0.0:${API_PORT})"
   fi
   ok "Systemd unit written"
 }
 
 _wait_for_healthy() {
-  # When nginx fronts uvicorn, the backend serves plain HTTP on loopback.
   local scheme="https"
-  [[ "${INSTALL_FRONTEND}" == true ]] && scheme="http"
+  [[ "${BACKEND_NO_TLS}" == true ]] && scheme="http"
   if [[ "${DRY_RUN}" == true ]]; then
     echo "[DRY-RUN] Would poll ${scheme}://localhost:${API_PORT}/health for up to 30 s"
     return
@@ -1660,122 +1548,58 @@ _wait_for_healthy() {
 }
 
 # ===========================================================================
-# FRONTEND INSTALLATION
+# FRONTEND DEPLOYMENT
 # ===========================================================================
-install_frontend() {
-  header "\n── Frontend installation ───────────────────────────────────────"
+# Copies the pre-built frontend bundle into the directory that FastAPI serves
+# at runtime (SERVE_FRONTEND_PATH).  Reads the path from the existing .env so
+# that an operator-customised SERVE_FRONTEND_PATH is respected on upgrades;
+# falls back to ${INSTALL_DIR}/www for fresh installs.
+# ===========================================================================
+_deploy_frontend() {
+  header "\n── Frontend deployment ─────────────────────────────────────────"
 
-  # Ensure the ecube user exists so that chown operations succeed even in
-  # --frontend-only mode (i.e., when install_backend was not called).
-  _ensure_ecube_user
-
-  # When --version TAG is given and only the frontend is being installed,
-  # install_backend has not run so _maybe_download_release has not been called.
-  # Call it here to download/extract the release package (which includes
-  # frontend/dist) into ${INSTALL_DIR} before the dist lookup below.
-  if [[ -n "${VERSION_TAG}" && "${INSTALL_BACKEND}" == false ]]; then
-    run mkdir -p "${INSTALL_DIR}"
-    _maybe_download_release
-  fi
-
-  # When the frontend is added to an existing same-host backend-only install,
-  # reconfigure the backend for the nginx topology: bind to 127.0.0.1 and set
-  # TRUST_PROXY_HEADERS / API_ROOT_PATH in .env.
-  # Skip this when --backend-host points to a remote host (nothing to reconfigure locally).
+  local www_dir="${INSTALL_DIR}/www"
   local env_file="${INSTALL_DIR}/.env"
-  local unit_file="/etc/systemd/system/ecube.service"
-  if [[ "${INSTALL_BACKEND}" == false && "${BACKEND_HOST}" == "127.0.0.1" && -f "${unit_file}" ]]; then
-    info "Updating existing backend configuration for nginx frontend..."
-
-    # Detect the port the existing unit is already listening on.  Preserve it
-    # unless the operator explicitly passed --api-port, so a non-default port
-    # from the original backend-only install is not silently overwritten.
-    if [[ "${_EXPLICIT_API_PORT}" == false ]]; then
-      local _detected_port
-      _detected_port=$(grep -oP -- '--port\s+\K[0-9]+' "${unit_file}" 2>/dev/null | head -1 || true)
-      if [[ -n "${_detected_port}" && "${_detected_port}" != "${API_PORT}" ]]; then
-        if _is_valid_port "${_detected_port}"; then
-          info "Detected existing API port ${_detected_port} from unit file — using it (pass --api-port to override)."
-          API_PORT="${_detected_port}"
-        else
-          warn "Detected port '${_detected_port}' from unit file is not a valid port number (1–65535) — keeping ${API_PORT}."
-        fi
-      fi
-    fi
-
-    # Patch .env — add or overwrite TRUST_PROXY_HEADERS and API_ROOT_PATH.
-    if [[ -f "${env_file}" ]]; then
-      _patch_env_proxy_keys "${env_file}" "true" "/api"
-    else
-      warn ".env not found at ${env_file} — skipping env patch (service may not exist yet)."
-    fi
-
-    # Rewrite the systemd unit so uvicorn binds to 127.0.0.1 instead of 0.0.0.0.
-    # _write_systemd_unit reads INSTALL_FRONTEND which is already true here.
-    _write_systemd_unit
-    run systemctl daemon-reload
-    if systemctl is-active --quiet ecube.service 2>/dev/null; then
-      run systemctl restart ecube.service
-      ok "ecube.service restarted with updated bind address (127.0.0.1:${API_PORT})"
-    fi
+  local _env_val
+  if _env_val="$(_extract_env_value "${env_file}" "SERVE_FRONTEND_PATH")"; then
+    www_dir="${_env_val}"
+    info "Using SERVE_FRONTEND_PATH from .env: ${www_dir}"
   fi
 
-  # Guard: --frontend-only + default BACKEND_HOST (127.0.0.1) with no local backend.
-  # If the unit file does not exist and nothing is listening on the API port,
-  # the generated nginx config will proxy to a dead loopback address.  Fail fast
-  # so the operator is forced to supply --backend-host for a remote backend, or
-  # to install the backend first.
-  if [[ "${INSTALL_BACKEND}" == false && "${BACKEND_HOST}" == "127.0.0.1" && ! -f "${unit_file}" ]]; then
-    local _loopback_listening=false
-    local _probe_skipped=false
-    local _backend_host_bare="${BACKEND_HOST#[}"
-    _backend_host_bare="${_backend_host_bare%]}"
-    if command -v ss &>/dev/null; then
-      # Detect any TCP listener on API_PORT on any local address (127.0.0.1, 0.0.0.0, ::1, [::], etc.).
-      # Using ss's sport filter avoids relying on distribution-specific address formatting.
-      if ss -H -ltn "sport = :${API_PORT}" 2>/dev/null | grep -q .; then
-        _loopback_listening=true
-      fi
-    elif command -v nc &>/dev/null; then
-      # Fallback when iproute2/ss is unavailable: active TCP probe to loopback backend host.
-      if nc -z -w5 -- "${_backend_host_bare}" "${API_PORT}" 2>/dev/null; then
-        _loopback_listening=true
-      fi
-    elif command -v timeout &>/dev/null && timeout 5 bash -c "echo '' > /dev/tcp/${_backend_host_bare}/${API_PORT}" 2>/dev/null; then
-      # Last-resort fallback matching DB preflight behavior.
-      _loopback_listening=true
-    else
-      warn "Cannot verify local backend listener on ${BACKEND_HOST}:${API_PORT} (missing 'ss', 'nc', and usable /dev/tcp check) — skipping this guard."
-      _probe_skipped=true
-    fi
-    if [[ "${_loopback_listening}" == false && "${_probe_skipped}" == false && "${DRY_RUN}" != true ]]; then
-      error "--frontend-only was specified with the default --backend-host (127.0.0.1),"
-      error "but no local ecube.service unit was found and nothing is listening on"
-      error "127.0.0.1:${API_PORT}.  nginx would proxy to a dead address."
-      error ""
-      error "To fix this, choose one of:"
-      error "  1. Install the backend first:    sudo ./install.sh --backend-only ..."
-      error "  2. Specify the remote backend:   sudo ./install.sh --frontend-only --backend-host <host>"
+  # Validate www_dir before any destructive operations.  A misconfigured
+  # SERVE_FRONTEND_PATH (e.g. "/" or "/etc") would otherwise cause rm -rf
+  # to wipe critical system paths.
+  if [[ "${www_dir}" != /* ]]; then
+    error "SERVE_FRONTEND_PATH must be an absolute path (got '${www_dir}')."
+    exit 1
+  fi
+  local _www_canonical
+  _www_canonical="$(realpath -m "${www_dir}" 2>/dev/null || echo "${www_dir}")"
+  local _protected=("/" "/bin" "/boot" "/dev" "/etc" "/home" "/lib" "/lib64"
+                    "/media" "/mnt" "/opt" "/proc" "/root" "/run" "/sbin"
+                    "/srv" "/sys" "/tmp" "/usr" "/var")
+  local _p
+  for _p in "${_protected[@]}"; do
+    if [[ "${_www_canonical}" == "${_p}" ]]; then
+      error "SERVE_FRONTEND_PATH '${www_dir}' resolves to protected system path '${_p}' — refusing to deploy."
       exit 1
     fi
+  done
+
+  # Guard against deploying into INSTALL_DIR itself or a parent of it.
+  # Clearing such a path would destroy the app, venv, configs, etc.
+  local _install_canonical
+  _install_canonical="$(realpath -m "${INSTALL_DIR}" 2>/dev/null || echo "${INSTALL_DIR}")"
+  if [[ "${_www_canonical}" == "${_install_canonical}" ]]; then
+    error "SERVE_FRONTEND_PATH '${www_dir}' resolves to INSTALL_DIR '${INSTALL_DIR}' — refusing to deploy."
+    exit 1
+  fi
+  if [[ "${_install_canonical}" == "${_www_canonical}"/* ]]; then
+    error "SERVE_FRONTEND_PATH '${www_dir}' is a parent of INSTALL_DIR '${INSTALL_DIR}' — refusing to deploy."
+    exit 1
   fi
 
-
-  if ! command -v nginx &>/dev/null; then
-    info "Installing nginx..."
-    run apt-get update -qq
-    run apt-get install -y nginx
-    ok "nginx installed"
-  fi
-
-  # 2. Deploy pre-built frontend bundle
-  local www_dir="${INSTALL_DIR}/www"
   local dist_src=""
-  # Search order:
-  #   1. ${INSTALL_DIR}/frontend/dist  — populated by --version extraction or
-  #                                      when INSTALL_DIR == cwd (package dir)
-  #   2. $(pwd)/frontend/dist          — running from inside an extracted package
-  #   3. $(pwd)/dist                   — legacy / alternative layout
   for candidate in \
       "${INSTALL_DIR}/frontend/dist" \
       "$(pwd)/frontend/dist" \
@@ -1787,184 +1611,24 @@ install_frontend() {
   done
   if [[ -z "${dist_src}" ]]; then
     error "Pre-built frontend dist/ not found. Checked: ${INSTALL_DIR}/frontend/dist, $(pwd)/frontend/dist, $(pwd)/dist"
+    error "Build the frontend first: cd frontend && npm ci && npm run build"
     exit 1
   fi
   info "Using frontend bundle from ${dist_src}"
-  # Clear the web root before copying so upgrades never leave stale files behind.
-  run rm -rf "${www_dir:?}"
+
+  # Clear existing contents rather than removing the directory itself to
+  # reduce blast radius if www_dir is unexpectedly shared or bind-mounted.
   run mkdir -p "${www_dir}"
-  run cp -r "${dist_src}/." "${www_dir}/"
-  # Static files are read by nginx (www-data); root ownership with world-readable
-  # permissions is correct here — the ecube service account does not need access.
   if [[ "${DRY_RUN}" != true ]]; then
-    chown -R root:root "${www_dir}"
-    find "${www_dir}" -type d -exec chmod 755 {} +
-    find "${www_dir}" -type f -exec chmod 644 {} +
+    find "${www_dir}" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+  else
+    echo "[DRY-RUN] Would clear contents of ${www_dir}"
+  fi
+  run cp -r "${dist_src}/." "${www_dir}/"
+  if [[ "${DRY_RUN}" != true ]]; then
+    chown -R ecube:ecube "${www_dir}"
   fi
   ok "Frontend files deployed to ${www_dir}"
-
-  # ${INSTALL_DIR} is owned ecube:ecube with mode 750, so nginx (www-data) cannot
-  # traverse it to reach ${www_dir}.  Rather than granting world execute (o+x),
-  # which exposes all world-readable sub-paths under ${INSTALL_DIR} to every
-  # local user, create a small bridge group ecube-www containing only www-data
-  # and grant that group traverse-only access (--x, no read/listing).
-  #   ecube:ecube-www 710  → ecube owner keeps full rwx; ecube-www (=www-data)
-  #                          gets --x (path traversal only, no listing); others
-  #                          get nothing.
-  if [[ "${DRY_RUN}" != true ]]; then
-    if ! getent group ecube-www &>/dev/null; then
-      groupadd --system ecube-www
-      ok "Created system group 'ecube-www'"
-    else
-      info "Group 'ecube-www' already exists — skipping creation."
-    fi
-    # Add www-data to the bridge group so nginx can traverse ${INSTALL_DIR}.
-    usermod -aG ecube-www www-data
-    ok "Added www-data to group 'ecube-www'"
-    # Re-own and tighten ${INSTALL_DIR}: group becomes ecube-www, mode 710.
-    chown ecube:ecube-www "${INSTALL_DIR}"
-    chmod 710 "${INSTALL_DIR}"
-    ok "Set ${INSTALL_DIR} to ecube:ecube-www 710 (nginx traversal via group, no world execute)"
-  else
-    echo "[DRY-RUN] Would create group 'ecube-www', add www-data to it, and set ${INSTALL_DIR} to ecube:ecube-www 710"
-  fi
-
-  # 3. TLS certificates (shared with backend if co-installed, or generate fresh)
-  _generate_certs
-
-  # 4. nginx site config
-  info "Writing nginx site config /etc/nginx/sites-available/ecube..."
-  if [[ "${DRY_RUN}" != true ]]; then
-        # nginx server_name does not accept IPv6 literals (colons are invalid
-        # in that directive) and using an IP as server_name is fragile.  When
-        # HOST is any IP literal, emit "server_name _;" (catch-all) so nginx
-        # matches any request arriving on the bound port regardless of the
-        # Host header value — which is the correct behaviour for an IP-bound
-        # listener.  For DNS names, use the bare hostname (brackets stripped).
-        local _bare_host _server_name_directive
-        _bare_host="${HOST#[}"; _bare_host="${_bare_host%]}"
-        if _is_ip "${_bare_host}"; then
-          _server_name_directive="server_name _;"
-        else
-          _server_name_directive="server_name ${_bare_host};"
-        fi
-        cat > /etc/nginx/sites-available/ecube <<EOF_NGINX
-server {
-    listen ${UI_PORT} ssl;
-    listen [::]:${UI_PORT} ssl;
-
-    ${_server_name_directive}
-
-    ssl_certificate     ${INSTALL_DIR}/certs/cert.pem;
-    ssl_certificate_key ${INSTALL_DIR}/certs/key.pem;
-
-    root ${www_dir};
-    index index.html;
-
-    # Single-page application fallback
-    location / {
-        try_files \$uri \$uri/ /index.html;
-    }
-
-    # Proxy API requests to the backend.
-    # The trailing slash on proxy_pass strips the /api prefix so that
-    # requests to /api/drives, /api/health, etc. reach the backend at
-    # /drives, /health, etc. (FastAPI routes are at root level).
-    # The exact-match redirect ensures GET /api (no trailing slash) is
-    # normalised to /api/ rather than falling through to the SPA handler.
-    location = /api {
-        return 301 /api/;
-    }
-    location /api/ {
-EOF_NGINX
-  if [[ "${BACKEND_HOST}" == "127.0.0.1" ]]; then
-    # Same-host: uvicorn serves plain HTTP on loopback; TLS is terminated here.
-    local _bh_url
-    _bh_url=$(_url_host "${BACKEND_HOST}")
-    cat >> /etc/nginx/sites-available/ecube <<EOF_PROXY
-        proxy_pass http://${_bh_url}:${API_PORT}/;
-EOF_PROXY
-  else
-    # Remote backend: proxy over HTTPS.
-    local _bh_url _bh_bare
-    _bh_url=$(_url_host "${BACKEND_HOST}")
-    # proxy_ssl_name must be a bare hostname or IP — never a bracketed IPv6
-    # literal like [2001:db8::1], which would break SNI / cert verification.
-    # Strip surrounding brackets if present; all other values pass through.
-    _bh_bare="${BACKEND_HOST#[}"
-    _bh_bare="${_bh_bare%]}"
-    if [[ -n "${BACKEND_CA_FILE}" ]]; then
-      # Custom CA certificate supplied — verify against it.
-      # proxy_ssl_server_name on sends SNI in the TLS ClientHello so the backend
-      # can select the right certificate on virtual-host setups. proxy_ssl_name
-      # sets both the SNI value and the hostname used for CN/SAN verification;
-      # this is critical when proxy_pass targets an IP literal. verify_depth 2
-      # allows for one intermediate CA in the chain (nginx default is 1).
-      cat >> /etc/nginx/sites-available/ecube <<EOF_PROXY
-        proxy_pass https://${_bh_url}:${API_PORT}/;
-        proxy_ssl_verify          on;
-        proxy_ssl_trusted_certificate ${BACKEND_CA_FILE};
-        proxy_ssl_server_name     on;
-        proxy_ssl_name            ${_bh_bare};
-        proxy_ssl_verify_depth    2;
-EOF_PROXY
-    elif [[ "${ALLOW_INSECURE_BACKEND}" == true ]]; then
-      # Default fallback: TLS verification disabled for quick bring-up.
-      # SECURITY WARNING: proxy_ssl_verify is off. The backend certificate is
-      # not validated. Only acceptable on trusted networks (VPN, private subnet).
-      # To enable verification pass --backend-ca-file or ensure the backend cert
-      # is signed by a CA in the system trust store and remove this line.
-      warn "TLS verification is DISABLED for remote backend ${BACKEND_HOST}:${API_PORT} (proxy_ssl_verify off)."
-      warn "This is the default for quick start. Pass --backend-ca-file or use a CA-signed cert to enable verification."
-      cat >> /etc/nginx/sites-available/ecube <<EOF_PROXY
-        proxy_pass https://${_bh_url}:${API_PORT}/;
-        proxy_ssl_verify off; # default; see --backend-ca-file to enable verification
-EOF_PROXY
-    else
-      # Strict mode: verify using the system trust store.
-      # proxy_ssl_trusted_certificate must be set explicitly — without it nginx
-      # does not know which CA bundle to use and verification will not work as
-      # intended (nginx -t may also fail on some versions).  The Debian/Ubuntu
-      # system CA bundle is always at /etc/ssl/certs/ca-certificates.crt.
-      # See CA-file branch above for explanation of proxy_ssl_server_name,
-      # proxy_ssl_name, and proxy_ssl_verify_depth.
-      cat >> /etc/nginx/sites-available/ecube <<EOF_PROXY
-        proxy_pass https://${_bh_url}:${API_PORT}/;
-        proxy_ssl_verify                on;
-        proxy_ssl_trusted_certificate   /etc/ssl/certs/ca-certificates.crt;
-        proxy_ssl_server_name           on;
-        proxy_ssl_name                  ${_bh_bare};
-        proxy_ssl_verify_depth          2;
-EOF_PROXY
-    fi
-  fi
-  cat >> /etc/nginx/sites-available/ecube <<EOF_PROXY2
-        proxy_set_header Host \$host;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-}
-EOF_PROXY2
-  else
-    echo "[DRY-RUN] Would write /etc/nginx/sites-available/ecube (listen ${UI_PORT} → proxy to ${API_PORT})"
-  fi
-
-  # Enable site
-  run ln -sf /etc/nginx/sites-available/ecube /etc/nginx/sites-enabled/ecube
-
-  # 5. Remove default nginx site (avoid port conflict on 443)
-  if [[ -L /etc/nginx/sites-enabled/default ]]; then
-    info "Removing nginx default site symlink..."
-    run rm /etc/nginx/sites-enabled/default
-  fi
-
-  # 6. Test and reload nginx
-  if [[ "${DRY_RUN}" != true ]]; then
-    nginx -t
-  fi
-  run systemctl enable nginx
-  run systemctl reload nginx || run systemctl start nginx
-  ok "nginx configured and running"
 }
 
 # ===========================================================================
@@ -1983,47 +1647,71 @@ configure_firewall() {
     return
   fi
 
-  local backend_is_local=false
-  if [[ "${INSTALL_BACKEND}" == true || "${BACKEND_HOST:-}" == "127.0.0.1" || "${BACKEND_HOST:-}" == "localhost" ]]; then
-    backend_is_local=true
-  fi
-
-  if [[ "${INSTALL_FRONTEND}" == true ]]; then
-    if _confirm "Allow TCP port ${UI_PORT} (UI) through ufw?"; then
-      run ufw allow "${UI_PORT}/tcp"
-      ok "ufw: allowed ${UI_PORT}/tcp"
+  # Prompt for an optional source CIDR to scope the allow rule.  A blank
+  # answer opens the port to all sources, but only after a clear warning.
+  local cidr=""
+  if [[ "${YES}" == true ]]; then
+    if [[ -z "${FIREWALL_CIDR}" ]]; then
+      # --yes without --firewall-cidr: safe default — skip rule creation.
+      info "Skipping ufw rule in --yes mode (no --firewall-cidr provided)."
+      info "To open the API port after install, run:"
+      info "  sudo ufw allow from <trusted-cidr> to any port ${API_PORT} proto tcp"
+      return
     fi
-    # Deny direct API access from external hosts when nginx fronts it,
-    # but only when the backend API is running locally.
-    if [[ "${backend_is_local}" == true ]]; then
-      if _confirm "Deny external access to API port ${API_PORT} (traffic should go through nginx)?"; then
-        run ufw deny "${API_PORT}/tcp"
-        ok "ufw: denied external access to ${API_PORT}/tcp"
+
+    if [[ "${FIREWALL_CIDR,,}" == "any" ]]; then
+      # Operator explicitly chose to open to all sources.
+      run ufw allow "${API_PORT}/tcp"
+      ok "ufw: allowed ${API_PORT}/tcp (all sources)"
+      warn "TIP — restrict to a trusted subnet later:"
+      warn "  sudo ufw delete allow ${API_PORT}/tcp"
+      warn "  sudo ufw allow from <trusted-cidr> to any port ${API_PORT} proto tcp"
+    else
+      if ! _is_valid_cidr "${FIREWALL_CIDR}"; then
+        warn "Invalid --firewall-cidr '${FIREWALL_CIDR}' — skipping ufw rule."
+        warn "To configure manually: sudo ufw allow from <cidr> to any port ${API_PORT} proto tcp"
+        return
+      fi
+      if run ufw allow from "${FIREWALL_CIDR}" to any port "${API_PORT}" proto tcp; then
+        ok "ufw: allowed ${FIREWALL_CIDR} → port ${API_PORT}/tcp"
+      else
+        warn "ufw: failed to add rule for '${FIREWALL_CIDR}' — configure manually: sudo ufw allow from ${FIREWALL_CIDR} to any port ${API_PORT} proto tcp"
+      fi
+    fi
+  else
+    echo ""
+    warn "SECURITY: opening port ${API_PORT}/tcp to all sources allows any host to"
+    warn "connect. If this machine is network-exposed, restrict access to a trusted"
+    warn "subnet by entering a CIDR block (e.g. 192.168.1.0/24 or 10.0.0.0/8)."
+    echo ""
+    while true; do
+      read -r -p "$(echo -e "${C_YELLOW}Source CIDR to allow for port ${API_PORT} (leave blank for all sources, 'skip' to add no rule):${C_RESET} ")" cidr
+      if [[ -z "${cidr}" ]]; then
+        break
+      elif [[ "${cidr,,}" == "skip" ]]; then
+        info "Skipping ufw rule — configure manually if needed:"
+        info "  sudo ufw allow from <cidr> to any port ${API_PORT} proto tcp"
+        return
+      elif ! _is_valid_cidr "${cidr}"; then
+        warn "Invalid CIDR '${cidr}' — expected n.n.n.n/prefix (IPv4) or hex::/prefix (IPv6). Leave blank for all, or 'skip'."
+      else
+        break
+      fi
+    done
+
+    if [[ -n "${cidr}" ]]; then
+      if run ufw allow from "${cidr}" to any port "${API_PORT}" proto tcp; then
+        ok "ufw: allowed ${cidr} → port ${API_PORT}/tcp"
+      else
+        warn "ufw: failed to add rule for '${cidr}' — configure manually: sudo ufw allow from ${cidr} to any port ${API_PORT} proto tcp"
       fi
     else
-      info "Skipping ufw deny rule for API port ${API_PORT} because backend host appears to be remote (${BACKEND_HOST:-})."
-    fi
-  elif [[ "${INSTALL_BACKEND}" == true ]]; then
-    local cidr=""
-    if [[ "${YES}" == true ]]; then
-      warn "Skipping ufw API port rule in --yes mode for backend-only install (use ufw manually if needed)."
-    else
-      while true; do
-        read -r -p "$(echo -e "${C_YELLOW}Enter source CIDR to allow for API port ${API_PORT} (leave blank to skip):${C_RESET} ")" cidr
-        if [[ -z "${cidr}" ]]; then
-          break
-        elif ! _is_valid_cidr "${cidr}"; then
-          warn "Invalid CIDR '${cidr}' — expected n.n.n.n/prefix (IPv4) or hex::/prefix (IPv6). Leave blank to skip."
-        else
-          break
-        fi
-      done
-      if [[ -n "${cidr}" ]]; then
-        if run ufw allow from "${cidr}" to any port "${API_PORT}" proto tcp; then
-          ok "ufw: allowed ${cidr} → port ${API_PORT}/tcp"
-        else
-          warn "ufw: failed to add rule for '${cidr}' — firewall not updated. Configure manually: sudo ufw allow from ${cidr} to any port ${API_PORT} proto tcp"
-        fi
+      if _confirm "Allow TCP port ${API_PORT} from ALL sources through ufw?"; then
+        run ufw allow "${API_PORT}/tcp"
+        ok "ufw: allowed ${API_PORT}/tcp (all sources)"
+        warn "TIP — restrict to a trusted subnet later:"
+        warn "  sudo ufw delete allow ${API_PORT}/tcp"
+        warn "  sudo ufw allow from <trusted-cidr> to any port ${API_PORT} proto tcp"
       fi
     fi
   fi
@@ -2104,14 +1792,14 @@ do_uninstall() {
     _cleanup_pg_superuser_role
   fi
 
-  # Remove nginx ecube site
+  # Remove nginx ecube site (legacy; may exist from an earlier install)
   if [[ -f /etc/nginx/sites-available/ecube ]]; then
     run rm -f /etc/nginx/sites-enabled/ecube
     run rm -f /etc/nginx/sites-available/ecube
     if systemctl is-active --quiet nginx 2>/dev/null; then
       run systemctl reload nginx
     fi
-    ok "nginx ecube site removed"
+    ok "nginx ecube site removed (legacy)"
   fi
 
   # Remove install directory
@@ -2141,38 +1829,31 @@ do_uninstall() {
     fi
   fi
 
-  # Remove ecube-www bridge group (created by install_frontend to give www-data
-  # traversal access to INSTALL_DIR without o+x).  Remove www-data from the
-  # group first so groupdel succeeds, then delete the group.
+  # Remove ecube-www bridge group (legacy; may exist from an earlier nginx install).
   if getent group ecube-www &>/dev/null; then
-    if id -nG www-data 2>/dev/null | grep -qw ecube-www; then
-      if command -v gpasswd &>/dev/null; then
-        run gpasswd -d www-data ecube-www 2>/dev/null || true
-      else
-        warn "gpasswd not found — www-data may still be a member of ecube-www; remove manually with: usermod -G ... www-data"
-      fi
+    # Remove any lingering members so groupdel can succeed.
+    if command -v gpasswd &>/dev/null; then
+      for _member in $(getent group ecube-www 2>/dev/null | cut -d: -f4 | tr ',' ' '); do
+        gpasswd -d "${_member}" ecube-www 2>/dev/null || true
+      done
     fi
     if command -v groupdel &>/dev/null; then
-      run groupdel ecube-www 2>/dev/null || true
-      ok "Group 'ecube-www' removed"
-    else
-      warn "groupdel not found — group 'ecube-www' not removed; remove manually with: groupdel ecube-www"
+      if groupdel ecube-www 2>/dev/null; then
+        ok "Group 'ecube-www' removed (legacy)"
+      else
+        warn "Could not remove legacy group 'ecube-www' — remove manually: sudo groupdel ecube-www"
+      fi
     fi
   fi
 
   # Revoke ufw rules that configure_firewall may have added.
-  # A frontend install creates: allow ${UI_PORT}/tcp + deny ${API_PORT}/tcp.
-  # A backend-only install may have created a per-CIDR allow for ${API_PORT}/tcp;
-  # the source CIDR is not persisted here, so we attempt best-effort deletion of
-  # the two known rules and warn the operator if any rule for ${API_PORT} remains.
+  # Removes the blanket allow rule; CIDR-scoped rules cannot be deleted without
+  # the original source address, so warn the operator if any rule remains.
   if command -v ufw &>/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
-    ufw delete allow "${UI_PORT}/tcp" 2>/dev/null || true
-    ufw delete deny  "${API_PORT}/tcp" 2>/dev/null || true
-    ok "ufw: rules for ${UI_PORT}/tcp and ${API_PORT}/tcp removed (if present)"
-    # A CIDR-scoped allow rule cannot be deleted without the original source
-    # address; alert the operator if any rule for API_PORT is still active.
+    ufw delete allow "${API_PORT}/tcp" 2>/dev/null || true
+    ok "ufw: blanket allow rule for ${API_PORT}/tcp removed (if present)"
     if ufw status 2>/dev/null | grep -q "^${API_PORT}"; then
-      warn "ufw: rule(s) for port ${API_PORT} may still be active — review with: sudo ufw status numbered"
+      warn "ufw: CIDR-scoped rule(s) for port ${API_PORT} may still be active — review with: sudo ufw status numbered"
     fi
   fi
 
@@ -2216,93 +1897,42 @@ print_summary() {
   local HOST_URL
   HOST_URL="$(_url_host "${HOST}")"
 
+  local _scheme="https"
+  [[ "${BACKEND_NO_TLS}" == true ]] && _scheme="http"
+
   echo ""
-  if [[ "${INSTALL_BACKEND}" == true && "${INSTALL_FRONTEND}" == true ]]; then
-    echo -e "${C_BOLD}=======================================================${C_RESET}"
-    echo -e "${C_GREEN}  ECUBE ${installed_version} installed successfully${C_RESET}"
-    echo -e "${C_BOLD}=======================================================${C_RESET}"
-    echo -e "  UI:           https://${HOST_URL}:${UI_PORT}"
-    echo -e "  API:          https://${HOST_URL}:${UI_PORT}/api/"
-    echo -e "  Setup wizard: https://${HOST_URL}:${UI_PORT}/setup"
+  echo -e "${C_BOLD}=======================================================${C_RESET}"
+  echo -e "${C_GREEN}  ECUBE ${installed_version} installed successfully${C_RESET}"
+  echo -e "${C_BOLD}=======================================================${C_RESET}"
+  echo -e "  UI:           ${_scheme}://${HOST_URL}:${API_PORT}"
+  echo -e "  API:          ${_scheme}://${HOST_URL}:${API_PORT}/docs"
+  echo -e "  Setup wizard: ${_scheme}://${HOST_URL}:${API_PORT}/setup"
+  echo ""
+  echo -e "  Complete initial configuration via the Setup Wizard."
+  echo ""
+  if [[ -n "${PG_SUPERUSER_NAME}" ]]; then
+    echo -e "  Database provisioning — enter these in the setup wizard:"
+    echo -e "    Host:     localhost"
+    echo -e "    Port:     5432"
+    echo -e "    Admin username: ${PG_SUPERUSER_NAME}"
+    echo -e "    Admin password: ${PG_SUPERUSER_PASS}"
     echo ""
-    echo -e "  Complete initial configuration via the Setup Wizard."
-    echo ""
-    if [[ -n "${PG_SUPERUSER_NAME}" ]]; then
-      echo -e "  Database provisioning — enter these in the setup wizard:"
-      echo -e "    Host:     localhost"
-      echo -e "    Port:     5432"
-      echo -e "    Admin username: ${PG_SUPERUSER_NAME}"
-      echo -e "    Admin password: ${PG_SUPERUSER_PASS}"
-      echo ""
-    else
-      echo -e "  A PostgreSQL superuser (CREATEDB privilege) is required in the"
-      echo -e "  setup wizard database provisioning screen."
-      echo ""
-    fi
-    echo -e "  Service management:"
-    echo -e "    sudo systemctl start   ecube"
-    echo -e "    sudo systemctl stop    ecube"
-    echo -e "    sudo systemctl restart ecube"
-    echo -e "    sudo systemctl status  ecube"
-    echo ""
-    echo -e "  Logs:"
-    echo -e "    sudo journalctl -u ecube -f"
-    echo ""
-    echo -e "  Install log: ${LOG_FILE}"
-    echo -e "${C_BOLD}=======================================================${C_RESET}"
-
-  elif [[ "${INSTALL_BACKEND}" == true ]]; then
-    echo -e "${C_BOLD}=======================================================${C_RESET}"
-    echo -e "${C_GREEN}  ECUBE backend ${installed_version} installed successfully${C_RESET}"
-    echo -e "${C_BOLD}=======================================================${C_RESET}"
-    echo -e "  API:  https://${HOST_URL}:${API_PORT}"
-    echo -e "  Docs: https://${HOST_URL}:${API_PORT}/docs"
-    echo ""
-    if [[ -n "${PG_SUPERUSER_NAME}" ]]; then
-      echo -e "  Database provisioning — enter these in the setup wizard:"
-      echo -e "    Host:     localhost"
-      echo -e "    Port:     5432"
-      echo -e "    Admin username: ${PG_SUPERUSER_NAME}"
-      echo -e "    Admin password: ${PG_SUPERUSER_PASS}"
-      echo ""
-    fi
-    echo -e "  TIP – restrict API access if this host is network-exposed:"
-    echo -e "    sudo ufw allow from <trusted-cidr> to any port ${API_PORT} proto tcp"
-    echo -e "    sudo ufw deny ${API_PORT}/tcp"
-    echo ""
-    echo -e "  Service management:"
-    echo -e "    sudo systemctl {start|stop|restart|status} ecube"
-    echo ""
-    echo -e "  Logs:"
-    echo -e "    sudo journalctl -u ecube -f"
-    echo ""
-    echo -e "  Install log: ${LOG_FILE}"
-    echo -e "${C_BOLD}=======================================================${C_RESET}"
-
   else
-    echo -e "${C_BOLD}=======================================================${C_RESET}"
-    echo -e "${C_GREEN}  ECUBE frontend installed successfully${C_RESET}"
-    echo -e "${C_BOLD}=======================================================${C_RESET}"
-    echo -e "  UI:  https://${HOST_URL}:${UI_PORT}"
+    echo -e "  A PostgreSQL superuser (CREATEDB privilege) is required in the"
+    echo -e "  setup wizard database provisioning screen."
     echo ""
-    local _summary_bh
-    _summary_bh=$(_url_host "${BACKEND_HOST}")
-    if [[ "${BACKEND_HOST}" == "127.0.0.1" ]]; then
-      # Same-host topology: the backend was reconfigured to serve plain HTTP on
-      # loopback; nginx is the only TLS termination point and is the component
-      # operators should interact with.  The loopback address is not directly
-      # accessible and the scheme is HTTP, so avoid printing it as an https://
-      # URL which would mislead operators into thinking it is externally reachable.
-      echo -e "  nginx proxies /api/ → http://${_summary_bh}:${API_PORT}/ (loopback, not directly accessible)"
-    else
-      echo -e "  Ensure the backend API is reachable at:"
-      echo -e "    https://${_summary_bh}:${API_PORT}"
-    fi
-    echo ""
-    echo -e "  Service management:"
-    echo -e "    sudo systemctl {start|stop|reload|status} nginx"
-    echo -e "${C_BOLD}=======================================================${C_RESET}"
   fi
+  echo -e "  Service management:"
+  echo -e "    sudo systemctl start   ecube"
+  echo -e "    sudo systemctl stop    ecube"
+  echo -e "    sudo systemctl restart ecube"
+  echo -e "    sudo systemctl status  ecube"
+  echo ""
+  echo -e "  Logs:"
+  echo -e "    sudo journalctl -u ecube -f"
+  echo ""
+  echo -e "  Install log: ${LOG_FILE}"
+  echo -e "${C_BOLD}=======================================================${C_RESET}"
 }
 
 # ===========================================================================
@@ -2316,33 +1946,21 @@ main() {
     exit 0
   fi
 
-  if [[ "${INSTALL_BACKEND}" == false && "${INSTALL_FRONTEND}" == false ]]; then
-    error "--backend-only and --frontend-only cannot both be specified."
-    exit 1
-  fi
-
   header "\n${C_BOLD}ECUBE Installer${C_RESET}"
   [[ "${DRY_RUN}" == true ]] && warn "DRY-RUN mode: no changes will be made."
 
-  # Stop running ECUBE services before pre-flight port checks so that a
-  # re-run or upgrade does not fail because the ports are already occupied by
-  # the currently-installed instance.  Services are restarted at the end of
-  # install_backend / install_frontend as normal.
+  # Stop running ECUBE service before pre-flight port checks so that a
+  # re-run or upgrade does not fail because the port is already occupied by
+  # the currently-installed instance.
   if systemctl is-active --quiet ecube.service 2>/dev/null; then
     info "Stopping ecube.service before pre-flight checks (will be restarted after install)..."
     run systemctl stop ecube.service
-  fi
-  if [[ "${INSTALL_FRONTEND}" == true ]] && systemctl is-active --quiet nginx 2>/dev/null; then
-    info "Stopping nginx before pre-flight checks (will be restarted after install)..."
-    run systemctl stop nginx
   fi
 
   preflight
   _resolve_host
 
-  [[ "${INSTALL_BACKEND}"  == true ]] && install_backend
-  [[ "${INSTALL_FRONTEND}" == true ]] && install_frontend
-
+  install_backend
   configure_firewall
   print_summary
 }

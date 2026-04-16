@@ -1,5 +1,6 @@
 @import './base.css';
 @import './buttons.css';
+@import './browse.css';
 
 #app {
   margin: 0;

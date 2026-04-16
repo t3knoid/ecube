@@ -68,6 +68,16 @@ For operator and user URLs, prefer stable DNS names over IP literals.
 
 Use only for non-production or temporary bootstrap.
 
+### Docker
+
+On first start, if no certificate files exist at `/opt/ecube/certs/key.pem` and `cert.pem`, the container automatically generates a self-signed certificate and logs a warning. No manual steps are required — `docker compose up` works out of the box with HTTPS.
+
+To use your own certificate, place `key.pem` and `cert.pem` in a host directory, set `ECUBE_CERTS_DIR` in `.env`, and uncomment the certs volume line in `docker-compose.ecube.yml`.
+
+### Native
+
+For native installs, generate a self-signed certificate manually:
+
 ```bash
 sudo mkdir -p /opt/ecube/certs
 sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
@@ -76,14 +86,15 @@ sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -subj "/CN=$(hostname -f)"
 ```
 
-If nginx terminates TLS (single-host frontend mode):
+Set ownership so the `ecube` service account can read the certificate files:
 
 ```bash
-sudo chown root:root /opt/ecube/certs/key.pem
+sudo chown ecube:ecube /opt/ecube/certs/key.pem /opt/ecube/certs/cert.pem
 sudo chmod 600 /opt/ecube/certs/key.pem
-sudo chown ecube:ecube /opt/ecube/certs/cert.pem
 sudo chmod 644 /opt/ecube/certs/cert.pem
 ```
+
+> **Docker note:** The Docker image includes a self-signed certificate generated at build time. Replace it only when you have a CA-signed or organization-issued certificate. Mount your cert directory into the container via the `ECUBE_CERTS_DIR` variable (see [04-configuration-reference.md](04-configuration-reference.md)).
 
 ---
 
@@ -91,39 +102,26 @@ sudo chmod 644 /opt/ecube/certs/cert.pem
 
 ### Prerequisites
 
-- Public DNS record (for example `ecube.example.com`) points to your frontend host
+- Public DNS record (for example `ecube.example.com`) points to the ECUBE host
 - Inbound `80/tcp` and `443/tcp` are reachable from the internet
-- nginx is installed and serving the target hostname
+- A webroot directory is accessible for ACME challenges (e.g. `/opt/ecube/www`)
 
 ### Install certbot (Debian/Ubuntu)
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y certbot python3-certbot-nginx
+sudo apt-get install -y certbot
 ```
 
-### Issue certificate using nginx plugin (HTTP-01)
+### Issue certificate using standalone or webroot mode
+
+Standalone mode (temporarily binds port 80 for the ACME challenge):
 
 ```bash
-sudo certbot --nginx -d ecube.example.com
+sudo certbot certonly --standalone -d ecube.example.com
 ```
 
-For multiple names:
-
-```bash
-sudo certbot --nginx -d ecube.example.com -d www.ecube.example.com
-```
-
-### Validate and reload
-
-```bash
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-### Alternative: webroot mode
-
-Use when you do not want certbot modifying nginx configuration directly.
+Webroot mode (uses an existing directory for the challenge):
 
 ```bash
 sudo certbot certonly --webroot \
@@ -131,7 +129,23 @@ sudo certbot certonly --webroot \
   -d ecube.example.com
 ```
 
-You must then point nginx `ssl_certificate` and `ssl_certificate_key` to the certbot paths under `/etc/letsencrypt/live/<name>/`.
+For multiple names:
+
+```bash
+sudo certbot certonly --standalone \
+  -d ecube.example.com -d www.ecube.example.com
+```
+
+After issuance, copy or symlink the certificate files into `/opt/ecube/certs/`:
+
+```bash
+sudo cp /etc/letsencrypt/live/ecube.example.com/fullchain.pem /opt/ecube/certs/cert.pem
+sudo cp /etc/letsencrypt/live/ecube.example.com/privkey.pem /opt/ecube/certs/key.pem
+sudo chown ecube:ecube /opt/ecube/certs/cert.pem /opt/ecube/certs/key.pem
+sudo chmod 644 /opt/ecube/certs/cert.pem
+sudo chmod 600 /opt/ecube/certs/key.pem
+sudo systemctl restart ecube
+```
 
 ---
 
@@ -150,33 +164,24 @@ systemctl list-timers | grep -i certbot || true
 systemctl status certbot.timer || true
 ```
 
-Post-renewal reload hook (if needed):
+Post-renewal deploy hook (copies renewed certs and restarts ECUBE):
 
 ```bash
-sudo certbot renew --deploy-hook "systemctl reload nginx"
+sudo certbot renew --deploy-hook "cp /etc/letsencrypt/live/ecube.example.com/fullchain.pem /opt/ecube/certs/cert.pem && cp /etc/letsencrypt/live/ecube.example.com/privkey.pem /opt/ecube/certs/key.pem && chown ecube:ecube /opt/ecube/certs/cert.pem /opt/ecube/certs/key.pem && systemctl restart ecube"
 ```
 
 ---
 
-## 5.7 Split-Host Notes (Frontend and Backend on Separate Hosts)
+## 5.7 Split-Host Notes (Optional Reverse Proxy)
 
-When frontend and backend are on separate hosts:
+ECUBE serves both the API and the Vue SPA directly and terminates TLS in uvicorn. A separate reverse proxy is **not required** for standard deployments.
 
-- Frontend host certificate protects user-to-frontend traffic.
-- Frontend-to-backend TLS is separate and should also be verified.
+If your organization places an external reverse proxy (nginx, HAProxy, etc.) in front of ECUBE:
 
-For nginx proxying to HTTPS backend, prefer:
-
-```nginx
-proxy_ssl_verify on;
-proxy_ssl_server_name on;
-proxy_ssl_name backend.example.com;
-```
-
-Use one of:
-
-- backend cert chain trusted by OS store, or
-- explicit `proxy_ssl_trusted_certificate` bundle
+- Terminate TLS at the reverse proxy.
+- Forward `Host`, `X-Forwarded-For`, and `X-Forwarded-Proto` headers.
+- Set `TRUST_PROXY_HEADERS=true` in the ECUBE `.env`.
+- Ensure the proxy-to-backend connection is also encrypted or on a trusted network segment.
 
 ---
 
@@ -185,9 +190,9 @@ Use one of:
 Minimum for public cert issuance and HTTPS serving:
 
 - `80/tcp` inbound (ACME HTTP-01 challenge)
-- `443/tcp` inbound (HTTPS)
+- `443/tcp` or `8443/tcp` inbound (HTTPS — depending on your port configuration)
 
-If using DNS-01 challenge instead of HTTP-01, `80/tcp` may be unnecessary for issuance, but keep `443/tcp` for service traffic.
+If using DNS-01 challenge instead of HTTP-01, `80/tcp` may be unnecessary for issuance, but keep the HTTPS port open for service traffic.
 
 Restrict backend/API ports from public exposure where possible.
 
@@ -197,16 +202,17 @@ Restrict backend/API ports from public exposure where possible.
 
 Keep private keys non-world-readable.
 
-Recommended patterns:
+Recommended pattern (uvicorn terminates TLS directly):
 
-- TLS terminated by nginx:
-  - key: `root:root`, mode `600`
-  - cert: readable by nginx process (`644` typical)
-- TLS terminated directly by ECUBE backend (uvicorn):
-  - key: `ecube:ecube`, mode `600`
-  - cert: `ecube:ecube`, mode `644`
+- key: `ecube:ecube`, mode `600`
+- cert: `ecube:ecube`, mode `644`
 
-After permission changes, validate and restart/reload affected services.
+If an external reverse proxy terminates TLS instead:
+
+- key: owned by the proxy service user, mode `600`
+- cert: mode `644`
+
+After permission changes, validate and restart affected services.
 
 ## References
 

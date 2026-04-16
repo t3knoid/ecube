@@ -30,7 +30,6 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   APP_IMAGE: ghcr.io/${{ github.repository_owner }}/ecube-app
-  UI_IMAGE: ghcr.io/${{ github.repository_owner }}/ecube-ui
 
 jobs:
   version-check:
@@ -107,7 +106,6 @@ jobs:
       - name: Tag images for registry
         run: |
           docker tag ecube-app ${{ env.APP_IMAGE }}:${{ steps.tag.outputs.value }}
-          docker tag ecube-ui  ${{ env.UI_IMAGE }}:${{ steps.tag.outputs.value }}
 
       - name: Save smoke-tested images as artifacts
         if: github.event_name == 'release'
@@ -115,8 +113,6 @@ jobs:
           mkdir -p /tmp/docker-images
           docker save "${{ env.APP_IMAGE }}:${{ steps.tag.outputs.value }}" \
             | gzip > /tmp/docker-images/ecube-app.tar.gz
-          docker save "${{ env.UI_IMAGE }}:${{ steps.tag.outputs.value }}" \
-            | gzip > /tmp/docker-images/ecube-ui.tar.gz
 
       - name: Upload smoke-tested images
         if: github.event_name == 'release'
@@ -126,14 +122,10 @@ jobs:
           path: /tmp/docker-images/
           retention-days: 1
 
-      - name: Generate self-signed TLS certificate for smoke test
+      - name: Create .env for smoke test
         run: |
-          mkdir -p deploy/certs
-          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
-            -keyout deploy/certs/key.pem \
-            -out    deploy/certs/cert.pem \
-            -days   1 \
-            -subj   '/CN=localhost' 2>/dev/null
+          printf 'SECRET_KEY=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_USER=ecube\nPOSTGRES_DB=ecube\n' \
+            "$SECRET_KEY" "$POSTGRES_PASSWORD" > .env
 
       - name: Start stack
         run: |
@@ -158,7 +150,7 @@ jobs:
           APP_READY=false
           for i in $(seq 1 20); do
             CODE=$(docker compose -f docker-compose.ecube.yml exec -T ecube-app \
-              curl -sf -o /dev/null -w "%{http_code}" http://localhost:8000/health 2>/dev/null || echo "000")
+              curl -skf -o /dev/null -w "%{http_code}" https://localhost:8443/api/health 2>/dev/null || echo "000")
             if [ "$CODE" = "200" ]; then
               echo "Health check passed (HTTP $CODE)"
               APP_READY=true
@@ -169,30 +161,29 @@ jobs:
           done
           $APP_READY || { echo "::error::ecube-app health check never passed"; exit 1; }
           docker compose -f docker-compose.ecube.yml exec -T ecube-app \
-            curl -sf http://localhost:8000/health | grep '"status"'
+            curl -skf https://localhost:8443/api/health | grep '"status"'
 
-      - name: Smoke test — nginx TLS proxy health check (via host)
+      - name: Smoke test — TLS health check (via host)
         run: |
-          echo "Verifying nginx TLS proxy is reachable..."
+          echo "Verifying TLS endpoint is reachable..."
           TLS_READY=false
           for i in $(seq 1 10); do
             CODE=$(curl -sk -o /dev/null -w "%{http_code}" https://localhost:8443/api/health 2>/dev/null || echo "000")
             if [ "$CODE" = "200" ]; then
-              echo "nginx TLS proxy health check passed (HTTP $CODE)"
+              echo "TLS health check passed (HTTP $CODE)"
               TLS_READY=true
               break
             fi
             echo "  attempt $i/10 — HTTP $CODE"
             sleep 2
           done
-          $TLS_READY || { echo "::error::nginx TLS proxy health check never passed"; exit 1; }
+          $TLS_READY || { echo "::error::TLS health check never passed"; exit 1; }
           curl -sk https://localhost:8443/api/health | grep '"status"'
 
       - name: Dump logs on failure
         if: failure()
         run: |
           docker compose -f docker-compose.ecube.yml logs ecube-app   || true
-          docker compose -f docker-compose.ecube.yml logs ecube-ui    || true
           docker compose -f docker-compose.ecube.yml logs postgres     || true
 
       - name: Tear down stack
@@ -229,35 +220,42 @@ jobs:
         # Pushes the exact linux/amd64 images that passed the smoke test — no rebuild.
         run: |
           docker load < /tmp/docker-images/ecube-app.tar.gz
-          docker load < /tmp/docker-images/ecube-ui.tar.gz
 
       - name: Tag images with :latest
         run: |
           docker tag "${{ env.APP_IMAGE }}:${{ needs.build-and-smoke-test.outputs.tag }}" "${{ env.APP_IMAGE }}:latest"
-          docker tag "${{ env.UI_IMAGE }}:${{ needs.build-and-smoke-test.outputs.tag }}" "${{ env.UI_IMAGE }}:latest"
 
       - name: Push ecube-app
         run: |
           docker push "${{ env.APP_IMAGE }}:${{ needs.build-and-smoke-test.outputs.tag }}"
           docker push "${{ env.APP_IMAGE }}:latest"
 
-      - name: Push ecube-ui
-        run: |
-          docker push "${{ env.UI_IMAGE }}:${{ needs.build-and-smoke-test.outputs.tag }}"
-          docker push "${{ env.UI_IMAGE }}:latest"
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
       - name: Generate production docker-compose
         run: |
+          pip install --quiet pyyaml
           mkdir -p dist
-          python scripts/generate_release_compose.py \
-            --app-image "${{ env.APP_IMAGE }}:${{ needs.build-and-smoke-test.outputs.tag }}" \
-            --ui-image  "${{ env.UI_IMAGE }}:${{ needs.build-and-smoke-test.outputs.tag }}"  \
-            --output    dist/docker-compose.yml
+          TAG="${{ needs.build-and-smoke-test.outputs.tag }}"
+          IMAGE="${{ env.APP_IMAGE }}:${TAG}"
+          # YAML-aware transform: drop the build: key and rewrite image: to
+          # the registry reference.  Safer than sed range-deletes which break
+          # when indentation or key ordering changes.
+          python3 -c "
+          import sys, yaml
+
+          with open('docker-compose.ecube.yml') as f:
+              doc = yaml.safe_load(f)
+
+          svc = doc.get('services', {}).get('ecube-app')
+          if svc is None:
+              print('ERROR: ecube-app service not found in compose file', file=sys.stderr)
+              sys.exit(1)
+
+          svc.pop('build', None)
+          svc['image'] = '${IMAGE}'
+
+          with open('dist/docker-compose.yml', 'w') as f:
+              yaml.dump(doc, f, default_flow_style=False, sort_keys=False)
+          "
 
       - name: Upload production docker-compose to GitHub Release
         uses: softprops/action-gh-release@v2
