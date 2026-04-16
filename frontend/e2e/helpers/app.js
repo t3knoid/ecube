@@ -7,7 +7,11 @@ export function makeToken(payload) {
 }
 
 export async function routeJson(page, pattern, body, status = 200) {
-  await page.route(pattern, async (route) => {
+  const matcher = typeof pattern === 'string' && !pattern.endsWith('**')
+    ? `${pattern}**`
+    : pattern
+
+  await page.route(matcher, async (route) => {
     await route.fulfill({
       status,
       contentType: 'application/json',

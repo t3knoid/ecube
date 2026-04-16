@@ -43,7 +43,6 @@ test('mounts add/test/remove flow', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Add Mount' }).click()
   await page.getByLabel('Remote Path').fill('10.0.0.8:/cases')
-  await page.getByLabel('Local Mount Point').fill('/mnt/cases')
   await page.getByRole('button', { name: 'Create' }).click()
   await expect(page.getByText('10.0.0.8:/cases')).toBeVisible()
 
