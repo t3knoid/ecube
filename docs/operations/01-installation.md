@@ -122,7 +122,7 @@ The installer will:
 4. Install `/etc/pam.d/ecube` PAM configuration for local and domain user authentication (detects SSSD at install time and installs an SSSD-enabled or local-only variant accordingly).
 5. Set up a Python virtual environment in `<install-dir>/venv`.
 6. Generate a self-signed TLS certificate (skipped with `--no-tls`).
-7. Write `<install-dir>/.env` with a random `SECRET_KEY`, `SETUP_DEFAULT_ADMIN_USERNAME=ecubeadmin`, and runtime defaults. `DATABASE_URL` is left empty and configured later via the setup wizard.
+7. Write `<install-dir>/.env` with a random `SECRET_KEY`, empty `SETUP_DEFAULT_ADMIN_USERNAME` (populated later by the superuser creation step), and runtime defaults. `DATABASE_URL` is left empty and configured later via the setup wizard.
 8. Write and start the `ecube.service` systemd unit.
 9. Deploy the pre-built frontend to `<install-dir>/www` so FastAPI serves the SPA directly (no separate web server required).
 10. Optionally configure `ufw` firewall rules.

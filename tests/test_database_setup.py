@@ -465,7 +465,7 @@ class TestSystemInfoEndpoint:
         assert resp.json() == {
             "in_docker": False,
             "suggested_db_host": "localhost",
-            "suggested_admin_username": "ecubeadmin",
+            "suggested_admin_username": "",
             "has_configured_credentials": False,
         }
         mock_is_running_in_docker.assert_called_once_with()
@@ -485,7 +485,7 @@ class TestSystemInfoEndpoint:
         assert resp.json() == {
             "in_docker": True,
             "suggested_db_host": "postgres-service",
-            "suggested_admin_username": "ecubeadmin",
+            "suggested_admin_username": "",
             "has_configured_credentials": False,
         }
         mock_is_running_in_docker.assert_called_once_with()
@@ -504,7 +504,7 @@ class TestSystemInfoEndpoint:
         assert resp.status_code == 200
         assert resp.json()["in_docker"] is False
         assert resp.json()["suggested_db_host"] == "localhost"
-        assert resp.json()["suggested_admin_username"] == "ecubeadmin"
+        assert resp.json()["suggested_admin_username"] == ""
         mock_is_running_in_docker.assert_called_once_with()
 
     @patch("app.routers.database_setup.is_running_in_docker", return_value=False)
