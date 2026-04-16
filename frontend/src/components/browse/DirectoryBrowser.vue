@@ -262,6 +262,7 @@ function onRowArrowKey(event) {
 .directory-browser {
   display: grid;
   gap: var(--space-sm);
+  min-width: 0;
 }
 
 /* Breadcrumb */
@@ -275,7 +276,6 @@ function onRowArrowKey(event) {
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius);
   padding: var(--space-xs) var(--space-sm);
-  overflow-x: auto;
 }
 
 .crumb-btn {
@@ -306,6 +306,8 @@ function onRowArrowKey(event) {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.875rem;
+  overflow-x: auto;
+  display: block;
 }
 
 .dir-table th {
