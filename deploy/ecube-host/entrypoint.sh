@@ -65,6 +65,14 @@ sys.exit(1)
 PY
 }
 
+# ---------------------------------------------------------------------------
+# PG_SUPERUSER fallback: when compose passes empty PG_SUPERUSER_NAME/PASS,
+# fall back to POSTGRES_USER / POSTGRES_PASSWORD so the setup wizard has
+# working defaults without requiring nested variable expansion in compose.
+# ---------------------------------------------------------------------------
+export PG_SUPERUSER_NAME="${PG_SUPERUSER_NAME:-${POSTGRES_USER:-}}"
+export PG_SUPERUSER_PASS="${PG_SUPERUSER_PASS:-${POSTGRES_PASSWORD:-}}"
+
 if [ -z "${DATABASE_URL:-}" ]; then
   echo "[entrypoint] DATABASE_URL not configured — starting in setup wizard mode"
 elif [ "${ECUBE_RUN_MIGRATIONS_ON_START}" = "true" ]; then
