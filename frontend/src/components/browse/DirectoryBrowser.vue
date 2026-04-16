@@ -131,6 +131,17 @@ function formatDate(iso) {
 function isNavigable(entry) {
   return entry.type === 'directory'
 }
+
+function onRowArrowKey(event) {
+  const rows = Array.from(event.currentTarget.closest('tbody').querySelectorAll('tr[tabindex]'))
+  const idx = rows.indexOf(event.currentTarget)
+  if (idx < 0) return
+  const next = event.key === 'ArrowDown' ? idx + 1 : idx - 1
+  if (next >= 0 && next < rows.length) {
+    event.preventDefault()
+    rows[next].focus()
+  }
+}
 </script>
 
 <template>
@@ -156,7 +167,7 @@ function isNavigable(entry) {
     <p v-else-if="error" class="status-msg error-banner">{{ error }}</p>
 
     <!-- Directory table -->
-    <table v-if="!loading && !error" class="dir-table">
+    <table v-if="!loading && !error" class="dir-table" :aria-label="t('browse.tableLabel')">
       <thead>
         <tr>
           <th class="col-name"
@@ -217,6 +228,12 @@ function isNavigable(entry) {
           v-for="entry in sortedEntries"
           :key="entry.name"
           :class="['dir-row', { 'dir-row--navigable': isNavigable(entry) }]"
+          :role="isNavigable(entry) ? 'button' : undefined"
+          :tabindex="isNavigable(entry) ? 0 : undefined"
+          @click="isNavigable(entry) && navigateInto(entry.name)"
+          @keydown.enter="isNavigable(entry) && navigateInto(entry.name)"
+          @keydown.arrow-down="isNavigable(entry) && onRowArrowKey($event)"
+          @keydown.arrow-up="isNavigable(entry) && onRowArrowKey($event)"
         >
           <td class="col-name">
             <span class="entry-icon" aria-hidden="true">
