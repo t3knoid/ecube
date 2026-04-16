@@ -203,7 +203,7 @@ onMounted(loadMounts)
             :disabled="row.status !== 'MOUNTED' || !row.local_mount_point"
             :title="row.status !== 'MOUNTED' || !row.local_mount_point ? t('mounts.browseUnavailable') : ''"
             :aria-expanded="browsingMountId === row.id"
-            :aria-label="t('mounts.browse') + ' ' + row.local_mount_point"
+            :aria-label="row.local_mount_point ? t('mounts.browse') + ' ' + row.local_mount_point : t('mounts.browse')"
             @click="toggleBrowse(row.id)"
           >
             {{ t('mounts.browse') }}
