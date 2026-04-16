@@ -910,6 +910,49 @@ def test_list_jobs_unauthenticated_returns_401(unauthenticated_client, db):
     assert response.status_code == 401
 
 
+def test_list_jobs_auditor_allowed(auditor_client, db):
+    """Auditor role should be able to list jobs and see client_ip."""
+    job = ExportJob(
+        project_id="PROJ-AUDITOR-LIST",
+        evidence_number="EV-AUDITOR-LIST",
+        source_path="/data",
+        status=JobStatus.PENDING,
+        client_ip="10.0.0.99",
+    )
+    db.add(job)
+    db.commit()
+
+    response = auditor_client.get("/jobs")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) >= 1
+    matched = [j for j in data if j["evidence_number"] == "EV-AUDITOR-LIST"]
+    assert len(matched) == 1
+    # auditor is in _IP_VISIBLE_ROLES — client_ip should be visible
+    assert matched[0]["client_ip"] == "10.0.0.99"
+
+
+def test_list_jobs_manager_client_ip_redacted(manager_client, db):
+    """Manager role should be able to list jobs but client_ip is redacted."""
+    job = ExportJob(
+        project_id="PROJ-MANAGER-LIST",
+        evidence_number="EV-MANAGER-LIST",
+        source_path="/data",
+        status=JobStatus.PENDING,
+        client_ip="10.0.0.88",
+    )
+    db.add(job)
+    db.commit()
+
+    response = manager_client.get("/jobs")
+    assert response.status_code == 200
+    data = response.json()
+    matched = [j for j in data if j["evidence_number"] == "EV-MANAGER-LIST"]
+    assert len(matched) == 1
+    # manager is NOT in _IP_VISIBLE_ROLES — client_ip should be redacted
+    assert matched[0]["client_ip"] is None
+
+
 # ---------------------------------------------------------------------------
 # _build_error_summary edge cases
 # ---------------------------------------------------------------------------
