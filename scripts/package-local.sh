@@ -95,16 +95,7 @@ if [[ ! "${ARTIFACT_NAME}" =~ ^[A-Za-z0-9._-]+$ ]]; then
 fi
 
 require_cmd tar
-
-# Portable checksum: prefer sha256sum (GNU), fall back to shasum (macOS/BSD).
-if command -v sha256sum >/dev/null 2>&1; then
-  SHA256CMD="sha256sum"
-elif command -v shasum >/dev/null 2>&1; then
-  SHA256CMD="shasum -a 256"
-else
-  echo "ERROR: Neither sha256sum nor shasum found." >&2
-  exit 1
-fi
+require_cmd sha256sum
 
 if [[ "${SKIP_FRONTEND_BUILD}" == false ]]; then
   require_cmd npm
@@ -168,7 +159,7 @@ rm -f "${staging_link}"
 echo "==> Generating dist/${ARTIFACT_NAME}.sha256"
 (
   cd dist
-  ${SHA256CMD} "${ARTIFACT_NAME}.tar.gz" > "${ARTIFACT_NAME}.sha256"
+  sha256sum "${ARTIFACT_NAME}.tar.gz" > "${ARTIFACT_NAME}.sha256"
 )
 
 echo "==> Done"
