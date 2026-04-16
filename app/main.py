@@ -933,9 +933,13 @@ if settings.serve_frontend_path:
         else:
             logger.warning(
                 "Frontend assets/ directory not found at %s — "
-                "/assets requests will fall through to the SPA fallback",
+                "/assets requests will return 404",
                 _assets_dir,
             )
+
+            @app.get("/assets/{asset_path:path}", include_in_schema=False)
+            async def _missing_assets(asset_path: str):
+                raise HTTPException(status_code=404, detail="Not Found")
 
         # Resolve the frontend root once at startup for containment checks.
         _frontend_root_resolved = _frontend_dir.resolve()
