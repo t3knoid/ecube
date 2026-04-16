@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     #: ``.env`` after successful database provisioning.
     pg_superuser_pass: str = ""
 
+    #: PostgreSQL container-level username (``POSTGRES_USER``).  Used as a
+    #: fallback when ``PG_SUPERUSER_NAME`` is not set, so the setup wizard
+    #: can suggest the correct admin username for database provisioning.
+    postgres_user: str = ""
+
     #: PostgreSQL hostname suggested to the setup wizard when the application
     #: is detected to be running inside a Docker container.  In a standard
     #: Docker Compose deployment this matches the ``postgres`` service name.
