@@ -1231,25 +1231,16 @@ _provision_pg_superuser() {
   # created by install.sh.
   local env_file="${INSTALL_DIR}/.env"
   if [[ -f "${env_file}" ]]; then
-    if grep -qE '^SETUP_DEFAULT_ADMIN_USERNAME=' "${env_file}"; then
-      sed -i "s|^SETUP_DEFAULT_ADMIN_USERNAME=.*|SETUP_DEFAULT_ADMIN_USERNAME=${su_name}|" "${env_file}"
-    else
-      printf '\nSETUP_DEFAULT_ADMIN_USERNAME=%s\n' "${su_name}" >> "${env_file}"
-    fi
+    sed -i '/^SETUP_DEFAULT_ADMIN_USERNAME=/d' "${env_file}"
+    printf 'SETUP_DEFAULT_ADMIN_USERNAME=%s\n' "${su_name}" >> "${env_file}"
 
     # Write PG_SUPERUSER_NAME and PG_SUPERUSER_PASS so the setup wizard can
     # auto-fill them — same behaviour as Docker Compose.  The wizard clears
     # both values from .env after successful provisioning.
-    if grep -qE '^PG_SUPERUSER_NAME=' "${env_file}"; then
-      sed -i "s|^PG_SUPERUSER_NAME=.*|PG_SUPERUSER_NAME=${su_name}|" "${env_file}"
-    else
-      printf 'PG_SUPERUSER_NAME=%s\n' "${su_name}" >> "${env_file}"
-    fi
-    if grep -qE '^PG_SUPERUSER_PASS=' "${env_file}"; then
-      sed -i "s|^PG_SUPERUSER_PASS=.*|PG_SUPERUSER_PASS=${su_pass}|" "${env_file}"
-    else
-      printf 'PG_SUPERUSER_PASS=%s\n' "${su_pass}" >> "${env_file}"
-    fi
+    sed -i '/^PG_SUPERUSER_NAME=/d' "${env_file}"
+    printf 'PG_SUPERUSER_NAME=%s\n' "${su_name}" >> "${env_file}"
+    sed -i '/^PG_SUPERUSER_PASS=/d' "${env_file}"
+    printf 'PG_SUPERUSER_PASS=%s\n' "${su_pass}" >> "${env_file}"
 
     chown ecube:ecube "${env_file}" 2>/dev/null || true
     chmod 600 "${env_file}" 2>/dev/null || true
@@ -1368,7 +1359,8 @@ _write_env_file() {
       # Key exists but value is empty or commented — fill it in.
       info "SERVE_FRONTEND_PATH is empty in .env — setting to ${INSTALL_DIR}/www..."
       if [[ "${DRY_RUN}" != true ]]; then
-        sed -i "s|^\([[:space:]]*SERVE_FRONTEND_PATH=\).*|\1${INSTALL_DIR}/www|" "${env_file}"
+        sed -i '/^[[:space:]]*SERVE_FRONTEND_PATH=/d' "${env_file}"
+        printf 'SERVE_FRONTEND_PATH=%s/www\n' "${INSTALL_DIR}" >> "${env_file}"
       fi
       ok "SERVE_FRONTEND_PATH updated in .env"
     fi
