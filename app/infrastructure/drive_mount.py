@@ -8,14 +8,13 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
-from typing import Optional, Protocol, Tuple
+from typing import Protocol
 
 from app.config import settings
 from app.infrastructure.device_path import validate_device_path
+from app.infrastructure.mount_info import find_device_mount_point
 
 logger = logging.getLogger(__name__)
-
-_MOUNT_BIN = settings.mount_binary_path
 
 
 def _with_sudo(cmd: list[str]) -> list[str]:
@@ -30,16 +29,27 @@ def _find_mountable_device(device_path: str) -> str:
     Checks ``/sys/block/<dev>/`` for partition sub-directories (e.g. ``sdb1``,
     ``nvme0n1p1``).  Returns ``/dev/<partition>`` when found, otherwise returns
     the original *device_path* so the caller can attempt a whole-device mount.
+
+    If sysfs access fails (``OSError``), silently falls back to the raw
+    device path.
     """
     base = os.path.basename(device_path)  # e.g. "sdb"
     block_dir = os.path.join(settings.sysfs_block_path, base)
     try:
         for entry in sorted(os.listdir(block_dir)):
             if entry.startswith(base) and entry != base:
-                return f"/dev/{entry}"
+                # Verify this is actually a partition, not an unrelated sysfs
+                # attribute directory (e.g. power, queue, holders).  Real
+                # partitions have a "partition" file inside their sysfs dir.
+                partition_marker = os.path.join(block_dir, entry, "partition")
+                if os.path.exists(partition_marker):
+                    return f"/dev/{entry}"
     except OSError:
         pass
     return device_path
+
+
+# Mount-point lookup moved to app.infrastructure.mount_info
 
 
 class DriveMountProvider(Protocol):
@@ -47,7 +57,7 @@ class DriveMountProvider(Protocol):
 
     def mount_drive(
         self, device_path: str, mount_point: str
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         """Mount *device_path* (or its first partition) at *mount_point*.
 
         Creates *mount_point* if it does not exist.  Returns
@@ -61,9 +71,23 @@ class LinuxDriveMount:
 
     def mount_drive(
         self, device_path: str, mount_point: str
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         if not validate_device_path(device_path):
             return False, f"invalid device path: {device_path!r}"
+
+        # Validate mount_point: must be an absolute path that resolves to a
+        # direct child of the configured usb_mount_base_path.  This prevents
+        # callers from creating arbitrary directories or mounting outside the
+        # expected tree.
+        if not os.path.isabs(mount_point):
+            return False, f"mount_point must be an absolute path, got {mount_point!r}"
+        expected_base = os.path.realpath(settings.usb_mount_base_path)
+        real_mp = os.path.realpath(mount_point)
+        if os.path.dirname(real_mp) != expected_base:
+            return False, (
+                f"mount_point must be a direct child of {expected_base}, "
+                f"got {mount_point!r} (resolves to {real_mp!r})"
+            )
 
         mountable = _find_mountable_device(device_path)
 
@@ -74,7 +98,7 @@ class LinuxDriveMount:
 
         try:
             subprocess.run(
-                _with_sudo([_MOUNT_BIN, mountable, mount_point]),
+                _with_sudo([settings.mount_binary_path, mountable, mount_point]),
                 check=True,
                 capture_output=True,
                 timeout=settings.subprocess_timeout_seconds,
@@ -83,9 +107,16 @@ class LinuxDriveMount:
             return False, f"mount timed out after {settings.subprocess_timeout_seconds}s"
         except subprocess.CalledProcessError as exc:
             stderr = (exc.stderr or b"").decode(errors="replace").strip()
-            # "already mounted" means desired state already achieved.
             if stderr and "already mounted" in stderr.lower():
-                return True, None
+                actual = find_device_mount_point(mountable)
+                if actual == mount_point:
+                    return True, None
+                if actual:
+                    return False, (
+                        f"{mountable} is already mounted at {actual}, "
+                        f"not at requested {mount_point}"
+                    )
+                return False, f"{mountable} reported already mounted but not found in {settings.procfs_mounts_path}"
             msg = f"mount failed for {mountable}"
             if stderr:
                 msg += f": {stderr}"

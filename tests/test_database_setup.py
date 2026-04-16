@@ -464,6 +464,7 @@ class TestSystemInfoEndpoint:
             "in_docker": False,
             "suggested_db_host": "localhost",
             "suggested_admin_username": "ecubeadmin",
+            "has_configured_credentials": False,
         }
         mock_is_running_in_docker.assert_called_once_with()
 
@@ -482,6 +483,7 @@ class TestSystemInfoEndpoint:
             "in_docker": True,
             "suggested_db_host": "postgres-service",
             "suggested_admin_username": "ecubeadmin",
+            "has_configured_credentials": False,
         }
         mock_is_running_in_docker.assert_called_once_with()
 
@@ -1274,6 +1276,21 @@ class TestDatabaseService:
         result_mode = stat.S_IMODE(env_file.stat().st_mode)
         assert result_mode == 0o600
 
+    def test_write_env_settings_readonly_file_gets_owner_rw(self, tmp_path):
+        """A read-only .env (0o400) must be upgraded to 0o600 so future writes succeed."""
+        from app.services.database_service import _write_env_settings
+
+        env_file = tmp_path / ".env"
+        env_file.write_text("DB=old\n")
+        env_file.chmod(0o400)
+
+        with patch("app.services.database_service._get_env_file_path", return_value=str(env_file)):
+            _write_env_settings({"DB": "new"})
+
+        result_mode = stat.S_IMODE(env_file.stat().st_mode)
+        assert result_mode == 0o600, f"Expected 0o600, got {oct(result_mode)}"
+        assert env_file.read_text() == "DB=new\n"
+
     @patch("app.services.database_service._write_env_setting")
     @patch("app.services.database_service._reinitialize_engine")
     @patch("app.services.database_service._run_migrations", return_value=4)
@@ -1407,7 +1424,7 @@ class TestDatabaseService:
 
     @patch("app.services.database_service._reinitialize_engine")
     @patch("app.services.database_service._run_migrations", return_value=4)
-    @patch("app.services.database_service._write_env_setting", side_effect=OSError("disk full"))
+    @patch("app.services.database_service._write_env_settings", side_effect=OSError("disk full"))
     @patch("app.services.database_service.psycopg2")
     def test_provision_env_write_failure_skips_engine(
         self, mock_psycopg2, mock_write, mock_migrations, mock_reinit
@@ -1432,7 +1449,7 @@ class TestDatabaseService:
 
         mock_reinit.assert_not_called()
 
-    @patch("app.services.database_service._write_env_setting")
+    @patch("app.services.database_service._write_env_settings")
     @patch("app.services.database_service._run_migrations", return_value=4)
     @patch("app.services.database_service._reinitialize_engine",
            side_effect=RuntimeError("lock contention"))

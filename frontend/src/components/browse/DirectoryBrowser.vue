@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getDirectory } from '@/api/browse.js'
 import Pagination from '@/components/common/Pagination.vue'
+import { logger } from '@/utils/logger.js'
 
 const props = defineProps({
   /** The mount root path (USB mount_path or network local_mount_point). */
@@ -91,7 +92,7 @@ async function loadEntries() {
     entries.value = result.entries
     total.value = result.total
   } catch (err) {
-    console.error('[DirectoryBrowser] Failed to load directory listing:', err)
+    logger.error('[DirectoryBrowser] Failed to load directory listing:', err)
     error.value = t('browse.loadError')
   } finally {
     loading.value = false
@@ -124,7 +125,7 @@ function formatSize(bytes) {
 function formatDate(iso) {
   if (!iso) return '—'
   const d = new Date(iso)
-  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString()
+  return isNaN(d.getTime()) ? '—' : d.toLocaleString()
 }
 
 function isNavigable(entry) {
@@ -163,9 +164,11 @@ function isNavigable(entry) {
           >
             <button class="sort-btn" @click="toggleSort('name')">
               {{ t('browse.columns.name') }}
-              <span class="sort-indicator" aria-hidden="true">
-                {{ sortKey === 'name' ? (sortDir === 'asc' ? '▲' : '▼') : '⇅' }}
-              </span>
+              <span
+                class="sort-indicator"
+                :class="sortKey === 'name' ? (sortDir === 'asc' ? 'sort-asc' : 'sort-desc') : 'sort-none'"
+                aria-hidden="true"
+              ></span>
             </button>
           </th>
           <th class="col-type"
@@ -173,9 +176,11 @@ function isNavigable(entry) {
           >
             <button class="sort-btn" @click="toggleSort('type')">
               {{ t('browse.columns.type') }}
-              <span class="sort-indicator" aria-hidden="true">
-                {{ sortKey === 'type' ? (sortDir === 'asc' ? '▲' : '▼') : '⇅' }}
-              </span>
+              <span
+                class="sort-indicator"
+                :class="sortKey === 'type' ? (sortDir === 'asc' ? 'sort-asc' : 'sort-desc') : 'sort-none'"
+                aria-hidden="true"
+              ></span>
             </button>
           </th>
           <th class="col-size"
@@ -183,9 +188,11 @@ function isNavigable(entry) {
           >
             <button class="sort-btn" @click="toggleSort('size_bytes')">
               {{ t('browse.columns.size') }}
-              <span class="sort-indicator" aria-hidden="true">
-                {{ sortKey === 'size_bytes' ? (sortDir === 'asc' ? '▲' : '▼') : '⇅' }}
-              </span>
+              <span
+                class="sort-indicator"
+                :class="sortKey === 'size_bytes' ? (sortDir === 'asc' ? 'sort-asc' : 'sort-desc') : 'sort-none'"
+                aria-hidden="true"
+              ></span>
             </button>
           </th>
           <th class="col-modified"
@@ -193,9 +200,11 @@ function isNavigable(entry) {
           >
             <button class="sort-btn" @click="toggleSort('modified_at')">
               {{ t('browse.columns.modified') }}
-              <span class="sort-indicator" aria-hidden="true">
-                {{ sortKey === 'modified_at' ? (sortDir === 'asc' ? '▲' : '▼') : '⇅' }}
-              </span>
+              <span
+                class="sort-indicator"
+                :class="sortKey === 'modified_at' ? (sortDir === 'asc' ? 'sort-asc' : 'sort-desc') : 'sort-none'"
+                aria-hidden="true"
+              ></span>
             </button>
           </th>
         </tr>
@@ -320,9 +329,48 @@ function isNavigable(entry) {
 }
 
 .sort-indicator {
+  display: inline-block;
   font-size: 0.75em;
   margin-left: 4px;
   opacity: 0.6;
+  width: 0;
+  height: 0;
+  vertical-align: middle;
+}
+
+.sort-indicator.sort-asc {
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-bottom: 5px solid currentColor;
+  opacity: 1;
+}
+
+.sort-indicator.sort-desc {
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  opacity: 1;
+}
+
+.sort-indicator.sort-none {
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4px solid currentColor;
+  border-bottom: 0;
+  position: relative;
+}
+
+.sort-indicator.sort-none::after {
+  content: '';
+  display: block;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-bottom: 4px solid currentColor;
+  position: absolute;
+  top: -8px;
+  left: -4px;
 }
 
 .dir-row--navigable {

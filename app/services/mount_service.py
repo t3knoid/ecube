@@ -339,6 +339,14 @@ def _validate_mount_directory_owner(local_mount_point: str) -> Optional[str]:
     except Exception as exc:
         return f"failed to stat local mount point directory: {exc}"
 
+    # When the path is already a mount point (i.e. a filesystem is mounted on
+    # top of it), os.stat() returns the *mounted* filesystem's root ownership
+    # — not the underlying directory's.  Network mounts (SMB/NFS) typically
+    # report root:root regardless of the local directory owner, so the
+    # ownership check would always fail.  Skip it in that case.
+    if os.path.ismount(local_mount_point):
+        return None
+
     # Enforce ownership by the service account; if needed and allowed, repair
     # ownership for managed mount roots via sudo.
     if os.geteuid() != 0 and st.st_uid != os.geteuid():
