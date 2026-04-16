@@ -239,6 +239,31 @@ def test_mount_drive_failure_redacts_provider_paths_from_client(manager_client, 
     assert "/mnt/ecube/42" not in response.json()["message"]
 
 
+def test_mount_drive_db_save_failure_attempts_cleanup(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-004C",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        filesystem_path="/dev/sdg",
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = MagicMock()
+    provider.mount_drive.return_value = (True, None)
+    provider.unmount_drive.return_value = (True, None)
+
+    with (
+        patch("app.routers.drives.get_drive_mount", return_value=provider),
+        patch("app.services.drive_service.DriveRepository.save", side_effect=RuntimeError("db failed")),
+    ):
+        response = manager_client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 500
+    assert "rollback attempted" in response.json()["message"].lower()
+    provider.unmount_drive.assert_called_once_with(f"/mnt/ecube/{drive.id}")
+
+
 def test_mount_drive_processor_forbidden(client, db):
     drive = UsbDrive(
         device_identifier="USB-MOUNT-005",

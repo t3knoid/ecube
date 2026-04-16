@@ -297,13 +297,37 @@ def mount_drive(
     try:
         drive_repo.save(drive)
     except Exception:
+        rollback_attempted = False
+        rollback_ok = False
+        rollback_error = None
+
+        cleanup = getattr(provider, "unmount_drive", None)
+        if callable(cleanup):
+            rollback_attempted = True
+            try:
+                rollback_ok, rollback_error = cleanup(mount_point)
+            except Exception as exc:
+                rollback_error = str(exc)
+                logger.exception(
+                    "OS mount rollback raised for drive %s mount_slot=%s",
+                    drive_id,
+                    _redacted_device_name(mount_point),
+                )
+
         logger.exception(
-            "DB commit failed after successful OS mount for drive %s",
+            "DB commit failed after successful OS mount for drive %s rollback_attempted=%s rollback_ok=%s mount_slot=%s rollback_error=%s",
             drive_id,
+            rollback_attempted,
+            rollback_ok,
+            _redacted_device_name(mount_point),
+            rollback_error,
         )
+        detail = "Drive mount failed after database update error; rollback attempted"
+        if rollback_attempted and not rollback_ok:
+            detail += "; manual intervention may be required"
         raise HTTPException(
             status_code=500,
-            detail="Drive mounted at OS level but database update failed; manual intervention may be required",
+            detail=detail,
         )
 
     try:
