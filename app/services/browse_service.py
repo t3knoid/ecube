@@ -27,7 +27,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.hardware import UsbDrive
+from app.models.hardware import DriveState, UsbDrive
 from app.models.network import MountStatus, NetworkMount
 from app.schemas.browse import BrowseEntry, BrowseResponse, EntryType
 from app.services.audit_service import log_and_audit
@@ -53,6 +53,9 @@ def _lookup_mount_root(path: str, db: Session) -> Optional[str]:
         db.query(UsbDrive.mount_path)
         .filter(
             UsbDrive.mount_path.isnot(None),
+            UsbDrive.current_state.in_(
+                [DriveState.AVAILABLE, DriveState.IN_USE]
+            ),
             UsbDrive.mount_path.in_(candidates),
         )
         .first()
