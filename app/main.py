@@ -383,30 +383,8 @@ if settings.cors_allowed_origins:
 # so they match the actual FastAPI routes.
 # ---------------------------------------------------------------------------
 if settings.serve_frontend_path:
-    @app.middleware("http")
-    async def strip_api_prefix(request: Request, call_next):
-        path = request.scope["path"]
-        raw_path = request.scope.get("raw_path")
-
-        if path.startswith("/api/"):
-            # Preserve the original path so downstream handlers (e.g. the
-            # SPA fallback) can distinguish a stripped API request from a
-            # genuine frontend route.
-            request.scope["_original_path"] = path
-            request.scope["path"] = path[4:]  # "/api/foo" → "/foo"
-            if raw_path is not None:
-                if raw_path.startswith(b"/api/"):
-                    request.scope["raw_path"] = raw_path[4:]
-                else:
-                    # raw_path doesn't carry the expected prefix — drop it
-                    # rather than re-encoding the decoded path, which would
-                    # lose the original percent-encoding.
-                    request.scope.pop("raw_path", None)
-        elif path == "/api":
-            request.scope["_original_path"] = path
-            request.scope["path"] = "/"
-            request.scope["raw_path"] = b"/"
-        return await call_next(request)
+    from app.spa import add_strip_api_prefix_middleware
+    add_strip_api_prefix_middleware(app)
 
 
 @app.middleware("http")
@@ -898,8 +876,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 # ---------------------------------------------------------------------------
 if settings.serve_frontend_path:
     import pathlib
-    from fastapi.staticfiles import StaticFiles
-    from starlette.responses import FileResponse
 
     _frontend_dir = pathlib.Path(settings.serve_frontend_path)
     _index_html = _frontend_dir / "index.html"
@@ -920,62 +896,8 @@ if settings.serve_frontend_path:
         )
 
     if _frontend_dir.is_dir() and _index_html.is_file():
-        # Serve Vite hashed assets (js/, css/, etc.) with StaticFiles so
-        # they get proper content-type headers and directory traversal is
-        # handled safely by Starlette.
-        _assets_dir = _frontend_dir / "assets"
-        if _assets_dir.is_dir():
-            app.mount(
-                "/assets",
-                StaticFiles(directory=str(_assets_dir)),
-                name="frontend-assets",
-            )
-        else:
-            logger.warning(
-                "Frontend assets/ directory not found at %s — "
-                "/assets requests will return 404",
-                _assets_dir,
-            )
-
-            @app.get("/assets/{asset_path:path}", include_in_schema=False)
-            async def _missing_assets(asset_path: str):
-                raise HTTPException(status_code=404, detail="Not Found")
-
-        # Resolve the frontend root once at startup for containment checks.
-        _frontend_root_resolved = _frontend_dir.resolve()
-
-        # Catch-all route that serves static files from the frontend
-        # directory, falling back to index.html for SPA client-side routing.
-        @app.get("/{full_path:path}", include_in_schema=False)
-        async def _spa_fallback(request: Request, full_path: str):
-            # Reject API requests that fell through to the SPA.  Two cases:
-            # 1. Direct /api/… or /api-… requests (no prefix stripping).
-            # 2. Stripped requests: path was /api/nonexistent, middleware
-            #    rewrote it to /nonexistent, no route matched, and it
-            #    arrived here.  _original_path records the pre-strip path.
-            original_path = request.scope.get("_original_path", "")
-            if full_path.startswith(("api/", "api-")) or original_path.startswith("/api"):
-                raise HTTPException(status_code=404, detail="Not Found")
-            # If the path matches an actual file in the dist dir, serve it.
-            # Guard against path traversal (e.g. ../../etc/passwd).
-            # First reject any path containing ".." segments so we never
-            # call resolve() on a path that could escape the frontend root
-            # via symlink resolution or directory climbing.
-            if ".." in pathlib.PurePosixPath(full_path).parts:
-                logger.debug("SPA fallback: rejected traversal in /%s", full_path)
-                return FileResponse(str(_index_html))
-            file_path = (_frontend_dir / full_path).resolve()
-            # Second layer: even after resolve(), confirm the result is
-            # still inside the frontend root.  is_relative_to() is a proper
-            # path-hierarchy check that avoids prefix-string false positives
-            # (e.g. /opt/ecube/www_malicious).
-            if full_path and file_path.is_relative_to(_frontend_root_resolved) and file_path.is_file():
-                logger.debug("SPA fallback: serving file %s for /%s", file_path, full_path)
-                return FileResponse(str(file_path))
-            # Otherwise, serve index.html for SPA client-side routing.
-            logger.debug("SPA fallback: serving index.html for /%s (file_path=%s, exists=%s)",
-                         full_path, file_path, file_path.is_file() if file_path.is_relative_to(_frontend_root_resolved) else "BLOCKED")
-            return FileResponse(str(_index_html))
+        from app.spa import mount_spa_frontend
+        mount_spa_frontend(app, _frontend_dir)
 
         logger.info("Serving frontend from %s (standalone mode)", _frontend_dir)
         _themes_dir = _frontend_dir / "themes"
