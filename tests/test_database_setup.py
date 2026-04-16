@@ -529,8 +529,6 @@ class TestSystemInfoEndpoint:
         self, mock_provisioned, mock_provision, admin_client, db
     ):
         """Setting force=true allows re-provisioning (admin-only)."""
-        from app.models.users import UserRole
-
         db.add(UserRole(username="admin-user", role="admin"))
         db.commit()
 
