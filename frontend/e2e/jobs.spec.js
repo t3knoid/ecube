@@ -18,7 +18,7 @@ test('jobs create, start, verify, and manifest flow', async ({ page }) => {
   await routeJson(page, '**/api/drives', [{ id: 1, device_identifier: '/dev/sdb' }])
   await routeJson(page, '**/api/mounts', [{ id: 4, remote_path: '10.1.1.1:/share', local_mount_point: '/mnt/share' }])
 
-  await page.route('**/api/jobs', async (route) => {
+  await page.route('**/api/jobs**', async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([createdJob]) })
       return

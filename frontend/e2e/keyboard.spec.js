@@ -100,6 +100,7 @@ test('keyboard navigation: DataTable pagination controls are keyboard-reachable'
   await page.route(/\/api\/audit(?!\/)/, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(logs) })
   })
+  await routeJson(page, '**/api/drives', [])
 
   await page.goto('/audit')
 

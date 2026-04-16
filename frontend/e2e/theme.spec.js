@@ -7,7 +7,19 @@ async function disableMotion(page) {
 }
 
 async function waitForStablePaint(page) {
-  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+  await page.waitForLoadState('domcontentloaded')
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+      return
+    } catch (error) {
+      if (!String(error).includes('Execution context was destroyed') || attempt === 1) {
+        throw error
+      }
+      await page.waitForLoadState('domcontentloaded')
+    }
+  }
 }
 
 async function persistThemeForNextNavigation(page, themeName) {
@@ -39,7 +51,7 @@ async function mockCoreApis(page) {
   await routeJson(page, /\/api\/audit(?!\/)/, [{ id: 1, user: 'frank', action: 'LOGIN', timestamp: '2026-03-29T00:00:00Z', details: {} }])
   await routeJson(page, '**/api/introspection/system-health', {
     status: 'ok',
-    database: 'ok',
+    database: 'connected',
     active_jobs: 1,
     cpu_percent: 12.5,
     memory_percent: 40.2,
