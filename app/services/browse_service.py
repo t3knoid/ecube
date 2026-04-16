@@ -243,6 +243,8 @@ def list_directory(
     #    or None.  Using the DB-stored value means all subsequent filesystem
     #    operations are derived from a trusted source, not from user input.
     db_mount_root = _lookup_mount_root(path, db)
+    real_root: Optional[str] = None
+    real_target: Optional[str] = None
     try:
         if db_mount_root is None:
             raise HTTPException(
@@ -313,6 +315,8 @@ def list_directory(
             metadata={
                 "path": path,
                 "subdir": subdir,
+                "real_root": real_root,
+                "resolved_path": real_target,
                 "page": page,
                 "page_size": page_size,
                 "total": total,
@@ -338,7 +342,13 @@ def list_directory(
                 "BROWSE_DENIED",
                 actor_id=actor,
                 level=logging.WARNING,
-                metadata={"path": path, "subdir": subdir, "reason": reason},
+                metadata={
+                    "path": path,
+                    "subdir": subdir,
+                    "real_root": real_root,
+                    "resolved_path": real_target,
+                    "reason": reason,
+                },
                 client_ip=client_ip,
             )
         raise
