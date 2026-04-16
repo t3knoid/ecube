@@ -263,6 +263,7 @@ The `GET /browse` endpoint allows authenticated users to list directory contents
 **Recommendations:**
 
 - Override `BROWSE_ALLOWED_PREFIXES` to match your actual mount hierarchy. The default (`/mnt/ecube/`, `/nfs/`, `/smb/`) covers common layouts but may be broader than needed.
+- Tune `BROWSE_MAX_DIR_ENTRIES` (default `50000`) to cap the number of entries a single directory listing may return. Directories exceeding the limit are rejected with `400`. Set to `0` to disable the limit.
 - Avoid adding broad prefixes like `/` or `/home` to the allowlist.
 - Symlinks within browsed directories are listed as `type: "symlink"` but are not followed or navigable.
 - All browse requests are audit-logged with action `BROWSE_DIRECTORY`, including the actor, resolved path, and client IP.
