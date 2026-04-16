@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.config import settings
 from app.services.mount_check_utils import check_mounted_with_configured_timeout
@@ -631,12 +633,8 @@ def test_check_mounted_with_configured_timeout_does_not_mask_provider_type_error
 
     provider = BrokenProvider()
 
-    try:
+    with pytest.raises(TypeError, match="provider internal type mismatch"):
         check_mounted_with_configured_timeout(provider, "/mnt/data")
-    except TypeError as exc:
-        assert str(exc) == "provider internal type mismatch"
-    else:
-        assert False, "Expected provider TypeError to propagate"
 
 
 def test_check_mounted_with_configured_timeout_caches_capability(monkeypatch):

@@ -1173,7 +1173,7 @@ class TestDatabaseService:
     @patch("app.services.database_service._reinitialize_engine")
     @patch("app.services.database_service.psycopg2")
     def test_update_settings_updates_in_memory_config(
-        self, mock_psycopg2, mock_reinit, mock_write
+        self, mock_psycopg2, mock_reinit, mock_write, monkeypatch
     ):
         """Verify settings object is updated so subsequent reads are consistent."""
         from app.config import settings
@@ -1183,29 +1183,23 @@ class TestDatabaseService:
         mock_psycopg2.connect.return_value = mock_conn
         mock_psycopg2.OperationalError = Exception
 
-        original_url = settings.database_url
-        original_pool = settings.db_pool_size
-        original_overflow = settings.db_pool_max_overflow
+        monkeypatch.setattr(settings, "database_url", settings.database_url)
+        monkeypatch.setattr(settings, "db_pool_size", settings.db_pool_size)
+        monkeypatch.setattr(settings, "db_pool_max_overflow", settings.db_pool_max_overflow)
 
-        try:
-            update_database_settings(
-                host="newhost.test",
-                port=5433,
-                app_database="newdb",
-                app_username="newuser",
-                app_password="newpass",
-                pool_size=20,
-                pool_max_overflow=40,
-            )
+        update_database_settings(
+            host="newhost.test",
+            port=5433,
+            app_database="newdb",
+            app_username="newuser",
+            app_password="newpass",
+            pool_size=20,
+            pool_max_overflow=40,
+        )
 
-            assert settings.database_url == "postgresql://newuser:newpass@newhost.test:5433/newdb"
-            assert settings.db_pool_size == 20
-            assert settings.db_pool_max_overflow == 40
-        finally:
-            # Restore original values to avoid polluting other tests
-            settings.database_url = original_url
-            settings.db_pool_size = original_pool
-            settings.db_pool_max_overflow = original_overflow
+        assert settings.database_url == "postgresql://newuser:newpass@newhost.test:5433/newdb"
+        assert settings.db_pool_size == 20
+        assert settings.db_pool_max_overflow == 40
 
     def test_write_env_settings_batch_atomic(self, tmp_path):
         """All keys are written in a single pass - no partial updates."""
@@ -1279,7 +1273,7 @@ class TestDatabaseService:
     @patch("app.services.database_service._run_migrations", return_value=4)
     @patch("app.services.database_service.psycopg2")
     def test_provision_reinitializes_engine_and_settings(
-        self, mock_psycopg2, mock_migrations, mock_reinit, mock_write
+        self, mock_psycopg2, mock_migrations, mock_reinit, mock_write, monkeypatch
     ):
         """provision_database() must update in-memory settings and reinitialize the engine."""
         from app.config import settings
@@ -1295,26 +1289,24 @@ class TestDatabaseService:
         mock_psycopg2.Error = Exception
         mock_psycopg2.sql = __import__("psycopg2").sql
 
-        original_url = settings.database_url
-        try:
-            result = provision_database(
-                host="provhost",
-                port=5434,
-                admin_username="postgres",
-                admin_password="adminpw",
-                app_database="newecube",
-                app_username="appuser",
-                app_password="apppw",
-            )
+        monkeypatch.setattr(settings, "database_url", settings.database_url)
 
-            expected_url = "postgresql://appuser:apppw@provhost:5434/newecube"
-            assert result == 4
-            assert settings.database_url == expected_url
-            mock_reinit.assert_called_once_with(
-                expected_url, settings.db_pool_size, settings.db_pool_max_overflow
-            )
-        finally:
-            settings.database_url = original_url
+        result = provision_database(
+            host="provhost",
+            port=5434,
+            admin_username="postgres",
+            admin_password="adminpw",
+            app_database="newecube",
+            app_username="appuser",
+            app_password="apppw",
+        )
+
+        expected_url = "postgresql://appuser:apppw@provhost:5434/newecube"
+        assert result == 4
+        assert settings.database_url == expected_url
+        mock_reinit.assert_called_once_with(
+            expected_url, settings.db_pool_size, settings.db_pool_max_overflow
+        )
 
     def test_get_current_revision_returns_none_when_database_missing(self):
         """pgcode 3D000 (database does not exist) → None, not 503."""
