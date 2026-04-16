@@ -1,5 +1,7 @@
 import logging
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from typing import Dict, List, Tuple
+
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, require_roles
@@ -20,8 +22,31 @@ _ADMIN_MANAGER_PROCESSOR = require_roles("admin", "manager", "processor")
 _IP_VISIBLE_ROLES = {"admin", "auditor"}
 
 
+def _build_error_summary(files_failed: int, error_rows: List[Tuple[str, str]]) -> str:
+    """Format an error summary string from failure count and error rows."""
+    prefix = f"{files_failed} file{'s' if files_failed != 1 else ''} failed"
+    if error_rows:
+        parts = [
+            f"{msg[:120]}{'…' if len(msg) > 120 else ''} ({path[:80]}{'…' if len(path) > 80 else ''})"
+            for msg, path in error_rows
+        ]
+        summary = prefix + ": " + ", ".join(parts)
+        unreported = files_failed - len(error_rows)
+        if unreported > 0:
+            summary += f", ... and {unreported} more"
+    else:
+        summary = prefix
+    if len(summary) > 1024:
+        summary = summary[:1021] + "..."
+    return summary
+
+
 def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
-    """Serialize an ExportJob, enriching with derived fields and redacting client_ip."""
+    """Serialize an ExportJob, enriching with derived fields and redacting client_ip.
+
+    Used by single-job endpoints (get, create, start).  The list endpoint
+    uses :func:`_enrich_jobs_bulk` instead to avoid N+1 queries.
+    """
     schema = ExportJobSchema.model_validate(job)
     if not _IP_VISIBLE_ROLES.intersection(user.roles):
         schema.client_ip = None
@@ -33,21 +58,7 @@ def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
     # Error summary (fetches at most 5 rows, truncated to stay brief)
     if schema.files_failed:
         error_rows = file_repo.list_error_messages(job.id, limit=5)
-        prefix = f"{schema.files_failed} file{'s' if schema.files_failed != 1 else ''} failed"
-        if error_rows:
-            parts = [
-                f"{msg[:120]}{'…' if len(msg) > 120 else ''} ({path[:80]}{'…' if len(path) > 80 else ''})"
-                for msg, path in error_rows
-            ]
-            summary = prefix + ": " + ", ".join(parts)
-            unreported = schema.files_failed - len(error_rows)
-            if unreported > 0:
-                summary += f", ... and {unreported} more"
-        else:
-            summary = prefix
-        if len(summary) > 1024:
-            summary = summary[:1021] + "..."
-        schema.error_summary = summary
+        schema.error_summary = _build_error_summary(schema.files_failed, error_rows)
 
     # Nested drive info — select the most recent unreleased assignment
     assignment_repo = DriveAssignmentRepository(db)
@@ -56,6 +67,75 @@ def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
         schema.drive = DriveInfoSchema.model_validate(active.drive)
 
     return schema
+
+
+def _enrich_jobs_bulk(
+    jobs: list, user: CurrentUser, db: Session
+) -> List[ExportJobSchema]:
+    """Serialize a list of ExportJob models with bulk-fetched aggregates.
+
+    Replaces per-job queries with three bulk queries (file counts, error
+    messages, active assignments) regardless of list size.
+    """
+    if not jobs:
+        return []
+
+    redact_ip = not _IP_VISIBLE_ROLES.intersection(user.roles)
+    job_ids = [j.id for j in jobs]
+
+    # 1. Bulk file counts — single GROUP BY query
+    file_repo = FileRepository(db)
+    counts_map: Dict[int, Tuple[int, int]] = file_repo.bulk_count_done_and_errors(job_ids)
+
+    # 2. Bulk error messages — single window-function query for jobs with failures
+    failed_job_ids = [jid for jid, (_, errs) in counts_map.items() if errs > 0]
+    errors_map: Dict[int, List[Tuple[str, str]]] = (
+        file_repo.bulk_list_error_messages(failed_job_ids) if failed_job_ids else {}
+    )
+
+    # 3. Bulk active assignments — single query with eager-loaded drives
+    assignment_repo = DriveAssignmentRepository(db)
+    assignments_map = assignment_repo.bulk_get_active_for_jobs(job_ids)
+
+    # Assemble schemas
+    result: List[ExportJobSchema] = []
+    for job in jobs:
+        schema = ExportJobSchema.model_validate(job)
+        if redact_ip:
+            schema.client_ip = None
+
+        done, failed = counts_map.get(job.id, (0, 0))
+        schema.files_succeeded = done
+        schema.files_failed = failed
+
+        if failed:
+            error_rows = errors_map.get(job.id, [])
+            schema.error_summary = _build_error_summary(failed, error_rows)
+
+        active = assignments_map.get(job.id)
+        if active and getattr(active, "drive", None):
+            schema.drive = DriveInfoSchema.model_validate(active.drive)
+
+        result.append(schema)
+    return result
+
+
+@router.get("", response_model=list[ExportJobSchema], responses={**R_401, **R_403, **R_422})
+def list_jobs(
+    limit: int = Query(default=200, ge=1, le=1000, description="Maximum number of jobs to return"),
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ALL_ROLES),
+):
+    """List the most recent export jobs, ordered by creation time descending.
+
+    Returns up to *limit* jobs.  Each job includes status, progress, and
+    drive assignment metadata.
+
+    **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
+    """
+    jobs = job_service.list_jobs(db, limit=limit)
+    return _enrich_jobs_bulk(jobs, current_user, db)
 
 
 @router.post("", response_model=ExportJobSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500})

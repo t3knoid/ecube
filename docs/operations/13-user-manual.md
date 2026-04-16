@@ -73,7 +73,7 @@ ECUBE is commonly provided in one of three ways:
 
 ### 1.1 Packaged Installation
 
-An administrator installs ECUBE directly on a Linux host using the provided installer. This is the standard bare-metal or VM deployment for production-style environments.
+An administrator installs ECUBE directly on a Linux host using the provided installer. This is the standard native or VM deployment for production-style environments.
 
 What users should expect:
 
@@ -83,7 +83,7 @@ What users should expect:
 
 ### 1.2 Manual Installation
 
-An administrator deploys ECUBE manually as systemd-managed services with nginx or another reverse proxy. This is used when the installer cannot be used or when tighter enterprise controls are required.
+An administrator deploys ECUBE manually as a systemd-managed service. This is used when the installer cannot be used or when tighter enterprise controls are required. An optional external reverse proxy can be placed in front of ECUBE for additional TLS termination or load balancing.
 
 What users should expect:
 
@@ -441,6 +441,28 @@ Use `Test` or `Test All` to verify that configured source mounts are reachable a
 Remove a mount only if it is no longer needed. If existing workflows depend on it, removing the definition can interrupt job creation or repeatability.
 
 ![Mounts page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/mounts-default-chromium-linux.png)
+
+---
+
+## 8.4 Directory Browser
+
+The directory browser allows users to explore the contents of active mount points (USB drives and network shares) before creating an export job.
+
+**Accessing the browser:**
+
+- **From Drive Detail:** Click the mount path link on any mounted drive to open the directory browser rooted at that drive's mount point.
+- **From Mounts:** Click the mount point path on any active network mount.
+
+**Navigating:**
+
+- Click a folder name to descend into it. The breadcrumb trail at the top shows the current path.
+- Click any breadcrumb segment to navigate back up.
+- Symlinks appear with a link icon and are not navigable.
+- Results are paginated; use the page controls at the bottom to navigate large directories.
+
+**Roles:** All authenticated roles (`admin`, `manager`, `processor`, `auditor`) can browse directories.
+
+> **Note:** Only active, registered mount points can be browsed. Arbitrary filesystem paths are not accessible through this feature.
 
 ---
 

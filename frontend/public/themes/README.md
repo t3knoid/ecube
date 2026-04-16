@@ -4,7 +4,7 @@
 
 ECUBE uses **CSS custom properties** for theming. Each theme is a standalone
 CSS file located in `public/themes/` (or volume-mounted at
-`/usr/share/nginx/html/themes/` in the Docker container). The application
+`/opt/ecube/www/themes/` in the Docker container). The application
 loads a theme by injecting a `<link>` element into `<head>`.
 
 Two built-in themes ship with the application:
@@ -19,7 +19,7 @@ Two built-in themes ship with the application:
 1. Copy `default.css` (or `dark.css`) to a new file, e.g. `my-company.css`.
 2. Edit the CSS variable values — every variable in `:root` must be present.
 3. Place the file in `public/themes/` (dev) or volume-mount it into the
-   Docker container at `/usr/share/nginx/html/themes/my-company.css`.
+   Docker container at `/opt/ecube/www/themes/my-company.css`.
 4. Add an entry to `manifest.json` in the same directory:
 
    ```json
@@ -187,10 +187,10 @@ To use a custom theme in production without rebuilding:
 ```yaml
 # docker-compose.yml
 services:
-  frontend:
+  ecube-app:
     volumes:
-      - ./my-themes/custom.css:/usr/share/nginx/html/themes/custom.css:ro
-      - ./my-themes/manifest.json:/usr/share/nginx/html/themes/manifest.json:ro
+      - ./my-themes/custom.css:/opt/ecube/www/themes/custom.css:ro
+      - ./my-themes/manifest.json:/opt/ecube/www/themes/manifest.json:ro
 ```
 
 The `manifest.json` only needs to list custom themes. Built-in themes

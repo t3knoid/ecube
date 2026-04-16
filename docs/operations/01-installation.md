@@ -10,16 +10,17 @@
 ## Table of Contents
 
 1. [Deployment Options](#deployment-options)
-2. [Prerequisites](#prerequisites)
-3. [Quick Start (bare-metal)](#quick-start-bare-metal)
-4. [CLI Flags Reference](#cli-flags-reference)
-5. [Install Modes](#install-modes)
-6. [Prepare PostgreSQL](#prepare-postgresql)
-7. [Database Configuration](#database-configuration)
-8. [TLS Certificates](#tls-certificates)
-9. [Post-Install: Setup Wizard](#post-install-setup-wizard)
-10. [Upgrade Procedure](#upgrade-procedure)
-11. [Uninstall Procedure](#uninstall-procedure)
+2. [Deployment Topologies](#deployment-topologies)
+3. [Prerequisites](#prerequisites)
+4. [Quick Start (native)](#quick-start-native)
+5. [CLI Flags Reference](#cli-flags-reference)
+6. [Install Modes](#install-modes)
+7. [Prepare PostgreSQL](#prepare-postgresql)
+8. [Database Configuration](#database-configuration)
+9. [TLS Certificates](#tls-certificates)
+10. [Post-Install: Setup Wizard](#post-install-setup-wizard)
+11. [Upgrade Procedure](#upgrade-procedure)
+12. [Uninstall Procedure](#uninstall-procedure)
 
 ---
 
@@ -30,6 +31,37 @@
 | **Automated Installer (`install.sh`)** | Recommended for most deployments on a dedicated Linux host or VM. |
 | **Manual installation** | Advanced administrators who want full control of the installation and host provisioning steps instead of using the automated installer. See [02-manual-installation.md](02-manual-installation.md). |
 | **Docker Compose** | Dev/lab environments or container-native ops. See [03-docker-deployment.md](03-docker-deployment.md). |
+
+---
+
+## Deployment Topologies
+
+### Topology A: Single Host (recommended for small/medium installs)
+
+One host runs:
+
+- PostgreSQL
+- ECUBE backend + frontend (`ecube.service`)
+
+Behavior:
+
+- Uvicorn terminates TLS and serves both the API and the SPA frontend
+- Single process, single port (default `8443`)
+- Frontend sends API calls to `/api/...`; the application middleware strips the prefix before routing
+
+### Topology B: Enterprise Split Host
+
+Two dedicated hosts:
+
+- DB host: PostgreSQL only
+- Backend host: ECUBE backend + frontend (`ecube.service`)
+
+Behavior:
+
+- Backend host serves frontend and API on a single port
+- DB host is isolated from client networks
+
+For detailed manual deployment steps for each topology, see [02-manual-installation.md](02-manual-installation.md).
 
 ---
 
@@ -62,8 +94,6 @@ The installer will:
   - **Ubuntu:** adds the `deadsnakes/ppa` Ubuntu PPA (`ppa:deadsnakes/ppa`) via `add-apt-repository`.
   - **Debian 12:** installs `python3.11` directly from `main` (no extra source needed).
   - **Debian 11:** adds `bullseye-backports` (official Debian mirror, already trusted by `debian-archive-keyring`) and installs from there.
-- Install `nginx` via `apt` if `--frontend-only` or full install is selected and nginx is absent.
-
 **Required commands (must be present before running `install.sh`):**
 
 - `curl`
@@ -72,7 +102,7 @@ The installer will:
 
 ---
 
-## Quick Start (bare-metal)
+## Quick Start (native)
 
 Download a release package from [GitHub Releases](https://github.com/t3knoid/ecube/releases), extract it, and run the installer as root:
 
@@ -91,24 +121,22 @@ The installer will:
 3. Install `/etc/sudoers.d/ecube-user-mgmt` with narrowly scoped `NOPASSWD` rules for setup OS user/group management, mount/unmount operations, and selected drive filesystem commands.
 4. Install `/etc/pam.d/ecube` PAM configuration for local and domain user authentication (detects SSSD at install time and installs an SSSD-enabled or local-only variant accordingly).
 5. Set up a Python virtual environment in `<install-dir>/venv`.
-6. Generate a self-signed TLS certificate.
+6. Generate a self-signed TLS certificate (skipped with `--no-tls`).
 7. Write `<install-dir>/.env` with a random `SECRET_KEY`, `SETUP_DEFAULT_ADMIN_USERNAME=ecubeadmin`, and runtime defaults. `DATABASE_URL` is left empty and configured later via the setup wizard.
 8. Write and start the `ecube.service` systemd unit.
-9. (Full install) Configure nginx to serve the frontend and proxy `/api/` to the backend.
+9. Deploy the pre-built frontend to `<install-dir>/www` so FastAPI serves the SPA directly (no separate web server required).
 10. Optionally configure `ufw` firewall rules.
 
 At the end it prints a summary with the UI URL, API URL, and service management commands.
 
 ECUBE supports domain-backed user login through the host PAM stack when SSSD is installed and configured on the host. In that case, the installer writes an SSSD-enabled PAM configuration so both local accounts and domain accounts can authenticate to ECUBE.
 
-When PostgreSQL is available locally, the installer also creates (or updates)
-a PostgreSQL superuser for setup-wizard database provisioning and prints those
-credentials in the summary.
+When PostgreSQL is available locally, the installer also creates (or updates) a PostgreSQL superuser for setup-wizard database provisioning. By default it uses the same credentials as Docker Compose (`POSTGRES_USER`/`POSTGRES_PASSWORD`, falling back to `ecube`/`ecube`). Override with `--pg-superuser-name` and `--pg-superuser-pass`.
 
 **Immediate next step:** open the ECUBE web UI and complete setup:
 
-- Full install / frontend available: `https://<hostname>:<ui-port>/setup`
-- Backend-only install (no UI on this host): complete setup from a frontend-enabled ECUBE deployment URL (see the Operations guides for split-host deployment)
+- HTTPS (default): `https://<hostname>:<api-port>/setup`
+- HTTP (`--no-tls`): `http://<hostname>:<api-port>/setup`
 
 ---
 
@@ -116,21 +144,15 @@ credentials in the summary.
 
 | Flag | Default | Description |
 | ------ | --------- | ------------- |
-| *(none)* | — | Install both backend and frontend |
-| `--backend-only` | — | Install the backend service and systemd unit only |
-| `--frontend-only` | — | Install nginx and the pre-built frontend only |
 | `--install-dir DIR` | `/opt/ecube` | Root installation directory |
-| `--api-port PORT` | `8443` | HTTPS port for the backend |
-| `--ui-port PORT` | `443` | HTTPS port for nginx |
-| `--backend-host HOST` | `127.0.0.1` | Hostname/IP of the backend. Set this when the backend is on a separate host. |
-| `--allow-insecure-backend` | on | Disable TLS certificate verification (proxy_ssl_verify off) when proxying to a remote backend. Default: on. A warning is printed when this is in effect. |
-| `--secure-backend` | — | Enable TLS certificate verification against the system trust store (proxy_ssl_verify on). Use when the remote backend has a CA-signed cert trusted by the OS and you want strict verification without supplying a CA file. Mutually exclusive with --allow-insecure-backend. |
-| `--backend-ca-file FILE` | — | Path to a PEM CA certificate used to verify the remote backend's TLS certificate (proxy_ssl_trusted_certificate). Implies proxy_ssl_verify on. Ignored for loopback backends. |
-| `--pg-superuser-name NAME` | `ecubeadmin` | Name for the PostgreSQL superuser created during installation. Skips the interactive prompt when supplied. |
-| `--pg-superuser-pass PASS` | — | Password for the PostgreSQL superuser. Skips the interactive prompt when supplied. Must be non-empty and contain no whitespace. |
+| `--api-port PORT` | `8443` | Port for the service (default: `8443`, or `80` with `--no-tls`) |
+| `--no-tls` | — | Disable TLS entirely (plain HTTP, default port 80). Suitable for lab/testing only. |
+| `--pg-superuser-name NAME` | `POSTGRES_USER` or `ecube` | Name for the PostgreSQL superuser created during installation. |
+| `--pg-superuser-pass PASS` | `POSTGRES_PASSWORD` or `ecube` | Password for the PostgreSQL superuser. |
 | `--hostname HOST` | `$(hostname -f)` | Hostname/IP for TLS cert CN |
 | `--cert-validity DAYS` | `730` | Self-signed cert validity |
-| `--yes`, `-y` | off | Non-interactive / unattended mode |
+| `--yes`, `-y` | off | Non-interactive / unattended mode. Firewall rules are skipped unless `--firewall-cidr` is provided. |
+| `--firewall-cidr CIDR` | *(skip)* | Source CIDR to allow through ufw for the API port (e.g. `192.168.1.0/24`). In `--yes` mode, if omitted the firewall rule is **skipped** (safe default). Use `any` to explicitly open to all sources. |
 | `--version TAG` | *(current package)* | Download and install a specific GitHub release tag. Must be exact format: v<major>.<minor>.<patch> (e.g. v0.2.0). Pre-releases, build metadata, and tags without a leading v are not supported. |
 | `--uninstall` | — | Remove ECUBE from this host |
 | `--drop-database` | — | With --uninstall, also drop the configured application database (best-effort; requires sufficient DB privileges) |
@@ -141,71 +163,23 @@ credentials in the summary.
 
 ## Install Modes
 
-### Full Install (default)
+### Default Install (HTTPS)
 
 ```bash
 sudo ./install.sh
 ```
 
-Installs the backend **and** the nginx-fronted frontend on the same host. nginx terminates TLS externally on port `443`; uvicorn serves plain HTTP on `127.0.0.1` (loopback only) so there is no TLS hop between nginx and uvicorn.
+Installs the backend service, deploys the pre-built frontend, and starts `ecube.service`. Uvicorn terminates TLS itself and binds to `0.0.0.0` on port `8443` (configurable with `--api-port`). FastAPI serves both the API and the SPA frontend from a single process — no separate web server is required.
 
-Note: `--api-port` controls the backend listen port in all modes; the protocol is HTTPS in backend-only mode and HTTP in same-host nginx mode.
-
-### Backend Only
+### Plain HTTP Install (`--no-tls`)
 
 ```bash
-sudo ./install.sh --backend-only
+sudo ./install.sh --no-tls
 ```
 
-Installs the backend service only. uvicorn terminates TLS itself and binds to `0.0.0.0` so the API is directly reachable from the network. No nginx configuration is created. If you later run `--frontend-only` on the same host, the installer will automatically switch uvicorn to plain HTTP on `127.0.0.1` (nginx takes over TLS termination), patch `.env`, and preserve the existing backend API port unless `--api-port` is passed explicitly.
+Same as the default install but skips TLS certificate generation. Uvicorn listens on port `80` (configurable with `--api-port`). When the service port is below 1024, the systemd unit is configured with `AmbientCapabilities=CAP_NET_BIND_SERVICE` so the unprivileged `ecube` user can bind to it.
 
-### Frontend Only
-
-```bash
-# Backend on the same host (default):
-sudo ./install.sh --frontend-only
-
-# Backend on a separate host (--backend-host is required):
-sudo ./install.sh --frontend-only --backend-host <backend-ip-or-hostname>
-```
-
-Installs nginx and deploys the pre-built frontend bundle only.
-
-> **`--backend-host` requirement:** The default value (`127.0.0.1`) is only valid when the backend is running on the same host. When the backend is on a separate machine, `--backend-host` **must** be specified — omitting it will cause nginx to proxy to `127.0.0.1`, which will not reach the remote backend.
-
-**Same-host backend (default — `--backend-host 127.0.0.1`):** When `ecube.service` is already present on this host the installer automatically:
-
-- Patches `.env` to set `TRUST_PROXY_HEADERS=true` and `API_ROOT_PATH=/api` so FastAPI renders Swagger UI and OpenAPI schema URLs correctly behind nginx.
-- Rewrites the systemd unit so uvicorn serves plain HTTP on `127.0.0.1` instead of HTTPS on `0.0.0.0`; nginx becomes the sole TLS termination point.
-- Restarts `ecube.service` to apply the changes.
-
-Two successive invocations (`--backend-only` then `--frontend-only`) on the same host are therefore fully supported without any manual reconfiguration.
-
-If `--frontend-only` is used with the default `--backend-host 127.0.0.1`, but no local backend service exists/listens on `--api-port`, the installer fails fast with guidance to either install the backend first or pass `--backend-host <remote-host>`.
-
-**Remote backend (`--backend-host HOST`):** nginx proxies `/api/` to `https://<HOST>:<api-port>/`, stripping the `/api` prefix before requests reach FastAPI. TLS verification is **disabled by default** (`proxy_ssl_verify off`) for quick bring-up — the installer prints a warning when this is in effect. Three modes are supported:
-
-| Scenario | Command |
-|----------|---------|
-| Quick start / self-signed cert (default, warning shown) | `sudo ./install.sh --frontend-only --backend-host <host>` |
-| Backend has a private/internal CA cert | `sudo ./install.sh --frontend-only --backend-host <host> --backend-ca-file /path/to/ca.pem` |
-| Backend has a CA-signed cert trusted by the OS | `sudo ./install.sh --frontend-only --backend-host <host> --secure-backend` |
-
-Only leave TLS verification disabled (the default) on trusted networks (VPN, private subnet, etc.). Pass `--secure-backend` or `--backend-ca-file` to enable certificate verification in any other environment.
-
-> **Remote backend: required `.env` settings on the backend host.**  
-> Unlike a same-host install (where the installer patches `.env` automatically), when the backend runs on a separate machine you must manually set the following in the backend's `.env` before or after running `--backend-only`:
->
-> ```env
-> TRUST_PROXY_HEADERS=true
-> API_ROOT_PATH=/api
-> ```
->
-> `API_ROOT_PATH=/api` tells FastAPI that the application is mounted behind nginx at `/api`, so Swagger UI (`/api/docs`), the OpenAPI schema (`/api/openapi.json`), and all "Try it out" request URLs are generated with the correct prefix. `TRUST_PROXY_HEADERS=true` controls whether the backend trusts proxy headers (such as `X-Forwarded-For`) from nginx when determining the client IP address, which affects audit logging and any IP-aware features. After editing `.env`, restart the backend service:
->
-> ```bash
-> sudo systemctl restart ecube.service
-> ```
+Use `--no-tls` only for lab/testing or when TLS termination is handled by an external load balancer.
 
 ---
 
@@ -215,19 +189,26 @@ Before running the setup wizard, ensure PostgreSQL is installed, running, and
 reachable from the ECUBE host.
 
 In current installer flow, `install.sh` creates (or updates) a PostgreSQL
-superuser for setup-wizard provisioning and prints its credentials in the
-install summary. The setup wizard then uses those admin credentials to:
+superuser for setup-wizard provisioning. By default this uses `POSTGRES_USER`/`POSTGRES_PASSWORD` (falling back to `ecube`/`ecube`) — the same defaulting cascade as Docker Compose. The credentials are written to `.env` so the setup wizard can auto-fill them. The setup wizard then uses those admin credentials to:
 
 1. Create/update the ECUBE application role.
 2. Create the ECUBE application database.
 3. Run Alembic migrations.
 
-You can pre-seed the installer and avoid interactive prompts:
+You can override the defaults with CLI flags:
 
 ```bash
 sudo ./install.sh \
-  --pg-superuser-name ecubeadmin \
-  --pg-superuser-pass '<strong-password>'
+  --pg-superuser-name myadmin \
+  --pg-superuser-pass '<strong-password>' \
+  --firewall-cidr 192.168.1.0/24
+```
+
+For fully unattended installs, add `--yes`.  Without `--firewall-cidr`, the firewall step is safely skipped in `--yes` mode:
+
+```bash
+sudo ./install.sh --yes \
+  --firewall-cidr 10.0.0.0/8
 ```
 
 If local PostgreSQL access via `sudo -u postgres psql` is not available,
@@ -249,8 +230,7 @@ During installation:
 
 Notes:
 
-1. On first install, open `https://<hostname>:<ui-port>/setup` and complete the
-  database provisioning/configuration step.
+1. On first install, open `https://<hostname>:<api-port>/setup` (or `http://` for `--no-tls`) and complete the database provisioning/configuration step.
 2. On upgrades/re-runs, the installer preserves existing `.env`; it does not
   rotate or overwrite `DATABASE_URL`.
 3. During normal install flow, only `--pg-superuser-name` and `--pg-superuser-pass` configure
@@ -281,10 +261,7 @@ Notes:
 - IPv6 passed in bracketed form (for example `[2001:db8::10]`) is normalized to the bare address (`2001:db8::10`) for CN/SAN generation.
 - The installer does not emit `DNS:` SAN entries for IP literals (especially important for IPv6), because values containing `:` are not valid DNS SAN names.
 
-**Bring your own certificate:** Place your `cert.pem` and `key.pem` in `<install-dir>/certs/` before running the installer. The installer skips certificate generation if those files already exist, but it still reconciles file mode/ownership for the selected topology:
-
-- nginx topology (full install / `--frontend-only`): `key.pem` remains `root:root` with mode `600`; `cert.pem` is `ecube:ecube` with mode `644`
-- backend-only topology: `key.pem` and `cert.pem` are `ecube:ecube` (`600` for key, `644` for cert)
+**Bring your own certificate:** Place your `cert.pem` and `key.pem` in `<install-dir>/certs/` before running the installer. The installer skips certificate generation if those files already exist. Certificate files are owned by `ecube:ecube` (`600` for key, `644` for cert) since uvicorn terminates TLS directly.
 
 When certificate generation is attempted, OpenSSL stderr is appended to the installer log (`/var/log/ecube-install.log`, or the configured fallback), so generation failures are diagnosable.
 
@@ -295,8 +272,10 @@ When certificate generation is attempted, OpenSSL stderr is appended to the inst
 After installation, open the setup wizard in a browser (this is the required next step before normal use):
 
 ```text
-https://<hostname>:<ui-port>/setup
+https://<hostname>:<api-port>/setup
 ```
+
+For `--no-tls` installs, use `http://` instead.
 
 The wizard will:
 
@@ -329,7 +308,7 @@ The wizard will:
    sudo ./install.sh
    ```
 
-   The installer automatically stops `ecube.service` (and `nginx` for full installs) before running pre-flight checks, so re-running on an active host does not produce a "port already in use" error. Services are restarted at the end of the run.
+   The installer automatically stops `ecube.service` before running pre-flight checks, so re-running on an active host does not produce a "port already in use" error. The service is restarted at the end of the run.
 
 3. Application files (`app/`, `alembic/`, etc.) are **overwritten where present** — the installer copies a fixed list of items from the new release onto the existing installation. Files or directories that existed in the previous release but are no longer shipped are **not removed**; stale content may remain under `INSTALL_DIR` until manually cleaned up or a full uninstall/reinstall is performed. `.env` is **never overwritten** — existing operator secrets are preserved.
 4. The service is always restarted after an upgrade.
@@ -360,15 +339,14 @@ If ECUBE was installed with a custom `--install-dir`, run the installer from tha
 This will:
 
 1. Stop and disable `ecube*.service` units discovered on the host.
-2. Remove the nginx ecube site and reload nginx.
-3. Remove `<install-dir>` and `/var/lib/ecube`.
-4. Remove the `ecube` system user/group and the `ecube-www` bridge group (if present).
-5. Remove `/etc/sudoers.d/ecube-user-mgmt`.
-6. Remove `/etc/pam.d/ecube` PAM configuration.
-7. Remove ECUBE-related ufw rules and installer log (if present).
-8. Remove the deadsnakes PPA entry if detected.
-9. When `--drop-database` is provided, attempt to terminate active sessions
-  and drop the configured application database (best-effort).
+2. Remove `<install-dir>` and `/var/lib/ecube`.
+3. Remove the `ecube` system user/group (and the legacy `ecube-www` group if present).
+4. Remove `/etc/sudoers.d/ecube-user-mgmt`.
+5. Remove `/etc/pam.d/ecube` PAM configuration.
+6. Remove ECUBE-related ufw rules and installer log (if present).
+7. Remove the deadsnakes PPA entry if detected.
+8. Remove any legacy nginx ecube site configuration (if present from a previous version).
+9. When `--drop-database` is provided, attempt to terminate active sessions and drop the configured application database (best-effort).
 
 Use `--yes` to auto-accept the initial uninstall confirmation prompt.
 

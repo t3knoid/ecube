@@ -20,6 +20,7 @@ from typing import List, Optional, Protocol, Tuple
 
 from app.config import settings
 from app.infrastructure.device_path import validate_device_path
+from app.infrastructure.mount_info import unescape_mountpoint
 
 # Absolute paths to system utilities so PATH manipulation cannot redirect them.
 # Actual values come from settings; these module-level names kept for readability.
@@ -102,37 +103,6 @@ class LinuxDriveEject:
             flush_error=flush_err,
             unmount_error=umount_err,
         )
-
-
-def _unescape_mountpoint(escaped_path: str) -> str:
-    """Unescape special characters in /proc/mounts path.
-
-    /proc/mounts uses POSIX octal escape sequences (``\\040`` for space,
-    ``\\011`` for tab, etc.) to encode raw bytes of the filesystem path.
-    These are *raw bytes*, not Unicode code points, so we build a
-    ``bytearray`` first and then decode it as UTF-8.  This correctly handles
-    multi-byte UTF-8 sequences (e.g. ``\\303\\251`` for the UTF-8 encoding
-    of ``é``), whereas the ``unicode_escape`` codec would misinterpret each
-    octal value as a Latin-1 code point, producing mojibake.
-
-    Args:
-        escaped_path: Path string with escape sequences (from /proc/mounts)
-
-    Returns:
-        Unescaped path ready to pass to system calls.
-    """
-    try:
-        buf = bytearray()
-        for part in re.split(r'(\\[0-7]{3})', escaped_path):
-            if part and part[0] == '\\':
-                # Octal escape — convert to the corresponding byte value
-                buf.append(int(part[1:], 8))
-            else:
-                buf.extend(part.encode('utf-8', errors='surrogateescape'))
-        return buf.decode('utf-8', errors='surrogateescape')
-    except (ValueError, UnicodeDecodeError):
-        # If unescaping fails, return the original path
-        return escaped_path
 
 
 def _normalize_device_path(path: str) -> str:
@@ -265,7 +235,7 @@ def _find_device_mountpoints(device_base: str) -> Tuple[List[str], Optional[str]
                     normalized_prefix = _normalize_device_path(device_prefix)
                     
                     # Unescape mount point (handles \040 for space, \011 for tab, etc.)
-                    mount_point = _unescape_mountpoint(mount_point_escaped)
+                    mount_point = unescape_mountpoint(mount_point_escaped)
                     
                     # Match the device itself (exact match)
                     if normalized_source == normalized_prefix:
