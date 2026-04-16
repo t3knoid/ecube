@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 import pathlib
-from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
