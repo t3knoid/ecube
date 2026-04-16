@@ -242,6 +242,11 @@ def list_directory(
         try:
             with os.scandir(real_target) as it:  # noqa: S605 -- path validated above
                 dir_entries = sorted(it, key=lambda e: e.name)
+        except FileNotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail="The directory no longer exists — the drive or share may have been unmounted.",
+            )
         except PermissionError:
             raise HTTPException(
                 status_code=403,
