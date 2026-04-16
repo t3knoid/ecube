@@ -268,6 +268,33 @@ class TestBrowseSecurity:
         assert entry is not None
         assert "not a registered active mount root" in entry.details["reason"]
 
+    def test_admin_role_allowed(self, admin_client, db, tmp_path):
+        """Admin role can access the browse endpoint."""
+        mount_point = str(tmp_path)
+        (tmp_path / "file.txt").write_bytes(b"x")
+        _make_network_mount(db, mount_point)
+        with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]):
+            response = admin_client.get(f"/browse?path={mount_point}")
+        assert response.status_code == 200
+
+    def test_manager_role_allowed(self, manager_client, db, tmp_path):
+        """Manager role can access the browse endpoint."""
+        mount_point = str(tmp_path)
+        (tmp_path / "file.txt").write_bytes(b"x")
+        _make_network_mount(db, mount_point)
+        with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]):
+            response = manager_client.get(f"/browse?path={mount_point}")
+        assert response.status_code == 200
+
+    def test_auditor_role_allowed(self, auditor_client, db, tmp_path):
+        """Auditor role can access the browse endpoint."""
+        mount_point = str(tmp_path)
+        (tmp_path / "file.txt").write_bytes(b"x")
+        _make_network_mount(db, mount_point)
+        with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]):
+            response = auditor_client.get(f"/browse?path={mount_point}")
+        assert response.status_code == 200
+
 
 # ---------------------------------------------------------------------------
 # Parameter validation
