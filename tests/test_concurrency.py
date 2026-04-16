@@ -30,7 +30,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from sqlalchemy.exc import OperationalError
 
-from app.database import get_db
 from app.exceptions import ConflictError
 from app.models.hardware import DriveState, UsbDrive
 from app.models.jobs import ExportJob, JobStatus

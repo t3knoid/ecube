@@ -8,15 +8,9 @@ Covers:
 - Response schema matches AuditLogSchema.
 """
 
-import time
-
-import jwt
 import pytest
 from sqlalchemy import text
 
-from app.config import settings
-from app.database import get_db
-from app.main import app
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
 
