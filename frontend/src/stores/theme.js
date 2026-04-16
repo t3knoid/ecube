@@ -27,9 +27,11 @@ function _themesUrl(filename) {
   return `${import.meta.env.BASE_URL}themes/${filename}`
 }
 
-/** Theme subsystem debug log (always available; use browser log-level filtering to hide). */
+/** Theme subsystem debug log — only emits in development builds. */
 function _debug(...args) {
-  console.debug(...args)
+  if (import.meta.env.DEV) {
+    console.debug(...args)
+  }
 }
 
 /** Wraps a localStorage operation, swallowing errors when storage is unavailable. */
@@ -37,7 +39,7 @@ function _safeStorage(fn) {
   try {
     return fn()
   } catch (err) {
-    console.debug('[theme] localStorage unavailable:', err)
+    _debug('[theme] localStorage unavailable:', err)
   }
 }
 
