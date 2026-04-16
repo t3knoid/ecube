@@ -35,9 +35,9 @@ See `.env.example` in the release package for a copy-paste starting point.
 
 ## Database
 
-| Variable       | Default                                    | Description                |
-| -------------- | ------------------------------------------ | -------------------------- |
-| `DATABASE_URL` | `postgresql://ecube:ecube@localhost/ecube` | PostgreSQL connection URI. |
+| Variable       | Default   | Description                |
+| -------------- | --------- | -------------------------- |
+| `DATABASE_URL` | *(empty)* | PostgreSQL connection URI. Left empty on fresh installs; the setup wizard writes this value after database provisioning. |
 
 ---
 
@@ -53,9 +53,12 @@ See `.env.example` in the release package for a copy-paste starting point.
 
 These settings control the behaviour of the first-run setup wizard before the application database is provisioned.
 
-| Variable               | Default    | Description                                                                                                                                                                                                                                                                                                                                                                      |
-| ---------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SETUP_DOCKER_DB_HOST` | `postgres` | PostgreSQL hostname suggested to the setup wizard when the application detects it is running inside a Docker container. The setup wizard pre-fills the database host field with this value when `GET /setup/database/system-info` reports `in_docker: true`. Set this to the Docker Compose service name of your PostgreSQL container if it differs from the default `postgres`. |
+| Variable                       | Default       | Description                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------ | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PG_SUPERUSER_NAME`            | *(empty)*     | PostgreSQL superuser (or CREATEDB-privileged role) name used by the setup wizard to provision the application database. Cleared from `.env` automatically after successful provisioning. Both Docker and native deployments default to `POSTGRES_USER` (then `ecube`) when not explicitly set. |
+| `PG_SUPERUSER_PASS`            | *(empty)*     | Password for `PG_SUPERUSER_NAME`. Cleared from `.env` automatically after successful provisioning. Both Docker and native deployments default to `POSTGRES_PASSWORD` (then `ecube`) when not explicitly set. |
+| `SETUP_DOCKER_DB_HOST`         | `postgres`    | PostgreSQL hostname suggested to the setup wizard when the application detects it is running inside a Docker container. The setup wizard pre-fills the database host field with this value when `GET /setup/database/system-info` reports `in_docker: true`. Set this to the Docker Compose service name of your PostgreSQL container if it differs from the default `postgres`. |
+| `SETUP_DEFAULT_ADMIN_USERNAME` | `ecubeadmin`  | PostgreSQL admin username suggested by the setup wizard. Falls back to `PG_SUPERUSER_NAME` when set. The native installer writes this to keep UI defaults aligned with the superuser it created. |
 
 ---
 
@@ -120,15 +123,21 @@ Used when `ROLE_RESOLVER=oidc`.
 
 ---
 
-## UI Container (Docker Compose)
+## Docker Compose Deployment Variables
 
-These are deployment variables from Docker Compose (not `app/config.py` settings).
+These are deployment variables from Docker Compose (not `app/config.py` settings). They apply to Docker-based deployments where the `ecube-app` container serves both the API and the Vue SPA.
 
-| Variable           | Default           | Description                                                                                                         |
-| ------------------ | ----------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `UI_PORT`          | `8443`            | Host port mapped to the `ecube-ui` HTTPS listener (port 443 inside the container).                                  |
-| `ECUBE_CERTS_DIR`  | `./deploy/certs`  | Host directory containing `cert.pem` and `key.pem` for nginx TLS termination. Use `/opt/ecube/certs` in production. |
-| `ECUBE_THEMES_DIR` | `./deploy/themes` | Host directory for optional CSS theme overrides served by nginx. Use `/opt/ecube/themes` in production.             |
+| Variable              | Default           | Description                                                                                                         |
+| --------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `UI_PORT`             | `8443`            | Host port mapped to the `ecube-app` listener. Use `8000` with `ECUBE_NO_TLS=true`.                                 |
+| `ECUBE_NO_TLS`        | `false`           | Set to `true` to disable TLS and start uvicorn in plain HTTP mode. Also set `ECUBE_PORT=8000` and `UI_PORT=8000`.   |
+| `ECUBE_PORT`          | `8443`            | Internal container port uvicorn listens on. Use `8000` with `ECUBE_NO_TLS=true`.                                   |
+| `ECUBE_CERTS_DIR`     | *(not set)*       | Host directory containing `cert.pem` and `key.pem` for TLS. Mounted to `/opt/ecube/certs` inside the container. The Docker image includes a self-signed certificate; set this only to provide your own cert (also uncomment the certs volume in the compose file). Not required when `ECUBE_NO_TLS=true`. |
+| `ECUBE_THEMES_DIR`    | `./deploy/themes` | Host directory for optional CSS theme overrides. Mounted to `/opt/ecube/www/themes` inside the container.           |
+| `POSTGRES_USER`       | `ecube`           | PostgreSQL user for the `postgres` container. Also used as the default `PG_SUPERUSER_NAME` when not explicitly set. |
+| `POSTGRES_PASSWORD`   | *(required)*      | PostgreSQL password for the `postgres` container. Also used as the default `PG_SUPERUSER_PASS` when not explicitly set. |
+| `POSTGRES_DB`         | `ecube`           | PostgreSQL database name created by the `postgres` container.                                                       |
+| `POSTGRES_HOST_PORT`  | `5432`            | Host port for the PostgreSQL container. Not published by default; add a `ports` mapping to the postgres service in the compose file if needed for external tools. |
 
 For off-the-shelf themes, custom theme creation, default-theme behavior, and logo configuration details, see [11-theme-and-branding-guide.md](11-theme-and-branding-guide.md).
 
@@ -258,6 +267,7 @@ Operational notes:
 | `PROCFS_DISKSTATS_PATH`      | `/proc/diskstats`      | Path to `/proc/diskstats` for block-device I/O statistics. |
 | `SYSFS_USB_DEVICES_PATH`     | `/sys/bus/usb/devices` | Sysfs USB devices directory.                                   |
 | `SYSFS_BLOCK_PATH`           | `/sys/block`           | Sysfs block devices directory.                                 |
+| `USB_MOUNT_BASE_PATH`        | `/mnt/ecube`           | Base directory for USB drive mount points. Each drive is mounted at `<USB_MOUNT_BASE_PATH>/<drive_db_id>`. |
 
 ---
 
@@ -275,7 +285,16 @@ Operational notes:
 | Variable  | Default | Description |
 | --------- | ------- | ----------- |
 | `TRUST_PROXY_HEADERS` | `false` | When `true`, extract client IP from `X-Forwarded-For` / `X-Real-IP` headers for audit logging. Only enable when ECUBE runs behind a trusted reverse proxy that sets these headers. When `false`, the direct TCP connection address is used. |
-| `API_ROOT_PATH`       | *(empty)* | ASGI root path passed to FastAPI. Set to `/api` when a reverse proxy strips the `/api` prefix before forwarding requests to uvicorn (the standard Docker and nginx configuration). This ensures Swagger UI generates correct server URLs when accessed through the proxy. Leave empty when uvicorn is accessed directly. |
+| `API_ROOT_PATH`       | *(empty)* | ASGI root path passed to FastAPI. Set to `/api` when an external reverse proxy strips the `/api` prefix before forwarding requests to uvicorn. This ensures Swagger UI generates correct server URLs when accessed through the proxy. Leave empty for standard deployments (both native and Docker) where FastAPI serves the frontend directly. |
+| `SERVE_FRONTEND_PATH` | *(empty)* | Path to the pre-built frontend directory (e.g. `/opt/ecube/www`). When set, FastAPI serves the SPA directly and enables an `/api` prefix-stripping middleware so the frontend's `/api/...` requests reach the correct routes. Set automatically in Docker images. Leave empty only when an external reverse proxy or separate web server handles frontend serving. |
+
+---
+
+## Directory Browsing
+
+| Variable                    | Default                            | Description |
+| --------------------------- | ---------------------------------- | ----------- |
+| `BROWSE_ALLOWED_PREFIXES`   | `["/mnt/ecube/", "/nfs/", "/smb/"]` | JSON array of filesystem path prefixes permitted as browse roots. Only paths whose `realpath` starts with one of these prefixes are served by `GET /browse`. Override via environment variable to match the actual mount hierarchy on your deployment. |
 
 ---
 

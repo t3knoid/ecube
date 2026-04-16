@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import { STORAGE_SETTINGS_KEY } from '@/constants/storage.js'
 import { AUDIT_EXPORT_FILENAME, DOWNLOAD_REVOKE_DELAY_MS } from '@/constants/exports.js'
+import { logger } from '@/utils/logger.js'
 
 export const useSettingsStore = defineStore('settings', () => {
   const auditExportFilename = ref(AUDIT_EXPORT_FILENAME)
@@ -20,9 +21,7 @@ export const useSettingsStore = defineStore('settings', () => {
         }
       }
     } catch (err) {
-      if (import.meta.env.DEV) {
-        console.debug('[settings] corrupt storage, ignoring:', err)
-      }
+      logger.debug('[settings] corrupt storage, ignoring:', err)
     }
   }
 
