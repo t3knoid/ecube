@@ -17,7 +17,7 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 
-def _unescape_mountpoint(escaped_path: str) -> str:
+def unescape_mountpoint(escaped_path: str) -> str:
     """Unescape octal escape sequences used in ``/proc/mounts``.
 
     ``/proc/mounts`` uses POSIX octal escape sequences (``\\040`` for space,
@@ -57,7 +57,7 @@ def read_mount_points() -> dict[str, str]:
             for line in fh:
                 parts = line.split()
                 if len(parts) >= 2 and parts[0].startswith("/dev/"):
-                    result[parts[0]] = _unescape_mountpoint(parts[1])
+                    result[parts[0]] = unescape_mountpoint(parts[1])
     except OSError:
         logger.debug("Unable to read %s", mounts_path)
     return result

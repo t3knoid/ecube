@@ -20,7 +20,7 @@ from typing import List, Optional, Protocol, Tuple
 
 from app.config import settings
 from app.infrastructure.device_path import validate_device_path
-from app.infrastructure.mount_info import _unescape_mountpoint
+from app.infrastructure.mount_info import unescape_mountpoint
 
 # Absolute paths to system utilities so PATH manipulation cannot redirect them.
 # Actual values come from settings; these module-level names kept for readability.
@@ -235,7 +235,7 @@ def _find_device_mountpoints(device_base: str) -> Tuple[List[str], Optional[str]
                     normalized_prefix = _normalize_device_path(device_prefix)
                     
                     # Unescape mount point (handles \040 for space, \011 for tab, etc.)
-                    mount_point = _unescape_mountpoint(mount_point_escaped)
+                    mount_point = unescape_mountpoint(mount_point_escaped)
                     
                     # Match the device itself (exact match)
                     if normalized_source == normalized_prefix:
