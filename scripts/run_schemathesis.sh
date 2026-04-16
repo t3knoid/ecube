@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
 # run_schemathesis.sh — Spin up the ECUBE Docker stack and run Schemathesis
+# Supported on Linux only (Ubuntu and Debian).
 #
 # Usage:
 #   ./scripts/run_schemathesis.sh                    # local CI-like run (coverage only)
@@ -161,7 +162,6 @@ elif [[ -x "$PROJECT_ROOT/.venv/bin/st" ]]; then
 else
   echo "ERROR: Schemathesis CLI ('st') not found." >&2
   echo "       Install it with:  pip install schemathesis" >&2
-  echo "       Or with pipx:     pipx install schemathesis" >&2
   exit 1
 fi
 
