@@ -650,6 +650,12 @@ def _write_env_settings(updates: Dict[str, str]) -> None:
             # Copy temp contents into the original file to preserve the
             # bind-mount inode.  The temp file remains on disk until the
             # copy-back is fully synced, acting as a recovery artefact.
+            # Ensure the target is writable first — a bind-mounted file may
+            # have been set to owner-readonly (0o400) on the host.
+            try:
+                os.chmod(env_path, safe_mode)
+            except OSError:
+                pass  # best-effort; the open() below will fail if still unwritable
             with open(tmp_path, "r") as src, open(env_path, "w") as dst:
                 dst.writelines(src.readlines())
                 dst.flush()
