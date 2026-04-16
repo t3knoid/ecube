@@ -50,7 +50,7 @@
     "sortAsc": "Sort: ascending",
     "sortDesc": "Sort: descending",
     "empty": "No drives found",
-    "open": "Open",
+    "details": "Details",
     "notFound": "Drive not found",
     "format": "Format",
     "initialize": "Initialize",
