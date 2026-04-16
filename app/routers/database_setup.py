@@ -60,9 +60,22 @@ def _resolve_admin_credentials(
 ) -> tuple[str, str]:
     """Return (username, password), falling back to configured PG superuser.
 
-    Raises ``HTTPException(422)`` when credentials are missing from both the
-    request body and the server configuration.
+    If either credential is provided in the request, both must be supplied
+    (all-or-nothing) to prevent accidental mixing with server-side defaults.
+    Raises ``HTTPException(422)`` when credentials cannot be fully resolved.
     """
+    request_has_username = bool(admin_username)
+    request_has_password = bool(admin_password)
+
+    if request_has_username != request_has_password:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "admin_username and admin_password must be provided together; "
+                "supply both or omit both to use server-configured defaults."
+            ),
+        )
+
     username = admin_username or settings.pg_superuser_name
     password = admin_password or settings.pg_superuser_pass
     if not username or not password:
