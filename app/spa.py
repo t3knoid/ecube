@@ -67,8 +67,9 @@ def mount_spa_frontend(app: FastAPI, frontend_dir: pathlib.Path) -> None:
 
     * API paths (``/api/…``, ``/api-…``) and paths that were originally
       ``/api/…`` before prefix-stripping are rejected with 404.
-    * Path-traversal (``..``) is blocked in two layers: segment inspection
-      before ``resolve()`` and an ``is_relative_to()`` check afterward.
+    * Path-traversal (``..``) is rejected with 400 in two layers: segment
+      inspection before ``resolve()`` and an ``is_relative_to()`` check
+      afterward.
     """
     _index_html = frontend_dir / "index.html"
 
@@ -111,7 +112,7 @@ def mount_spa_frontend(app: FastAPI, frontend_dir: pathlib.Path) -> None:
         # via symlink resolution or directory climbing.
         if ".." in pathlib.PurePosixPath(full_path).parts:
             logger.debug("SPA fallback: rejected traversal in /%s", full_path)
-            return FileResponse(str(_index_html))
+            raise HTTPException(status_code=400, detail="Bad Request")
         file_path = (frontend_dir / full_path).resolve()
         # Second layer: even after resolve(), confirm the result is
         # still inside the frontend root.  is_relative_to() is a proper
