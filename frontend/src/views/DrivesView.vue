@@ -194,7 +194,7 @@ onMounted(loadDrives)
       </template>
       <template #cell-actions="{ row }">
         <div class="row-actions">
-          <button class="btn" @click="openDrive(row)">{{ t('drives.open') }}</button>
+          <button class="btn" @click="openDrive(row)">{{ t('drives.details') }}</button>
           <button
             v-if="row.mount_path && row.current_state !== 'EMPTY'"
             class="btn"
