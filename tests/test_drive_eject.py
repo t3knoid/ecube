@@ -136,37 +136,37 @@ class TestFindDeviceMountpoints:
 
     def test_unescape_mountpoint_with_spaces(self):
         """Correctly unescape mountpoints with escaped spaces from /proc/mounts."""
-        from app.infrastructure.mount_info import _unescape_mountpoint
+        from app.infrastructure.mount_info import unescape_mountpoint
         
         # /proc/mounts encodes spaces as \040
         escaped_path = "/media/my\\040files"
-        result = _unescape_mountpoint(escaped_path)
+        result = unescape_mountpoint(escaped_path)
         assert result == "/media/my files"
 
     def test_unescape_mountpoint_with_tabs(self):
         """Correctly unescape mountpoints with escaped tabs from /proc/mounts."""
-        from app.infrastructure.mount_info import _unescape_mountpoint
+        from app.infrastructure.mount_info import unescape_mountpoint
         
         # /proc/mounts encodes tabs as \011
         escaped_path = "/media/usb\\011backup"
-        result = _unescape_mountpoint(escaped_path)
+        result = unescape_mountpoint(escaped_path)
         assert result == "/media/usb\tbackup"
 
     def test_unescape_mountpoint_multiple_escapes(self):
         """Correctly unescape mountpoints with multiple escape sequences."""
-        from app.infrastructure.mount_info import _unescape_mountpoint
+        from app.infrastructure.mount_info import unescape_mountpoint
         
         # Multiple escapes: space, newline (as literal \n), etc.
         escaped_path = "/mnt/my\\040files\\011here"
-        result = _unescape_mountpoint(escaped_path)
+        result = unescape_mountpoint(escaped_path)
         assert result == "/mnt/my files\there"
 
     def test_unescape_mountpoint_no_escapes(self):
         """Mountpoint with no escapes should remain unchanged."""
-        from app.infrastructure.mount_info import _unescape_mountpoint
+        from app.infrastructure.mount_info import unescape_mountpoint
         
         path = "/media/usb"
-        result = _unescape_mountpoint(path)
+        result = unescape_mountpoint(path)
         assert result == "/media/usb"
 
     def test_unescape_mountpoint_utf8_non_ascii(self):
@@ -178,11 +178,11 @@ class TestFindDeviceMountpoints:
         The bytes-first decoding must reconstruct the original UTF-8 string;
         the old ``unicode_escape`` codec would produce mojibake (``cafÃ©``).
         """
-        from app.infrastructure.mount_info import _unescape_mountpoint
+        from app.infrastructure.mount_info import unescape_mountpoint
 
         # UTF-8 bytes for 'é' are 0xC3 0xA9 → octal \303 \251
         escaped_path = "/mnt/caf\\303\\251"
-        result = _unescape_mountpoint(escaped_path)
+        result = unescape_mountpoint(escaped_path)
         assert result == "/mnt/café"
 
     def test_find_device_with_escaped_mountpoint(self):
