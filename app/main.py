@@ -953,10 +953,16 @@ if settings.serve_frontend_path:
             if full_path.startswith(("api/", "api-")) or original_path.startswith("/api"):
                 raise HTTPException(status_code=404, detail="Not Found")
             # If the path matches an actual file in the dist dir, serve it.
-            file_path = (_frontend_dir / full_path).resolve()
             # Guard against path traversal (e.g. ../../etc/passwd).
-            # Check containment BEFORE any filesystem stat to avoid probing
-            # paths outside the frontend root.  is_relative_to() is a proper
+            # First reject any path containing ".." segments so we never
+            # call resolve() on a path that could escape the frontend root
+            # via symlink resolution or directory climbing.
+            if ".." in pathlib.PurePosixPath(full_path).parts:
+                logger.debug("SPA fallback: rejected traversal in /%s", full_path)
+                return FileResponse(str(_index_html))
+            file_path = (_frontend_dir / full_path).resolve()
+            # Second layer: even after resolve(), confirm the result is
+            # still inside the frontend root.  is_relative_to() is a proper
             # path-hierarchy check that avoids prefix-string false positives
             # (e.g. /opt/ecube/www_malicious).
             if full_path and file_path.is_relative_to(_frontend_root_resolved) and file_path.is_file():
