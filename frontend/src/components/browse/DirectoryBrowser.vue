@@ -104,9 +104,11 @@ watch(
   () => {
     subdir.value = ''
     page.value = 1
+    loadEntries()
   },
+  { immediate: true },
 )
-watch([() => props.mountPath, subdir, page], loadEntries, { immediate: true })
+watch([subdir, page], loadEntries)
 
 // --- Helpers ---
 function formatSize(bytes) {
