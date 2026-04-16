@@ -58,7 +58,7 @@ These settings control the behaviour of the first-run setup wizard before the ap
 | `PG_SUPERUSER_NAME`            | *(empty)*     | PostgreSQL superuser (or CREATEDB-privileged role) name used by the setup wizard to provision the application database. Cleared from `.env` automatically after successful provisioning. Both Docker and native deployments default to `POSTGRES_USER` (then `ecube`) when not explicitly set. |
 | `PG_SUPERUSER_PASS`            | *(empty)*     | Password for `PG_SUPERUSER_NAME`. Cleared from `.env` automatically after successful provisioning. Both Docker and native deployments default to `POSTGRES_PASSWORD` (then `ecube`) when not explicitly set. |
 | `SETUP_DOCKER_DB_HOST`         | `postgres`    | PostgreSQL hostname suggested to the setup wizard when the application detects it is running inside a Docker container. The setup wizard pre-fills the database host field with this value when `GET /setup/database/system-info` reports `in_docker: true`. Set this to the Docker Compose service name of your PostgreSQL container if it differs from the default `postgres`. |
-| `SETUP_DEFAULT_ADMIN_USERNAME` | `ecubeadmin`  | PostgreSQL admin username suggested by the setup wizard. Falls back to `PG_SUPERUSER_NAME` when set. The native installer writes this to keep UI defaults aligned with the superuser it created. |
+| `SETUP_DEFAULT_ADMIN_USERNAME` | *(empty)*     | PostgreSQL admin username suggested by the setup wizard as a last-resort fallback. The cascade is `PG_SUPERUSER_NAME` → `POSTGRES_USER` → this value. The native installer writes this to keep UI defaults aligned with the superuser it created. |
 
 ---
 

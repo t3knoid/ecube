@@ -26,7 +26,7 @@ const setupSuccessMessage = ref('')
 const db = ref({
   host: 'localhost',
   port: 5432,
-  admin_username: 'ecubeadmin',
+  admin_username: '',
   admin_password: '',
   app_database: 'ecube',
   app_username: 'ecube',
