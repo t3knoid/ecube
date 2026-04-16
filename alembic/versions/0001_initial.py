@@ -19,6 +19,15 @@ old head revision before the history was collapsed. In that case, run::
 Do not run ``alembic stamp 0001`` against a partially migrated or otherwise
 schema-drifted database. For those environments, recreate the database from
 scratch and then run ``alembic upgrade head``.
+
+Mutability notice
+-----------------
+This migration may be edited in-place while ECUBE is pre-release (no
+production deployments exist). All dev/test environments are rebuilt from
+scratch (``drop → create → alembic upgrade head``), so columns or indexes
+added here will always be applied. Once v1.0 ships, this file becomes
+immutable and all schema changes must use new sequential migrations.
+
 Revision ID: 0001
 Revises:
 Create Date: 2024-01-01 00:00:00.000000
