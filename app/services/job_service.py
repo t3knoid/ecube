@@ -54,6 +54,8 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
         db.add(job)
         db.flush()  # obtain job.id for the assignment FK
 
+        explicit_bound = False
+
         if body.drive_id is not None:
             drive = drive_repo.get_for_update(body.drive_id)
             if not drive:
@@ -98,6 +100,7 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
             # Bind the drive to this project if currently unbound.
             if drive.current_project_id is None:
                 drive.current_project_id = body.project_id
+                explicit_bound = True
 
             if not drive.mount_path:
                 db.rollback()
