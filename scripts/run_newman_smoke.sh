@@ -153,7 +153,15 @@ fi
 
 # The smoke test needs DATABASE_URL so the app connects to the compose
 # postgres service and reports /health/ready as 200 instead of 503.
-_smoke_db_url="postgresql://ecube:ecube@postgres:5432/ecube"
+# Derive from the effective POSTGRES_* values (env vars take precedence,
+# then .env, then defaults) so credentials stay in sync with the stack.
+_pg_user="${POSTGRES_USER:-$(sed -n 's/^POSTGRES_USER=//p' "$_env_file" | head -1)}"
+_pg_user="${_pg_user:-ecube}"
+_pg_pass="${POSTGRES_PASSWORD:-$(sed -n 's/^POSTGRES_PASSWORD=//p' "$_env_file" | head -1)}"
+_pg_pass="${_pg_pass:-ecube}"
+_pg_db="${POSTGRES_DB:-$(sed -n 's/^POSTGRES_DB=//p' "$_env_file" | head -1)}"
+_pg_db="${_pg_db:-ecube}"
+_smoke_db_url="postgresql://${_pg_user}:${_pg_pass}@postgres:5432/${_pg_db}"
 _current_db_url=$(sed -n 's/^DATABASE_URL=//p' "$_env_file" | head -1)
 # Strip one layer of surrounding quotes.
 _current_db_url="${_current_db_url#\"}" ; _current_db_url="${_current_db_url%\"}"
