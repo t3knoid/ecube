@@ -46,6 +46,7 @@
     "rescan": "Rescan",
     "searchPlaceholder": "Search by device, path, project, or ID",
     "allStates": "All states",
+    "sortBy": "Sort by",
     "sortAsc": "Sort: ascending",
     "sortDesc": "Sort: descending",
     "empty": "No drives found",
