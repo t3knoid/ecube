@@ -98,12 +98,13 @@ Options:
                          WARNING: all traffic is unencrypted.
   --pg-superuser-name NAME
                          Name for the PostgreSQL superuser created during
-                         installation (default: ecubeadmin). Skips the
-                         interactive prompt when supplied.
+                         installation (default: \$POSTGRES_USER or 'ecube').
+                         Skips the interactive prompt when supplied.
   --pg-superuser-pass PASS
-                         Password for the PostgreSQL superuser. Skips the
-                         interactive prompt when supplied. Must be non-empty
-                         and contain no whitespace.
+                         Password for the PostgreSQL superuser (default:
+                         \$POSTGRES_PASSWORD or 'ecube'). Skips the interactive
+                         prompt when supplied. Must be non-empty and contain
+                         no whitespace.
   --hostname HOST        Hostname/IP for TLS cert CN  (default: \$(hostname -f))
   --cert-validity DAYS   Self-signed cert validity    (default: 730, max: 730 — 2 years)
   --yes, -y              Non-interactive / unattended mode
