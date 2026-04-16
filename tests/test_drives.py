@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 from app.infrastructure.drive_eject import EjectResult
 from app.models.hardware import UsbDrive, DriveState
+from app.services import drive_service
 
 
 def _fake_eject(flush_ok=True, unmount_ok=True,
@@ -261,6 +262,53 @@ def test_mount_drive_db_save_failure_attempts_cleanup(manager_client, db):
 
     assert response.status_code == 500
     assert "rollback attempted" in response.json()["message"].lower()
+    provider.unmount_drive.assert_called_once_with(f"/mnt/ecube/{drive.id}")
+
+
+def test_mount_drive_relocks_only_after_os_mount_and_aborts_if_state_changed(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-004D",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        filesystem_path="/dev/sdh",
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = MagicMock()
+    call_order = []
+
+    def mount_side_effect(device_path, mount_point):
+        call_order.append("mount")
+        return True, None
+
+    provider.mount_drive.side_effect = mount_side_effect
+    provider.unmount_drive.return_value = (True, None)
+
+    original_get = drive_service.DriveRepository.get
+    original_get_for_update = drive_service.DriveRepository.get_for_update
+
+    def get_side_effect(self, drive_id):
+        call_order.append("get")
+        return original_get(self, drive_id)
+
+    def get_for_update_side_effect(self, drive_id):
+        call_order.append("lock")
+        locked_drive = original_get_for_update(self, drive_id)
+        if "mount" in call_order:
+            locked_drive.current_state = DriveState.ARCHIVED
+        return locked_drive
+
+    with (
+        patch("app.routers.drives.get_drive_mount", return_value=provider),
+        patch.object(drive_service.DriveRepository, "get", get_side_effect),
+        patch.object(drive_service.DriveRepository, "get_for_update", get_for_update_side_effect),
+    ):
+        response = manager_client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 409
+    assert "changed during mount" in response.json()["message"].lower()
+    assert call_order == ["get", "mount", "lock"]
     provider.unmount_drive.assert_called_once_with(f"/mnt/ecube/{drive.id}")
 
 
