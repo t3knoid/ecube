@@ -42,7 +42,7 @@ const columns = computed(() => [
   { key: 'mount_path', label: t('drives.localMountPoint') },
   { key: 'current_state', label: t('common.labels.status') },
   { key: 'current_project_id', label: t('dashboard.project') },
-  { key: 'actions', label: t('common.actions.edit'), align: 'center' },
+  { key: 'actions', label: '', align: 'center' },
 ])
 
 function formatBytes(value) {
