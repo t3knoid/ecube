@@ -90,7 +90,7 @@ class JobRepository:
         """Return the most recent jobs ordered by creation time descending."""
         return (
             self.db.query(ExportJob)
-            .order_by(ExportJob.created_at.desc())
+            .order_by(ExportJob.created_at.desc(), ExportJob.id.desc())
             .limit(limit)
             .all()
         )
