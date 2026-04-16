@@ -48,7 +48,7 @@ const columns = computed(() => [
   { key: 'local_mount_point', label: t('mounts.localPath') },
   { key: 'status', label: t('common.labels.status') },
   { key: 'last_checked_at', label: t('mounts.lastChecked') },
-  { key: 'actions', label: t('common.actions.edit'), align: 'center' },
+  { key: 'actions', label: '', align: 'center' },
 ])
 
 const filtered = computed(() => {
