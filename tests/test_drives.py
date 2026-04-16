@@ -128,6 +128,26 @@ def test_mount_drive_success(manager_client, db):
     audit = db.query(AuditLog).filter(AuditLog.action == "DRIVE_MOUNTED").first()
     assert audit is not None
     assert audit.details["drive_id"] == drive.id
+    assert audit.details["device_name"] == "sdb"
+    assert audit.details["mount_slot"] == str(drive.id)
+    assert "filesystem_path" not in audit.details
+    assert "mount_path" not in audit.details
+
+
+def test_mount_drive_requires_recognized_filesystem(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-001B",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="unknown",
+        filesystem_path="/dev/sdb",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = manager_client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 409
+    assert "recognized filesystem" in response.json()["message"].lower()
 
 
 def test_mount_drive_conflict_when_already_mounted(manager_client, db):
@@ -191,6 +211,10 @@ def test_mount_drive_provider_failure_is_audited(manager_client, db):
     assert audit is not None
     assert audit.details["drive_id"] == drive.id
     assert audit.details["error"] == "mount failed"
+    assert audit.details["device_name"] == "sdd"
+    assert audit.details["mount_slot"] == str(drive.id)
+    assert "filesystem_path" not in audit.details
+    assert "mount_path" not in audit.details
 
 
 def test_mount_drive_processor_forbidden(client, db):
@@ -411,9 +435,10 @@ def test_prepare_eject_with_filesystem_path(manager_client, db):
     assert log.drive_id == drive.id
     assert log.project_id == "PROJ-001"
     assert log.details["drive_id"] == drive.id
-    assert log.details["filesystem_path"] == "/dev/sdb"
+    assert log.details["device_name"] == "sdb"
     assert log.details["flush_ok"] is True
     assert log.details["unmount_ok"] is True
+    assert "filesystem_path" not in log.details
 
 
 def test_prepare_eject_not_found(manager_client, db):
