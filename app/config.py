@@ -14,6 +14,16 @@ class Settings(BaseSettings):
     # database connectivity is configured.
     database_url: str = ""
 
+    #: PostgreSQL superuser (or CREATEDB-privileged role) name used by the
+    #: setup wizard to provision the application database.  Set via
+    #: ``PG_SUPERUSER_NAME`` in ``.env``.  Cleared automatically after
+    #: successful provisioning.
+    pg_superuser_name: str = ""
+
+    #: Password for :attr:`pg_superuser_name`.  Cleared automatically from
+    #: ``.env`` after successful database provisioning.
+    pg_superuser_pass: str = ""
+
     #: PostgreSQL hostname suggested to the setup wizard when the application
     #: is detected to be running inside a Docker container.  In a standard
     #: Docker Compose deployment this matches the ``postgres`` service name.
@@ -22,7 +32,8 @@ class Settings(BaseSettings):
     setup_docker_db_host: str = "postgres"
 
     #: PostgreSQL admin username suggested to the setup wizard for the
-    #: database provisioning step. The installer can persist this in `.env`
+    #: database provisioning step.  Falls back to :attr:`pg_superuser_name`
+    #: when this field is not configured.  The installer can persist this in ``.env``
     #: (``SETUP_DEFAULT_ADMIN_USERNAME=...``) to keep UI defaults aligned
     #: with the superuser it created.
     setup_default_admin_username: str = "ecubeadmin"
@@ -237,7 +248,7 @@ class Settings(BaseSettings):
 
     #: Whether to prepend ``sudo`` to OS management commands.  Set to
     #: ``false`` when the process already runs as root (e.g. inside a
-    #: Docker container).  Defaults to ``true`` for bare-metal deployments
+    #: Docker container).  Defaults to ``true`` for native deployments
     #: where the service runs as a non-root ``ecube`` account.
     use_sudo: bool = True
 
@@ -293,6 +304,10 @@ class Settings(BaseSettings):
     #: Only paths whose realpath starts with one of these prefixes (after DB
     #: validation) are served.  Provides a secondary defence-in-depth layer on
     #: top of the database-backed mount root validation.
+    #:
+    #: The defaults cover common ECUBE layouts.  Operators should override this
+    #: via the ``BROWSE_ALLOWED_PREFIXES`` environment variable (JSON array) to
+    #: match the actual mount hierarchy on their deployment.
     browse_allowed_prefixes: List[str] = Field(
         default=["/mnt/ecube/", "/nfs/", "/smb/"]
     )
@@ -312,7 +327,7 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------------------
 
     #: Origins permitted for cross-origin requests.  Empty by default
-    #: (CORS disabled).  In production, nginx proxies everything on the
+    #: (CORS disabled).  In production, FastAPI serves the SPA on the
     #: same origin so CORS is not triggered.  For local development, set
     #: via the ``CORS_ALLOWED_ORIGINS`` env var as a JSON list, e.g.:
     #:
@@ -331,12 +346,20 @@ class Settings(BaseSettings):
     trust_proxy_headers: bool = False
 
     #: Path prefix this application is mounted at behind a reverse proxy.
-    #: Set to ``"/api"`` when a proxy strips the ``/api`` prefix before
-    #: forwarding requests (e.g. the bundled nginx config and the bare-metal
-    #: installer).  Leave empty for direct deployments where no prefix is
-    #: stripped.  Controls the ``servers`` entry in the OpenAPI spec so that
-    #: Swagger UI "Try it out" generates correct request paths.
+    #: Set to ``"/api"`` when an external reverse proxy (e.g. nginx)
+    #: strips the ``/api`` prefix before forwarding requests.  Leave
+    #: empty for standard deployments (both native and Docker) and any
+    #: deployment where no prefix is stripped.  Controls the ``servers``
+    #: entry in the OpenAPI spec so that Swagger UI "Try it out" generates
+    #: correct request paths.
     api_root_path: str = ""
+
+    #: Absolute path to a directory containing the pre-built frontend
+    #: (Vue/Vite ``dist/`` output).  When set and the directory exists,
+    #: FastAPI serves these static files and provides SPA fallback.  Set
+    #: automatically in Docker images.  Leave empty (default) only when
+    #: an external reverse proxy serves the frontend.
+    serve_frontend_path: str = ""
 
     # ---------------------------------------------------------------------------
     # Webhook callback settings
@@ -423,6 +446,39 @@ class Settings(BaseSettings):
 
     #: Enable TCP keepalive on the Redis socket to detect dead connections.
     redis_socket_keepalive: bool = True
+
+    @field_validator("serve_frontend_path", mode="before")
+    @classmethod
+    def _normalise_serve_frontend_path(cls, v: str) -> str:  # noqa: N805
+        """Ensure ``serve_frontend_path`` is empty or an absolute path.
+
+        Rejects dangerous system roots (``/``, ``/etc``, …) so a
+        misconfiguration fails fast at startup rather than silently
+        exposing host files through the SPA fallback.
+        """
+        if not isinstance(v, str) or v.strip() == "":
+            return ""
+        import os
+        v = v.strip()
+        if not os.path.isabs(v):
+            raise ValueError(
+                f"SERVE_FRONTEND_PATH must be an absolute path, got: {v!r}"
+            )
+        normalised = os.path.normpath(v)
+        # Reject well-known system roots — mirrors the installer's
+        # _protected list so runtime and install-time share the same
+        # safety boundary.
+        _DANGEROUS_ROOTS = frozenset((
+            "/", "/bin", "/boot", "/dev", "/etc", "/home", "/lib",
+            "/lib64", "/media", "/mnt", "/opt", "/proc", "/root",
+            "/run", "/sbin", "/srv", "/sys", "/tmp", "/usr", "/var",
+        ))
+        if normalised in _DANGEROUS_ROOTS:
+            raise ValueError(
+                f"SERVE_FRONTEND_PATH must not be a system root directory, "
+                f"got: {normalised!r}"
+            )
+        return normalised
 
     @field_validator("session_cookie_domain", mode="before")
     @classmethod

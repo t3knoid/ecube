@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Generator
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
@@ -373,6 +373,18 @@ if settings.cors_allowed_origins:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+
+# ---------------------------------------------------------------------------
+# /api prefix stripping (standalone mode)
+# ---------------------------------------------------------------------------
+# When serving the frontend directly (no nginx), the UI sends all API requests
+# to /api/... because that's what nginx used to proxy.  Rewrite them to /...
+# so they match the actual FastAPI routes.
+# ---------------------------------------------------------------------------
+if settings.serve_frontend_path:
+    from app.spa import add_strip_api_prefix_middleware
+    add_strip_api_prefix_middleware(app)
 
 
 @app.middleware("http")
@@ -853,3 +865,49 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
         traceback.format_exc(),
     )
     return _error_response(500, "INTERNAL_ERROR", "An unexpected error occurred.", trace_id)
+
+
+# ---------------------------------------------------------------------------
+# Optional embedded frontend (--no-nginx / standalone mode)
+# ---------------------------------------------------------------------------
+# When SERVE_FRONTEND_PATH points to a Vite dist/ directory, serve the
+# pre-built SPA directly from FastAPI — no nginx required.  Mounted last
+# so all API routes take priority.
+# ---------------------------------------------------------------------------
+if settings.serve_frontend_path:
+    import pathlib
+
+    _frontend_dir = pathlib.Path(settings.serve_frontend_path)
+    _index_html = _frontend_dir / "index.html"
+
+    if not _frontend_dir.is_dir():
+        logger.error(
+            "SERVE_FRONTEND_PATH=%s does not exist or is not a directory — "
+            "frontend will NOT be served. Requests to / will return 404. "
+            "Run the installer to deploy the frontend, or check the path.",
+            settings.serve_frontend_path,
+        )
+    elif not _index_html.is_file():
+        logger.error(
+            "SERVE_FRONTEND_PATH=%s exists but index.html is missing — "
+            "frontend will NOT be served. Requests to / will return 404. "
+            "Ensure the pre-built frontend was deployed to this directory.",
+            settings.serve_frontend_path,
+        )
+
+    if _frontend_dir.is_dir() and _index_html.is_file():
+        from app.spa import mount_spa_frontend
+        mount_spa_frontend(app, _frontend_dir)
+
+        logger.info("Serving frontend from %s (standalone mode)", _frontend_dir)
+        _themes_dir = _frontend_dir / "themes"
+        if _themes_dir.is_dir():
+            _theme_files = sorted(f.name for f in _themes_dir.iterdir() if f.is_file())
+            logger.info("Theme files found in %s: %s", _themes_dir, _theme_files)
+        else:
+            logger.warning("No themes/ directory found at %s", _themes_dir)
+else:
+    logger.warning(
+        "SERVE_FRONTEND_PATH is not set — frontend will NOT be served. "
+        "API-only mode; requests to / will return 404.",
+    )

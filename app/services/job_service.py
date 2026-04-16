@@ -24,6 +24,12 @@ from app.utils.sanitize import is_encoding_error
 logger = logging.getLogger(__name__)
 
 
+def list_jobs(db: Session, limit: int = 200) -> list[ExportJob]:
+    """Return the most recent export jobs."""
+    repo = JobRepository(db)
+    return repo.list_recent(limit=limit)
+
+
 def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client_ip: Optional[str] = None) -> ExportJob:
     drive_repo = DriveRepository(db)
     audit_repo = AuditRepository(db)

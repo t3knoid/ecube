@@ -13,7 +13,8 @@ Security model:
    ``settings.browse_allowed_prefixes`` as a secondary defence layer.
 5. Symlinks are *not* followed — they are reported as ``type: "symlink"`` but
    never dereferenced.
-6. A ``BROWSE_DIRECTORY`` audit record is written on every call.
+6. A ``BROWSE_DIRECTORY`` audit record is written on success; a
+   ``BROWSE_DENIED`` record is written when the request is rejected with 403.
 """
 
 import logging
@@ -28,7 +29,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.hardware import UsbDrive
 from app.models.network import MountStatus, NetworkMount
-from app.schemas.browse import BrowseEntry, BrowseResponse
+from app.schemas.browse import BrowseEntry, BrowseResponse, EntryType
 from app.services.audit_service import log_and_audit
 
 logger = logging.getLogger(__name__)
@@ -142,44 +143,38 @@ def _resolve_and_validate(
     return real_root, real_target
 
 
-def _stat_entry(dirpath: str, name: str) -> Optional[BrowseEntry]:
-    """Build a :class:`BrowseEntry` for ``name`` inside ``dirpath``.
+def _stat_entry(dir_entry: os.DirEntry) -> Optional[BrowseEntry]:
+    """Build a :class:`BrowseEntry` from an :class:`os.DirEntry`.
 
-    Uses ``lstat`` so that symlinks are reported as-is without following them.
-    Returns ``None`` when the entry cannot be stat'd (e.g. race condition).
+    Accepts an ``os.DirEntry`` so the caller can sort by name before
+    stat'ing only the page slice.  Note: ``DirEntry.stat()`` still
+    performs a real ``lstat`` syscall on the first call (it is **not**
+    served from the ``scandir`` d_type cache); however, the result is
+    cached on the ``DirEntry`` for any subsequent ``.stat()`` calls.
 
-    Security: ``dirpath`` is the validated ``real_target`` (contained within the
-    DB-registered mount root).  ``name`` comes from ``os.listdir()`` — it is a
-    filesystem-provided entry name, not user input.  The join of two safe values
-    is therefore safe; the ``os.lstat`` call below is intentional (false-positive
-    path-injection: path is validated by the caller via realpath containment check).
+    Returns ``None`` when the entry cannot be stat'd (e.g. race condition
+    where the file was removed between ``scandir`` and ``stat``).
     """
-    # Limit name to a bare filename component (no directory separators).
-    # On POSIX, os.listdir() always returns bare names, so this is a
-    # defence-in-depth guard against unexpected platform behaviour or
-    # filesystem corruption rather than a defence against user input.
-    safe_name = os.path.basename(name)
-    full_path = os.path.join(dirpath, safe_name)
     try:
-        entry_stat = os.lstat(full_path)
+        entry_stat = dir_entry.stat(follow_symlinks=False)
     except OSError:
         return None
 
     mode = entry_stat.st_mode
     if stat.S_ISLNK(mode):
-        entry_type = "symlink"
+        entry_type = EntryType.SYMLINK
         size_bytes = None
     elif stat.S_ISDIR(mode):
-        entry_type = "directory"
+        entry_type = EntryType.DIRECTORY
         size_bytes = None
     else:
-        entry_type = "file"
+        entry_type = EntryType.FILE
         size_bytes = entry_stat.st_size
 
     modified_at = datetime.fromtimestamp(entry_stat.st_mtime, tz=timezone.utc)
 
     return BrowseEntry(
-        name=safe_name,
+        name=dir_entry.name,
         type=entry_type,
         size_bytes=size_bytes,
         modified_at=modified_at,
@@ -234,31 +229,23 @@ def list_directory(
         if db_mount_root is None:
             raise HTTPException(
                 status_code=403,
-                detail={
-                    "message": "The requested path is not a registered active mount root.",
-                    "reason": "unknown_mount_root",
-                },
+                detail="The requested path is not a registered active mount root.",
             )
 
         # 2 & 3. Resolve path from the trusted DB root + user subdir; validate
         #         containment (anti-traversal) and allowlist (defence-in-depth).
         real_root, real_target = _resolve_and_validate(db_mount_root, subdir)
 
-        # 4. List directory -- use os.scandir() to collect only entry names,
-        #    sort them, then stat only the requested page.  This avoids
-        #    materialising full BrowseEntry objects for every file in large
-        #    directories; only the page slice is stat'd.
+        # 4. List directory -- use os.scandir() to collect DirEntry objects,
+        #    sort by name, then stat only the requested page.  This avoids
+        #    stat'ing entries outside the page window.
         try:
-            names = sorted(
-                entry.name for entry in os.scandir(real_target)  # noqa: S605 -- path validated above
-            )
+            with os.scandir(real_target) as it:  # noqa: S605 -- path validated above
+                dir_entries = sorted(it, key=lambda e: e.name)
         except PermissionError:
             raise HTTPException(
                 status_code=403,
-                detail={
-                    "message": "Permission denied listing the requested directory.",
-                    "reason": "permission_denied",
-                },
+                detail="Permission denied listing the requested directory.",
             )
         except NotADirectoryError:
             raise HTTPException(
@@ -272,14 +259,13 @@ def list_directory(
                 detail="Failed to list the directory due to a filesystem error.",
             )
 
-        total = len(names)
+        total = len(dir_entries)
         start = (page - 1) * page_size
-        page_names = names[start : start + page_size]
+        page_slice = dir_entries[start : start + page_size]
 
         entries = []
-        for name in page_names:
-            # name comes from os.listdir() (filesystem-provided), not from user input
-            entry = _stat_entry(real_target, name)  # noqa: S605 -- path validated above
+        for de in page_slice:
+            entry = _stat_entry(de)  # noqa: S605 -- path validated above
             if entry is not None:
                 entries.append(entry)
 
@@ -309,12 +295,7 @@ def list_directory(
         )
     except HTTPException as exc:
         if exc.status_code == 403:
-            reason = "browse_forbidden"
-            detail = exc.detail
-            if isinstance(detail, dict):
-                reason = str(detail.get("reason") or detail.get("message") or reason)
-            elif detail:
-                reason = str(detail)
+            reason = str(exc.detail) if exc.detail else "browse_forbidden"
 
             log_and_audit(
                 db,
