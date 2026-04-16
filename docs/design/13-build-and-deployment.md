@@ -21,9 +21,9 @@ The build and deployment design exists to satisfy these goals:
 
 ECUBE supports two primary deployment models.
 
-### Package-Based Deployment
+### Package-Based Deployment (Native Standalone)
 
-In the package-based model, ECUBE runs as a host-managed Python application under Linux service management.
+In the default package-based model, ECUBE runs as a host-managed Python application under Linux service management. The application serves the frontend SPA directly. The installer configures TLS termination in Uvicorn and deploys the pre-built frontend to `<install-dir>/www`.
 
 This model is appropriate when:
 
@@ -31,9 +31,18 @@ This model is appropriate when:
 - operators want direct host-level service control,
 - local integration with OS facilities is preferred over container orchestration.
 
+### Package-Based Deployment (Behind Reverse Proxy)
+
+Same host-managed application, but an optional external reverse proxy (nginx, HAProxy, etc.) terminates TLS in front of ECUBE. The application runs behind the proxy with `TRUST_PROXY_HEADERS=true`. If the proxy also serves the frontend (from a separate host or CDN), set `SERVE_FRONTEND_PATH` to empty and `API_ROOT_PATH=/api` so the proxy can strip the prefix before forwarding.
+
+This model is appropriate when:
+
+- centralized TLS termination or load balancing is required,
+- the frontend is served from a separate host or CDN.
+
 ### Container-Based Deployment
 
-In the container-based model, ECUBE runs as one or more containers with PostgreSQL and, when applicable, a separate UI container.
+In the container-based model, ECUBE runs as two containers: `ecube-app` (FastAPI serving both API and Vue SPA with TLS) and PostgreSQL.
 
 This model is appropriate when:
 
@@ -70,7 +79,7 @@ At deployment time, ECUBE depends on:
 - Python runtime and application dependencies,
 - PostgreSQL for persistent state,
 - OS-level utilities required by the trusted system layer,
-- optional frontend and reverse-proxy runtime when the web UI is deployed.
+- pre-built frontend assets served by FastAPI (bundled into the Docker image or deployed to SERVE_FRONTEND_PATH for native installs).
 
 Cryptographic JWT validation support is a required part of the dependency model because OIDC token verification depends on asymmetric signature algorithms.
 
@@ -78,12 +87,11 @@ Cryptographic JWT validation support is a required part of the dependency model 
 
 In the container deployment model, the system is logically split into:
 
-- API/runtime container,
+- API/runtime container (serves both backend API and frontend SPA with TLS),
 - PostgreSQL database container,
-- optional UI container for static asset serving and reverse proxying,
 - optional Redis container when server-side session storage is selected.
 
-This separation preserves the trust boundary between the UI and the hardware-aware system layer while allowing the UI to remain a conventional web workload.
+This separation preserves the trust boundary between the UI and the hardware-aware system layer while keeping the deployment simple (two containers: ecube-app + postgres).
 
 ## 13.7 Configuration Boundaries
 

@@ -186,6 +186,7 @@ def run_discovery_sync(
                 filesystem_path=discovered_drive.filesystem_path,
                 capacity_bytes=discovered_drive.capacity_bytes,
                 current_state=initial_state,
+                mount_path=discovered_drive.mount_path,
             )
             # Detect filesystem type for newly discovered drives.
             if discovered_drive.filesystem_path:
@@ -211,6 +212,7 @@ def run_discovery_sync(
                 continue
             db.refresh(drive)
             drives_inserted.append(discovered_drive.device_identifier)
+
         else:
             # Existing drive — update mutable fields.
             changed = False
@@ -222,6 +224,9 @@ def run_discovery_sync(
                 changed = True
             if discovered_drive.capacity_bytes is not None and existing.capacity_bytes != discovered_drive.capacity_bytes:
                 existing.capacity_bytes = discovered_drive.capacity_bytes
+                changed = True
+            if existing.mount_path != discovered_drive.mount_path:
+                existing.mount_path = discovered_drive.mount_path
                 changed = True
 
             # Detect filesystem type on every refresh cycle.
@@ -249,6 +254,7 @@ def run_discovery_sync(
             # IN_USE drives are left untouched to preserve project isolation.
             if existing.current_state == DriveState.AVAILABLE and not _port_is_enabled(port_id or existing.port_id):
                 existing.current_state = DriveState.EMPTY
+                existing.mount_path = None
                 changed = True
 
             if changed:
@@ -271,6 +277,7 @@ def run_discovery_sync(
         if drive.device_identifier not in discovered_ids:
             if drive.current_state == DriveState.AVAILABLE:
                 drive.current_state = DriveState.EMPTY
+                drive.mount_path = None
                 try:
                     db.commit()
                 except Exception:

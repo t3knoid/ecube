@@ -46,6 +46,7 @@
     "rescan": "Rescan",
     "searchPlaceholder": "Search by device, path, project, or ID",
     "allStates": "All states",
+    "sortBy": "Sort by",
     "sortAsc": "Sort: ascending",
     "sortDesc": "Sort: descending",
     "empty": "No drives found",
@@ -68,6 +69,8 @@
     "ejectConfirmBody": "Ensure no active copy operation is running before eject.",
     "cocPrompt": "Drive is ready for safe removal. Generate a chain-of-custody report and confirm handoff details.",
     "openCocReport": "Open CoC Report",
+    "browse": "Browse",
+    "localMountPoint": "Local Mount Point",
     "initializeTitle": "Initialize drive",
     "projectWarning": "Project binding is enforced for all writes.",
     "initializeProjectHint": "This drive was last used for project \"{project}\"."
@@ -135,7 +138,27 @@
     "remove": "Remove",
     "credentialsFile": "Credentials File",
     "removeConfirmTitle": "Remove mount?",
-    "removeConfirmBody": "Removing a mount may impact in-progress jobs."
+    "removeConfirmBody": "Removing a mount may impact in-progress jobs.",
+    "browse": "Browse",
+    "browseUnavailable": "Browse is only available for mounted shares"
+  },
+  "browse": {
+    "browseContents": "Browse Drive Contents",
+    "browseMountContents": "Browse Mount Contents",
+    "loadError": "Failed to load directory listing. Please try again.",
+    "empty": "This directory is empty.",
+    "tableLabel": "Directory contents",
+    "columns": {
+      "name": "Name",
+      "type": "Type",
+      "size": "Size",
+      "modified": "Modified"
+    },
+    "types": {
+      "file": "File",
+      "directory": "Directory",
+      "symlink": "Symlink"
+    }
   },
   "audit": {
     "title": "Audit",

@@ -6,63 +6,77 @@ services:
     image: ecube-app
     container_name: ecube-app
     restart: unless-stopped
-    # Development convenience: publish API port 8000 to localhost.
-    # This is NOT a typical hardened deployment shape.
-    # Typical Docker deployments should expose only ecube-ui on 8443.
-    # For production-like behavior, avoid direct host exposure of port 8000.
     ports:
-      - "${API_PORT:-8000}:8000"
+      - "${UI_PORT:-8443}:${ECUBE_PORT:-8443}"
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-ecube}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-ecube}
+      # DATABASE_URL is left empty so the container starts in setup wizard
+      # mode.  The wizard provisions the database using PG_SUPERUSER_*
+      # credentials and writes DATABASE_URL to the mounted .env file.
+      # On subsequent restarts, the entrypoint reads it from .env.
       PYTHONUNBUFFERED: "1"
-      TRUST_PROXY_HEADERS: "true"
-      ECUBE_RUN_MIGRATIONS_ON_START: "true"
       ECUBE_DB_WAIT_MAX_RETRIES: "30"
       ECUBE_DB_WAIT_SECONDS: "2"
       USE_SUDO: "false"
-      SECRET_KEY: "${SECRET_KEY:-change-me-in-production-please-rotate-32b}"
+      SECRET_KEY: "${SECRET_KEY:?SECRET_KEY must be set in .env}"
       LOCAL_GROUP_ROLE_MAP: '${LOCAL_GROUP_ROLE_MAP:-{}}'
       USB_DISCOVERY_INTERVAL: "${USB_DISCOVERY_INTERVAL:-30}"
-      # nginx strips /api before forwarding — tell FastAPI its mounted prefix
-      # so Swagger UI "Try it out" generates correct request paths.
-      API_ROOT_PATH: "/api"
+      # PostgreSQL superuser credentials for the setup wizard.
+      # Cleared from .env automatically after successful provisioning.
+      # Falls back to POSTGRES_USER / POSTGRES_PASSWORD in the entrypoint
+      # when not set explicitly.
+      PG_SUPERUSER_NAME: "${PG_SUPERUSER_NAME:-}"
+      PG_SUPERUSER_PASS: "${PG_SUPERUSER_PASS:-}"
+      POSTGRES_USER: "${POSTGRES_USER:-ecube}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}"
+      SETUP_DOCKER_DB_HOST: "postgres"
+      # TLS is enabled by default.  Set ECUBE_NO_TLS=true in .env to use
+      # plain HTTP on port 8000 (also set ECUBE_PORT=8000, UI_PORT=8000).
+      ECUBE_NO_TLS: "${ECUBE_NO_TLS:-false}"
+      ECUBE_PORT: "${ECUBE_PORT:-8443}"
     privileged: true
     volumes:
+      - ./.env:/opt/ecube/.env
       - ecube_runtime_data:/var/lib/ecube
-      - /dev:/dev
-      - /sys:/sys:ro
+      # A self-signed TLS cert is generated on first start if none exists.
+      # To use your own cert, mount it read-only and set TLS_KEYFILE /
+      # TLS_CERTFILE, or set ECUBE_CERTS_DIR and uncomment the line below.
+      # - ${ECUBE_CERTS_DIR}:/opt/ecube/certs:ro
+      # To override built-in themes, set ECUBE_THEMES_DIR in .env and
+      # uncomment the line below.
+      # - ${ECUBE_THEMES_DIR}:/opt/ecube/www/themes:ro
+      - /dev/bus/usb:/dev/bus/usb
+      - /sys/bus/usb:/sys/bus/usb:ro
       - /run/udev:/run/udev:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsk -m5 https://localhost:${ECUBE_PORT:-8443}/health/live 2>/dev/null || curl -fs -m5 http://localhost:${ECUBE_PORT:-8443}/health/live 2>/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
     depends_on:
       postgres:
         condition: service_healthy
 
-  ecube-ui:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    image: ecube-ui
-    container_name: ecube-ui
-    restart: unless-stopped
-    ports:
-      - "${UI_PORT:-8443}:443"
-    volumes:
-      - ${ECUBE_CERTS_DIR:-./deploy/certs}:/etc/nginx/certs:ro
-      - ${ECUBE_THEMES_DIR:-./deploy/themes}:/usr/share/nginx/html/themes:ro
-    depends_on:
-      - ecube-app
-
   postgres:
-    image: postgres:16
+    image: postgres:16.13-bookworm
     container_name: ecube-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: "${POSTGRES_DB:-ecube}"
       POSTGRES_USER: "${POSTGRES_USER:-ecube}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}"
-    ports:
-      - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - ecube_postgres_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s

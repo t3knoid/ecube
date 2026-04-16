@@ -152,7 +152,12 @@ Table usb_drives {
   filesystem_type varchar
   current_state drive_state [default: 'AVAILABLE']
   current_project_id varchar
+  mount_path varchar
   last_seen_at timestamptz
+
+  indexes {
+    mount_path [name: 'ix_usb_drives_mount_path']
+  }
 }
 
 Table audit_logs {

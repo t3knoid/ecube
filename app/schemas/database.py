@@ -57,8 +57,8 @@ class DatabaseTestConnectionRequest(StrictIntMixin, BaseModel):
 
     host: str = Field(..., min_length=1, max_length=255, json_schema_extra={"pattern": _HOST_PATTERN}, description="PostgreSQL server hostname or IP")
     port: StrictInt = Field(default=5432, ge=1, le=65535, description="PostgreSQL server port")
-    admin_username: str = Field(..., min_length=1, max_length=63, description="PostgreSQL admin username")
-    admin_password: str = Field(..., min_length=1, description="PostgreSQL admin password")
+    admin_username: Optional[str] = Field(default=None, min_length=1, max_length=63, description="PostgreSQL admin username (defaults to PG_SUPERUSER_NAME from server config)")
+    admin_password: Optional[str] = Field(default=None, min_length=1, description="PostgreSQL admin password (defaults to PG_SUPERUSER_PASS from server config)")
 
     @field_validator("host")
     @classmethod
@@ -83,8 +83,8 @@ class DatabaseProvisionRequest(StrictIntMixin, BaseModel):
 
     host: str = Field(..., min_length=1, max_length=255, json_schema_extra={"pattern": _HOST_PATTERN}, description="PostgreSQL server hostname or IP")
     port: StrictInt = Field(default=5432, ge=1, le=65535, description="PostgreSQL server port")
-    admin_username: str = Field(..., min_length=1, max_length=63, description="PostgreSQL admin username")
-    admin_password: str = Field(..., min_length=1, description="PostgreSQL admin password")
+    admin_username: Optional[str] = Field(default=None, min_length=1, max_length=63, description="PostgreSQL admin username (defaults to PG_SUPERUSER_NAME from server config)")
+    admin_password: Optional[str] = Field(default=None, min_length=1, description="PostgreSQL admin password (defaults to PG_SUPERUSER_PASS from server config)")
     app_database: str = Field(default="ecube", min_length=1, max_length=63, json_schema_extra={"pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"}, description="Application database name")
     app_username: str = Field(default="ecube", min_length=1, max_length=63, json_schema_extra={"pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"}, description="Application database user")
     app_password: str = Field(..., min_length=1, description="Application database user password")
@@ -133,6 +133,10 @@ class SystemInfoResponse(BaseModel):
     suggested_db_host: str = Field(..., description="Recommended PostgreSQL hostname for this runtime environment")
     suggested_admin_username: str = Field(
         ..., description="Recommended PostgreSQL admin username for provisioning"
+    )
+    has_configured_credentials: bool = Field(
+        ...,
+        description="True when PG_SUPERUSER_NAME and PG_SUPERUSER_PASS are both set in the server configuration, allowing the setup wizard to use them as defaults",
     )
 
 

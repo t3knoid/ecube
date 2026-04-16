@@ -10,7 +10,6 @@ Covers:
 """
 
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -176,6 +175,60 @@ class TestSettingsDefaults:
     def test_pam_fallback_services_default(self):
         s = Settings(database_url="sqlite://")
         assert s.pam_fallback_services == []
+
+    def test_serve_frontend_path_default_empty(self):
+        s = Settings(database_url="sqlite://")
+        assert s.serve_frontend_path == ""
+
+    def test_serve_frontend_path_absolute(self):
+        s = Settings(database_url="sqlite://", serve_frontend_path="/opt/ecube/www")
+        assert s.serve_frontend_path == "/opt/ecube/www"
+
+    def test_serve_frontend_path_normalized(self):
+        s = Settings(database_url="sqlite://", serve_frontend_path="/opt/ecube/www/")
+        assert s.serve_frontend_path == "/opt/ecube/www"
+
+    def test_serve_frontend_path_normalizes_dotdot(self):
+        s = Settings(database_url="sqlite://", serve_frontend_path="/opt/ecube/../ecube/www")
+        assert s.serve_frontend_path == "/opt/ecube/www"
+
+    def test_serve_frontend_path_blank_treated_as_empty(self):
+        with patch.dict("os.environ", {"SERVE_FRONTEND_PATH": "  "}):
+            s = Settings(database_url="sqlite://")
+        assert s.serve_frontend_path == ""
+
+    def test_serve_frontend_path_from_env(self):
+        with patch.dict("os.environ", {"SERVE_FRONTEND_PATH": "/srv/ecube/www"}):
+            s = Settings(database_url="sqlite://")
+        assert s.serve_frontend_path == "/srv/ecube/www"
+
+    def test_serve_frontend_path_relative_rejected(self):
+        with pytest.raises(ValueError, match="absolute path"):
+            Settings(database_url="sqlite://", serve_frontend_path="relative/path")
+
+    def test_serve_frontend_path_relative_from_env_rejected(self):
+        with pytest.raises(ValueError, match="absolute path"):
+            with patch.dict("os.environ", {"SERVE_FRONTEND_PATH": "relative/path"}):
+                Settings(database_url="sqlite://")
+
+    def test_serve_frontend_path_root_rejected(self):
+        with pytest.raises(ValueError, match="system root"):
+            Settings(database_url="sqlite://", serve_frontend_path="/")
+
+    def test_serve_frontend_path_system_dir_rejected(self):
+        for dangerous in ("/etc", "/var", "/tmp", "/usr", "/home"):
+            with pytest.raises(ValueError, match="system root"):
+                Settings(database_url="sqlite://", serve_frontend_path=dangerous)
+
+    def test_serve_frontend_path_system_dir_trailing_slash_rejected(self):
+        """normpath strips trailing slashes, so '/etc/' should also be caught."""
+        with pytest.raises(ValueError, match="system root"):
+            Settings(database_url="sqlite://", serve_frontend_path="/etc/")
+
+    def test_serve_frontend_path_under_system_dir_allowed(self):
+        """Subdirectories of system roots are fine (e.g. /opt/ecube/www)."""
+        s = Settings(database_url="sqlite://", serve_frontend_path="/opt/ecube/www")
+        assert s.serve_frontend_path == "/opt/ecube/www"
 
 
 # ---------------------------------------------------------------------------

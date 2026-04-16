@@ -48,6 +48,7 @@ class UsbDriveSchema(BaseModel):
     filesystem_type: Optional[str] = Field(default=None, description="Detected filesystem label (e.g. ext4, exfat, unformatted, unknown, or null if not yet detected)")
     current_state: DriveState = Field(..., description="Current drive state (EMPTY, AVAILABLE, IN_USE)")
     current_project_id: Optional[str] = Field(default=None, description="Bound project ID if IN_USE, enforces isolation")
+    mount_path: Optional[str] = Field(default=None, description="Active mount path for this drive (e.g. /mnt/ecube/7); null when not mounted")
 
     model_config = {"from_attributes": True}
 

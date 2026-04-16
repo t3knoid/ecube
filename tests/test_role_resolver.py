@@ -236,10 +236,10 @@ class TestOidcGroupRoleResolver:
 
 
 class TestGetRoleResolver:
-    def setup_method(self):
+    @pytest.fixture(autouse=True)
+    def _clear_resolver_cache(self):
         get_role_resolver.cache_clear()
-
-    def teardown_method(self):
+        yield
         get_role_resolver.cache_clear()
 
     def test_local_resolver_selected_by_default(self):
@@ -317,10 +317,10 @@ class TestGetCurrentUserWithResolver:
 
     _LOCAL_MAP = {"evidence-admins": ["admin"], "evidence-team": ["processor"]}
 
-    def setup_method(self):
+    @pytest.fixture(autouse=True)
+    def _clear_resolver_cache(self):
         get_role_resolver.cache_clear()
-
-    def teardown_method(self):
+        yield
         get_role_resolver.cache_clear()
 
     def test_roles_resolved_from_groups_when_no_roles_claim(self, resolver_client):
@@ -412,10 +412,10 @@ class TestGetCurrentUserWithOidcResolver:
 
     _OIDC_MAP = {"evidence-admins": ["admin"], "evidence-team": ["processor"]}
 
-    def setup_method(self):
+    @pytest.fixture(autouse=True)
+    def _clear_resolver_cache(self):
         get_role_resolver.cache_clear()
-
-    def teardown_method(self):
+        yield
         get_role_resolver.cache_clear()
 
     def _make_oidc_token_via_mock(self, groups, group_claim_name="groups"):

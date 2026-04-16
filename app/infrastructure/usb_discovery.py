@@ -9,10 +9,12 @@ without requiring physical hardware.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from typing import List, Optional, Protocol
 
 from app.config import settings
+from app.infrastructure.mount_info import read_mount_points
 
 
 @dataclass
@@ -62,6 +64,9 @@ class DiscoveredDrive:
     """Block device node, e.g. ``"/dev/sdb"``."""
     capacity_bytes: Optional[int] = None
     """Total capacity in bytes as reported by the kernel."""
+    mount_path: Optional[str] = None
+    """Active mount point from ``/proc/mounts``, e.g. ``"/mnt/ecube/7"``.
+    ``None`` when the device is not currently mounted."""
 
 
 @dataclass
@@ -139,6 +144,51 @@ def _read_capacity_bytes(dev_path: str) -> Optional[int]:
     return None
 
 
+# Mount-point parsing moved to app.infrastructure.mount_info
+
+
+def _find_mount_point(
+    device_path: str, mount_map: dict[str, str]
+) -> Optional[str]:
+    """Return the mount point for *device_path* or any of its partitions.
+
+    Both *device_path* and mount-map keys are resolved via
+    ``os.path.realpath`` so that symlinked device paths (e.g.
+    ``/dev/disk/by-uuid/…``) are matched correctly.
+
+    Checks the exact path first (e.g. ``/dev/sdb``), then any partition
+    variant (``/dev/sdb1``, ``/dev/sdb2``, …).  Returns ``None`` when no
+    match is found.
+    """
+    try:
+        real_device = os.path.realpath(device_path)
+    except (OSError, ValueError):
+        real_device = device_path
+
+    # Build a realpath-keyed view so symlinked /proc/mounts entries match.
+    real_map: dict[str, str] = {}
+    for dev, mnt in mount_map.items():
+        try:
+            real_map[os.path.realpath(dev)] = mnt
+        except (OSError, ValueError):
+            real_map[dev] = mnt
+
+    if real_device in real_map:
+        return real_map[real_device]
+    # Check partitions — match only valid partition suffixes:
+    #   sdX  → sdX1, sdX2, …       (SCSI/SATA/USB)
+    #   nvmeNnM → nvmeNnMp1, …     (NVMe)
+    #   mmcblkN → mmcblkNp1, …     (MMC/SD)
+    base = os.path.basename(real_device)  # e.g. "sdb"
+    partition_re = re.compile(
+        r"^" + re.escape(base) + r"(?:p?\d+)$"
+    )
+    for dev, mnt in real_map.items():
+        if partition_re.match(os.path.basename(dev)):
+            return mnt
+    return None
+
+
 def discover_usb_topology() -> DiscoveredTopology:
     """Read the current USB topology from ``/sys/bus/usb/devices``.
 
@@ -149,6 +199,7 @@ def discover_usb_topology() -> DiscoveredTopology:
     """
     usb_path = settings.sysfs_usb_devices_path
     topology = DiscoveredTopology()
+    mount_map = read_mount_points()
 
     try:
         entries = os.listdir(usb_path)
@@ -219,6 +270,7 @@ def discover_usb_topology() -> DiscoveredTopology:
                             port_system_path=dev,
                             filesystem_path=block_node,
                             capacity_bytes=capacity,
+                            mount_path=_find_mount_point(block_node, mount_map) if block_node else None,
                         )
                     )
 
