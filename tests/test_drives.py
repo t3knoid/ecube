@@ -166,6 +166,63 @@ def test_mount_drive_requires_filesystem_path(manager_client, db):
     assert "filesystem_path" in response.json()["message"]
 
 
+def test_mount_drive_provider_failure_is_audited(manager_client, db):
+    from app.models.audit import AuditLog
+
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-004",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        filesystem_path="/dev/sdd",
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = MagicMock()
+    provider.mount_drive.return_value = (False, "mount failed")
+
+    with patch("app.routers.drives.get_drive_mount", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 500
+    assert "mount failed" in response.json()["message"].lower()
+
+    audit = db.query(AuditLog).filter(AuditLog.action == "DRIVE_MOUNT_FAILED").first()
+    assert audit is not None
+    assert audit.details["drive_id"] == drive.id
+    assert audit.details["error"] == "mount failed"
+
+
+def test_mount_drive_processor_forbidden(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-005",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        filesystem_path="/dev/sde",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 403
+
+
+def test_mount_drive_auditor_forbidden(auditor_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-006",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        filesystem_path="/dev/sdf",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = auditor_client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 403
+
+
 def test_initialize_drive_not_found(manager_client, db):
     response = manager_client.post("/drives/999/initialize", json={"project_id": "PROJ-001"})
     assert response.status_code == 404
