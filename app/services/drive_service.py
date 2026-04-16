@@ -290,7 +290,7 @@ def mount_drive(
             logger.exception("Failed to write audit log for DRIVE_MOUNT_FAILED")
         raise HTTPException(
             status_code=500,
-            detail=error or "Drive mount failed",
+            detail="Drive mount failed",
         )
 
     drive.mount_path = mount_point
