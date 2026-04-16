@@ -83,6 +83,7 @@ describe('SetupWizardView existing admin reconciliation', () => {
     const wrapper = mountView()
     await flushPromises()
 
+    await wrapper.find('#db-admin-user').setValue('postgres')
     await wrapper.find('#db-admin-pass').setValue('DbAdmin#123')
     await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('setup.connectDatabase')).trigger('click')
     await flushPromises()
