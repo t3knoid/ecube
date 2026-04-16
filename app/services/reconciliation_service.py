@@ -24,9 +24,9 @@ stale to other workers.
 import logging
 import os
 from datetime import datetime, timezone, timedelta
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
 
 from app.infrastructure.mount_protocol import MountProvider
@@ -42,6 +42,25 @@ from app.services.mount_check_utils import check_mounted_with_configured_timeout
 from app.constants import ECUBE_GROUP_ROLE_MAP
 
 logger = logging.getLogger(__name__)
+
+
+def _schema_mismatch_hint(exc: Exception) -> Optional[str]:
+    """Return a human-readable hint if *exc* is a DB schema mismatch.
+
+    Catches ``ProgrammingError`` (missing column/table) and
+    ``OperationalError`` (SQLite equivalent) so the reconciliation log
+    clearly tells the operator to run migrations instead of burying the
+    cause in a traceback.
+    """
+    if isinstance(exc, (ProgrammingError, OperationalError)):
+        msg = str(exc.orig) if hasattr(exc, "orig") else str(exc)
+        msg_lower = msg.lower()
+        if "column" in msg_lower or "relation" in msg_lower or "table" in msg_lower or "no such" in msg_lower:
+            return (
+                f"Database schema mismatch: {msg.strip()}. "
+                "Run 'alembic upgrade head' to apply pending migrations."
+            )
+    return None
 
 # A lock older than this is considered stale (worker crashed mid-reconciliation)
 # and will be reclaimed by the next startup attempt.
@@ -510,40 +529,56 @@ def run_startup_reconciliation(
             logger.info("Startup reconciliation: ensuring default ECUBE OS groups")
             try:
                 results["identity"]["groups"] = reconcile_identity_groups(os_user_provider)
-            except Exception:
-                logger.exception("Identity group reconciliation failed")
-                results["identity"]["groups"] = {"error": "identity group reconciliation failed"}
+            except Exception as exc:
+                hint = _schema_mismatch_hint(exc)
+                if hint:
+                    logger.error("Identity group reconciliation failed: %s", hint)
+                else:
+                    logger.exception("Identity group reconciliation failed")
+                results["identity"]["groups"] = {"error": hint or "identity group reconciliation failed"}
 
             _refresh_reconciliation_lock(db)
 
             logger.info("Startup reconciliation: reconciling DB users to OS users")
             try:
                 results["identity"]["users"] = reconcile_identity_users(db, os_user_provider)
-            except Exception:
-                logger.exception("Identity user reconciliation failed")
-                results["identity"]["users"] = {"error": "identity user reconciliation failed"}
+            except Exception as exc:
+                hint = _schema_mismatch_hint(exc)
+                if hint:
+                    logger.error("Identity user reconciliation failed: %s", hint)
+                else:
+                    logger.exception("Identity user reconciliation failed")
+                results["identity"]["users"] = {"error": hint or "identity user reconciliation failed"}
 
             _refresh_reconciliation_lock(db)
 
         logger.info("Startup reconciliation: checking mounts")
         try:
             results["mounts"] = reconcile_mounts(db, mount_provider)
-        except Exception:
+        except Exception as exc:
             db.rollback()
             db.expire_all()
-            logger.exception("Mount reconciliation failed")
-            results["mounts"] = {"error": "mount reconciliation failed"}
+            hint = _schema_mismatch_hint(exc)
+            if hint:
+                logger.error("Mount reconciliation failed: %s", hint)
+            else:
+                logger.exception("Mount reconciliation failed")
+            results["mounts"] = {"error": hint or "mount reconciliation failed"}
 
         _refresh_reconciliation_lock(db)
 
         logger.info("Startup reconciliation: checking jobs")
         try:
             results["jobs"] = reconcile_jobs(db)
-        except Exception:
+        except Exception as exc:
             db.rollback()
             db.expire_all()
-            logger.exception("Job reconciliation failed")
-            results["jobs"] = {"error": "job reconciliation failed"}
+            hint = _schema_mismatch_hint(exc)
+            if hint:
+                logger.error("Job reconciliation failed: %s", hint)
+            else:
+                logger.exception("Job reconciliation failed")
+            results["jobs"] = {"error": hint or "job reconciliation failed"}
 
         _refresh_reconciliation_lock(db)
 
@@ -554,11 +589,15 @@ def run_startup_reconciliation(
                 topology_source=topology_source,
                 filesystem_detector=filesystem_detector,
             )
-        except Exception:
+        except Exception as exc:
             db.rollback()
             db.expire_all()
-            logger.exception("Drive reconciliation failed")
-            results["drives"] = {"error": "drive reconciliation failed"}
+            hint = _schema_mismatch_hint(exc)
+            if hint:
+                logger.error("Drive reconciliation failed: %s", hint)
+            else:
+                logger.exception("Drive reconciliation failed")
+            results["drives"] = {"error": hint or "drive reconciliation failed"}
 
         logger.info("Startup reconciliation complete: %s", results)
         return results

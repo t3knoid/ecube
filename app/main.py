@@ -27,7 +27,7 @@ from app.exceptions import AuthenticationError, AuthorizationError, ConflictErro
 from app.utils.sanitize import is_encoding_error
 from app.logging_config import configure_logging
 from app.models.network import NetworkMount
-from app.routers import admin, audit, auth, configuration, database_setup, drives, files, introspection, jobs, mounts, setup, telemetry, users
+from app.routers import admin, audit, auth, browse, configuration, database_setup, drives, files, introspection, jobs, mounts, setup, telemetry, users
 from app.schemas.errors import ErrorResponse
 from app.schemas.introspection import HealthLiveResponse, HealthNotReadyResponse, HealthReadyResponse, HealthResponse, VersionResponse
 from app.session import close_session_backend, init_session_backend, mount_session_middleware
@@ -185,6 +185,10 @@ tags_metadata = [
         "description": "Administration — log file access, OS user and group management.",
     },
     {
+        "name": "browse",
+        "description": "Directory browsing — paginated listing of files and folders within active mount points.",
+    },
+    {
         "name": "setup",
         "description": "First-run setup wizard — system initialization and status check.",
     },
@@ -197,7 +201,10 @@ async def lifespan(application: FastAPI):
 
     db_runtime_ready = False
     if not (settings.database_url or "").strip():
-        logger.info("DATABASE_URL is not configured; skipping DB startup tasks")
+        logger.info(
+            "DATABASE_URL is not configured; skipping DB startup tasks. "
+            "Visit the setup wizard at /setup to provision the database."
+        )
     else:
         try:
             from app.services import database_service
@@ -365,6 +372,18 @@ if settings.cors_allowed_origins:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+
+# ---------------------------------------------------------------------------
+# /api prefix stripping (standalone mode)
+# ---------------------------------------------------------------------------
+# When serving the frontend directly (no nginx), the UI sends all API requests
+# to /api/... because that's what nginx used to proxy.  Rewrite them to /...
+# so they match the actual FastAPI routes.
+# ---------------------------------------------------------------------------
+if settings.serve_frontend_path:
+    from app.spa import add_strip_api_prefix_middleware
+    add_strip_api_prefix_middleware(app)
 
 
 @app.middleware("http")
@@ -708,6 +727,7 @@ app.include_router(database_setup.router)
 
 app.include_router(drives.router, dependencies=[Depends(get_current_user)])
 app.include_router(mounts.router, dependencies=[Depends(get_current_user)])
+app.include_router(browse.router, dependencies=[Depends(get_current_user)])
 app.include_router(jobs.router, dependencies=[Depends(get_current_user)])
 app.include_router(files.router, dependencies=[Depends(get_current_user)])
 app.include_router(introspection.router, dependencies=[Depends(get_current_user)])
@@ -844,3 +864,49 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
         traceback.format_exc(),
     )
     return _error_response(500, "INTERNAL_ERROR", "An unexpected error occurred.", trace_id)
+
+
+# ---------------------------------------------------------------------------
+# Optional embedded frontend (--no-nginx / standalone mode)
+# ---------------------------------------------------------------------------
+# When SERVE_FRONTEND_PATH points to a Vite dist/ directory, serve the
+# pre-built SPA directly from FastAPI — no nginx required.  Mounted last
+# so all API routes take priority.
+# ---------------------------------------------------------------------------
+if settings.serve_frontend_path:
+    import pathlib
+
+    _frontend_dir = pathlib.Path(settings.serve_frontend_path)
+    _index_html = _frontend_dir / "index.html"
+
+    if not _frontend_dir.is_dir():
+        logger.error(
+            "SERVE_FRONTEND_PATH=%s does not exist or is not a directory — "
+            "frontend will NOT be served. Requests to / will return 404. "
+            "Run the installer to deploy the frontend, or check the path.",
+            settings.serve_frontend_path,
+        )
+    elif not _index_html.is_file():
+        logger.error(
+            "SERVE_FRONTEND_PATH=%s exists but index.html is missing — "
+            "frontend will NOT be served. Requests to / will return 404. "
+            "Ensure the pre-built frontend was deployed to this directory.",
+            settings.serve_frontend_path,
+        )
+
+    if _frontend_dir.is_dir() and _index_html.is_file():
+        from app.spa import mount_spa_frontend
+        mount_spa_frontend(app, _frontend_dir)
+
+        logger.info("Serving frontend from %s (standalone mode)", _frontend_dir)
+        _themes_dir = _frontend_dir / "themes"
+        if _themes_dir.is_dir():
+            _theme_files = sorted(f.name for f in _themes_dir.iterdir() if f.is_file())
+            logger.info("Theme files found in %s: %s", _themes_dir, _theme_files)
+        else:
+            logger.warning("No themes/ directory found at %s", _themes_dir)
+else:
+    logger.warning(
+        "SERVE_FRONTEND_PATH is not set — frontend will NOT be served. "
+        "API-only mode; requests to / will return 404.",
+    )

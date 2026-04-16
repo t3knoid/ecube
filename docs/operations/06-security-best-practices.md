@@ -16,15 +16,17 @@
 5. [File Permissions](#5-file-permissions)
 6. [Audit Log Monitoring](#6-audit-log-monitoring)
 7. [Firewall Configuration](#7-firewall-configuration)
+8. [Directory Browse Hardening](#8-directory-browse-hardening)
+9. [Reverse Proxy Deployment](#9-reverse-proxy-deployment)
 
 ---
 
 ## 1. Network Isolation
 
-- **Database (bare-metal):** Keep PostgreSQL reachable only from the ECUBE system layer or trusted admin hosts. Do not expose PostgreSQL broadly.
-- **Database (Docker Compose):** PostgreSQL is published to the host by default via `POSTGRES_HOST_PORT` in the Compose file. For hardened deployments, remove the port mapping entirely or bind it to `127.0.0.1` only.
+- **Database (native):** Keep PostgreSQL reachable only from the ECUBE system layer or trusted admin hosts. Do not expose PostgreSQL broadly.
+- **Database (Docker Compose):** PostgreSQL is not published to the host by default. If you add a `ports` mapping for external tooling, bind it to `127.0.0.1` only (e.g. `127.0.0.1:5432:5432`).
 - **API (external access):** Expose HTTPS only to clients.
-- **API (internal architecture):** nginx-fronted and Docker deployments use internal HTTP between the reverse proxy and backend; this is acceptable only when that backend port is not externally exposed.
+- **API (internal architecture):** Docker deployments may use internal HTTP between a reverse proxy container and the backend; this is acceptable only when that backend port is not externally exposed. Native installs serve HTTPS directly from uvicorn.
 - **Mounts:** NFS/SMB shares on isolated VLAN if possible
 - **USB:** Local USB hub, not exposed over network
 
@@ -34,11 +36,10 @@ Use the table below to determine which ports should exist in each deployment and
 
 | Port / Protocol | Service | When Used | Exposure Guidance |
 | --- | --- | --- | --- |
-| `443/tcp` | nginx / `ecube-ui` HTTPS ingress | Bare-metal full install and Docker UI ingress when using standard HTTPS frontend publishing | Primary client-facing ingress. Allow from trusted client networks. |
-| `8443/tcp` | ECUBE backend HTTPS or alternate published UI port | Bare-metal backend-only installs, or deployments where UI/API HTTPS is intentionally published on 8443 instead of 443 | Expose only when this is the intentional client ingress port. Do not expose publicly if nginx already fronts the service on 443. |
-| `8000/tcp` | FastAPI backend HTTP | Internal-only backend port in Docker Compose and some reverse-proxy topologies | Do not publish externally. Keep reachable only from the local reverse proxy or container network. |
-| `5432/tcp` | PostgreSQL | Bare-metal local/remote DB, Docker Compose postgres service | Restrict to ECUBE backend host(s) and approved admin paths only. Avoid broad exposure. |
-| `80/tcp` | HTTP challenge endpoint | Optional for Let's Encrypt HTTP-01 certificate issuance | Open only when needed for ACME validation or redirect-to-HTTPS behavior. |
+| `8443/tcp` | ECUBE service HTTPS | Default native install port; also used as alternate published UI port in Docker | Primary client-facing ingress. Allow from trusted client networks. |
+| `80/tcp` | ECUBE service HTTP | Native `--no-tls` installs; also optional for Let's Encrypt HTTP-01 certificate issuance | Expose only in lab/testing or when TLS is terminated by an external load balancer. |
+| `8000/tcp` | FastAPI backend HTTP | Internal-only backend port in Docker Compose | Do not publish externally. Keep reachable only from the Docker container network. |
+| `5432/tcp` | PostgreSQL | Native local/remote DB, Docker Compose postgres service | Restrict to ECUBE backend host(s) and approved admin paths only. Avoid broad exposure. |
 | `22/tcp` | SSH | Administrative access to host(s) | Restrict to management networks or VPN only. |
 | `2049/tcp` | NFS | Evidence source mounts when using NFS | Allow only between ECUBE host(s) and approved file servers. |
 | `445/tcp` / `139/tcp` | SMB/CIFS | Evidence source mounts when using SMB | Allow only between ECUBE host(s) and approved file servers. |
@@ -72,13 +73,16 @@ DATABASE_URL=postgresql://ecube:strong-pass@db.internal:5432/ecube?sslmode=requi
 
 #### Reverse proxy ingress
 
-- Prefer a reverse proxy such as nginx as the only client-facing ingress point.
-- Terminate TLS at the reverse proxy for full installs and Docker UI ingress.
+When deploying ECUBE behind an external reverse proxy (load balancer, CDN, or Docker UI container):
+
+- Terminate TLS at the reverse proxy.
 - Keep backend application ports non-public and reachable only from the reverse proxy.
-- When proxying ECUBE behind `/api`, ensure the backend is configured with `TRUST_PROXY_HEADERS=true` only when the proxy is trusted and `API_ROOT_PATH=/api` when the proxy strips the prefix.
+- Set `TRUST_PROXY_HEADERS=true` only when the proxy is trusted. If the proxy also strips an `/api` prefix before forwarding, set `API_ROOT_PATH=/api`.
 - Use the reverse proxy to enforce HTTPS, constrain TLS versions, and centralize certificate rotation.
 
-Recommended posture:
+For native installs (the default), ECUBE serves the frontend directly and does not require a reverse proxy.
+
+Recommended posture (when using a reverse proxy):
 
 - Clients -> reverse proxy over HTTPS
 - Reverse proxy -> backend over localhost or private container network
@@ -96,17 +100,21 @@ Preferred certificate sources:
 
 For full issuance and renewal procedures, see [05-tls-certificates-and-letsencrypt.md](05-tls-certificates-and-letsencrypt.md).
 
-Example certbot command for nginx-based deployments:
+Example certbot command (standalone mode — temporarily binds port 80 for the ACME challenge):
 
 ```bash
-sudo certbot --nginx -d ecube.example.com
+sudo certbot certonly --standalone -d ecube.example.com
 ```
 
-If you manage nginx TLS settings directly, enforce modern TLS versions explicitly in the reverse proxy configuration, for example:
+After issuance, copy the certificate files into `<install-dir>/certs/`, set appropriate ownership, and restart the service.
 
-```nginx
+If you manage TLS settings directly in an external reverse proxy, enforce modern TLS versions in its configuration:
+
+```
 ssl_protocols TLSv1.2 TLSv1.3;
 ```
+
+For standard deployments where uvicorn terminates TLS, replace the self-signed certificate in `<install-dir>/certs/` with a CA-signed certificate and restart the service.
 
 ## 3. Credential Management
 
@@ -188,10 +196,10 @@ sudo chmod 750 /opt/ecube/venv
 sudo chown -R ecube:ecube /opt/ecube
 ```
 
-Certificate ownership depends on topology:
+Certificate ownership:
 
-- nginx/fronted deployments: private key is typically `root:root` with mode `600`
-- backend-only TLS termination: private key and cert can be owned by `ecube:ecube`
+- Native installs: private key and cert are owned by `ecube:ecube` (`600` for key, `644` for cert) since uvicorn terminates TLS directly.
+- Docker deployments with a UI container: private key ownership depends on the container configuration.
 
 Follow the topology-specific guidance in [01-installation.md](01-installation.md), [02-manual-installation.md](02-manual-installation.md), and [05-tls-certificates-and-letsencrypt.md](05-tls-certificates-and-letsencrypt.md).
 
@@ -221,7 +229,7 @@ Notes:
 ## 7. Firewall Configuration
 
 ```bash
-# Bare-metal backend-only deployment: allow direct API TLS
+# Native deployment: allow the ECUBE service port
 sudo ufw allow 8443/tcp
 
 # Deny all other inbound by default
@@ -232,7 +240,8 @@ sudo ufw enable
 
 Topology-specific notes:
 
-- Bare-metal full install / nginx-fronted deployment: allow `443/tcp`; do not expose backend `8443/tcp` publicly.
+- Native install (default HTTPS): allow `8443/tcp` (or the configured `--api-port`).
+- Native `--no-tls` install: allow `80/tcp` (or the configured `--api-port`).
 - Docker Compose deployment: allow only the published UI HTTPS port (`8443` by default). The backend port `8000` should remain unpublished.
 - Docker Compose PostgreSQL: if you do not need host access to PostgreSQL, remove the port mapping. If host access is required, bind it to localhost only instead of all interfaces.
 
@@ -240,3 +249,120 @@ Topology-specific notes:
 
 - [docs/operations/05-tls-certificates-and-letsencrypt.md](05-tls-certificates-and-letsencrypt.md)
 - [docs/requirements/10-security-and-access-control.md](../requirements/10-security-and-access-control.md)
+
+---
+
+## 8. Directory Browse Hardening
+
+The `GET /browse` endpoint allows authenticated users to list directory contents of active mount points (USB drives and network shares). Three layers protect against unauthorized filesystem access:
+
+1. **Database validation:** The `path` parameter must match a registered, active mount root in the database. Arbitrary paths are rejected with `403`.
+2. **Realpath containment:** The `subdir` parameter is resolved via `os.path.realpath` and checked to be within the mount root. Path-traversal attempts (`../../etc`) are rejected with `400`.
+3. **Prefix allowlist:** The resolved path must start with one of the `BROWSE_ALLOWED_PREFIXES` values. This provides defence-in-depth against mount-root misconfiguration.
+
+**Recommendations:**
+
+- Override `BROWSE_ALLOWED_PREFIXES` to match your actual mount hierarchy. The default (`/mnt/ecube/`, `/nfs/`, `/smb/`) covers common layouts but may be broader than needed.
+- Tune `BROWSE_MAX_DIR_ENTRIES` (default `50000`) to cap the number of entries a single directory listing may return. Directories exceeding the limit are rejected with `400`. Set to `0` to disable the limit.
+- Avoid adding broad prefixes like `/` or `/home` to the allowlist.
+- Symlinks within browsed directories are listed as `type: "symlink"` but are not followed or navigable.
+- All browse requests are audit-logged with action `BROWSE_DIRECTORY`, including the actor, resolved path, and client IP.
+
+---
+
+## 9. Reverse Proxy Deployment
+
+ECUBE does not require a reverse proxy — uvicorn serves both the API and the SPA frontend directly, with optional built-in TLS. However, organizations may choose to place a reverse proxy (nginx, Caddy, HAProxy, etc.) in front of ECUBE for centralized certificate management, load balancing, or compliance with existing network architecture.
+
+### 9.1 When to Use a Reverse Proxy
+
+- Centralized TLS termination and certificate rotation (e.g. Let's Encrypt with automated renewal).
+- Multiple services behind a single domain or IP.
+- Organizational policy requires all web traffic to pass through an approved gateway.
+- Advanced rate limiting, WAF, or access logging at the proxy layer.
+
+### 9.2 ECUBE Backend Configuration
+
+When ECUBE sits behind a reverse proxy, set the following in `<install-dir>/.env`:
+
+```dotenv
+# Trust X-Forwarded-For / X-Real-IP from the proxy for client IP detection.
+TRUST_PROXY_HEADERS=true
+
+# Leave empty — the frontend is served by the proxy or by ECUBE directly.
+# Only set API_ROOT_PATH if the proxy strips a path prefix before forwarding.
+# API_ROOT_PATH=/api
+```
+
+### 9.3 Using `--no-tls` Behind a Reverse Proxy
+
+Running the ECUBE backend in plain HTTP mode (`--no-tls`) is acceptable when **both** of these conditions are met:
+
+1. The reverse proxy terminates TLS for all client-facing traffic.
+2. The reverse proxy and ECUBE backend communicate over a private network, loopback interface, or the same host — so unencrypted traffic never traverses an untrusted network segment.
+
+For native installs:
+
+```bash
+sudo ./install.sh --no-tls --api-port 8000
+```
+
+For Docker Compose, set `ECUBE_NO_TLS=true` and `ECUBE_PORT=8000` in `.env`.
+
+> **Warning:** Do not use `--no-tls` if the backend is reachable from untrusted networks without a TLS-terminating proxy in front of it.
+
+### 9.4 Example: nginx Reverse Proxy
+
+The following example configures nginx to terminate TLS and proxy requests to ECUBE running on `localhost:8000` (plain HTTP).
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name ecube.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/ecube.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/ecube.example.com/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+
+    # Pass client IP and protocol information to the backend.
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # WebSocket support (if needed for future features).
+    proxy_http_version 1.1;
+    proxy_set_header   Upgrade    $http_upgrade;
+    proxy_set_header   Connection "upgrade";
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+    }
+}
+
+# Redirect HTTP to HTTPS.
+server {
+    listen 80;
+    server_name ecube.example.com;
+    return 301 https://$host$request_uri;
+}
+```
+
+Key points:
+
+- All client requests arrive over HTTPS; nginx forwards to the backend over plain HTTP on localhost.
+- `TRUST_PROXY_HEADERS=true` must be set in ECUBE's `.env` so the backend reads `X-Forwarded-For` for client IP detection and audit logging.
+- `SERVE_FRONTEND_PATH` should still be set — ECUBE serves the SPA and the API through the same backend process. The proxy simply forwards everything.
+- If the proxy strips a path prefix (e.g. `/ecube/` → `/`), set `API_ROOT_PATH=/ecube` in `.env` so OpenAPI/Swagger URLs resolve correctly. For a simple passthrough proxy (no prefix stripping), leave `API_ROOT_PATH` empty.
+
+### 9.5 Security Checklist (Reverse Proxy)
+
+- [ ] TLS is terminated at the proxy — clients never connect over plain HTTP.
+- [ ] Backend port (`8000`) is not published to external networks.
+- [ ] `TRUST_PROXY_HEADERS=true` is set in ECUBE `.env`.
+- [ ] `TRUST_PROXY_HEADERS` is **not** true when ECUBE is directly exposed without a proxy (enables client-IP spoofing).
+- [ ] Proxy enforces `TLSv1.2` or later (`ssl_protocols TLSv1.2 TLSv1.3`).
+- [ ] HTTP-to-HTTPS redirect is configured.
+- [ ] Proxy forwards `X-Forwarded-For`, `X-Real-IP`, and `X-Forwarded-Proto` headers.
+- [ ] Let's Encrypt / CA certificate renewal is automated and tested.

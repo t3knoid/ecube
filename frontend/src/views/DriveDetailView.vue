@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
@@ -9,6 +9,7 @@ import { normalizeErrorMessage } from '@/api/client.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -31,6 +32,7 @@ function clearBanners() {
 const showFormatDialog = ref(false)
 const showEjectDialog = ref(false)
 const showInitializeDialog = ref(false)
+const browseExpanded = ref(false)
 const showCocPrompt = ref(false)
 
 const filesystemType = ref('ext4')
@@ -207,6 +209,11 @@ function openChainOfCustody() {
 }
 
 onMounted(loadDrive)
+
+watch(driveId, () => {
+  browseExpanded.value = false
+  loadDrive()
+})
 </script>
 
 <template>
@@ -270,6 +277,20 @@ onMounted(loadDrive)
         </select>
       </div>
     </ConfirmDialog>
+
+    <!-- Browse section — shown when drive has an active mount_path and is not EMPTY -->
+    <section v-if="drive && drive.mount_path && drive.current_state !== 'EMPTY'" class="browse-section">
+      <button
+        class="browse-toggle btn"
+        :aria-expanded="browseExpanded"
+        @click="browseExpanded = !browseExpanded"
+      >
+        <span aria-hidden="true">{{ browseExpanded ? '▼' : '▶' }}</span> {{ t('browse.browseContents') }}
+      </button>
+      <div v-if="browseExpanded" class="browse-panel">
+        <DirectoryBrowser :mount-path="drive.mount_path" />
+      </div>
+    </section>
 
     <ConfirmDialog
       v-model="showEjectDialog"
@@ -426,5 +447,14 @@ select {
 .format-selector {
   display: grid;
   gap: var(--space-xs);
+}
+
+.browse-section {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.browse-toggle {
+  justify-self: start;
 }
 </style>
