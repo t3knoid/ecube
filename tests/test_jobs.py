@@ -953,6 +953,43 @@ def test_list_jobs_manager_client_ip_redacted(manager_client, db):
     assert matched[0]["client_ip"] is None
 
 
+def test_create_job_auditor_forbidden(auditor_client, db):
+    """Auditor role should be rejected from creating jobs (403)."""
+    response = auditor_client.post("/jobs", json={
+        "project_id": "PROJ-AUDIT-DENY",
+        "evidence_number": "EV-AUDIT-DENY",
+        "source_path": "/data/evidence",
+    })
+    assert response.status_code == 403
+
+
+def test_start_job_auditor_forbidden(auditor_client, db):
+    """Auditor role should be rejected from starting jobs (403)."""
+    job = ExportJob(
+        project_id="PROJ-START-DENY",
+        evidence_number="EV-START-DENY",
+        source_path="/data/evidence",
+        status=JobStatus.PENDING,
+    )
+    db.add(job)
+    db.commit()
+
+    response = auditor_client.post(f"/jobs/{job.id}/start", json={
+        "target_mount_path": "/mnt/usb/1",
+    })
+    assert response.status_code == 403
+
+
+def test_create_job_unauthenticated_returns_401(unauthenticated_client, db):
+    """POST /jobs without auth should return 401."""
+    response = unauthenticated_client.post("/jobs", json={
+        "project_id": "PROJ-NOAUTH",
+        "evidence_number": "EV-NOAUTH",
+        "source_path": "/data/evidence",
+    })
+    assert response.status_code == 401
+
+
 # ---------------------------------------------------------------------------
 # _build_error_summary edge cases
 # ---------------------------------------------------------------------------
