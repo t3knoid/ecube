@@ -96,11 +96,17 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
                 )
 
             # Bind the drive to this project if currently unbound.
-            explicit_bound = False
             if drive.current_project_id is None:
                 drive.current_project_id = body.project_id
-                explicit_bound = True
 
+            if not drive.mount_path:
+                db.rollback()
+                raise HTTPException(
+                    status_code=409,
+                    detail="Assigned drive is not mounted",
+                )
+
+            job.target_mount_path = body.target_mount_path or drive.mount_path
             db.add(DriveAssignment(drive_id=body.drive_id, job_id=job.id))
             drive.current_state = DriveState.IN_USE
             db.flush()  # validate assignment + drive state change
@@ -111,6 +117,13 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
                 drive_repo=drive_repo,
                 db=db,
             )
+            if not drive.mount_path:
+                db.rollback()
+                raise HTTPException(
+                    status_code=409,
+                    detail="Assigned drive is not mounted",
+                )
+            job.target_mount_path = body.target_mount_path or drive.mount_path
             db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
             drive.current_state = DriveState.IN_USE
             db.flush()

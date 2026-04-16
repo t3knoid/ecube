@@ -1,11 +1,14 @@
 import logging
+import os
 from typing import List, Optional
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.infrastructure.drive_eject import DriveEjectProvider
 from app.infrastructure.drive_format import DriveFormatter
+from app.infrastructure.drive_mount import DriveMountProvider
 from app.infrastructure import validate_device_path
 from app.models.hardware import DriveState, UsbDrive
 from app.repositories.audit_repository import AuditRepository
@@ -18,6 +21,12 @@ def _default_eject_provider() -> DriveEjectProvider:
     """Lazy import to avoid circular dependency at module level."""
     from app.infrastructure import get_drive_eject
     return get_drive_eject()
+
+
+def _default_mount_provider() -> DriveMountProvider:
+    """Lazy import to avoid circular dependency at module level."""
+    from app.infrastructure import get_drive_mount
+    return get_drive_mount()
 
 
 def get_all_drives(
@@ -208,6 +217,101 @@ def initialize_drive(
     return drive
 
 
+def mount_drive(
+    drive_id: int,
+    db: Session,
+    actor: Optional[str] = None,
+    mount_provider: Optional[DriveMountProvider] = None,
+    client_ip: Optional[str] = None,
+) -> UsbDrive:
+    drive_repo = DriveRepository(db)
+    audit_repo = AuditRepository(db)
+    provider = mount_provider or _default_mount_provider()
+
+    drive = drive_repo.get_for_update(drive_id)
+    if not drive:
+        raise HTTPException(status_code=404, detail="Drive not found")
+
+    if drive.current_state not in (DriveState.AVAILABLE, DriveState.IN_USE):
+        raise HTTPException(
+            status_code=409,
+            detail="Drive must be AVAILABLE or IN_USE before it can be mounted",
+        )
+
+    if not drive.filesystem_path:
+        raise HTTPException(
+            status_code=400,
+            detail="Drive has no filesystem_path and cannot be mounted",
+        )
+
+    if not validate_device_path(drive.filesystem_path):
+        raise HTTPException(
+            status_code=400,
+            detail="Drive filesystem_path is invalid and cannot be mounted",
+        )
+
+    if drive.mount_path:
+        raise HTTPException(
+            status_code=409,
+            detail="Drive is already mounted",
+        )
+
+    mount_point = os.path.join(settings.usb_mount_base_path, str(drive.id))
+    success, error = provider.mount_drive(drive.filesystem_path, mount_point)
+    if not success:
+        try:
+            audit_repo.add(
+                action="DRIVE_MOUNT_FAILED",
+                user=actor,
+                project_id=drive.current_project_id,
+                drive_id=drive_id,
+                details={
+                    "drive_id": drive_id,
+                    "filesystem_path": drive.filesystem_path,
+                    "mount_path": mount_point,
+                    "error": error,
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for DRIVE_MOUNT_FAILED")
+        raise HTTPException(
+            status_code=500,
+            detail=error or "Drive mount failed",
+        )
+
+    drive.mount_path = mount_point
+    try:
+        drive_repo.save(drive)
+    except Exception:
+        logger.exception(
+            "DB commit failed after successful OS mount for drive %s",
+            drive_id,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Drive mounted at OS level but database update failed; manual intervention may be required",
+        )
+
+    try:
+        audit_repo.add(
+            action="DRIVE_MOUNTED",
+            user=actor,
+            project_id=drive.current_project_id,
+            drive_id=drive_id,
+            details={
+                "drive_id": drive_id,
+                "filesystem_path": drive.filesystem_path,
+                "mount_path": drive.mount_path,
+            },
+            client_ip=client_ip,
+        )
+    except Exception:
+        logger.exception("Failed to write audit log for DRIVE_MOUNTED")
+
+    return drive
+
+
 def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                   eject_provider: Optional[DriveEjectProvider] = None,
                   client_ip: Optional[str] = None) -> UsbDrive:
@@ -261,6 +365,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
 
     if result.success:
         drive.current_state = DriveState.AVAILABLE
+        drive.mount_path = None
         try:
             drive_repo.save(drive)
         except Exception:
@@ -289,6 +394,23 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
         except Exception:
             logger.exception("Failed to write audit log for DRIVE_EJECT_PREPARED")
     else:
+        if not result.unmount_ok:
+            try:
+                audit_repo.add(
+                    action="DRIVE_UNMOUNT_FAILED",
+                    user=actor,
+                    project_id=drive.current_project_id,
+                    drive_id=drive_id,
+                    details={
+                        "drive_id": drive_id,
+                        "filesystem_path": initial_device_path,
+                        "mount_path": drive.mount_path,
+                        "unmount_error": result.unmount_error,
+                    },
+                    client_ip=client_ip,
+                )
+            except Exception:
+                logger.exception("Failed to write audit log for DRIVE_UNMOUNT_FAILED")
         try:
             audit_repo.add(
                 action="DRIVE_EJECT_FAILED",
