@@ -190,7 +190,7 @@ onMounted(loadMounts)
     <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
     <p v-if="error" class="error-banner">{{ error }}</p>
 
-    <input v-model="search" type="text" :placeholder="t('mounts.searchPlaceholder')" />
+    <input v-model="search" type="text" :placeholder="t('mounts.searchPlaceholder')" :aria-label="t('mounts.searchPlaceholder')" />
 
     <DataTable :columns="columns" :rows="paged" :empty-text="t('mounts.empty')">
       <template #cell-status="{ row }"><StatusBadge :status="row.status" /></template>
