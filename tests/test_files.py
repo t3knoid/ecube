@@ -1,13 +1,7 @@
 """Tests for GET /files/{file_id}/hashes and POST /files/compare."""
 
-import time
-from pathlib import Path
-from unittest.mock import patch
-
-import jwt
 import pytest
 
-from app.config import settings
 from app.models.jobs import ExportFile, ExportJob, FileStatus, JobStatus
 
 
