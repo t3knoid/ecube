@@ -2,6 +2,7 @@
 
 import pathlib
 
+import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
@@ -67,7 +68,8 @@ def _make_test_app():
 class TestStripApiPrefixMiddleware:
     """Verify the strip_api_prefix middleware rewrites paths correctly."""
 
-    def setup_method(self):
+    @pytest.fixture(autouse=True)
+    def _setup_client(self):
         self.app = _make_test_app()
         self.client = TestClient(self.app)
 

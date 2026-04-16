@@ -241,8 +241,7 @@ class TestDbRoleResolution:
         fastapi_app.dependency_overrides[_get_pam] = lambda: fake_pam
 
         # Temporarily set a group map that maps test-admins → admin
-        original_map = settings.local_group_role_map
-        settings.local_group_role_map = {"test-admins": ["admin"]}
+        monkeypatch.setattr(settings, "local_group_role_map", {"test-admins": ["admin"]})
         # Clear the cached resolver so it picks up the new map
         get_role_resolver.cache_clear()
         try:
@@ -255,7 +254,6 @@ class TestDbRoleResolution:
             payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
             assert payload["roles"] == ["admin"]
         finally:
-            settings.local_group_role_map = original_map
             get_role_resolver.cache_clear()
 
 
