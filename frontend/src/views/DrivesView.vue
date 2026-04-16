@@ -266,4 +266,10 @@ select {
   border-radius: var(--border-radius);
   padding: var(--space-sm);
 }
+
+.browse-not-mounted {
+  color: var(--color-text-secondary);
+  font-style: italic;
+  padding: var(--space-sm) 0;
+}
 </style>
