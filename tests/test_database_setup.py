@@ -457,7 +457,9 @@ class TestSystemInfoEndpoint:
     def test_system_info_non_docker_uses_localhost(
         self, mock_is_running_in_docker, unauthenticated_client
     ):
-        resp = unauthenticated_client.get("/setup/database/system-info")
+        with patch("app.routers.database_setup.settings.postgres_user", ""), \
+             patch("app.routers.database_setup.settings.pg_superuser_name", ""):
+            resp = unauthenticated_client.get("/setup/database/system-info")
 
         assert resp.status_code == 200
         assert resp.json() == {
@@ -475,7 +477,8 @@ class TestSystemInfoEndpoint:
         with patch(
             "app.routers.database_setup.settings.setup_docker_db_host",
             "postgres-service",
-        ):
+        ), patch("app.routers.database_setup.settings.postgres_user", ""), \
+             patch("app.routers.database_setup.settings.pg_superuser_name", ""):
             resp = unauthenticated_client.get("/setup/database/system-info")
 
         assert resp.status_code == 200
@@ -494,13 +497,28 @@ class TestSystemInfoEndpoint:
         db.add(UserRole(username="admin-user", role="admin"))
         db.commit()
 
-        resp = unauthenticated_client.get("/setup/database/system-info")
+        with patch("app.routers.database_setup.settings.postgres_user", ""), \
+             patch("app.routers.database_setup.settings.pg_superuser_name", ""):
+            resp = unauthenticated_client.get("/setup/database/system-info")
 
         assert resp.status_code == 200
         assert resp.json()["in_docker"] is False
         assert resp.json()["suggested_db_host"] == "localhost"
         assert resp.json()["suggested_admin_username"] == "ecubeadmin"
         mock_is_running_in_docker.assert_called_once_with()
+
+    @patch("app.routers.database_setup.is_running_in_docker", return_value=False)
+    def test_system_info_falls_back_to_postgres_user(
+        self, mock_is_running_in_docker, unauthenticated_client
+    ):
+        """When PG_SUPERUSER_NAME is unset but POSTGRES_USER is set, the
+        suggested admin username falls back to POSTGRES_USER."""
+        with patch("app.routers.database_setup.settings.pg_superuser_name", ""), \
+             patch("app.routers.database_setup.settings.postgres_user", "mypguser"):
+            resp = unauthenticated_client.get("/setup/database/system-info")
+
+        assert resp.status_code == 200
+        assert resp.json()["suggested_admin_username"] == "mypguser"
 
     @patch("app.services.database_service.is_database_provisioned", return_value=True)
     def test_provision_blocked_when_already_provisioned(
