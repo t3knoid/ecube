@@ -56,6 +56,33 @@ def test_create_job_conflict_when_assigned_drive_not_mounted(client, db):
     assert "not mounted" in response.json()["message"].lower()
 
 
+def test_create_job_explicit_unbound_drive_writes_project_bound_audit(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-EXPLICIT-UNBOUND-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id=None,
+        mount_path="/mnt/ecube/explicit-unbound-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-BOUND",
+            "evidence_number": "EV-BOUND-001",
+            "source_path": "/data/evidence",
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 200
+    audit = db.query(AuditLog).filter(AuditLog.action == "DRIVE_PROJECT_BOUND").first()
+    assert audit is not None
+    assert audit.details["drive_id"] == drive.id
+    assert audit.details["project_id"] == "PROJ-BOUND"
+
+
 def test_get_job(client, db):
     db.add(UsbDrive(
         device_identifier="USB-GET-001",
