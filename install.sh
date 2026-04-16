@@ -189,69 +189,20 @@ _cleanup_pg_superuser_role() {
     return
   fi
 
-  local db_url
-  db_url="$(_extract_database_url_from_env "${env_file}" || true)"
-  if [[ -z "${db_url}" ]]; then
-    warn "PostgreSQL superuser cleanup skipped: no usable DATABASE_URL found in ${env_file}."
-    return
-  fi
-
-  local py_bin
-  if command -v python3.11 &>/dev/null; then
-    py_bin="python3.11"
-  elif command -v python3 &>/dev/null; then
-    py_bin="python3"
-  else
-    warn "PostgreSQL superuser cleanup skipped: python3 is required to parse DATABASE_URL safely."
-    return
-  fi
-
-  local parsed admin_url
-  parsed="$(${py_bin} - <<'PY' "${db_url}" "${su_name}"
-import sys
-from urllib.parse import urlparse, urlunparse
-
-url = sys.argv[1]
-superuser_name = sys.argv[2]
-u = urlparse(url)
-
-# Preserve transport/query params but point at maintenance database.
-path = "/postgres"
-
-# For remote DBs, credentials for SETUP_DEFAULT_ADMIN_USERNAME are often
-# provided via ~/.pgpass or PGPASSWORD during maintenance operations, so avoid
-# embedding a potentially stale app-role password when switching usernames.
-if "@" in u.netloc:
-    hostport = u.netloc.split("@", 1)[1]
-else:
-    hostport = u.netloc
-
-netloc = f"{superuser_name}@{hostport}" if hostport else superuser_name
-admin = u._replace(netloc=netloc, path=path, params="", fragment="")
-print(urlunparse(admin))
-PY
-)" || {
-    warn "PostgreSQL superuser cleanup skipped: failed to parse DATABASE_URL."
-    return
-  }
-
-  admin_url="${parsed}"
-  if [[ -z "${admin_url}" ]]; then
-    warn "PostgreSQL superuser cleanup skipped: parsed admin connection details were incomplete."
-    return
-  fi
-
   if ! command -v psql &>/dev/null; then
     warn "PostgreSQL superuser cleanup skipped: psql not found."
     return
   fi
 
   if [[ "${DRY_RUN}" == true ]]; then
-    echo "[DRY-RUN] Would drop PostgreSQL role '${su_name}' via ${admin_url} if it exists"
+    echo "[DRY-RUN] Would drop PostgreSQL role '${su_name}' if it exists"
     return
   fi
 
-  if ! psql "${admin_url}" -tAc "SELECT 1 FROM pg_roles WHERE rolname = '${su_name}'" 2>/dev/null | grep -q 1; then
+  # Use peer authentication via the postgres OS user — avoids needing the
+  # role's password and avoids the self-drop problem (connecting as the very
+  # role you want to DROP).
+  if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname = '${su_name}'" 2>/dev/null | grep -q 1; then
     info "PostgreSQL role '${su_name}' not found — skipping role cleanup."
     return
   fi
@@ -259,7 +210,7 @@ PY
   local escaped_su_name
   escaped_su_name="${su_name//\"/\"\"}"
   local drop_out
-  if ! drop_out="$(psql "${admin_url}" -v ON_ERROR_STOP=1 -c "DROP ROLE \"${escaped_su_name}\";" 2>&1)"; then
+  if ! drop_out="$(sudo -u postgres psql -v ON_ERROR_STOP=1 -c "DROP OWNED BY \"${escaped_su_name}\"; DROP ROLE IF EXISTS \"${escaped_su_name}\";" 2>&1)"; then
     warn "Failed to drop PostgreSQL role '${su_name}': ${drop_out}"
     return
   fi
@@ -279,11 +230,6 @@ _cleanup_application_database() {
     return 0
   fi
 
-  if [[ "${DRY_RUN}" == true ]]; then
-    echo "[DRY-RUN] Would drop application database from DATABASE_URL configured for uninstall"
-    return 0
-  fi
-
   if ! command -v psql &>/dev/null; then
     warn "Database cleanup skipped: psql not found."
     return 0
@@ -299,30 +245,22 @@ _cleanup_application_database() {
     return 0
   fi
 
-  local parsed admin_url target_db
-  parsed="$(${py_bin} - <<'PY' "${db_url}"
+  # Extract only the database name from DATABASE_URL; connection is via peer auth.
+  local target_db
+  target_db="$(${py_bin} -c "
 import sys
-from urllib.parse import urlparse, urlunparse
-
-url = sys.argv[1]
-u = urlparse(url)
-db_name = (u.path or "/").lstrip("/")
+from urllib.parse import urlparse
+db_name = urlparse(sys.argv[1]).path.lstrip('/')
 if not db_name:
     raise SystemExit(1)
-
-admin = u._replace(path="/postgres", params="", query="", fragment="")
-print(urlunparse(admin))
 print(db_name)
-PY
-)" || {
+" "${db_url}" 2>/dev/null)" || {
     warn "Database cleanup skipped: failed to parse DATABASE_URL."
     return 0
   }
 
-  admin_url="$(printf '%s\n' "${parsed}" | sed -n '1p')"
-  target_db="$(printf '%s\n' "${parsed}" | sed -n '2p')"
-  if [[ -z "${admin_url}" || -z "${target_db}" ]]; then
-    warn "Database cleanup skipped: parsed connection details were incomplete."
+  if [[ -z "${target_db}" ]]; then
+    warn "Database cleanup skipped: could not determine database name from DATABASE_URL."
     return 0
   fi
 
@@ -334,22 +272,27 @@ PY
     return 0
   fi
 
+  if [[ "${DRY_RUN}" == true ]]; then
+    echo "[DRY-RUN] Would drop application database '${target_db}'"
+    return 0
+  fi
+
   info "Attempting database cleanup for '${target_db}'..."
 
-  # Best-effort terminate existing sessions. This may fail for non-superusers;
-  # still continue to DROP so cleanup can succeed when no active sessions exist.
-  if ! psql "${admin_url}" -v ON_ERROR_STOP=1 -v db_name="${target_db}" \
+  # Use peer authentication via the postgres OS user — the cluster superuser
+  # can always terminate sessions and drop databases without needing a password.
+  if ! sudo -u postgres psql -v ON_ERROR_STOP=1 -v db_name="${target_db}" \
       -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = :'db_name' AND pid <> pg_backend_pid();" \
       >/dev/null 2>&1; then
     warn "Could not terminate active sessions for '${target_db}' (continuing with drop attempt)."
   fi
 
   local _drop_out
-  if ! _drop_out="$(psql "${admin_url}" -v ON_ERROR_STOP=1 \
+  if ! _drop_out="$(sudo -u postgres psql -v ON_ERROR_STOP=1 \
       -c "DROP DATABASE IF EXISTS \"${target_db//\"/\"\"}\";" 2>&1)"; then
     # If sessions are still attached, retry with FORCE for PostgreSQL 13+.
     if printf '%s' "${_drop_out}" | grep -qi "being accessed by other users"; then
-      if ! _drop_out="$(psql "${admin_url}" -v ON_ERROR_STOP=1 \
+      if ! _drop_out="$(sudo -u postgres psql -v ON_ERROR_STOP=1 \
           -c "DROP DATABASE IF EXISTS \"${target_db//\"/\"\"}\" WITH (FORCE);" 2>&1)"; then
         warn "Database cleanup failed for '${target_db}': ${_drop_out}"
         return 0
