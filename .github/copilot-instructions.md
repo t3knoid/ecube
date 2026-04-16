@@ -135,3 +135,86 @@ CI workflows are configured in `.github/workflows/`. Key pipelines:
 3. **Security Scan** — static analysis and dependency vulnerability checks
 4. **Schemathesis API Fuzz** — auto-generated requests from the OpenAPI schema
 5. **Newman API Smoke** — Postman collection-based API smoke validation
+
+Got it, Frank — you’re absolutely right to call out that the section I generated **did not match the formatting style** of your existing `copilot‑instructions.md`.
+
+Your file uses:
+
+- **H2 headers (`##`)** for major sections  
+- **H3 headers (`###`)** sparingly  
+- **Bullet lists** with short, declarative rules  
+- **No emoji, no bold section titles, no callouts**  
+- A clean, documentation‑style tone  
+- No “marketing” language — just facts and constraints  
+
+So the new section must follow that exact style.
+
+Below is the **correctly formatted version**, rewritten to match your file *perfectly*.
+
+You can paste this **directly at the bottom** of `copilot-instructions.md`.
+
+---
+
+## Architecture and Trust Boundaries
+
+- UI code must never access hardware, the filesystem, or the database directly.  
+- All OS-level operations must go through interfaces in `app/infrastructure`.  
+- Business logic belongs in `services/`, not in routers.  
+- Routers validate input, enforce roles, and delegate to services.
+
+## Security Requirements
+
+- All security‑relevant events must be logged to `audit_logs`.  
+- Internal paths, credentials, and hardware identifiers must not be exposed.  
+- Endpoints must declare error responses using shared `R_*` schemas.  
+- Role checks must use `require_roles()`.
+
+## Shell and Environment Safety
+
+- `shell=True` is not allowed.  
+- All environment variable expansions must be quoted (`"${VAR}"`).  
+- `.env` files must not be parsed with whitespace‑collapsing tools.  
+- Paths must be constructed using `printf '%s/%s'` or Python `pathlib`.  
+- Bash scripts must use `set -euo pipefail`.
+
+## Docker and Compose Safety
+
+- Docker images must be pinned to a specific version (no `latest`).  
+- Multi‑stage builds are required; production images must not include compilers or debugging tools.  
+- Entrypoints must use exec form (`["python", "app.py"]`).  
+- Docker Compose must not use nested variable interpolation (`${A:-${B}}`).  
+- Long‑running services must define healthchecks and resource limits.
+
+## Logging Rules
+
+- Logging helpers must not drop arguments.  
+- Printf‑style formatting must not be used unless the logger supports it.  
+- Prefer structured logging with context objects.
+
+## Pagination and Filesystem Safety
+
+- Paginated endpoints must not materialize entire directories.  
+- Use streaming iteration (`os.scandir`) and incremental pagination.  
+- Avoid global sorting of large directory listings.
+
+## Test Requirements
+
+- Tests must use pytest, not `unittest.TestCase`.  
+- Fixtures must be used instead of `setUp`/`tearDown`.  
+- Tests must use bare `assert` statements, not `self.assert*`.  
+- Exception assertions must use `pytest.raises`.  
+- Tests must not contain unused imports, fixtures, helpers, or unreachable code.  
+- Test names must use snake_case and must match the behavior being tested.
+
+## Frontend Rules
+
+- CSS selectors must not be defined unless they are used in the template.  
+- All interactive elements must meet WCAG 2.1 A/AA requirements.  
+- Clickable elements must not use `<div>` or `<span>` without proper roles, tabindex, and keyboard handlers.  
+- Vue components must expose correct semantics and keyboard accessibility.
+
+## Code Quality
+- No dead code, commented‑out blocks, or unused imports.  
+- Duplicated logic must be extracted into utilities or composables.  
+- Code must follow Black, Ruff, ESLint, and Prettier formatting rules.  
+- All new behavior must include tests.
