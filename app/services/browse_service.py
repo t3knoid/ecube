@@ -256,12 +256,26 @@ def list_directory(
         #         containment (anti-traversal) and allowlist (defence-in-depth).
         real_root, real_target = _resolve_and_validate(db_mount_root, subdir)
 
-        # 4. List directory -- os.listdir() returns only name strings (no
-        #    stat, no file-descriptor overhead), so sorting + slicing is
-        #    O(n log n) on lightweight strings.  Only the page slice is
-        #    then stat'd, keeping per-request I/O proportional to page_size.
+        # 4. List directory -- iterate with os.scandir() so we can bail out
+        #    early when the DoS cap (BROWSE_MAX_DIR_ENTRIES) is exceeded
+        #    without materializing the full listing in memory.  Only names
+        #    are collected (DirEntry.name); the page slice is stat'd later.
+        max_entries = settings.browse_max_dir_entries
         try:
-            all_names = sorted(os.listdir(real_target))
+            names: list[str] = []
+            with os.scandir(real_target) as it:
+                for entry in it:
+                    names.append(entry.name)
+                    if max_entries and len(names) > max_entries:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=(
+                                f"Directory contains more than {max_entries} "
+                                f"entries which exceeds the configured limit. "
+                                f"Use a more specific subdir."
+                            ),
+                        )
+            all_names = sorted(names)
         except FileNotFoundError:
             raise HTTPException(
                 status_code=404,
@@ -285,18 +299,6 @@ def list_directory(
             )
 
         total = len(all_names)
-
-        # Guard against extremely large directories that could become a DoS
-        # vector.  The cap is configurable via BROWSE_MAX_DIR_ENTRIES.
-        max_entries = settings.browse_max_dir_entries
-        if max_entries and total > max_entries:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"Directory contains {total} entries which exceeds the "
-                    f"configured limit of {max_entries}. Use a more specific subdir."
-                ),
-            )
 
         start = (page - 1) * page_size
         page_names = all_names[start : start + page_size]
