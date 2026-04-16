@@ -340,3 +340,45 @@ class TestBrowseFilesystemErrors:
             response = client.get(f"/browse?path={mount_point}")
 
         assert response.status_code == 500
+
+    def test_file_not_found_returns_404(self, client, db, tmp_path):
+        """When the directory disappears between DB lookup and scandir (TOCTOU),
+        the endpoint returns 404 with a helpful message."""
+        mount_point = str(tmp_path)
+        _make_network_mount(db, mount_point)
+
+        with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]), \
+             patch("os.scandir", side_effect=FileNotFoundError("No such file or directory")):
+            response = client.get(f"/browse?path={mount_point}")
+
+        assert response.status_code == 404
+        assert "unmounted" in response.json()["message"].lower()
+
+    def test_stat_race_skips_vanished_entries(self, client, db, tmp_path):
+        """When a file vanishes between scandir and stat (_stat_entry returns
+        None), the entry is silently excluded from the response."""
+        mount_point = str(tmp_path)
+        _make_network_mount(db, mount_point)
+        (tmp_path / "keep.txt").write_text("ok")
+        (tmp_path / "vanish.txt").write_text("gone")
+
+        original_stat_entry = None
+
+        # Patch _stat_entry so it returns None for 'vanish.txt'
+        import app.services.browse_service as _bs
+
+        _original = _bs._stat_entry
+
+        def _mock_stat_entry(dir_entry):
+            if dir_entry.name == "vanish.txt":
+                return None
+            return _original(dir_entry)
+
+        with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]), \
+             patch.object(_bs, "_stat_entry", side_effect=_mock_stat_entry):
+            response = client.get(f"/browse?path={mount_point}")
+
+        assert response.status_code == 200
+        names = [e["name"] for e in response.json()["entries"]]
+        assert "keep.txt" in names
+        assert "vanish.txt" not in names
