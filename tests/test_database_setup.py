@@ -988,15 +988,12 @@ class TestFailClosedBehavior:
         from app.repositories.user_role_repository import UserRoleRepository
         from sqlalchemy.exc import ProgrammingError
 
-        original_has_any_admin = UserRoleRepository.has_any_admin
-
         def _raise_missing_table(self):
             raise ProgrammingError(
                 "SELECT", {}, Exception('relation "user_roles" does not exist')
             )
 
-        UserRoleRepository.has_any_admin = _raise_missing_table
-        try:
+        with patch.object(UserRoleRepository, "has_any_admin", _raise_missing_table):
             resp = unauthenticated_client.post(
                 "/setup/database/test-connection",
                 json={
@@ -1009,8 +1006,6 @@ class TestFailClosedBehavior:
 
             # Should be treated as initial setup (200), not 503
             assert resp.status_code == 200
-        finally:
-            UserRoleRepository.has_any_admin = original_has_any_admin
 
     @patch("app.services.database_service.test_connection", return_value="16.2")
     def test_operational_error_fails_closed(
@@ -1021,15 +1016,12 @@ class TestFailClosedBehavior:
         from app.repositories.user_role_repository import UserRoleRepository
         from sqlalchemy.exc import OperationalError as SAOperationalError
 
-        original_has_any_admin = UserRoleRepository.has_any_admin
-
         def _raise_operational(self):
             raise SAOperationalError(
                 "SELECT", {}, Exception("permission denied for table user_roles")
             )
 
-        UserRoleRepository.has_any_admin = _raise_operational
-        try:
+        with patch.object(UserRoleRepository, "has_any_admin", _raise_operational):
             resp = unauthenticated_client.post(
                 "/setup/database/test-connection",
                 json={
@@ -1042,8 +1034,6 @@ class TestFailClosedBehavior:
             # Must NOT return 200; unauthenticated requests should be
             # rejected because we couldn't confirm there are no admins.
             assert resp.status_code in (401, 403, 503)
-        finally:
-            UserRoleRepository.has_any_admin = original_has_any_admin
 
     @patch("app.services.database_service.test_connection", return_value="16.2")
     def test_unexpected_error_fails_closed(
@@ -1053,13 +1043,10 @@ class TestFailClosedBehavior:
         must NOT be treated as initial setup — fail closed."""
         from app.repositories.user_role_repository import UserRoleRepository
 
-        original_has_any_admin = UserRoleRepository.has_any_admin
-
         def _raise_unexpected(self):
             raise AttributeError("some coding bug")
 
-        UserRoleRepository.has_any_admin = _raise_unexpected
-        try:
+        with patch.object(UserRoleRepository, "has_any_admin", _raise_unexpected):
             resp = unauthenticated_client.post(
                 "/setup/database/test-connection",
                 json={
@@ -1071,8 +1058,6 @@ class TestFailClosedBehavior:
             )
             # Must NOT return 200
             assert resp.status_code in (401, 403, 500, 503)
-        finally:
-            UserRoleRepository.has_any_admin = original_has_any_admin
 
 
 # ---------------------------------------------------------------------------
