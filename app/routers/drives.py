@@ -9,7 +9,7 @@ from app.database import get_db
 from app.exceptions import EncodingError
 from app.schemas.hardware import DiscoverySyncResponse, DriveFormatRequest, DriveInitialize, UsbDriveSchema
 from app.services import drive_service, discovery_service
-from app.infrastructure import get_drive_eject, get_drive_formatter, get_filesystem_detector
+from app.infrastructure import get_drive_eject, get_drive_formatter, get_drive_mount, get_filesystem_detector
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500
 from app.utils.client_ip import get_client_ip
 from app.utils.sanitize import sanitize_string
@@ -68,6 +68,30 @@ def initialize_drive(
     **Roles:** ``admin``, ``manager``
     """
     return drive_service.initialize_drive(drive_id, body.project_id, db, actor=current_user.username, client_ip=get_client_ip(request))
+
+
+@router.post("/{drive_id}/mount", response_model=UsbDriveSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
+def mount_drive(
+    drive_id: int,
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER),
+    request: Request,
+):
+    """Mount a drive to the managed ECUBE mount root.
+
+    The drive must already have a valid filesystem and be in ``AVAILABLE`` or
+    ``IN_USE`` state. On success, ``mount_path`` is populated and returned.
+
+    **Roles:** ``admin``, ``manager``
+    """
+    return drive_service.mount_drive(
+        drive_id,
+        db,
+        actor=current_user.username,
+        mount_provider=get_drive_mount(),
+        client_ip=get_client_ip(request),
+    )
 
 
 @router.post("/{drive_id}/prepare-eject", response_model=UsbDriveSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
