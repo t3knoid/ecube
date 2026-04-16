@@ -278,8 +278,8 @@ watch(driveId, () => {
       </div>
     </ConfirmDialog>
 
-    <!-- Browse section — shown when drive has an active mount_path -->
-    <section v-if="drive && drive.mount_path" class="browse-section">
+    <!-- Browse section — shown when drive has an active mount_path and is not EMPTY -->
+    <section v-if="drive && drive.mount_path && drive.current_state !== 'EMPTY'" class="browse-section">
       <button
         class="browse-toggle btn"
         :aria-expanded="browseExpanded"
