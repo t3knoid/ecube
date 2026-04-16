@@ -306,7 +306,10 @@ class TestMountDBFailures:
         db.add(mount)
         db.commit()
 
-        with patch("subprocess.run"), \
+        with patch(
+                 "subprocess.run",
+                 return_value=MagicMock(returncode=0, stderr="", stdout=""),
+             ), \
              patch(
                  "app.repositories.audit_repository.AuditRepository.add",
                  side_effect=Exception("simulated audit DB failure"),
