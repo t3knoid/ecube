@@ -196,7 +196,7 @@ onMounted(loadDrives)
         <div class="row-actions">
           <button class="btn" @click="openDrive(row)">{{ t('drives.open') }}</button>
           <button
-            v-if="row.current_state === 'AVAILABLE' || row.current_state === 'IN_USE'"
+            v-if="row.mount_path"
             class="btn"
             :aria-expanded="browsingDriveId === row.id"
             :aria-label="t('drives.browse') + ' ' + row.device_identifier"
@@ -218,11 +218,7 @@ onMounted(loadDrives)
       <h3 class="browse-panel-title">
         {{ t('browse.browseContents') }}: {{ activeBrowsedDrive.device_identifier }}
       </h3>
-      <p v-if="!activeBrowsedDrive.mount_path" class="browse-not-mounted">
-        {{ t('drives.notMounted') }}
-      </p>
       <DirectoryBrowser
-        v-else
         :mount-path="activeBrowsedDrive.mount_path"
       />
     </section>
