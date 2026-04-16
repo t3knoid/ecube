@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
-import { getDrives, formatDrive, initializeDrive, prepareEjectDrive, refreshDrives } from '@/api/drives.js'
+import { getDrives, formatDrive, initializeDrive, mountDrive, prepareEjectDrive, refreshDrives } from '@/api/drives.js'
 import { enablePort } from '@/api/admin.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
@@ -50,6 +50,12 @@ const canFormat = computed(
 )
 const canInitialize = computed(
   () => drive.value?.current_state === 'AVAILABLE' && canManage.value,
+)
+const canMount = computed(
+  () => canManage.value
+    && ['AVAILABLE', 'IN_USE'].includes(drive.value?.current_state)
+    && !drive.value?.mount_path
+    && !!drive.value?.filesystem_path,
 )
 const canEject = computed(
   () => drive.value?.current_state === 'IN_USE' && canManage.value,
@@ -181,6 +187,36 @@ async function runEnable() {
   }
 }
 
+async function runMount() {
+  if (!drive.value) return
+  saving.value = true
+  clearBanners()
+  try {
+    drive.value = await mountDrive(drive.value.id)
+    infoMessage.value = t('drives.mountSuccess')
+  } catch (err) {
+    const status = err?.response?.status
+    const detail = normalizeErrorMessage(err?.response?.data, null)
+    if (!status) {
+      error.value = t('common.errors.networkError')
+    } else if (status === 403) {
+      error.value = detail || t('common.errors.insufficientPermissions')
+    } else if (status === 404) {
+      error.value = detail || t('common.errors.notFound')
+    } else if (status === 409) {
+      error.value = detail || t('common.errors.requestConflict')
+    } else if (status === 422) {
+      error.value = detail || t('common.errors.validationFailed')
+    } else if (status >= 500) {
+      error.value = detail || t('common.errors.serverError', { status })
+    } else {
+      error.value = t('common.errors.serverErrorGeneric')
+    }
+  } finally {
+    saving.value = false
+  }
+}
+
 async function runPrepareEject() {
   if (!drive.value) return
   saving.value = true
@@ -243,6 +279,7 @@ watch(driveId, () => {
         <div><strong>{{ t('common.labels.id') }}</strong><span>{{ drive.id }}</span></div>
         <div><strong>{{ t('drives.device') }}</strong><span>{{ drive.device_identifier }}</span></div>
         <div><strong>{{ t('drives.filesystemPath') }}</strong><span>{{ drive.filesystem_path || '-' }}</span></div>
+        <div><strong>{{ t('drives.mountPoint') }}</strong><span>{{ drive.mount_path || '-' }}</span></div>
         <div><strong>{{ t('drives.filesystem') }}</strong><span>{{ drive.filesystem_type || '-' }}</span></div>
         <div><strong>{{ t('common.labels.size') }}</strong><span>{{ formatBytes(drive.capacity_bytes) }}</span></div>
         <div><strong>{{ t('dashboard.project') }}</strong><span>{{ drive.current_project_id || '-' }}</span></div>
@@ -251,6 +288,7 @@ watch(driveId, () => {
 
       <div class="action-row">
         <button v-if="canEnable" class="btn btn-primary" :disabled="saving" @click="runEnable">{{ t('drives.enable') }}</button>
+        <button v-if="canMount" class="btn" :disabled="saving" @click="runMount">{{ t('drives.mount') }}</button>
         <button class="btn" :disabled="!canFormat || saving" @click="showFormatDialog = true">{{ t('drives.format') }}</button>
         <button class="btn" :disabled="!canInitialize || saving" @click="openInitializeDialog">{{ t('drives.initialize') }}</button>
         <button class="btn btn-danger" :disabled="!canEject || saving" @click="showEjectDialog = true">{{ t('drives.prepareEject') }}</button>
