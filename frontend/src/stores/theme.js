@@ -202,10 +202,10 @@ export const useThemeStore = defineStore('theme', () => {
     const timer = setTimeout(() => controller.abort(), MANIFEST_TIMEOUT_MS)
     try {
       const url = _themesUrl('manifest.json')
-      logger.debug('[theme] fetchManifest: url=%s', url)
+      logger.debug(`[theme] fetchManifest: url=${url}`)
       const resp = await fetch(url, { signal: controller.signal })
       if (!resp.ok) {
-        logger.debug('[theme] fetchManifest: HTTP %d %s', resp.status, resp.statusText)
+        logger.debug(`[theme] fetchManifest: HTTP ${resp.status} ${resp.statusText}`)
         return
       }
       const data = await resp.json()
@@ -264,7 +264,7 @@ export const useThemeStore = defineStore('theme', () => {
       return
     }
     const href = _themesUrl(`${name}.css`)
-    logger.debug('[theme] loadTheme: name=%s href=%s', name, href)
+    logger.debug(`[theme] loadTheme: name=${name} href=${href}`)
 
     const oldLink = document.getElementById(THEME_LINK_ID)
 
@@ -285,7 +285,7 @@ export const useThemeStore = defineStore('theme', () => {
     // a previous loadTheme call whose <link> has since been replaced.
     link.onload = () => {
       if (document.getElementById(THEME_LINK_ID) !== link) return
-      logger.debug('[theme] loadTheme: CSS loaded OK for %s', name)
+      logger.debug(`[theme] loadTheme: CSS loaded OK for ${name}`)
       _clearInlineFallbackTheme()
       currentTheme.value = name
       _setBrandingForTheme(name)
@@ -294,7 +294,7 @@ export const useThemeStore = defineStore('theme', () => {
 
     link.onerror = () => {
       if (document.getElementById(THEME_LINK_ID) !== link) return
-      logger.debug('[theme] loadTheme: CSS FAILED for %s (href=%s)', name, href)
+      logger.debug(`[theme] loadTheme: CSS FAILED for ${name} (href=${href})`)
       // Stylesheet failed to load — clear broken preference and fall back.
       _safeStorage(() => localStorage.removeItem(STORAGE_THEME_KEY))
       if (name !== 'default') {
@@ -329,7 +329,7 @@ export const useThemeStore = defineStore('theme', () => {
   function initialize() {
     const saved = _safeStorage(() => localStorage.getItem(STORAGE_THEME_KEY)) ?? null
     const themeName = saved && _isKnownTheme(saved) ? saved : 'default'
-    logger.debug('[theme] initialize: saved=%s, resolved=%s', saved, themeName)
+    logger.debug(`[theme] initialize: saved=${saved}, resolved=${themeName}`)
     loadTheme(themeName)
 
     // Remember what initialize() applied so the manifest callback can
