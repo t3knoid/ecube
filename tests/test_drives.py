@@ -672,8 +672,8 @@ def test_prepare_eject_device_path_changed(manager_client, db):
 
     assert response.status_code == 409
     assert "Device path changed" in response.json()["message"]
-    assert "/dev/sdb" in response.json()["message"]
-    assert "/dev/sdc" in response.json()["message"]
+    assert "/dev/sdb" not in response.json()["message"]
+    assert "/dev/sdc" not in response.json()["message"]
 
     # Drive state must remain IN_USE.
     db.expire_all()
@@ -712,7 +712,7 @@ def test_prepare_eject_device_path_cleared_during_operation(manager_client, db):
 
     assert response.status_code == 409
     assert "Device path changed" in response.json()["message"]
-    assert "/dev/sde" in response.json()["message"]
+    assert "/dev/sde" not in response.json()["message"]
 
     # Drive state must remain IN_USE.
     db.expire_all()
