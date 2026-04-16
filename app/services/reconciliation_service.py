@@ -24,7 +24,7 @@ stale to other workers.
 import logging
 import os
 from datetime import datetime, timezone, timedelta
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 
 from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
@@ -44,7 +44,7 @@ from app.constants import ECUBE_GROUP_ROLE_MAP
 logger = logging.getLogger(__name__)
 
 
-def _schema_mismatch_hint(exc: Exception) -> str | None:
+def _schema_mismatch_hint(exc: Exception) -> Optional[str]:
     """Return a human-readable hint if *exc* is a DB schema mismatch.
 
     Catches ``ProgrammingError`` (missing column/table) and
