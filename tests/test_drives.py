@@ -205,7 +205,7 @@ def test_mount_drive_provider_failure_is_audited(manager_client, db):
         response = manager_client.post(f"/drives/{drive.id}/mount")
 
     assert response.status_code == 500
-    assert "mount failed" in response.json()["message"].lower()
+    assert response.json()["message"] == "Drive mount failed"
 
     audit = db.query(AuditLog).filter(AuditLog.action == "DRIVE_MOUNT_FAILED").first()
     assert audit is not None
@@ -215,6 +215,28 @@ def test_mount_drive_provider_failure_is_audited(manager_client, db):
     assert audit.details["mount_slot"] == str(drive.id)
     assert "filesystem_path" not in audit.details
     assert "mount_path" not in audit.details
+
+
+def test_mount_drive_failure_redacts_provider_paths_from_client(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-004B",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        filesystem_path="/dev/sdz1",
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = MagicMock()
+    provider.mount_drive.return_value = (False, "mount: /dev/sdz1 already mounted on /mnt/ecube/42")
+
+    with patch("app.routers.drives.get_drive_mount", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 500
+    assert response.json()["message"] == "Drive mount failed"
+    assert "/dev/sdz1" not in response.json()["message"]
+    assert "/mnt/ecube/42" not in response.json()["message"]
 
 
 def test_mount_drive_processor_forbidden(client, db):
