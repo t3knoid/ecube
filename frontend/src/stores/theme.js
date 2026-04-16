@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { STORAGE_THEME_KEY } from '@/constants/storage.js'
+import { logger } from '@/utils/logger.js'
 
 const THEME_LINK_ID = 'ecube-theme-stylesheet'
 const THEME_FALLBACK_STYLE_ID = 'ecube-theme-inline-fallback'
@@ -27,11 +28,9 @@ function _themesUrl(filename) {
   return `${import.meta.env.BASE_URL}themes/${filename}`
 }
 
-/** Theme subsystem debug log — only emits in development builds. */
+/** Theme subsystem debug log. */
 function _debug(...args) {
-  if (import.meta.env.DEV) {
-    console.debug(...args)
-  }
+  logger.debug(...args)
 }
 
 /** Wraps a localStorage operation, swallowing errors when storage is unavailable. */
@@ -39,7 +38,7 @@ function _safeStorage(fn) {
   try {
     return fn()
   } catch (err) {
-    _debug('[theme] localStorage unavailable:', err)
+    logger.debug('[theme] localStorage unavailable:', err)
   }
 }
 
