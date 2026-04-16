@@ -143,11 +143,8 @@
     "browseUnavailable": "Browse is only available for mounted shares"
   },
   "browse": {
-    "title": "Browse",
     "browseContents": "Browse Drive Contents",
     "browseMountContents": "Browse Mount Contents",
-    "expand": "Expand",
-    "collapse": "Collapse",
     "loadError": "Failed to load directory listing. Please try again.",
     "empty": "This directory is empty.",
     "tableLabel": "Directory contents",
