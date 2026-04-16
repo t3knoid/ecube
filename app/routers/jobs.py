@@ -120,7 +120,7 @@ def _enrich_jobs_bulk(
     return result
 
 
-@router.get("", response_model=list[ExportJobSchema], responses={**R_401, **R_403})
+@router.get("", response_model=list[ExportJobSchema], responses={**R_401, **R_403, **R_422})
 def list_jobs(
     limit: int = Query(default=200, ge=1, le=1000, description="Maximum number of jobs to return"),
     *,
