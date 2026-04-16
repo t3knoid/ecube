@@ -285,7 +285,7 @@ watch(driveId, () => {
         :aria-expanded="browseExpanded"
         @click="browseExpanded = !browseExpanded"
       >
-        {{ browseExpanded ? '▼' : '▶' }} {{ t('browse.browseContents') }}
+        <span aria-hidden="true">{{ browseExpanded ? '▼' : '▶' }}</span> {{ t('browse.browseContents') }}
       </button>
       <div v-if="browseExpanded" class="browse-panel">
         <DirectoryBrowser :mount-path="drive.mount_path" />
