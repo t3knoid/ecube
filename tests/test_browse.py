@@ -178,6 +178,8 @@ class TestBrowseHappyPath:
         entry = db.query(AuditLog).filter(AuditLog.action == "BROWSE_DIRECTORY").first()
         assert entry is not None
         assert entry.details["path"] == mount_point
+        assert entry.details["resolved_path"] == os.path.realpath(mount_point)
+        assert entry.details["real_root"] == os.path.realpath(mount_point)
 
 
 # ---------------------------------------------------------------------------
@@ -265,6 +267,9 @@ class TestBrowseSecurity:
         entry = db.query(AuditLog).filter(AuditLog.action == "BROWSE_DENIED").first()
         assert entry is not None
         assert "not a registered active mount root" in entry.details["reason"]
+        # real_root / resolved_path are None when lookup itself failed
+        assert entry.details["real_root"] is None
+        assert entry.details["resolved_path"] is None
 
     def test_admin_role_allowed(self, admin_client, db, tmp_path):
         """Admin role can access the browse endpoint."""
