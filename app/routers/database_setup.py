@@ -501,6 +501,7 @@ def get_system_info() -> SystemInfoResponse:
     in_docker = is_running_in_docker()
     suggested_username = (
         settings.pg_superuser_name
+        or settings.postgres_user
         or settings.setup_default_admin_username
     )
     return SystemInfoResponse(
