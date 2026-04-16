@@ -136,85 +136,191 @@ CI workflows are configured in `.github/workflows/`. Key pipelines:
 4. **Schemathesis API Fuzz** — auto-generated requests from the OpenAPI schema
 5. **Newman API Smoke** — Postman collection-based API smoke validation
 
-Got it, Frank — you’re absolutely right to call out that the section I generated **did not match the formatting style** of your existing `copilot‑instructions.md`.
-
-Your file uses:
-
-- **H2 headers (`##`)** for major sections  
-- **H3 headers (`###`)** sparingly  
-- **Bullet lists** with short, declarative rules  
-- **No emoji, no bold section titles, no callouts**  
-- A clean, documentation‑style tone  
-- No “marketing” language — just facts and constraints  
-
-So the new section must follow that exact style.
-
-Below is the **correctly formatted version**, rewritten to match your file *perfectly*.
-
-You can paste this **directly at the bottom** of `copilot-instructions.md`.
-
----
-
 ## Architecture and Trust Boundaries
 
-- UI code must never access hardware, the filesystem, or the database directly.  
-- All OS-level operations must go through interfaces in `app/infrastructure`.  
-- Business logic belongs in `services/`, not in routers.  
+- UI code must never access hardware, the filesystem, or the database directly.
+- All OS-level operations must go through interfaces in `app/infrastructure`.
+- Business logic belongs in `services/`, not in routers.
 - Routers validate input, enforce roles, and delegate to services.
 
 ## Security Requirements
 
-- All security‑relevant events must be logged to `audit_logs`.  
-- Internal paths, credentials, and hardware identifiers must not be exposed.  
-- Endpoints must declare error responses using shared `R_*` schemas.  
+- All security-relevant events must be logged to `audit_logs`.
+- Internal paths, credentials, and hardware identifiers must not be exposed in API responses or logs.
+- Endpoints must declare error responses using shared `R_*` schemas.
 - Role checks must use `require_roles()`.
+- All user input used in filesystem paths, shell commands, or API calls must be sanitized.
+- Directory traversal risks must be eliminated (normalize paths before use).
+- `eval`, `exec`, `Function()`, and dynamic code execution are forbidden.
+- Insecure defaults (`debug=True`, wide-open CORS, permissive permissions) are forbidden.
+- Unsafe file operations that could overwrite or delete data unintentionally must be guarded.
 
 ## Shell and Environment Safety
 
-- `shell=True` is not allowed.  
-- All environment variable expansions must be quoted (`"${VAR}"`).  
-- `.env` files must not be parsed with whitespace‑collapsing tools.  
-- Paths must be constructed using `printf '%s/%s'` or Python `pathlib`.  
+- `shell=True` is forbidden in Python.
+- All environment variable expansions must be quoted (`"${VAR}"`).
+- Forbid unquoted `$VAR` in `cp`, `mv`, `rm`, `mkdir`, `ln`, `tar`, `rsync`, `find`, `grep`, `sed`, `awk`, `cut`, `xargs`.
+- `.env` files must not be parsed with whitespace-collapsing tools (e.g., `xargs`, `awk`, `cut` without quoting).
+- Paths must be constructed using `printf '%s/%s'` or Python `pathlib`, never string concatenation.
 - Bash scripts must use `set -euo pipefail`.
+- POSIX `sh` scripts must use `|| exit 1` or equivalent for error handling.
+- Forbid backticks; require `$(cmd)` for command substitution.
+- Require safe parameter expansion: `${VAR}`, `${VAR:-default}`, `${VAR:?error}`.
+- Scripts must run under `/bin/sh` unless bash-specific features are required and documented.
+- Forbid GNU-only flags unless explicitly documented and validated.
+- Reject ambiguous or unsafe operator input early with clear error messages.
+- Forbid silent failures (e.g., `rm -f` without logging).
 
 ## Docker and Compose Safety
 
-- Docker images must be pinned to a specific version (no `latest`).  
-- Multi‑stage builds are required; production images must not include compilers or debugging tools.  
-- Entrypoints must use exec form (`["python", "app.py"]`).  
-- Docker Compose must not use nested variable interpolation (`${A:-${B}}`).  
-- Long‑running services must define healthchecks and resource limits.
+### Dockerfile
+
+- Base images must be pinned to a specific version or digest (no `latest`).
+- Multi-stage builds are required; production images must not include compilers or debugging tools.
+- Prefer minimal base images (`python:3.11-slim`, `alpine`, `distroless`).
+- Forbid `COPY . .` unless explicitly justified; prefer targeted `COPY`.
+- `.dockerignore` must exclude `node_modules`, `venv`, build artifacts, secrets, `.git`.
+- Require `--no-cache-dir` for `pip install`, `apt-get clean`, and removal of `/var/lib/apt/lists/*`.
+- Require explicit `USER` directive; forbid running as root unless documented and required.
+- Forbid embedding secrets, tokens, or credentials in Dockerfiles, `ENV`, or `ARG`.
+- Forbid `chmod -R 777` or other overly permissive patterns.
+- Require explicit file permissions for copied files.
+- Require healthchecks for long-running services.
+
+### Entrypoint Scripts
+
+- Entrypoints must use exec form (`["python", "app.py"]`).
+- Require `set -euo pipefail` in all bash entrypoints.
+- Forbid unquoted `$VAR` in entrypoint scripts.
+- Require explicit error messages for invalid configuration.
+- Complex logic must live in separate tested scripts, not inline in Compose `command` fields.
+
+### Docker Compose
+
+- Docker Compose must not use nested variable interpolation (`${A:-${B}}`).
+- Only single-level defaults are allowed: `${VAR:-default}`.
+- All environment variables used in Compose must be documented in `.env.example`.
+- Long-running services must define healthchecks and resource limits (`cpus`, `mem_limit`).
+- All services must define a restart policy. `restart: always` is forbidden unless explicitly justified.
+- All services must declare explicit networks.
+- Services that depend on others must declare `depends_on` paired with healthchecks.
+- Forbid mounting the Docker socket unless explicitly required and documented.
+- Secrets must be mounted via Docker secrets, not environment variables or bind mounts.
+- Forbid bind-mounting sensitive host paths.
+- Shell-form `CMD` or `ENTRYPOINT` is forbidden; require exec form.
+- Forbid using mutable tags in production.
+
+## System Degradation Prevention
+
+- No long-running synchronous operations in FastAPI endpoints.
+- No CPU-heavy or IO-heavy work on the event loop.
+- No unbounded loops, recursion, or polling that can degrade performance.
+- No unbounded `ThreadPoolExecutor` or creation of new executors per request.
+- No N+1 database queries or inefficient ORM patterns.
+- No unnecessary re-renders or reactive explosions in Vue components.
+- No large directory scans done repeatedly instead of cached or batched.
+- No blocking filesystem operations inside Vue or frontend logic.
+- No unbounded growth of logs, buffers, or in-memory collections.
+- Background tasks and temporary files must have cleanup logic.
+- Copy/verify/manifest tasks must not starve the system or block other operations.
+- Drive lifecycle transitions must be handled safely and atomically.
 
 ## Logging Rules
 
-- Logging helpers must not drop arguments.  
-- Printf‑style formatting must not be used unless the logger supports it.  
+- Logging helpers must not drop arguments.
+- Printf-style formatting must not be used unless the logger supports it.
 - Prefer structured logging with context objects.
+- Logging calls must not silently lose information (e.g., extra args dropped, `statusText` lost).
+- Logger wrapper signatures must match the underlying logger behavior.
 
 ## Pagination and Filesystem Safety
 
-- Paginated endpoints must not materialize entire directories.  
-- Use streaming iteration (`os.scandir`) and incremental pagination.  
-- Avoid global sorting of large directory listings.
+- Paginated endpoints must not materialize entire directories (no `list(os.scandir())`, no `sorted(os.scandir())`).
+- Use streaming iteration (`os.scandir`) and incremental pagination.
+- Avoid global sorting of large directory listings unless documented and justified.
+- Return `has_more` instead of computing exact totals when totals are expensive.
+- O(n) or O(n log n) work inside paginated endpoints must be avoided.
+- No patterns that can cause memory blow-ups or DoS risk on large mount points.
 
 ## Test Requirements
 
-- Tests must use pytest, not `unittest.TestCase`.  
-- Fixtures must be used instead of `setUp`/`tearDown`.  
-- Tests must use bare `assert` statements, not `self.assert*`.  
-- Exception assertions must use `pytest.raises`.  
-- Tests must not contain unused imports, fixtures, helpers, or unreachable code.  
+### Pytest Style
+
+- Tests must use pytest, not `unittest.TestCase`.
+- Fixtures must be used instead of `setUp`/`tearDown`.
+- Tests must use bare `assert` statements, not `self.assert*`.
+- Exception assertions must use `pytest.raises`.
 - Test names must use snake_case and must match the behavior being tested.
+- Mixing unittest and pytest styles is forbidden.
+- Tests must avoid shared mutable state; prefer fixture injection.
+
+### Test Coverage
+
+- Every new API endpoint must include corresponding automated tests.
+- Tests must cover: role-based access control, input validation, pagination/limit parameters, redaction of sensitive fields, derived/aggregated fields, error conditions, and edge cases.
+- New behavior (aggregation, redaction, derived fields) must have explicit correctness tests.
+- New endpoints must match or exceed the coverage level of existing endpoints in the same family.
+- Tests must verify that sensitive fields are redacted, omitted, or transformed per ECUBE policy.
+
+### Test Hygiene
+
+- Tests must not contain unused imports, fixtures, helpers, or unreachable code.
+- Tests must not include unused parameters or dead code paths.
+- Test names and docstrings must accurately describe what the test exercises.
+- No leftover debug statements (`print`, `pdb`, `debugger`).
 
 ## Frontend Rules
 
-- CSS selectors must not be defined unless they are used in the template.  
-- All interactive elements must meet WCAG 2.1 A/AA requirements.  
-- Clickable elements must not use `<div>` or `<span>` without proper roles, tabindex, and keyboard handlers.  
-- Vue components must expose correct semantics and keyboard accessibility.
+### Accessibility (WCAG 2.1 A/AA)
+
+- All interactive UI elements must be operable with keyboard only.
+- Clickable elements must not use `<div>` or `<span>` without `tabindex="0"`, `@keydown.enter`/`@keydown.space` handlers, and `role="button"` or `role="link"`.
+- Prefer native interactive elements (`<button>`, `<a>`, `<input>`) over custom widgets.
+- Focus order must be logical and preserved. Focus styles must never be removed.
+- ARIA roles, labels, and attributes must be used correctly and only when needed.
+- Every input must have a visible label or `aria-label`.
+- Error messages must be programmatically associated with inputs.
+- Required fields must be indicated visually and programmatically.
+- Text must meet minimum contrast ratios. Color must not be the only means of conveying meaning.
+- Icons used as buttons must have accessible labels.
+- Focus must be moved intentionally after: opening dialogs, closing dialogs, navigating directories, triggering destructive actions.
+- Modals must trap focus correctly and restore focus on close.
+- Vue components emitting click events must also support keyboard activation.
+- Vue props controlling interactivity (`disabled`, `active`, `selected`) must be reflected in ARIA attributes.
+
+### Directory Browser and Tree View
+
+- Directory rows, tree items, and file browser entries must be fully keyboard accessible.
+- Do not use `<tr @click>` or `<div @click>` for navigation without `tabindex` and keyboard handlers.
+- Prefer rendering directory names as `<button>` or `<a>` elements inside table cells.
+- Arrow key navigation must be supported where appropriate (tree view).
+- Focus must move predictably when expanding/collapsing tree nodes.
+- Screen readers must be able to identify directory vs file items.
+
+### CSS and Template Consistency
+
+- CSS selectors must not be defined unless they are used in the template.
+- Orphaned or stale styles left behind after refactors must be removed.
+- All defined classes must correspond to actual rendered states or documented variants.
+- Mismatches between template class names and style selectors must be corrected.
 
 ## Code Quality
-- No dead code, commented‑out blocks, or unused imports.  
-- Duplicated logic must be extracted into utilities or composables.  
-- Code must follow Black, Ruff, ESLint, and Prettier formatting rules.  
+
+- No dead code, commented-out blocks, or unused imports.
+- No leftover debug statements (`console.log`, `print`, `pdb`, `debugger`).
+- Duplicated logic must be extracted into utilities or composables.
+- Constants, enums, and shared values must not be duplicated across files.
+- Consistent naming conventions across backend and frontend.
+- Error messages and exceptions must be consistent and meaningful.
+- Code must follow Black, Ruff, ESLint, and Prettier formatting rules.
 - All new behavior must include tests.
+
+## Behavior-Comment Consistency
+
+- All comments, docstrings, and inline explanations must accurately describe the actual implementation.
+- Do not write comments that describe stricter behavior than the code enforces.
+- Do not write comments that describe looser behavior than the code enforces.
+- Do not write comments that imply constraints the code does not validate (e.g., "direct child" when nesting is allowed).
+- Do not write comments that describe security or safety guarantees the code does not implement.
+- When changing behavior, update all related comments in the same change.
+- When a mismatch is found, either tighten the code to match the comment or update the comment to match the actual behavior.
