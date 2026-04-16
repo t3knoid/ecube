@@ -73,11 +73,14 @@ def _default_topology_source() -> DiscoveredTopology:
 def _auto_mount_drive(
     drive: UsbDrive,
     drive_mount: DriveMountProvider,
-    db: Session,
 ) -> None:
     """Mount an AVAILABLE drive under ``settings.usb_mount_base_path``.
 
-    On success the drive's ``mount_path`` is updated and committed.
+    On success the drive's ``mount_path`` attribute is updated in-place.
+    The caller is responsible for committing the session so that the
+    mount_path change is persisted atomically with any other pending
+    mutations (e.g. state transitions).
+
     Failures are logged and silently swallowed so that a mount error does
     not prevent the rest of the discovery sync from completing.
     """
@@ -93,21 +96,11 @@ def _auto_mount_drive(
         return
     if ok:
         drive.mount_path = mount_point
-        try:
-            db.commit()
-        except Exception:
-            db.rollback()
-            logger.exception(
-                "DB commit failed setting mount_path for drive %s",
-                drive.device_identifier,
-            )
-        else:
-            db.refresh(drive)
-            logger.info(
-                "AUTO_MOUNT_OK drive=%s mount_path=%s",
-                drive.device_identifier,
-                mount_point,
-            )
+        logger.info(
+            "AUTO_MOUNT_OK drive=%s mount_path=%s",
+            drive.device_identifier,
+            mount_point,
+        )
     else:
         logger.warning(
             "AUTO_MOUNT_FAILED drive=%s mount_point=%s error=%s",
@@ -274,7 +267,18 @@ def run_discovery_sync(
                 and drive.filesystem_path
                 and not drive.mount_path
             ):
-                _auto_mount_drive(drive, drive_mount, db)
+                _auto_mount_drive(drive, drive_mount)
+                if drive.mount_path:
+                    try:
+                        db.commit()
+                    except Exception:
+                        db.rollback()
+                        logger.exception(
+                            "DB commit failed setting mount_path for new drive %s",
+                            discovered_drive.device_identifier,
+                        )
+                    else:
+                        db.refresh(drive)
         else:
             # Existing drive — update mutable fields.
             changed = False
@@ -311,13 +315,6 @@ def run_discovery_sync(
             if existing.current_state == DriveState.EMPTY and _port_is_enabled(port_id or existing.port_id):
                 existing.current_state = DriveState.AVAILABLE
                 changed = True
-                # Auto-mount on re-activation when not already mounted.
-                if (
-                    drive_mount
-                    and existing.filesystem_path
-                    and not existing.mount_path
-                ):
-                    _auto_mount_drive(existing, drive_mount, db)
 
             # Demote AVAILABLE → EMPTY when the port has been disabled.
             # IN_USE drives are left untouched to preserve project isolation.
@@ -333,7 +330,7 @@ def run_discovery_sync(
                 and existing.filesystem_path
                 and not existing.mount_path
             ):
-                _auto_mount_drive(existing, drive_mount, db)
+                _auto_mount_drive(existing, drive_mount)
                 if existing.mount_path:
                     changed = True
 

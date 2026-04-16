@@ -27,6 +27,18 @@ logger = logging.getLogger(__name__)
 _ADMIN_CONNECT_TIMEOUT = 10   # For admin/provisioning operations
 _STATUS_CONNECT_TIMEOUT = 5   # For lightweight status-check queries
 
+
+def _strip_sqlalchemy_dialect(url: str) -> str:
+    """Convert a SQLAlchemy URL to a plain libpq-compatible DSN.
+
+    ``psycopg2.connect()`` does not understand SQLAlchemy dialect suffixes
+    such as ``postgresql+psycopg2://``.  This helper strips any ``+driver``
+    portion so the URL starts with ``postgresql://``.
+    """
+    if url.startswith("postgresql+"):
+        return "postgresql" + url[url.index("://"):]
+    return url
+
 # Guards engine/session-factory replacement so concurrent requests cannot
 # observe a half-swapped state.  Also exposes "reinitialization in progress"
 # to the router layer so it can return 503.
@@ -211,8 +223,15 @@ def provision_database(
         ) from exc
 
     # Step 3: Write DATABASE_URL to .env — only after migrations succeed.
+    #         Also clear PG superuser credentials so they are not left on disk.
     try:
-        _write_env_setting("DATABASE_URL", new_url)
+        env_updates: Dict[str, str] = {"DATABASE_URL": new_url}
+        from app.config import settings as _cfg
+        if _cfg.pg_superuser_pass:
+            env_updates["PG_SUPERUSER_PASS"] = ""
+        if _cfg.pg_superuser_name:
+            env_updates["PG_SUPERUSER_NAME"] = ""
+        _write_env_settings(env_updates)
     except Exception as exc:
         logger.error("Failed to write DATABASE_URL to .env: %s", exc)
         raise RuntimeError(
@@ -333,7 +352,11 @@ def _get_current_revision(database_url: str) -> Optional[str]:
     })
 
     try:
-        conn = psycopg2.connect(database_url, connect_timeout=_STATUS_CONNECT_TIMEOUT)
+        # psycopg2.connect() expects a plain libpq DSN or a postgresql://
+        # URL.  SQLAlchemy URLs use a dialect suffix (e.g.
+        # "postgresql+psycopg2://…") that libpq cannot parse.  Strip it.
+        dsn = _strip_sqlalchemy_dialect(database_url)
+        conn = psycopg2.connect(dsn, connect_timeout=_STATUS_CONNECT_TIMEOUT)
     except psycopg2.OperationalError as exc:
         pgcode = getattr(exc, "pgcode", None)
         if pgcode in _NOT_PROVISIONED_PGCODES:
@@ -384,7 +407,7 @@ def get_database_status() -> Dict[str, Any]:
 
     try:
         conn = psycopg2.connect(
-            settings.database_url,
+            _strip_sqlalchemy_dialect(settings.database_url),
             connect_timeout=_STATUS_CONNECT_TIMEOUT,
         )
         try:
@@ -540,8 +563,24 @@ def _write_env_settings(updates: Dict[str, str]) -> None:
     """Atomically write or update one or more settings in the .env file.
 
     All *updates* are applied in a single read/modify/write pass so the
-    file is never left in a partially-updated state.  Uses a
-    write-to-temp-then-rename strategy (``os.replace``) for crash safety.
+    file is never left in a partially-updated state.
+
+    **Native (non-Docker):** Uses a write-to-temp-then-rename strategy
+    (``os.replace``) for true atomicity — the old file is replaced in a
+    single filesystem operation.
+
+    **Docker (bind-mount):** ``os.replace`` would create a new inode,
+    breaking the bind-mount so the host never sees the update.  Instead
+    the new content is written and ``fsync``-ed to a temp file first,
+    then copied back into the original file (preserving its inode) and
+    ``fsync``-ed again.  If the process crashes *before* the copy-back
+    the original .env is untouched and the temp file serves as a
+    recovery artefact; if it crashes *during* the copy-back the file
+    may be incomplete — the temp file still holds the full content.
+
+    In both paths the file's permission bits are set to ``0o600``
+    (owner read+write only) and original ownership is restored when
+    possible.
     """
     if not updates:
         return
@@ -565,30 +604,37 @@ def _write_env_settings(updates: Dict[str, str]) -> None:
     for key, value in remaining.items():
         lines.append(f"{key}={value}\n")
 
-    # Atomic write via temp file + rename
+    from app.utils.docker import is_running_in_docker
+
+    in_docker = is_running_in_docker()
     dir_name = os.path.dirname(env_path) or "."
+
+    # Capture existing ownership/mode before any write so we can restore it.
+    try:
+        orig_stat = os.stat(env_path)
+        existing_mode = stat.S_IMODE(orig_stat.st_mode)
+        existing_uid = orig_stat.st_uid
+        existing_gid = orig_stat.st_gid
+    except OSError:
+        existing_mode = 0o600
+        existing_uid = None
+        existing_gid = None
+
+    # Always set owner read+write and strip group/world bits.
+    # A dynamic mask (``existing_mode & 0o600``) could yield 0o400 or
+    # 0o200 if the original was read-only or write-only, blocking future
+    # .env updates (e.g. the setup wizard writing DATABASE_URL).
+    safe_mode = 0o600
+
+    # --- write new content to a temp file (both paths need this) ----------
     fd, tmp_path = tempfile.mkstemp(dir=dir_name, prefix=".env.", suffix=".tmp")
     try:
         with os.fdopen(fd, "w") as f:
             f.writelines(lines)
-        # Preserve the existing file's permission bits and ownership so that
-        # a root-owned process (e.g. sudo uvicorn) does not leave the .env
-        # unreadable for non-root service users or test runners.
-        try:
-            orig_stat = os.stat(env_path)
-            existing_mode = stat.S_IMODE(orig_stat.st_mode)
-            existing_uid = orig_stat.st_uid
-            existing_gid = orig_stat.st_gid
-        except OSError:
-            existing_mode = 0o600
-            existing_uid = None
-            existing_gid = None
-        # Enforce a ceiling of 0o600 so group/world-readable .env files
-        # (e.g. an accidental 0644) never keep credentials exposed.
-        safe_mode = existing_mode & 0o600
+            f.flush()
+            os.fsync(f.fileno())
+
         os.chmod(tmp_path, safe_mode)
-        # Restore original ownership so root-spawned rewrites don't lock
-        # out the normal service user.
         if existing_uid is not None:
             try:
                 os.chown(tmp_path, existing_uid, existing_gid)
@@ -599,14 +645,49 @@ def _write_env_settings(updates: Dict[str, str]) -> None:
                     existing_uid,
                     existing_gid,
                 )
-        os.replace(tmp_path, env_path)
-    except Exception:
-        # Clean up temp file on failure
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
+
+        if in_docker:
+            # Copy temp contents into the original file to preserve the
+            # bind-mount inode.  The temp file remains on disk until the
+            # copy-back is fully synced, acting as a recovery artefact.
+            # Ensure the target is writable first — a bind-mounted file may
+            # have been set to owner-readonly (0o400) on the host.
+            try:
+                os.chmod(env_path, safe_mode)
+            except OSError:
+                pass  # best-effort; the open() below will fail if still unwritable
+            with open(tmp_path, "r") as src, open(env_path, "w") as dst:
+                dst.writelines(src.readlines())
+                dst.flush()
+                os.fsync(dst.fileno())
+
+            try:
+                os.chmod(env_path, safe_mode)
+            except OSError:
+                logger.debug(
+                    "Could not clamp .env permissions to %o; continuing.",
+                    safe_mode,
+                )
+            if existing_uid is not None:
+                try:
+                    os.chown(env_path, existing_uid, existing_gid)
+                except OSError:
+                    logger.debug(
+                        "Could not restore .env ownership (uid=%s, gid=%s); "
+                        "file will be owned by the current process user.",
+                        existing_uid,
+                        existing_gid,
+                    )
+        else:
+            # Native path: atomic rename replaces the old file.
+            os.replace(tmp_path, env_path)
+            tmp_path = None  # prevent cleanup — file was consumed
+    finally:
+        if tmp_path is not None:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
 
 def _reinitialize_engine(
