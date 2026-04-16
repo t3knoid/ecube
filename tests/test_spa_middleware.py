@@ -45,6 +45,7 @@ def _make_test_app():
         raw_path = request.scope.get("raw_path")
 
         if path.startswith("/api/"):
+            request.scope["_original_path"] = path
             request.scope["path"] = path[4:]
             if raw_path is not None:
                 if raw_path.startswith(b"/api/"):
@@ -52,6 +53,7 @@ def _make_test_app():
                 else:
                     request.scope.pop("raw_path", None)
         elif path == "/api":
+            request.scope["_original_path"] = path
             request.scope["path"] = "/"
             request.scope["raw_path"] = b"/"
         return await call_next(request)
@@ -167,7 +169,8 @@ def _make_spa_app(frontend_dir: pathlib.Path):
 
     @spa_app.get("/{full_path:path}", include_in_schema=False)
     async def _spa_fallback(request: Request, full_path: str):
-        if full_path.startswith(("api/", "api-")):
+        original_path = request.scope.get("_original_path", "")
+        if full_path.startswith(("api/", "api-")) or original_path.startswith("/api"):
             raise HTTPException(status_code=404, detail="Not Found")
         file_path = (frontend_dir / full_path).resolve()
         if full_path and file_path.is_relative_to(_frontend_root_resolved) and file_path.is_file():
@@ -175,6 +178,38 @@ def _make_spa_app(frontend_dir: pathlib.Path):
         return FileResponse(str(_index_html))
 
     return spa_app
+
+
+def _make_spa_app_with_strip(frontend_dir: pathlib.Path):
+    """Build an app that combines strip_api_prefix + SPA fallback.
+
+    This mirrors the full production behaviour when ``SERVE_FRONTEND_PATH``
+    is set: API requests arrive as ``/api/…``, the middleware strips the
+    prefix, real routes handle them, and anything left over hits the SPA
+    catch-all which must still 404 for API misses.
+    """
+    app = _make_spa_app(frontend_dir)
+
+    @app.middleware("http")
+    async def strip_api_prefix(request: Request, call_next):
+        path = request.scope["path"]
+        raw_path = request.scope.get("raw_path")
+
+        if path.startswith("/api/"):
+            request.scope["_original_path"] = path
+            request.scope["path"] = path[4:]
+            if raw_path is not None:
+                if raw_path.startswith(b"/api/"):
+                    request.scope["raw_path"] = raw_path[4:]
+                else:
+                    request.scope.pop("raw_path", None)
+        elif path == "/api":
+            request.scope["_original_path"] = path
+            request.scope["path"] = "/"
+            request.scope["raw_path"] = b"/"
+        return await call_next(request)
+
+    return app
 
 
 class TestSpaFrontendServing:
@@ -275,6 +310,42 @@ class TestSpaFrontendServing:
         resp = client.get("/health")
         assert resp.status_code == 200
         assert resp.json() == {"status": "ok"}
+
+    # -- Stripped /api/ paths must 404, not serve index.html ---------------
+
+    def test_stripped_api_nonexistent_returns_404(self, tmp_path):
+        """GET /api/nonexistent → strip → /nonexistent → no route → SPA → 404.
+
+        Without the _original_path guard this would serve index.html.
+        """
+        dist = self._build_dist(tmp_path)
+        client = TestClient(_make_spa_app_with_strip(dist))
+        resp = client.get("/api/nonexistent")
+        assert resp.status_code == 404
+        assert "SPA" not in resp.text
+
+    def test_stripped_api_deep_path_returns_404(self, tmp_path):
+        """GET /api/v1/some/deep/path must 404 after prefix stripping."""
+        dist = self._build_dist(tmp_path)
+        client = TestClient(_make_spa_app_with_strip(dist))
+        resp = client.get("/api/v1/some/deep/path")
+        assert resp.status_code == 404
+
+    def test_stripped_api_real_route_still_works(self, tmp_path):
+        """GET /api/health → strip → /health → matched route → 200."""
+        dist = self._build_dist(tmp_path)
+        client = TestClient(_make_spa_app_with_strip(dist))
+        resp = client.get("/api/health")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok"}
+
+    def test_non_api_spa_route_still_serves_index(self, tmp_path):
+        """Non-API paths must still get index.html even with strip middleware."""
+        dist = self._build_dist(tmp_path)
+        client = TestClient(_make_spa_app_with_strip(dist))
+        resp = client.get("/projects/123/files")
+        assert resp.status_code == 200
+        assert "SPA" in resp.text
 
     # -- Path traversal rejection ------------------------------------------
 

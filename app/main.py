@@ -389,6 +389,10 @@ if settings.serve_frontend_path:
         raw_path = request.scope.get("raw_path")
 
         if path.startswith("/api/"):
+            # Preserve the original path so downstream handlers (e.g. the
+            # SPA fallback) can distinguish a stripped API request from a
+            # genuine frontend route.
+            request.scope["_original_path"] = path
             request.scope["path"] = path[4:]  # "/api/foo" → "/foo"
             if raw_path is not None:
                 if raw_path.startswith(b"/api/"):
@@ -399,6 +403,7 @@ if settings.serve_frontend_path:
                     # lose the original percent-encoding.
                     request.scope.pop("raw_path", None)
         elif path == "/api":
+            request.scope["_original_path"] = path
             request.scope["path"] = "/"
             request.scope["raw_path"] = b"/"
         return await call_next(request)
@@ -939,9 +944,13 @@ if settings.serve_frontend_path:
         # directory, falling back to index.html for SPA client-side routing.
         @app.get("/{full_path:path}", include_in_schema=False)
         async def _spa_fallback(request: Request, full_path: str):
-            # Reject paths that look like API requests — these should never
-            # fall through to the SPA and silently return HTML instead of 404.
-            if full_path.startswith(("api/", "api-")):
+            # Reject API requests that fell through to the SPA.  Two cases:
+            # 1. Direct /api/… or /api-… requests (no prefix stripping).
+            # 2. Stripped requests: path was /api/nonexistent, middleware
+            #    rewrote it to /nonexistent, no route matched, and it
+            #    arrived here.  _original_path records the pre-strip path.
+            original_path = request.scope.get("_original_path", "")
+            if full_path.startswith(("api/", "api-")) or original_path.startswith("/api"):
                 raise HTTPException(status_code=404, detail="Not Found")
             # If the path matches an actual file in the dist dir, serve it.
             file_path = (_frontend_dir / full_path).resolve()
