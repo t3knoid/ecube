@@ -166,15 +166,15 @@ onMounted(loadDrives)
     <p v-if="error" class="error-banner">{{ error }}</p>
 
     <div class="filters">
-      <input v-model="search" type="text" :placeholder="t('drives.searchPlaceholder')" />
-      <select v-model="stateFilter">
+      <input v-model="search" type="text" :placeholder="t('drives.searchPlaceholder')" :aria-label="t('drives.searchPlaceholder')" />
+      <select v-model="stateFilter" :aria-label="t('drives.allStates')">
         <option value="ALL">{{ t('drives.allStates') }}</option>
         <option value="EMPTY">{{ t('drives.states.empty') }}</option>
         <option value="AVAILABLE">{{ t('drives.states.available') }}</option>
         <option value="IN_USE">{{ t('drives.states.inUse') }}</option>
         <option value="ARCHIVED">{{ t('drives.states.archived') }}</option>
       </select>
-      <select v-model="sortKey">
+      <select v-model="sortKey" :aria-label="t('drives.sortBy')">
         <option value="id">{{ t('common.labels.id') }}</option>
         <option value="device_identifier">{{ t('drives.device') }}</option>
         <option value="filesystem_type">{{ t('drives.filesystem') }}</option>
