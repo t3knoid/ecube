@@ -336,34 +336,34 @@ class TestBrowseParameterValidation:
 
 class TestBrowseFilesystemErrors:
     def test_permission_denied_returns_403(self, client, db, tmp_path):
-        """When os.scandir raises PermissionError, the endpoint returns 403."""
+        """When os.listdir raises PermissionError, the endpoint returns 403."""
         mount_point = str(tmp_path)
         _make_network_mount(db, mount_point)
 
         with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]), \
-             patch("os.scandir", side_effect=PermissionError("Permission denied")):
+             patch("os.listdir", side_effect=PermissionError("Permission denied")):
             response = client.get(f"/browse?path={mount_point}")
 
         assert response.status_code == 403
 
     def test_not_a_directory_returns_400(self, client, db, tmp_path):
-        """When os.scandir raises NotADirectoryError, the endpoint returns 400."""
+        """When os.listdir raises NotADirectoryError, the endpoint returns 400."""
         mount_point = str(tmp_path)
         _make_network_mount(db, mount_point)
 
         with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]), \
-             patch("os.scandir", side_effect=NotADirectoryError("Not a directory")):
+             patch("os.listdir", side_effect=NotADirectoryError("Not a directory")):
             response = client.get(f"/browse?path={mount_point}")
 
         assert response.status_code == 400
 
     def test_os_error_returns_500(self, client, db, tmp_path):
-        """When os.scandir raises a generic OSError, the endpoint returns 500."""
+        """When os.listdir raises a generic OSError, the endpoint returns 500."""
         mount_point = str(tmp_path)
         _make_network_mount(db, mount_point)
 
         with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]), \
-             patch("os.scandir", side_effect=OSError("I/O error")):
+             patch("os.listdir", side_effect=OSError("I/O error")):
             response = client.get(f"/browse?path={mount_point}")
 
         assert response.status_code == 500
@@ -375,31 +375,29 @@ class TestBrowseFilesystemErrors:
         _make_network_mount(db, mount_point)
 
         with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]), \
-             patch("os.scandir", side_effect=FileNotFoundError("No such file or directory")):
+             patch("os.listdir", side_effect=FileNotFoundError("No such file or directory")):
             response = client.get(f"/browse?path={mount_point}")
 
         assert response.status_code == 404
         assert "unmounted" in response.json()["message"].lower()
 
     def test_stat_race_skips_vanished_entries(self, client, db, tmp_path):
-        """When a file vanishes between scandir and stat (_stat_entry returns
+        """When a file vanishes between listdir and lstat (_stat_entry returns
         None), the entry is silently excluded from the response."""
         mount_point = str(tmp_path)
         _make_network_mount(db, mount_point)
         (tmp_path / "keep.txt").write_text("ok")
         (tmp_path / "vanish.txt").write_text("gone")
 
-        original_stat_entry = None
-
         # Patch _stat_entry so it returns None for 'vanish.txt'
         import app.services.browse_service as _bs
 
         _original = _bs._stat_entry
 
-        def _mock_stat_entry(dir_entry):
-            if dir_entry.name == "vanish.txt":
+        def _mock_stat_entry(parent, name):
+            if name == "vanish.txt":
                 return None
-            return _original(dir_entry)
+            return _original(parent, name)
 
         with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]), \
              patch.object(_bs, "_stat_entry", side_effect=_mock_stat_entry):
