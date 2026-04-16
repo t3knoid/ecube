@@ -150,6 +150,7 @@
     "collapse": "Collapse",
     "loadError": "Failed to load directory listing. Please try again.",
     "empty": "This directory is empty.",
+    "tableLabel": "Directory contents",
     "columns": {
       "name": "Name",
       "type": "Type",
