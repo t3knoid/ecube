@@ -293,6 +293,43 @@ class TestBrowseSecurity:
             response = auditor_client.get(f"/browse?path={mount_point}")
         assert response.status_code == 200
 
+    def test_encoded_traversal_in_subdir_returns_400(self, client, db, tmp_path):
+        """URL-encoded traversal sequences in subdir (..%2F) are rejected."""
+        mount_point = str(tmp_path)
+        _make_network_mount(db, mount_point)
+
+        with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]):
+            response = client.get(
+                f"/browse?path={mount_point}&subdir=..%2F..%2Fetc"
+            )
+
+        assert response.status_code == 400
+
+    def test_absolute_subdir_returns_400(self, client, db, tmp_path):
+        """An absolute path in subdir is rejected as a traversal attempt."""
+        mount_point = str(tmp_path)
+        _make_network_mount(db, mount_point)
+
+        with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]):
+            response = client.get(
+                f"/browse?path={mount_point}&subdir=/etc/passwd"
+            )
+
+        assert response.status_code == 400
+
+    def test_null_byte_in_subdir_rejected(self, client, db, tmp_path):
+        """Null bytes in the subdir parameter are rejected."""
+        mount_point = str(tmp_path)
+        _make_network_mount(db, mount_point)
+
+        with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]):
+            response = client.get(
+                f"/browse?path={mount_point}&subdir=docs%00/../etc"
+            )
+
+        # StrictSafeStr rejects with 422, or service catches with 400/403
+        assert response.status_code in (400, 403, 422)
+
 
 # ---------------------------------------------------------------------------
 # Parameter validation
