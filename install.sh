@@ -644,7 +644,7 @@ _run_as_ecube() {
 _detect_version() {
   local pyproject="${INSTALL_DIR}/pyproject.toml"
   if [[ -f "${pyproject}" ]]; then
-    grep -Po '(?<=^version = ")[^"]+' "${pyproject}" 2>/dev/null || echo "unknown"
+    sed -n 's/^version = "\([^"]*\)".*/\1/p' "${pyproject}" 2>/dev/null || echo "unknown"
   else
     echo "unknown"
   fi
