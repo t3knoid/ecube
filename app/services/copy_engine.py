@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
@@ -75,6 +76,8 @@ def copy_file(
             while chunk := fsrc.read(chunk_size):
                 h.update(chunk)
                 fdst.write(chunk)
+            fdst.flush()
+            os.fsync(fdst.fileno())
         return True, h.hexdigest(), None
     except Exception as exc:
         # Remove partial file so the target drive is not left with corrupt data.
