@@ -65,6 +65,7 @@ def copy_file(
     """Copy *src* to *dst* and compute a checksum.
 
     Returns (success, checksum_hex, error_message).
+    On failure, any partially written *dst* file is removed.
     """
     try:
         dst.parent.mkdir(parents=True, exist_ok=True)
@@ -76,6 +77,12 @@ def copy_file(
                 fdst.write(chunk)
         return True, h.hexdigest(), None
     except Exception as exc:
+        # Remove partial file so the target drive is not left with corrupt data.
+        try:
+            if dst.exists():
+                dst.unlink()
+        except OSError:
+            logger.debug("Could not remove partial file %s", dst)
         return False, None, str(exc)
 
 
