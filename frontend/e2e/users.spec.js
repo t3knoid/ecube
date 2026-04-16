@@ -41,7 +41,6 @@ test('users list, role assignment, and create os user', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Create User' }).click()
   await page.getByLabel('Username').fill('newuser')
-  await page.getByLabel('Password').first().fill('StrongPass123!')
   await page.getByRole('dialog').getByRole('button', { name: 'Create' }).click()
 
   await expectNoCriticalA11yViolations(page)
