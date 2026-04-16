@@ -9,11 +9,35 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from typing import Optional
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _unescape_mountpoint(escaped_path: str) -> str:
+    """Unescape octal escape sequences used in ``/proc/mounts``.
+
+    ``/proc/mounts`` uses POSIX octal escape sequences (``\\040`` for space,
+    ``\\011`` for tab, etc.) to encode raw bytes of the filesystem path.
+    These are *raw bytes*, not Unicode code points, so we build a
+    ``bytearray`` first and then decode it as UTF-8.  This correctly handles
+    multi-byte UTF-8 sequences (e.g. ``\\303\\251`` for the UTF-8 encoding
+    of ``é``), whereas the ``unicode_escape`` codec would misinterpret each
+    octal value as a Latin-1 code point, producing mojibake.
+    """
+    try:
+        buf = bytearray()
+        for part in re.split(r'(\\[0-7]{3})', escaped_path):
+            if part and part[0] == '\\':
+                buf.append(int(part[1:], 8))
+            else:
+                buf.extend(part.encode('utf-8', errors='surrogateescape'))
+        return buf.decode('utf-8', errors='surrogateescape')
+    except (ValueError, UnicodeDecodeError):
+        return escaped_path
 
 
 def read_mount_points() -> dict[str, str]:
@@ -33,7 +57,7 @@ def read_mount_points() -> dict[str, str]:
             for line in fh:
                 parts = line.split()
                 if len(parts) >= 2 and parts[0].startswith("/dev/"):
-                    result[parts[0]] = parts[1]
+                    result[parts[0]] = _unescape_mountpoint(parts[1])
     except OSError:
         logger.debug("Unable to read %s", mounts_path)
     return result
