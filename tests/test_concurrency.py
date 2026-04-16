@@ -330,7 +330,10 @@ def test_double_assign_prevented(manager_client, db):
     creation request reads IN_USE and is rejected with 409.
     """
     drive = UsbDrive(
-        device_identifier="USB-GUARD-01", current_state=DriveState.AVAILABLE
+        device_identifier="USB-GUARD-01",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        mount_path="/mnt/ecube/guard-01",
     )
     db.add(drive)
     db.commit()
