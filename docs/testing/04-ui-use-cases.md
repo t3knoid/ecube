@@ -95,21 +95,22 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 
 | UC# | Use Case | Primary Actor | Roles |
 |-----|----------|---------------|-------|
-| UC-4.1 | View all USB drives (state, filesystem, project, capacity) | Any authenticated user | any |
-| UC-4.2 | Filter/search drives by state (EMPTY, AVAILABLE, IN_USE) | Any authenticated user | any |
+| UC-4.1 | View all USB drives (state, filesystem, project, capacity, mount point) | Any authenticated user | any |
+| UC-4.2 | Filter/search drives by state (EMPTY, AVAILABLE, IN_USE, ARCHIVED) | Any authenticated user | any |
 | UC-4.3 | Trigger USB discovery refresh | Admin, Manager | admin, manager |
 | UC-4.4 | Format a drive (select ext4 or exfat) | Admin, Manager | admin, manager |
 | UC-4.5 | Initialize a drive for a project (bind project ID) | Admin, Manager | admin, manager |
-| UC-4.6 | Prepare a drive for safe eject | Admin, Manager | admin, manager |
-| UC-4.7 | View drive detail (serial, port, device path, mount history) | Any authenticated user | any |
-| UC-4.8 | List USB ports with enablement state | Admin, Manager | admin, manager |
-| UC-4.9 | Enable a USB port for ECUBE use | Admin, Manager | admin, manager |
-| UC-4.10 | Disable a USB port | Admin, Manager | admin, manager |
-| UC-4.11 | List USB hubs with hardware metadata | Admin, Manager | admin, manager |
-| UC-4.12 | Set/update hub location hint | Admin, Manager | admin, manager |
-| UC-4.13 | Set/update port friendly label | Admin, Manager | admin, manager |
+| UC-4.6 | Mount a drive to the managed ECUBE mount root | Admin, Manager | admin, manager |
+| UC-4.7 | Prepare a drive for safe eject | Admin, Manager | admin, manager |
+| UC-4.8 | View drive detail (serial, port, device path, current mount point) | Any authenticated user | any |
+| UC-4.9 | List USB ports with enablement state | Admin, Manager | admin, manager |
+| UC-4.10 | Enable a USB port for ECUBE use | Admin, Manager | admin, manager |
+| UC-4.11 | Disable a USB port | Admin, Manager | admin, manager |
+| UC-4.12 | List USB hubs with hardware metadata | Admin, Manager | admin, manager |
+| UC-4.13 | Set/update hub location hint | Admin, Manager | admin, manager |
+| UC-4.14 | Set/update port friendly label | Admin, Manager | admin, manager |
 
-**UI Implication:** Drive inventory dashboard with state-based color indicators and a finite-state-machine visual. Action buttons (Format, Initialize, Eject) contextually enabled based on current drive state. Project binding shown prominently on IN_USE drives. Port management panel (accessible to admin/manager) showing all USB ports with enable/disable toggles — disabled ports prevent drives from becoming AVAILABLE during discovery, and AVAILABLE drives on a subsequently disabled port are demoted to EMPTY on the next sync. IN_USE drives are never affected by port enablement. Hub and port listing displays enriched hardware metadata (vendor/product IDs, link speed). Admins and managers can assign human-readable labels (hub location hints, port friendly labels) for easier physical identification.
+**UI Implication:** Drive inventory dashboard with state-based color indicators and a finite-state-machine visual. Action buttons (Format, Initialize, Mount, Eject) are contextually enabled based on current drive state. The drive detail screen now shows the current Mount Point and offers a Mount action for admin and manager users when the drive has a usable filesystem path and is not already mounted. Project binding is shown prominently on IN_USE drives. Port management panel (accessible to admin/manager) shows all USB ports with enable/disable toggles — disabled ports prevent drives from becoming AVAILABLE during discovery, and AVAILABLE drives on a subsequently disabled port are demoted to EMPTY on the next sync. IN_USE drives are never affected by port enablement. Hub and port listing displays enriched hardware metadata (vendor/product IDs, link speed). Admins and managers can assign human-readable labels (hub location hints, port friendly labels) for easier physical identification.
 
 ---
 
@@ -141,7 +142,7 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 | UC-6.7 | View file hashes (MD5/SHA-256) for an individual file | Admin, Auditor | admin, auditor |
 | UC-6.8 | Compare two files by hash | Admin, Auditor | admin, auditor |
 
-**UI Implication:** Job creation wizard (select mount → select drive → enter project/evidence metadata → configure threads → submit). Job monitoring dashboard with progress bars, real-time byte counters, and per-file status table. Post-copy action buttons for Verify and Generate Manifest. End-to-end workflow guided experience: Mount → Drive → Job → Copy → Verify → Manifest → Eject.
+**UI Implication:** Job creation wizard (select source mount → select mounted destination drive → enter project/evidence metadata → configure threads → submit). When a mounted drive is selected, the target destination path is derived automatically from the drive mount point. If the assigned drive is not mounted, the UI/API flow returns a conflict that instructs the operator to mount the drive first. Job monitoring dashboard with progress bars, real-time byte counters, and per-file status table. Post-copy action buttons for Verify and Generate Manifest. End-to-end workflow guided experience: Source Mount → Drive Mount → Job → Copy → Verify → Manifest → Eject.
 
 ---
 
@@ -237,9 +238,9 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 The primary operational workflow combines use cases across groups:
 
 1. **Setup** (one-time): UC-1.1 → UC-1.2 → UC-1.3 → UC-1.6 → UC-2.1
-2. **Prepare infrastructure**: UC-5.2/5.3 (add mounts) → UC-4.3 (discover drives) → UC-4.8/4.9 (enable ports) → UC-4.4 (format) → UC-4.5 (initialize for project)
-3. **Execute export**: UC-6.1 (create job) → UC-6.2 (start) → UC-6.3 (monitor) → UC-6.5 (verify) → UC-6.6 (manifest)
-4. **Eject & chain of custody**: UC-4.6 (prepare eject) → UC-7.8/7.10 (retrieve CoC) → UC-7.13 (confirm handoff) → UC-7.14 (dismiss warning) → UC-7.15 (save report for records) → drive transitions to `ARCHIVED`
+2. **Prepare infrastructure**: UC-5.2/5.3 (add mounts) → UC-4.3 (discover drives) → UC-4.9/4.10 (enable ports) → UC-4.4 (format) → UC-4.5 (initialize for project) → UC-4.6 (mount drive)
+3. **Execute export**: UC-6.1 (create job using the mounted destination) → UC-6.2 (start) → UC-6.3 (monitor) → UC-6.5 (verify) → UC-6.6 (manifest)
+4. **Eject & chain of custody**: UC-4.7 (prepare eject) → UC-7.8/7.10 (retrieve CoC) → UC-7.13 (confirm handoff) → UC-7.14 (dismiss warning) → UC-7.15 (save report for records) → drive transitions to `ARCHIVED`
 5. **Audit trail**: UC-7.1–7.7 (review operational audit) + UC-7.8–7.12 (validate handoff in compliance record)
 6. **Operational tuning (admin, optional)**: UC-9.1 → UC-9.2/UC-9.4 → UC-9.5 → UC-9.6
 7. **Contextual assistance (optional)**: UC-10.1 → UC-10.2/UC-10.3 during any workflow stage
