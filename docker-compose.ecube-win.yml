@@ -22,8 +22,12 @@ services:
       USB_DISCOVERY_INTERVAL: "${USB_DISCOVERY_INTERVAL:-30}"
       # PostgreSQL superuser credentials for the setup wizard.
       # Cleared from .env automatically after successful provisioning.
-      PG_SUPERUSER_NAME: "${PG_SUPERUSER_NAME:-${POSTGRES_USER:-ecube}}"
-      PG_SUPERUSER_PASS: "${PG_SUPERUSER_PASS:-${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}}"
+      # Falls back to POSTGRES_USER / POSTGRES_PASSWORD in the entrypoint
+      # when not set explicitly.
+      PG_SUPERUSER_NAME: "${PG_SUPERUSER_NAME:-}"
+      PG_SUPERUSER_PASS: "${PG_SUPERUSER_PASS:-}"
+      POSTGRES_USER: "${POSTGRES_USER:-ecube}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}"
       SETUP_DOCKER_DB_HOST: "postgres"
       # TLS is enabled by default.  Set ECUBE_NO_TLS=true in .env to use
       # plain HTTP on port 8000 (also set ECUBE_PORT=8000, UI_PORT=8000).
