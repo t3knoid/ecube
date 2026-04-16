@@ -44,8 +44,6 @@ from sqlalchemy.orm import Session
 
 from app.infrastructure.usb_discovery import DiscoveredTopology
 from app.infrastructure import FilesystemDetector
-from app.infrastructure.drive_mount import DriveMountProvider
-from app.config import settings as app_settings
 from app.models.hardware import DriveState, UsbDrive, UsbPort
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
@@ -70,45 +68,6 @@ def _default_topology_source() -> DiscoveredTopology:
     return discover_usb_topology()
 
 
-def _auto_mount_drive(
-    drive: UsbDrive,
-    drive_mount: DriveMountProvider,
-) -> None:
-    """Mount an AVAILABLE drive under ``settings.usb_mount_base_path``.
-
-    On success the drive's ``mount_path`` attribute is updated in-place.
-    The caller is responsible for committing the session so that the
-    mount_path change is persisted atomically with any other pending
-    mutations (e.g. state transitions).
-
-    Failures are logged and silently swallowed so that a mount error does
-    not prevent the rest of the discovery sync from completing.
-    """
-    mount_point = f"{app_settings.usb_mount_base_path}/{drive.id}"
-    try:
-        ok, err = drive_mount.mount_drive(drive.filesystem_path, mount_point)
-    except Exception:
-        logger.exception(
-            "Unexpected error mounting drive %s at %s",
-            drive.device_identifier,
-            mount_point,
-        )
-        return
-    if ok:
-        drive.mount_path = mount_point
-        logger.info(
-            "AUTO_MOUNT_OK drive=%s mount_path=%s",
-            drive.device_identifier,
-            mount_point,
-        )
-    else:
-        logger.warning(
-            "AUTO_MOUNT_FAILED drive=%s mount_point=%s error=%s",
-            drive.device_identifier,
-            mount_point,
-            err,
-        )
-
 
 def run_discovery_sync(
     db: Session,
@@ -116,7 +75,6 @@ def run_discovery_sync(
     *,
     topology_source: Callable[[], DiscoveredTopology] = _default_topology_source,
     filesystem_detector: FilesystemDetector,
-    drive_mount: Optional[DriveMountProvider] = None,
     client_ip: Optional[str] = None,
 ) -> dict:
     """Discover USB hardware state and synchronise the database.
@@ -138,10 +96,6 @@ def run_discovery_sync(
         must supply an instance explicitly; production routers pass the result
         of :func:`get_filesystem_detector`, while tests inject a lightweight
         fake.
-    drive_mount:
-        Optional :class:`DriveMountProvider` for auto-mounting drives.  When
-        supplied, newly AVAILABLE drives are mounted under
-        ``settings.usb_mount_base_path``.
 
     Returns
     -------
@@ -260,25 +214,6 @@ def run_discovery_sync(
             db.refresh(drive)
             drives_inserted.append(discovered_drive.device_identifier)
 
-            # Auto-mount newly AVAILABLE drives that are not already mounted.
-            if (
-                drive_mount
-                and drive.current_state == DriveState.AVAILABLE
-                and drive.filesystem_path
-                and not drive.mount_path
-            ):
-                _auto_mount_drive(drive, drive_mount)
-                if drive.mount_path:
-                    try:
-                        db.commit()
-                    except Exception:
-                        db.rollback()
-                        logger.exception(
-                            "DB commit failed setting mount_path for new drive %s",
-                            discovered_drive.device_identifier,
-                        )
-                    else:
-                        db.refresh(drive)
         else:
             # Existing drive — update mutable fields.
             changed = False
@@ -322,17 +257,6 @@ def run_discovery_sync(
                 existing.current_state = DriveState.EMPTY
                 existing.mount_path = None
                 changed = True
-
-            # Auto-mount any AVAILABLE drive that still lacks a mount_path.
-            if (
-                drive_mount
-                and existing.current_state == DriveState.AVAILABLE
-                and existing.filesystem_path
-                and not existing.mount_path
-            ):
-                _auto_mount_drive(existing, drive_mount)
-                if existing.mount_path:
-                    changed = True
 
             if changed:
                 try:
