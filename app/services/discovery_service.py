@@ -68,7 +68,6 @@ def _default_topology_source() -> DiscoveredTopology:
     return discover_usb_topology()
 
 
-
 def run_discovery_sync(
     db: Session,
     actor: Optional[str] = None,
