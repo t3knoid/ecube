@@ -95,7 +95,16 @@ if [[ ! "${ARTIFACT_NAME}" =~ ^[A-Za-z0-9._-]+$ ]]; then
 fi
 
 require_cmd tar
-require_cmd sha256sum
+
+# Portable checksum: prefer sha256sum (GNU), fall back to shasum (macOS/BSD).
+if command -v sha256sum >/dev/null 2>&1; then
+  SHA256CMD="sha256sum"
+elif command -v shasum >/dev/null 2>&1; then
+  SHA256CMD="shasum -a 256"
+else
+  echo "ERROR: Neither sha256sum nor shasum found." >&2
+  exit 1
+fi
 
 if [[ "${SKIP_FRONTEND_BUILD}" == false ]]; then
   require_cmd npm
@@ -138,22 +147,28 @@ if [[ "${BUILD_ONLY}" == true ]]; then
 fi
 
 echo "==> Creating dist/${ARTIFACT_NAME}.tar.gz"
+
+# Use a staging symlink so the archive root directory is portable across
+# GNU tar (--transform) and BSD tar (no --transform).
+staging_link="dist/${ARTIFACT_NAME}"
+ln -snf "${REPO_ROOT}" "${staging_link}"
 tar -czf "dist/${ARTIFACT_NAME}.tar.gz" \
-  --transform "s|^|${ARTIFACT_NAME}/|" \
-  install.sh \
-  app \
-  alembic \
-  deploy \
-  pyproject.toml \
-  alembic.ini \
-  frontend/dist \
-  README.md \
-  LICENSE
+  -C dist \
+  "${ARTIFACT_NAME}/install.sh" \
+  "${ARTIFACT_NAME}/app" \
+  "${ARTIFACT_NAME}/alembic" \
+  "${ARTIFACT_NAME}/deploy" \
+  "${ARTIFACT_NAME}/pyproject.toml" \
+  "${ARTIFACT_NAME}/alembic.ini" \
+  "${ARTIFACT_NAME}/frontend/dist" \
+  "${ARTIFACT_NAME}/README.md" \
+  "${ARTIFACT_NAME}/LICENSE"
+rm -f "${staging_link}"
 
 echo "==> Generating dist/${ARTIFACT_NAME}.sha256"
 (
   cd dist
-  sha256sum "${ARTIFACT_NAME}.tar.gz" > "${ARTIFACT_NAME}.sha256"
+  ${SHA256CMD} "${ARTIFACT_NAME}.tar.gz" > "${ARTIFACT_NAME}.sha256"
 )
 
 echo "==> Done"
