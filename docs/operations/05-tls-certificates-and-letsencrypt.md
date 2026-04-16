@@ -94,7 +94,7 @@ sudo chmod 600 /opt/ecube/certs/key.pem
 sudo chmod 644 /opt/ecube/certs/cert.pem
 ```
 
-> **Docker note:** The Docker image includes a self-signed certificate generated at build time. Replace it only when you have a CA-signed or organization-issued certificate. Mount your cert directory into the container via the `ECUBE_CERTS_DIR` variable (see [04-configuration-reference.md](04-configuration-reference.md)).
+> **Docker note:** The Docker image does not ship a certificate. On first container start the entrypoint generates a self-signed certificate at `/opt/ecube/certs/` if `key.pem` and `cert.pem` are missing (see Section 5.4 Docker above). To supply your own certificate, place `key.pem` and `cert.pem` in a host directory, set `ECUBE_CERTS_DIR` in `.env`, and uncomment the certs volume in the compose file — the entrypoint skips generation when the files already exist. See [04-configuration-reference.md](04-configuration-reference.md).
 
 ---
 
