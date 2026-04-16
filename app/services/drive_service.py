@@ -17,6 +17,13 @@ from app.repositories.drive_repository import DriveRepository
 logger = logging.getLogger(__name__)
 
 
+def _redacted_device_name(path: Optional[str]) -> Optional[str]:
+    """Return a safe device identifier for logs without exposing full paths."""
+    if not path:
+        return None
+    return os.path.basename(path.rstrip("/")) or None
+
+
 def _default_eject_provider() -> DriveEjectProvider:
     """Lazy import to avoid circular dependency at module level."""
     from app.infrastructure import get_drive_eject
@@ -238,6 +245,12 @@ def mount_drive(
             detail="Drive must be AVAILABLE or IN_USE before it can be mounted",
         )
 
+    if drive.filesystem_type in {None, "unformatted", "unknown"}:
+        raise HTTPException(
+            status_code=409,
+            detail="Drive must have a recognized filesystem before it can be mounted",
+        )
+
     if not drive.filesystem_path:
         raise HTTPException(
             status_code=400,
@@ -267,8 +280,8 @@ def mount_drive(
                 drive_id=drive_id,
                 details={
                     "drive_id": drive_id,
-                    "filesystem_path": drive.filesystem_path,
-                    "mount_path": mount_point,
+                    "device_name": _redacted_device_name(drive.filesystem_path),
+                    "mount_slot": _redacted_device_name(mount_point),
                     "error": error,
                 },
                 client_ip=client_ip,
@@ -301,8 +314,8 @@ def mount_drive(
             drive_id=drive_id,
             details={
                 "drive_id": drive_id,
-                "filesystem_path": drive.filesystem_path,
-                "mount_path": drive.mount_path,
+                "device_name": _redacted_device_name(drive.filesystem_path),
+                "mount_slot": _redacted_device_name(drive.mount_path),
             },
             client_ip=client_ip,
         )
@@ -360,7 +373,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
     if drive.filesystem_path != initial_device_path:
         raise HTTPException(
             status_code=409,
-            detail=f"Device path changed during prepare-eject (was: {initial_device_path!r}, now: {drive.filesystem_path!r}); operation aborted",
+            detail="Device path changed during prepare-eject; operation aborted",
         )
 
     if result.success:
@@ -385,7 +398,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                 drive_id=drive_id,
                 details={
                     "drive_id": drive_id,
-                    "filesystem_path": initial_device_path,
+                    "device_name": _redacted_device_name(initial_device_path),
                     "flush_ok": result.flush_ok,
                     "unmount_ok": result.unmount_ok,
                 },
@@ -403,8 +416,8 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                     drive_id=drive_id,
                     details={
                         "drive_id": drive_id,
-                        "filesystem_path": initial_device_path,
-                        "mount_path": drive.mount_path,
+                        "device_name": _redacted_device_name(initial_device_path),
+                        "mount_slot": _redacted_device_name(drive.mount_path),
                         "unmount_error": result.unmount_error,
                     },
                     client_ip=client_ip,
@@ -419,7 +432,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                 drive_id=drive_id,
                 details={
                     "drive_id": drive_id,
-                    "filesystem_path": initial_device_path,
+                    "device_name": _redacted_device_name(initial_device_path),
                     "flush_ok": result.flush_ok,
                     "flush_error": result.flush_error,
                     "unmount_ok": result.unmount_ok,
