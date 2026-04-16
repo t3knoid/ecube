@@ -3,8 +3,6 @@
 import os
 from unittest.mock import patch
 
-import pytest
-
 from app.models.hardware import UsbDrive
 from app.models.network import NetworkMount, MountStatus, MountType
 
