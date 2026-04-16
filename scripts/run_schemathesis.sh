@@ -198,11 +198,8 @@ _current_db_url=$(sed -n 's/^DATABASE_URL=//p' "$_env_file" | head -1)
 _current_db_url="${_current_db_url#\"}" ; _current_db_url="${_current_db_url%\"}"
 _current_db_url="${_current_db_url#\'}" ; _current_db_url="${_current_db_url%\'}"
 if [[ -z "$_current_db_url" ]]; then
-  if grep -q '^DATABASE_URL=' "$_env_file" 2>/dev/null; then
-    sed -i "s|^DATABASE_URL=.*|DATABASE_URL=$_smoke_db_url|" "$_env_file"
-  else
-    echo "DATABASE_URL=$_smoke_db_url" >> "$_env_file"
-  fi
+  sed -i '/^DATABASE_URL=/d' "$_env_file" 2>/dev/null || true
+  printf 'DATABASE_URL=%s\n' "$_smoke_db_url" >> "$_env_file"
 fi
 
 ecube_compose_up
