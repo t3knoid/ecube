@@ -886,26 +886,22 @@ class TestDeliverCallback:
 
 class TestExecutorLifecycle:
 
-    def test_get_executor_returns_thread_pool(self):
+    def test_get_executor_returns_thread_pool(self, monkeypatch):
         """_get_executor returns a ThreadPoolExecutor."""
         from concurrent.futures import ThreadPoolExecutor as _TPE
         from app.services.callback_service import _get_executor, _shutdown_executor
         import app.services.callback_service as _mod
 
         # Reset module state for a clean test.
-        old = _mod._executor
-        _mod._executor = None
-        try:
-            with patch.object(_mod, "settings") as mock_settings:
-                mock_settings.callback_max_workers = 2
-                pool = _get_executor()
-                assert isinstance(pool, _TPE)
-                assert pool._max_workers == 2
-        finally:
-            # Restore previous state; shut down the pool we created.
-            if _mod._executor is not None:
-                _mod._executor.shutdown(wait=False)
-            _mod._executor = old
+        monkeypatch.setattr(_mod, "_executor", None)
+        with patch.object(_mod, "settings") as mock_settings:
+            mock_settings.callback_max_workers = 2
+            pool = _get_executor()
+            assert isinstance(pool, _TPE)
+            assert pool._max_workers == 2
+        # Shut down the pool we created so it doesn't leak.
+        if _mod._executor is not None:
+            _mod._executor.shutdown(wait=False)
 
 
 # ---------------------------------------------------------------------------
@@ -916,7 +912,7 @@ class TestExecutorLifecycle:
 class TestBackpressure:
     """Tests for the BoundedSemaphore-based backpressure mechanism."""
 
-    def test_delivery_dropped_when_queue_full(self):
+    def test_delivery_dropped_when_queue_full(self, monkeypatch):
         """When the semaphore is exhausted, deliver_callback drops and audits."""
         import app.services.callback_service as _mod
         from app.services.callback_service import _get_pending_semaphore
@@ -927,27 +923,24 @@ class TestBackpressure:
         job.status = JobStatus.COMPLETED
 
         # Force semaphore to have 0 permits so the next acquire fails.
-        old_sem = _mod._pending_semaphore
-        _mod._pending_semaphore = __import__("threading").BoundedSemaphore(1)
-        _mod._pending_semaphore.acquire()  # consume the single permit
-        try:
-            with patch.object(_mod, "_audit_dropped_delivery") as mock_audit, \
-                 patch.object(_mod, "_get_executor") as mock_exec, \
-                 patch.object(_mod, "build_payload", return_value={"event": "JOB_COMPLETED"}):
-                deliver_callback(job)  # db=None → production path
+        sem = __import__("threading").BoundedSemaphore(1)
+        sem.acquire()  # consume the single permit
+        monkeypatch.setattr(_mod, "_pending_semaphore", sem)
+        with patch.object(_mod, "_audit_dropped_delivery") as mock_audit, \
+             patch.object(_mod, "_get_executor") as mock_exec, \
+             patch.object(_mod, "build_payload", return_value={"event": "JOB_COMPLETED"}):
+            deliver_callback(job)  # db=None → production path
 
-                # Should NOT have submitted to the executor.
-                mock_exec.return_value.submit.assert_not_called()
+            # Should NOT have submitted to the executor.
+            mock_exec.return_value.submit.assert_not_called()
 
-                # Should have written a drop audit record.
-                mock_audit.assert_called_once()
-                args = mock_audit.call_args
-                assert args[0][0] == 42  # job_id
-                assert "example.com" in args[0][1]  # safe_url
-        finally:
-            _mod._pending_semaphore = old_sem
+            # Should have written a drop audit record.
+            mock_audit.assert_called_once()
+            args = mock_audit.call_args
+            assert args[0][0] == 42  # job_id
+            assert "example.com" in args[0][1]  # safe_url
 
-    def test_delivery_proceeds_when_permits_available(self):
+    def test_delivery_proceeds_when_permits_available(self, monkeypatch):
         """When permits are available, deliver_callback submits normally."""
         import app.services.callback_service as _mod
 
@@ -956,67 +949,55 @@ class TestBackpressure:
         job.callback_url = "https://example.com/hook"
         job.status = JobStatus.COMPLETED
 
-        old_sem = _mod._pending_semaphore
-        _mod._pending_semaphore = __import__("threading").BoundedSemaphore(5)
-        try:
-            with patch.object(_mod, "_get_executor") as mock_exec, \
-                 patch.object(_mod, "_audit_dropped_delivery") as mock_audit, \
-                 patch.object(_mod, "build_payload", return_value={"event": "JOB_COMPLETED"}):
-                mock_executor = MagicMock()
-                mock_exec.return_value = mock_executor
+        monkeypatch.setattr(_mod, "_pending_semaphore", __import__("threading").BoundedSemaphore(5))
+        with patch.object(_mod, "_get_executor") as mock_exec, \
+             patch.object(_mod, "_audit_dropped_delivery") as mock_audit, \
+             patch.object(_mod, "build_payload", return_value={"event": "JOB_COMPLETED"}):
+            mock_executor = MagicMock()
+            mock_exec.return_value = mock_executor
 
-                deliver_callback(job)  # db=None
+            deliver_callback(job)  # db=None
 
-                mock_executor.submit.assert_called_once()
-                mock_audit.assert_not_called()
-        finally:
-            _mod._pending_semaphore = old_sem
+            mock_executor.submit.assert_called_once()
+            mock_audit.assert_not_called()
 
-    def test_semaphore_released_after_delivery(self):
+    def test_semaphore_released_after_delivery(self, monkeypatch):
         """_deliver_callback_sync releases the semaphore even on failure."""
         import app.services.callback_service as _mod
         from app.services.callback_service import _deliver_callback_sync
 
-        old_sem = _mod._pending_semaphore
         sem = __import__("threading").BoundedSemaphore(2)
         sem.acquire()  # 1 permit left
-        _mod._pending_semaphore = sem
-        try:
-            with patch("app.database.SessionLocal") as mock_sl, \
-                 patch.object(_mod, "_do_deliver", side_effect=RuntimeError("boom")):
-                mock_db = MagicMock()
-                mock_sl.return_value = mock_db
+        monkeypatch.setattr(_mod, "_pending_semaphore", sem)
+        with patch("app.database.SessionLocal") as mock_sl, \
+             patch.object(_mod, "_do_deliver", side_effect=RuntimeError("boom")):
+            mock_db = MagicMock()
+            mock_sl.return_value = mock_db
 
-                # Should raise but still release the semaphore.
-                with pytest.raises(RuntimeError):
-                    _deliver_callback_sync(1, "https://example.com/hook", {})
+            # Should raise but still release the semaphore.
+            with pytest.raises(RuntimeError):
+                _deliver_callback_sync(1, "https://example.com/hook", {})
 
-                mock_db.close.assert_called_once()
+            mock_db.close.assert_called_once()
 
-                # Semaphore should be back to 2 permits (both should acquire).
-                assert sem.acquire(blocking=False)
-                assert sem.acquire(blocking=False)
-        finally:
-            _mod._pending_semaphore = old_sem
+            # Semaphore should be back to 2 permits (both should acquire).
+            assert sem.acquire(blocking=False)
+            assert sem.acquire(blocking=False)
 
-    def test_get_pending_semaphore_creates_bounded_semaphore(self):
+    def test_get_pending_semaphore_creates_bounded_semaphore(self, monkeypatch):
         """_get_pending_semaphore returns a BoundedSemaphore sized by config."""
         import app.services.callback_service as _mod
         from app.services.callback_service import _get_pending_semaphore
 
-        old_sem = _mod._pending_semaphore
-        _mod._pending_semaphore = None
-        try:
-            with patch.object(_mod, "settings") as mock_settings:
-                mock_settings.callback_max_pending = 3
-                sem = _get_pending_semaphore()
-                # Verify we can acquire exactly 3 times.
-                assert sem.acquire(blocking=False)
-                assert sem.acquire(blocking=False)
-                assert sem.acquire(blocking=False)
-                assert not sem.acquire(blocking=False)  # 4th should fail
-        finally:
-            _mod._pending_semaphore = old_sem
+        monkeypatch.setattr(_mod, "_pending_semaphore", None)
+        with patch.object(_mod, "settings") as mock_settings:
+            mock_settings.callback_max_pending = 3
+            sem = _get_pending_semaphore()
+            # Verify we can acquire exactly 3 times.
+            assert sem.acquire(blocking=False)
+            assert sem.acquire(blocking=False)
+            assert sem.acquire(blocking=False)
+            assert not sem.acquire(blocking=False)  # 4th should fail
 
 
 # ---------------------------------------------------------------------------

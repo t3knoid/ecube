@@ -653,3 +653,188 @@ def test_port_repo_list_enabled(db):
     assert len(enabled) == 2
     enabled_ids = {p.id for p in enabled}
     assert enabled_ids == {p1.id, p3.id}
+
+
+# ---------------------------------------------------------------------------
+# FileRepository — bulk methods
+# ---------------------------------------------------------------------------
+
+
+def test_bulk_count_done_and_errors_multiple_jobs(db):
+    """bulk_count_done_and_errors returns correct counts for several jobs."""
+    repo = FileRepository(db)
+
+    j1 = _make_job(db)
+    j2 = _make_job(db)
+
+    repo.add_bulk([
+        ExportFile(job_id=j1.id, relative_path="a.txt", status=FileStatus.DONE),
+        ExportFile(job_id=j1.id, relative_path="b.txt", status=FileStatus.ERROR),
+        ExportFile(job_id=j1.id, relative_path="c.txt", status=FileStatus.DONE),
+        ExportFile(job_id=j2.id, relative_path="x.txt", status=FileStatus.ERROR),
+        ExportFile(job_id=j2.id, relative_path="y.txt", status=FileStatus.ERROR),
+    ])
+
+    result = repo.bulk_count_done_and_errors([j1.id, j2.id])
+
+    assert result[j1.id] == (2, 1)
+    assert result[j2.id] == (0, 2)
+
+
+def test_bulk_count_done_and_errors_empty_job_ids(db):
+    """Passing empty list returns empty dict without hitting the DB."""
+    repo = FileRepository(db)
+    assert repo.bulk_count_done_and_errors([]) == {}
+
+
+def test_bulk_count_done_and_errors_jobs_with_no_files(db):
+    """Jobs that have no files should not appear in the result dict."""
+    repo = FileRepository(db)
+    j1 = _make_job(db)
+    j2 = _make_job(db)  # no files added
+
+    repo.add_bulk([
+        ExportFile(job_id=j1.id, relative_path="a.txt", status=FileStatus.DONE),
+    ])
+
+    result = repo.bulk_count_done_and_errors([j1.id, j2.id])
+    assert result[j1.id] == (1, 0)
+    # j2 absent from dict because GROUP BY never sees it
+    assert j2.id not in result
+
+
+def test_bulk_count_done_and_errors_mixed_statuses(db):
+    """Only DONE and ERROR files are counted; PENDING/COPYING are ignored."""
+    repo = FileRepository(db)
+    j = _make_job(db)
+
+    repo.add_bulk([
+        ExportFile(job_id=j.id, relative_path="a.txt", status=FileStatus.DONE),
+        ExportFile(job_id=j.id, relative_path="b.txt", status=FileStatus.PENDING),
+        ExportFile(job_id=j.id, relative_path="c.txt", status=FileStatus.ERROR),
+        ExportFile(job_id=j.id, relative_path="d.txt", status=FileStatus.COPYING),
+    ])
+
+    result = repo.bulk_count_done_and_errors([j.id])
+    assert result[j.id] == (1, 1)
+
+
+def test_bulk_list_error_messages_multiple_jobs(db):
+    """bulk_list_error_messages returns per-job error rows."""
+    repo = FileRepository(db)
+
+    j1 = _make_job(db)
+    j2 = _make_job(db)
+
+    repo.add_bulk([
+        ExportFile(job_id=j1.id, relative_path="e1.txt", status=FileStatus.ERROR, error_message="disk full"),
+        ExportFile(job_id=j1.id, relative_path="e2.txt", status=FileStatus.ERROR, error_message="perm denied"),
+        ExportFile(job_id=j2.id, relative_path="e3.txt", status=FileStatus.ERROR, error_message="io error"),
+    ])
+
+    result = repo.bulk_list_error_messages([j1.id, j2.id])
+
+    assert len(result[j1.id]) == 2
+    assert len(result[j2.id]) == 1
+    msgs_j1 = {msg for msg, _ in result[j1.id]}
+    assert "disk full" in msgs_j1
+    assert "perm denied" in msgs_j1
+
+
+def test_bulk_list_error_messages_respects_limit_per_job(db):
+    """limit_per_job caps the number of error rows returned per job."""
+    repo = FileRepository(db)
+    j = _make_job(db)
+
+    for i in range(10):
+        repo.add_bulk([
+            ExportFile(job_id=j.id, relative_path=f"e{i}.txt", status=FileStatus.ERROR, error_message=f"err{i}"),
+        ])
+
+    result = repo.bulk_list_error_messages([j.id], limit_per_job=3)
+    assert len(result[j.id]) == 3
+
+
+def test_bulk_list_error_messages_empty_job_ids(db):
+    """Passing empty list returns empty dict."""
+    repo = FileRepository(db)
+    assert repo.bulk_list_error_messages([]) == {}
+
+
+def test_bulk_list_error_messages_no_errors_returns_empty(db):
+    """Jobs with only DONE files produce no entries."""
+    repo = FileRepository(db)
+    j = _make_job(db)
+    repo.add_bulk([
+        ExportFile(job_id=j.id, relative_path="ok.txt", status=FileStatus.DONE),
+    ])
+
+    result = repo.bulk_list_error_messages([j.id])
+    assert j.id not in result
+
+
+# ---------------------------------------------------------------------------
+# DriveAssignmentRepository — bulk methods
+# ---------------------------------------------------------------------------
+
+
+def test_bulk_get_active_for_jobs_multiple_jobs(db):
+    """bulk_get_active_for_jobs returns the active assignment per job."""
+    d1 = UsbDrive(device_identifier="USB-BA-01", current_state=DriveState.IN_USE)
+    d2 = UsbDrive(device_identifier="USB-BA-02", current_state=DriveState.IN_USE)
+    j1 = ExportJob(project_id="P", evidence_number="E1", source_path="/src")
+    j2 = ExportJob(project_id="P", evidence_number="E2", source_path="/src")
+    db.add_all([d1, d2, j1, j2])
+    db.commit()
+
+    repo = DriveAssignmentRepository(db)
+    repo.add(DriveAssignment(drive_id=d1.id, job_id=j1.id))
+    repo.add(DriveAssignment(drive_id=d2.id, job_id=j2.id))
+
+    result = repo.bulk_get_active_for_jobs([j1.id, j2.id])
+
+    assert result[j1.id].drive_id == d1.id
+    assert result[j2.id].drive_id == d2.id
+
+
+def test_bulk_get_active_for_jobs_empty_job_ids(db):
+    """Passing empty list returns empty dict."""
+    repo = DriveAssignmentRepository(db)
+    assert repo.bulk_get_active_for_jobs([]) == {}
+
+
+def test_bulk_get_active_for_jobs_no_assignments(db):
+    """Jobs without assignments are absent from the result."""
+    j = ExportJob(project_id="P", evidence_number="E", source_path="/src")
+    db.add(j)
+    db.commit()
+
+    repo = DriveAssignmentRepository(db)
+    result = repo.bulk_get_active_for_jobs([j.id])
+    assert j.id not in result
+
+
+def test_bulk_get_active_for_jobs_deduplicates_multiple_unreleased(db):
+    """When a job has multiple unreleased assignments, the most recent wins."""
+    from datetime import datetime, timezone
+
+    d1 = UsbDrive(device_identifier="USB-DEDUP-01", current_state=DriveState.IN_USE)
+    d2 = UsbDrive(device_identifier="USB-DEDUP-02", current_state=DriveState.IN_USE)
+    j = ExportJob(project_id="P", evidence_number="E", source_path="/src")
+    db.add_all([d1, d2, j])
+    db.commit()
+
+    repo = DriveAssignmentRepository(db)
+    # Older assignment
+    repo.add(DriveAssignment(
+        drive_id=d1.id, job_id=j.id,
+        assigned_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    ))
+    # Newer assignment (should win)
+    repo.add(DriveAssignment(
+        drive_id=d2.id, job_id=j.id,
+        assigned_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    ))
+
+    result = repo.bulk_get_active_for_jobs([j.id])
+    assert result[j.id].drive_id == d2.id

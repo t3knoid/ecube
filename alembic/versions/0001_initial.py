@@ -19,6 +19,15 @@ old head revision before the history was collapsed. In that case, run::
 Do not run ``alembic stamp 0001`` against a partially migrated or otherwise
 schema-drifted database. For those environments, recreate the database from
 scratch and then run ``alembic upgrade head``.
+
+Mutability notice
+-----------------
+This migration may be edited in-place while ECUBE is pre-release (no
+production deployments exist). All dev/test environments are rebuilt from
+scratch (``drop → create → alembic upgrade head``), so columns or indexes
+added here will always be applied. Once v1.0 ships, this file becomes
+immutable and all schema changes must use new sequential migrations.
+
 Revision ID: 0001
 Revises:
 Create Date: 2024-01-01 00:00:00.000000
@@ -77,12 +86,14 @@ def upgrade() -> None:
             nullable=True,
         ),
         sa.Column("current_project_id", sa.String, nullable=True),
+        sa.Column("mount_path", sa.String(), nullable=True),
         sa.Column(
             "last_seen_at",
             sa.DateTime(timezone=True),
             server_default=sa.func.now(),
         ),
     )
+    op.create_index("ix_usb_drives_mount_path", "usb_drives", ["mount_path"])
 
     op.create_table(
         "network_mounts",
@@ -275,6 +286,7 @@ def downgrade() -> None:
     op.drop_table("export_files")
     op.drop_table("export_jobs")
     op.drop_table("network_mounts")
+    op.drop_index("ix_usb_drives_mount_path", table_name="usb_drives")
     op.drop_table("usb_drives")
     op.drop_table("usb_ports")
     op.drop_table("usb_hubs")

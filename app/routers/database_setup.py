@@ -54,6 +54,42 @@ _ADMIN_ONLY = require_roles("admin")
 _bearer_scheme = HTTPBearer(auto_error=False)
 
 
+def _resolve_admin_credentials(
+    admin_username: Optional[str],
+    admin_password: Optional[str],
+) -> tuple[str, str]:
+    """Return (username, password), falling back to configured PG superuser.
+
+    If either credential is provided in the request, both must be supplied
+    (all-or-nothing) to prevent accidental mixing with server-side defaults.
+    Raises ``HTTPException(422)`` when credentials cannot be fully resolved.
+    """
+    request_has_username = bool(admin_username)
+    request_has_password = bool(admin_password)
+
+    if request_has_username != request_has_password:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "admin_username and admin_password must be provided together; "
+                "supply both or omit both to use server-configured defaults."
+            ),
+        )
+
+    username = admin_username or settings.pg_superuser_name
+    password = admin_password or settings.pg_superuser_pass
+    if not username or not password:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "admin_username and admin_password are required when "
+                "PG_SUPERUSER_NAME / PG_SUPERUSER_PASS are not configured "
+                "on the server."
+            ),
+        )
+    return username, password
+
+
 def _admins_have_any_os_account(db: Session) -> bool:
     """Return True if any DB admin role has a corresponding OS account.
 
@@ -280,12 +316,15 @@ def test_database_connection(
     endpoint accepts unauthenticated requests.  Once the system is
     initialized, a valid admin JWT is required.
     """
+    username, password = _resolve_admin_credentials(
+        body.admin_username, body.admin_password,
+    )
     try:
         server_version = database_service.test_connection(
             host=body.host,
             port=body.port,
-            username=body.admin_username,
-            password=body.admin_password,
+            username=username,
+            password=password,
         )
     except ConnectionError as exc:
         raise HTTPException(
@@ -378,12 +417,16 @@ def provision_database(
                 ),
             )
 
+    admin_username, admin_password = _resolve_admin_credentials(
+        body.admin_username, body.admin_password,
+    )
+
     try:
         migrations_applied = database_service.provision_database(
             host=body.host,
             port=body.port,
-            admin_username=body.admin_username,
-            admin_password=body.admin_password,
+            admin_username=admin_username,
+            admin_password=admin_password,
             app_database=body.app_database,
             app_username=body.app_username,
             app_password=body.app_password,
@@ -456,10 +499,17 @@ def get_system_info() -> SystemInfoResponse:
     container and the recommended PostgreSQL hostname to pre-fill in the UI.
     """
     in_docker = is_running_in_docker()
+    suggested_username = (
+        settings.pg_superuser_name
+        or settings.setup_default_admin_username
+    )
     return SystemInfoResponse(
         in_docker=in_docker,
         suggested_db_host=settings.setup_docker_db_host if in_docker else "localhost",
-        suggested_admin_username=settings.setup_default_admin_username,
+        suggested_admin_username=suggested_username,
+        has_configured_credentials=bool(
+            settings.pg_superuser_name and settings.pg_superuser_pass
+        ),
     )
 
 
