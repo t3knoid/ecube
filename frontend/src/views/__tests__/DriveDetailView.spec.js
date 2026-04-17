@@ -117,7 +117,9 @@ describe('DriveDetailView mount workflow', () => {
 
     expect(mocks.mountDrive).toHaveBeenCalledWith(7)
     expect(wrapper.text()).toContain(i18n.global.t('drives.mountSuccess'))
-    expect(wrapper.text()).toContain('/mnt/ecube/7')
+    expect(wrapper.text()).not.toContain('/mnt/ecube/7')
+    expect(wrapper.text()).not.toContain('USB-DETAIL-007')
+    expect(wrapper.text()).not.toContain('/dev/sdb1')
 
     const statusBanner = wrapper.find('.ok-banner')
     expect(statusBanner.attributes('role')).toBe('status')

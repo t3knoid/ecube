@@ -432,7 +432,8 @@
       "db": "DB",
       "id": "ID",
       "traceReferencePrefix": "Ref:",
-      "progress": "Progress"
+      "progress": "Progress",
+      "protected": "Protected"
     },
     "plural": {
       "file": "no files | 1 file | {count} files",
