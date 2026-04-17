@@ -79,7 +79,7 @@ During initial setup, `POST /setup/database/test-connection`, `POST /setup/datab
 
 | Method | Endpoint | Role | Description |
 | ------ | -------- | ---- | ----------- |
-| GET | `/drives` | admin/manager/processor/auditor | List all drives and state (includes `filesystem_type`). Optional `?project_id=` and repeatable `?state=` filters |
+| GET | `/drives` | admin/manager/processor/auditor | List drives (excludes `EMPTY`/disconnected by default). Optional `?project_id=`, repeatable `?state=`, and `?include_disconnected=true` filters |
 | POST | `/drives/refresh` | admin/manager | Force rescan of attached drives |
 | POST | `/drives/{drive_id}/initialize` | admin/manager | Initialize drive for project (rejects unformatted/unknown drives) |
 | POST | `/drives/{drive_id}/format` | admin/manager | Format drive with `ext4` or `exfat`; drive must be AVAILABLE and unmounted |
