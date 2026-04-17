@@ -73,10 +73,11 @@ def test_list_drives_empty_project_id_rejected(client, db):
 
 
 def test_list_drives_no_filter_returns_all(client, db):
-    """GET /drives without project_id returns all drives (no regression)."""
+    """GET /drives without project_id returns connected drives (excludes EMPTY by default)."""
     d1 = UsbDrive(device_identifier="USB-1", current_state=DriveState.IN_USE, current_project_id="PROJ-001")
     d2 = UsbDrive(device_identifier="USB-2", current_state=DriveState.AVAILABLE)
-    db.add_all([d1, d2])
+    d3 = UsbDrive(device_identifier="USB-3", current_state=DriveState.EMPTY)
+    db.add_all([d1, d2, d3])
     db.commit()
 
     response = client.get("/drives")
@@ -85,6 +86,41 @@ def test_list_drives_no_filter_returns_all(client, db):
     ids = [d["device_identifier"] for d in data]
     assert "USB-1" in ids
     assert "USB-2" in ids
+    assert "USB-3" not in ids
+
+
+def test_list_drives_include_disconnected(client, db):
+    """GET /drives?include_disconnected=true returns all drives including EMPTY."""
+    d1 = UsbDrive(device_identifier="USB-1", current_state=DriveState.IN_USE, current_project_id="PROJ-001")
+    d2 = UsbDrive(device_identifier="USB-2", current_state=DriveState.AVAILABLE)
+    d3 = UsbDrive(device_identifier="USB-3", current_state=DriveState.EMPTY)
+    db.add_all([d1, d2, d3])
+    db.commit()
+
+    response = client.get("/drives", params={"include_disconnected": "true"})
+    assert response.status_code == 200
+    data = response.json()
+    ids = [d["device_identifier"] for d in data]
+    assert "USB-1" in ids
+    assert "USB-2" in ids
+    assert "USB-3" in ids
+
+
+def test_list_drives_default_excludes_empty(client, db):
+    """GET /drives (no params) excludes EMPTY drives by default."""
+    d1 = UsbDrive(device_identifier="USB-A", current_state=DriveState.EMPTY)
+    d2 = UsbDrive(device_identifier="USB-B", current_state=DriveState.AVAILABLE)
+    d3 = UsbDrive(device_identifier="USB-C", current_state=DriveState.IN_USE, current_project_id="PROJ-001")
+    db.add_all([d1, d2, d3])
+    db.commit()
+
+    response = client.get("/drives")
+    assert response.status_code == 200
+    data = response.json()
+    states = [d["current_state"] for d in data]
+    assert "EMPTY" not in states
+    assert "AVAILABLE" in states
+    assert "IN_USE" in states
 
 
 def test_initialize_drive(manager_client, db):

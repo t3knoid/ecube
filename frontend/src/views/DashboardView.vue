@@ -39,7 +39,7 @@ const healthColumns = computed(() => [
 
 async function refreshSnapshot() {
   const warnings = []
-  const results = await Promise.allSettled([getDrives(), listJobs({ limit: 200 })])
+  const results = await Promise.allSettled([getDrives({ include_disconnected: true }), listJobs({ limit: 200 })])
 
   if (results[0].status === 'fulfilled') {
     drives.value = Array.isArray(results[0].value) ? results[0].value : []

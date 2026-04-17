@@ -491,7 +491,7 @@ curl -sk -X POST https://localhost:8443/drives/{drive_id}/prepare-eject \
 
 ### 11.3a Port Management
 
-USB ports default to disabled. Drives on disabled ports stay in `EMPTY` state
+USB ports default to disabled. Drives on disabled ports stay in `DISCONNECTED` state
 until the port is enabled and a discovery refresh runs.
 
 ```bash
@@ -950,7 +950,7 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 2 | Initialize a drive with `filesystem_type=NULL` | 409, `CONFLICT` — must have recognized filesystem |
 | 3 | Initialize a drive with `filesystem_type=unformatted` | 409, `CONFLICT` — must have recognized filesystem |
 | 4 | Initialize a drive with `filesystem_type=unknown` | 409, `CONFLICT` — must have recognized filesystem |
-| 5 | Initialize an `EMPTY` drive (not present / disabled port) | 409, `CONFLICT`; audit `INIT_REJECTED_NOT_AVAILABLE` recorded |
+| 5 | Initialize an `EMPTY` drive (not present / disabled port) | 409, `CONFLICT`; audit `INIT_REJECTED_NOT_AVAILABLE` recorded; note: `GET /drives` excludes disconnected drives by default — use `include_disconnected=true` to see them |
 | 6 | Mount an `AVAILABLE` or `IN_USE` drive with a recognized filesystem | 200, `mount_path` is populated |
 | 7 | Mount a drive with `filesystem_type=unknown`, `unformatted`, or `NULL` | 409, `CONFLICT` — must have recognized filesystem |
 | 8 | Prepare-eject an `IN_USE` drive | 200, state → `AVAILABLE`, `mount_path` cleared |
@@ -1000,11 +1000,11 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 8 | Enable port — processor denied | `PATCH /admin/ports/{port_id}` with processor token | 403, `FORBIDDEN` |
 | 9 | Enable non-existent port | `PATCH /admin/ports/99999` with `{"enabled": true}` | 404, `NOT_FOUND` |
 | 10 | Ports default to disabled | Discover a new port, then `GET /admin/ports` | New port has `enabled: false` |
-| 11 | Drive on disabled port stays EMPTY | Plug in drive on disabled port, run `POST /drives/refresh` | `GET /drives` shows drive in `EMPTY` state |
+| 11 | Drive on disabled port stays DISCONNECTED | Plug in drive on disabled port, run `POST /drives/refresh` | `GET /drives?include_disconnected=true` shows drive in `EMPTY` state |
 | 12 | Drive on enabled port becomes AVAILABLE | Enable port, run `POST /drives/refresh` | `GET /drives` shows drive in `AVAILABLE` state |
 | 13 | Disable port — IN_USE drive unaffected | Disable a port with an `IN_USE` drive, run `POST /drives/refresh` | Drive remains `IN_USE` (project isolation priority) |
-| 14 | Disable port — AVAILABLE drive demoted | Enable port, confirm drive is `AVAILABLE`, disable port, run `POST /drives/refresh` | Drive transitions to `EMPTY` |
-| 15 | Orphan drive stays EMPTY | Discover a drive with no matching port (`port_id = NULL`), run `POST /drives/refresh` | Drive remains in `EMPTY` state (unknown port treated as disabled) |
+| 14 | Disable port — AVAILABLE drive demoted | Enable port, confirm drive is `AVAILABLE`, disable port, run `POST /drives/refresh` | Drive transitions to `DISCONNECTED` (`EMPTY`); `GET /drives` (default) no longer returns it |
+| 15 | Orphan drive stays DISCONNECTED | Discover a drive with no matching port (`port_id = NULL`), run `POST /drives/refresh` | Drive remains in `EMPTY` state (unknown port treated as disabled); only visible with `include_disconnected=true` |
 | 16 | PORT_ENABLED audit log | `GET /audit?action=PORT_ENABLED` after enabling a port | Audit entry with `port_id`, `system_path`, `hub_id`, `enabled`, `path` |
 | 17 | PORT_DISABLED audit log | `GET /audit?action=PORT_DISABLED` after disabling a port | Audit entry with `port_id`, `system_path`, `hub_id`, `enabled`, `path` |
 
@@ -1048,13 +1048,13 @@ These tests exercise real hardware paths that must be validated during manual QA
 
 | # | Test | Steps | Expected |
 |---|------|-------|----------|
-| 1 | Hot-plug detection | Plug in a USB drive, wait 30 seconds | `GET /drives` shows the new drive (in `EMPTY` state if port is disabled, or `AVAILABLE` if port is enabled) |
+| 1 | Hot-plug detection | Plug in a USB drive, wait 30 seconds | `GET /drives` shows the new drive (in `DISCONNECTED` state if port is disabled, or `AVAILABLE` if port is enabled); disconnected drives require `include_disconnected=true` |
 | 2 | USB topology | `GET /introspection/usb/topology` | Shows real hub serial numbers, port numbers, connected devices |
-| 3 | Physical eject | Initialize drive → prepare-eject → physically remove | After the next discovery cycle, `GET /drives` still lists the drive with `current_state=EMPTY`; audit shows `DRIVE_EJECT_PREPARED` |
+| 3 | Physical eject | Initialize drive → prepare-eject → physically remove | After the next discovery cycle, `GET /drives?include_disconnected=true` lists the drive with `current_state=EMPTY` (displayed as "Disconnected"); audit shows `DRIVE_EJECT_PREPARED` |
 | 4 | Re-plug same drive | Remove and re-insert the same drive | Drive reappears as `AVAILABLE` with same `device_identifier` (after discovery cycle) |
 | 5 | Multiple drives | Plug in 2+ drives simultaneously | All drives appear in `/drives`; each can be initialized to different projects |
 | 6 | Sync + unmount | Initialize drive, create/start a job, then prepare-eject | Filesystem flushed and unmounted before eject (verify via `mount` command — no partitions from that drive should be listed) |
-| 7 | Disabled port blocks AVAILABLE | Disable a port, plug in a drive to that port, run discovery | Drive appears in `EMPTY` state; enable port + refresh → drive transitions to `AVAILABLE` |
+| 7 | Disabled port blocks AVAILABLE | Disable a port, plug in a drive to that port, run discovery | Drive appears in `DISCONNECTED` state (visible with `include_disconnected=true`); enable port + refresh → drive transitions to `AVAILABLE` |
 
 ### 12.6 End-to-End Copy Workflow
 
