@@ -67,9 +67,12 @@ def test_list_drives_filter_by_project_no_match(client, db):
 
 
 def test_list_drives_filter_by_project_normalizes_case_and_whitespace(client, db):
-    drive = UsbDrive(device_identifier="USB-NORM", current_state=DriveState.IN_USE, current_project_id="PROJ-001")
+    drive = UsbDrive(device_identifier="USB-NORM", current_state=DriveState.IN_USE, current_project_id="  proj-001  ")
     db.add(drive)
     db.commit()
+    db.refresh(drive)
+
+    assert drive.current_project_id == "PROJ-001"
 
     response = client.get("/drives", params={"project_id": "  proj-001  "})
     assert response.status_code == 200
