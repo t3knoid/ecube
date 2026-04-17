@@ -200,7 +200,7 @@ def test_mount_drive_provider_failure_is_audited(manager_client, db):
     db.commit()
 
     provider = MagicMock()
-    provider.mount_drive.return_value = (False, "mount failed")
+    provider.mount_drive.return_value = (False, "mount failed for /dev/sdd at /mnt/ecube/4")
 
     with patch("app.routers.drives.get_drive_mount", return_value=provider):
         response = manager_client.post(f"/drives/{drive.id}/mount")
@@ -211,9 +211,11 @@ def test_mount_drive_provider_failure_is_audited(manager_client, db):
     audit = db.query(AuditLog).filter(AuditLog.action == "DRIVE_MOUNT_FAILED").first()
     assert audit is not None
     assert audit.details["drive_id"] == drive.id
-    assert audit.details["error"] == "mount failed"
-    assert audit.details["device_name"] == "sdd"
-    assert audit.details["mount_slot"] == str(drive.id)
+    assert audit.details["error_code"] == "MOUNT_FAILED"
+    assert audit.details["message"] == "Provider mount operation failed"
+    assert "error" not in audit.details
+    assert "/dev/sdd" not in str(audit.details)
+    assert "/mnt/ecube/4" not in str(audit.details)
     assert "filesystem_path" not in audit.details
     assert "mount_path" not in audit.details
 
@@ -570,7 +572,9 @@ def test_prepare_eject_flush_failure(manager_client, db):
     assert log.drive_id == drive.id
     assert log.project_id == "PROJ-001"
     assert log.details["flush_ok"] is False
-    assert log.details["flush_error"] == "sync failed"
+    assert log.details["error_code"] == "EJECT_FLUSH_FAILED"
+    assert log.details["message"] == "Drive flush operation failed"
+    assert "flush_error" not in log.details
 
 
 def test_prepare_eject_unmount_failure(manager_client, db):
@@ -602,7 +606,10 @@ def test_prepare_eject_unmount_failure(manager_client, db):
     log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_EJECT_FAILED").first()
     assert log is not None
     assert log.details["unmount_ok"] is False
-    assert log.details["unmount_error"] == "umount failed for /dev/sdc"
+    assert log.details["error_code"] == "EJECT_UNMOUNT_FAILED"
+    assert log.details["message"] == "Drive unmount operation failed"
+    assert "unmount_error" not in log.details
+    assert "/dev/sdc" not in str(log.details)
 
 
 def test_prepare_eject_no_unmount_when_no_path(manager_client, db):
@@ -681,7 +688,9 @@ def test_prepare_eject_invalid_device_path(manager_client, db):
     from app.models.audit import AuditLog
     log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_EJECT_FAILED").first()
     assert log is not None
-    assert "invalid device path" in (log.details.get("unmount_error") or "")
+    assert log.details["error_code"] == "EJECT_UNMOUNT_FAILED"
+    assert "invalid device path" not in str(log.details)
+    assert "/tmp/../../etc/passwd" not in str(log.details)
 
 
 def test_prepare_eject_requires_in_use_state(manager_client, db):
