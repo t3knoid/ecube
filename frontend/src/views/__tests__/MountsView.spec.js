@@ -190,4 +190,25 @@ describe('MountsView removal flow', () => {
 
     expect(wrapper.find('#mount-type').exists()).toBe(true)
   })
+
+  it('marks required add-mount fields as required for assistive tech', async () => {
+    mocks.getMounts.mockResolvedValue([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    expect(addButton).toBeTruthy()
+
+    await addButton.trigger('click')
+    await flushPromises()
+
+    const remotePath = wrapper.find('#mount-remote-path')
+    const projectId = wrapper.find('#mount-project-id')
+
+    expect(remotePath.attributes('required')).toBeDefined()
+    expect(remotePath.attributes('aria-required')).toBe('true')
+    expect(projectId.attributes('required')).toBeDefined()
+    expect(projectId.attributes('aria-required')).toBe('true')
+  })
 })
