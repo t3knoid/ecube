@@ -20,7 +20,7 @@ from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
 from app.models.jobs import ExportFile, ExportJob, FileStatus, JobStatus
 from app.models.network import MountStatus, MountType, NetworkMount
-
+from app.repositories.audit_repository import AuditRepository
 
 from app.infrastructure.drive_eject import EjectResult
 
@@ -55,6 +55,34 @@ def _audit_by_action(db, action):
         .order_by(AuditLog.id.desc())
         .first()
     )
+
+
+def test_audit_repository_redacts_sensitive_error_details(db):
+    repo = AuditRepository(db)
+
+    entry = repo.add(
+        action="AUDIT_SANITIZE_CHECK",
+        details={
+            "remote_path": "10.0.0.5:/exports/case-alpha",
+            "filesystem_path": "/dev/sdz1",
+            "device_name": "sdz1",
+            "mount_label": "case-alpha",
+            "error": "mount failed for /dev/sdz1 on /mnt/ecube/42",
+            "nested": {
+                "path": "/run/media/secret",
+                "details": "permission denied for /nfs/case-alpha",
+            },
+        },
+    )
+
+    assert entry.details["remote_path"] == "[redacted]"
+    assert entry.details["filesystem_path"] == "[redacted]"
+    assert entry.details["device_name"] == "[redacted]"
+    assert entry.details["mount_label"] == "[redacted]"
+    assert "/dev/sdz1" not in str(entry.details)
+    assert "/mnt/ecube/42" not in str(entry.details)
+    assert "/run/media/secret" not in str(entry.details)
+    assert "/nfs/case-alpha" not in str(entry.details)
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +189,7 @@ class TestMountAuditLogging:
         entry = _audit_by_action(db, "MOUNT_ADDED")
         assert entry is not None
         assert entry.user == "manager-user"
-        assert entry.details["mount_label"] == "audit-data"
+        assert entry.details["mount_label"] == "[redacted]"
         assert "remote_path" not in entry.details
         assert entry.details["status"] in {"MOUNTED", "ERROR"}
 
@@ -185,7 +213,7 @@ class TestMountAuditLogging:
         assert entry is not None
         assert entry.user == "manager-user"
         assert entry.details["mount_id"] == mount_id
-        assert entry.details["mount_label"] == "remove"
+        assert entry.details["mount_label"] == "[redacted]"
         assert "local_mount_point" not in entry.details
 
     def test_validate_mount_logs_actor(self, manager_client, db):
@@ -208,7 +236,7 @@ class TestMountAuditLogging:
         assert entry is not None
         assert entry.user == "manager-user"
         assert entry.details["mount_id"] == mount_id
-        assert entry.details["mount_label"] == "validate"
+        assert entry.details["mount_label"] == "[redacted]"
         assert "local_mount_point" not in entry.details
         assert entry.details["status"] == "MOUNTED"
 
@@ -234,7 +262,7 @@ class TestMountAuditLogging:
 
         entry = _audit_by_action(db, "MOUNT_VALIDATED")
         assert entry is not None
-        assert entry.details["mount_label"] == "unmounted"
+        assert entry.details["mount_label"] == "[redacted]"
         assert "local_mount_point" not in entry.details
         assert entry.details["status"] == "UNMOUNTED"
 
