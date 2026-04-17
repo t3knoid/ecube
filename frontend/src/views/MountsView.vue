@@ -317,7 +317,7 @@ onBeforeUnmount(() => {
     <Pagination v-model:page="page" :page-size="pageSize" :total="filtered.length" />
 
     <teleport to="body">
-      <div v-if="showAddDialog" class="dialog-overlay" @click.self="closeAddDialog">
+      <div v-if="showAddDialog" class="dialog-overlay">
         <div ref="addDialogRef" class="dialog-panel" role="dialog" aria-modal="true" :aria-labelledby="addMountDialogTitleId">
           <h2 :id="addMountDialogTitleId">{{ t('mounts.add') }}</h2>
           <label for="mount-type">{{ t('common.labels.type') }}</label>

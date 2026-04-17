@@ -453,7 +453,7 @@ onBeforeUnmount(() => {
     />
 
     <teleport to="body">
-      <div v-if="showInitializeDialog" class="dialog-overlay" @click.self="closeInitializeDialog">
+      <div v-if="showInitializeDialog" class="dialog-overlay">
         <div
           ref="initializeDialogRef"
           class="dialog-panel"
