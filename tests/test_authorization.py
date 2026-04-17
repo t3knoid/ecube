@@ -139,18 +139,34 @@ class TestDriveAuthorization:
     # POST /drives/{id}/initialize — admin, manager only
     def test_initialize_drive_admin_allowed(self, db):
         from app.models.hardware import DriveState, UsbDrive
+        from app.models.network import MountStatus, MountType, NetworkMount
 
         drive = UsbDrive(device_identifier="AUTHZ-INIT-ADMIN", current_state=DriveState.AVAILABLE, filesystem_type="ext4")
-        db.add(drive)
+        mount = NetworkMount(
+            type=MountType.NFS,
+            remote_path="server:/authz-admin",
+            project_id="P-1",
+            local_mount_point="/nfs/authz-admin",
+            status=MountStatus.MOUNTED,
+        )
+        db.add_all([drive, mount])
         db.commit()
         c = _client_for_role(db, ["admin"])
         assert c.post(f"/drives/{drive.id}/initialize", json={"project_id": "P-1"}).status_code == 200
 
     def test_initialize_drive_manager_allowed(self, db):
         from app.models.hardware import DriveState, UsbDrive
+        from app.models.network import MountStatus, MountType, NetworkMount
 
         drive = UsbDrive(device_identifier="AUTHZ-INIT-MGR", current_state=DriveState.AVAILABLE, filesystem_type="ext4")
-        db.add(drive)
+        mount = NetworkMount(
+            type=MountType.NFS,
+            remote_path="server:/authz-manager",
+            project_id="P-1",
+            local_mount_point="/nfs/authz-manager",
+            status=MountStatus.MOUNTED,
+        )
+        db.add_all([drive, mount])
         db.commit()
         c = _client_for_role(db, ["manager"])
         assert c.post(f"/drives/{drive.id}/initialize", json={"project_id": "P-1"}).status_code == 200
@@ -220,7 +236,7 @@ class TestMountAuthorization:
             mock_run.return_value = MagicMock(returncode=0)
             r = c.post(
                 "/mounts",
-                json={"type": "NFS", "remote_path": "1.2.3.4:/data"},
+                json={"type": "NFS", "remote_path": "1.2.3.4:/data", "project_id": "PROJ-AUTH-1"},
             )
         assert r.status_code == 200
 
@@ -232,7 +248,7 @@ class TestMountAuthorization:
             mock_run.return_value = MagicMock(returncode=0)
             r = c.post(
                 "/mounts",
-                json={"type": "NFS", "remote_path": "1.2.3.4:/data2"},
+                json={"type": "NFS", "remote_path": "1.2.3.4:/data2", "project_id": "PROJ-AUTH-2"},
             )
         assert r.status_code == 200
 
@@ -241,7 +257,7 @@ class TestMountAuthorization:
         _assert_forbidden(
             c.post(
                 "/mounts",
-                json={"type": "NFS", "remote_path": "1.2.3.4:/data3"},
+                json={"type": "NFS", "remote_path": "1.2.3.4:/data3", "project_id": "PROJ-AUTH-3"},
             )
         )
 
@@ -250,7 +266,7 @@ class TestMountAuthorization:
         _assert_forbidden(
             c.post(
                 "/mounts",
-                json={"type": "NFS", "remote_path": "1.2.3.4:/data4"},
+                json={"type": "NFS", "remote_path": "1.2.3.4:/data4", "project_id": "PROJ-AUTH-4"},
             )
         )
 
@@ -287,6 +303,8 @@ class TestJobAuthorization:
             device_identifier=device_id,
             current_state=DriveState.AVAILABLE,
             current_project_id=project_id,
+            filesystem_type="ext4",
+            mount_path=f"/mnt/ecube/{device_id.lower()}",
         )
         db.add(drive)
         db.commit()
