@@ -61,6 +61,7 @@ function buildDrive(overrides = {}) {
 
 function mountView() {
   return mount(DriveDetailView, {
+    attachTo: document.body,
     global: {
       plugins: [i18n],
       stubs: {
@@ -169,5 +170,25 @@ describe('DriveDetailView mount workflow', () => {
     expect(wrapper.text()).toContain(i18n.global.t('drives.initializeNoProjects'))
     const submitButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.initialize') && node.attributes('disabled') !== undefined)
     expect(submitButton).toBeTruthy()
+  })
+
+  it('moves focus into the initialize dialog and closes it on Escape', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const initializeButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.initialize'))
+    expect(initializeButton).toBeTruthy()
+
+    await initializeButton.trigger('click')
+    await flushPromises()
+
+    const projectSelect = wrapper.find('#project-id')
+    expect(projectSelect.exists()).toBe(true)
+    expect(document.activeElement?.id).toBe('project-id')
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+
+    expect(wrapper.find('#project-id').exists()).toBe(false)
   })
 })
