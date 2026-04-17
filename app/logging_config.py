@@ -126,6 +126,9 @@ class JsonFormatter(logging.Formatter):
 
 _TEXT_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 
+# Sentinel used to distinguish "argument omitted" from an explicit None.
+_UNSET = object()
+
 
 class TextFormatter(logging.Formatter):
     """Human-readable log format with timestamp, level, module, and message."""
@@ -143,9 +146,9 @@ def configure_logging(
     *,
     level: Optional[str] = None,
     log_format: Optional[str] = None,
-    log_file: Optional[str] = None,
-    log_file_max_bytes: Optional[int] = None,
-    log_file_backup_count: Optional[int] = None,
+    log_file: Optional[str] | object = _UNSET,
+    log_file_max_bytes: Optional[int] | object = _UNSET,
+    log_file_backup_count: Optional[int] | object = _UNSET,
 ) -> None:
     """Initialise the root logger with the configured handlers/formatters.
 
@@ -154,10 +157,12 @@ def configure_logging(
     """
     effective_level = (level or settings.log_level).upper()
     effective_format = log_format or settings.log_format
-    effective_file = log_file if log_file is not None else settings.log_file
-    effective_max_bytes = log_file_max_bytes if log_file_max_bytes is not None else settings.log_file_max_bytes
+    effective_file = settings.log_file if log_file is _UNSET else log_file
+    effective_max_bytes = (
+        settings.log_file_max_bytes if log_file_max_bytes is _UNSET else log_file_max_bytes
+    )
     effective_backup_count = (
-        log_file_backup_count if log_file_backup_count is not None else settings.log_file_backup_count
+        settings.log_file_backup_count if log_file_backup_count is _UNSET else log_file_backup_count
     )
 
     formatter: logging.Formatter
@@ -189,16 +194,23 @@ def configure_logging(
 
     # File handler – optional, controlled by LOG_FILE.
     if effective_file:
-        log_dir = os.path.dirname(effective_file)
-        if log_dir:
-            os.makedirs(log_dir, exist_ok=True)
-        file_handler = logging.handlers.RotatingFileHandler(
-            effective_file,
-            maxBytes=effective_max_bytes,
-            backupCount=effective_backup_count,
-        )
-        file_handler.setFormatter(formatter)
-        root.addHandler(file_handler)
+        try:
+            log_dir = os.path.dirname(effective_file)
+            if log_dir:
+                os.makedirs(log_dir, exist_ok=True)
+            file_handler = logging.handlers.RotatingFileHandler(
+                effective_file,
+                maxBytes=effective_max_bytes,
+                backupCount=effective_backup_count,
+            )
+            file_handler.setFormatter(formatter)
+            root.addHandler(file_handler)
+        except OSError as exc:
+            logging.getLogger("app.logging_config").warning(
+                "File logging disabled; could not initialize log file %s: %s",
+                effective_file,
+                exc,
+            )
 
     # Normalize existing application loggers so runtime reconfiguration works
     # even if the host process or a prior logging config left them disabled,
