@@ -595,7 +595,7 @@ Every USB drive passes through four states:
 
 ```text
   ┌────────────────┐  discovery  ┌──────────────┐   initialize   ┌──────────┐
-  │ DISCONNECTED │ ──────────► │  AVAILABLE   │ ─────────────► │  IN_USE  │
+  │    EMPTY     │ ──────────► │  AVAILABLE   │ ─────────────► │  IN_USE  │
   └────────────────┘               └──────────────┘                └──────────┘
         ▲                           ╭─╮ ▲                            │
         │        drive removed      │ │ │       prepare-eject        │
@@ -610,33 +610,37 @@ Every USB drive passes through four states:
 
 | State | Meaning |
 |-------|----------|
-| `DISCONNECTED` | Drive known to the database but not physically present |
+| `EMPTY` | Drive known to the database but not physically present (disconnected) |
 | `AVAILABLE` | Drive is present and ready to be formatted (if needed) and assigned to a project |
 | `IN_USE` | Drive is bound to a project and actively receiving evidence |
 | `ARCHIVED` | Drive permanently retired after chain-of-custody handoff; no further operations permitted |
 
 Key behaviors:
 
-- **Discovery sync** detects newly inserted drives and transitions `DISCONNECTED → AVAILABLE` — but only if the drive's USB port is **enabled**. Drives on disabled ports remain in `DISCONNECTED` state until the port is enabled and a subsequent discovery sync runs. If a port is disabled while a drive is already `AVAILABLE`, the next sync demotes the drive to `DISCONNECTED`. Drives with no associated port (`port_id = NULL`) are treated as disabled and remain `DISCONNECTED`. Drives in `IN_USE` state are never affected by port enablement — project isolation takes priority.
+- **Discovery sync** detects newly inserted drives and transitions `EMPTY → AVAILABLE` — but only if the drive's USB port is **enabled**. Drives on disabled ports remain in `EMPTY` state until the port is enabled and a subsequent discovery sync runs. If a port is disabled while a drive is already `AVAILABLE`, the next sync demotes the drive to `EMPTY`. Drives with no associated port (`port_id = NULL`) are treated as disabled and remain `EMPTY`. Drives in `IN_USE` state are never affected by port enablement — project isolation takes priority.
 - **Format** writes a filesystem to the drive (stays `AVAILABLE`) and **clears any existing project binding** (`current_project_id → null`). Required before a drive can be assigned to a new project. A drive with no recognized filesystem cannot be initialized.
 - **Initialize** binds a drive to a project (`AVAILABLE → IN_USE`). See the Initialize Drive section below for state-aware guard rules.
 - **Eject** flushes writes, unmounts, and returns the drive to `AVAILABLE` (`IN_USE → AVAILABLE`). The project binding and filesystem type are **preserved** so the same drive can be re-initialized for the same project without reformatting.
-- **Physical removal** of an `AVAILABLE` drive transitions it back to `DISCONNECTED` on the next discovery sync. An `IN_USE` drive remains `IN_USE` even when physically absent — the project binding is intentionally preserved (project isolation must not be broken by hardware events). The drive resumes normal operation without operator intervention when re-inserted.
+- **Physical removal** of an `AVAILABLE` drive transitions it back to `EMPTY` on the next discovery sync. An `IN_USE` drive remains `IN_USE` even when physically absent — the project binding is intentionally preserved (project isolation must not be broken by hardware events). The drive resumes normal operation without operator intervention when re-inserted.
 - **Chain-of-custody handoff** permanently archives a drive (`IN_USE / AVAILABLE → ARCHIVED`). No operations are possible on archived drives.
 
 ### List Drives
 
 Returns all known USB drives with their current state, device path, serial
-number, and project assignment. By default, disconnected (`EMPTY`) drives are excluded. Add `include_disconnected=true` to include them.
+number, and project assignment. By default, disconnected (`EMPTY`) drives are excluded. Add `include_disconnected=true` to include them. If one or more `state` filters are provided, those explicit states are used.
 
 ```bash
 # Requires any authenticated role
 curl -k -H "Authorization: Bearer $JWT_TOKEN" \
   https://localhost:8443/drives
 
-# Include disconnected drives
+# Include disconnected (EMPTY) drives
 curl -k -H "Authorization: Bearer $JWT_TOKEN" \
   'https://localhost:8443/drives?include_disconnected=true'
+
+# Filter by explicit state server-side (repeat state to request multiple)
+curl -k -H "Authorization: Bearer $JWT_TOKEN" \
+  'https://localhost:8443/drives?state=IN_USE&state=AVAILABLE'
 ```
 
 Example response:
@@ -666,7 +670,7 @@ Example response:
 ]
 ```
 
-To filter by state, use `jq` client-side:
+You can still do additional client-side filtering with `jq`:
 
 ```bash
 # List only drives that are IN_USE
@@ -707,7 +711,7 @@ curl -k -X POST https://localhost:8443/drives/refresh \
 ### Port Management
 
 USB ports default to **disabled** when first discovered. Drives on disabled
-ports remain in `DISCONNECTED` state and cannot transition to `AVAILABLE` until the
+ports remain in `EMPTY` state and cannot transition to `AVAILABLE` until the
 port is explicitly enabled by an admin or manager. This allows operators to
 control which physical ports are active for evidence export.
 
@@ -895,7 +899,7 @@ and `current_project_id` set to the provided project ID.
 >
 > | Condition | Result |
 > |-----------|--------|
-> | Drive is `DISCONNECTED` (not present or port disabled) | 409 — not accessible; insert drive or enable port first |
+> | Drive is `EMPTY` (not present or port disabled) | 409 — not accessible; insert drive or enable port first |
 > | Drive is `ARCHIVED` | 409 — permanently retired, cannot re-initialize |
 > | Drive is `IN_USE` and `project_id` differs from binding | 403 — project isolation violation |
 > | Drive is `AVAILABLE` and `project_id` differs from binding | 409 — format required before reassigning to a new project |
@@ -1082,7 +1086,7 @@ drive using strict disambiguation rules:
    concurrent operations.
 
 When `drive_id` is provided explicitly, the system validates project isolation
-and requires the drive to be in `AVAILABLE` state (drives in `DISCONNECTED`, `IN_USE`,
+and requires the drive to be in `AVAILABLE` state (drives in `EMPTY`, `IN_USE`,
 or any other state are rejected with HTTP 409). If the drive is currently
 unbound (`current_project_id` is null), the system binds it to the requested
 project before committing, consistent with auto-assignment behaviour.
