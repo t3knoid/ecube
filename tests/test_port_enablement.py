@@ -148,6 +148,21 @@ def test_toggle_port_enable_triggers_drive_reconciliation(admin_client, db):
     assert drive.current_state == DriveState.IN_USE
 
 
+def test_toggle_port_enable_surfaces_reconciliation_failure(admin_client, db):
+    port = _seed_port(db)
+
+    with patch("app.routers.admin.run_discovery_sync", side_effect=RuntimeError("discovery unavailable")):
+        response = admin_client.patch(f"/admin/ports/{port.id}", json={"enabled": True})
+
+    assert response.status_code == 503
+    assert response.json()["message"] == (
+        "Port state updated, but drive discovery reconciliation failed; retry refresh or rescan"
+    )
+
+    db.refresh(port)
+    assert port.enabled is True
+
+
 # ---------------------------------------------------------------------------
 # Audit logging
 # ---------------------------------------------------------------------------
