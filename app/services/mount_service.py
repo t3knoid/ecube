@@ -410,6 +410,12 @@ def _cleanup_generated_mount_directory(local_mount_point: str) -> None:
         return
 
 
+def _redacted_mount_label(local_mount_point: str) -> str:
+    """Return a safe label for audits without persisting the full mount path."""
+    label = os.path.basename(os.path.normpath(local_mount_point or ""))
+    return label or "mount"
+
+
 def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
               provider: Optional["MountProvider"] = None,
               client_ip: Optional[str] = None) -> NetworkMount:
@@ -611,7 +617,7 @@ def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None,
         audit_repo.add(
             action="MOUNT_REMOVED",
             user=actor,
-            details={"mount_id": mount_id, "local_mount_point": mount.local_mount_point},
+            details={"mount_id": mount_id, "mount_label": _redacted_mount_label(str(mount.local_mount_point))},
             client_ip=client_ip,
         )
     except Exception:
@@ -672,7 +678,7 @@ def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None,
             user=actor,
             details={
                 "mount_id": mount_id,
-                "local_mount_point": mount.local_mount_point,
+                "mount_label": _redacted_mount_label(str(mount.local_mount_point)),
                 "status": mount.status.value,
             },
             client_ip=client_ip,
