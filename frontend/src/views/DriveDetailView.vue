@@ -430,7 +430,7 @@ onBeforeUnmount(() => {
       </div>
     </ConfirmDialog>
 
-    <!-- Browse section — shown when drive has an active mount_path and is not DISCONNECTED -->
+    <!-- Browse section — shown when the drive currently exposes a mount path -->
     <section v-if="drive && drive.mount_path" class="browse-section">
       <button
         class="browse-toggle btn"
