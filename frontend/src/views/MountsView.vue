@@ -274,7 +274,7 @@ onBeforeUnmount(() => {
     </header>
 
     <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
-    <p v-if="error" class="error-banner">{{ error }}</p>
+    <p v-if="error" class="error-banner" role="alert" aria-live="assertive">{{ error }}</p>
 
     <input v-model="search" type="text" :placeholder="t('mounts.searchPlaceholder')" :aria-label="t('mounts.searchPlaceholder')" />
 

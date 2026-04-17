@@ -374,10 +374,10 @@ onBeforeUnmount(() => {
     </header>
 
     <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
-    <p v-if="error" class="error-banner">{{ error }}</p>
-    <p v-if="infoMessage" class="ok-banner">{{ infoMessage }}</p>
-    <p v-if="warnMessage" class="warn-banner">{{ warnMessage }}</p>
-    <div v-if="showCocPrompt" class="coc-banner">
+    <p v-if="error" class="error-banner" role="alert" aria-live="assertive">{{ error }}</p>
+    <p v-if="infoMessage" class="ok-banner" role="status" aria-live="polite">{{ infoMessage }}</p>
+    <p v-if="warnMessage" class="warn-banner" role="status" aria-live="polite">{{ warnMessage }}</p>
+    <div v-if="showCocPrompt" class="coc-banner" role="status" aria-live="polite">
       <p>{{ t('drives.cocPrompt') }}</p>
       <div class="actions">
         <button class="btn btn-primary" @click="openChainOfCustody">{{ t('drives.openCocReport') }}</button>
@@ -476,8 +476,8 @@ onBeforeUnmount(() => {
             <option value="" disabled>{{ t('audit.selectProject') }}</option>
             <option v-for="option in mountedProjectOptions" :key="option" :value="option">{{ option }}</option>
           </select>
-          <p :id="initializeDialogStatusId" v-if="!loadingProjects && !hasMountedProjectOptions" class="muted">{{ t('drives.initializeNoProjects') }}</p>
-          <p :id="initializeDialogStatusId" v-else-if="loadingProjects" class="muted">{{ t('common.labels.loading') }}</p>
+          <p :id="initializeDialogStatusId" v-if="!loadingProjects && !hasMountedProjectOptions" class="muted" role="status" aria-live="polite">{{ t('drives.initializeNoProjects') }}</p>
+          <p :id="initializeDialogStatusId" v-else-if="loadingProjects" class="muted" role="status" aria-live="polite">{{ t('common.labels.loading') }}</p>
           <div class="dialog-actions">
             <button class="btn" :disabled="saving" @click="closeInitializeDialog">{{ t('common.actions.cancel') }}</button>
             <button class="btn btn-primary" :disabled="saving || loadingProjects || !projectId.trim()" @click="runInitialize">{{ t('drives.initialize') }}</button>
