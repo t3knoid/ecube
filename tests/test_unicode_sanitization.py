@@ -194,6 +194,7 @@ class TestMountsUnicodeSanitization:
             json={
                 "type": "NFS",
                 "remote_path": "192.168.1.1:/export\x00s",
+                "project_id": "PROJ-UNICODE-1",
             },
         )
         assert response.status_code == 422
@@ -203,6 +204,7 @@ class TestMountsUnicodeSanitization:
         payload = json.dumps({
             "type": "NFS",
             "remote_path": "server\ud800:/share",
+            "project_id": "PROJ-UNICODE-2",
         }).encode("utf-8", "surrogatepass")
         response = manager_client.post(
             "/mounts",
@@ -218,6 +220,7 @@ class TestMountsUnicodeSanitization:
             json={
                 "type": "NFS",
                 "remote_path": "\x00\x00",
+                "project_id": "PROJ-UNICODE-3",
             },
         )
         assert response.status_code == 422
@@ -236,6 +239,8 @@ class TestJobsUnicodeSanitization:
             device_identifier=device_id,
             current_state=DriveState.AVAILABLE,
             current_project_id=project_id,
+            filesystem_type="ext4",
+            mount_path=f"/mnt/ecube/{device_id.lower()}",
         )
         db.add(drive)
         db.commit()

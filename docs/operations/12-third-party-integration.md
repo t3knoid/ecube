@@ -120,10 +120,38 @@ To list only drives bound to a specific project:
 GET /drives?project_id=CASE-2026-001
 ```
 
-### Step 2 — Initialize the Drive for the Project
+### Step 2 — Mount the Network Share
 
-> **Note:** This step is only needed when you explicitly selected a drive in
-> Step 1. Auto-assigned drives are automatically bound to the project.
+> **Note:** Before a drive can be initialized for a project, ECUBE must already have at least one network share assigned to that same project and in the `MOUNTED` state.
+
+```
+POST /mounts
+Content-Type: application/json
+
+{
+    "type": "NFS",
+    "remote_path": "fileserver:/exports/case-2026-001",
+    "project_id": "CASE-2026-001"
+}
+```
+
+For SMB shares, include credentials:
+
+```json
+{
+    "type": "SMB",
+    "remote_path": "//fileserver/evidence$/case-2026-001",
+    "project_id": "CASE-2026-001",
+    "username": "svc-reader",
+    "password": "share-password"
+}
+```
+
+Returns the mount object with its `id` and `status` (`MOUNTED` or `ERROR`). Verify `status` is `MOUNTED` before proceeding.
+
+### Step 3 — Initialize the Drive for the Project
+
+> **Note:** This step is only needed when you explicitly selected a drive in Step 1. Auto-assigned drives are automatically bound to the project.
 
 ```
 POST /drives/{drive_id}/initialize
@@ -134,32 +162,9 @@ Content-Type: application/json
 }
 ```
 
+ECUBE trims surrounding whitespace and stores project IDs in uppercase for consistent comparison. If no eligible mounted share exists, or the project source is being updated concurrently, the request returns `409 Conflict` and should be retried after the source state stabilizes.
+
 This binds the drive to the project. Once bound, it only accepts data for that project (project isolation). Returns the updated drive object.
-
-### Step 3 — Mount the Network Share
-
-```
-POST /mounts
-Content-Type: application/json
-
-{
-    "type": "NFS",
-  "remote_path": "fileserver:/exports/case-2026-001"
-}
-```
-
-For SMB shares, include credentials:
-
-```json
-{
-    "type": "SMB",
-    "remote_path": "//fileserver/evidence$/case-2026-001",
-    "username": "svc-reader",
-    "password": "share-password"
-}
-```
-
-Returns the mount object with its `id` and `status` (`MOUNTED` or `ERROR`). Verify `status` is `MOUNTED` before proceeding.
 
 ### Step 4 — Create the Copy Job
 

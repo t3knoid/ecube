@@ -29,13 +29,61 @@ def test_add_mount(manager_client, db):
             json={
                 "type": "NFS",
                 "remote_path": "192.168.1.1:/exports/evidence",
+                "project_id": "PROJ-001",
             },
         )
     assert response.status_code == 200
     data = response.json()
     assert data["type"] == "NFS"
+    assert data["project_id"] == "PROJ-001"
     assert data["local_mount_point"] == "/nfs/evidence"
     assert data["status"] == "MOUNTED"
+
+
+def test_add_mount_requires_project_id(manager_client, db):
+    response = manager_client.post(
+        "/mounts",
+        json={
+            "type": "NFS",
+            "remote_path": "192.168.1.1:/exports/evidence",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_add_mount_normalizes_project_id(manager_client, db):
+    with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
+         patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        response = manager_client.post(
+            "/mounts",
+            json={
+                "type": "NFS",
+                "remote_path": "192.168.1.1:/exports/normalized",
+                "project_id": "  proj-001  ",
+            },
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["project_id"] == "PROJ-001"
+
+
+def test_network_mount_model_normalizes_project_id(db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="192.168.1.9:/exports/direct-model",
+        project_id="  proj-model  ",
+        local_mount_point="/nfs/direct-model",
+        status=MountStatus.MOUNTED,
+    )
+    db.add(mount)
+    db.commit()
+    db.refresh(mount)
+
+    assert mount.project_id == "PROJ-MODEL"
 
 
 def test_add_mount_rejects_client_local_mount_point(manager_client, db):
@@ -61,6 +109,7 @@ def test_add_mount_logs_attempt_and_success(manager_client, db, caplog):
                 json={
                     "type": "NFS",
                     "remote_path": "192.168.1.2:/exports/audit",
+                    "project_id": "PROJ-AUDIT",
                 },
             )
 
@@ -80,11 +129,11 @@ def test_add_mount_uses_unique_generated_local_mount_point(manager_client, db):
         mock_run.return_value = MagicMock(returncode=0)
         first = manager_client.post(
             "/mounts",
-            json={"type": "NFS", "remote_path": "192.168.1.1:/exports/evidence"},
+            json={"type": "NFS", "remote_path": "192.168.1.1:/exports/evidence", "project_id": "PROJ-001"},
         )
         second = manager_client.post(
             "/mounts",
-            json={"type": "NFS", "remote_path": "192.168.1.2:/exports/evidence"},
+            json={"type": "NFS", "remote_path": "192.168.1.2:/exports/evidence", "project_id": "PROJ-002"},
         )
 
     assert first.status_code == 200
@@ -109,6 +158,7 @@ def test_add_mount_failure(manager_client, db):
             json={
                 "type": "NFS",
                 "remote_path": "192.168.1.1:/exports/evidence",
+                "project_id": "PROJ-FAIL",
             },
         )
     assert response.status_code == 200
@@ -119,6 +169,8 @@ def test_add_mount_failure(manager_client, db):
     assert audit is not None
     assert audit.details["error_code"] == "MOUNT_FAILED"
     assert audit.details["message"] == "Provider mount operation failed"
+    assert "remote_path" not in audit.details
+    assert "/exports/evidence" not in str(audit.details)
     assert "/nfs/evidence" not in str(audit.details)
 
 
@@ -134,6 +186,7 @@ def test_add_mount_fails_when_mountpoint_owned_by_root(manager_client, db):
             json={
                 "type": "NFS",
                 "remote_path": "192.168.1.1:/exports/evidence",
+                "project_id": "PROJ-ROOT",
             },
         )
 
@@ -154,6 +207,7 @@ def test_add_mount_logs_failure(manager_client, db, caplog):
                 json={
                     "type": "NFS",
                     "remote_path": "192.168.1.3:/exports/audit",
+                    "project_id": "PROJ-AUDIT-FAIL",
                 },
             )
 
