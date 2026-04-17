@@ -20,6 +20,7 @@ class NetworkMount(Base):
     id = Column(Integer, primary_key=True)
     type = Column(Enum(MountType, native_enum=False), nullable=False)
     remote_path = Column(String, nullable=False)
+    project_id = Column(String, nullable=False, default="UNASSIGNED")
     local_mount_point = Column(String, nullable=False, unique=True)
     status = Column(Enum(MountStatus, native_enum=False), default=MountStatus.UNMOUNTED)
     last_checked_at = Column(DateTime(timezone=True), server_default=func.now())
