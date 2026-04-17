@@ -459,7 +459,7 @@ The default landing page after login. Provides an at-a-glance overview of system
 │  ─────────── │                                                               │
 │  ◎ Users     │  ┌─ Drives ───────────────┐  ┌─ Mounts ────────────────────┐  │
 │  ◎ System    │  │                        │  │                             │  │
-│              │  │  EMPTY       0          │  │  MOUNTED     3             │  │
+│              │  │  DISCONNECTED 0          │  │  MOUNTED     3             │  │
 │              │  │  AVAILABLE   3          │  │  UNMOUNTED   0             │  │
 │              │  │  IN_USE      2          │  │  ERROR       1             │  │
 │              │  │              ──         │  │              ──            │  │
@@ -508,7 +508,7 @@ The default landing page after login. Provides an at-a-glance overview of system
 │              │  │ 2  │ A1B2C3D4E5F60001    │🟡AVAIL │ exfat │ —             ││
 │              │  │ 3  │ 7F8E9D0A1B2C3456    │🟡AVAIL │ ext4  │ —             ││
 │              │  │ 4  │ B2C3D4E5F6070002    │🟢IN_USE│ ext4  │ PROJ-001      ││
-│              │  │ 5  │ C3D4E5F607080003    │⚪EMPTY │ —     │ —             ││
+│              │  │ 5  │ C3D4E5F607080003    │⚪DISCON│ —     │ —             ││
 │              │  └────┴─────────────────────┴────────┴───────┴───────────────┘│
 │              │                                                               │
 │              │  Click a row to view drive details and available actions.      │
@@ -516,7 +516,7 @@ The default landing page after login. Provides an at-a-glance overview of system
 │              │  [ Manage Ports ]  [ Manage Hubs ]  (admin/manager — 4c/4d)   │
 │              │                                                               │
 │              │  ┌─ Lifecycle Reference ─────────────────────────────────────┐ │
-│              │  │   EMPTY ──▶ AVAILABLE ──▶ IN_USE                         │ │
+│              │  │   DISCONNECTED ──▶ AVAILABLE ──▶ IN_USE                   │ │
 │              │  │     ▲      (format)    (initialize)  │                    │ │
 │              │  │     │         ▲                       │ (eject)           │ │
 │              │  │     │         └───────────────────────┘                   │ │
@@ -525,7 +525,7 @@ The default landing page after login. Provides an at-a-glance overview of system
 └──────────────┴───────────────────────────────────────────────────────────────┘
 ```
 
-**State color key:** 🟢 IN_USE (green) · 🟡 AVAILABLE (yellow) · ⚪ EMPTY (gray)
+**State color key:** 🟢 IN_USE (green) · 🟡 AVAILABLE (yellow) · ⚪ DISCONNECTED (gray)
 
 ### 4b — Drive Detail Panel (UC-4.7, UC-4.4, UC-4.5, UC-4.6)
 
@@ -578,7 +578,7 @@ Shown when a drive row is selected (slide-out panel or detail page).
 
 | Drive State | Format | Initialize | Eject |
 |-------------|--------|------------|-------|
-| EMPTY       | disabled | disabled | disabled |
+| DISCONNECTED | disabled | disabled | disabled |
 | AVAILABLE   | enabled | enabled (if FS present) | disabled |
 | IN_USE      | disabled | disabled | enabled |
 
@@ -606,8 +606,8 @@ Accessible from the Drive Management screen via a "Manage Ports" button. Visible
 │              │  └────┴────────┴──────────────────────────┴──────┴──────┴───────┴─────────────────┴────────┘│
 │              │                                                                          │
 │              │  ⚠ Changes take effect on the next discovery refresh.                     │
-│              │    Drives on disabled ports remain in EMPTY state.                        │
-│              │    AVAILABLE drives are demoted to EMPTY when port disabled.              │
+│              │    Drives on disabled ports remain in DISCONNECTED state.                  │
+│              │    AVAILABLE drives are demoted to DISCONNECTED when port disabled.        │
 │              │    Drives already IN_USE are not affected.                                │
 │              │                                                                          │
 │              │  [ Refresh Drives ] — run discovery after enabling ports                  │

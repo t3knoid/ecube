@@ -11,20 +11,20 @@
 
 - Implement a finite-state machine for drive states and legal transitions.
 - Gate all transitions through a single service module to ensure consistency.
-- The recommended persisted drive states are `EMPTY`, `AVAILABLE`, and `IN_USE`.
+- The recommended persisted drive states are `DISCONNECTED`, `AVAILABLE`, and `IN_USE`.
 
 ### 4.1.0 Recommended Drive State Semantics
 
-- `EMPTY` — drive record exists but hardware is not presently available for use.
+- `DISCONNECTED` — drive record exists but hardware is not presently available for use.
 - `AVAILABLE` — drive is present, writable, and eligible for initialization or job assignment.
 - `IN_USE` — drive is actively assigned to a project/job workflow and may receive data writes.
 
 Recommended legal transitions:
 
-- `EMPTY → AVAILABLE` on discovery of a usable drive.
+- `DISCONNECTED → AVAILABLE` on discovery of a usable drive.
 - `AVAILABLE → IN_USE` on initialize or job assignment.
 - `IN_USE → AVAILABLE` on prepare-eject.
-- `AVAILABLE → EMPTY` on removal or disabled-port reconciliation.
+- `AVAILABLE → DISCONNECTED` on removal or disabled-port reconciliation.
 - `AVAILABLE → ARCHIVED` on custody handoff confirmation (via `POST /audit/chain-of-custody/handoff`).
 
 Note: handoff confirmation accepts drives in any non-archived state so that drives that were not formally ejected before handoff can still be archived. The expected operational flow is `IN_USE → AVAILABLE` (prepare-eject) followed by `AVAILABLE → ARCHIVED` (handoff). `ARCHIVED` is a terminal state; no further transitions are permitted.
@@ -310,12 +310,12 @@ The callback body is a JSON object containing:
 - Hub and port records are upserted using stable hardware identity keys.
 - **Hardware enrichment:** Discovery should capture vendor, product, and negotiated-speed metadata when available, without erasing previously known values with empty readings.
 - **Label preservation:** Admin-assigned hub and port labels are never overwritten by discovery.
-- Drive state transitions follow FSM rules: `EMPTY → AVAILABLE` on reconnection, `AVAILABLE → EMPTY` on removal (unless `IN_USE` — project isolation takes priority).
+- Drive state transitions follow FSM rules: `DISCONNECTED → AVAILABLE` on reconnection, `AVAILABLE → DISCONNECTED` on removal (unless `IN_USE` — project isolation takes priority).
 - **Port enablement filtering:** Each USB port has an `enabled` flag (default `false`). Discovery uses this flag to gate drive availability:
-  - A newly discovered drive on a **disabled** port is inserted in `EMPTY` state (not `AVAILABLE`).
-  - A reconnecting drive (previously `EMPTY`) on a **disabled** port remains `EMPTY`.
-  - An `AVAILABLE` drive whose port is subsequently **disabled** is demoted to `EMPTY` on the next discovery sync.
-  - Drives with no associated port (`port_id = NULL`) are treated as **disabled** — they remain in `EMPTY` state.
+  - A newly discovered drive on a **disabled** port is inserted in `DISCONNECTED` state (not `AVAILABLE`).
+  - A reconnecting drive (previously `DISCONNECTED`) on a **disabled** port remains `DISCONNECTED`.
+  - An `AVAILABLE` drive whose port is subsequently **disabled** is demoted to `DISCONNECTED` on the next discovery sync.
+  - Drives with no associated port (`port_id = NULL`) are treated as **disabled** — they remain in `DISCONNECTED` state.
   - Drives already in `IN_USE` state are **never** changed by the enablement filter — project isolation takes priority.
   - Port enablement changes take effect on the next discovery sync.
 - Refresh operation is fully idempotent: running multiple times without hardware changes produces no mutations.
@@ -360,8 +360,8 @@ Reconciliation runs during application startup, before the service begins normal
 ### 4.11.3 Drive Reconciliation
 
 - Delegates to the normal discovery refresh path (see § 4.10) with `actor="system"`.
-- This re-reads the USB topology and applies the standard drive FSM transitions (EMPTY ↔ AVAILABLE, IN_USE preserved).
-- Drives that are no longer physically present and were `AVAILABLE` are transitioned to `EMPTY`.
+- This re-reads the USB topology and applies the standard drive FSM transitions (DISCONNECTED ↔ AVAILABLE, IN_USE preserved).
+- Drives that are no longer physically present and were `AVAILABLE` are transitioned to `DISCONNECTED`.
 
 ### Failure Isolation
 

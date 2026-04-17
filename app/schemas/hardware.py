@@ -46,7 +46,7 @@ class UsbDriveSchema(BaseModel):
     capacity_bytes: Optional[int] = Field(default=None, description="Total storage capacity in bytes")
     encryption_status: Optional[str] = Field(default=None, description="Encryption status (e.g., 'encrypted', 'none')")
     filesystem_type: Optional[str] = Field(default=None, description="Detected filesystem label (e.g. ext4, exfat, unformatted, unknown, or null if not yet detected)")
-    current_state: DriveState = Field(..., description="Current drive state (EMPTY, AVAILABLE, IN_USE)")
+    current_state: DriveState = Field(..., description="Current drive state (DISCONNECTED, AVAILABLE, IN_USE)")
     current_project_id: Optional[str] = Field(default=None, description="Bound project ID if IN_USE, enforces isolation")
     mount_path: Optional[str] = Field(default=None, description="Active mount path for this drive (e.g. /mnt/ecube/7); null when not mounted")
 
