@@ -129,7 +129,7 @@ class TestDriveAuditLogging:
         assert entry.details["drive_id"] == drive.id
         assert entry.details["flush_ok"] is True
         assert entry.details["unmount_ok"] is True
-        assert entry.details["filesystem_path"] is None
+        assert "filesystem_path" not in entry.details
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +178,8 @@ class TestMountAuditLogging:
         assert entry is not None
         assert entry.user == "manager-user"
         assert entry.details["mount_id"] == mount_id
+        assert entry.details["mount_label"] == "remove"
+        assert "local_mount_point" not in entry.details
 
     def test_validate_mount_logs_actor(self, manager_client, db):
         mount = NetworkMount(
@@ -199,6 +201,8 @@ class TestMountAuditLogging:
         assert entry is not None
         assert entry.user == "manager-user"
         assert entry.details["mount_id"] == mount_id
+        assert entry.details["mount_label"] == "validate"
+        assert "local_mount_point" not in entry.details
         assert entry.details["status"] == "MOUNTED"
 
     def test_validate_mount_not_found(self, manager_client, db):
@@ -223,6 +227,8 @@ class TestMountAuditLogging:
 
         entry = _audit_by_action(db, "MOUNT_VALIDATED")
         assert entry is not None
+        assert entry.details["mount_label"] == "unmounted"
+        assert "local_mount_point" not in entry.details
         assert entry.details["status"] == "UNMOUNTED"
 
 
@@ -237,6 +243,8 @@ class TestJobAuditLogging:
             device_identifier=device_id,
             current_state=DriveState.AVAILABLE,
             current_project_id=project_id,
+            filesystem_type="ext4",
+            mount_path=f"/mnt/ecube/{device_id.lower()}",
         )
         db.add(drive)
         db.commit()
