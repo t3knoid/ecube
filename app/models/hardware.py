@@ -6,7 +6,7 @@ import enum
 
 
 class DriveState(str, enum.Enum):
-    EMPTY = "EMPTY"
+    DISCONNECTED = "DISCONNECTED"
     AVAILABLE = "AVAILABLE"
     IN_USE = "IN_USE"
     ARCHIVED = "ARCHIVED"

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getDrives, refreshDrives } from '@/api/drives.js'
@@ -18,7 +18,7 @@ const loading = ref(false)
 const refreshing = ref(false)
 const error = ref('')
 const search = ref('')
-const stateFilter = ref('ALL')
+const stateFilter = ref('AVAILABLE')
 const sortKey = ref('id')
 const sortDir = ref('asc')
 const page = ref(1)
@@ -113,7 +113,11 @@ async function loadDrives() {
   loading.value = true
   error.value = ''
   try {
-    drives.value = await getDrives()
+    const params = {}
+    if (stateFilter.value === 'ALL' || stateFilter.value === 'DISCONNECTED') {
+      params.include_disconnected = true
+    }
+    drives.value = await getDrives(params)
   } catch {
     error.value = t('common.errors.networkError')
   } finally {
@@ -126,13 +130,36 @@ async function rescan() {
   error.value = ''
   try {
     await refreshDrives()
-    await loadDrives()
+    const previousState = stateFilter.value
+    const previousIncludesDisconnected = previousState === 'ALL' || previousState === 'DISCONNECTED'
+
+    // Rescan should always switch the UI to All States.
+    if (previousState !== 'ALL') {
+      stateFilter.value = 'ALL'
+    }
+
+    // The state watcher only reloads when disconnected-inclusion mode changes.
+    // When staying on ALL, trigger the reload here.
+    if (previousIncludesDisconnected) {
+      await loadDrives()
+    }
   } catch {
     error.value = t('common.errors.networkError')
   } finally {
     refreshing.value = false
   }
 }
+
+watch(stateFilter, (newValue, oldValue) => {
+  page.value = 1
+
+  const nextIncludesDisconnected = newValue === 'ALL' || newValue === 'DISCONNECTED'
+  const previousIncludesDisconnected = oldValue === 'ALL' || oldValue === 'DISCONNECTED'
+
+  if (nextIncludesDisconnected !== previousIncludesDisconnected) {
+    loadDrives()
+  }
+})
 
 function openDrive(drive) {
   router.push({ name: 'drive-detail', params: { id: drive.id } })
@@ -169,7 +196,7 @@ onMounted(loadDrives)
       <input v-model="search" type="text" :placeholder="t('drives.searchPlaceholder')" :aria-label="t('drives.searchPlaceholder')" />
       <select v-model="stateFilter" :aria-label="t('drives.allStates')">
         <option value="ALL">{{ t('drives.allStates') }}</option>
-        <option value="EMPTY">{{ t('drives.states.empty') }}</option>
+        <option value="DISCONNECTED">{{ t('drives.states.disconnected') }}</option>
         <option value="AVAILABLE">{{ t('drives.states.available') }}</option>
         <option value="IN_USE">{{ t('drives.states.inUse') }}</option>
         <option value="ARCHIVED">{{ t('drives.states.archived') }}</option>
@@ -196,7 +223,7 @@ onMounted(loadDrives)
         <div class="row-actions">
           <button class="btn" @click="openDrive(row)">{{ t('drives.details') }}</button>
           <button
-            v-if="row.mount_path && row.current_state !== 'EMPTY'"
+            v-if="row.mount_path"
             class="btn"
             :aria-expanded="browsingDriveId === row.id"
             :aria-label="t('drives.browse') + ' ' + row.device_identifier"

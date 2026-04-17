@@ -18,7 +18,7 @@ const loading = ref(true)
 const error = ref('')
 
 const driveCounts = computed(() => {
-  const counts = { EMPTY: 0, AVAILABLE: 0, IN_USE: 0 }
+  const counts = { DISCONNECTED: 0, AVAILABLE: 0, IN_USE: 0 }
   for (const drive of drives.value) {
     const key = String(drive.current_state || '').toUpperCase()
     if (counts[key] !== undefined) counts[key] += 1
@@ -39,7 +39,7 @@ const healthColumns = computed(() => [
 
 async function refreshSnapshot() {
   const warnings = []
-  const results = await Promise.allSettled([getDrives(), listJobs({ limit: 200 })])
+  const results = await Promise.allSettled([getDrives({ include_disconnected: true }), listJobs({ limit: 200 })])
 
   if (results[0].status === 'fulfilled') {
     drives.value = Array.isArray(results[0].value) ? results[0].value : []
@@ -110,7 +110,7 @@ onUnmounted(() => {
 
       <article class="summary-card">
         <h2>{{ t('dashboard.driveSummary') }}</h2>
-        <div class="summary-row"><span>{{ t('drives.states.empty') }}</span><strong>{{ driveCounts.EMPTY }}</strong></div>
+        <div class="summary-row"><span>{{ t('drives.states.disconnected') }}</span><strong>{{ driveCounts.DISCONNECTED }}</strong></div>
         <div class="summary-row"><span>{{ t('drives.states.available') }}</span><strong>{{ driveCounts.AVAILABLE }}</strong></div>
         <div class="summary-row"><span>{{ t('drives.states.inUse') }}</span><strong>{{ driveCounts.IN_USE }}</strong></div>
       </article>

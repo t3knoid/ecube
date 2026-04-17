@@ -100,7 +100,7 @@ Sampling behavior:
 | `ecube_usb_hubs_total` | Gauge | hubs | none | From discovery snapshot |
 | `ecube_usb_ports_total` | Gauge | ports | none | From discovery snapshot |
 | `ecube_usb_drives_present` | Gauge | drives | none | Physically present drives |
-| `ecube_usb_drives_state` | Gauge | drives | `state` | `state`: `empty`, `available`, `in_use` |
+| `ecube_usb_drives_state` | Gauge | drives | `state` | `state`: `disconnected`, `available`, `in_use` |
 | `ecube_port_enabled_total` | Gauge | ports | none | Administratively enabled ports |
 | `ecube_network_mounts_state` | Gauge | mounts | `state`, `mount_type` | `state`: `mounted`, `unmounted`, `error`; `mount_type`: `nfs`, `smb` |
 | `ecube_drive_format_total` | Counter | operations | `filesystem_type`, `outcome` | `outcome`: `success`, `error` |

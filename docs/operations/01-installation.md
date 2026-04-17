@@ -109,6 +109,16 @@ The ECUBE service depends on several non-standard OS packages for USB formatting
 
 On minimal Ubuntu installs, also install `linux-modules-extra-$(uname -r)` so the native exFAT kernel module is available at runtime. On Ubuntu 20.04 hosts using the 5.4 kernel series, install `exfat-fuse` instead of the native module package.
 
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+  python3.11 python3.11-venv \
+  postgresql postgresql-contrib \
+  curl openssl \
+  exfatprogs nfs-common cifs-utils usbutils util-linux \
+  "linux-modules-extra-$(uname -r)"
+```
+
 **Required commands (must be present before running `install.sh`):**
 
 - `curl`
