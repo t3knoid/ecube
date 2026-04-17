@@ -53,7 +53,7 @@ const handoffForm = ref({
 const allActiveDrives = ref([])
 
 // Drives in IN_USE (active job) or AVAILABLE (after prepare-eject) with a project
-// binding — the two states that need CoC and handoff selectors.  EMPTY drives that
+// binding — the two states that need CoC and handoff selectors.  DISCONNECTED drives that
 // retain a stale project_id after removal/port-disable are intentionally excluded.
 const initializedDrives = computed(() =>
   allActiveDrives.value.filter(
