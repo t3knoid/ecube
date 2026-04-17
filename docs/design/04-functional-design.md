@@ -102,26 +102,17 @@ The binding is persisted as part of the drive's authoritative state. A drive wit
 
 ### Binding Lifecycle
 
-1. **Format** — The drive must have a recognized filesystem (`ext4`,
-   `exfat`, etc.) before it can be bound. Drives with `filesystem_type`
-   of `unformatted`, `unknown`, or `NULL` are rejected at initialization
-   with HTTP 409.
-2. **Initialize** — `POST /drives/{drive_id}/initialize` accepts a `project_id`
-   in the request body. The service:
+1. **Format** — The drive must have a recognized filesystem (`ext4`, `exfat`, etc.) before it can be bound. Drives with `filesystem_type` of `unformatted`, `unknown`, or `NULL` are rejected at initialization with HTTP 409. Formatting also clears the prior project binding so the drive can be safely reassigned.
+2. **Initialize** — `POST /drives/{drive_id}/initialize` accepts a `project_id` in the request body. The service:
+   - Normalizes the requested project identifier by trimming surrounding whitespace and converting it to uppercase.
    - Acquires an exclusive lock on the drive record to prevent concurrent mutations.
-   - Checks `current_project_id`: if already set **and** different from
-     the requested project, the request is denied with HTTP 403 and a
-     `PROJECT_ISOLATION_VIOLATION` audit event is recorded (including
-     actor, drive ID, existing project, and requested project).
-   - Sets `current_project_id = project_id` and transitions
-     `current_state` from `AVAILABLE` to `IN_USE`.
+   - Verifies that the requested project already has at least one assigned share in the `MOUNTED` state and requests a fast-fail update lock on one eligible share.
+   - Checks `current_project_id`: if the drive is already `IN_USE` for a different project, the request is denied with HTTP 403 and a `PROJECT_ISOLATION_VIOLATION` audit event is recorded; if the drive is `AVAILABLE` but still bound to a different project, the request is denied with HTTP 409 until the drive is formatted.
+   - Rejects the request with HTTP 409 when no eligible mounted share exists or when the project source is being updated concurrently.
+   - Sets `current_project_id = project_id` and transitions `current_state` from `AVAILABLE` to `IN_USE`.
    - Commits the change and emits a `DRIVE_INITIALIZED` audit event.
-3. **Copy enforcement** — When a copy job targets a drive, the job's
-   `project_id` is compared against the drive's `current_project_id`.
-   Mismatched writes are rejected **before** any data is copied.
-4. **Release** — The project binding persists until the drive is explicitly
-   re-initialized for a different project or reset. Removing a drive
-   physically does not clear its `current_project_id` in the database.
+3. **Copy enforcement** — When a copy job targets a drive, the job's `project_id` is compared against the drive's `current_project_id`. Mismatched writes are rejected **before** any data is copied.
+4. **Release** — The project binding persists until the drive is explicitly reformatted or re-initialized for the same project. Removing a drive physically does not clear its `current_project_id` in the database.
 
 ### Concurrency
 
