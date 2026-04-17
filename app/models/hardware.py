@@ -1,7 +1,8 @@
-from sqlalchemy import Boolean, Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime, UniqueConstraint
-from sqlalchemy.orm import relationship
+from sqlalchemy import Boolean, Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime, Index, UniqueConstraint
+from sqlalchemy.orm import relationship, validates
 from sqlalchemy.sql import func
 from app.database import Base
+from app.utils.sanitize import normalize_project_id
 import enum
 
 
@@ -41,6 +42,10 @@ class UsbPort(Base):
 
 class UsbDrive(Base):
     __tablename__ = "usb_drives"
+    __table_args__ = (
+        Index("ix_usb_drives_state_project", "current_state", "current_project_id"),
+    )
+
     id = Column(Integer, primary_key=True)
     port_id = Column(Integer, ForeignKey("usb_ports.id"), nullable=True)
     device_identifier = Column(String, unique=True, nullable=False)
@@ -49,12 +54,19 @@ class UsbDrive(Base):
     encryption_status = Column(String)
     filesystem_type = Column(String, nullable=True)
     current_state = Column(
-        Enum(DriveState, native_enum=False), default=DriveState.AVAILABLE
+        Enum(DriveState, native_enum=False), default=DriveState.AVAILABLE, index=True
     )
-    current_project_id = Column(String)
+    current_project_id = Column(String, index=True)
     mount_path = Column(String, nullable=True, index=True)
     last_seen_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     port = relationship("UsbPort", back_populates="drives")
     assignments = relationship("DriveAssignment", back_populates="drive")
+
+    @validates("current_project_id")
+    def _normalize_current_project_id(self, _key, value):
+        normalized = normalize_project_id(value)
+        if normalized == "":
+            return None
+        return normalized
