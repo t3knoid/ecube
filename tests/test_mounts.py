@@ -52,6 +52,25 @@ def test_add_mount_requires_project_id(manager_client, db):
     assert response.status_code == 422
 
 
+def test_add_mount_normalizes_project_id(manager_client, db):
+    with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
+         patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        response = manager_client.post(
+            "/mounts",
+            json={
+                "type": "NFS",
+                "remote_path": "192.168.1.1:/exports/normalized",
+                "project_id": "  proj-001  ",
+            },
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["project_id"] == "PROJ-001"
+
+
 def test_add_mount_rejects_client_local_mount_point(manager_client, db):
     response = manager_client.post(
         "/mounts",

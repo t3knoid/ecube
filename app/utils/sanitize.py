@@ -59,6 +59,19 @@ def strict_sanitize_string(value: object) -> object:
     return value
 
 
+def normalize_project_id(value: object) -> object:
+    """Canonicalize project identifiers for storage and comparison.
+
+    Project IDs are treated case-insensitively in ECUBE workflows. This keeps
+    a stable representation by removing invalid Unicode, trimming surrounding
+    whitespace, and uppercasing the remaining value.
+    """
+    value = sanitize_string(value)
+    if not isinstance(value, str):
+        return value
+    return value.strip().upper()
+
+
 _PATH_LIKE_RE = re.compile(r"(?<![A-Za-z0-9._-])/(?:[^\s'\"=:;,])+")
 
 
@@ -103,6 +116,9 @@ def is_encoding_error(exc: BaseException) -> bool:
 
 # Drop-in replacement for ``str`` in Pydantic schemas.
 SafeStr = Annotated[str, BeforeValidator(sanitize_string)]
+
+# Project identifier variant: trims and uppercases for stable comparisons.
+ProjectIdStr = Annotated[str, BeforeValidator(normalize_project_id)]
 
 # Strict variant for path-like fields: rejects rather than silently modifying.
 StrictSafeStr = Annotated[str, BeforeValidator(strict_sanitize_string)]
