@@ -1,6 +1,5 @@
 from typing import List, Optional, Sequence
 
-from sqlalchemy import func
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -35,7 +34,7 @@ class DriveRepository:
             return []
         return (
             self.db.query(UsbDrive)
-            .filter(func.upper(func.trim(UsbDrive.current_project_id)) == normalized_project_id)
+            .filter(UsbDrive.current_project_id == normalized_project_id)
             .all()
         )
 
@@ -108,7 +107,7 @@ class DriveRepository:
             self.db.query(UsbDrive)
             .filter(
                 UsbDrive.current_state == DriveState.AVAILABLE,
-                func.upper(func.trim(UsbDrive.current_project_id)) == normalized_project_id,
+                UsbDrive.current_project_id == normalized_project_id,
             )
             .count()
         )
@@ -127,7 +126,7 @@ class DriveRepository:
             self.db.query(UsbDrive)
             .filter(
                 UsbDrive.current_state == DriveState.AVAILABLE,
-                func.upper(func.trim(UsbDrive.current_project_id)) == normalized_project_id,
+                UsbDrive.current_project_id == normalized_project_id,
             )
             .order_by(UsbDrive.id)
             .with_for_update(skip_locked=True)
