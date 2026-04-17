@@ -104,6 +104,10 @@ function formatBytes(value) {
   return `${next.toFixed(next >= 10 ? 0 : 1)} ${units[unit]}`
 }
 
+function protectedValue(value) {
+  return value ? t('common.labels.protected') : '-'
+}
+
 async function loadDrive() {
   loading.value = true
   clearBanners()
@@ -326,7 +330,6 @@ function openChainOfCustody() {
     coc: '1',
     drive_id: String(drive.value.id),
   }
-  if (drive.value.device_identifier) query.drive_sn = drive.value.device_identifier
   if (drive.value.current_project_id) query.project_id = drive.value.current_project_id
   router.push({ name: 'audit', query })
 }
@@ -388,9 +391,9 @@ onBeforeUnmount(() => {
     <article v-if="drive" class="detail-card">
       <div class="detail-grid">
         <div><strong>{{ t('common.labels.id') }}</strong><span>{{ drive.id }}</span></div>
-        <div><strong>{{ t('drives.device') }}</strong><span>{{ drive.device_identifier }}</span></div>
-        <div><strong>{{ t('drives.filesystemPath') }}</strong><span>{{ drive.filesystem_path || '-' }}</span></div>
-        <div><strong>{{ t('drives.mountPoint') }}</strong><span>{{ drive.mount_path || '-' }}</span></div>
+        <div><strong>{{ t('drives.device') }}</strong><span>{{ protectedValue(drive.device_identifier) }}</span></div>
+        <div><strong>{{ t('drives.filesystemPath') }}</strong><span>{{ protectedValue(drive.filesystem_path) }}</span></div>
+        <div><strong>{{ t('drives.mountPoint') }}</strong><span>{{ protectedValue(drive.mount_path) }}</span></div>
         <div><strong>{{ t('drives.filesystem') }}</strong><span>{{ drive.filesystem_type || '-' }}</span></div>
         <div><strong>{{ t('common.labels.size') }}</strong><span>{{ formatBytes(drive.capacity_bytes) }}</span></div>
         <div><strong>{{ t('dashboard.project') }}</strong><span>{{ drive.current_project_id || '-' }}</span></div>
