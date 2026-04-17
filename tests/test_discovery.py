@@ -212,6 +212,23 @@ def test_available_drive_removed_becomes_empty(db):
     assert drive.current_state == DriveState.DISCONNECTED
 
 
+def test_available_drive_removed_clears_stale_filesystem_path(db):
+    topology = _simple_topology()
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    _enable_all_ports(db)
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+
+    drive = db.query(UsbDrive).one()
+    assert drive.filesystem_path == "/dev/sdb"
+
+    run_discovery_sync(db, topology_source=_empty_topology, filesystem_detector=_NULL_DETECTOR)
+
+    db.refresh(drive)
+    assert drive.current_state == DriveState.DISCONNECTED
+    assert drive.filesystem_path is None
+    assert drive.mount_path is None
+
+
 def test_available_drive_removed_emits_audit(db):
     """DRIVE_REMOVED audit entry is created when an AVAILABLE drive disappears."""
     topology = _simple_topology()
@@ -401,6 +418,7 @@ def test_new_drive_on_disabled_port_inserted_as_empty(db):
     assert summary["drives_inserted"] == 1
     drive = db.query(UsbDrive).one()
     assert drive.current_state == DriveState.DISCONNECTED
+    assert drive.filesystem_path == "/dev/sdb"
 
 
 def test_new_drive_on_enabled_port_inserted_as_available(db):
