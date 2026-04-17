@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Literal, Optional
 from app.models.hardware import DriveState
-from app.utils.sanitize import SafeStr
+from app.utils.sanitize import ProjectIdStr, SafeStr
 
 
 class UsbHubSchema(BaseModel):
@@ -64,7 +64,7 @@ class DiscoverySyncResponse(BaseModel):
 
 
 class DriveInitialize(BaseModel):
-    project_id: SafeStr = Field(..., min_length=1, description="Project ID to bind the drive to for isolation enforcement")
+    project_id: ProjectIdStr = Field(..., min_length=1, description="Project ID to bind the drive to for isolation enforcement")
 
 
 class DriveFormatRequest(BaseModel):

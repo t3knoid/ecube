@@ -14,7 +14,7 @@ from app.models.hardware import DriveState, UsbDrive
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
 from app.repositories.mount_repository import MountRepository
-from app.utils.sanitize import sanitize_error_message
+from app.utils.sanitize import normalize_project_id, sanitize_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +66,12 @@ def initialize_drive(
     drive_id: int, project_id: str, db: Session, actor: Optional[str] = None,
     client_ip: Optional[str] = None,
 ) -> UsbDrive:
+    normalized_project_id = normalize_project_id(project_id)
+    if not isinstance(normalized_project_id, str) or not normalized_project_id:
+        raise HTTPException(status_code=422, detail="project_id must not be empty")
+
+    project_id = normalized_project_id
+
     drive_repo = DriveRepository(db)
     audit_repo = AuditRepository(db)
     mount_repo = MountRepository(db)

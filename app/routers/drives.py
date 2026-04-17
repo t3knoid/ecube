@@ -12,7 +12,7 @@ from app.services import drive_service, discovery_service
 from app.infrastructure import get_drive_eject, get_drive_formatter, get_drive_mount, get_filesystem_detector
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500
 from app.utils.client_ip import get_client_ip
-from app.utils.sanitize import sanitize_string
+from app.utils.sanitize import normalize_project_id
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +54,9 @@ def list_drives(
     **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
     """
     if project_id is not None:
-        sanitized: str = sanitize_string(project_id)
+        sanitized: str = normalize_project_id(project_id)
         if not sanitized:
-            raise EncodingError("project_id is empty after removing invalid characters")   
+            raise EncodingError("project_id is empty after removing invalid characters")
         project_id = sanitized
     return drive_service.get_all_drives(
         db, project_id=project_id, states=state, include_disconnected=include_disconnected,

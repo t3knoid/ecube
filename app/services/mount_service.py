@@ -20,7 +20,7 @@ from app.config import settings
 from app.exceptions import EncodingError
 from app.services.mount_check_utils import check_mounted_with_configured_timeout
 
-from app.utils.sanitize import is_encoding_error, sanitize_error_message
+from app.utils.sanitize import is_encoding_error, normalize_project_id, sanitize_error_message
 
 # Re-export so existing ``mount_service.MountProvider`` access keeps working.
 from app.infrastructure.mount_protocol import MountProvider  # noqa: F401 – re-export
@@ -437,6 +437,10 @@ def _redacted_mount_label(local_mount_point: str) -> str:
 def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
               provider: Optional["MountProvider"] = None,
               client_ip: Optional[str] = None) -> NetworkMount:
+    normalized_project_id = normalize_project_id(mount_data.project_id)
+    if not isinstance(normalized_project_id, str) or not normalized_project_id:
+        raise HTTPException(status_code=422, detail="project_id must not be empty")
+
     mount_repo = MountRepository(db)
     audit_repo = AuditRepository(db)
     provider = provider or _default_provider()
@@ -451,7 +455,7 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
     mount = NetworkMount(
         type=mount_data.type,
         remote_path=mount_data.remote_path,
-        project_id=mount_data.project_id,
+        project_id=normalized_project_id,
         local_mount_point=local_mount_point,
         status=MountStatus.UNMOUNTED,
     )

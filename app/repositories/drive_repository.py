@@ -1,7 +1,10 @@
 from typing import List, Optional, Sequence
 
+from sqlalchemy import func
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
+
+from app.utils.sanitize import normalize_project_id
 
 from app.exceptions import ConflictError
 from app.models.hardware import DriveState, UsbDrive
@@ -27,9 +30,12 @@ class DriveRepository:
 
     def list_by_project(self, project_id: str) -> List[UsbDrive]:
         """Return drives whose ``current_project_id`` matches *project_id*."""
+        normalized_project_id = normalize_project_id(project_id)
+        if not isinstance(normalized_project_id, str) or not normalized_project_id:
+            return []
         return (
             self.db.query(UsbDrive)
-            .filter(UsbDrive.current_project_id == project_id)
+            .filter(func.upper(func.trim(UsbDrive.current_project_id)) == normalized_project_id)
             .all()
         )
 
@@ -95,11 +101,14 @@ class DriveRepository:
         must know the true total (including rows locked by other
         transactions) to decide whether auto-assignment is unambiguous.
         """
+        normalized_project_id = normalize_project_id(project_id)
+        if not isinstance(normalized_project_id, str) or not normalized_project_id:
+            return 0
         return (
             self.db.query(UsbDrive)
             .filter(
                 UsbDrive.current_state == DriveState.AVAILABLE,
-                UsbDrive.current_project_id == project_id,
+                func.upper(func.trim(UsbDrive.current_project_id)) == normalized_project_id,
             )
             .count()
         )
@@ -111,11 +120,14 @@ class DriveRepository:
         transaction is skipped rather than blocking.  Returns ``None`` if no
         unlocked candidate exists.
         """
+        normalized_project_id = normalize_project_id(project_id)
+        if not isinstance(normalized_project_id, str) or not normalized_project_id:
+            return None
         return (
             self.db.query(UsbDrive)
             .filter(
                 UsbDrive.current_state == DriveState.AVAILABLE,
-                UsbDrive.current_project_id == project_id,
+                func.upper(func.trim(UsbDrive.current_project_id)) == normalized_project_id,
             )
             .order_by(UsbDrive.id)
             .with_for_update(skip_locked=True)

@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Mapping, Optional
 from sqlalchemy.orm import Session
 
 from app.models.audit import AuditLog
+from app.utils.sanitize import normalize_project_id
 
 _logger = logging.getLogger(__name__)
 
@@ -192,9 +193,10 @@ def _extract_project_id(details: Optional[Mapping[str, Any]]) -> Optional[str]:
 
 
 def _normalize_project_id(project_id: Optional[str]) -> Optional[str]:
-    if project_id == "":
+    normalized = normalize_project_id(project_id)
+    if not isinstance(normalized, str) or normalized == "":
         return None
-    return project_id
+    return normalized
 
 
 def _normalize_drive_id(drive_id: Optional[int]) -> Optional[int]:
