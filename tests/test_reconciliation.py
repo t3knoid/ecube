@@ -473,6 +473,43 @@ class TestReconcileDrives:
         assert drive is not None
         assert drive.current_state == DriveState.AVAILABLE
 
+    def test_mounted_discovered_drive_promoted_to_in_use(self, db: Session):
+        hub, port = _make_hub_and_port(db, enabled=True)
+        drive = _make_drive(db, "USB-MOUNTED", DriveState.AVAILABLE, port_id=port.id)
+        drive.current_project_id = "PROJ-001"
+        drive.mount_path = "/mnt/ecube/stale"
+        db.commit()
+
+        topology = DiscoveredTopology(
+            hubs=[DiscoveredHub(
+                system_identifier="hub-1", name="Hub-1",
+                location_hint=None, vendor_id=None, product_id=None,
+            )],
+            ports=[DiscoveredPort(
+                hub_system_identifier="hub-1", port_number=1,
+                system_path="/sys/bus/usb/1-1",
+                vendor_id=None, product_id=None, speed=None,
+            )],
+            drives=[DiscoveredDrive(
+                device_identifier="USB-MOUNTED",
+                port_system_path="/sys/bus/usb/1-1",
+                filesystem_path="/dev/sdb1",
+                mount_path="/media/ecube/usb-mounted",
+                capacity_bytes=1_000_000,
+            )],
+        )
+
+        result = reconcile_drives(
+            db,
+            topology_source=lambda: topology,
+            filesystem_detector=FakeFilesystemDetector(),
+        )
+
+        db.refresh(drive)
+        assert result["drives_updated"] >= 1
+        assert drive.current_state == DriveState.IN_USE
+        assert drive.mount_path == "/media/ecube/usb-mounted"
+
     def test_absent_available_drive_marked_empty(self, db: Session):
         hub, port = _make_hub_and_port(db, enabled=True)
         drive = _make_drive(db, "USB-GONE", DriveState.AVAILABLE, port_id=port.id)
