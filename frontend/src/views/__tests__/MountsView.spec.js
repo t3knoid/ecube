@@ -223,4 +223,20 @@ describe('MountsView removal flow', () => {
     expect(errorBanner.attributes('role')).toBe('alert')
     expect(errorBanner.attributes('aria-live')).toBe('assertive')
   })
+
+  it('does not expose raw mount paths in browse labels', async () => {
+    mocks.getMounts.mockResolvedValue([buildMount({ status: 'MOUNTED' })])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const browseButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.browse'))
+    expect(browseButton).toBeTruthy()
+    expect(browseButton.attributes('aria-label')).not.toContain('/smb/project2')
+
+    await browseButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('/smb/project2')
+  })
 })
