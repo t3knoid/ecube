@@ -13,6 +13,7 @@ from app.infrastructure import validate_device_path
 from app.models.hardware import DriveState, UsbDrive
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
+from app.utils.sanitize import sanitize_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -308,7 +309,9 @@ def mount_drive(
                     "drive_id": drive_id,
                     "device_name": _redacted_device_name(initial_filesystem_path),
                     "mount_slot": _redacted_device_name(mount_point),
-                    "error": error,
+                    "error_code": "MOUNT_FAILED",
+                    "message": "Provider mount operation failed",
+                    "details": sanitize_error_message(error, "Mount provider reported failure"),
                 },
                 client_ip=client_ip,
             )
@@ -530,7 +533,9 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                         "drive_id": drive_id,
                         "device_name": _redacted_device_name(initial_device_path),
                         "mount_slot": _redacted_device_name(drive.mount_path),
-                        "unmount_error": result.unmount_error,
+                        "error_code": "UNMOUNT_FAILED",
+                        "message": "Drive unmount operation failed",
+                        "details": sanitize_error_message(result.unmount_error, "Unmount provider reported failure"),
                     },
                     client_ip=client_ip,
                 )
@@ -546,9 +551,25 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                     "drive_id": drive_id,
                     "device_name": _redacted_device_name(initial_device_path),
                     "flush_ok": result.flush_ok,
-                    "flush_error": result.flush_error,
                     "unmount_ok": result.unmount_ok,
-                    "unmount_error": result.unmount_error,
+                    "error_code": (
+                        "EJECT_FLUSH_FAILED"
+                        if not result.flush_ok
+                        else "EJECT_UNMOUNT_FAILED"
+                        if not result.unmount_ok
+                        else "EJECT_FAILED"
+                    ),
+                    "message": (
+                        "Drive flush operation failed"
+                        if not result.flush_ok
+                        else "Drive unmount operation failed"
+                        if not result.unmount_ok
+                        else "Drive eject preparation failed"
+                    ),
+                    "details": sanitize_error_message(
+                        result.flush_error if not result.flush_ok else result.unmount_error,
+                        "Drive eject operation failed",
+                    ),
                 },
                 client_ip=client_ip,
             )

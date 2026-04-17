@@ -20,7 +20,7 @@ from app.config import settings
 from app.exceptions import EncodingError
 from app.services.mount_check_utils import check_mounted_with_configured_timeout
 
-from app.utils.sanitize import is_encoding_error
+from app.utils.sanitize import is_encoding_error, sanitize_error_message
 
 # Re-export so existing ``mount_service.MountProvider`` access keeps working.
 from app.infrastructure.mount_protocol import MountProvider  # noqa: F401 – re-export
@@ -544,7 +544,9 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
                 "mount_id": mount.id,
                 "remote_path": mount_data.remote_path,
                 "status": mount.status.value,
-                "error": _mount_error,
+                "error_code": "MOUNT_FAILED" if _mount_error else None,
+                "message": "Provider mount operation failed" if _mount_error else None,
+                "details": sanitize_error_message(_mount_error, "Mount provider reported failure") if _mount_error else None,
             },
             client_ip=client_ip,
         )
