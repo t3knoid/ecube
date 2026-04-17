@@ -324,3 +324,30 @@ CI workflows are configured in `.github/workflows/`. Key pipelines:
 - Do not write comments that describe security or safety guarantees the code does not implement.
 - When changing behavior, update all related comments in the same change.
 - When a mismatch is found, either tighten the code to match the comment or update the comment to match the actual behavior.
+
+## Audit Log Redaction & Provider Error Safety
+
+- Provider errors, OS errors, and mount/drive/mountpoint failures must **never** be logged verbatim.  
+- Raw error strings often contain internal paths (e.g., `/dev/...`, `/mnt/...`, `/run/media/...`) or system details that must not appear in `audit_logs`.
+- All audit log entries must use **sanitized**, **redacted**, or **structured** error information.
+- When generating code that logs failures (e.g., `DRIVE_MOUNT_FAILED`, `NETWORK_MOUNT_FAILED`, `DRIVE_EJECT_FAILED`), Copilot must:
+  - redact or strip path-like substrings  
+  - avoid persisting raw exception messages  
+  - prefer structured fields: `{ error_code, message, details }`  
+  - ensure messages contain **no filesystem paths**, **no device identifiers**, and **no sensitive OS details**
+
+### Required patterns
+- Use a helper such as `sanitize_error_message(err)` before logging.
+- Or extract a safe error code and a human-readable message.
+- Or map provider errors to internal error enums.
+
+### Forbidden patterns
+- `audit_logs.create(..., details=str(err))`
+- Logging raw exceptions that include `/dev/`, `/mnt/`, `/media/`, `/run/`, or absolute paths.
+- Passing provider error objects directly into audit log schemas.
+
+### When in doubt
+- Prefer:  
+  `{"error_code": "MOUNT_FAILED", "message": "Provider mount operation failed", "details": redacted_details}`  
+- Never:  
+  `{"details": str(err)}`
