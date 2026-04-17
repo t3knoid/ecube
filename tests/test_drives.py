@@ -314,6 +314,39 @@ def test_mount_drive_relocks_only_after_os_mount_and_aborts_if_state_changed(man
     provider.unmount_drive.assert_called_once_with(f"/mnt/ecube/{drive.id}")
 
 
+def test_mount_drive_treats_same_persisted_mount_as_idempotent(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-004E",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        filesystem_path="/dev/sdi",
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = MagicMock()
+    provider.mount_drive.return_value = (True, None)
+    provider.unmount_drive.return_value = (True, None)
+
+    expected_mount_path = f"/mnt/ecube/{drive.id}"
+    original_get_for_update = drive_service.DriveRepository.get_for_update
+
+    def get_for_update_side_effect(self, drive_id):
+        locked_drive = original_get_for_update(self, drive_id)
+        locked_drive.mount_path = expected_mount_path
+        return locked_drive
+
+    with (
+        patch("app.routers.drives.get_drive_mount", return_value=provider),
+        patch.object(drive_service.DriveRepository, "get_for_update", get_for_update_side_effect),
+    ):
+        response = manager_client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 200
+    assert response.json()["mount_path"] == expected_mount_path
+    provider.unmount_drive.assert_not_called()
+
+
 def test_mount_drive_processor_forbidden(client, db):
     drive = UsbDrive(
         device_identifier="USB-MOUNT-005",
