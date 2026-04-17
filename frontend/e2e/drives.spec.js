@@ -3,7 +3,8 @@ import { setupAuthenticatedPage, routeJson } from './helpers/app.js'
 import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
 
 // ---------------------------------------------------------------------------
-// Shared fixture for a DISCONNECTED drive with a known port_id
+// Shared fixture for a historically known DISCONNECTED drive.
+// Set filesystem_path when discovery has physically detected the device.
 // ---------------------------------------------------------------------------
 function makeEmptyDrive(overrides = {}) {
   return {
@@ -23,22 +24,31 @@ function makeEmptyDrive(overrides = {}) {
 // Enable Drive — button visibility
 // ---------------------------------------------------------------------------
 
-test('Enable Drive button is visible for admin on DISCONNECTED drive with port_id', async ({ page }) => {
+test('Enable Drive button is visible for admin on a physically detected DISCONNECTED drive', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
-  const drive = makeEmptyDrive()
+  const drive = makeEmptyDrive({ filesystem_path: '/dev/sdc' })
   await routeJson(page, '**/api/drives', () => [drive])
 
   await page.goto('/drives/2')
   await expect(page.getByRole('button', { name: 'Enable Drive' })).toBeVisible()
 })
 
-test('Enable Drive button is visible for manager on DISCONNECTED drive with port_id', async ({ page }) => {
+test('Enable Drive button is visible for manager on a physically detected DISCONNECTED drive', async ({ page }) => {
   await setupAuthenticatedPage(page, ['manager'])
-  const drive = makeEmptyDrive()
+  const drive = makeEmptyDrive({ filesystem_path: '/dev/sdc' })
   await routeJson(page, '**/api/drives', () => [drive])
 
   await page.goto('/drives/2')
   await expect(page.getByRole('button', { name: 'Enable Drive' })).toBeVisible()
+})
+
+test('Enable Drive button is not visible for admin when the drive is disconnected and not physically detected', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['admin'])
+  const drive = makeEmptyDrive()
+  await routeJson(page, '**/api/drives', () => [drive])
+
+  await page.goto('/drives/2')
+  await expect(page.getByRole('button', { name: 'Enable Drive' })).toHaveCount(0)
 })
 
 test('Enable Drive button is not visible for processor on DISCONNECTED drive', async ({ page }) => {
@@ -75,7 +85,7 @@ test('Enable Drive button is not visible when drive is AVAILABLE', async ({ page
 test('Enable Drive issues PATCH port + POST refresh and shows success banner when drive becomes AVAILABLE', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
-  const drive = makeEmptyDrive()
+  const drive = makeEmptyDrive({ filesystem_path: '/dev/sdc' })
 
   // Track which API calls were made
   const patchRequests = []
@@ -113,7 +123,7 @@ test('Enable Drive issues PATCH port + POST refresh and shows success banner whe
 test('Enable Drive shows warning banner when drive does not promote to AVAILABLE', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
-  const drive = makeEmptyDrive()
+  const drive = makeEmptyDrive({ filesystem_path: '/dev/sdc' })
 
   await routeJson(page, '**/api/drives', () => [drive])
 
@@ -135,7 +145,7 @@ test('Enable Drive shows warning banner when drive does not promote to AVAILABLE
 test('Enable Drive shows success banner when drive is immediately reconciled to IN_USE', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
-  const drive = makeEmptyDrive()
+  const drive = makeEmptyDrive({ filesystem_path: '/dev/sdc' })
 
   await routeJson(page, '**/api/drives', () => [drive])
 
@@ -161,7 +171,7 @@ test('Enable Drive shows success banner when drive is immediately reconciled to 
 test('Enable Drive shows error banner when PATCH port call fails', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
-  const drive = makeEmptyDrive()
+  const drive = makeEmptyDrive({ filesystem_path: '/dev/sdc' })
   await routeJson(page, '**/api/drives', () => [drive])
 
   await page.route('**/api/admin/ports/7', async (route) => {

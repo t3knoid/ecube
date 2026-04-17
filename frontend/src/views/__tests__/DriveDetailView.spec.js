@@ -145,6 +145,16 @@ describe('DriveDetailView mount workflow', () => {
     expect(wrapper.text()).toContain(i18n.global.t('browse.browseContents'))
   })
 
+  it('hides Enable Drive when the drive is disconnected and not physically detected', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'DISCONNECTED', filesystem_path: null })])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const labels = wrapper.findAll('button').map((node) => node.text())
+    expect(labels).not.toContain(i18n.global.t('drives.enable'))
+  })
+
   it('populates initialize options from distinct mounted share projects', async () => {
     const wrapper = mountView()
     await flushPromises()
