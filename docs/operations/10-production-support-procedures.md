@@ -858,7 +858,7 @@ echo "TLS renewal on $(date): $(openssl x509 -noout -enddate -in /etc/ecube/tls.
 
 ### Mode 1: USB Drive Disconnected During Copy
 
-**Symptom:** Job fails mid-copy; job status is `FAILED`; drive shows as `EMPTY`.
+**Symptom:** Job fails mid-copy; job status is `FAILED`; drive shows as `DISCONNECTED`.
 
 **Root Cause:** Physical disconnection, power loss, or USB error during transfer.
 
