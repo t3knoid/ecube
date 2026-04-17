@@ -295,6 +295,48 @@ def test_delete_mount_returns_conflict_when_unmount_fails(manager_client, db):
     assert db.get(NetworkMount, mount.id) is not None
 
 
+def test_delete_unmounted_mount_skips_os_unmount_and_removes_record(manager_client, db):
+    mount = NetworkMount(
+        type=MountType.SMB,
+        remote_path="//server/share",
+        local_mount_point="/smb/project2",
+        status=MountStatus.UNMOUNTED,
+    )
+    db.add(mount)
+    db.commit()
+
+    provider = MagicMock()
+
+    with patch("app.services.mount_service._default_provider", return_value=provider):
+        response = manager_client.delete(f"/mounts/{mount.id}")
+
+    assert response.status_code == 204
+    provider.os_unmount.assert_not_called()
+    assert db.get(NetworkMount, mount.id) is None
+
+
+def test_delete_mount_treats_not_mounted_error_as_success(manager_client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="192.168.1.1:/share",
+        local_mount_point="/mnt/share",
+        status=MountStatus.MOUNTED,
+    )
+    db.add(mount)
+    db.commit()
+
+    provider = MagicMock()
+    provider.check_mounted.return_value = None
+    provider.os_unmount.return_value = (False, "umount: /mnt/share: not mounted")
+
+    with patch("app.services.mount_service._default_provider", return_value=provider):
+        response = manager_client.delete(f"/mounts/{mount.id}")
+
+    assert response.status_code == 204
+    provider.os_unmount.assert_called_once_with("/mnt/share")
+    assert db.get(NetworkMount, mount.id) is None
+
+
 def test_validate_mount_success(manager_client, db):
     mount = NetworkMount(
         type=MountType.NFS,

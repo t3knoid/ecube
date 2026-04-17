@@ -565,23 +565,43 @@ def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None,
 
     provider = provider or _default_provider()
     local_mount_point = str(mount.local_mount_point)
-    try:
-        unmount_ok, unmount_error = provider.os_unmount(local_mount_point)
-    except Exception as exc:
-        unmount_ok, unmount_error = False, str(exc)
+    should_attempt_unmount = mount.status == MountStatus.MOUNTED and bool(local_mount_point)
 
-    if not unmount_ok:
-        error_text = unmount_error or "umount failed"
-        logger.warning(
-            "Mount removal aborted because unmount failed: mount_id=%s local_mount_point=%s error=%s",
+    if not should_attempt_unmount:
+        logger.info(
+            "Skipping OS unmount for non-mounted record removal: mount_id=%s local_mount_point=%s status=%s",
             mount_id,
             local_mount_point,
-            error_text,
+            mount.status.value,
         )
-        raise HTTPException(
-            status_code=409,
-            detail=f"Failed to unmount {local_mount_point}: {error_text}",
-        )
+
+    if should_attempt_unmount:
+        try:
+            unmount_ok, unmount_error = provider.os_unmount(local_mount_point)
+        except Exception as exc:
+            unmount_ok, unmount_error = False, str(exc)
+
+        if not unmount_ok:
+            error_text = unmount_error or "umount failed"
+            lowered_error = error_text.lower()
+            if any(phrase in lowered_error for phrase in ("not mounted", "no mount point")):
+                logger.info(
+                    "Treating already-unmounted mount removal as success: mount_id=%s local_mount_point=%s error=%s",
+                    mount_id,
+                    local_mount_point,
+                    error_text,
+                )
+            else:
+                logger.warning(
+                    "Mount removal aborted because unmount failed: mount_id=%s local_mount_point=%s error=%s",
+                    mount_id,
+                    local_mount_point,
+                    error_text,
+                )
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Failed to unmount {local_mount_point}: {error_text}",
+                )
 
     _cleanup_generated_mount_directory(local_mount_point)
 
