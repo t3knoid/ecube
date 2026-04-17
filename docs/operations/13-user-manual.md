@@ -284,7 +284,7 @@ Typical information shown:
 - Overall system health
 - Database status
 - Number of active jobs
-- Drive state summary (`EMPTY`, `AVAILABLE`, `IN_USE`)
+- Drive state summary (`DISCONNECTED`, `AVAILABLE`, `IN_USE`)
 - Table of active jobs
 
 Use the dashboard when you need a quick answer to questions such as:
@@ -323,7 +323,7 @@ Every drive moves through a defined set of states. Actions available in the UI d
 
 | State | Meaning | Actions available |
 |-----------|-------------------------------------------------------------------------|-----------------------------------|
-| `EMPTY` | Drive is known to the system but not currently accessible — either not physically present, or present on a disabled port. | Enable port |
+| `DISCONNECTED` | Drive is known to the system but not currently accessible — either not physically present, or present on a disabled port. | Enable port |
 | `AVAILABLE` | Drive is present on an enabled port and ready to be formatted or assigned to a project. | Format, Initialize |
 | `IN_USE` | Drive is assigned to a project. Jobs can target this drive. | Prepare Eject |
 | `ARCHIVED` | Drive has been permanently handed off via the Chain of Custody workflow. | None — drive is read-only. |
@@ -331,7 +331,7 @@ Every drive moves through a defined set of states. Actions available in the UI d
 State transitions follow this order:
 
 ```
-EMPTY → AVAILABLE → IN_USE → AVAILABLE → ARCHIVED
+DISCONNECTED → AVAILABLE → IN_USE → AVAILABLE → ARCHIVED
                        ↑____________|
                      (re-insert same project)
 ```
@@ -814,7 +814,7 @@ Governance note: denied log access attempts by non-admin users are recorded in t
 2. Open `Drives`.
 3. Refresh or rescan the drive list until the new device appears.
 4. Open the drive detail page.
-5. If the drive is not yet formatted (state is `EMPTY` or filesystem shows `unformatted`), format it using the intended filesystem.
+5. If the drive is not yet formatted (state is `DISCONNECTED` or filesystem shows `unformatted`), format it using the intended filesystem.
 6. Click `Initialize`, confirm the project identifier, and submit.
 7. Confirm the drive now shows `IN_USE` and the expected project association.
 

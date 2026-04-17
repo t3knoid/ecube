@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getDrives, refreshDrives } from '@/api/drives.js'
@@ -113,7 +113,11 @@ async function loadDrives() {
   loading.value = true
   error.value = ''
   try {
-    drives.value = await getDrives()
+    const params = {}
+    if (stateFilter.value === 'EMPTY') {
+      params.include_disconnected = true
+    }
+    drives.value = await getDrives(params)
   } catch {
     error.value = t('common.errors.networkError')
   } finally {
@@ -133,6 +137,11 @@ async function rescan() {
     refreshing.value = false
   }
 }
+
+watch(stateFilter, () => {
+  page.value = 1
+  loadDrives()
+})
 
 function openDrive(drive) {
   router.push({ name: 'drive-detail', params: { id: drive.id } })

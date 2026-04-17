@@ -41,6 +41,7 @@ def get_all_drives(
     db: Session,
     project_id: Optional[str] = None,
     states: Optional[List[str]] = None,
+    include_disconnected: bool = False,
 ) -> List[UsbDrive]:
     repo = DriveRepository(db)
     if project_id is not None:
@@ -55,7 +56,9 @@ def get_all_drives(
                 detail=f"Invalid state filter. Valid values: {valid}",
             )
         return repo.list_by_states(parsed)
-    return repo.list_all()
+    if include_disconnected:
+        return repo.list_all()
+    return repo.list_by_states([DriveState.AVAILABLE, DriveState.IN_USE, DriveState.ARCHIVED])
 
 
 def initialize_drive(
