@@ -4,7 +4,7 @@
 |---|---|
 | Title | ECUBE User Manual |
 | Purpose | Guides end users, processors, managers, and auditors through day-to-day ECUBE workflows and operational tasks. |
-| Updated on | 04/09/26 |
+| Updated on | 04/17/26 |
 | Audience | Processors, managers, auditors, administrators, end users. |
 
 ## Table of Contents
@@ -366,7 +366,7 @@ Current UI options include:
 - `ext4`
 - `exfat`
 
-Formatting removes all existing data and clears the project binding. After formatting, the drive can be initialized for any project.
+Formatting removes all existing data and clears the project binding. After formatting, the drive can be initialized for any project that has an eligible mounted share.
 
 Confirm the target drive carefully before proceeding.
 
@@ -374,14 +374,18 @@ Confirm the target drive carefully before proceeding.
 
 Initialization assigns a drive to a project identifier and transitions it to `IN_USE`. Once initialized, project isolation rules apply to all writes performed through ECUBE.
 
+Initialization now requires at least one network share that is both assigned to the same project and currently in the `MOUNTED` state. If no eligible mounted share exists, the UI disables submission and the API rejects the request.
+
 When you open the Initialize dialog:
 
-- If the drive has a previous project assignment, the **Project** field is pre-filled and read-only. The dialog also shows which project the drive was last used for.
-- If the drive has no prior project assignment (for example, it was just formatted), the **Project** field is blank and editable.
+- The **Project** field is shown as a dropdown populated from distinct project IDs on mounted shares only.
+- If the drive has a previous project assignment and that project still has an eligible mounted share, that project is pre-selected.
+- If no eligible mounted project exists, the dialog shows a helper message telling you to add and mount a share first.
 
 Before initializing a drive:
 
-- Confirm the project identifier is correct.
+- Confirm the correct source share for the case or matter has already been added and mounted.
+- Select the correct project from the dropdown list.
 - Confirm the drive is the intended destination media.
 - If you need to assign the drive to a *different* project, format it first to clear the existing binding.
 
@@ -423,10 +427,13 @@ You can typically:
 The add-mount dialog supports common fields such as:
 
 - Type (`SMB` or `NFS`)
+- Project ID
 - Remote path
 - Username
 - Password
 - Credentials file
+
+Project assignment is required when creating a mount. Drives can only be initialized for projects that have at least one assigned share in the `MOUNTED` state.
 
 ECUBE now creates the local mount point automatically based on the remote path and mount type (for example, NFS mounts are created under `/nfs/*` and SMB mounts under `/smb/*`).
 
@@ -811,17 +818,19 @@ Governance note: denied log access attempts by non-admin users are recorded in t
 **Allowed roles:** `admin`, `manager`
 
 1. Insert the new USB drive into the ECUBE host.
-2. Open `Drives`.
-3. Refresh or rescan the drive list until the new device appears.
-4. Open the drive detail page.
-5. If the drive is not yet formatted (state is `DISCONNECTED` or filesystem shows `unformatted`), format it using the intended filesystem.
-6. Click `Initialize`, confirm the project identifier, and submit.
-7. Confirm the drive now shows `IN_USE` and the expected project association.
+2. Open `Mounts` and confirm the correct source share for the project has been added, assigned to the project ID, and is currently `MOUNTED`.
+3. Open `Drives`.
+4. Refresh or rescan the drive list until the new device appears.
+5. Open the drive detail page.
+6. If the drive is not yet formatted (state is `DISCONNECTED` or filesystem shows `unformatted`), format it using the intended filesystem.
+7. Click `Initialize`, choose the project from the dropdown list, and submit.
+8. Confirm the drive now shows `IN_USE` and the expected project association.
 
 Notes:
 
 - `processor` and `auditor` users can view drives but cannot perform format or initialize actions in the current UI.
-- Confirm the project identifier carefully before initialization because project isolation is enforced after association.
+- Only projects backed by an actively mounted share appear in the Initialize dropdown.
+- Confirm the project carefully before initialization because project isolation is enforced after association.
 
 ### 14.1a Re-insert a Drive to Add More Data to the Same Project
 
@@ -830,13 +839,14 @@ Notes:
 If a drive was previously ejected and needs to receive more data for the same project:
 
 1. Re-insert the drive into the ECUBE host.
-2. Open `Drives` and locate the drive (state will be `AVAILABLE`).
-3. Open the drive detail page.
-4. Click `Initialize`. The **Project** field is pre-filled with the previous project and is read-only.
-5. Confirm and submit.
-6. The drive transitions back to `IN_USE` for the same project.
+2. Confirm the project's source share is still configured and currently `MOUNTED`.
+3. Open `Drives` and locate the drive (state will be `AVAILABLE`).
+4. Open the drive detail page.
+5. Click `Initialize`. The previous project is selected automatically only if that project still has an eligible mounted share.
+6. Confirm and submit.
+7. The drive transitions back to `IN_USE` for the same project.
 
-No format is required when re-using the same project.
+No format is required when re-using the same project, but the mounted-share prerequisite still applies.
 
 ### 14.1b Re-assign a Drive to a Different Project
 
@@ -844,12 +854,13 @@ No format is required when re-using the same project.
 
 If a drive must be reassigned to a different project, a format is required to wipe existing data and clear the project binding:
 
-1. Open `Drives` and locate the drive (state must be `AVAILABLE`).
-2. Open the drive detail page.
-3. Click `Format` and select the target filesystem. Confirm the format.
-4. After formatting completes, click `Initialize`.
-5. Enter the new project identifier and confirm.
-6. The drive transitions to `IN_USE` for the new project.
+1. Open `Mounts` and make sure the destination project's source share has already been added, assigned the correct project ID, and mounted successfully.
+2. Open `Drives` and locate the drive (state must be `AVAILABLE`).
+3. Open the drive detail page.
+4. Click `Format` and select the target filesystem. Confirm the format.
+5. After formatting completes, click `Initialize`.
+6. Choose the new project from the dropdown and confirm.
+7. The drive transitions to `IN_USE` for the new project.
 
 > **Warning:** Formatting permanently deletes all data on the drive. Verify that copies and chain-of-custody records for prior project data are complete before proceeding.
 
