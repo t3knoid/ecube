@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock, patch
 
+from app.exceptions import ConflictError
 from app.infrastructure.drive_eject import EjectResult
 from app.models.hardware import UsbDrive, DriveState
 from app.services import drive_service
@@ -66,6 +67,21 @@ def test_list_drives_filter_by_project_no_match(client, db):
     assert response.json() == []
 
 
+def test_list_drives_filter_by_project_normalizes_case_and_whitespace(client, db):
+    drive = UsbDrive(device_identifier="USB-NORM", current_state=DriveState.IN_USE, current_project_id="  proj-001  ")
+    db.add(drive)
+    db.commit()
+    db.refresh(drive)
+
+    assert drive.current_project_id == "PROJ-001"
+
+    response = client.get("/drives", params={"project_id": "  proj-001  "})
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["device_identifier"] == "USB-NORM"
+
+
 def test_list_drives_empty_project_id_rejected(client, db):
     """GET /drives?project_id= (empty string) returns 422."""
     response = client.get("/drives", params={"project_id": ""})
@@ -108,8 +124,17 @@ def test_list_drives_include_disconnected(client, db):
 
 
 def test_initialize_drive(manager_client, db):
+    from app.models.network import MountStatus, MountType, NetworkMount
+
     drive = UsbDrive(device_identifier="USB002", current_state=DriveState.AVAILABLE, filesystem_type="ext4")
-    db.add(drive)
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="10.0.0.1:/exports/proj-001",
+        project_id="PROJ-001",
+        local_mount_point="/nfs/proj-001",
+        status=MountStatus.MOUNTED,
+    )
+    db.add_all([drive, mount])
     db.commit()
 
     response = manager_client.post(f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-001"})
@@ -117,6 +142,118 @@ def test_initialize_drive(manager_client, db):
     data = response.json()
     assert data["current_project_id"] == "PROJ-001"
     assert data["current_state"] == "IN_USE"
+
+
+def test_initialize_drive_rejects_project_without_mounted_source(manager_client, db):
+    from app.models.audit import AuditLog
+
+    drive = UsbDrive(
+        device_identifier="USB-NO-MOUNT",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = manager_client.post(f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-MISSING"})
+
+    assert response.status_code == 409
+    assert response.json()["message"] == (
+        "No mounted share is assigned to project PROJ-MISSING. "
+        "Mount a share for this project before initializing a drive."
+    )
+
+    log = db.query(AuditLog).filter(AuditLog.action == "INIT_REJECTED_NO_PROJECT_SOURCE").one()
+    assert log.project_id == "PROJ-MISSING"
+    assert log.drive_id == drive.id
+    assert log.details["requested_project_id"] == "PROJ-MISSING"
+    assert log.details["error_code"] == "NO_PROJECT_SOURCE"
+    assert log.details["message"] == "No mounted project source is available"
+
+
+def test_initialize_drive_allows_project_with_mounted_source(manager_client, db):
+    from app.models.network import MountStatus, MountType, NetworkMount
+
+    drive = UsbDrive(
+        device_identifier="USB-WITH-MOUNT",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+    )
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="10.0.0.5:/exports/proj-205",
+        local_mount_point="/nfs/proj-205",
+        project_id="PROJ-205",
+        status=MountStatus.MOUNTED,
+    )
+    db.add_all([drive, mount])
+    db.commit()
+
+    response = manager_client.post(f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-205"})
+
+    assert response.status_code == 200
+    assert response.json()["current_project_id"] == "PROJ-205"
+    assert response.json()["current_state"] == "IN_USE"
+
+
+def test_initialize_drive_rejects_busy_project_source(manager_client, db):
+    from app.models.audit import AuditLog
+    from app.models.network import MountStatus, MountType, NetworkMount
+
+    drive = UsbDrive(
+        device_identifier="USB-BUSY-MOUNT",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+    )
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="10.0.0.8:/exports/proj-busy",
+        local_mount_point="/nfs/proj-busy",
+        project_id="PROJ-BUSY",
+        status=MountStatus.MOUNTED,
+    )
+    db.add_all([drive, mount])
+    db.commit()
+
+    with patch(
+        "app.services.drive_service.MountRepository.get_mounted_project_for_update",
+        side_effect=ConflictError("Project source is currently being updated by another operation."),
+    ):
+        response = manager_client.post(f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-BUSY"})
+
+    assert response.status_code == 409
+    assert response.json()["message"] == "Project source is currently being updated by another operation."
+
+    log = db.query(AuditLog).filter(AuditLog.action == "INIT_REJECTED_PROJECT_SOURCE_BUSY").one()
+    assert log.project_id == "PROJ-BUSY"
+    assert log.drive_id == drive.id
+    assert log.details["error_code"] == "PROJECT_SOURCE_BUSY"
+    assert log.details["message"] == "Project source is currently being updated"
+
+
+def test_initialize_drive_normalizes_project_id_case_and_whitespace(manager_client, db):
+    from app.models.network import MountStatus, MountType, NetworkMount
+
+    drive = UsbDrive(
+        device_identifier="USB-WITH-NORMALIZED-MOUNT",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+    )
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="10.0.0.7:/exports/proj-777",
+        local_mount_point="/nfs/proj-777",
+        project_id="PROJ-777",
+        status=MountStatus.MOUNTED,
+    )
+    db.add_all([drive, mount])
+    db.commit()
+
+    response = manager_client.post(f"/drives/{drive.id}/initialize", json={"project_id": "  proj-777  "})
+
+    assert response.status_code == 200
+    assert response.json()["current_project_id"] == "PROJ-777"
+    assert response.json()["current_state"] == "IN_USE"
 
 
 def test_mount_drive_success(manager_client, db):
@@ -149,8 +286,8 @@ def test_mount_drive_success(manager_client, db):
     audit = db.query(AuditLog).filter(AuditLog.action == "DRIVE_MOUNTED").first()
     assert audit is not None
     assert audit.details["drive_id"] == drive.id
-    assert audit.details["device_name"] == "sdb"
-    assert audit.details["mount_slot"] == str(drive.id)
+    assert audit.details["device_name"] == "[redacted]"
+    assert audit.details["mount_slot"] == "[redacted]"
     assert "filesystem_path" not in audit.details
     assert "mount_path" not in audit.details
 
@@ -475,13 +612,22 @@ def test_project_isolation_violation(manager_client, db):
 
 
 def test_reinitialize_same_project(manager_client, db):
+    from app.models.network import MountStatus, MountType, NetworkMount
+
     drive = UsbDrive(
         device_identifier="USB004",
         current_state=DriveState.IN_USE,
         current_project_id="PROJ-001",
         filesystem_type="ext4",
     )
-    db.add(drive)
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="10.0.0.1:/exports/proj-001",
+        project_id="PROJ-001",
+        local_mount_point="/nfs/proj-001-reinit",
+        status=MountStatus.MOUNTED,
+    )
+    db.add_all([drive, mount])
     db.commit()
 
     response = manager_client.post(f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-001"})
@@ -509,13 +655,22 @@ def test_prepare_eject(manager_client, db):
 
 def test_reinitialize_same_project_after_eject(manager_client, db):
     """A drive can be re-initialized for the same project after eject (adds more data)."""
+    from app.models.network import MountStatus, MountType, NetworkMount
+
     drive = UsbDrive(
         device_identifier="USB005D",
         current_state=DriveState.IN_USE,
         current_project_id="PROJ-001",
         filesystem_type="exfat",
     )
-    db.add(drive)
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="10.0.0.1:/exports/proj-001",
+        project_id="PROJ-001",
+        local_mount_point="/nfs/proj-001-after-eject",
+        status=MountStatus.MOUNTED,
+    )
+    db.add_all([drive, mount])
     db.commit()
 
     with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject()):
@@ -585,7 +740,7 @@ def test_prepare_eject_with_filesystem_path(manager_client, db):
     assert log.drive_id == drive.id
     assert log.project_id == "PROJ-001"
     assert log.details["drive_id"] == drive.id
-    assert log.details["device_name"] == "sdb"
+    assert log.details["device_name"] == "[redacted]"
     assert log.details["flush_ok"] is True
     assert log.details["unmount_ok"] is True
     assert "filesystem_path" not in log.details

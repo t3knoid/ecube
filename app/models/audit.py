@@ -1,7 +1,9 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import validates
 from sqlalchemy.sql import func
 from app.database import Base
+from app.utils.sanitize import normalize_project_id
 
 
 class AuditLog(Base):
@@ -19,3 +21,10 @@ class AuditLog(Base):
     )
     details = Column(JSON().with_variant(JSONB(), "postgresql"))
     client_ip = Column(String(45), nullable=True)
+
+    @validates("project_id")
+    def _normalize_project_id(self, _key, value):
+        normalized = normalize_project_id(value)
+        if normalized == "":
+            return None
+        return normalized

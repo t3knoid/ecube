@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Mapping, Optional
 from sqlalchemy.orm import Session
 
 from app.models.audit import AuditLog
+from app.utils.sanitize import normalize_project_id, sanitize_audit_details
 
 _logger = logging.getLogger(__name__)
 
@@ -59,17 +60,18 @@ class AuditRepository:
         This is intended for callers that need to include audit writes in a
         wider atomic transaction before issuing a single commit.
         """
+        sanitized_details = sanitize_audit_details(details or {})
         normalized_project_id = _normalize_project_id(project_id)
         normalized_drive_id = _normalize_drive_id(drive_id)
-        resolved_project_id = normalized_project_id if normalized_project_id is not None else _extract_project_id(details)
-        resolved_drive_id = normalized_drive_id if normalized_drive_id is not None else _extract_drive_id(details)
+        resolved_project_id = normalized_project_id if normalized_project_id is not None else _extract_project_id(sanitized_details)
+        resolved_drive_id = normalized_drive_id if normalized_drive_id is not None else _extract_drive_id(sanitized_details)
         entry = AuditLog(
             user=user,
             action=action,
             project_id=resolved_project_id,
             drive_id=resolved_drive_id,
             job_id=job_id,
-            details=details or {},
+            details=sanitized_details,
             client_ip=client_ip,
         )
         self.db.add(entry)
@@ -89,7 +91,7 @@ class AuditRepository:
         """
         rows = []
         for kwargs in entries:
-            details = kwargs.get("details") or {}
+            details = sanitize_audit_details(kwargs.get("details") or {})
             project_id = _normalize_project_id(kwargs.get("project_id"))
             drive_id = _normalize_drive_id(kwargs.get("drive_id"))
             row = AuditLog(
@@ -192,9 +194,10 @@ def _extract_project_id(details: Optional[Mapping[str, Any]]) -> Optional[str]:
 
 
 def _normalize_project_id(project_id: Optional[str]) -> Optional[str]:
-    if project_id == "":
+    normalized = normalize_project_id(project_id)
+    if not isinstance(normalized, str) or normalized == "":
         return None
-    return project_id
+    return normalized
 
 
 def _normalize_drive_id(drive_id: Optional[int]) -> Optional[int]:

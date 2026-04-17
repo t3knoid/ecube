@@ -1,7 +1,8 @@
 from sqlalchemy import Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime, Text
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, validates
 from sqlalchemy.sql import func
 from app.database import Base
+from app.utils.sanitize import normalize_project_id
 import enum
 
 
@@ -24,7 +25,7 @@ class FileStatus(str, enum.Enum):
 class ExportJob(Base):
     __tablename__ = "export_jobs"
     id = Column(Integer, primary_key=True)
-    project_id = Column(String, nullable=False)
+    project_id = Column(String, nullable=False, index=True)
     evidence_number = Column(String, nullable=False)
     source_path = Column(String, nullable=False)
     target_mount_path = Column(String)
@@ -45,6 +46,11 @@ class ExportJob(Base):
     files = relationship("ExportFile", back_populates="job")
     manifests = relationship("Manifest", back_populates="job")
     assignments = relationship("DriveAssignment", back_populates="job")
+
+    @validates("project_id")
+    def _normalize_project_id(self, _key, value):
+        normalized = normalize_project_id(value)
+        return normalized if isinstance(normalized, str) else value
 
 
 class ExportFile(Base):
