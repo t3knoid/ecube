@@ -2,7 +2,7 @@ from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.network import NetworkMount
+from app.models.network import MountStatus, NetworkMount
 
 
 class MountRepository:
@@ -29,6 +29,18 @@ class MountRepository:
             raise
         self.db.refresh(mount)
         return mount
+
+    def has_mounted_project(self, project_id: str) -> bool:
+        """Return ``True`` when a mounted share is assigned to ``project_id``."""
+        return (
+            self.db.query(NetworkMount.id)
+            .filter(
+                NetworkMount.status == MountStatus.MOUNTED,
+                NetworkMount.project_id == project_id,
+            )
+            .first()
+            is not None
+        )
 
     def save(self, mount: NetworkMount) -> NetworkMount:
         """Commit pending changes to an existing mount and refresh it."""

@@ -23,6 +23,7 @@ function buildMount(overrides = {}) {
   return {
     id: 11,
     type: 'SMB',
+    project_id: 'PROJ-011',
     remote_path: '//server/share',
     local_mount_point: '/smb/project2',
     status: 'UNMOUNTED',
@@ -120,5 +121,32 @@ describe('MountsView removal flow', () => {
 
     expect(mocks.deleteMount).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain(i18n.global.t('mounts.removeConfirmTitle'))
+  })
+
+  it('submits the selected project when adding a mount', async () => {
+    mocks.getMounts.mockResolvedValue([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    expect(addButton).toBeTruthy()
+
+    await addButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#mount-remote-path').setValue('//server/new-share')
+    await wrapper.find('#mount-project-id').setValue('PROJ-NEW')
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.create')).trigger('click')
+    await flushPromises()
+
+    expect(mocks.createMount).toHaveBeenCalledWith({
+      type: 'SMB',
+      remote_path: '//server/new-share',
+      project_id: 'PROJ-NEW',
+      username: null,
+      password: null,
+      credentials_file: null,
+    })
   })
 })

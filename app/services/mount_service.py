@@ -451,6 +451,7 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
     mount = NetworkMount(
         type=mount_data.type,
         remote_path=mount_data.remote_path,
+        project_id=mount_data.project_id,
         local_mount_point=local_mount_point,
         status=MountStatus.UNMOUNTED,
     )
@@ -561,8 +562,10 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
         audit_repo.add(
             action="MOUNT_ADDED",
             user=actor,
+            project_id=mount.project_id,
             details={
                 "mount_id": mount.id,
+                "project_id": mount.project_id,
                 "remote_path": mount_data.remote_path,
                 "status": mount.status.value,
                 "error_code": "MOUNT_FAILED" if _mount_error else None,

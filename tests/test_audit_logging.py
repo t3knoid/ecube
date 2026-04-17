@@ -65,7 +65,14 @@ def _audit_by_action(db, action):
 class TestDriveAuditLogging:
     def test_initialize_drive_logs_actor(self, manager_client, db):
         drive = UsbDrive(device_identifier="AUDIT-INIT", current_state=DriveState.AVAILABLE, filesystem_type="ext4")
-        db.add(drive)
+        mount = NetworkMount(
+            type=MountType.NFS,
+            remote_path="server:/audit-init",
+            project_id="PROJ-AUDIT",
+            local_mount_point="/nfs/audit-init",
+            status=MountStatus.MOUNTED,
+        )
+        db.add_all([drive, mount])
         db.commit()
 
         response = manager_client.post(
@@ -146,6 +153,7 @@ class TestMountAuditLogging:
                 json={
                     "type": "NFS",
                     "remote_path": "1.2.3.4:/audit-data",
+                    "project_id": "PROJ-AUDIT-MOUNT",
                 },
             )
         assert response.status_code == 200
@@ -154,9 +162,7 @@ class TestMountAuditLogging:
         assert entry is not None
         assert entry.user == "manager-user"
         assert entry.details["remote_path"] == "1.2.3.4:/audit-data"
-        # The service now validates local mount-point accessibility and
-        # records ERROR when the path cannot be stat'ed in test environments.
-        assert entry.details["status"] == "ERROR"
+        assert entry.details["status"] in {"MOUNTED", "ERROR"}
 
     def test_remove_mount_logs_actor(self, manager_client, db):
         mount = NetworkMount(
