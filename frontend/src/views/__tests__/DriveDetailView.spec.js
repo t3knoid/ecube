@@ -207,4 +207,19 @@ describe('DriveDetailView mount workflow', () => {
 
     expect(wrapper.find('#project-id').exists()).toBe(true)
   })
+
+  it('marks the initialize project selection as required', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const initializeButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.initialize'))
+    expect(initializeButton).toBeTruthy()
+
+    await initializeButton.trigger('click')
+    await flushPromises()
+
+    const projectSelect = wrapper.find('#project-id')
+    expect(projectSelect.attributes('required')).toBeDefined()
+    expect(projectSelect.attributes('aria-required')).toBe('true')
+  })
 })
