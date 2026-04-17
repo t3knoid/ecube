@@ -4,7 +4,7 @@
 |---|---|
 | Title | ECUBE Manual Installation |
 | Purpose | Documents the manual deployment steps for ECUBE on a Linux host without using the automated installer. |
-| Updated on | 04/10/26 |
+| Updated on | 04/16/26 |
 | Audience | Systems administrators, platform engineers. |
 
 ## Table of Contents
@@ -147,13 +147,19 @@ sha256sum -c "ecube-package-${LATEST_TAG}.sha256"
 
 ### 4.1 Install OS packages
 
+Install the ECUBE runtime dependencies before creating the service account or starting the application. These packages provide exFAT formatting support, host USB enumeration, and NFS/SMB client tooling required by the managed mount workflow.
+
 ```bash
 sudo apt-get update
 sudo apt-get install -y \
   python3.11 python3.11-venv \
   postgresql postgresql-contrib \
-  curl openssl
+  curl openssl \
+  exfatprogs nfs-common cifs-utils usbutils util-linux \
+  "linux-modules-extra-$(uname -r)"
 ```
+
+If the host is running Ubuntu 20.04 with the 5.4 kernel series, install `exfat-fuse` instead of `linux-modules-extra-$(uname -r)`.
 
 ### 4.2 Create backend service account and directories
 
@@ -182,7 +188,7 @@ perform local PAM (`pam_unix`) authentication consistently on hosts where
 helper privilege transitions are restricted by host security policy.
 
 ### 4.3 Install sudoers Policy
-Install the sudoers policy required for setup-time OS user/group management, mount operations, and managed mount-root bootstrap/ownership:
+Install the sudoers policy required for setup-time OS user/group management, mount operations, and managed mount-root bootstrap/ownership. The `mkfs.exfat` entry below assumes `exfatprogs` was installed in the package preparation step above.
 
 ```bash
 sudo install -d -m 0755 /etc/sudoers.d
