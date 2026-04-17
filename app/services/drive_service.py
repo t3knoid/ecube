@@ -387,18 +387,27 @@ def mount_drive(
         raise HTTPException(status_code=409, detail=detail)
 
     if drive.mount_path:
-        rollback_attempted, rollback_ok, rollback_error = _rollback_mount()
-        logger.warning(
-            "Drive %s mount state changed during mount rollback_attempted=%s rollback_ok=%s rollback_reason=%s",
-            drive_id,
-            rollback_attempted,
-            rollback_ok,
-            sanitize_error_message(rollback_error, "Mount rollback failed"),
-        )
-        detail = "Drive mount state changed during mount; operation aborted after rollback attempted"
-        if rollback_attempted and not rollback_ok:
-            detail += "; manual intervention may be required"
-        raise HTTPException(status_code=409, detail=detail)
+        persisted_mount_path = os.path.normpath(str(drive.mount_path))
+        requested_mount_path = os.path.normpath(mount_point)
+        if persisted_mount_path == requested_mount_path:
+            logger.info(
+                "Drive %s mount already persisted for mount_slot=%s; treating as idempotent success",
+                drive_id,
+                _redacted_device_name(mount_point),
+            )
+        else:
+            rollback_attempted, rollback_ok, rollback_error = _rollback_mount()
+            logger.warning(
+                "Drive %s mount state changed during mount rollback_attempted=%s rollback_ok=%s rollback_reason=%s",
+                drive_id,
+                rollback_attempted,
+                rollback_ok,
+                sanitize_error_message(rollback_error, "Mount rollback failed"),
+            )
+            detail = "Drive mount state changed during mount; operation aborted after rollback attempted"
+            if rollback_attempted and not rollback_ok:
+                detail += "; manual intervention may be required"
+            raise HTTPException(status_code=409, detail=detail)
 
     drive.mount_path = mount_point
     try:
