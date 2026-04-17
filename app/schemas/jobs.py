@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from app.models.hardware import DriveState
 from app.models.jobs import JobStatus, FileStatus
 from app.schemas.types import StrictIntMixin
-from app.utils.sanitize import SafeStr, StrictSafeStr
+from app.utils.sanitize import ProjectIdStr, SafeStr, StrictSafeStr
 
 
 class FileHashesResponse(BaseModel):
@@ -51,7 +51,7 @@ class FileCompareResponse(BaseModel):
 
 
 class JobCreate(StrictIntMixin, BaseModel):
-    project_id: SafeStr = Field(..., min_length=1, description="Project ID for isolation enforcement")
+    project_id: ProjectIdStr = Field(..., min_length=1, description="Project ID for isolation enforcement")
     evidence_number: SafeStr = Field(..., min_length=1, description="Evidence case number or identifier")
     source_path: StrictSafeStr = Field(..., min_length=1, description="Path to source data on network mount or local filesystem")
     target_mount_path: Optional[StrictSafeStr] = Field(default=None, description="Alternative target mount; defaults to assigned drive")

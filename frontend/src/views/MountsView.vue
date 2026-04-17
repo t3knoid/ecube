@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getMounts, createMount, deleteMount, validateAllMounts, validateMount } from '@/api/mounts.js'
 import DataTable from '@/components/common/DataTable.vue'
@@ -36,14 +36,20 @@ const activeBrowsedMount = computed(() =>
 const form = ref({
   type: 'SMB',
   remote_path: '',
+  project_id: '',
   username: '',
   password: '',
   credentials_file: '',
 })
 
+const addDialogRef = ref(null)
+const addDialogTriggerRef = ref(null)
+const addMountDialogTitleId = 'add-mount-dialog-title'
+
 const columns = computed(() => [
   { key: 'id', label: t('common.labels.id'), align: 'right' },
   { key: 'type', label: t('common.labels.type') },
+  { key: 'project_id', label: t('dashboard.project') },
   { key: 'remote_path', label: t('mounts.remotePath') },
   { key: 'local_mount_point', label: t('mounts.localPath') },
   { key: 'status', label: t('common.labels.status') },
@@ -55,7 +61,7 @@ const filtered = computed(() => {
   const query = search.value.trim().toLowerCase()
   return mounts.value.filter((mount) => {
     if (!query) return true
-    const text = [mount.type, mount.remote_path, mount.local_mount_point, mount.status].join(' ').toLowerCase()
+    const text = [mount.type, mount.project_id, mount.remote_path, mount.local_mount_point, mount.status].join(' ').toLowerCase()
     return text.includes(query)
   })
 })
@@ -88,14 +94,46 @@ function resetForm() {
   form.value = {
     type: 'SMB',
     remote_path: '',
+    project_id: '',
     username: '',
     password: '',
     credentials_file: '',
   }
 }
 
+function trapFocusWithin(event, container) {
+  if (!container) return
+  const focusable = Array.from(
+    container.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'),
+  ).filter((element) => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true')
+
+  if (!focusable.length) return
+
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  const active = document.activeElement
+
+  if (event.shiftKey && active === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
+function protectedValue(value) {
+  return value ? t('common.labels.protected') : '-'
+}
+
+function browseLabel(mount) {
+  return mount?.project_id
+    ? `${t('mounts.browse')} ${mount.project_id}`
+    : t('mounts.browse')
+}
+
 function formValid() {
-  return !!form.value.type && !!form.value.remote_path.trim()
+  return !!form.value.type && !!form.value.remote_path.trim() && !!form.value.project_id.trim()
 }
 
 async function submitAddMount() {
@@ -106,6 +144,7 @@ async function submitAddMount() {
     const payload = {
       type: form.value.type,
       remote_path: form.value.remote_path.trim(),
+      project_id: form.value.project_id.trim(),
       username: form.value.username.trim() || null,
       password: form.value.password || null,
       credentials_file: form.value.credentials_file.trim() || null,
@@ -141,6 +180,29 @@ async function runValidateOne(mountId) {
     if (index >= 0) mounts.value[index] = next
   } catch {
     error.value = t('common.errors.requestConflict')
+  }
+}
+
+function openAddDialog(event) {
+  addDialogTriggerRef.value = event?.currentTarget instanceof HTMLElement ? event.currentTarget : document.activeElement
+  showAddDialog.value = true
+}
+
+function closeAddDialog() {
+  showAddDialog.value = false
+  error.value = ''
+  resetForm()
+}
+
+function handleAddDialogKeydown(event) {
+  if (!showAddDialog.value) return
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeAddDialog()
+    return
+  }
+  if (event.key === 'Tab') {
+    trapFocusWithin(event, addDialogRef.value)
   }
 }
 
@@ -181,11 +243,37 @@ async function toggleBrowse(mountId) {
   browsingMountId.value = browsingMountId.value === mountId ? null : mountId
   if (browsingMountId.value !== null) {
     await nextTick()
-    browsePanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    if (typeof browsePanelRef.value?.scrollIntoView === 'function') {
+      browsePanelRef.value.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
   }
 }
 
 onMounted(loadMounts)
+
+watch(showAddDialog, async (open) => {
+  if (open) {
+    document.addEventListener('keydown', handleAddDialogKeydown)
+    await nextTick()
+    const target = addDialogRef.value?.querySelector('#mount-type')
+    if (target instanceof HTMLElement) {
+      target.focus()
+    }
+    return
+  }
+
+  document.removeEventListener('keydown', handleAddDialogKeydown)
+  const trigger = addDialogTriggerRef.value
+  addDialogTriggerRef.value = null
+  await nextTick()
+  if (trigger instanceof HTMLElement) {
+    trigger.focus()
+  }
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', handleAddDialogKeydown)
+})
 </script>
 
 <template>
@@ -195,16 +283,18 @@ onMounted(loadMounts)
       <div class="actions">
         <button class="btn" @click="loadMounts">{{ t('common.actions.refresh') }}</button>
         <button class="btn" @click="runValidateAll">{{ t('mounts.testAll') }}</button>
-        <button class="btn btn-primary" @click="showAddDialog = true">{{ t('mounts.add') }}</button>
+        <button class="btn btn-primary" @click="openAddDialog">{{ t('mounts.add') }}</button>
       </div>
     </header>
 
     <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
-    <p v-if="error" class="error-banner">{{ error }}</p>
+    <p v-if="error" class="error-banner" role="alert" aria-live="assertive">{{ error }}</p>
 
     <input v-model="search" type="text" :placeholder="t('mounts.searchPlaceholder')" :aria-label="t('mounts.searchPlaceholder')" />
 
     <DataTable :columns="columns" :rows="paged" :empty-text="t('mounts.empty')">
+      <template #cell-remote_path="{ row }">{{ protectedValue(row.remote_path) }}</template>
+      <template #cell-local_mount_point="{ row }">{{ protectedValue(row.local_mount_point) }}</template>
       <template #cell-status="{ row }"><StatusBadge :status="row.status" /></template>
       <template #cell-last_checked_at="{ row }">{{ toIso(row.last_checked_at) }}</template>
       <template #cell-actions="{ row }">
@@ -215,7 +305,7 @@ onMounted(loadMounts)
             :disabled="row.status !== 'MOUNTED' || !row.local_mount_point"
             :title="row.status !== 'MOUNTED' || !row.local_mount_point ? t('mounts.browseUnavailable') : ''"
             :aria-expanded="browsingMountId === row.id"
-            :aria-label="row.local_mount_point ? t('mounts.browse') + ' ' + row.local_mount_point : t('mounts.browse')"
+            :aria-label="browseLabel(row)"
             @click="toggleBrowse(row.id)"
           >
             {{ t('mounts.browse') }}
@@ -225,15 +315,15 @@ onMounted(loadMounts)
       </template>
     </DataTable>
 
-    <!-- Inline directory browser panels (one per browsed mount) -->
+    <!-- Inline directory browser panel for the currently browsed mount -->
     <section
       v-if="activeBrowsedMount"
       ref="browsePanelRef"
       class="browse-panel"
-      :aria-label="t('browse.browseMountContents') + ': ' + activeBrowsedMount.local_mount_point"
+      :aria-label="browseLabel(activeBrowsedMount)"
     >
       <h3 class="browse-panel-title">
-        {{ t('browse.browseMountContents') }}: {{ activeBrowsedMount.local_mount_point }}
+        {{ t('browse.browseMountContents') }}: {{ activeBrowsedMount.project_id || t('common.labels.protected') }}
       </h3>
       <DirectoryBrowser
         :mount-path="activeBrowsedMount.local_mount_point"
@@ -243,16 +333,30 @@ onMounted(loadMounts)
     <Pagination v-model:page="page" :page-size="pageSize" :total="filtered.length" />
 
     <teleport to="body">
-      <div v-if="showAddDialog" class="dialog-overlay" @click.self="showAddDialog = false">
-        <div class="dialog-panel" role="dialog" aria-modal="true">
-          <h2>{{ t('mounts.add') }}</h2>
-          <label for="mount-type">{{ t('common.labels.type') }}</label>
-          <select id="mount-type" v-model="form.type">
+      <div v-if="showAddDialog" class="dialog-overlay">
+        <div ref="addDialogRef" class="dialog-panel" role="dialog" aria-modal="true" :aria-labelledby="addMountDialogTitleId">
+          <h2 :id="addMountDialogTitleId">{{ t('mounts.add') }}</h2>
+          <label for="mount-type" class="field-label">
+            {{ t('common.labels.type') }}
+            <span class="required-indicator" aria-hidden="true">*</span>
+            <span class="sr-only">required</span>
+          </label>
+          <select id="mount-type" v-model="form.type" required aria-required="true">
             <option value="SMB">SMB</option>
             <option value="NFS">NFS</option>
           </select>
-          <label for="mount-remote-path">{{ t('mounts.remotePath') }}</label>
-          <input id="mount-remote-path" v-model="form.remote_path" type="text" />
+          <label for="mount-remote-path" class="field-label">
+            {{ t('mounts.remotePath') }}
+            <span class="required-indicator" aria-hidden="true">*</span>
+            <span class="sr-only">required</span>
+          </label>
+          <input id="mount-remote-path" v-model="form.remote_path" type="text" required aria-required="true" />
+          <label for="mount-project-id" class="field-label">
+            {{ t('dashboard.project') }}
+            <span class="required-indicator" aria-hidden="true">*</span>
+            <span class="sr-only">required</span>
+          </label>
+          <input id="mount-project-id" v-model="form.project_id" type="text" required aria-required="true" />
           <label for="mount-username">{{ t('auth.username') }}</label>
           <input id="mount-username" v-model="form.username" type="text" autocomplete="off" />
           <label for="mount-password">{{ t('auth.password') }}</label>
@@ -261,7 +365,7 @@ onMounted(loadMounts)
           <input id="mount-creds-file" v-model="form.credentials_file" type="text" />
 
           <div class="dialog-actions">
-            <button class="btn" @click="showAddDialog = false">{{ t('common.actions.cancel') }}</button>
+            <button class="btn" @click="closeAddDialog">{{ t('common.actions.cancel') }}</button>
             <button class="btn btn-primary" :disabled="saving || !formValid()" @click="submitAddMount">
               {{ saving ? t('common.labels.loading') : t('common.actions.create') }}
             </button>
@@ -340,6 +444,15 @@ select {
   padding: var(--space-lg);
   display: grid;
   gap: var(--space-xs);
+}
+
+.field-label {
+  font-weight: var(--font-weight-bold);
+}
+
+.required-indicator {
+  color: var(--color-danger, #b91c1c);
+  margin-left: 0.15rem;
 }
 
 .dialog-actions {

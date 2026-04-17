@@ -42,6 +42,7 @@ def _make_drive(db, *, state=DriveState.AVAILABLE, project_id=None, device_id="U
         current_state=state,
         current_project_id=project_id,
         filesystem_type=filesystem_type,
+        mount_path=f"/mnt/ecube/{device_id.lower()}",
     )
     db.add(drive)
     db.commit()
@@ -189,7 +190,19 @@ class TestDriveInitDBFailures:
 
     def test_initialize_audit_failure_does_not_abort(self, manager_client, db):
         """Audit failure during initialization must not abort the operation."""
+        from app.models.network import MountStatus, MountType, NetworkMount
+
         drive = _make_drive(db)
+        db.add(
+            NetworkMount(
+                type=MountType.NFS,
+                remote_path="server:/proj-001",
+                project_id="PROJ-001",
+                local_mount_point="/nfs/proj-001-db-audit",
+                status=MountStatus.MOUNTED,
+            )
+        )
+        db.commit()
 
         with patch(
             "app.repositories.audit_repository.AuditRepository.add",
@@ -205,7 +218,19 @@ class TestDriveInitDBFailures:
 
     def test_initialize_db_failure_returns_500(self, manager_client, db):
         """If DB commit fails during drive state change, return 500."""
+        from app.models.network import MountStatus, MountType, NetworkMount
+
         drive = _make_drive(db)
+        db.add(
+            NetworkMount(
+                type=MountType.NFS,
+                remote_path="server:/proj-001",
+                project_id="PROJ-001",
+                local_mount_point="/nfs/proj-001-db-save",
+                status=MountStatus.MOUNTED,
+            )
+        )
+        db.commit()
 
         with patch(
             "app.repositories.drive_repository.DriveRepository.save",
@@ -252,6 +277,7 @@ class TestMountDBFailures:
                 json={
                     "type": "NFS",
                     "remote_path": "server:/share",
+                    "project_id": "PROJ-DB-MOUNT",
                 },
             )
         assert response.status_code == 500
@@ -267,6 +293,7 @@ class TestMountDBFailures:
                 json={
                     "type": "NFS",
                     "remote_path": "server:/share",
+                    "project_id": "PROJ-DB-MOUNT",
                 },
             )
         assert response.status_code == 422
@@ -288,6 +315,7 @@ class TestMountDBFailures:
                 json={
                     "type": "NFS",
                     "remote_path": "server:/share",
+                    "project_id": "PROJ-DB-MOUNT",
                 },
             )
         # Should succeed despite audit failure
@@ -331,6 +359,7 @@ class TestMountDBFailures:
                 json={
                     "type": "NFS",
                     "remote_path": "server:/share",
+                    "project_id": "PROJ-DB-MOUNT",
                 },
             )
         assert response.status_code == 500

@@ -1,9 +1,10 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { getDrives, formatDrive, initializeDrive, mountDrive, prepareEjectDrive, refreshDrives } from '@/api/drives.js'
+import { getMounts } from '@/api/mounts.js'
 import { enablePort } from '@/api/admin.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
@@ -29,6 +30,27 @@ function clearBanners() {
   warnMessage.value = ''
 }
 
+function trapFocusWithin(event, container) {
+  if (!container) return
+  const focusable = Array.from(
+    container.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'),
+  ).filter((element) => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true')
+
+  if (!focusable.length) return
+
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  const active = document.activeElement
+
+  if (event.shiftKey && active === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
 const showFormatDialog = ref(false)
 const showEjectDialog = ref(false)
 const showInitializeDialog = ref(false)
@@ -37,6 +59,14 @@ const showCocPrompt = ref(false)
 
 const filesystemType = ref('ext4')
 const projectId = ref('')
+const loadingProjects = ref(false)
+const mountedProjectOptions = ref([])
+const initializeDialogRef = ref(null)
+const initializeTriggerRef = ref(null)
+
+const initializeDialogTitleId = 'drive-initialize-dialog-title'
+const initializeDialogHelpId = 'drive-initialize-dialog-help'
+const initializeDialogStatusId = 'drive-initialize-dialog-status'
 
 const { driveStateLabel } = useStatusLabels()
 
@@ -60,6 +90,7 @@ const canMount = computed(
 const canEject = computed(
   () => drive.value?.current_state === 'IN_USE' && canManage.value,
 )
+const hasMountedProjectOptions = computed(() => mountedProjectOptions.value.length > 0)
 
 function formatBytes(value) {
   if (typeof value !== 'number' || value <= 0) return '-'
@@ -71,6 +102,10 @@ function formatBytes(value) {
     unit += 1
   }
   return `${next.toFixed(next >= 10 ? 0 : 1)} ${units[unit]}`
+}
+
+function protectedValue(value) {
+  return value ? t('common.labels.protected') : '-'
 }
 
 async function loadDrive() {
@@ -101,6 +136,45 @@ async function runFormat() {
     error.value = t('common.errors.requestConflict')
   } finally {
     saving.value = false
+  }
+}
+
+function normalizeMountedProjectOptions(mounts) {
+  return [...new Set(
+    (mounts || [])
+      .filter((mount) => mount?.status === 'MOUNTED')
+      .map((mount) => (typeof mount?.project_id === 'string' ? mount.project_id.trim() : ''))
+      .filter((value) => value && value.toUpperCase() !== 'UNASSIGNED'),
+  )].sort((left, right) => left.localeCompare(right))
+}
+
+async function loadMountedProjects() {
+  loadingProjects.value = true
+  try {
+    const mounts = await getMounts()
+    mountedProjectOptions.value = normalizeMountedProjectOptions(mounts)
+    const currentProject = typeof drive.value?.current_project_id === 'string'
+      ? drive.value.current_project_id.trim()
+      : ''
+
+    if (currentProject && mountedProjectOptions.value.includes(currentProject)) {
+      projectId.value = currentProject
+    } else {
+      projectId.value = mountedProjectOptions.value[0] || ''
+    }
+  } catch {
+    mountedProjectOptions.value = []
+    projectId.value = ''
+    error.value = t('common.errors.networkError')
+  } finally {
+    loadingProjects.value = false
+    await nextTick()
+    if (showInitializeDialog.value) {
+      const target = initializeDialogRef.value?.querySelector('#project-id')
+      if (target instanceof HTMLElement) {
+        target.focus()
+      }
+    }
   }
 }
 
@@ -136,9 +210,26 @@ async function runInitialize() {
   }
 }
 
-function openInitializeDialog() {
-  projectId.value = drive.value?.current_project_id ?? ''
+function openInitializeDialog(event) {
+  initializeTriggerRef.value = event?.currentTarget instanceof HTMLElement ? event.currentTarget : document.activeElement
   showInitializeDialog.value = true
+  void loadMountedProjects()
+}
+
+function closeInitializeDialog() {
+  showInitializeDialog.value = false
+}
+
+function handleInitializeDialogKeydown(event) {
+  if (!showInitializeDialog.value) return
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeInitializeDialog()
+    return
+  }
+  if (event.key === 'Tab') {
+    trapFocusWithin(event, initializeDialogRef.value)
+  }
 }
 
 async function runEnable() {
@@ -239,7 +330,6 @@ function openChainOfCustody() {
     coc: '1',
     drive_id: String(drive.value.id),
   }
-  if (drive.value.device_identifier) query.drive_sn = drive.value.device_identifier
   if (drive.value.current_project_id) query.project_id = drive.value.current_project_id
   router.push({ name: 'audit', query })
 }
@@ -249,6 +339,30 @@ onMounted(loadDrive)
 watch(driveId, () => {
   browseExpanded.value = false
   loadDrive()
+})
+
+watch(showInitializeDialog, async (open) => {
+  if (open) {
+    document.addEventListener('keydown', handleInitializeDialogKeydown)
+    await nextTick()
+    const target = initializeDialogRef.value?.querySelector('#project-id')
+    if (target instanceof HTMLElement) {
+      target.focus()
+    }
+    return
+  }
+
+  document.removeEventListener('keydown', handleInitializeDialogKeydown)
+  const trigger = initializeTriggerRef.value
+  initializeTriggerRef.value = null
+  await nextTick()
+  if (trigger instanceof HTMLElement) {
+    trigger.focus()
+  }
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', handleInitializeDialogKeydown)
 })
 </script>
 
@@ -263,10 +377,10 @@ watch(driveId, () => {
     </header>
 
     <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
-    <p v-if="error" class="error-banner">{{ error }}</p>
-    <p v-if="infoMessage" class="ok-banner">{{ infoMessage }}</p>
-    <p v-if="warnMessage" class="warn-banner">{{ warnMessage }}</p>
-    <div v-if="showCocPrompt" class="coc-banner">
+    <p v-if="error" class="error-banner" role="alert" aria-live="assertive">{{ error }}</p>
+    <p v-if="infoMessage" class="ok-banner" role="status" aria-live="polite">{{ infoMessage }}</p>
+    <p v-if="warnMessage" class="warn-banner" role="status" aria-live="polite">{{ warnMessage }}</p>
+    <div v-if="showCocPrompt" class="coc-banner" role="status" aria-live="polite">
       <p>{{ t('drives.cocPrompt') }}</p>
       <div class="actions">
         <button class="btn btn-primary" @click="openChainOfCustody">{{ t('drives.openCocReport') }}</button>
@@ -277,9 +391,9 @@ watch(driveId, () => {
     <article v-if="drive" class="detail-card">
       <div class="detail-grid">
         <div><strong>{{ t('common.labels.id') }}</strong><span>{{ drive.id }}</span></div>
-        <div><strong>{{ t('drives.device') }}</strong><span>{{ drive.device_identifier }}</span></div>
-        <div><strong>{{ t('drives.filesystemPath') }}</strong><span>{{ drive.filesystem_path || '-' }}</span></div>
-        <div><strong>{{ t('drives.mountPoint') }}</strong><span>{{ drive.mount_path || '-' }}</span></div>
+        <div><strong>{{ t('drives.device') }}</strong><span>{{ protectedValue(drive.device_identifier) }}</span></div>
+        <div><strong>{{ t('drives.filesystemPath') }}</strong><span>{{ protectedValue(drive.filesystem_path) }}</span></div>
+        <div><strong>{{ t('drives.mountPoint') }}</strong><span>{{ protectedValue(drive.mount_path) }}</span></div>
         <div><strong>{{ t('drives.filesystem') }}</strong><span>{{ drive.filesystem_type || '-' }}</span></div>
         <div><strong>{{ t('common.labels.size') }}</strong><span>{{ formatBytes(drive.capacity_bytes) }}</span></div>
         <div><strong>{{ t('dashboard.project') }}</strong><span>{{ drive.current_project_id || '-' }}</span></div>
@@ -316,7 +430,7 @@ watch(driveId, () => {
       </div>
     </ConfirmDialog>
 
-    <!-- Browse section — shown when drive has an active mount_path and is not DISCONNECTED -->
+    <!-- Browse section — shown when the drive currently exposes a mount path -->
     <section v-if="drive && drive.mount_path" class="browse-section">
       <button
         class="browse-toggle btn"
@@ -342,18 +456,34 @@ watch(driveId, () => {
     />
 
     <teleport to="body">
-      <div v-if="showInitializeDialog" class="dialog-overlay" @click.self="showInitializeDialog = false">
-        <div class="dialog-panel" role="dialog" aria-modal="true">
-          <h3>{{ t('drives.initializeTitle') }}</h3>
-          <p class="muted">
+      <div v-if="showInitializeDialog" class="dialog-overlay">
+        <div
+          ref="initializeDialogRef"
+          class="dialog-panel"
+          role="dialog"
+          aria-modal="true"
+          :aria-labelledby="initializeDialogTitleId"
+          :aria-describedby="`${initializeDialogHelpId} ${initializeDialogStatusId}`"
+        >
+          <h3 :id="initializeDialogTitleId">{{ t('drives.initializeTitle') }}</h3>
+          <p :id="initializeDialogHelpId" class="muted">
             {{ t('drives.projectWarning') }}
             <template v-if="drive.current_project_id"> {{ t('drives.initializeProjectHint', { project: drive.current_project_id }) }}</template>
           </p>
-          <label class="field-label" for="project-id">{{ t('dashboard.project') }}</label>
-          <input id="project-id" v-model="projectId" type="text" :readonly="!!drive.current_project_id" />
+          <label class="field-label" for="project-id">
+            {{ t('dashboard.project') }}
+            <span class="required-indicator" aria-hidden="true">*</span>
+            <span class="sr-only">required</span>
+          </label>
+          <select id="project-id" v-model="projectId" :disabled="loadingProjects || !hasMountedProjectOptions" required aria-required="true">
+            <option value="" disabled>{{ t('audit.selectProject') }}</option>
+            <option v-for="option in mountedProjectOptions" :key="option" :value="option">{{ option }}</option>
+          </select>
+          <p :id="initializeDialogStatusId" v-if="!loadingProjects && !hasMountedProjectOptions" class="muted" role="status" aria-live="polite">{{ t('drives.initializeNoProjects') }}</p>
+          <p :id="initializeDialogStatusId" v-else-if="loadingProjects" class="muted" role="status" aria-live="polite">{{ t('common.labels.loading') }}</p>
           <div class="dialog-actions">
-            <button class="btn" :disabled="saving" @click="showInitializeDialog = false">{{ t('common.actions.cancel') }}</button>
-            <button class="btn btn-primary" :disabled="saving || !projectId.trim()" @click="runInitialize">{{ t('drives.initialize') }}</button>
+            <button class="btn" :disabled="saving" @click="closeInitializeDialog">{{ t('common.actions.cancel') }}</button>
+            <button class="btn btn-primary" :disabled="saving || loadingProjects || !projectId.trim()" @click="runInitialize">{{ t('drives.initialize') }}</button>
           </div>
         </div>
       </div>
@@ -471,6 +601,11 @@ watch(driveId, () => {
 
 .field-label {
   font-weight: var(--font-weight-bold);
+}
+
+.required-indicator {
+  color: var(--color-danger, #b91c1c);
+  margin-left: 0.15rem;
 }
 
 input,
