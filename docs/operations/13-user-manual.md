@@ -352,7 +352,7 @@ Use the page controls to:
 
 Selecting a drive opens a detail view showing:
 
-- Drive identifiers and filesystem details
+- Drive identifiers and filesystem details, with sensitive device and path values shown as `Protected` in standard operator views when appropriate
 - Current project assignment
 - Current status badge
 - Available actions such as format, initialize, and prepare eject
@@ -434,6 +434,8 @@ The add-mount dialog supports common fields such as:
 - Credentials file
 
 Project assignment is required when creating a mount. Drives can only be initialized for projects that have at least one assigned share in the `MOUNTED` state.
+
+For security, the standard mount list and browse labels intentionally redact raw remote paths and local mount points in operator-facing views.
 
 ECUBE now creates the local mount point automatically based on the remote path and mount type (for example, NFS mounts are created under `/nfs/*` and SMB mounts under `/smb/*`).
 
