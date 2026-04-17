@@ -93,4 +93,14 @@ describe('DrivesView rescan and filter loading', () => {
     expect(mocks.getDrives).toHaveBeenLastCalledWith({ include_disconnected: true })
     expect(wrapper.find('select').element.value).toBe('ALL')
   })
+
+  it('shows the Browse action for a mounted available drive', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/1', current_state: 'AVAILABLE' })])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const labels = wrapper.findAll('button').map((node) => node.text())
+    expect(labels).toContain(i18n.global.t('drives.browse'))
+  })
 })
