@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.exceptions import ConflictError
 from app.infrastructure.drive_eject import DriveEjectProvider
 from app.infrastructure.drive_format import DriveFormatter
 from app.infrastructure.drive_mount import DriveMountProvider
@@ -13,7 +14,8 @@ from app.infrastructure import validate_device_path
 from app.models.hardware import DriveState, UsbDrive
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
-from app.utils.sanitize import sanitize_error_message
+from app.repositories.mount_repository import MountRepository
+from app.utils.sanitize import normalize_project_id, sanitize_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +67,15 @@ def initialize_drive(
     drive_id: int, project_id: str, db: Session, actor: Optional[str] = None,
     client_ip: Optional[str] = None,
 ) -> UsbDrive:
+    normalized_project_id = normalize_project_id(project_id)
+    if not isinstance(normalized_project_id, str) or not normalized_project_id:
+        raise HTTPException(status_code=422, detail="project_id must not be empty")
+
+    project_id = normalized_project_id
+
     drive_repo = DriveRepository(db)
     audit_repo = AuditRepository(db)
+    mount_repo = MountRepository(db)
 
     drive = drive_repo.get_for_update(drive_id)
     if not drive:
@@ -201,6 +210,74 @@ def initialize_drive(
             detail=(
                 "Drive must have a recognized filesystem before initialization. "
                 f"Current filesystem_type: {current_val}"
+            ),
+        )
+
+    try:
+        project_source = mount_repo.get_mounted_project_for_update(project_id)
+    except ConflictError as exc:
+        try:
+            audit_repo.add(
+                action="INIT_REJECTED_PROJECT_SOURCE_BUSY",
+                user=actor,
+                project_id=project_id,
+                drive_id=drive_id,
+                details={
+                    "actor": actor,
+                    "drive_id": drive_id,
+                    "requested_project_id": project_id,
+                    "error_code": "PROJECT_SOURCE_BUSY",
+                    "message": "Project source is currently being updated",
+                    "details": "Project source is currently being updated by another operation.",
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.error(
+                "Failed to write audit log for INIT_REJECTED_PROJECT_SOURCE_BUSY",
+                extra={
+                    "action": "INIT_REJECTED_PROJECT_SOURCE_BUSY",
+                    "drive_id": drive_id,
+                    "project_id": project_id,
+                    "user_id": actor,
+                    "client_ip": client_ip,
+                },
+            )
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    if not project_source:
+        try:
+            audit_repo.add(
+                action="INIT_REJECTED_NO_PROJECT_SOURCE",
+                user=actor,
+                project_id=project_id,
+                drive_id=drive_id,
+                details={
+                    "actor": actor,
+                    "drive_id": drive_id,
+                    "requested_project_id": project_id,
+                    "error_code": "NO_PROJECT_SOURCE",
+                    "message": "No mounted project source is available",
+                    "details": "Mount a share for this project before initializing a drive.",
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.error(
+                "Failed to write audit log for INIT_REJECTED_NO_PROJECT_SOURCE",
+                extra={
+                    "action": "INIT_REJECTED_NO_PROJECT_SOURCE",
+                    "drive_id": drive_id,
+                    "project_id": project_id,
+                    "user_id": actor,
+                    "client_ip": client_ip,
+                },
+            )
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"No mounted share is assigned to project {project_id}. "
+                "Mount a share for this project before initializing a drive."
             ),
         )
 

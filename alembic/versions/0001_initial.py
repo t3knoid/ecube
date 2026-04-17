@@ -94,6 +94,9 @@ def upgrade() -> None:
         ),
     )
     op.create_index("ix_usb_drives_mount_path", "usb_drives", ["mount_path"])
+    op.create_index("ix_usb_drives_current_state", "usb_drives", ["current_state"])
+    op.create_index("ix_usb_drives_current_project_id", "usb_drives", ["current_project_id"])
+    op.create_index("ix_usb_drives_state_project", "usb_drives", ["current_state", "current_project_id"])
 
     op.create_table(
         "network_mounts",
@@ -104,6 +107,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("remote_path", sa.String, nullable=False),
+        sa.Column("project_id", sa.String(), nullable=False, server_default="UNASSIGNED"),
         sa.Column("local_mount_point", sa.String, nullable=False, unique=True),
         sa.Column(
             "status",
@@ -116,6 +120,10 @@ def upgrade() -> None:
             server_default=sa.func.now(),
         ),
     )
+
+    op.create_index("ix_network_mounts_status", "network_mounts", ["status"])
+    op.create_index("ix_network_mounts_project_id", "network_mounts", ["project_id"])
+    op.create_index("ix_network_mounts_status_project", "network_mounts", ["status", "project_id"])
 
     op.create_table(
         "export_jobs",
@@ -151,6 +159,8 @@ def upgrade() -> None:
             server_default=sa.func.now(),
         ),
     )
+
+    op.create_index("ix_export_jobs_project_id", "export_jobs", ["project_id"])
 
     op.create_table(
         "export_files",
@@ -285,7 +295,14 @@ def downgrade() -> None:
     op.drop_table("manifests")
     op.drop_table("export_files")
     op.drop_table("export_jobs")
+    op.drop_index("ix_export_jobs_project_id", table_name="export_jobs")
+    op.drop_index("ix_network_mounts_status_project", table_name="network_mounts")
+    op.drop_index("ix_network_mounts_project_id", table_name="network_mounts")
+    op.drop_index("ix_network_mounts_status", table_name="network_mounts")
     op.drop_table("network_mounts")
+    op.drop_index("ix_usb_drives_state_project", table_name="usb_drives")
+    op.drop_index("ix_usb_drives_current_project_id", table_name="usb_drives")
+    op.drop_index("ix_usb_drives_current_state", table_name="usb_drives")
     op.drop_index("ix_usb_drives_mount_path", table_name="usb_drives")
     op.drop_table("usb_drives")
     op.drop_table("usb_ports")

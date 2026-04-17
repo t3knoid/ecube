@@ -23,6 +23,7 @@ function buildMount(overrides = {}) {
   return {
     id: 11,
     type: 'SMB',
+    project_id: 'PROJ-011',
     remote_path: '//server/share',
     local_mount_point: '/smb/project2',
     status: 'UNMOUNTED',
@@ -33,6 +34,7 @@ function buildMount(overrides = {}) {
 
 function mountView() {
   return mount(MountsView, {
+    attachTo: document.body,
     global: {
       plugins: [i18n],
       stubs: {
@@ -120,5 +122,146 @@ describe('MountsView removal flow', () => {
 
     expect(mocks.deleteMount).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain(i18n.global.t('mounts.removeConfirmTitle'))
+  })
+
+  it('submits the selected project when adding a mount', async () => {
+    mocks.getMounts.mockResolvedValue([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    expect(addButton).toBeTruthy()
+
+    await addButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#mount-remote-path').setValue('//server/new-share')
+    await wrapper.find('#mount-project-id').setValue('PROJ-NEW')
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.create')).trigger('click')
+    await flushPromises()
+
+    expect(mocks.createMount).toHaveBeenCalledWith({
+      type: 'SMB',
+      remote_path: '//server/new-share',
+      project_id: 'PROJ-NEW',
+      username: null,
+      password: null,
+      credentials_file: null,
+    })
+  })
+
+  it('moves focus into the add mount dialog and closes it on Escape', async () => {
+    mocks.getMounts.mockResolvedValue([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    expect(addButton).toBeTruthy()
+
+    await addButton.trigger('click')
+    await flushPromises()
+
+    const mountTypeSelect = wrapper.find('#mount-type')
+    expect(mountTypeSelect.exists()).toBe(true)
+    expect(document.activeElement?.id).toBe('mount-type')
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+
+    expect(wrapper.find('#mount-type').exists()).toBe(false)
+  })
+
+  it('does not dismiss the add mount dialog when the overlay is clicked', async () => {
+    mocks.getMounts.mockResolvedValue([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    expect(addButton).toBeTruthy()
+
+    await addButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('.dialog-overlay').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('#mount-type').exists()).toBe(true)
+  })
+
+  it('marks required add-mount fields as required for assistive tech', async () => {
+    mocks.getMounts.mockResolvedValue([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    expect(addButton).toBeTruthy()
+
+    await addButton.trigger('click')
+    await flushPromises()
+
+    const remotePath = wrapper.find('#mount-remote-path')
+    const projectId = wrapper.find('#mount-project-id')
+
+    expect(remotePath.attributes('required')).toBeDefined()
+    expect(remotePath.attributes('aria-required')).toBe('true')
+    expect(projectId.attributes('required')).toBeDefined()
+    expect(projectId.attributes('aria-required')).toBe('true')
+  })
+
+  it('announces load errors through an alert live region', async () => {
+    mocks.getMounts.mockRejectedValue(new Error('network down'))
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const errorBanner = wrapper.find('.error-banner')
+    expect(errorBanner.exists()).toBe(true)
+    expect(errorBanner.attributes('role')).toBe('alert')
+    expect(errorBanner.attributes('aria-live')).toBe('assertive')
+  })
+
+  it('does not expose raw mount paths in browse labels', async () => {
+    mocks.getMounts.mockResolvedValue([buildMount({ status: 'MOUNTED' })])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const browseButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.browse'))
+    expect(browseButton).toBeTruthy()
+    expect(browseButton.attributes('aria-label')).not.toContain('/smb/project2')
+
+    await browseButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('/smb/project2')
+  })
+
+  it('clears password and credentials fields when the dialog closes', async () => {
+    mocks.getMounts.mockResolvedValue([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    expect(addButton).toBeTruthy()
+
+    await addButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#mount-password').setValue('super-secret')
+    await wrapper.find('#mount-creds-file').setValue('/tmp/creds.txt')
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+
+    await addButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('#mount-password').element.value).toBe('')
+    expect(wrapper.find('#mount-creds-file').element.value).toBe('')
   })
 })
