@@ -42,7 +42,7 @@
   - `current_project_id` (nullable string) — set during initialization to
     bind the drive to a project for isolation enforcement. Remains `NULL`
     until the drive is initialized via `POST /drives/{drive_id}/initialize`.
-  - `current_state` — FSM column (`EMPTY`, `AVAILABLE`, `IN_USE`, `ARCHIVED`);
+  - `current_state` — FSM column (`DISCONNECTED`, `AVAILABLE`, `IN_USE`, `ARCHIVED`);
     transitions to `IN_USE` when `current_project_id` is bound, then to
     `ARCHIVED` upon successful chain-of-custody handoff confirmation to
     remove the drive from active circulation and exclude it from CoC searches
@@ -170,7 +170,7 @@ This section documents the concrete table layout represented by the SQLAlchemy m
 - `capacity_bytes` (BigInteger, nullable)
 - `encryption_status` (String, nullable)
 - `filesystem_type` (String, nullable)
-- `current_state` (Enum `DriveState: EMPTY | AVAILABLE | IN_USE | ARCHIVED`, `native_enum=False`, default `AVAILABLE`)
+- `current_state` (Enum `DriveState: DISCONNECTED | AVAILABLE | IN_USE | ARCHIVED`, `native_enum=False`, default `AVAILABLE`)
   - Transitions: `EMPTY ↔ AVAILABLE` (discovery), `AVAILABLE → IN_USE` (init), `IN_USE → ARCHIVED` (CoC handoff)
   - **ARCHIVED state:** Drive is removed from active circulation after legal custody transfer; excluded from all CoC searches and operational endpoints
 - `current_project_id` (String, nullable)

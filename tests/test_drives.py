@@ -72,11 +72,11 @@ def test_list_drives_empty_project_id_rejected(client, db):
     assert response.status_code == 422
 
 
-def test_list_drives_no_filter_returns_all(client, db):
-    """GET /drives without project_id returns connected drives (excludes EMPTY by default)."""
+def test_list_drives_default_excludes_disconnected(client, db):
+    """GET /drives without project_id returns connected drives (excludes DISCONNECTED by default)."""
     d1 = UsbDrive(device_identifier="USB-1", current_state=DriveState.IN_USE, current_project_id="PROJ-001")
     d2 = UsbDrive(device_identifier="USB-2", current_state=DriveState.AVAILABLE)
-    d3 = UsbDrive(device_identifier="USB-3", current_state=DriveState.EMPTY)
+    d3 = UsbDrive(device_identifier="USB-3", current_state=DriveState.DISCONNECTED)
     db.add_all([d1, d2, d3])
     db.commit()
 
@@ -90,10 +90,10 @@ def test_list_drives_no_filter_returns_all(client, db):
 
 
 def test_list_drives_include_disconnected(client, db):
-    """GET /drives?include_disconnected=true returns all drives including EMPTY."""
+    """GET /drives?include_disconnected=true returns all drives including DISCONNECTED."""
     d1 = UsbDrive(device_identifier="USB-1", current_state=DriveState.IN_USE, current_project_id="PROJ-001")
     d2 = UsbDrive(device_identifier="USB-2", current_state=DriveState.AVAILABLE)
-    d3 = UsbDrive(device_identifier="USB-3", current_state=DriveState.EMPTY)
+    d3 = UsbDrive(device_identifier="USB-3", current_state=DriveState.DISCONNECTED)
     db.add_all([d1, d2, d3])
     db.commit()
 
@@ -105,22 +105,6 @@ def test_list_drives_include_disconnected(client, db):
     assert "USB-2" in ids
     assert "USB-3" in ids
 
-
-def test_list_drives_default_excludes_empty(client, db):
-    """GET /drives (no params) excludes EMPTY drives by default."""
-    d1 = UsbDrive(device_identifier="USB-A", current_state=DriveState.EMPTY)
-    d2 = UsbDrive(device_identifier="USB-B", current_state=DriveState.AVAILABLE)
-    d3 = UsbDrive(device_identifier="USB-C", current_state=DriveState.IN_USE, current_project_id="PROJ-001")
-    db.add_all([d1, d2, d3])
-    db.commit()
-
-    response = client.get("/drives")
-    assert response.status_code == 200
-    data = response.json()
-    states = [d["current_state"] for d in data]
-    assert "EMPTY" not in states
-    assert "AVAILABLE" in states
-    assert "IN_USE" in states
 
 
 def test_initialize_drive(manager_client, db):
@@ -449,12 +433,12 @@ def test_initialize_archived_drive_is_rejected(manager_client, db):
 
 
 def test_initialize_empty_drive_is_rejected(manager_client, db):
-    """EMPTY drives are not accessible; initialization must be rejected with 409."""
+    """DISCONNECTED drives are not accessible; initialization must be rejected with 409."""
     from app.models.audit import AuditLog
 
     drive = UsbDrive(
         device_identifier="USB003E",
-        current_state=DriveState.EMPTY,
+        current_state=DriveState.DISCONNECTED,
         filesystem_type="ext4",
     )
     db.add(drive)
@@ -462,17 +446,17 @@ def test_initialize_empty_drive_is_rejected(manager_client, db):
 
     response = manager_client.post(f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-NEW"})
     assert response.status_code == 409
-    assert "empty" in response.json()["message"].lower()
+    assert "disconnected" in response.json()["message"].lower()
 
-    # Drive state must remain EMPTY.
+    # Drive state must remain DISCONNECTED.
     db.refresh(drive)
-    assert drive.current_state == DriveState.EMPTY
+    assert drive.current_state == DriveState.DISCONNECTED
 
     # Denial must be recorded in the audit trail.
     log = db.query(AuditLog).filter(AuditLog.action == "INIT_REJECTED_NOT_AVAILABLE").first()
     assert log is not None
     assert log.details["drive_id"] == drive.id
-    assert log.details["current_state"] == "EMPTY"
+    assert log.details["current_state"] == "DISCONNECTED"
     assert log.details["requested_project_id"] == "PROJ-NEW"
 
 
@@ -769,7 +753,7 @@ def test_prepare_eject_requires_in_use_state(manager_client, db):
     """
     drive = UsbDrive(
         device_identifier="USB011",
-        current_state=DriveState.EMPTY,
+        current_state=DriveState.DISCONNECTED,
         current_project_id=None,
     )
     db.add(drive)
@@ -784,10 +768,10 @@ def test_prepare_eject_requires_in_use_state(manager_client, db):
     # Verify prepare_eject was NOT called (fast-fail before OS operations)
     provider.prepare_eject.assert_not_called()
 
-    # Drive state must remain EMPTY.
+    # Drive state must remain DISCONNECTED.
     db.expire(drive)
     db.refresh(drive)
-    assert drive.current_state == DriveState.EMPTY
+    assert drive.current_state == DriveState.DISCONNECTED
 
 
 def test_prepare_eject_available_state_conflict(manager_client, db):

@@ -79,7 +79,7 @@ def test_drive_repo_get_missing(db):
 def test_drive_repo_list_all_returns_all(db):
     repo = DriveRepository(db)
     repo.add(UsbDrive(device_identifier="USB-A", current_state=DriveState.AVAILABLE))
-    repo.add(UsbDrive(device_identifier="USB-B", current_state=DriveState.EMPTY))
+    repo.add(UsbDrive(device_identifier="USB-B", current_state=DriveState.DISCONNECTED))
 
     all_drives = repo.list_all()
     assert len(all_drives) == 2
