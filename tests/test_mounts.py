@@ -68,6 +68,9 @@ def test_add_mount_logs_attempt_and_success(manager_client, db, caplog):
     messages = [r.getMessage() for r in caplog.records]
     assert any("Mount attempt started" in m for m in messages)
     assert any("Mount attempt succeeded" in m for m in messages)
+    assert not any("/exports/audit" in m for m in messages)
+    assert not any("/nfs/audit" in m for m in messages)
+    assert not any("sudo -n" in m for m in messages)
 
 
 def test_add_mount_uses_unique_generated_local_mount_point(manager_client, db):
@@ -158,6 +161,9 @@ def test_add_mount_logs_failure(manager_client, db, caplog):
     messages = [r.getMessage() for r in caplog.records]
     assert any("Mount attempt started" in m for m in messages)
     assert any("Mount attempt failed" in m for m in messages)
+    assert not any("/exports/audit" in m for m in messages)
+    assert not any("/nfs/audit" in m for m in messages)
+    assert not any("sudo -n" in m for m in messages)
 
 
 def test_list_mounts(client, db):
@@ -289,7 +295,7 @@ def test_delete_mount_not_found(manager_client, db):
     assert response.status_code == 404
 
 
-def test_delete_mount_returns_conflict_when_unmount_fails(manager_client, db):
+def test_delete_mount_returns_conflict_when_unmount_fails(manager_client, db, caplog):
     mount = NetworkMount(
         type=MountType.NFS,
         remote_path="192.168.1.1:/share",
@@ -300,11 +306,14 @@ def test_delete_mount_returns_conflict_when_unmount_fails(manager_client, db):
     db.commit()
 
     with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(returncode=1, stderr="target is busy", stdout="")
-        response = manager_client.delete(f"/mounts/{mount.id}")
+        mock_run.return_value = MagicMock(returncode=1, stderr="umount: /mnt/share: target is busy", stdout="")
+        with caplog.at_level("INFO"):
+            response = manager_client.delete(f"/mounts/{mount.id}")
 
     assert response.status_code == 409
     assert db.get(NetworkMount, mount.id) is not None
+    messages = [r.getMessage() for r in caplog.records]
+    assert not any("/mnt/share" in m for m in messages)
 
 
 def test_delete_unmounted_mount_skips_os_unmount_and_removes_record(manager_client, db):
