@@ -570,7 +570,7 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
             details={
                 "mount_id": mount.id,
                 "project_id": mount.project_id,
-                "remote_path": mount_data.remote_path,
+                "mount_label": _redacted_mount_label(str(mount.local_mount_point)),
                 "status": mount.status.value,
                 "error_code": "MOUNT_FAILED" if _mount_error else None,
                 "message": "Provider mount operation failed" if _mount_error else None,

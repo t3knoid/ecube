@@ -161,7 +161,8 @@ class TestMountAuditLogging:
         entry = _audit_by_action(db, "MOUNT_ADDED")
         assert entry is not None
         assert entry.user == "manager-user"
-        assert entry.details["remote_path"] == "1.2.3.4:/audit-data"
+        assert entry.details["mount_label"] == "audit-data"
+        assert "remote_path" not in entry.details
         assert entry.details["status"] in {"MOUNTED", "ERROR"}
 
     def test_remove_mount_logs_actor(self, manager_client, db):
