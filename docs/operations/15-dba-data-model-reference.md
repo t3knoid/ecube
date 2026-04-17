@@ -115,7 +115,7 @@ This section captures the primary physical schema details used by DBAs.
 
 ### Core Enumerations
 
-- `drive_state`: `EMPTY`, `AVAILABLE`, `IN_USE`
+- `drive_state`: `EMPTY` (displayed as "Disconnected"), `AVAILABLE`, `IN_USE`
 - `mount_type`: `NFS`, `SMB`
 - `mount_status`: `MOUNTED`, `UNMOUNTED`, `ERROR`
 - `job_status`: `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `VERIFYING`
@@ -169,6 +169,8 @@ stateDiagram-v2
   IN_USE --> AVAILABLE: Prepare-eject
   AVAILABLE --> EMPTY: Drive removed
   IN_USE --> IN_USE: Project isolation enforced
+
+  state "Disconnected" as EMPTY
 ```
 
 ### Startup Reconciliation
