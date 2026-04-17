@@ -39,7 +39,7 @@ const columns = computed(() => [
   { key: 'device_identifier', label: t('drives.device') },
   { key: 'filesystem_type', label: t('drives.filesystem') },
   { key: 'capacity_bytes', label: t('common.labels.size'), align: 'right' },
-  { key: 'mount_path', label: t('drives.localMountPoint') },
+  { key: 'mount_path', label: t('drives.mountPoint') },
   { key: 'current_state', label: t('common.labels.status') },
   { key: 'current_project_id', label: t('dashboard.project') },
   { key: 'actions', label: '', align: 'center' },
