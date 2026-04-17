@@ -126,7 +126,7 @@ class DriveInfoSchema(BaseModel):
     filesystem_path: Optional[str] = Field(default=None, description="Current OS block device node (e.g. /dev/sdb)")
     capacity_bytes: Optional[int] = Field(default=None, description="Total storage capacity in bytes")
     filesystem_type: Optional[str] = Field(default=None, description="Detected filesystem label (e.g. ext4, exfat)")
-    current_state: DriveState = Field(..., description="Current drive state (EMPTY, AVAILABLE, IN_USE)")
+    current_state: DriveState = Field(..., description="Current drive state (DISCONNECTED, AVAILABLE, IN_USE)")
     current_project_id: Optional[str] = Field(default=None, description="Bound project ID if IN_USE")
 
     model_config = {"from_attributes": True}

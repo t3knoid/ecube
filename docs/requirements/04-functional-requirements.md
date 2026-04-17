@@ -44,7 +44,7 @@ ECUBE must:
 
 Managed drive states must include:
 
-- `EMPTY`
+- `DISCONNECTED`
 - `AVAILABLE`
 - `IN_USE`
 
