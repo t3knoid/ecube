@@ -447,7 +447,7 @@ Vue I18n 9.x provides the localization infrastructure. All user-visible strings 
 | `MountsView.vue` | Screen 5 | UC-5.1 – UC-5.6 | Mount list with test/unmount/remove actions; add-mount dialog |
 | `JobsView.vue` | Screen 6a | UC-6.1, UC-6.3 | Job list with status/progress; create-job button |
 | `JobDetailView.vue` | Screen 6b–d | UC-6.2 – UC-6.8 | Progress bar with polling; file list table; start/verify/manifest actions; hash viewer; file compare |
-| `AuditView.vue` | Screen 7 | UC-7.1 – UC-7.7 | Filterable audit log table; date range, user, action filters; CSV export; CoC report retrieval by drive/project (drive default) with print/save controls. Drive selector populated server-side via `GET /drives?state=IN_USE&state=AVAILABLE` to exclude EMPTY and ARCHIVED drives. |
+| `AuditView.vue` | Screen 7 | UC-7.1 – UC-7.7 | Filterable audit log table; date range, user, action filters; CSV export; CoC report retrieval by drive/project (drive default) with print/save controls. Drive selector populated server-side via `GET /drives?state=IN_USE&state=AVAILABLE` to exclude DISCONNECTED and ARCHIVED drives. |
 | `UsersView.vue` | Screen 8 | UC-3.1 – UC-3.9 | Single editable users table: role selection, per-user save, password reset, and create-user flow; admin-only |
 | `SystemView.vue` | Screen 9 | UC-8.1 – UC-8.8 | Tabbed: Health, USB Topology, Block Devices, Mounts, Logs, Job Debug |
 
@@ -455,7 +455,7 @@ Vue I18n 9.x provides the localization infrastructure. All user-visible strings 
 
 | Component | Purpose | Used By |
 |-----------|---------|--------|
-| `StatusBadge.vue` | Colored pill showing state (EMPTY, AVAILABLE, IN_USE, RUNNING, etc.) | DrivesView, JobsView, MountsView |
+| `StatusBadge.vue` | Colored pill showing state (DISCONNECTED, AVAILABLE, IN_USE, RUNNING, etc.) | DrivesView, JobsView, MountsView |
 | `ProgressBar.vue` | Determinate bar with percentage and bytes label | JobDetailView, DashboardView |
 | `ConfirmDialog.vue` | Modal with title, message, confirm/cancel buttons | Format drive, delete mount, eject drive, remove user |
 | `DataTable.vue` | Sortable, paginated table with slot-based column rendering | All list views |

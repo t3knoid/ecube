@@ -66,14 +66,14 @@
 
 ### State Model
 
-- `EMPTY` when no removable media is present on the mapped port.
+- `DISCONNECTED` when no removable media is present on the mapped port.
 - `AVAILABLE` when media is detected, validated, and eligible for assignment.
 - `IN_USE` when media is actively assigned to an export workflow.
 
 ### Event Handling
 
 - On insertion: detect media, evaluate usability signals, and bind to stable port identity.
-- On removal: invalidate media bindings, preserve historical assignment traceability, and mark port `EMPTY`.
+- On removal: invalidate media bindings, preserve historical assignment traceability, and mark port `DISCONNECTED`.
 - On transient disconnect/reconnect: preserve deterministic remapping behavior and avoid cross-port ambiguity.
 
 ### Filesystem Detection

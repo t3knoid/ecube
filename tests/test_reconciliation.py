@@ -484,7 +484,7 @@ class TestReconcileDrives:
         )
 
         db.refresh(drive)
-        assert drive.current_state == DriveState.EMPTY
+        assert drive.current_state == DriveState.DISCONNECTED
         assert result["drives_removed"] >= 1
 
     def test_absent_in_use_drive_preserved(self, db: Session):
