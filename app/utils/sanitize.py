@@ -90,6 +90,8 @@ def sanitize_error_message(err: object, default_message: str = "Operation failed
         return "Target is busy"
     if "invalid device path" in lowered:
         return "Invalid device path"
+    if "unknown filesystem type" in lowered or "wrong fs type" in lowered or "bad superblock" in lowered:
+        return "Filesystem type is not supported by the host"
     return default_message
 
 
