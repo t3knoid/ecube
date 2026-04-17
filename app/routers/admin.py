@@ -60,9 +60,10 @@ from app.schemas.admin import (
     SetOSGroupsRequest,
 )
 from app.schemas.hardware import HubUpdateRequest, PortEnableRequest, PortUpdateRequest, UsbHubSchema, UsbPortSchema
-from app.infrastructure import get_os_user_provider
+from app.infrastructure import get_drive_discovery, get_filesystem_detector, get_os_user_provider
 from app.infrastructure.os_user_protocol import OSUserError, OsUserProvider
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500, R_503, R_504
+from app.services.discovery_service import run_discovery_sync
 from app.services.os_user_service import validate_group_name, validate_username
 from app.constants import ECUBE_GROUPNAME_PATTERN, USERNAME_PATTERN, ECUBE_GROUP_ROLE_MAP, RESERVED_USERNAMES
 from app.utils.client_ip import get_client_ip
@@ -1183,6 +1184,21 @@ def toggle_port_enabled(
         "enabled": body.enabled,
         "path": str(request.url.path),
     }, client_ip=get_client_ip(request))
+
+    try:
+        run_discovery_sync(
+            db,
+            actor=current_user.username,
+            topology_source=get_drive_discovery().discover_topology,
+            filesystem_detector=get_filesystem_detector(),
+            client_ip=get_client_ip(request),
+        )
+    except Exception:
+        logger.exception(
+            "Port toggle reconciliation failed for port %s enabled=%s",
+            port.id,
+            body.enabled,
+        )
 
     return UsbPortSchema.model_validate(port)
 

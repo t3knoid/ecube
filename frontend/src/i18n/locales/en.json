@@ -63,6 +63,7 @@
     "ejectSuccess": "Drive prepared for ejection.",
     "enable": "Enable Drive",
     "enableSuccess": "Port enabled. Drive is now available.",
+    "enableInUse": "Port enabled. Drive remains in use because it is already mounted.",
     "enableNoPort": "Cannot enable: drive has no associated port.",
     "enablePortNotFound": "Port not found. The port may have been removed or the drive re-seated.",
     "enablePending": "Port enabled, but drive is still {state}. Discovery may still be in progress.",

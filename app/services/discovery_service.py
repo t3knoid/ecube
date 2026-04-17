@@ -178,8 +178,14 @@ def run_discovery_sync(
             port_id = port_id_by_system_path.get(discovered_drive.port_system_path)
 
         if existing is None:
-            # New drive — insert as AVAILABLE only if port is enabled.
-            initial_state = DriveState.AVAILABLE if _port_is_enabled(port_id) else DriveState.DISCONNECTED
+            # New drive — mounted drives must never be inserted as AVAILABLE.
+            port_enabled = _port_is_enabled(port_id)
+            if port_enabled and discovered_drive.mount_path:
+                initial_state = DriveState.IN_USE
+            elif port_enabled:
+                initial_state = DriveState.AVAILABLE
+            else:
+                initial_state = DriveState.DISCONNECTED
             drive = UsbDrive(
                 device_identifier=discovered_drive.device_identifier,
                 port_id=port_id,
@@ -245,14 +251,20 @@ def run_discovery_sync(
                     existing.filesystem_type = detected_fs
                     changed = True
 
-            # Re-activate a previously-emptied drive only if port is enabled.
-            if existing.current_state == DriveState.DISCONNECTED and _port_is_enabled(port_id or existing.port_id):
+            port_enabled = _port_is_enabled(port_id or existing.port_id)
+
+            # Mounted drives must never remain in AVAILABLE after rediscovery.
+            if port_enabled and existing.mount_path and existing.current_state != DriveState.IN_USE:
+                existing.current_state = DriveState.IN_USE
+                changed = True
+            # Re-activate a previously disconnected drive only if the port is enabled.
+            elif existing.current_state == DriveState.DISCONNECTED and port_enabled:
                 existing.current_state = DriveState.AVAILABLE
                 changed = True
 
             # Demote AVAILABLE → DISCONNECTED when the port has been disabled.
             # IN_USE drives are left untouched to preserve project isolation.
-            if existing.current_state == DriveState.AVAILABLE and not _port_is_enabled(port_id or existing.port_id):
+            if existing.current_state == DriveState.AVAILABLE and not port_enabled:
                 existing.current_state = DriveState.DISCONNECTED
                 existing.mount_path = None
                 changed = True
