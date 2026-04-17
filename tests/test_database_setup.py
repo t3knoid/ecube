@@ -1286,7 +1286,7 @@ class TestDatabaseService:
         assert result_mode == 0o600, f"Expected 0o600, got {oct(result_mode)}"
         assert env_file.read_text() == "DB=new\n"
 
-    @patch("app.services.database_service._write_env_setting")
+    @patch("app.services.database_service._write_env_settings")
     @patch("app.services.database_service._reinitialize_engine")
     @patch("app.services.database_service._run_migrations", return_value=4)
     @patch("app.services.database_service.psycopg2")
