@@ -1,6 +1,5 @@
 from typing import List, Optional
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.utils.sanitize import normalize_project_id
@@ -42,7 +41,7 @@ class MountRepository:
             self.db.query(NetworkMount.id)
             .filter(
                 NetworkMount.status == MountStatus.MOUNTED,
-                func.upper(func.trim(NetworkMount.project_id)) == normalized_project_id,
+                NetworkMount.project_id == normalized_project_id,
             )
             .first()
             is not None
