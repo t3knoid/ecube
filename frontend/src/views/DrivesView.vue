@@ -138,9 +138,15 @@ async function rescan() {
   }
 }
 
-watch(stateFilter, () => {
+watch(stateFilter, (newValue, oldValue) => {
   page.value = 1
-  loadDrives()
+
+  const nextIncludesDisconnected = newValue === 'ALL' || newValue === 'EMPTY'
+  const previousIncludesDisconnected = oldValue === 'ALL' || oldValue === 'EMPTY'
+
+  if (nextIncludesDisconnected !== previousIncludesDisconnected) {
+    loadDrives()
+  }
 })
 
 function openDrive(drive) {
