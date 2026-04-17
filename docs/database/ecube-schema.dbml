@@ -70,6 +70,7 @@ Table network_mounts {
   id int [pk, not null]
   type mount_type [not null]
   remote_path varchar [not null]
+  project_id varchar [not null, default: 'UNASSIGNED']
   local_mount_point varchar [not null, unique]
   status mount_status [default: 'UNMOUNTED']
   last_checked_at timestamptz
