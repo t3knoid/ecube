@@ -1,23 +1,40 @@
 import logging
+import os
 from typing import List, Optional
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.infrastructure.drive_eject import DriveEjectProvider
 from app.infrastructure.drive_format import DriveFormatter
+from app.infrastructure.drive_mount import DriveMountProvider
 from app.infrastructure import validate_device_path
 from app.models.hardware import DriveState, UsbDrive
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
+from app.utils.sanitize import sanitize_error_message
 
 logger = logging.getLogger(__name__)
+
+
+def _redacted_device_name(path: Optional[str]) -> Optional[str]:
+    """Return a safe device identifier for logs without exposing full paths."""
+    if not path:
+        return None
+    return os.path.basename(path.rstrip("/")) or None
 
 
 def _default_eject_provider() -> DriveEjectProvider:
     """Lazy import to avoid circular dependency at module level."""
     from app.infrastructure import get_drive_eject
     return get_drive_eject()
+
+
+def _default_mount_provider() -> DriveMountProvider:
+    """Lazy import to avoid circular dependency at module level."""
+    from app.infrastructure import get_drive_mount
+    return get_drive_mount()
 
 
 def get_all_drives(
@@ -208,6 +225,230 @@ def initialize_drive(
     return drive
 
 
+def mount_drive(
+    drive_id: int,
+    db: Session,
+    actor: Optional[str] = None,
+    mount_provider: Optional[DriveMountProvider] = None,
+    client_ip: Optional[str] = None,
+) -> UsbDrive:
+    drive_repo = DriveRepository(db)
+    audit_repo = AuditRepository(db)
+    provider = mount_provider or _default_mount_provider()
+
+    # Read and validate without a row lock so the OS mount does not hold a DB lock.
+    drive = drive_repo.get(drive_id)
+    if not drive:
+        raise HTTPException(status_code=404, detail="Drive not found")
+
+    initial_state = drive.current_state
+    initial_filesystem_path = drive.filesystem_path
+    initial_project_id = drive.current_project_id
+
+    if initial_state not in (DriveState.AVAILABLE, DriveState.IN_USE):
+        raise HTTPException(
+            status_code=409,
+            detail="Drive must be AVAILABLE or IN_USE before it can be mounted",
+        )
+
+    if drive.filesystem_type in {None, "unformatted", "unknown"}:
+        raise HTTPException(
+            status_code=409,
+            detail="Drive must have a recognized filesystem before it can be mounted",
+        )
+
+    if not initial_filesystem_path:
+        raise HTTPException(
+            status_code=400,
+            detail="Drive has no filesystem_path and cannot be mounted",
+        )
+
+    if not validate_device_path(initial_filesystem_path):
+        raise HTTPException(
+            status_code=400,
+            detail="Drive filesystem_path is invalid and cannot be mounted",
+        )
+
+    if drive.mount_path:
+        raise HTTPException(
+            status_code=409,
+            detail="Drive is already mounted",
+        )
+
+    mount_point = os.path.join(settings.usb_mount_base_path, str(drive.id))
+
+    def _rollback_mount() -> tuple[bool, bool, Optional[str]]:
+        rollback_attempted = False
+        rollback_ok = False
+        rollback_error: Optional[str] = None
+
+        cleanup = getattr(provider, "unmount_drive", None)
+        if callable(cleanup):
+            rollback_attempted = True
+            try:
+                rollback_ok, rollback_error = cleanup(mount_point)
+            except Exception as exc:
+                rollback_error = str(exc)
+                logger.exception(
+                    "OS mount rollback raised for drive %s mount_slot=%s",
+                    drive_id,
+                    _redacted_device_name(mount_point),
+                )
+
+        return rollback_attempted, rollback_ok, rollback_error
+
+    success, error = provider.mount_drive(initial_filesystem_path, mount_point)
+    if not success:
+        try:
+            audit_repo.add(
+                action="DRIVE_MOUNT_FAILED",
+                user=actor,
+                project_id=initial_project_id,
+                drive_id=drive_id,
+                details={
+                    "drive_id": drive_id,
+                    "device_name": _redacted_device_name(initial_filesystem_path),
+                    "mount_slot": _redacted_device_name(mount_point),
+                    "error_code": "MOUNT_FAILED",
+                    "message": "Provider mount operation failed",
+                    "details": sanitize_error_message(error, "Mount provider reported failure"),
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for DRIVE_MOUNT_FAILED")
+        raise HTTPException(
+            status_code=500,
+            detail="Drive mount failed",
+        )
+
+    # Re-lock only after the OS mount completes so the DB lock window stays short.
+    drive = drive_repo.get_for_update(drive_id)
+    if not drive:
+        rollback_attempted, rollback_ok, rollback_error = _rollback_mount()
+        logger.warning(
+            "Drive %s disappeared during mount rollback_attempted=%s rollback_ok=%s mount_slot=%s rollback_reason=%s",
+            drive_id,
+            rollback_attempted,
+            rollback_ok,
+            _redacted_device_name(mount_point),
+            sanitize_error_message(rollback_error, "Mount rollback failed"),
+        )
+        detail = "Drive disappeared during mount; rollback attempted"
+        if rollback_attempted and not rollback_ok:
+            detail += "; manual intervention may be required"
+        raise HTTPException(status_code=404, detail=detail)
+
+    if drive.current_state != initial_state:
+        rollback_attempted, rollback_ok, rollback_error = _rollback_mount()
+        logger.warning(
+            "Drive %s state changed during mount from %s to %s rollback_attempted=%s rollback_ok=%s rollback_reason=%s",
+            drive_id,
+            initial_state.value,
+            drive.current_state.value,
+            rollback_attempted,
+            rollback_ok,
+            sanitize_error_message(rollback_error, "Mount rollback failed"),
+        )
+        detail = (
+            f"Drive state changed during mount (was: {initial_state.value}, "
+            f"now: {drive.current_state.value}); operation aborted after rollback attempted"
+        )
+        if rollback_attempted and not rollback_ok:
+            detail += "; manual intervention may be required"
+        raise HTTPException(status_code=409, detail=detail)
+
+    if drive.filesystem_path != initial_filesystem_path:
+        rollback_attempted, rollback_ok, rollback_error = _rollback_mount()
+        logger.warning(
+            "Drive %s device path changed during mount rollback_attempted=%s rollback_ok=%s rollback_reason=%s",
+            drive_id,
+            rollback_attempted,
+            rollback_ok,
+            sanitize_error_message(rollback_error, "Mount rollback failed"),
+        )
+        detail = "Device path changed during mount; operation aborted after rollback attempted"
+        if rollback_attempted and not rollback_ok:
+            detail += "; manual intervention may be required"
+        raise HTTPException(status_code=409, detail=detail)
+
+    if drive.current_project_id != initial_project_id:
+        rollback_attempted, rollback_ok, rollback_error = _rollback_mount()
+        logger.warning(
+            "Drive %s project binding changed during mount rollback_attempted=%s rollback_ok=%s rollback_reason=%s",
+            drive_id,
+            rollback_attempted,
+            rollback_ok,
+            sanitize_error_message(rollback_error, "Mount rollback failed"),
+        )
+        detail = "Drive project binding changed during mount; operation aborted after rollback attempted"
+        if rollback_attempted and not rollback_ok:
+            detail += "; manual intervention may be required"
+        raise HTTPException(status_code=409, detail=detail)
+
+    if drive.mount_path:
+        persisted_mount_path = os.path.normpath(str(drive.mount_path))
+        requested_mount_path = os.path.normpath(mount_point)
+        if persisted_mount_path == requested_mount_path:
+            logger.info(
+                "Drive %s mount already persisted for mount_slot=%s; treating as idempotent success",
+                drive_id,
+                _redacted_device_name(mount_point),
+            )
+        else:
+            rollback_attempted, rollback_ok, rollback_error = _rollback_mount()
+            logger.warning(
+                "Drive %s mount state changed during mount rollback_attempted=%s rollback_ok=%s rollback_reason=%s",
+                drive_id,
+                rollback_attempted,
+                rollback_ok,
+                sanitize_error_message(rollback_error, "Mount rollback failed"),
+            )
+            detail = "Drive mount state changed during mount; operation aborted after rollback attempted"
+            if rollback_attempted and not rollback_ok:
+                detail += "; manual intervention may be required"
+            raise HTTPException(status_code=409, detail=detail)
+
+    drive.mount_path = mount_point
+    try:
+        drive_repo.save(drive)
+    except Exception:
+        rollback_attempted, rollback_ok, rollback_error = _rollback_mount()
+        logger.exception(
+            "DB commit failed after successful OS mount for drive %s rollback_attempted=%s rollback_ok=%s mount_slot=%s rollback_reason=%s",
+            drive_id,
+            rollback_attempted,
+            rollback_ok,
+            _redacted_device_name(mount_point),
+            sanitize_error_message(rollback_error, "Mount rollback failed"),
+        )
+        detail = "Drive mount failed after database update error; rollback attempted"
+        if rollback_attempted and not rollback_ok:
+            detail += "; manual intervention may be required"
+        raise HTTPException(
+            status_code=500,
+            detail=detail,
+        )
+
+    try:
+        audit_repo.add(
+            action="DRIVE_MOUNTED",
+            user=actor,
+            project_id=drive.current_project_id,
+            drive_id=drive_id,
+            details={
+                "drive_id": drive_id,
+                "device_name": _redacted_device_name(drive.filesystem_path),
+                "mount_slot": _redacted_device_name(drive.mount_path),
+            },
+            client_ip=client_ip,
+        )
+    except Exception:
+        logger.exception("Failed to write audit log for DRIVE_MOUNTED")
+
+    return drive
+
+
 def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                   eject_provider: Optional[DriveEjectProvider] = None,
                   client_ip: Optional[str] = None) -> UsbDrive:
@@ -256,11 +497,12 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
     if drive.filesystem_path != initial_device_path:
         raise HTTPException(
             status_code=409,
-            detail=f"Device path changed during prepare-eject (was: {initial_device_path!r}, now: {drive.filesystem_path!r}); operation aborted",
+            detail="Device path changed during prepare-eject; operation aborted",
         )
 
     if result.success:
         drive.current_state = DriveState.AVAILABLE
+        drive.mount_path = None
         try:
             drive_repo.save(drive)
         except Exception:
@@ -280,7 +522,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                 drive_id=drive_id,
                 details={
                     "drive_id": drive_id,
-                    "filesystem_path": initial_device_path,
+                    "device_name": _redacted_device_name(initial_device_path),
                     "flush_ok": result.flush_ok,
                     "unmount_ok": result.unmount_ok,
                 },
@@ -289,6 +531,25 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
         except Exception:
             logger.exception("Failed to write audit log for DRIVE_EJECT_PREPARED")
     else:
+        if not result.unmount_ok:
+            try:
+                audit_repo.add(
+                    action="DRIVE_UNMOUNT_FAILED",
+                    user=actor,
+                    project_id=drive.current_project_id,
+                    drive_id=drive_id,
+                    details={
+                        "drive_id": drive_id,
+                        "device_name": _redacted_device_name(initial_device_path),
+                        "mount_slot": _redacted_device_name(drive.mount_path),
+                        "error_code": "UNMOUNT_FAILED",
+                        "message": "Drive unmount operation failed",
+                        "details": sanitize_error_message(result.unmount_error, "Unmount provider reported failure"),
+                    },
+                    client_ip=client_ip,
+                )
+            except Exception:
+                logger.exception("Failed to write audit log for DRIVE_UNMOUNT_FAILED")
         try:
             audit_repo.add(
                 action="DRIVE_EJECT_FAILED",
@@ -297,11 +558,27 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                 drive_id=drive_id,
                 details={
                     "drive_id": drive_id,
-                    "filesystem_path": initial_device_path,
+                    "device_name": _redacted_device_name(initial_device_path),
                     "flush_ok": result.flush_ok,
-                    "flush_error": result.flush_error,
                     "unmount_ok": result.unmount_ok,
-                    "unmount_error": result.unmount_error,
+                    "error_code": (
+                        "EJECT_FLUSH_FAILED"
+                        if not result.flush_ok
+                        else "EJECT_UNMOUNT_FAILED"
+                        if not result.unmount_ok
+                        else "EJECT_FAILED"
+                    ),
+                    "message": (
+                        "Drive flush operation failed"
+                        if not result.flush_ok
+                        else "Drive unmount operation failed"
+                        if not result.unmount_ok
+                        else "Drive eject preparation failed"
+                    ),
+                    "details": sanitize_error_message(
+                        result.flush_error if not result.flush_ok else result.unmount_error,
+                        "Drive eject operation failed",
+                    ),
                 },
                 client_ip=client_ip,
             )

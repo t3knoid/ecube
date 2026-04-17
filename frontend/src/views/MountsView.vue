@@ -144,13 +144,14 @@ async function runValidateOne(mountId) {
   }
 }
 
-async function runRemove() {
-  if (!removeTarget.value) return
+async function runRemove(target = removeTarget.value) {
+  if (!target) return
+  removeTarget.value = target
   saving.value = true
   error.value = ''
   try {
-    await deleteMount(removeTarget.value.id)
-    if (browsingMountId.value === removeTarget.value.id) {
+    await deleteMount(target.id)
+    if (browsingMountId.value === target.id) {
       browsingMountId.value = null
     }
     removeTarget.value = null
@@ -161,6 +162,17 @@ async function runRemove() {
   } finally {
     saving.value = false
   }
+}
+
+function requestRemove(mount) {
+  if (!mount) return
+  removeTarget.value = mount
+  if (mount.status === 'MOUNTED' && mount.local_mount_point) {
+    showRemoveDialog.value = true
+    return
+  }
+  showRemoveDialog.value = false
+  void runRemove(mount)
 }
 
 const browsePanelRef = ref(null)
@@ -208,7 +220,7 @@ onMounted(loadMounts)
           >
             {{ t('mounts.browse') }}
           </button>
-          <button class="btn btn-danger" @click="removeTarget = row; showRemoveDialog = true">{{ t('mounts.remove') }}</button>
+          <button class="btn btn-danger" @click="requestRemove(row)">{{ t('mounts.remove') }}</button>
         </div>
       </template>
     </DataTable>

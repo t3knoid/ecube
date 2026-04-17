@@ -20,7 +20,7 @@ from app.config import settings
 from app.exceptions import EncodingError
 from app.services.mount_check_utils import check_mounted_with_configured_timeout
 
-from app.utils.sanitize import is_encoding_error
+from app.utils.sanitize import is_encoding_error, sanitize_error_message
 
 # Re-export so existing ``mount_service.MountProvider`` access keeps working.
 from app.infrastructure.mount_protocol import MountProvider  # noqa: F401 – re-export
@@ -49,18 +49,25 @@ class LinuxMountProvider:
                 cmd += ["-o", f"username={username}"]
 
         cmd = _with_host_mount_namespace(cmd)
-        logger.info("Executing mount command: %s", " ".join(cmd))
+        mount_label = _redacted_mount_label(local_mount_point)
+        logger.info("Executing mount command: type=%s mount_label=%s", mount_type.value, mount_label)
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=settings.subprocess_timeout_seconds)
         if result.returncode == 0:
             mounted = self.check_mounted(local_mount_point)
             if mounted is True:
                 return True, None
             error = "mount command reported success but mountpoint is not active"
-            logger.warning("Mount command verification failed: %s", error)
+            logger.warning("Mount command verification failed for mount_label=%s", mount_label)
             return False, error
 
         error = (result.stderr or result.stdout or "").strip() or "mount failed"
-        logger.warning("Mount command failed: returncode=%s error=%s", result.returncode, error)
+        logger.warning(
+            "Mount command failed: type=%s mount_label=%s returncode=%s reason=%s",
+            mount_type.value,
+            mount_label,
+            result.returncode,
+            sanitize_error_message(error, "Mount command failed"),
+        )
 
         # Some environments have /etc/fstab entries for the target path with options
         # that conflict with on-demand API mounts.
@@ -74,7 +81,7 @@ class LinuxMountProvider:
                 if nfs_bin:
                     direct_cmd = [nfs_bin, remote_path, local_mount_point]
                     direct_cmd = _with_host_mount_namespace(direct_cmd)
-                    logger.info("Retrying with direct NFS helper: %s", " ".join(direct_cmd))
+                    logger.info("Retrying direct NFS helper for mount_label=%s", mount_label)
                     direct_result = subprocess.run(
                         direct_cmd,
                         capture_output=True,
@@ -82,13 +89,14 @@ class LinuxMountProvider:
                         timeout=settings.subprocess_timeout_seconds,
                     )
                     if direct_result.returncode == 0:
-                        logger.info("Direct NFS helper mount succeeded")
+                        logger.info("Direct NFS helper mount succeeded for mount_label=%s", mount_label)
                         return True, None
                     direct_error = (direct_result.stderr or direct_result.stdout or "").strip() or "mount failed"
                     logger.warning(
-                        "Direct NFS helper mount failed: returncode=%s error=%s",
+                        "Direct NFS helper mount failed: mount_label=%s returncode=%s reason=%s",
+                        mount_label,
                         direct_result.returncode,
-                        direct_error,
+                        sanitize_error_message(direct_error, "Direct NFS helper mount failed"),
                     )
                     retry_error = direct_error
 
@@ -96,8 +104,8 @@ class LinuxMountProvider:
             mounted = self.check_mounted(local_mount_point)
             if mounted is True:
                 logger.warning(
-                    "Mount commands reported failure but mountpoint is active; treating as mounted: %s",
-                    local_mount_point,
+                    "Mount commands reported failure but the target is active; treating as mounted for mount_label=%s",
+                    mount_label,
                 )
                 return True, None
 
@@ -108,7 +116,8 @@ class LinuxMountProvider:
     def os_unmount(self, local_mount_point: str) -> Tuple[bool, Optional[str]]:
         try:
             cmd = _with_host_mount_namespace([settings.umount_binary_path, local_mount_point])
-            logger.info("Executing unmount command: %s", " ".join(cmd))
+            mount_label = _redacted_mount_label(local_mount_point)
+            logger.info("Executing unmount command for mount_label=%s", mount_label)
             result = subprocess.run(
                 cmd,
                 capture_output=True, text=True,
@@ -116,12 +125,21 @@ class LinuxMountProvider:
             )
             if result.returncode != 0:
                 error = (result.stderr or result.stdout or "").strip() or "umount failed"
-                logger.warning("Unmount command failed: returncode=%s error=%s", result.returncode, error)
+                logger.warning(
+                    "Unmount command failed: mount_label=%s returncode=%s reason=%s",
+                    mount_label,
+                    result.returncode,
+                    sanitize_error_message(error, "Unmount command failed"),
+                )
                 return False, error
-            logger.info("Unmount command succeeded: %s", local_mount_point)
+            logger.info("Unmount command succeeded for mount_label=%s", mount_label)
             return True, None
         except Exception as exc:
-            logger.warning("Unmount command raised exception: %s", exc)
+            logger.warning(
+                "Unmount command raised exception for mount_label=%s reason=%s",
+                _redacted_mount_label(local_mount_point),
+                sanitize_error_message(exc, "Unmount command failed"),
+            )
             return False, str(exc)
 
     def check_mounted(self, local_mount_point: str, *, timeout_seconds: Optional[float] = None) -> Optional[bool]:
@@ -134,7 +152,7 @@ class LinuxMountProvider:
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
                 if result.returncode != 0:
                     error = (result.stderr or result.stdout or "").strip() or "mount list check failed"
-                    logger.warning("Host namespace mount list check failed: %s", error)
+                    logger.warning("Host namespace mount list check failed: reason=%s", sanitize_error_message(error, "Mount list check failed"))
                     return self._check_mounted_with_mountpoint(local_mount_point, timeout)
 
                 stdout = result.stdout if isinstance(result.stdout, str) else ""
@@ -384,8 +402,8 @@ def _cleanup_target_for_generated_mount_point(local_mount_point: str) -> Optiona
     # Only allow one generated leaf directly under /nfs or /smb.
     if rel in (".", "..") or rel.startswith("../") or "/" in rel:
         logger.warning(
-            "Skipping generated mount cleanup for non-leaf managed path: %s",
-            local_mount_point,
+            "Skipping generated mount cleanup for non-leaf managed path label=%s",
+            _redacted_mount_label(local_mount_point),
         )
         return None
     return os.path.join(root, rel)
@@ -408,6 +426,12 @@ def _cleanup_generated_mount_directory(local_mount_point: str) -> None:
     except OSError as exc:
         logger.warning("Failed to remove generated mount directory %s: %s", target, exc)
         return
+
+
+def _redacted_mount_label(local_mount_point: str) -> str:
+    """Return a safe label for audits without persisting the full mount path."""
+    label = os.path.basename(os.path.normpath(local_mount_point or ""))
+    return label or "mount"
 
 
 def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
@@ -448,22 +472,22 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
 
     _mount_error = None
     logger.info(
-        "Mount attempt started: type=%s remote_path=%s local_mount_point=%s actor=%s",
+        "Mount attempt started: mount_id=%s type=%s mount_label=%s actor=%s",
+        mount.id,
         mount_data.type.value,
-        mount_data.remote_path,
-        mount.local_mount_point,
+        _redacted_mount_label(str(mount.local_mount_point)),
         actor or "system",
     )
     try:
         create_dir_error = _ensure_mount_directory(mount.local_mount_point)
         if create_dir_error:
             logger.warning(
-                "Mountpoint preparation failed: type=%s remote_path=%s local_mount_point=%s actor=%s error=%s",
+                "Mountpoint preparation failed: mount_id=%s type=%s mount_label=%s actor=%s reason=%s",
+                mount.id,
                 mount_data.type.value,
-                mount_data.remote_path,
-                mount.local_mount_point,
+                _redacted_mount_label(str(mount.local_mount_point)),
                 actor or "system",
-                create_dir_error,
+                sanitize_error_message(create_dir_error, "Mountpoint preparation failed"),
             )
             success, error = False, create_dir_error
         else:
@@ -481,24 +505,22 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
         if success:
             mount.status = MountStatus.MOUNTED
             logger.info(
-                "Mount attempt succeeded: mount_id=%s type=%s remote_path=%s local_mount_point=%s actor=%s",
+                "Mount attempt succeeded: mount_id=%s type=%s mount_label=%s actor=%s",
                 mount.id,
                 mount_data.type.value,
-                mount_data.remote_path,
-                mount.local_mount_point,
+                _redacted_mount_label(str(mount.local_mount_point)),
                 actor or "system",
             )
         else:
             mount.status = MountStatus.ERROR
             _mount_error = error
             logger.warning(
-                "Mount attempt failed: mount_id=%s type=%s remote_path=%s local_mount_point=%s actor=%s error=%s",
+                "Mount attempt failed: mount_id=%s type=%s mount_label=%s actor=%s reason=%s",
                 mount.id,
                 mount_data.type.value,
-                mount_data.remote_path,
-                mount.local_mount_point,
+                _redacted_mount_label(str(mount.local_mount_point)),
                 actor or "system",
-                _mount_error,
+                sanitize_error_message(_mount_error, "Mount attempt failed"),
             )
         try:
             mount_repo.save(mount)
@@ -528,11 +550,10 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
             )
         _mount_error = str(exc)
         logger.exception(
-            "Mount attempt raised exception: mount_id=%s type=%s remote_path=%s local_mount_point=%s actor=%s",
+            "Mount attempt raised exception: mount_id=%s type=%s mount_label=%s actor=%s",
             mount.id,
             mount_data.type.value,
-            mount_data.remote_path,
-            mount.local_mount_point,
+            _redacted_mount_label(str(mount.local_mount_point)),
             actor or "system",
         )
 
@@ -544,7 +565,9 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
                 "mount_id": mount.id,
                 "remote_path": mount_data.remote_path,
                 "status": mount.status.value,
-                "error": _mount_error,
+                "error_code": "MOUNT_FAILED" if _mount_error else None,
+                "message": "Provider mount operation failed" if _mount_error else None,
+                "details": sanitize_error_message(_mount_error, "Mount provider reported failure") if _mount_error else None,
             },
             client_ip=client_ip,
         )
@@ -565,23 +588,46 @@ def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None,
 
     provider = provider or _default_provider()
     local_mount_point = str(mount.local_mount_point)
-    try:
-        unmount_ok, unmount_error = provider.os_unmount(local_mount_point)
-    except Exception as exc:
-        unmount_ok, unmount_error = False, str(exc)
+    should_attempt_unmount = mount.status == MountStatus.MOUNTED and bool(local_mount_point)
 
-    if not unmount_ok:
-        error_text = unmount_error or "umount failed"
-        logger.warning(
-            "Mount removal aborted because unmount failed: mount_id=%s local_mount_point=%s error=%s",
+    if not should_attempt_unmount:
+        logger.info(
+            "Skipping OS unmount for non-mounted record removal: mount_id=%s mount_label=%s status=%s",
             mount_id,
-            local_mount_point,
-            error_text,
+            _redacted_mount_label(local_mount_point),
+            mount.status.value,
         )
-        raise HTTPException(
-            status_code=409,
-            detail=f"Failed to unmount {local_mount_point}: {error_text}",
-        )
+
+    if should_attempt_unmount:
+        try:
+            unmount_ok, unmount_error = provider.os_unmount(local_mount_point)
+        except Exception as exc:
+            unmount_ok, unmount_error = False, str(exc)
+
+        if not unmount_ok:
+            error_text = unmount_error or "umount failed"
+            lowered_error = error_text.lower()
+            if any(phrase in lowered_error for phrase in ("not mounted", "no mount point")):
+                logger.info(
+                    "Treating already-unmounted mount removal as success: mount_id=%s mount_label=%s reason=%s",
+                    mount_id,
+                    _redacted_mount_label(local_mount_point),
+                    sanitize_error_message(error_text, "Target was already unmounted"),
+                )
+            else:
+                logger.warning(
+                    "Mount removal aborted because unmount failed: mount_id=%s mount_label=%s reason=%s",
+                    mount_id,
+                    _redacted_mount_label(local_mount_point),
+                    sanitize_error_message(error_text, "Unmount failed"),
+                )
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"Failed to unmount {_redacted_mount_label(local_mount_point)}: "
+                        f"{sanitize_error_message(error_text, 'Unmount failed')}"
+                    ),
+                )
 
     _cleanup_generated_mount_directory(local_mount_point)
 
@@ -589,7 +635,7 @@ def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None,
         audit_repo.add(
             action="MOUNT_REMOVED",
             user=actor,
-            details={"mount_id": mount_id, "local_mount_point": mount.local_mount_point},
+            details={"mount_id": mount_id, "mount_label": _redacted_mount_label(str(mount.local_mount_point))},
             client_ip=client_ip,
         )
     except Exception:
@@ -650,7 +696,7 @@ def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None,
             user=actor,
             details={
                 "mount_id": mount_id,
-                "local_mount_point": mount.local_mount_point,
+                "mount_label": _redacted_mount_label(str(mount.local_mount_point)),
                 "status": mount.status.value,
             },
             client_ip=client_ip,

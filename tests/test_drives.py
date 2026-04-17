@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 from app.infrastructure.drive_eject import EjectResult
 from app.models.hardware import UsbDrive, DriveState
+from app.services import drive_service
 
 
 def _fake_eject(flush_ok=True, unmount_ok=True,
@@ -96,6 +97,284 @@ def test_initialize_drive(manager_client, db):
     data = response.json()
     assert data["current_project_id"] == "PROJ-001"
     assert data["current_state"] == "IN_USE"
+
+
+def test_mount_drive_success(manager_client, db):
+    from app.config import settings
+    from app.models.audit import AuditLog
+
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-001",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        filesystem_path="/dev/sdb",
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = MagicMock()
+    provider.mount_drive.return_value = (True, None)
+
+    with patch("app.routers.drives.get_drive_mount", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["mount_path"] == f"{settings.usb_mount_base_path}/{drive.id}"
+    provider.mount_drive.assert_called_once_with(
+        "/dev/sdb",
+        f"{settings.usb_mount_base_path}/{drive.id}",
+    )
+
+    audit = db.query(AuditLog).filter(AuditLog.action == "DRIVE_MOUNTED").first()
+    assert audit is not None
+    assert audit.details["drive_id"] == drive.id
+    assert audit.details["device_name"] == "sdb"
+    assert audit.details["mount_slot"] == str(drive.id)
+    assert "filesystem_path" not in audit.details
+    assert "mount_path" not in audit.details
+
+
+def test_mount_drive_requires_recognized_filesystem(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-001B",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="unknown",
+        filesystem_path="/dev/sdb",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = manager_client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 409
+    assert "recognized filesystem" in response.json()["message"].lower()
+
+
+def test_mount_drive_conflict_when_already_mounted(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-002",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        filesystem_path="/dev/sdc",
+        mount_path="/mnt/ecube/2",
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = MagicMock()
+    with patch("app.routers.drives.get_drive_mount", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 409
+    assert "already mounted" in response.json()["message"].lower()
+    provider.mount_drive.assert_not_called()
+
+
+def test_mount_drive_requires_filesystem_path(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-003",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        filesystem_path=None,
+    )
+    db.add(drive)
+    db.commit()
+
+    response = manager_client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 400
+    assert "filesystem_path" in response.json()["message"]
+
+
+def test_mount_drive_provider_failure_is_audited(manager_client, db):
+    from app.models.audit import AuditLog
+
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-004",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        filesystem_path="/dev/sdd",
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = MagicMock()
+    provider.mount_drive.return_value = (False, "mount failed for /dev/sdd at /mnt/ecube/4")
+
+    with patch("app.routers.drives.get_drive_mount", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 500
+    assert response.json()["message"] == "Drive mount failed"
+
+    audit = db.query(AuditLog).filter(AuditLog.action == "DRIVE_MOUNT_FAILED").first()
+    assert audit is not None
+    assert audit.details["drive_id"] == drive.id
+    assert audit.details["error_code"] == "MOUNT_FAILED"
+    assert audit.details["message"] == "Provider mount operation failed"
+    assert "error" not in audit.details
+    assert "/dev/sdd" not in str(audit.details)
+    assert "/mnt/ecube/4" not in str(audit.details)
+    assert "filesystem_path" not in audit.details
+    assert "mount_path" not in audit.details
+
+
+def test_mount_drive_failure_redacts_provider_paths_from_client(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-004B",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        filesystem_path="/dev/sdz1",
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = MagicMock()
+    provider.mount_drive.return_value = (False, "mount: /dev/sdz1 already mounted on /mnt/ecube/42")
+
+    with patch("app.routers.drives.get_drive_mount", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 500
+    assert response.json()["message"] == "Drive mount failed"
+    assert "/dev/sdz1" not in response.json()["message"]
+    assert "/mnt/ecube/42" not in response.json()["message"]
+
+
+def test_mount_drive_db_save_failure_attempts_cleanup(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-004C",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        filesystem_path="/dev/sdg",
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = MagicMock()
+    provider.mount_drive.return_value = (True, None)
+    provider.unmount_drive.return_value = (True, None)
+
+    with (
+        patch("app.routers.drives.get_drive_mount", return_value=provider),
+        patch("app.services.drive_service.DriveRepository.save", side_effect=RuntimeError("db failed")),
+    ):
+        response = manager_client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 500
+    assert "rollback attempted" in response.json()["message"].lower()
+    provider.unmount_drive.assert_called_once_with(f"/mnt/ecube/{drive.id}")
+
+
+def test_mount_drive_relocks_only_after_os_mount_and_aborts_if_state_changed(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-004D",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        filesystem_path="/dev/sdh",
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = MagicMock()
+    call_order = []
+
+    def mount_side_effect(device_path, mount_point):
+        call_order.append("mount")
+        return True, None
+
+    provider.mount_drive.side_effect = mount_side_effect
+    provider.unmount_drive.return_value = (True, None)
+
+    original_get = drive_service.DriveRepository.get
+    original_get_for_update = drive_service.DriveRepository.get_for_update
+
+    def get_side_effect(self, drive_id):
+        call_order.append("get")
+        return original_get(self, drive_id)
+
+    def get_for_update_side_effect(self, drive_id):
+        call_order.append("lock")
+        locked_drive = original_get_for_update(self, drive_id)
+        if "mount" in call_order:
+            locked_drive.current_state = DriveState.ARCHIVED
+        return locked_drive
+
+    with (
+        patch("app.routers.drives.get_drive_mount", return_value=provider),
+        patch.object(drive_service.DriveRepository, "get", get_side_effect),
+        patch.object(drive_service.DriveRepository, "get_for_update", get_for_update_side_effect),
+    ):
+        response = manager_client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 409
+    assert "changed during mount" in response.json()["message"].lower()
+    assert call_order == ["get", "mount", "lock"]
+    provider.unmount_drive.assert_called_once_with(f"/mnt/ecube/{drive.id}")
+
+
+def test_mount_drive_treats_same_persisted_mount_as_idempotent(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-004E",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        filesystem_path="/dev/sdi",
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = MagicMock()
+    provider.mount_drive.return_value = (True, None)
+    provider.unmount_drive.return_value = (True, None)
+
+    expected_mount_path = f"/mnt/ecube/{drive.id}"
+    original_get_for_update = drive_service.DriveRepository.get_for_update
+
+    def get_for_update_side_effect(self, drive_id):
+        locked_drive = original_get_for_update(self, drive_id)
+        locked_drive.mount_path = expected_mount_path
+        return locked_drive
+
+    with (
+        patch("app.routers.drives.get_drive_mount", return_value=provider),
+        patch.object(drive_service.DriveRepository, "get_for_update", get_for_update_side_effect),
+    ):
+        response = manager_client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 200
+    assert response.json()["mount_path"] == expected_mount_path
+    provider.unmount_drive.assert_not_called()
+
+
+def test_mount_drive_processor_forbidden(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-005",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        filesystem_path="/dev/sde",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 403
+
+
+def test_mount_drive_auditor_forbidden(auditor_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-006",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        filesystem_path="/dev/sdf",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = auditor_client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 403
 
 
 def test_initialize_drive_not_found(manager_client, db):
@@ -267,6 +546,7 @@ def test_prepare_eject_with_filesystem_path(manager_client, db):
         current_state=DriveState.IN_USE,
         current_project_id="PROJ-001",
         filesystem_path="/dev/sdb",
+        mount_path="/mnt/ecube/6",
     )
     db.add(drive)
     db.commit()
@@ -277,6 +557,7 @@ def test_prepare_eject_with_filesystem_path(manager_client, db):
 
     assert response.status_code == 200
     assert response.json()["current_state"] == "AVAILABLE"
+    assert response.json()["mount_path"] is None
     provider.prepare_eject.assert_called_once_with("/dev/sdb")
 
     log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_EJECT_PREPARED").first()
@@ -284,9 +565,10 @@ def test_prepare_eject_with_filesystem_path(manager_client, db):
     assert log.drive_id == drive.id
     assert log.project_id == "PROJ-001"
     assert log.details["drive_id"] == drive.id
-    assert log.details["filesystem_path"] == "/dev/sdb"
+    assert log.details["device_name"] == "sdb"
     assert log.details["flush_ok"] is True
     assert log.details["unmount_ok"] is True
+    assert "filesystem_path" not in log.details
 
 
 def test_prepare_eject_not_found(manager_client, db):
@@ -323,7 +605,9 @@ def test_prepare_eject_flush_failure(manager_client, db):
     assert log.drive_id == drive.id
     assert log.project_id == "PROJ-001"
     assert log.details["flush_ok"] is False
-    assert log.details["flush_error"] == "sync failed"
+    assert log.details["error_code"] == "EJECT_FLUSH_FAILED"
+    assert log.details["message"] == "Drive flush operation failed"
+    assert "flush_error" not in log.details
 
 
 def test_prepare_eject_unmount_failure(manager_client, db):
@@ -355,7 +639,10 @@ def test_prepare_eject_unmount_failure(manager_client, db):
     log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_EJECT_FAILED").first()
     assert log is not None
     assert log.details["unmount_ok"] is False
-    assert log.details["unmount_error"] == "umount failed for /dev/sdc"
+    assert log.details["error_code"] == "EJECT_UNMOUNT_FAILED"
+    assert log.details["message"] == "Drive unmount operation failed"
+    assert "unmount_error" not in log.details
+    assert "/dev/sdc" not in str(log.details)
 
 
 def test_prepare_eject_no_unmount_when_no_path(manager_client, db):
@@ -434,7 +721,9 @@ def test_prepare_eject_invalid_device_path(manager_client, db):
     from app.models.audit import AuditLog
     log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_EJECT_FAILED").first()
     assert log is not None
-    assert "invalid device path" in (log.details.get("unmount_error") or "")
+    assert log.details["error_code"] == "EJECT_UNMOUNT_FAILED"
+    assert "invalid device path" not in str(log.details)
+    assert "/tmp/../../etc/passwd" not in str(log.details)
 
 
 def test_prepare_eject_requires_in_use_state(manager_client, db):
@@ -520,8 +809,8 @@ def test_prepare_eject_device_path_changed(manager_client, db):
 
     assert response.status_code == 409
     assert "Device path changed" in response.json()["message"]
-    assert "/dev/sdb" in response.json()["message"]
-    assert "/dev/sdc" in response.json()["message"]
+    assert "/dev/sdb" not in response.json()["message"]
+    assert "/dev/sdc" not in response.json()["message"]
 
     # Drive state must remain IN_USE.
     db.expire_all()
@@ -560,7 +849,7 @@ def test_prepare_eject_device_path_cleared_during_operation(manager_client, db):
 
     assert response.status_code == 409
     assert "Device path changed" in response.json()["message"]
-    assert "/dev/sde" in response.json()["message"]
+    assert "/dev/sde" not in response.json()["message"]
 
     # Drive state must remain IN_USE.
     db.expire_all()
