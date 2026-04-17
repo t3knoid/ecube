@@ -467,8 +467,12 @@ onBeforeUnmount(() => {
             {{ t('drives.projectWarning') }}
             <template v-if="drive.current_project_id"> {{ t('drives.initializeProjectHint', { project: drive.current_project_id }) }}</template>
           </p>
-          <label class="field-label" for="project-id">{{ t('dashboard.project') }}</label>
-          <select id="project-id" v-model="projectId" :disabled="loadingProjects || !hasMountedProjectOptions">
+          <label class="field-label" for="project-id">
+            {{ t('dashboard.project') }}
+            <span class="required-indicator" aria-hidden="true">*</span>
+            <span class="sr-only">required</span>
+          </label>
+          <select id="project-id" v-model="projectId" :disabled="loadingProjects || !hasMountedProjectOptions" required aria-required="true">
             <option value="" disabled>{{ t('audit.selectProject') }}</option>
             <option v-for="option in mountedProjectOptions" :key="option" :value="option">{{ option }}</option>
           </select>
@@ -594,6 +598,11 @@ onBeforeUnmount(() => {
 
 .field-label {
   font-weight: var(--font-weight-bold);
+}
+
+.required-indicator {
+  color: var(--color-danger, #b91c1c);
+  margin-left: 0.15rem;
 }
 
 input,
