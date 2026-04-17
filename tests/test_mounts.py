@@ -154,6 +154,8 @@ def test_add_mount_failure(manager_client, db):
     assert audit is not None
     assert audit.details["error_code"] == "MOUNT_FAILED"
     assert audit.details["message"] == "Provider mount operation failed"
+    assert "remote_path" not in audit.details
+    assert "/exports/evidence" not in str(audit.details)
     assert "/nfs/evidence" not in str(audit.details)
 
 
