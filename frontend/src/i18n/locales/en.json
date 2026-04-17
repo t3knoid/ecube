@@ -35,7 +35,7 @@
     "detail": "Drive Detail",
     "placeholder": "Drives view will be implemented in a future phase.",
     "states": {
-      "empty": "Disconnected",
+      "disconnected": "Disconnected",
       "available": "Available",
       "inUse": "In Use",
       "archived": "Archived"

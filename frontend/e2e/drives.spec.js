@@ -3,7 +3,7 @@ import { setupAuthenticatedPage, routeJson } from './helpers/app.js'
 import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
 
 // ---------------------------------------------------------------------------
-// Shared fixture for an EMPTY drive with a known port_id
+// Shared fixture for a DISCONNECTED drive with a known port_id
 // ---------------------------------------------------------------------------
 function makeEmptyDrive(overrides = {}) {
   return {
@@ -12,7 +12,7 @@ function makeEmptyDrive(overrides = {}) {
     filesystem_path: null,
     filesystem_type: null,
     capacity_bytes: 1073741824,
-    current_state: 'EMPTY',
+    current_state: 'DISCONNECTED',
     current_project_id: null,
     port_id: 7,
     ...overrides,
@@ -23,7 +23,7 @@ function makeEmptyDrive(overrides = {}) {
 // Enable Drive — button visibility
 // ---------------------------------------------------------------------------
 
-test('Enable Drive button is visible for admin on EMPTY drive with port_id', async ({ page }) => {
+test('Enable Drive button is visible for admin on DISCONNECTED drive with port_id', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
   const drive = makeEmptyDrive()
   await routeJson(page, '**/api/drives', () => [drive])
@@ -32,7 +32,7 @@ test('Enable Drive button is visible for admin on EMPTY drive with port_id', asy
   await expect(page.getByRole('button', { name: 'Enable Drive' })).toBeVisible()
 })
 
-test('Enable Drive button is visible for manager on EMPTY drive with port_id', async ({ page }) => {
+test('Enable Drive button is visible for manager on DISCONNECTED drive with port_id', async ({ page }) => {
   await setupAuthenticatedPage(page, ['manager'])
   const drive = makeEmptyDrive()
   await routeJson(page, '**/api/drives', () => [drive])
@@ -41,7 +41,7 @@ test('Enable Drive button is visible for manager on EMPTY drive with port_id', a
   await expect(page.getByRole('button', { name: 'Enable Drive' })).toBeVisible()
 })
 
-test('Enable Drive button is not visible for processor', async ({ page }) => {
+test('Enable Drive button is not visible for processor on DISCONNECTED drive', async ({ page }) => {
   await setupAuthenticatedPage(page, ['processor'])
   const drive = makeEmptyDrive()
   await routeJson(page, '**/api/drives', () => [drive])

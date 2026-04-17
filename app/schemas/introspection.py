@@ -75,7 +75,7 @@ class IntrospectionDriveItem(BaseModel):
     id: int = Field(..., description="Unique drive identifier")
     device_identifier: str = Field(..., description="Stable hardware identifier")
     capacity_bytes: Optional[int] = Field(default=None, description="Storage capacity in bytes")
-    current_state: Optional[str] = Field(default=None, description="Drive state (EMPTY, AVAILABLE, IN_USE)")
+    current_state: Optional[str] = Field(default=None, description="Drive state (DISCONNECTED, AVAILABLE, IN_USE)")
     current_project_id: Optional[str] = Field(default=None, description="Bound project ID")
     encryption_status: Optional[str] = Field(default=None, description="Encryption status")
     last_seen_at: Optional[str] = Field(default=None, description="ISO 8601 timestamp of last detection")

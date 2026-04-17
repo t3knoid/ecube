@@ -58,7 +58,7 @@ def get_all_drives(
         return repo.list_by_states(parsed)
     if include_disconnected:
         return repo.list_all()
-    return repo.list_by_states([DriveState.AVAILABLE, DriveState.IN_USE, DriveState.ARCHIVED])
+    return repo.list_by_states([DriveState.AVAILABLE, DriveState.IN_USE, DriveState.ARCHIVED])  # DISCONNECTED excluded by default
 
 
 def initialize_drive(
@@ -96,11 +96,11 @@ def initialize_drive(
             detail="Drive is archived and cannot be re-initialized.",
         )
 
-    # EMPTY drives are not physically accessible (not present or on a disabled port).
+    # DISCONNECTED drives are not physically accessible (not present or on a disabled port).
     # Initialization requires the drive to be AVAILABLE so that a filesystem is
-    # present and the drive is reachable.  Attempting to initialize from EMPTY is
+    # present and the drive is reachable.  Attempting to initialize from DISCONNECTED is
     # always a precondition failure.
-    if drive.current_state == DriveState.EMPTY:
+    if drive.current_state == DriveState.DISCONNECTED:
         try:
             audit_repo.add(
                 action="INIT_REJECTED_NOT_AVAILABLE",
@@ -119,7 +119,7 @@ def initialize_drive(
             logger.error("Failed to write audit log for INIT_REJECTED_NOT_AVAILABLE")
         raise HTTPException(
             status_code=409,
-            detail="Drive is EMPTY (not present or port disabled) and cannot be initialized.",
+            detail="Drive is DISCONNECTED (not present or port disabled) and cannot be initialized.",
         )
 
     # Project isolation is state-dependent:

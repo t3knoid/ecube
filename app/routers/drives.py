@@ -31,21 +31,21 @@ def list_drives(
     ),
     state: Optional[List[str]] = Query(
         default=None,
-        description="Filter drives by state (repeatable). Valid values: EMPTY, AVAILABLE, IN_USE, ARCHIVED.",
+        description="Filter drives by state (repeatable). Valid values: DISCONNECTED, AVAILABLE, IN_USE, ARCHIVED.",
     ),
     include_disconnected: bool = Query(
         default=False,
-        description="Include disconnected (EMPTY) drives in the response. Default behaviour excludes them.",
+        description="When no state filter is provided, include DISCONNECTED drives in the default response. Has no effect when state is explicitly provided.",
     ),
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_ALL_ROLES),
 ):
     """List USB drives with their current state and project assignments.
 
-    By default only drives in non-``EMPTY`` states (``AVAILABLE``,
+    By default only drives in non-``DISCONNECTED`` states (``AVAILABLE``,
     ``IN_USE``, ``ARCHIVED``) are returned. Set
-    ``include_disconnected=true`` to also include disconnected
-    (``EMPTY``) drives.
+    ``include_disconnected=true`` to include ``DISCONNECTED`` drives
+    in that default listing.
 
     When *project_id* is provided, only drives bound to that project are
     returned.  When *state* is provided, only drives in one of the given
