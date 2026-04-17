@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getMounts, createMount, deleteMount, validateAllMounts, validateMount } from '@/api/mounts.js'
 import DataTable from '@/components/common/DataTable.vue'
@@ -41,6 +41,10 @@ const form = ref({
   password: '',
   credentials_file: '',
 })
+
+const addDialogRef = ref(null)
+const addDialogTriggerRef = ref(null)
+const addMountDialogTitleId = 'add-mount-dialog-title'
 
 const columns = computed(() => [
   { key: 'id', label: t('common.labels.id'), align: 'right' },
@@ -97,6 +101,27 @@ function resetForm() {
   }
 }
 
+function trapFocusWithin(event, container) {
+  if (!container) return
+  const focusable = Array.from(
+    container.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'),
+  ).filter((element) => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true')
+
+  if (!focusable.length) return
+
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  const active = document.activeElement
+
+  if (event.shiftKey && active === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
 function formValid() {
   return !!form.value.type && !!form.value.remote_path.trim() && !!form.value.project_id.trim()
 }
@@ -148,6 +173,27 @@ async function runValidateOne(mountId) {
   }
 }
 
+function openAddDialog(event) {
+  addDialogTriggerRef.value = event?.currentTarget instanceof HTMLElement ? event.currentTarget : document.activeElement
+  showAddDialog.value = true
+}
+
+function closeAddDialog() {
+  showAddDialog.value = false
+}
+
+function handleAddDialogKeydown(event) {
+  if (!showAddDialog.value) return
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeAddDialog()
+    return
+  }
+  if (event.key === 'Tab') {
+    trapFocusWithin(event, addDialogRef.value)
+  }
+}
+
 async function runRemove(target = removeTarget.value) {
   if (!target) return
   removeTarget.value = target
@@ -190,6 +236,30 @@ async function toggleBrowse(mountId) {
 }
 
 onMounted(loadMounts)
+
+watch(showAddDialog, async (open) => {
+  if (open) {
+    document.addEventListener('keydown', handleAddDialogKeydown)
+    await nextTick()
+    const target = addDialogRef.value?.querySelector('#mount-type')
+    if (target instanceof HTMLElement) {
+      target.focus()
+    }
+    return
+  }
+
+  document.removeEventListener('keydown', handleAddDialogKeydown)
+  const trigger = addDialogTriggerRef.value
+  addDialogTriggerRef.value = null
+  await nextTick()
+  if (trigger instanceof HTMLElement) {
+    trigger.focus()
+  }
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', handleAddDialogKeydown)
+})
 </script>
 
 <template>
@@ -199,7 +269,7 @@ onMounted(loadMounts)
       <div class="actions">
         <button class="btn" @click="loadMounts">{{ t('common.actions.refresh') }}</button>
         <button class="btn" @click="runValidateAll">{{ t('mounts.testAll') }}</button>
-        <button class="btn btn-primary" @click="showAddDialog = true">{{ t('mounts.add') }}</button>
+        <button class="btn btn-primary" @click="openAddDialog">{{ t('mounts.add') }}</button>
       </div>
     </header>
 
@@ -247,9 +317,9 @@ onMounted(loadMounts)
     <Pagination v-model:page="page" :page-size="pageSize" :total="filtered.length" />
 
     <teleport to="body">
-      <div v-if="showAddDialog" class="dialog-overlay" @click.self="showAddDialog = false">
-        <div class="dialog-panel" role="dialog" aria-modal="true">
-          <h2>{{ t('mounts.add') }}</h2>
+      <div v-if="showAddDialog" class="dialog-overlay" @click.self="closeAddDialog">
+        <div ref="addDialogRef" class="dialog-panel" role="dialog" aria-modal="true" :aria-labelledby="addMountDialogTitleId">
+          <h2 :id="addMountDialogTitleId">{{ t('mounts.add') }}</h2>
           <label for="mount-type">{{ t('common.labels.type') }}</label>
           <select id="mount-type" v-model="form.type">
             <option value="SMB">SMB</option>
@@ -267,7 +337,7 @@ onMounted(loadMounts)
           <input id="mount-creds-file" v-model="form.credentials_file" type="text" />
 
           <div class="dialog-actions">
-            <button class="btn" @click="showAddDialog = false">{{ t('common.actions.cancel') }}</button>
+            <button class="btn" @click="closeAddDialog">{{ t('common.actions.cancel') }}</button>
             <button class="btn btn-primary" :disabled="saving || !formValid()" @click="submitAddMount">
               {{ saving ? t('common.labels.loading') : t('common.actions.create') }}
             </button>

@@ -34,6 +34,7 @@ function buildMount(overrides = {}) {
 
 function mountView() {
   return mount(MountsView, {
+    attachTo: document.body,
     global: {
       plugins: [i18n],
       stubs: {
@@ -148,5 +149,27 @@ describe('MountsView removal flow', () => {
       password: null,
       credentials_file: null,
     })
+  })
+
+  it('moves focus into the add mount dialog and closes it on Escape', async () => {
+    mocks.getMounts.mockResolvedValue([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    expect(addButton).toBeTruthy()
+
+    await addButton.trigger('click')
+    await flushPromises()
+
+    const mountTypeSelect = wrapper.find('#mount-type')
+    expect(mountTypeSelect.exists()).toBe(true)
+    expect(document.activeElement?.id).toBe('mount-type')
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+
+    expect(wrapper.find('#mount-type').exists()).toBe(false)
   })
 })
