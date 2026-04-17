@@ -18,7 +18,7 @@ const loading = ref(false)
 const refreshing = ref(false)
 const error = ref('')
 const search = ref('')
-const stateFilter = ref('ALL')
+const stateFilter = ref('AVAILABLE')
 const sortKey = ref('id')
 const sortDir = ref('asc')
 const page = ref(1)
@@ -130,7 +130,19 @@ async function rescan() {
   error.value = ''
   try {
     await refreshDrives()
-    await loadDrives()
+    const previousState = stateFilter.value
+    const previousIncludesDisconnected = previousState === 'ALL' || previousState === 'EMPTY'
+
+    // Rescan should always switch the UI to All States.
+    if (previousState !== 'ALL') {
+      stateFilter.value = 'ALL'
+    }
+
+    // The state watcher only reloads when disconnected-inclusion mode changes.
+    // When switching EMPTY -> ALL (or staying on ALL), trigger the reload here.
+    if (previousIncludesDisconnected) {
+      await loadDrives()
+    }
   } catch {
     error.value = t('common.errors.networkError')
   } finally {
