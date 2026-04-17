@@ -623,7 +623,10 @@ def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None,
                 )
                 raise HTTPException(
                     status_code=409,
-                    detail=f"Failed to unmount {local_mount_point}: {error_text}",
+                    detail=(
+                        f"Failed to unmount {_redacted_mount_label(local_mount_point)}: "
+                        f"{sanitize_error_message(error_text, 'Unmount failed')}"
+                    ),
                 )
 
     _cleanup_generated_mount_directory(local_mount_point)
