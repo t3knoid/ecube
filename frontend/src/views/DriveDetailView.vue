@@ -248,6 +248,8 @@ async function runEnable() {
     if (!drive.value) return
     if (drive.value.current_state === 'AVAILABLE') {
       infoMessage.value = t('drives.enableSuccess')
+    } else if (drive.value.current_state === 'IN_USE') {
+      infoMessage.value = t('drives.enableInUse')
     } else {
       warnMessage.value = t('drives.enablePending', {
         state: driveStateLabel(drive.value.current_state),

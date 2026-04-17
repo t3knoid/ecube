@@ -60,12 +60,14 @@ from app.schemas.admin import (
     SetOSGroupsRequest,
 )
 from app.schemas.hardware import HubUpdateRequest, PortEnableRequest, PortUpdateRequest, UsbHubSchema, UsbPortSchema
-from app.infrastructure import get_os_user_provider
+from app.infrastructure import get_drive_discovery, get_filesystem_detector, get_os_user_provider
 from app.infrastructure.os_user_protocol import OSUserError, OsUserProvider
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500, R_503, R_504
+from app.services.discovery_service import run_discovery_sync
 from app.services.os_user_service import validate_group_name, validate_username
 from app.constants import ECUBE_GROUPNAME_PATTERN, USERNAME_PATTERN, ECUBE_GROUP_ROLE_MAP, RESERVED_USERNAMES
 from app.utils.client_ip import get_client_ip
+from app.utils.sanitize import sanitize_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -1161,7 +1163,7 @@ def list_ports(
     return [UsbPortSchema.model_validate(p) for p in ports]
 
 
-@router.patch("/ports/{port_id}", response_model=UsbPortSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_422})
+@router.patch("/ports/{port_id}", response_model=UsbPortSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_422, **R_500, **R_503})
 def toggle_port_enabled(
     port_id: int,
     body: PortEnableRequest,
@@ -1183,6 +1185,38 @@ def toggle_port_enabled(
         "enabled": body.enabled,
         "path": str(request.url.path),
     }, client_ip=get_client_ip(request))
+
+    client_ip = get_client_ip(request)
+
+    try:
+        run_discovery_sync(
+            db,
+            actor=current_user.username,
+            topology_source=get_drive_discovery().discover_topology,
+            filesystem_detector=get_filesystem_detector(),
+            client_ip=client_ip,
+        )
+    except Exception as exc:
+        best_effort_audit(db, "PORT_RECONCILIATION_FAILED", current_user.username, {
+            "port_id": port.id,
+            "hub_id": port.hub_id,
+            "enabled": body.enabled,
+            "path": str(request.url.path),
+            "error_code": "DISCOVERY_SYNC_FAILED",
+            "message": "Port state updated but drive discovery reconciliation failed",
+            "details": sanitize_error_message(exc, "Drive discovery reconciliation failed"),
+        }, client_ip=client_ip)
+        logger.warning(
+            "Port toggle reconciliation failed for port %s enabled=%s reason=%s",
+            port.id,
+            body.enabled,
+            sanitize_error_message(exc, "Drive discovery reconciliation failed"),
+        )
+        logger.debug("Port toggle reconciliation raw error", exc_info=True)
+        raise HTTPException(
+            status_code=503,
+            detail="Port state updated, but drive discovery reconciliation failed; retry refresh or rescan",
+        ) from exc
 
     return UsbPortSchema.model_validate(port)
 
