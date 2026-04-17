@@ -84,28 +84,20 @@ def redact_pathlike_substrings(value: object, placeholder: str = "[redacted-path
 
 
 def sanitize_error_message(err: object, default_message: str = "Operation failed") -> str:
-    """Return a filesystem-safe summary for provider and OS errors."""
+    """Return a safe error summary with sensitive path content redacted.
+
+    Sanitization here is intentionally narrow: preserve the useful message text
+    while removing OS-specific path targets and similar sensitive substrings.
+    """
     if err is None:
         return default_message
 
     redacted = redact_pathlike_substrings(err).strip()
-    if not redacted:
+    if not redacted or redacted == "[redacted-path]":
         return default_message
 
-    lowered = redacted.lower()
-    if any(token in lowered for token in ("permission denied", "access denied", "auth")):
-        return "Permission or authentication failure"
-    if "timed out" in lowered or "timeout" in lowered:
-        return "Operation timed out"
-    if "not mounted" in lowered or "no mount point" in lowered:
-        return "Target was already unmounted"
-    if "busy" in lowered:
-        return "Target is busy"
-    if "invalid device path" in lowered:
-        return "Invalid device path"
-    if "unknown filesystem type" in lowered or "wrong fs type" in lowered or "bad superblock" in lowered:
-        return "Filesystem type is not supported by the host"
-    return default_message
+    # Normalize repeated whitespace/newlines but keep the original meaning.
+    return " ".join(redacted.split())
 
 
 _AUDIT_REDACTED = "[redacted]"

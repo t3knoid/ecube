@@ -820,6 +820,56 @@ def test_prepare_eject_unmount_failure(manager_client, db):
     assert "/dev/sdc" not in str(log.details)
 
 
+def test_prepare_eject_stale_restart_mount_failure_returns_conflict(manager_client, db):
+    """Restart-related stale mount failures return a recoverable conflict, not a generic 500."""
+    drive = UsbDrive(
+        device_identifier="USB008B",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        filesystem_path="/dev/sdc",
+        mount_path="/mnt/ecube/8b",
+    )
+    db.add(drive)
+    db.commit()
+
+    with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject(
+        unmount_ok=False,
+        unmount_error="could not read /proc/mounts: stale restart state",
+    )):
+        response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+
+    assert response.status_code == 409
+    assert response.json()["message"] == (
+        "Drive mount state is stale or changed; refresh drive status and retry prepare-eject"
+    )
+    assert "/proc/mounts" not in response.json()["message"]
+
+
+def test_prepare_eject_busy_mount_failure_returns_conflict(manager_client, db):
+    """Busy mounted drives return an actionable conflict explaining how to recover."""
+    drive = UsbDrive(
+        device_identifier="USB008C",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        filesystem_path="/dev/sdd",
+        mount_path="/mnt/ecube/8c",
+    )
+    db.add(drive)
+    db.commit()
+
+    with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject(
+        unmount_ok=False,
+        unmount_error="umount: /mnt/ecube/8c: target is busy",
+    )):
+        response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+
+    assert response.status_code == 409
+    assert response.json()["message"] == (
+        "Drive is busy; close any shell, file browser, or process using the mounted drive and retry prepare-eject"
+    )
+    assert "/mnt/ecube/8c" not in response.json()["message"]
+
+
 def test_prepare_eject_no_unmount_when_no_path(manager_client, db):
     """prepare_eject is called with None when the drive has no filesystem_path."""
     drive = UsbDrive(
@@ -897,8 +947,9 @@ def test_prepare_eject_invalid_device_path(manager_client, db):
     log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_EJECT_FAILED").first()
     assert log is not None
     assert log.details["error_code"] == "EJECT_UNMOUNT_FAILED"
-    assert "invalid device path" not in str(log.details)
+    assert "invalid device path" in str(log.details).lower()
     assert "/tmp/../../etc/passwd" not in str(log.details)
+    assert "[redacted-path]" in str(log.details)
 
 
 def test_prepare_eject_requires_in_use_state(manager_client, db):
