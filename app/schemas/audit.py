@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_serializer, model_validator
 
-from app.utils.sanitize import SafeStr
+from app.utils.sanitize import ProjectIdStr, SafeStr
 
 
 class AuditLogSchema(BaseModel):
@@ -63,7 +63,7 @@ class ChainOfCustodyReportSchema(BaseModel):
 
 class ChainOfCustodyHandoffRequest(BaseModel):
     drive_id: int = Field(..., ge=1, description="Drive identifier")
-    project_id: Optional[SafeStr] = Field(default=None, min_length=1, description="Expected project identifier")
+    project_id: Optional[ProjectIdStr] = Field(default=None, min_length=1, description="Expected project identifier")
     possessor: SafeStr = Field(..., min_length=1, description="Person or entity taking possession")
     delivery_time: datetime = Field(..., description="Physical handoff time in RFC 3339 UTC")
     received_by: Optional[SafeStr] = Field(default=None, min_length=1, description="Receiver identity when different from possessor")

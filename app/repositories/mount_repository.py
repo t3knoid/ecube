@@ -1,6 +1,9 @@
 from typing import List, Optional
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
+
+from app.utils.sanitize import normalize_project_id
 
 from app.models.network import MountStatus, NetworkMount
 
@@ -32,11 +35,14 @@ class MountRepository:
 
     def has_mounted_project(self, project_id: str) -> bool:
         """Return ``True`` when a mounted share is assigned to ``project_id``."""
+        normalized_project_id = normalize_project_id(project_id)
+        if not isinstance(normalized_project_id, str) or not normalized_project_id:
+            return False
         return (
             self.db.query(NetworkMount.id)
             .filter(
                 NetworkMount.status == MountStatus.MOUNTED,
-                NetworkMount.project_id == project_id,
+                func.upper(func.trim(NetworkMount.project_id)) == normalized_project_id,
             )
             .first()
             is not None
