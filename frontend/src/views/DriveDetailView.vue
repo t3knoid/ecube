@@ -77,7 +77,7 @@ async function loadDrive() {
   loading.value = true
   clearBanners()
   try {
-    const drives = await getDrives()
+    const drives = await getDrives({ include_disconnected: true })
     drive.value = drives.find((item) => item.id === driveId.value) || null
     if (!drive.value) {
       error.value = t('drives.notFound')
