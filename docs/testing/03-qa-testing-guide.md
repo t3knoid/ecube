@@ -480,6 +480,10 @@ curl -sk -X POST https://localhost:8443/drives/{drive_id}/initialize \
   -H "Content-Type: application/json" \
   -d '{"project_id": "PROJ-QA-001"}' | jq
 
+# Mount the initialized drive so it can be used as a managed export destination
+curl -sk -X POST https://localhost:8443/drives/{drive_id}/mount \
+  -H "Authorization: Bearer $TOKEN" | jq
+
 # Prepare drive for safe physical removal
 curl -sk -X POST https://localhost:8443/drives/{drive_id}/prepare-eject \
   -H "Authorization: Bearer $TOKEN" | jq
@@ -557,8 +561,9 @@ curl -sk https://localhost:8443/admin/hubs \
 ### 11.4 Job Management
 
 ```bash
-# Create a copy job targeting the initialized USB drive (replace {drive_id})
-# Use the mount path returned by POST /mounts
+# Create a copy job targeting the mounted USB drive (replace {drive_id})
+# target_mount_path is optional; when omitted, ECUBE derives it from the drive's managed mount point
+# If the assigned drive is not mounted, expect 409 CONFLICT
 curl -sk -X POST https://localhost:8443/jobs \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -567,7 +572,6 @@ curl -sk -X POST https://localhost:8443/jobs \
     "evidence_number": "EV-001",
     "source_path": "'"$MOUNT_POINT""'/case-001",
     "drive_id": "{drive_id}",
-    "target_mount_path": "/mnt/usb/{drive_id}",
     "thread_count": 4
   }' | jq
 
@@ -602,7 +606,6 @@ curl -sk -X POST https://localhost:8443/jobs \
     "evidence_number": "EV-CB-001",
     "source_path": "'"$MOUNT_POINT""'/case-001",
     "drive_id": "{drive_id}",
-    "target_mount_path": "/mnt/usb/{drive_id}",
     "thread_count": 4,
     "callback_url": "https://example.com/webhook"
   }' | jq
@@ -908,12 +911,14 @@ curl -sk -X POST https://localhost:8443/admin/configuration/restart \
 | 3 | Expired token | Generate token with `'exp': int(time.time()) - 60` | 401, `UNAUTHORIZED` |
 | 4 | Processor adds mount | `POST /mounts` with processor token | 403, `FORBIDDEN` |
 | 5 | Processor initializes drive | `POST /drives/{drive_id}/initialize` with processor token | 403, `FORBIDDEN` |
-| 6 | Processor formats drive | `POST /drives/{drive_id}/format` with processor token | 403, `FORBIDDEN` |
-| 7 | Processor reads audit | `GET /audit` with processor token | 403, `FORBIDDEN` |
-| 8 | Auditor reads audit | `GET /audit` with auditor token | 200 |
-| 9 | Processor creates job | `POST /jobs` with processor token | 200 |
-| 10 | All four roles read job files | `GET /jobs/{job_id}/files` with admin/manager/processor/auditor tokens | 200 for each role |
-| 11 | All error responses have `trace_id` | Inspect any 4xx/5xx JSON body | `trace_id` field present |
+| 6 | Processor mounts drive | `POST /drives/{drive_id}/mount` with processor token | 403, `FORBIDDEN` |
+| 7 | Auditor mounts drive | `POST /drives/{drive_id}/mount` with auditor token | 403, `FORBIDDEN` |
+| 8 | Processor formats drive | `POST /drives/{drive_id}/format` with processor token | 403, `FORBIDDEN` |
+| 9 | Processor reads audit | `GET /audit` with processor token | 403, `FORBIDDEN` |
+| 10 | Auditor reads audit | `GET /audit` with auditor token | 200 |
+| 11 | Processor creates job | `POST /jobs` with processor token | 200 |
+| 12 | All four roles read job files | `GET /jobs/{job_id}/files` with admin/manager/processor/auditor tokens | 200 for each role |
+| 13 | All error responses have `trace_id` | Inspect any 4xx/5xx JSON body | `trace_id` field present |
 
 ### 12.2.1 Session Lifecycle and Token Expiry
 
@@ -946,10 +951,12 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 3 | Initialize a drive with `filesystem_type=unformatted` | 409, `CONFLICT` — must have recognized filesystem |
 | 4 | Initialize a drive with `filesystem_type=unknown` | 409, `CONFLICT` — must have recognized filesystem |
 | 5 | Initialize an `EMPTY` drive (not present / disabled port) | 409, `CONFLICT`; audit `INIT_REJECTED_NOT_AVAILABLE` recorded |
-| 6 | Prepare-eject an `IN_USE` drive | 200, state → `AVAILABLE` |
-| 7 | Prepare-eject an `AVAILABLE` drive | 409, `CONFLICT` |
-| 8 | Format-then-initialize workflow: discover unformatted → format ext4 → initialize | Each step succeeds; final state `IN_USE` |
-| 9 | Attempt to format an `IN_USE` drive | 409, `CONFLICT` — must be `AVAILABLE` |
+| 6 | Mount an `AVAILABLE` or `IN_USE` drive with a recognized filesystem | 200, `mount_path` is populated |
+| 7 | Mount a drive with `filesystem_type=unknown`, `unformatted`, or `NULL` | 409, `CONFLICT` — must have recognized filesystem |
+| 8 | Prepare-eject an `IN_USE` drive | 200, state → `AVAILABLE`, `mount_path` cleared |
+| 9 | Prepare-eject an `AVAILABLE` drive | 409, `CONFLICT` |
+| 10 | Format-then-initialize-mount workflow: discover unformatted → format ext4 → initialize → mount | Each step succeeds; `mount_path` becomes populated |
+| 11 | Attempt to format an `IN_USE` drive | 409, `CONFLICT` — must be `AVAILABLE` |
 
 ### 12.4.1 Filesystem Detection
 
