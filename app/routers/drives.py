@@ -42,9 +42,10 @@ def list_drives(
 ):
     """List USB drives with their current state and project assignments.
 
-    By default only connected drives (``AVAILABLE``, ``IN_USE``, ``ARCHIVED``)
-    are returned.  Set ``include_disconnected=true`` to also include
-    disconnected (``EMPTY``) drives.
+    By default only drives in non-``EMPTY`` states (``AVAILABLE``,
+    ``IN_USE``, ``ARCHIVED``) are returned. Set
+    ``include_disconnected=true`` to also include disconnected
+    (``EMPTY``) drives.
 
     When *project_id* is provided, only drives bound to that project are
     returned.  When *state* is provided, only drives in one of the given
