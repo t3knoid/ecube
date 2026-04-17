@@ -76,7 +76,8 @@
     "localMountPoint": "Local Mount Point",
     "initializeTitle": "Initialize drive",
     "projectWarning": "Project binding is enforced for all writes.",
-    "initializeProjectHint": "This drive was last used for project \"{project}\"."
+    "initializeProjectHint": "This drive was last used for project \"{project}\".",
+    "initializeNoProjects": "No mounted shares have assigned projects. Add a mount first."
   },
   "jobs": {
     "title": "Jobs",
@@ -431,7 +432,8 @@
       "db": "DB",
       "id": "ID",
       "traceReferencePrefix": "Ref:",
-      "progress": "Progress"
+      "progress": "Progress",
+      "protected": "Protected"
     },
     "plural": {
       "file": "no files | 1 file | {count} files",

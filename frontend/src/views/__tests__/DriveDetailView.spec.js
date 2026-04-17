@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   hasAnyRole: vi.fn(),
   push: vi.fn(),
   getDrives: vi.fn(),
+  getMounts: vi.fn(),
   formatDrive: vi.fn(),
   initializeDrive: vi.fn(),
   mountDrive: vi.fn(),
@@ -35,6 +36,10 @@ vi.mock('@/api/drives.js', () => ({
   refreshDrives: (...args) => mocks.refreshDrives(...args),
 }))
 
+vi.mock('@/api/mounts.js', () => ({
+  getMounts: (...args) => mocks.getMounts(...args),
+}))
+
 vi.mock('@/api/admin.js', () => ({
   enablePort: (...args) => mocks.enablePort(...args),
 }))
@@ -56,6 +61,7 @@ function buildDrive(overrides = {}) {
 
 function mountView() {
   return mount(DriveDetailView, {
+    attachTo: document.body,
     global: {
       plugins: [i18n],
       stubs: {
@@ -80,6 +86,7 @@ describe('DriveDetailView mount workflow', () => {
     mocks.hasAnyRole.mockReset()
     mocks.push.mockReset()
     mocks.getDrives.mockReset()
+    mocks.getMounts.mockReset()
     mocks.formatDrive.mockReset()
     mocks.initializeDrive.mockReset()
     mocks.mountDrive.mockReset()
@@ -89,6 +96,12 @@ describe('DriveDetailView mount workflow', () => {
 
     mocks.hasAnyRole.mockReturnValue(true)
     mocks.getDrives.mockResolvedValue([buildDrive()])
+    mocks.getMounts.mockResolvedValue([
+      { id: 1, status: 'MOUNTED', project_id: 'PROJ-007' },
+      { id: 2, status: 'MOUNTED', project_id: 'PROJ-999' },
+      { id: 3, status: 'MOUNTED', project_id: 'PROJ-007' },
+      { id: 4, status: 'UNMOUNTED', project_id: 'PROJ-HIDDEN' },
+    ])
     mocks.mountDrive.mockResolvedValue(buildDrive({ mount_path: '/mnt/ecube/7' }))
   })
 
@@ -104,7 +117,13 @@ describe('DriveDetailView mount workflow', () => {
 
     expect(mocks.mountDrive).toHaveBeenCalledWith(7)
     expect(wrapper.text()).toContain(i18n.global.t('drives.mountSuccess'))
-    expect(wrapper.text()).toContain('/mnt/ecube/7')
+    expect(wrapper.text()).not.toContain('/mnt/ecube/7')
+    expect(wrapper.text()).not.toContain('USB-DETAIL-007')
+    expect(wrapper.text()).not.toContain('/dev/sdb1')
+
+    const statusBanner = wrapper.find('.ok-banner')
+    expect(statusBanner.attributes('role')).toBe('status')
+    expect(statusBanner.attributes('aria-live')).toBe('polite')
   })
 
   it('hides the Mount action when the drive is already mounted', async () => {
@@ -124,5 +143,89 @@ describe('DriveDetailView mount workflow', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain(i18n.global.t('browse.browseContents'))
+  })
+
+  it('populates initialize options from distinct mounted share projects', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const initializeButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.initialize'))
+    expect(initializeButton).toBeTruthy()
+
+    await initializeButton.trigger('click')
+    await flushPromises()
+
+    const options = wrapper.findAll('#project-id option').map((node) => node.text())
+    expect(options).toContain('PROJ-007')
+    expect(options).toContain('PROJ-999')
+    expect(options.filter((text) => text === 'PROJ-007')).toHaveLength(1)
+  })
+
+  it('shows the empty helper and disables initialize submission when no mounted project exists', async () => {
+    mocks.getMounts.mockResolvedValue([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const initializeButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.initialize'))
+    expect(initializeButton).toBeTruthy()
+
+    await initializeButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('drives.initializeNoProjects'))
+    const submitButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.initialize') && node.attributes('disabled') !== undefined)
+    expect(submitButton).toBeTruthy()
+  })
+
+  it('moves focus into the initialize dialog and closes it on Escape', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const initializeButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.initialize'))
+    expect(initializeButton).toBeTruthy()
+
+    await initializeButton.trigger('click')
+    await flushPromises()
+
+    const projectSelect = wrapper.find('#project-id')
+    expect(projectSelect.exists()).toBe(true)
+    expect(document.activeElement?.id).toBe('project-id')
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+
+    expect(wrapper.find('#project-id').exists()).toBe(false)
+  })
+
+  it('does not dismiss the initialize dialog when the overlay is clicked', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const initializeButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.initialize'))
+    expect(initializeButton).toBeTruthy()
+
+    await initializeButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('.dialog-overlay').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('#project-id').exists()).toBe(true)
+  })
+
+  it('marks the initialize project selection as required', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const initializeButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.initialize'))
+    expect(initializeButton).toBeTruthy()
+
+    await initializeButton.trigger('click')
+    await flushPromises()
+
+    const projectSelect = wrapper.find('#project-id')
+    expect(projectSelect.attributes('required')).toBeDefined()
+    expect(projectSelect.attributes('aria-required')).toBe('true')
   })
 })

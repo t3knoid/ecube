@@ -26,6 +26,7 @@ def test_add_mount_success_persists_and_audits(integration_client, integration_d
             json={
                 "type": "NFS",
                 "remote_path": "10.0.0.5:/evidence",
+                "project_id": "PROJ-INT-1",
             },
         )
 
@@ -60,6 +61,7 @@ def test_add_mount_failure_sets_error_and_audits(integration_client, integration
             json={
                 "type": "NFS",
                 "remote_path": "10.0.0.6:/restricted",
+                "project_id": "PROJ-INT-2",
             },
         )
 
