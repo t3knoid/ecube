@@ -43,7 +43,7 @@ const { driveStateLabel } = useStatusLabels()
 const driveId = computed(() => Number(route.params.id))
 const canManage = computed(() => authStore.hasAnyRole(['admin', 'manager']))
 const canEnable = computed(
-  () => drive.value?.current_state === 'EMPTY' && drive.value?.port_id != null && canManage.value,
+  () => drive.value?.current_state === 'DISCONNECTED' && drive.value?.port_id != null && canManage.value,
 )
 const canFormat = computed(
   () => drive.value?.current_state === 'AVAILABLE' && canManage.value,
@@ -316,8 +316,8 @@ watch(driveId, () => {
       </div>
     </ConfirmDialog>
 
-    <!-- Browse section — shown when drive has an active mount_path and is not EMPTY -->
-    <section v-if="drive && drive.mount_path && drive.current_state !== 'EMPTY'" class="browse-section">
+    <!-- Browse section — shown when drive has an active mount_path and is not DISCONNECTED -->
+    <section v-if="drive && drive.mount_path" class="browse-section">
       <button
         class="browse-toggle btn"
         :aria-expanded="browseExpanded"
