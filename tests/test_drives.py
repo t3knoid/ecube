@@ -947,9 +947,8 @@ def test_prepare_eject_invalid_device_path(manager_client, db):
     log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_EJECT_FAILED").first()
     assert log is not None
     assert log.details["error_code"] == "EJECT_UNMOUNT_FAILED"
-    assert "invalid device path" in str(log.details).lower()
+    assert log.details["details"] == "Invalid device path"
     assert "/tmp/../../etc/passwd" not in str(log.details)
-    assert "[redacted-path]" in str(log.details)
 
 
 def test_prepare_eject_requires_in_use_state(manager_client, db):
