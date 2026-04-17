@@ -4,7 +4,7 @@
 |---|---|
 | Title | ECUBE Installation Guide |
 | Purpose | Guides administrators through deploying ECUBE using the automated installer or Docker, including prerequisites and environment validation. |
-| Updated on | 04/08/26 |
+| Updated on | 04/16/26 |
 | Audience | Systems administrators, IT staff. |
 
 ## Table of Contents
@@ -94,6 +94,21 @@ The installer will:
   - **Ubuntu:** adds the `deadsnakes/ppa` Ubuntu PPA (`ppa:deadsnakes/ppa`) via `add-apt-repository`.
   - **Debian 12:** installs `python3.11` directly from `main` (no extra source needed).
   - **Debian 11:** adds `bullseye-backports` (official Debian mirror, already trusted by `debian-archive-keyring`) and installs from there.
+
+**ECUBE runtime packages for native/manual hosts:**
+
+The ECUBE service depends on several non-standard OS packages for USB formatting, USB discovery, and NFS/SMB evidence mounts. These packages are provisioned by the Ansible deployment path and mirrored by the container image runtime dependencies, but operators preparing a bare-metal or minimal VM host should ensure they are installed before running the native installer or starting the service manually.
+
+| Package | Purpose |
+|---|---|
+| `exfatprogs` | Provides `mkfs.exfat` for formatting evidence drives as exFAT. |
+| `nfs-common` | NFS client utilities for mounting evidence shares. |
+| `cifs-utils` | SMB/CIFS client utilities for mounting evidence shares. |
+| `usbutils` | Provides `lsusb` and USB enumeration support. |
+| `util-linux` | Provides core block and session utilities such as `lsblk`, `blkid`, and `runuser`. |
+
+On minimal Ubuntu installs, also install `linux-modules-extra-$(uname -r)` so the native exFAT kernel module is available at runtime. On Ubuntu 20.04 hosts using the 5.4 kernel series, install `exfat-fuse` instead of the native module package.
+
 **Required commands (must be present before running `install.sh`):**
 
 - `curl`
