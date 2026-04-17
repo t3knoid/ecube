@@ -269,6 +269,10 @@ Important default-theme note:
 
 For deployment-side theme and branding management, see [14-theme-and-branding-guide.md](14-theme-and-branding-guide.md) and [04-configuration-reference.md](04-configuration-reference.md) (`ECUBE_THEMES_DIR`).
 
+Example dark-theme appearance:
+
+![Dashboard overview in dark theme (E2E snapshot, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/dashboard-dark-chromium-linux.png)
+
 ---
 
 ## 6. Dashboard
@@ -357,6 +361,10 @@ Selecting a drive opens a detail view showing:
 - Current status badge
 - Available actions such as format, initialize, and prepare eject
 
+Reference screen:
+
+![Drives page with state, project, and action controls (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/drives-default-chromium-linux.png)
+
 ### 7.4 Formatting a Drive
 
 If your role allows it, you can format a drive from the detail page.
@@ -401,8 +409,6 @@ After a successful prepare-eject:
 - The drive can be physically removed once the operation completes.
 
 > To permanently retire a drive after removal, use the Chain of Custody handoff workflow on the `Audit` page. Confirming a handoff transitions the drive to `ARCHIVED`.
-
-![Drives page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/drives-default-chromium-linux.png)
 
 ---
 
@@ -449,7 +455,7 @@ Use `Test` or `Test All` to verify that configured source mounts are reachable a
 
 Remove a mount only if it is no longer needed. If existing workflows depend on it, removing the definition can interrupt job creation or repeatability.
 
-![Mounts page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/mounts-default-chromium-linux.png)
+![Mounts page with validation, browse, and add/remove actions (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/mounts-default-chromium-linux.png)
 
 ---
 
@@ -528,7 +534,7 @@ Before creating a job, confirm:
 
 Open a job to view details and perform follow-up actions.
 
-![Jobs list and create wizard (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/jobs-list-default-chromium-linux.png)
+![Jobs list and create workflow reference (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/jobs-list-default-chromium-linux.png)
 
 ---
 
@@ -616,7 +622,7 @@ When exporting CSV:
 - Review filters before export so the file contains the intended data set
 - Treat exported audit data as sensitive operational evidence
 
-![Audit page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/audit-default-chromium-linux.png)
+![Audit page with filters and export tools (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/audit-default-chromium-linux.png)
 
 ### 11.1 Chain of Custody Workflow
 
