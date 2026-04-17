@@ -91,10 +91,16 @@ def test_add_mount_uses_unique_generated_local_mount_point(manager_client, db):
 
 
 def test_add_mount_failure(manager_client, db):
+    from app.models.audit import AuditLog
+
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
          patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(returncode=1, stderr="Permission denied", stdout="")
+        mock_run.return_value = MagicMock(
+            returncode=1,
+            stderr="mount.nfs: access denied by server while mounting 192.168.1.1:/exports/evidence on /nfs/evidence",
+            stdout="",
+        )
         response = manager_client.post(
             "/mounts",
             json={
@@ -105,6 +111,12 @@ def test_add_mount_failure(manager_client, db):
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ERROR"
+
+    audit = db.query(AuditLog).filter(AuditLog.action == "MOUNT_ADDED").first()
+    assert audit is not None
+    assert audit.details["error_code"] == "MOUNT_FAILED"
+    assert audit.details["message"] == "Provider mount operation failed"
+    assert "/nfs/evidence" not in str(audit.details)
 
 
 def test_add_mount_fails_when_mountpoint_owned_by_root(manager_client, db):

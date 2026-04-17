@@ -59,6 +59,40 @@ def strict_sanitize_string(value: object) -> object:
     return value
 
 
+_PATH_LIKE_RE = re.compile(r"(?<![A-Za-z0-9._-])/(?:[^\s'\"=:;,])+")
+
+
+def redact_pathlike_substrings(value: object, placeholder: str = "[redacted-path]") -> str:
+    """Replace path-like substrings in error text with a safe placeholder."""
+    if value is None:
+        return ""
+    text = sanitize_string(str(value))
+    return _PATH_LIKE_RE.sub(placeholder, text)
+
+
+def sanitize_error_message(err: object, default_message: str = "Operation failed") -> str:
+    """Return a filesystem-safe summary for provider and OS errors."""
+    if err is None:
+        return default_message
+
+    redacted = redact_pathlike_substrings(err).strip()
+    if not redacted:
+        return default_message
+
+    lowered = redacted.lower()
+    if any(token in lowered for token in ("permission denied", "access denied", "auth")):
+        return "Permission or authentication failure"
+    if "timed out" in lowered or "timeout" in lowered:
+        return "Operation timed out"
+    if "not mounted" in lowered or "no mount point" in lowered:
+        return "Target was already unmounted"
+    if "busy" in lowered:
+        return "Target is busy"
+    if "invalid device path" in lowered:
+        return "Invalid device path"
+    return default_message
+
+
 def is_encoding_error(exc: BaseException) -> bool:
     """Return True if *exc* looks like a database character-encoding failure."""
     msg = str(exc).lower()
