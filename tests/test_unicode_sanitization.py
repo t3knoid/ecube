@@ -74,11 +74,13 @@ class TestSanitizeString:
 
 class TestSanitizeErrorMessage:
 
-    def test_preserves_meaningful_message_while_redacting_paths(self):
+    def test_returns_bounded_summary_for_busy_target(self):
         msg = sanitize_error_message("umount failed for /mnt/ecube/1: target is busy")
-        assert "target is busy" in msg.lower()
-        assert "/mnt/ecube/1" not in msg
-        assert "[redacted-path]" in msg
+        assert msg == "Target is busy"
+
+    def test_returns_bounded_summary_for_invalid_device_path(self):
+        msg = sanitize_error_message("invalid device path: /tmp/../../etc/passwd")
+        assert msg == "Invalid device path"
 
     def test_returns_default_when_only_path_is_present(self):
         msg = sanitize_error_message("/mnt/ecube/1", "Unmount failed")
