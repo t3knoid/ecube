@@ -84,10 +84,10 @@ def redact_pathlike_substrings(value: object, placeholder: str = "[redacted-path
 
 
 def sanitize_error_message(err: object, default_message: str = "Operation failed") -> str:
-    """Return a safe error summary with sensitive path content redacted.
+    """Return a bounded, filesystem-safe summary for provider and OS errors.
 
-    Sanitization here is intentionally narrow: preserve the useful message text
-    while removing OS-specific path targets and similar sensitive substrings.
+    Keep the useful operator-facing meaning while redacting path-like substrings
+    and collapsing raw provider text into a small safe set of summaries.
     """
     if err is None:
         return default_message
@@ -96,8 +96,23 @@ def sanitize_error_message(err: object, default_message: str = "Operation failed
     if not redacted or redacted == "[redacted-path]":
         return default_message
 
-    # Normalize repeated whitespace/newlines but keep the original meaning.
-    return " ".join(redacted.split())
+    lowered = redacted.lower()
+    if any(token in lowered for token in ("permission denied", "access denied", "auth", "not authorized")):
+        return "Permission or authentication failure"
+    if "timed out" in lowered or "timeout" in lowered:
+        return "Operation timed out"
+    if "not mounted" in lowered or "no mount point" in lowered:
+        return "Target was already unmounted"
+    if "busy" in lowered:
+        return "Target is busy"
+    if "invalid device path" in lowered or "not a block device" in lowered:
+        return "Invalid device path"
+    if "unknown filesystem type" in lowered or "wrong fs type" in lowered or "bad superblock" in lowered:
+        return "Filesystem type is not supported by the host"
+    if "no such file" in lowered or "not found" in lowered:
+        return "Target device or path was not found"
+
+    return default_message
 
 
 _AUDIT_REDACTED = "[redacted]"
@@ -116,7 +131,7 @@ _AUDIT_SENSITIVE_KEYS = {
     "drive_sn",
     "dev",
 }
-_AUDIT_ERROR_TEXT_KEYS = {"error", "details", "raw_error", "reason", "message"}
+_AUDIT_ERROR_TEXT_KEYS = {"error", "details", "raw_error"}
 _SYSTEM_PATH_PREFIXES = (
     "/dev/",
     "/mnt/",
@@ -162,7 +177,7 @@ def _sanitize_audit_value(value: object, key: Optional[str] = None) -> object:
 
     redacted = redact_pathlike_substrings(value).strip()
     if key_lower in _AUDIT_ERROR_TEXT_KEYS:
-        return redacted or "Operation failed"
+        return sanitize_error_message(value, "Operation failed")
     return redacted
 
 
