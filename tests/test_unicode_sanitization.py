@@ -10,7 +10,7 @@ import json
 import pytest
 
 from app.models.hardware import DriveState, UsbDrive
-from app.utils.sanitize import SafeStr, StrictSafeStr, is_encoding_error, sanitize_string, strict_sanitize_string
+from app.utils.sanitize import SafeStr, StrictSafeStr, is_encoding_error, sanitize_error_message, sanitize_string, strict_sanitize_string
 
 
 # ---------------------------------------------------------------------------
@@ -70,6 +70,19 @@ class TestSanitizeString:
 # ---------------------------------------------------------------------------
 # Unit tests: is_encoding_error
 # ---------------------------------------------------------------------------
+
+
+class TestSanitizeErrorMessage:
+
+    def test_preserves_meaningful_message_while_redacting_paths(self):
+        msg = sanitize_error_message("umount failed for /mnt/ecube/1: target is busy")
+        assert "target is busy" in msg.lower()
+        assert "/mnt/ecube/1" not in msg
+        assert "[redacted-path]" in msg
+
+    def test_returns_default_when_only_path_is_present(self):
+        msg = sanitize_error_message("/mnt/ecube/1", "Unmount failed")
+        assert msg == "Unmount failed"
 
 
 class TestIsEncodingError:
