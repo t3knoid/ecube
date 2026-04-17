@@ -61,3 +61,32 @@ def test_mount_drive_accepts_direct_child_of_base():
             ok, err = _mount(f"{_BASE}/7")
     assert ok is True
     assert err is None
+
+
+def test_unmount_drive_rejects_path_outside_base():
+    """Unmount must also be restricted to managed direct-child mount points."""
+    dm = LinuxDriveMount()
+    with patch("app.infrastructure.drive_mount.settings") as mock_settings:
+        mock_settings.usb_mount_base_path = _BASE
+        mock_settings.umount_binary_path = "/bin/umount"
+        mock_settings.use_sudo = False
+        mock_settings.subprocess_timeout_seconds = 10
+        with patch("os.path.realpath", side_effect=lambda p: p):
+            ok, err = dm.unmount_drive("/tmp/evil")
+    assert ok is False
+    assert "direct child" in err
+
+
+def test_unmount_drive_accepts_direct_child_of_base():
+    """A managed direct child under the base path can be safely unmounted."""
+    dm = LinuxDriveMount()
+    with patch("app.infrastructure.drive_mount.settings") as mock_settings:
+        mock_settings.usb_mount_base_path = _BASE
+        mock_settings.umount_binary_path = "/bin/umount"
+        mock_settings.use_sudo = False
+        mock_settings.subprocess_timeout_seconds = 10
+        with patch("os.path.realpath", side_effect=lambda p: p):
+            with patch("subprocess.run"):
+                ok, err = dm.unmount_drive(f"{_BASE}/7")
+    assert ok is True
+    assert err is None
