@@ -359,7 +359,8 @@ List all drives with state and project assignment.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `project_id` | string | No | When provided, return only drives bound to this project. When omitted, return all drives. |
-| `state` | string (repeatable) | No | Filter by drive state. May be specified multiple times (e.g. `?state=IN_USE&state=AVAILABLE`). Valid values: `EMPTY`, `AVAILABLE`, `IN_USE`, `ARCHIVED`. When omitted, all states are returned. |
+| `state` | string (repeatable) | No | Filter by drive state. May be specified multiple times (e.g. `?state=IN_USE&state=AVAILABLE`). Valid values: `DISCONNECTED`, `AVAILABLE`, `IN_USE`, `ARCHIVED`. When omitted, connected states (`AVAILABLE`, `IN_USE`, `ARCHIVED`) are returned unless `include_disconnected=true` is also set. |
+| `include_disconnected` | boolean | No | When `true`, `DISCONNECTED` drives are included in the response. Default: `false`. Has no effect when `state` is explicitly provided. |
 
 **Roles:** `admin`, `manager`, `processor`, `auditor`
 
@@ -518,7 +519,7 @@ List all USB ports with their current enablement state and hardware metadata.
 
 ### `PATCH /admin/ports/{port_id}`
 
-Enable or disable a USB port for ECUBE use. Disabled ports cause newly discovered or reconnecting drives to remain in `EMPTY` state instead of transitioning to `AVAILABLE`. Drives already in `AVAILABLE` state on a disabled port are demoted to `EMPTY` on the next discovery sync.
+Enable or disable a USB port for ECUBE use. Disabled ports cause newly discovered or reconnecting drives to remain in `DISCONNECTED` state instead of transitioning to `AVAILABLE`. Drives already in `AVAILABLE` state on a disabled port are demoted to `DISCONNECTED` on the next discovery sync.
 
 **Roles:** `admin`, `manager`
 
@@ -556,7 +557,7 @@ Enable or disable a USB port for ECUBE use. Disabled ports cause newly discovere
 
 - The enablement change takes effect on the next discovery sync.
 - Drives already in `IN_USE` state on a disabled port are **not** affected — project isolation takes priority.
-- Drives with no associated port (`port_id = NULL`) are treated as disabled — they remain in `EMPTY` state.
+- Drives with no associated port (`port_id = NULL`) are treated as disabled — they remain in `DISCONNECTED` state.
 
 **Audit events:**
 
@@ -692,7 +693,7 @@ All job endpoints that return a single job use the `ExportJobSchema` response, w
 | `filesystem_path` | string or null | OS block device node (e.g. `/dev/sdb`) |
 | `capacity_bytes` | integer or null | Total storage capacity in bytes |
 | `filesystem_type` | string or null | Detected filesystem label |
-| `current_state` | string | `EMPTY`, `AVAILABLE`, `IN_USE` |
+| `current_state` | string | `DISCONNECTED`, `AVAILABLE`, `IN_USE` |
 | `current_project_id` | string or null | Bound project ID |
 
 #### Example response (completed job)

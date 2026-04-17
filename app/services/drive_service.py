@@ -41,6 +41,7 @@ def get_all_drives(
     db: Session,
     project_id: Optional[str] = None,
     states: Optional[List[str]] = None,
+    include_disconnected: bool = False,
 ) -> List[UsbDrive]:
     repo = DriveRepository(db)
     if project_id is not None:
@@ -55,7 +56,9 @@ def get_all_drives(
                 detail=f"Invalid state filter. Valid values: {valid}",
             )
         return repo.list_by_states(parsed)
-    return repo.list_all()
+    if include_disconnected:
+        return repo.list_all()
+    return repo.list_by_states([DriveState.AVAILABLE, DriveState.IN_USE, DriveState.ARCHIVED])  # DISCONNECTED excluded by default
 
 
 def initialize_drive(
@@ -93,11 +96,11 @@ def initialize_drive(
             detail="Drive is archived and cannot be re-initialized.",
         )
 
-    # EMPTY drives are not physically accessible (not present or on a disabled port).
+    # DISCONNECTED drives are not physically accessible (not present or on a disabled port).
     # Initialization requires the drive to be AVAILABLE so that a filesystem is
-    # present and the drive is reachable.  Attempting to initialize from EMPTY is
+    # present and the drive is reachable.  Attempting to initialize from DISCONNECTED is
     # always a precondition failure.
-    if drive.current_state == DriveState.EMPTY:
+    if drive.current_state == DriveState.DISCONNECTED:
         try:
             audit_repo.add(
                 action="INIT_REJECTED_NOT_AVAILABLE",
@@ -116,7 +119,7 @@ def initialize_drive(
             logger.error("Failed to write audit log for INIT_REJECTED_NOT_AVAILABLE")
         raise HTTPException(
             status_code=409,
-            detail="Drive is EMPTY (not present or port disabled) and cannot be initialized.",
+            detail="Drive is DISCONNECTED (not present or port disabled) and cannot be initialized.",
         )
 
     # Project isolation is state-dependent:
@@ -299,6 +302,14 @@ def mount_drive(
 
     success, error = provider.mount_drive(initial_filesystem_path, mount_point)
     if not success:
+        logger.warning(
+            "Drive mount failed: drive_id=%s device_name=%s filesystem_type=%s mount_slot=%s reason=%s",
+            drive_id,
+            _redacted_device_name(initial_filesystem_path),
+            drive.filesystem_type,
+            _redacted_device_name(mount_point),
+            sanitize_error_message(error, "Mount provider reported failure"),
+        )
         try:
             audit_repo.add(
                 action="DRIVE_MOUNT_FAILED",
