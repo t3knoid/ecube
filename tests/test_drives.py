@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock, patch
 
+from app.exceptions import ConflictError
 from app.infrastructure.drive_eject import EjectResult
 from app.models.hardware import UsbDrive, DriveState
 from app.services import drive_service
@@ -192,6 +193,40 @@ def test_initialize_drive_allows_project_with_mounted_source(manager_client, db)
     assert response.status_code == 200
     assert response.json()["current_project_id"] == "PROJ-205"
     assert response.json()["current_state"] == "IN_USE"
+
+
+def test_initialize_drive_rejects_busy_project_source(manager_client, db):
+    from app.models.audit import AuditLog
+    from app.models.network import MountStatus, MountType, NetworkMount
+
+    drive = UsbDrive(
+        device_identifier="USB-BUSY-MOUNT",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+    )
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="10.0.0.8:/exports/proj-busy",
+        local_mount_point="/nfs/proj-busy",
+        project_id="PROJ-BUSY",
+        status=MountStatus.MOUNTED,
+    )
+    db.add_all([drive, mount])
+    db.commit()
+
+    with patch(
+        "app.services.drive_service.MountRepository.get_mounted_project_for_update",
+        side_effect=ConflictError("Project source is currently being updated by another operation."),
+    ):
+        response = manager_client.post(f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-BUSY"})
+
+    assert response.status_code == 409
+    assert response.json()["message"] == "Project source is currently being updated by another operation."
+
+    log = db.query(AuditLog).filter(AuditLog.action == "INIT_REJECTED_PROJECT_SOURCE_BUSY").one()
+    assert log.project_id == "PROJ-BUSY"
+    assert log.drive_id == drive.id
+    assert log.details["reason"] == "project_source_busy"
 
 
 def test_initialize_drive_normalizes_project_id_case_and_whitespace(manager_client, db):

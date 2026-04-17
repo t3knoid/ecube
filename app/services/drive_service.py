@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.exceptions import ConflictError
 from app.infrastructure.drive_eject import DriveEjectProvider
 from app.infrastructure.drive_format import DriveFormatter
 from app.infrastructure.drive_mount import DriveMountProvider
@@ -212,7 +213,28 @@ def initialize_drive(
             ),
         )
 
-    if not mount_repo.has_mounted_project(project_id):
+    try:
+        project_source = mount_repo.get_mounted_project_for_update(project_id)
+    except ConflictError as exc:
+        try:
+            audit_repo.add(
+                action="INIT_REJECTED_PROJECT_SOURCE_BUSY",
+                user=actor,
+                project_id=project_id,
+                drive_id=drive_id,
+                details={
+                    "actor": actor,
+                    "drive_id": drive_id,
+                    "requested_project_id": project_id,
+                    "reason": "project_source_busy",
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.error("Failed to write audit log for INIT_REJECTED_PROJECT_SOURCE_BUSY")
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    if not project_source:
         try:
             audit_repo.add(
                 action="INIT_REJECTED_NO_PROJECT_SOURCE",
