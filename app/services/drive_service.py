@@ -327,12 +327,12 @@ def mount_drive(
     if not drive:
         rollback_attempted, rollback_ok, rollback_error = _rollback_mount()
         logger.warning(
-            "Drive %s disappeared during mount rollback_attempted=%s rollback_ok=%s mount_slot=%s rollback_error=%s",
+            "Drive %s disappeared during mount rollback_attempted=%s rollback_ok=%s mount_slot=%s rollback_reason=%s",
             drive_id,
             rollback_attempted,
             rollback_ok,
             _redacted_device_name(mount_point),
-            rollback_error,
+            sanitize_error_message(rollback_error, "Mount rollback failed"),
         )
         detail = "Drive disappeared during mount; rollback attempted"
         if rollback_attempted and not rollback_ok:
@@ -342,13 +342,13 @@ def mount_drive(
     if drive.current_state != initial_state:
         rollback_attempted, rollback_ok, rollback_error = _rollback_mount()
         logger.warning(
-            "Drive %s state changed during mount from %s to %s rollback_attempted=%s rollback_ok=%s rollback_error=%s",
+            "Drive %s state changed during mount from %s to %s rollback_attempted=%s rollback_ok=%s rollback_reason=%s",
             drive_id,
             initial_state.value,
             drive.current_state.value,
             rollback_attempted,
             rollback_ok,
-            rollback_error,
+            sanitize_error_message(rollback_error, "Mount rollback failed"),
         )
         detail = (
             f"Drive state changed during mount (was: {initial_state.value}, "
@@ -361,11 +361,11 @@ def mount_drive(
     if drive.filesystem_path != initial_filesystem_path:
         rollback_attempted, rollback_ok, rollback_error = _rollback_mount()
         logger.warning(
-            "Drive %s device path changed during mount rollback_attempted=%s rollback_ok=%s rollback_error=%s",
+            "Drive %s device path changed during mount rollback_attempted=%s rollback_ok=%s rollback_reason=%s",
             drive_id,
             rollback_attempted,
             rollback_ok,
-            rollback_error,
+            sanitize_error_message(rollback_error, "Mount rollback failed"),
         )
         detail = "Device path changed during mount; operation aborted after rollback attempted"
         if rollback_attempted and not rollback_ok:
@@ -375,11 +375,11 @@ def mount_drive(
     if drive.current_project_id != initial_project_id:
         rollback_attempted, rollback_ok, rollback_error = _rollback_mount()
         logger.warning(
-            "Drive %s project binding changed during mount rollback_attempted=%s rollback_ok=%s rollback_error=%s",
+            "Drive %s project binding changed during mount rollback_attempted=%s rollback_ok=%s rollback_reason=%s",
             drive_id,
             rollback_attempted,
             rollback_ok,
-            rollback_error,
+            sanitize_error_message(rollback_error, "Mount rollback failed"),
         )
         detail = "Drive project binding changed during mount; operation aborted after rollback attempted"
         if rollback_attempted and not rollback_ok:
@@ -389,11 +389,11 @@ def mount_drive(
     if drive.mount_path:
         rollback_attempted, rollback_ok, rollback_error = _rollback_mount()
         logger.warning(
-            "Drive %s mount state changed during mount rollback_attempted=%s rollback_ok=%s rollback_error=%s",
+            "Drive %s mount state changed during mount rollback_attempted=%s rollback_ok=%s rollback_reason=%s",
             drive_id,
             rollback_attempted,
             rollback_ok,
-            rollback_error,
+            sanitize_error_message(rollback_error, "Mount rollback failed"),
         )
         detail = "Drive mount state changed during mount; operation aborted after rollback attempted"
         if rollback_attempted and not rollback_ok:
@@ -406,12 +406,12 @@ def mount_drive(
     except Exception:
         rollback_attempted, rollback_ok, rollback_error = _rollback_mount()
         logger.exception(
-            "DB commit failed after successful OS mount for drive %s rollback_attempted=%s rollback_ok=%s mount_slot=%s rollback_error=%s",
+            "DB commit failed after successful OS mount for drive %s rollback_attempted=%s rollback_ok=%s mount_slot=%s rollback_reason=%s",
             drive_id,
             rollback_attempted,
             rollback_ok,
             _redacted_device_name(mount_point),
-            rollback_error,
+            sanitize_error_message(rollback_error, "Mount rollback failed"),
         )
         detail = "Drive mount failed after database update error; rollback attempted"
         if rollback_attempted and not rollback_ok:
