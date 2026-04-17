@@ -223,7 +223,7 @@ onMounted(loadDrives)
         <div class="row-actions">
           <button class="btn" @click="openDrive(row)">{{ t('drives.details') }}</button>
           <button
-            v-if="row.mount_path && row.current_state !== 'DISCONNECTED'"
+            v-if="row.mount_path"
             class="btn"
             :aria-expanded="browsingDriveId === row.id"
             :aria-label="t('drives.browse') + ' ' + row.device_identifier"
