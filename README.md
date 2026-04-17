@@ -144,10 +144,10 @@ Installer/package artifact workflows (`build-artifact.yml` and `tag-release.yml`
 ## Documentation
 
 - [Operations Guide](docs/operations/00-operational-guide.md) — production deployment and operations index
-- [User Manual](docs/operations/10-user-manual.md) — operator and end-user workflows
+- [User Manual](docs/operations/13-user-manual.md) — operator and end-user workflows
 - [Installation](docs/operations/01-installation.md) — native install and installer options
 - [Configuration Reference](docs/operations/04-configuration-reference.md) — environment variables and runtime settings
-- [API Quick Reference](docs/operations/08-api-quick-reference.md) — high-value endpoints for operators and automation
+- [API Quick Reference](docs/operations/11-api-quick-reference.md) — high-value endpoints for operators and automation
 - [REST API Design](docs/design/06-rest-api-design.md) — endpoint contracts and response behavior
 - [Security and Access Control](docs/design/10-security-and-access-control.md) — roles, trust boundary, and authorization model
 - [Build and Deployment](docs/design/13-build-and-deployment.md) — release artifacts and deployment model

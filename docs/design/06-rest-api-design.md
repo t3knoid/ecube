@@ -206,7 +206,9 @@ Additional error codes are documented per endpoint where applicable (e.g. `404`,
 
 ### `POST /mounts`
 
-Add NFS/SMB mount.
+Add NFS/SMB mount with a required project assignment.
+
+The request body must include `project_id`. ECUBE trims surrounding whitespace and stores project IDs in uppercase for stable comparison.
 
 **Roles:** `admin`, `manager`
 
@@ -214,6 +216,7 @@ Add NFS/SMB mount.
 
 - `401 Unauthorized` — Missing/invalid token
 - `403 Forbidden` — Insufficient role
+- `422 Unprocessable Entity` — Invalid or missing request fields
 
 ### `DELETE /mounts/{mount_id}`
 
@@ -374,14 +377,17 @@ List all drives with state and project assignment.
 
 Initialize drive for a project.
 
-Enforces project isolation.
+Enforces project isolation. The request body must include `project_id`, which is trimmed and normalized to uppercase before storage and comparison.
+
+Initialization succeeds only when the drive has a recognized filesystem and the requested project already has an assigned share in the `MOUNTED` state. If the drive is still bound to a different project, if no eligible mounted share exists, or if the project source is being updated concurrently, the endpoint returns `409 Conflict`.
 
 **Roles:** `admin`, `manager`
 
 **Error responses:**
 
 - `401 Unauthorized` — Missing/invalid token
-- `403 Forbidden` — Insufficient role
+- `403 Forbidden` — Insufficient role or active project-isolation violation
+- `409 Conflict` — Drive not ready for initialization or project source unavailable
 - `422 Unprocessable Entity` — Invalid request body (e.g. malformed Unicode in project_id)
 
 ### `POST /drives/{drive_id}/format`

@@ -936,11 +936,13 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 
 | # | Test | Expected |
 |---|------|----------|
-| 1 | Initialize an AVAILABLE drive with `PROJ-A` | 200, state → `IN_USE` |
+| 1 | Initialize an AVAILABLE drive with request project ` proj-a ` while a mounted share is assigned to `PROJ-A` | 200, state → `IN_USE`, stored `current_project_id` is normalized to `PROJ-A` |
 | 2 | Re-initialize same drive with `PROJ-B` (drive still `IN_USE`) | 403, `FORBIDDEN` — isolation violation |
-| 3 | Check audit log for `PROJECT_ISOLATION_VIOLATION` | Record present with `requested_project_id: PROJ-B` |
+| 3 | Check audit log for row 2 | `PROJECT_ISOLATION_VIOLATION` record present with `requested_project_id: PROJ-B` |
 | 4 | Prepare-eject the drive from step 1 (state → `AVAILABLE`), then initialize with `PROJ-B` | 409, `CONFLICT` — drive is bound to `PROJ-A`; format required before reassigning to a different project |
 | 5 | Check audit log for row 4 | `INIT_REJECTED_PROJECT_MISMATCH` record present with `requested_project_id: PROJ-B` |
+| 6 | Attempt initialize when no `MOUNTED` share is assigned to the requested project | 409, `CONFLICT`; audit includes `INIT_REJECTED_NO_PROJECT_SOURCE` |
+| 7 | Retry initialize while the same project's share is being modified concurrently | 409, `CONFLICT`; audit includes `INIT_REJECTED_PROJECT_SOURCE_BUSY` |
 
 ### 12.4 Drive State Machine
 
@@ -957,6 +959,10 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 9 | Prepare-eject an `AVAILABLE` drive | 409, `CONFLICT` |
 | 10 | Format-then-initialize-mount workflow: discover unformatted → format ext4 → initialize → mount | Each step succeeds; `mount_path` becomes populated |
 | 11 | Attempt to format an `IN_USE` drive | 409, `CONFLICT` — must be `AVAILABLE` |
+| 12 | Open the Initialize dialog when no eligible mounted project exists | UI shows a helper message, disables the project selector, and blocks submission |
+| 13 | View drive detail after initialization | Sensitive device and path fields are shown as `Protected` instead of raw internal identifiers |
+| 14 | View the mounts list and browse controls | Raw remote and local mount paths are redacted in the table; browse remains enabled only for mounted shares |
+| 15 | Operate the Initialize and Add Mount dialogs with keyboard only | Focus enters the dialog, Tab stays trapped within it, Escape closes it, and focus returns to the triggering control |
 
 ### 12.4.1 Filesystem Detection
 
