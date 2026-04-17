@@ -50,10 +50,11 @@ class MountRepository:
         )
 
     def get_mounted_project_for_update(self, project_id: str) -> Optional[NetworkMount]:
-        """Return one mounted share for ``project_id`` locked for update.
+        """Return one mounted share for ``project_id`` and request an update lock.
 
-        Uses ``FOR UPDATE NOWAIT`` so that initialization fails fast rather than
-        blocking behind a concurrent mount/unmount operation.
+        On backends that support row-level locking, this uses ``FOR UPDATE NOWAIT``
+        so initialization fails fast instead of blocking behind a concurrent
+        mount or unmount operation.
         """
         normalized_project_id = normalize_project_id(project_id)
         if not isinstance(normalized_project_id, str) or not normalized_project_id:
