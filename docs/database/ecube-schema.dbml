@@ -38,7 +38,7 @@ Enum file_status {
 }
 
 Enum drive_state {
-  EMPTY
+  DISCONNECTED
   AVAILABLE
   IN_USE
   ARCHIVED

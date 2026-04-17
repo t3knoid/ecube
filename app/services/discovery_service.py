@@ -179,7 +179,7 @@ def run_discovery_sync(
 
         if existing is None:
             # New drive — insert as AVAILABLE only if port is enabled.
-            initial_state = DriveState.AVAILABLE if _port_is_enabled(port_id) else DriveState.EMPTY
+            initial_state = DriveState.AVAILABLE if _port_is_enabled(port_id) else DriveState.DISCONNECTED
             drive = UsbDrive(
                 device_identifier=discovered_drive.device_identifier,
                 port_id=port_id,
@@ -246,14 +246,14 @@ def run_discovery_sync(
                     changed = True
 
             # Re-activate a previously-emptied drive only if port is enabled.
-            if existing.current_state == DriveState.EMPTY and _port_is_enabled(port_id or existing.port_id):
+            if existing.current_state == DriveState.DISCONNECTED and _port_is_enabled(port_id or existing.port_id):
                 existing.current_state = DriveState.AVAILABLE
                 changed = True
 
-            # Demote AVAILABLE → EMPTY when the port has been disabled.
+            # Demote AVAILABLE → DISCONNECTED when the port has been disabled.
             # IN_USE drives are left untouched to preserve project isolation.
             if existing.current_state == DriveState.AVAILABLE and not _port_is_enabled(port_id or existing.port_id):
-                existing.current_state = DriveState.EMPTY
+                existing.current_state = DriveState.DISCONNECTED
                 existing.mount_path = None
                 changed = True
 
@@ -270,20 +270,20 @@ def run_discovery_sync(
                 db.refresh(existing)
                 drives_updated.append(discovered_drive.device_identifier)
 
-    # Mark drives absent from hardware as EMPTY (unless IN_USE — project
+    # Mark drives absent from hardware as DISCONNECTED (unless IN_USE — project
     # isolation must not be broken).
     all_db_drives: List[UsbDrive] = drive_repo.list_all()
     for drive in all_db_drives:
         if drive.device_identifier not in discovered_ids:
             if drive.current_state == DriveState.AVAILABLE:
-                drive.current_state = DriveState.EMPTY
+                drive.current_state = DriveState.DISCONNECTED
                 drive.mount_path = None
                 try:
                     db.commit()
                 except Exception:
                     db.rollback()
                     logger.exception(
-                        "DB commit failed marking drive %s as EMPTY",
+                        "DB commit failed marking drive %s as DISCONNECTED",
                         drive.device_identifier,
                     )
                     continue
