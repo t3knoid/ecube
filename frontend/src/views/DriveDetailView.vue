@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
@@ -30,6 +30,27 @@ function clearBanners() {
   warnMessage.value = ''
 }
 
+function trapFocusWithin(event, container) {
+  if (!container) return
+  const focusable = Array.from(
+    container.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'),
+  ).filter((element) => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true')
+
+  if (!focusable.length) return
+
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  const active = document.activeElement
+
+  if (event.shiftKey && active === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
 const showFormatDialog = ref(false)
 const showEjectDialog = ref(false)
 const showInitializeDialog = ref(false)
@@ -40,6 +61,12 @@ const filesystemType = ref('ext4')
 const projectId = ref('')
 const loadingProjects = ref(false)
 const mountedProjectOptions = ref([])
+const initializeDialogRef = ref(null)
+const initializeTriggerRef = ref(null)
+
+const initializeDialogTitleId = 'drive-initialize-dialog-title'
+const initializeDialogHelpId = 'drive-initialize-dialog-help'
+const initializeDialogStatusId = 'drive-initialize-dialog-status'
 
 const { driveStateLabel } = useStatusLabels()
 
@@ -137,6 +164,13 @@ async function loadMountedProjects() {
     error.value = t('common.errors.networkError')
   } finally {
     loadingProjects.value = false
+    await nextTick()
+    if (showInitializeDialog.value) {
+      const target = initializeDialogRef.value?.querySelector('#project-id')
+      if (target instanceof HTMLElement) {
+        target.focus()
+      }
+    }
   }
 }
 
@@ -172,9 +206,26 @@ async function runInitialize() {
   }
 }
 
-function openInitializeDialog() {
+function openInitializeDialog(event) {
+  initializeTriggerRef.value = event?.currentTarget instanceof HTMLElement ? event.currentTarget : document.activeElement
   showInitializeDialog.value = true
   void loadMountedProjects()
+}
+
+function closeInitializeDialog() {
+  showInitializeDialog.value = false
+}
+
+function handleInitializeDialogKeydown(event) {
+  if (!showInitializeDialog.value) return
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeInitializeDialog()
+    return
+  }
+  if (event.key === 'Tab') {
+    trapFocusWithin(event, initializeDialogRef.value)
+  }
 }
 
 async function runEnable() {
@@ -286,6 +337,30 @@ watch(driveId, () => {
   browseExpanded.value = false
   loadDrive()
 })
+
+watch(showInitializeDialog, async (open) => {
+  if (open) {
+    document.addEventListener('keydown', handleInitializeDialogKeydown)
+    await nextTick()
+    const target = initializeDialogRef.value?.querySelector('#project-id')
+    if (target instanceof HTMLElement) {
+      target.focus()
+    }
+    return
+  }
+
+  document.removeEventListener('keydown', handleInitializeDialogKeydown)
+  const trigger = initializeTriggerRef.value
+  initializeTriggerRef.value = null
+  await nextTick()
+  if (trigger instanceof HTMLElement) {
+    trigger.focus()
+  }
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', handleInitializeDialogKeydown)
+})
 </script>
 
 <template>
@@ -378,10 +453,17 @@ watch(driveId, () => {
     />
 
     <teleport to="body">
-      <div v-if="showInitializeDialog" class="dialog-overlay" @click.self="showInitializeDialog = false">
-        <div class="dialog-panel" role="dialog" aria-modal="true">
-          <h3>{{ t('drives.initializeTitle') }}</h3>
-          <p class="muted">
+      <div v-if="showInitializeDialog" class="dialog-overlay" @click.self="closeInitializeDialog">
+        <div
+          ref="initializeDialogRef"
+          class="dialog-panel"
+          role="dialog"
+          aria-modal="true"
+          :aria-labelledby="initializeDialogTitleId"
+          :aria-describedby="`${initializeDialogHelpId} ${initializeDialogStatusId}`"
+        >
+          <h3 :id="initializeDialogTitleId">{{ t('drives.initializeTitle') }}</h3>
+          <p :id="initializeDialogHelpId" class="muted">
             {{ t('drives.projectWarning') }}
             <template v-if="drive.current_project_id"> {{ t('drives.initializeProjectHint', { project: drive.current_project_id }) }}</template>
           </p>
@@ -390,9 +472,10 @@ watch(driveId, () => {
             <option value="" disabled>{{ t('audit.selectProject') }}</option>
             <option v-for="option in mountedProjectOptions" :key="option" :value="option">{{ option }}</option>
           </select>
-          <p v-if="!loadingProjects && !hasMountedProjectOptions" class="muted">{{ t('drives.initializeNoProjects') }}</p>
+          <p :id="initializeDialogStatusId" v-if="!loadingProjects && !hasMountedProjectOptions" class="muted">{{ t('drives.initializeNoProjects') }}</p>
+          <p :id="initializeDialogStatusId" v-else-if="loadingProjects" class="muted">{{ t('common.labels.loading') }}</p>
           <div class="dialog-actions">
-            <button class="btn" :disabled="saving" @click="showInitializeDialog = false">{{ t('common.actions.cancel') }}</button>
+            <button class="btn" :disabled="saving" @click="closeInitializeDialog">{{ t('common.actions.cancel') }}</button>
             <button class="btn btn-primary" :disabled="saving || loadingProjects || !projectId.trim()" @click="runInitialize">{{ t('drives.initialize') }}</button>
           </div>
         </div>
