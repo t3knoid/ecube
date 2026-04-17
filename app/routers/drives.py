@@ -33,14 +33,22 @@ def list_drives(
         default=None,
         description="Filter drives by state (repeatable). Valid values: EMPTY, AVAILABLE, IN_USE, ARCHIVED.",
     ),
+    include_disconnected: bool = Query(
+        default=False,
+        description="Include disconnected (EMPTY) drives in the response. Default behaviour excludes them.",
+    ),
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_ALL_ROLES),
 ):
-    """List all USB drives with their current state and project assignments.
+    """List USB drives with their current state and project assignments.
+
+    By default only connected drives (``AVAILABLE``, ``IN_USE``, ``ARCHIVED``)
+    are returned.  Set ``include_disconnected=true`` to also include
+    disconnected (``EMPTY``) drives.
 
     When *project_id* is provided, only drives bound to that project are
     returned.  When *state* is provided, only drives in one of the given
-    states are returned.  When omitted, all drives are returned.
+    states are returned.
 
     **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
     """
@@ -49,7 +57,9 @@ def list_drives(
         if not sanitized:
             raise EncodingError("project_id is empty after removing invalid characters")   
         project_id = sanitized
-    return drive_service.get_all_drives(db, project_id=project_id, states=state)
+    return drive_service.get_all_drives(
+        db, project_id=project_id, states=state, include_disconnected=include_disconnected,
+    )
 
 @router.post("/{drive_id}/initialize", response_model=UsbDriveSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
 def initialize_drive(

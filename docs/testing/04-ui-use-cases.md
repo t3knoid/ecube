@@ -96,7 +96,7 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 | UC# | Use Case | Primary Actor | Roles |
 |-----|----------|---------------|-------|
 | UC-4.1 | View all USB drives (state, filesystem, project, capacity, mount point) | Any authenticated user | any |
-| UC-4.2 | Filter/search drives by state (EMPTY, AVAILABLE, IN_USE, ARCHIVED) | Any authenticated user | any |
+| UC-4.2 | Filter/search drives by state (DISCONNECTED, AVAILABLE, IN_USE, ARCHIVED) | Any authenticated user | any |
 | UC-4.3 | Trigger USB discovery refresh | Admin, Manager | admin, manager |
 | UC-4.4 | Format a drive (select ext4 or exfat) | Admin, Manager | admin, manager |
 | UC-4.5 | Initialize a drive for a project (bind project ID) | Admin, Manager | admin, manager |
@@ -110,7 +110,7 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 | UC-4.13 | Set/update hub location hint | Admin, Manager | admin, manager |
 | UC-4.14 | Set/update port friendly label | Admin, Manager | admin, manager |
 
-**UI Implication:** Drive inventory dashboard with state-based color indicators and a finite-state-machine visual. Action buttons (Format, Initialize, Mount, Eject) are contextually enabled based on current drive state. The drive detail screen now shows the current Mount Point and offers a Mount action for admin and manager users when the drive has a usable filesystem path and is not already mounted. Project binding is shown prominently on IN_USE drives. Port management panel (accessible to admin/manager) shows all USB ports with enable/disable toggles — disabled ports prevent drives from becoming AVAILABLE during discovery, and AVAILABLE drives on a subsequently disabled port are demoted to EMPTY on the next sync. IN_USE drives are never affected by port enablement. Hub and port listing displays enriched hardware metadata (vendor/product IDs, link speed). Admins and managers can assign human-readable labels (hub location hints, port friendly labels) for easier physical identification.
+**UI Implication:** Drive inventory dashboard with state-based color indicators and a finite-state-machine visual. Action buttons (Format, Initialize, Mount, Eject) are contextually enabled based on current drive state. The drive detail screen now shows the current Mount Point and offers a Mount action for admin and manager users when the drive has a usable filesystem path and is not already mounted. Project binding is shown prominently on IN_USE drives. Port management panel (accessible to admin/manager) shows all USB ports with enable/disable toggles — disabled ports prevent drives from becoming AVAILABLE during discovery, and AVAILABLE drives on a subsequently disabled port are demoted to DISCONNECTED on the next sync. IN_USE drives are never affected by port enablement. Hub and port listing displays enriched hardware metadata (vendor/product IDs, link speed). Admins and managers can assign human-readable labels (hub location hints, port friendly labels) for easier physical identification.
 
 ---
 
