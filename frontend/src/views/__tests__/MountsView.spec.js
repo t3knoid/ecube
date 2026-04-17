@@ -239,4 +239,29 @@ describe('MountsView removal flow', () => {
 
     expect(wrapper.text()).not.toContain('/smb/project2')
   })
+
+  it('clears password and credentials fields when the dialog closes', async () => {
+    mocks.getMounts.mockResolvedValue([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    expect(addButton).toBeTruthy()
+
+    await addButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#mount-password').setValue('super-secret')
+    await wrapper.find('#mount-creds-file').setValue('/tmp/creds.txt')
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+
+    await addButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('#mount-password').element.value).toBe('')
+    expect(wrapper.find('#mount-creds-file').element.value).toBe('')
+  })
 })
