@@ -114,7 +114,7 @@ async function loadDrives() {
   error.value = ''
   try {
     const params = {}
-    if (stateFilter.value === 'EMPTY') {
+    if (stateFilter.value === 'ALL' || stateFilter.value === 'EMPTY') {
       params.include_disconnected = true
     }
     drives.value = await getDrives(params)
