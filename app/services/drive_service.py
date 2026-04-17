@@ -302,6 +302,14 @@ def mount_drive(
 
     success, error = provider.mount_drive(initial_filesystem_path, mount_point)
     if not success:
+        logger.warning(
+            "Drive mount failed: drive_id=%s device_name=%s filesystem_type=%s mount_slot=%s reason=%s",
+            drive_id,
+            _redacted_device_name(initial_filesystem_path),
+            drive.filesystem_type,
+            _redacted_device_name(mount_point),
+            sanitize_error_message(error, "Mount provider reported failure"),
+        )
         try:
             audit_repo.add(
                 action="DRIVE_MOUNT_FAILED",
