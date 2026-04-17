@@ -2,6 +2,7 @@ import logging
 import subprocess
 import shutil
 import os
+import posixpath
 import re
 import pwd
 import grp
@@ -434,6 +435,68 @@ def _redacted_mount_label(local_mount_point: str) -> str:
     return label or "mount"
 
 
+def _normalize_remote_subpath(path: str) -> str:
+    raw = (path or "").strip().replace("\\", "/")
+    normalized = posixpath.normpath(f"/{raw.lstrip('/')}")
+    return normalized if normalized != "." else "/"
+
+
+def _normalize_remote_reference(mount_type: MountType, remote_path: str) -> tuple[str, str, str]:
+    raw = (remote_path or "").strip()
+
+    if mount_type == MountType.NFS:
+        if ":" in raw:
+            host, path = raw.split(":", 1)
+        else:
+            host, path = raw, "/"
+        return mount_type.value, host.strip().lower(), _normalize_remote_subpath(path)
+
+    normalized = raw.replace("\\", "/")
+    parts = [part for part in normalized.lstrip("/").split("/") if part]
+    if not parts:
+        return mount_type.value, "", "/"
+
+    host = parts[0].strip().lower()
+    share_path = "/" + "/".join(parts[1:]) if len(parts) > 1 else "/"
+    return mount_type.value, host, _normalize_remote_subpath(share_path)
+
+
+def _remote_paths_overlap(left: str, right: str) -> bool:
+    if left == right:
+        return True
+    left_prefix = left.rstrip("/") + "/"
+    right_prefix = right.rstrip("/") + "/"
+    return left.startswith(right_prefix) or right.startswith(left_prefix)
+
+
+def _validate_remote_path_conflicts(
+    mount_type: MountType,
+    remote_path: str,
+    project_id: str,
+    existing_mounts: list[NetworkMount],
+) -> None:
+    candidate_type, candidate_host, candidate_path = _normalize_remote_reference(mount_type, remote_path)
+
+    for existing in existing_mounts:
+        existing_type, existing_host, existing_path = _normalize_remote_reference(existing.type, existing.remote_path)
+        if (candidate_type, candidate_host, candidate_path) == (existing_type, existing_host, existing_path):
+            raise HTTPException(
+                status_code=409,
+                detail="A mount for this remote source is already configured.",
+            )
+
+        if candidate_type != existing_type or candidate_host != existing_host:
+            continue
+
+        if _remote_paths_overlap(candidate_path, existing_path):
+            existing_project_id = normalize_project_id(existing.project_id) or "UNASSIGNED"
+            if existing_project_id != project_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Remote source paths overlap with another project's configured mount.",
+                )
+
+
 def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
               provider: Optional["MountProvider"] = None,
               client_ip: Optional[str] = None) -> NetworkMount:
@@ -445,7 +508,32 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
     audit_repo = AuditRepository(db)
     provider = provider or _default_provider()
 
-    existing_mount_points = {str(m.local_mount_point) for m in mount_repo.list_all()}
+    existing_mounts = mount_repo.list_all()
+    try:
+        _validate_remote_path_conflicts(
+            mount_data.type,
+            mount_data.remote_path,
+            normalized_project_id,
+            existing_mounts,
+        )
+    except HTTPException as exc:
+        try:
+            audit_repo.add(
+                action="MOUNT_ADD_REJECTED_CONFLICT",
+                user=actor,
+                project_id=normalized_project_id,
+                details={
+                    "project_id": normalized_project_id,
+                    "status": "REJECTED",
+                    "message": str(exc.detail),
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for MOUNT_ADD_REJECTED_CONFLICT")
+        raise
+
+    existing_mount_points = {str(m.local_mount_point) for m in existing_mounts}
     local_mount_point = _generate_local_mount_point(
         mount_data.type,
         mount_data.remote_path,
