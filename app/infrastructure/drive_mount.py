@@ -103,6 +103,11 @@ class LinuxDriveMount:
             return False, mount_point_error
 
         mountable = _find_mountable_device(device_path)
+        logger.info(
+            "Attempting drive mount: device_name=%s mount_slot=%s",
+            os.path.basename(mountable),
+            os.path.basename(mount_point.rstrip("/")),
+        )
 
         try:
             os.makedirs(mount_point, exist_ok=True)
@@ -117,9 +122,22 @@ class LinuxDriveMount:
                 timeout=settings.subprocess_timeout_seconds,
             )
         except subprocess.TimeoutExpired:
+            logger.warning(
+                "Drive mount timed out: device_name=%s mount_slot=%s timeout=%ss",
+                os.path.basename(mountable),
+                os.path.basename(mount_point.rstrip("/")),
+                settings.subprocess_timeout_seconds,
+            )
             return False, f"mount timed out after {settings.subprocess_timeout_seconds}s"
         except subprocess.CalledProcessError as exc:
             stderr = (exc.stderr or b"").decode(errors="replace").strip()
+            logger.warning(
+                "Drive mount command failed: device_name=%s mount_slot=%s returncode=%s reason=%s",
+                os.path.basename(mountable),
+                os.path.basename(mount_point.rstrip("/")),
+                exc.returncode,
+                stderr or "mount command failed",
+            )
             if stderr and "already mounted" in stderr.lower():
                 actual = find_device_mount_point(mountable)
                 if actual == mount_point:
@@ -135,8 +153,19 @@ class LinuxDriveMount:
                 msg += f": {stderr}"
             return False, msg
         except OSError as exc:
+            logger.warning(
+                "Drive mount OS error: device_name=%s mount_slot=%s reason=%s",
+                os.path.basename(mountable),
+                os.path.basename(mount_point.rstrip("/")),
+                str(exc),
+            )
             return False, f"mount error: {exc}"
 
+        logger.info(
+            "Drive mount succeeded: device_name=%s mount_slot=%s",
+            os.path.basename(mountable),
+            os.path.basename(mount_point.rstrip("/")),
+        )
         return True, None
 
     def unmount_drive(

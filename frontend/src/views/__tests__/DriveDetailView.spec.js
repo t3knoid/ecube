@@ -116,4 +116,13 @@ describe('DriveDetailView mount workflow', () => {
     const labels = wrapper.findAll('button').map((node) => node.text())
     expect(labels).not.toContain(i18n.global.t('drives.mount'))
   })
+
+  it('shows the Browse control when the drive has a mount path', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/7' })])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('browse.browseContents'))
+  })
 })

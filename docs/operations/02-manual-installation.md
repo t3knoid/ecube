@@ -147,7 +147,17 @@ sha256sum -c "ecube-package-${LATEST_TAG}.sha256"
 
 ### 4.1 Install OS packages
 
-Install the ECUBE runtime dependencies before creating the service account or starting the application. These packages provide exFAT formatting support, host USB enumeration, and NFS/SMB client tooling required by the managed mount workflow.
+The ECUBE service depends on several non-standard OS packages for USB formatting, USB discovery, and NFS/SMB evidence mounts. These packages are provisioned by the Ansible deployment path and mirrored by the container image runtime dependencies, but operators preparing a bare-metal or minimal VM host should ensure they are installed before running the native installer or starting the service manually.
+
+| Package | Purpose |
+|---|---|
+| `exfatprogs` | Provides `mkfs.exfat` for formatting evidence drives as exFAT. |
+| `nfs-common` | NFS client utilities for mounting evidence shares. |
+| `cifs-utils` | SMB/CIFS client utilities for mounting evidence shares. |
+| `usbutils` | Provides `lsusb` and USB enumeration support. |
+| `util-linux` | Provides core block and session utilities such as `lsblk`, `blkid`, and `runuser`. |
+
+On minimal Ubuntu installs, also install `linux-modules-extra-$(uname -r)` so the native exFAT kernel module is available at runtime. On Ubuntu 20.04 hosts using the 5.4 kernel series, install `exfat-fuse` instead of the native module package.
 
 ```bash
 sudo apt-get update
@@ -158,8 +168,6 @@ sudo apt-get install -y \
   exfatprogs nfs-common cifs-utils usbutils util-linux \
   "linux-modules-extra-$(uname -r)"
 ```
-
-If the host is running Ubuntu 20.04 with the 5.4 kernel series, install `exfat-fuse` instead of `linux-modules-extra-$(uname -r)`.
 
 ### 4.2 Create backend service account and directories
 

@@ -35,7 +35,7 @@
     "detail": "Drive Detail",
     "placeholder": "Drives view will be implemented in a future phase.",
     "states": {
-      "empty": "Empty",
+      "disconnected": "Disconnected",
       "available": "Available",
       "inUse": "In Use",
       "archived": "Archived"
@@ -45,7 +45,7 @@
     "filesystemPath": "Filesystem Path",
     "rescan": "Rescan",
     "searchPlaceholder": "Search by device, path, project, or ID",
-    "allStates": "All states",
+    "allStates": "All",
     "sortBy": "Sort by",
     "sortAsc": "Sort: ascending",
     "sortDesc": "Sort: descending",

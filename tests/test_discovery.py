@@ -209,7 +209,7 @@ def test_available_drive_removed_becomes_empty(db):
 
     assert summary["drives_removed"] == 1
     drive = db.query(UsbDrive).one()
-    assert drive.current_state == DriveState.EMPTY
+    assert drive.current_state == DriveState.DISCONNECTED
 
 
 def test_available_drive_removed_emits_audit(db):
@@ -254,7 +254,7 @@ def test_in_use_drive_removal_preserves_project(db):
 def test_empty_drive_removal_stays_empty(db):
     """A drive already EMPTY that is absent from HW remains EMPTY."""
     # Insert an EMPTY drive directly (e.g. legacy record)
-    drive = UsbDrive(device_identifier="LEGACY-001", current_state=DriveState.EMPTY)
+    drive = UsbDrive(device_identifier="LEGACY-001", current_state=DriveState.DISCONNECTED)
     db.add(drive)
     db.commit()
 
@@ -262,7 +262,7 @@ def test_empty_drive_removal_stays_empty(db):
 
     assert summary["drives_removed"] == 0
     db.refresh(drive)
-    assert drive.current_state == DriveState.EMPTY
+    assert drive.current_state == DriveState.DISCONNECTED
 
 
 # ---------------------------------------------------------------------------
@@ -279,7 +279,7 @@ def test_empty_drive_reconnects_becomes_available(db):
     # Remove the drive
     run_discovery_sync(db, topology_source=_empty_topology, filesystem_detector=_NULL_DETECTOR)
     drive = db.query(UsbDrive).one()
-    assert drive.current_state == DriveState.EMPTY
+    assert drive.current_state == DriveState.DISCONNECTED
 
     # Reconnect
     summary = run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
@@ -400,7 +400,7 @@ def test_new_drive_on_disabled_port_inserted_as_empty(db):
 
     assert summary["drives_inserted"] == 1
     drive = db.query(UsbDrive).one()
-    assert drive.current_state == DriveState.EMPTY
+    assert drive.current_state == DriveState.DISCONNECTED
 
 
 def test_new_drive_on_enabled_port_inserted_as_available(db):
@@ -438,7 +438,7 @@ def test_reconnecting_drive_on_disabled_port_stays_empty(db):
     # Remove the drive (becomes EMPTY).
     run_discovery_sync(db, topology_source=_empty_topology, filesystem_detector=_NULL_DETECTOR)
     db.refresh(drive)
-    assert drive.current_state == DriveState.EMPTY
+    assert drive.current_state == DriveState.DISCONNECTED
 
     # Disable the port.
     port.enabled = False
@@ -447,7 +447,7 @@ def test_reconnecting_drive_on_disabled_port_stays_empty(db):
     # Reconnect the drive — should stay EMPTY because port is disabled.
     run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
     db.refresh(drive)
-    assert drive.current_state == DriveState.EMPTY
+    assert drive.current_state == DriveState.DISCONNECTED
 
 
 def test_existing_tests_still_pass_with_enabled_port(db):
@@ -484,7 +484,7 @@ def test_available_drive_demoted_when_port_disabled(db):
     # Next sync should demote the drive to EMPTY.
     summary = run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
     db.refresh(drive)
-    assert drive.current_state == DriveState.EMPTY
+    assert drive.current_state == DriveState.DISCONNECTED
     assert summary["drives_updated"] == 1
 
 
