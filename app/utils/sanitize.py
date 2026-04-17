@@ -6,7 +6,7 @@ time (issue #124).
 """
 
 import re
-from typing import Annotated
+from typing import Annotated, Optional
 
 from pydantic import BeforeValidator
 
@@ -106,6 +106,72 @@ def sanitize_error_message(err: object, default_message: str = "Operation failed
     if "unknown filesystem type" in lowered or "wrong fs type" in lowered or "bad superblock" in lowered:
         return "Filesystem type is not supported by the host"
     return default_message
+
+
+_AUDIT_REDACTED = "[redacted]"
+_AUDIT_SENSITIVE_KEYS = {
+    "filesystem_path",
+    "mount_path",
+    "local_mount_point",
+    "remote_path",
+    "device_name",
+    "device_identifier",
+    "system_path",
+    "mount_label",
+    "mount_slot",
+    "serial",
+    "serial_number",
+    "drive_sn",
+    "dev",
+}
+_AUDIT_ERROR_TEXT_KEYS = {"error", "details", "raw_error", "reason", "message"}
+_SYSTEM_PATH_PREFIXES = (
+    "/dev/",
+    "/mnt/",
+    "/media/",
+    "/run/",
+    "/nfs/",
+    "/smb/",
+    "/proc/",
+    "/sys/",
+    "/tmp/",
+    "/var/",
+)
+
+
+def sanitize_audit_details(details: object) -> object:
+    """Recursively sanitize audit metadata before it is persisted.
+
+    This provides a final repository-side safety net so raw paths, device
+    identifiers, and provider error text are not written verbatim even if an
+    individual caller forgets to sanitize them first.
+    """
+    return _sanitize_audit_value(details)
+
+
+def _sanitize_audit_value(value: object, key: Optional[str] = None) -> object:
+    key_lower = key.lower() if isinstance(key, str) else None
+
+    if isinstance(value, dict):
+        return {item_key: _sanitize_audit_value(item_value, str(item_key)) for item_key, item_value in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_audit_value(item, key) for item in value]
+    if isinstance(value, tuple):
+        return [_sanitize_audit_value(item, key) for item in value]
+    if not isinstance(value, str):
+        return value
+
+    if key_lower in _AUDIT_SENSITIVE_KEYS:
+        return _AUDIT_REDACTED
+
+    stripped = sanitize_string(value).strip()
+    if key_lower == "path":
+        return _AUDIT_REDACTED if any(stripped.startswith(prefix) for prefix in _SYSTEM_PATH_PREFIXES) else stripped
+
+    redacted = redact_pathlike_substrings(value).strip()
+    if key_lower in _AUDIT_ERROR_TEXT_KEYS:
+        return redacted or "Operation failed"
+    return redacted
 
 
 def is_encoding_error(exc: BaseException) -> bool:

@@ -226,7 +226,9 @@ def initialize_drive(
                     "actor": actor,
                     "drive_id": drive_id,
                     "requested_project_id": project_id,
-                    "reason": "project_source_busy",
+                    "error_code": "PROJECT_SOURCE_BUSY",
+                    "message": "Project source is currently being updated",
+                    "details": "Project source is currently being updated by another operation.",
                 },
                 client_ip=client_ip,
             )
@@ -245,7 +247,9 @@ def initialize_drive(
                     "actor": actor,
                     "drive_id": drive_id,
                     "requested_project_id": project_id,
-                    "reason": "no_mounted_project_source",
+                    "error_code": "NO_PROJECT_SOURCE",
+                    "message": "No mounted project source is available",
+                    "details": "Mount a share for this project before initializing a drive.",
                 },
                 client_ip=client_ip,
             )

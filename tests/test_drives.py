@@ -167,7 +167,8 @@ def test_initialize_drive_rejects_project_without_mounted_source(manager_client,
     assert log.project_id == "PROJ-MISSING"
     assert log.drive_id == drive.id
     assert log.details["requested_project_id"] == "PROJ-MISSING"
-    assert log.details["reason"] == "no_mounted_project_source"
+    assert log.details["error_code"] == "NO_PROJECT_SOURCE"
+    assert log.details["message"] == "No mounted project source is available"
 
 
 def test_initialize_drive_allows_project_with_mounted_source(manager_client, db):
@@ -226,7 +227,8 @@ def test_initialize_drive_rejects_busy_project_source(manager_client, db):
     log = db.query(AuditLog).filter(AuditLog.action == "INIT_REJECTED_PROJECT_SOURCE_BUSY").one()
     assert log.project_id == "PROJ-BUSY"
     assert log.drive_id == drive.id
-    assert log.details["reason"] == "project_source_busy"
+    assert log.details["error_code"] == "PROJECT_SOURCE_BUSY"
+    assert log.details["message"] == "Project source is currently being updated"
 
 
 def test_initialize_drive_normalizes_project_id_case_and_whitespace(manager_client, db):
@@ -284,8 +286,8 @@ def test_mount_drive_success(manager_client, db):
     audit = db.query(AuditLog).filter(AuditLog.action == "DRIVE_MOUNTED").first()
     assert audit is not None
     assert audit.details["drive_id"] == drive.id
-    assert audit.details["device_name"] == "sdb"
-    assert audit.details["mount_slot"] == str(drive.id)
+    assert audit.details["device_name"] == "[redacted]"
+    assert audit.details["mount_slot"] == "[redacted]"
     assert "filesystem_path" not in audit.details
     assert "mount_path" not in audit.details
 
@@ -738,7 +740,7 @@ def test_prepare_eject_with_filesystem_path(manager_client, db):
     assert log.drive_id == drive.id
     assert log.project_id == "PROJ-001"
     assert log.details["drive_id"] == drive.id
-    assert log.details["device_name"] == "sdb"
+    assert log.details["device_name"] == "[redacted]"
     assert log.details["flush_ok"] is True
     assert log.details["unmount_ok"] is True
     assert "filesystem_path" not in log.details
