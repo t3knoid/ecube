@@ -491,8 +491,9 @@ curl -sk -X POST https://localhost:8443/drives/{drive_id}/prepare-eject \
 
 ### 11.3a Port Management
 
-USB ports default to disabled. Drives on disabled ports stay in `DISCONNECTED` state
-until the port is enabled and a discovery refresh runs.
+USB ports default to disabled. For drives on disabled ports, the backend/API state
+remains `EMPTY` (this may be displayed in the UI as “Disconnected”) until the port
+is enabled and a discovery refresh runs.
 
 ```bash
 # List all USB ports with enablement state (admin or manager)
