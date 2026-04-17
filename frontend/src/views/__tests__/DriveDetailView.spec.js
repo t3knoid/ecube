@@ -118,6 +118,10 @@ describe('DriveDetailView mount workflow', () => {
     expect(mocks.mountDrive).toHaveBeenCalledWith(7)
     expect(wrapper.text()).toContain(i18n.global.t('drives.mountSuccess'))
     expect(wrapper.text()).toContain('/mnt/ecube/7')
+
+    const statusBanner = wrapper.find('.ok-banner')
+    expect(statusBanner.attributes('role')).toBe('status')
+    expect(statusBanner.attributes('aria-live')).toBe('polite')
   })
 
   it('hides the Mount action when the drive is already mounted', async () => {

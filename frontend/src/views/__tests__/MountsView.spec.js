@@ -211,4 +211,16 @@ describe('MountsView removal flow', () => {
     expect(projectId.attributes('required')).toBeDefined()
     expect(projectId.attributes('aria-required')).toBe('true')
   })
+
+  it('announces load errors through an alert live region', async () => {
+    mocks.getMounts.mockRejectedValue(new Error('network down'))
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const errorBanner = wrapper.find('.error-banner')
+    expect(errorBanner.exists()).toBe(true)
+    expect(errorBanner.attributes('role')).toBe('alert')
+    expect(errorBanner.attributes('aria-live')).toBe('assertive')
+  })
 })
