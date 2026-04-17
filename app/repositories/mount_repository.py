@@ -1,7 +1,9 @@
 from typing import List, Optional
 
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from app.exceptions import ConflictError
 from app.utils.sanitize import normalize_project_id
 
 from app.models.network import MountStatus, NetworkMount
@@ -46,6 +48,36 @@ class MountRepository:
             .first()
             is not None
         )
+
+    def get_mounted_project_for_update(self, project_id: str) -> Optional[NetworkMount]:
+        """Return one mounted share for ``project_id`` locked for update.
+
+        Uses ``FOR UPDATE NOWAIT`` so that initialization fails fast rather than
+        blocking behind a concurrent mount/unmount operation.
+        """
+        normalized_project_id = normalize_project_id(project_id)
+        if not isinstance(normalized_project_id, str) or not normalized_project_id:
+            return None
+        try:
+            return (
+                self.db.query(NetworkMount)
+                .filter(
+                    NetworkMount.status == MountStatus.MOUNTED,
+                    NetworkMount.project_id == normalized_project_id,
+                )
+                .order_by(NetworkMount.id)
+                .with_for_update(nowait=True)
+                .first()
+            )
+        except OperationalError as exc:
+            self.db.rollback()
+            orig = getattr(exc, "orig", None)
+            sqlstate = getattr(orig, "pgcode", None) or getattr(orig, "sqlstate", None)
+            if sqlstate == "55P03":
+                raise ConflictError(
+                    "Project source is currently being updated by another operation."
+                ) from exc
+            raise
 
     def save(self, mount: NetworkMount) -> NetworkMount:
         """Commit pending changes to an existing mount and refresh it."""
