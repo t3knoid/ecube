@@ -132,6 +132,28 @@ test('Enable Drive shows warning banner when drive does not promote to AVAILABLE
   await expect(page.getByText('Port enabled. Drive is now available.')).toHaveCount(0)
 })
 
+test('Enable Drive shows success banner when drive is immediately reconciled to IN_USE', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['admin'])
+
+  const drive = makeEmptyDrive()
+
+  await routeJson(page, '**/api/drives', () => [drive])
+
+  await page.route('**/api/admin/ports/7', async (route) => {
+    drive.current_state = 'IN_USE'
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 7, enabled: true }) })
+  })
+  await page.route('**/api/drives/refresh', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
+  })
+
+  await page.goto('/drives/2')
+  await page.getByRole('button', { name: 'Enable Drive' }).click()
+
+  await expect(page.getByText('Port enabled. Drive remains in use because it is already mounted.')).toBeVisible()
+  await expect(page.getByText(/Port enabled, but drive is still/)).toHaveCount(0)
+})
+
 // ---------------------------------------------------------------------------
 // Enable Drive — error banner on API failure
 // ---------------------------------------------------------------------------

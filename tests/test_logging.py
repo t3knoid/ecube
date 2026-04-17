@@ -190,6 +190,22 @@ class TestConfigureLogging:
         ]
         assert len(file_handlers) == 0
 
+    def test_file_handler_failure_falls_back_to_console(self):
+        with patch("logging.handlers.RotatingFileHandler", side_effect=OSError("permission denied")):
+            configure_logging(level="INFO", log_format="text", log_file="/var/log/ecube/app.log")
+
+        root = logging.getLogger()
+        file_handlers = [
+            h for h in root.handlers
+            if isinstance(h, logging.handlers.RotatingFileHandler)
+        ]
+        console_handlers = [
+            h for h in root.handlers
+            if isinstance(h, logging.StreamHandler)
+        ]
+        assert len(file_handlers) == 0
+        assert len(console_handlers) >= 1
+
     def test_log_level_filtering(self):
         """Verify that records below the configured level are filtered out."""
         configure_logging(level="WARNING", log_format="text")
