@@ -36,6 +36,7 @@ const activeBrowsedMount = computed(() =>
 const form = ref({
   type: 'SMB',
   remote_path: '',
+  project_id: '',
   username: '',
   password: '',
   credentials_file: '',
@@ -44,6 +45,7 @@ const form = ref({
 const columns = computed(() => [
   { key: 'id', label: t('common.labels.id'), align: 'right' },
   { key: 'type', label: t('common.labels.type') },
+  { key: 'project_id', label: t('dashboard.project') },
   { key: 'remote_path', label: t('mounts.remotePath') },
   { key: 'local_mount_point', label: t('mounts.localPath') },
   { key: 'status', label: t('common.labels.status') },
@@ -55,7 +57,7 @@ const filtered = computed(() => {
   const query = search.value.trim().toLowerCase()
   return mounts.value.filter((mount) => {
     if (!query) return true
-    const text = [mount.type, mount.remote_path, mount.local_mount_point, mount.status].join(' ').toLowerCase()
+    const text = [mount.type, mount.project_id, mount.remote_path, mount.local_mount_point, mount.status].join(' ').toLowerCase()
     return text.includes(query)
   })
 })
@@ -88,6 +90,7 @@ function resetForm() {
   form.value = {
     type: 'SMB',
     remote_path: '',
+    project_id: '',
     username: '',
     password: '',
     credentials_file: '',
@@ -95,7 +98,7 @@ function resetForm() {
 }
 
 function formValid() {
-  return !!form.value.type && !!form.value.remote_path.trim()
+  return !!form.value.type && !!form.value.remote_path.trim() && !!form.value.project_id.trim()
 }
 
 async function submitAddMount() {
@@ -106,6 +109,7 @@ async function submitAddMount() {
     const payload = {
       type: form.value.type,
       remote_path: form.value.remote_path.trim(),
+      project_id: form.value.project_id.trim(),
       username: form.value.username.trim() || null,
       password: form.value.password || null,
       credentials_file: form.value.credentials_file.trim() || null,
@@ -253,6 +257,8 @@ onMounted(loadMounts)
           </select>
           <label for="mount-remote-path">{{ t('mounts.remotePath') }}</label>
           <input id="mount-remote-path" v-model="form.remote_path" type="text" />
+          <label for="mount-project-id">{{ t('dashboard.project') }}</label>
+          <input id="mount-project-id" v-model="form.project_id" type="text" />
           <label for="mount-username">{{ t('auth.username') }}</label>
           <input id="mount-username" v-model="form.username" type="text" autocomplete="off" />
           <label for="mount-password">{{ t('auth.password') }}</label>
