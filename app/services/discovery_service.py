@@ -283,12 +283,20 @@ def run_discovery_sync(
                 drives_updated.append(discovered_drive.device_identifier)
 
     # Mark drives absent from hardware as DISCONNECTED (unless IN_USE — project
-    # isolation must not be broken).
+    # isolation must not be broken). Also clear stale device-path evidence so the
+    # UI does not treat historically known drives as currently present.
     all_db_drives: List[UsbDrive] = drive_repo.list_all()
     for drive in all_db_drives:
         if drive.device_identifier not in discovered_ids:
-            if drive.current_state == DriveState.AVAILABLE:
+            if drive.current_state == DriveState.IN_USE:
+                continue
+
+            was_available = drive.current_state == DriveState.AVAILABLE
+            had_stale_presence = drive.filesystem_path is not None or drive.mount_path is not None
+
+            if was_available or had_stale_presence:
                 drive.current_state = DriveState.DISCONNECTED
+                drive.filesystem_path = None
                 drive.mount_path = None
                 try:
                     db.commit()
@@ -300,22 +308,23 @@ def run_discovery_sync(
                     )
                     continue
                 db.refresh(drive)
-                drives_removed.append(drive.device_identifier)
-                try:
-                    audit_repo.add(
-                        action="DRIVE_REMOVED",
-                        user=actor,
-                        details={
-                            "drive_id": drive.id,
-                            "device_identifier": drive.device_identifier,
-                        },
-                        client_ip=client_ip,
-                    )
-                except Exception:
-                    logger.exception(
-                        "Failed to write audit log for DRIVE_REMOVED: %s",
-                        drive.device_identifier,
-                    )
+                if was_available:
+                    drives_removed.append(drive.device_identifier)
+                    try:
+                        audit_repo.add(
+                            action="DRIVE_REMOVED",
+                            user=actor,
+                            details={
+                                "drive_id": drive.id,
+                                "device_identifier": drive.device_identifier,
+                            },
+                            client_ip=client_ip,
+                        )
+                    except Exception:
+                        logger.exception(
+                            "Failed to write audit log for DRIVE_REMOVED: %s",
+                            drive.device_identifier,
+                        )
 
     summary = {
         "hubs_upserted": len(hubs_upserted),
