@@ -191,4 +191,20 @@ describe('DriveDetailView mount workflow', () => {
 
     expect(wrapper.find('#project-id').exists()).toBe(false)
   })
+
+  it('does not dismiss the initialize dialog when the overlay is clicked', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const initializeButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.initialize'))
+    expect(initializeButton).toBeTruthy()
+
+    await initializeButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('.dialog-overlay').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('#project-id').exists()).toBe(true)
+  })
 })
