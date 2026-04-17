@@ -895,10 +895,13 @@ curl -k -X POST https://localhost:8443/drives/1/initialize \
 Response: returns the updated drive object with `current_state: "IN_USE"`
 and `current_project_id` set to the provided project ID.
 
-> **Note:** The drive must have a recognized filesystem. Initialize enforces the following state-aware guards:
+> **Note:** The drive must have a recognized filesystem, and the requested project must already have at least one assigned network share in the `MOUNTED` state. In the UI, this appears as a project dropdown populated only from eligible mounted shares.
+>
+> Initialize enforces the following state-aware guards:
 >
 > | Condition | Result |
 > |-----------|--------|
+> | No mounted share is assigned to the requested `project_id` | 409 — mount and assign a share for that project first |
 > | Drive is `DISCONNECTED` (not present or port disabled) | 409 — not accessible; insert drive or enable port first |
 > | Drive is `ARCHIVED` | 409 — permanently retired, cannot re-initialize |
 > | Drive is `IN_USE` and `project_id` differs from binding | 403 — project isolation violation |
