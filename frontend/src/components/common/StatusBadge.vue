@@ -27,7 +27,7 @@ const badgeClass = computed(() => {
   if (['RUNNING', 'VERIFYING', 'COPYING', 'IN_USE', 'DEGRADED'].includes(value)) {
     return 'badge-warning'
   }
-  if (['PENDING', 'EMPTY', 'UNKNOWN'].includes(value)) {
+  if (['PENDING', 'DISCONNECTED', 'UNKNOWN'].includes(value)) {
     return 'badge-muted'
   }
   return 'badge-info'

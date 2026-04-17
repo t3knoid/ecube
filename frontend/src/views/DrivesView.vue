@@ -114,7 +114,7 @@ async function loadDrives() {
   error.value = ''
   try {
     const params = {}
-    if (stateFilter.value === 'ALL' || stateFilter.value === 'EMPTY') {
+    if (stateFilter.value === 'DISCONNECTED') {
       params.include_disconnected = true
     }
     drives.value = await getDrives(params)
@@ -139,7 +139,7 @@ async function rescan() {
     }
 
     // The state watcher only reloads when disconnected-inclusion mode changes.
-    // When switching EMPTY -> ALL (or staying on ALL), trigger the reload here.
+    // When switching DISCONNECTED -> ALL (or staying on ALL), trigger the reload here.
     if (previousIncludesDisconnected) {
       await loadDrives()
     }
@@ -153,8 +153,8 @@ async function rescan() {
 watch(stateFilter, (newValue, oldValue) => {
   page.value = 1
 
-  const nextIncludesDisconnected = newValue === 'ALL' || newValue === 'EMPTY'
-  const previousIncludesDisconnected = oldValue === 'ALL' || oldValue === 'EMPTY'
+const nextIncludesDisconnected = newValue === 'ALL' || newValue === 'DISCONNECTED'
+    const previousIncludesDisconnected = oldValue === 'ALL' || oldValue === 'DISCONNECTED'
 
   if (nextIncludesDisconnected !== previousIncludesDisconnected) {
     loadDrives()
@@ -196,7 +196,7 @@ onMounted(loadDrives)
       <input v-model="search" type="text" :placeholder="t('drives.searchPlaceholder')" :aria-label="t('drives.searchPlaceholder')" />
       <select v-model="stateFilter" :aria-label="t('drives.allStates')">
         <option value="ALL">{{ t('drives.allStates') }}</option>
-        <option value="EMPTY">{{ t('drives.states.empty') }}</option>
+        <option value="DISCONNECTED">{{ t('drives.states.disconnected') }}</option>
         <option value="AVAILABLE">{{ t('drives.states.available') }}</option>
         <option value="IN_USE">{{ t('drives.states.inUse') }}</option>
         <option value="ARCHIVED">{{ t('drives.states.archived') }}</option>
@@ -223,7 +223,7 @@ onMounted(loadDrives)
         <div class="row-actions">
           <button class="btn" @click="openDrive(row)">{{ t('drives.details') }}</button>
           <button
-            v-if="row.mount_path && row.current_state !== 'EMPTY'"
+            v-if="row.mount_path && row.current_state !== 'DISCONNECTED'"
             class="btn"
             :aria-expanded="browsingDriveId === row.id"
             :aria-label="t('drives.browse') + ' ' + row.device_identifier"
