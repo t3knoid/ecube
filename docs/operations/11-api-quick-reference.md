@@ -81,7 +81,7 @@ During initial setup, `POST /setup/database/test-connection`, `POST /setup/datab
 | ------ | -------- | ---- | ----------- |
 | GET | `/drives` | admin/manager/processor/auditor | List drives (excludes `DISCONNECTED` drives by default). Optional `?project_id=`, repeatable `?state=`, and `?include_disconnected=true` filters |
 | POST | `/drives/refresh` | admin/manager | Force rescan of attached drives |
-| POST | `/drives/{drive_id}/initialize` | admin/manager | Initialize drive for project (rejects unformatted/unknown drives) |
+| POST | `/drives/{drive_id}/initialize` | admin/manager | Initialize drive for project (rejects unformatted/unknown drives and requires a mounted share assigned to that project) |
 | POST | `/drives/{drive_id}/format` | admin/manager | Format drive with `ext4` or `exfat`; drive must be AVAILABLE and unmounted |
 | POST | `/drives/{drive_id}/prepare-eject` | admin/manager | Flush filesystem + unmount all partitions; transitions drive to AVAILABLE on success, stays IN_USE on failure |
 
@@ -92,7 +92,7 @@ During initial setup, `POST /setup/database/test-connection`, `POST /setup/datab
 | Method | Endpoint | Role | Description |
 | ------ | -------- | ---- | ----------- |
 | GET | `/mounts` | manager+ | List network mounts |
-| POST | `/mounts` | manager | Add new mount |
+| POST | `/mounts` | manager | Add new mount with required project assignment |
 | POST | `/mounts/{mount_id}/validate` | admin/manager | Validate mount connectivity |
 | POST | `/mounts/validate` | admin/manager | Validate all mounts |
 | DELETE | `/mounts/{mount_id}` | admin/manager | Remove mount |
