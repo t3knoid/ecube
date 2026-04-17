@@ -320,15 +320,27 @@ onBeforeUnmount(() => {
       <div v-if="showAddDialog" class="dialog-overlay">
         <div ref="addDialogRef" class="dialog-panel" role="dialog" aria-modal="true" :aria-labelledby="addMountDialogTitleId">
           <h2 :id="addMountDialogTitleId">{{ t('mounts.add') }}</h2>
-          <label for="mount-type">{{ t('common.labels.type') }}</label>
-          <select id="mount-type" v-model="form.type">
+          <label for="mount-type" class="field-label">
+            {{ t('common.labels.type') }}
+            <span class="required-indicator" aria-hidden="true">*</span>
+            <span class="sr-only">required</span>
+          </label>
+          <select id="mount-type" v-model="form.type" required aria-required="true">
             <option value="SMB">SMB</option>
             <option value="NFS">NFS</option>
           </select>
-          <label for="mount-remote-path">{{ t('mounts.remotePath') }}</label>
-          <input id="mount-remote-path" v-model="form.remote_path" type="text" />
-          <label for="mount-project-id">{{ t('dashboard.project') }}</label>
-          <input id="mount-project-id" v-model="form.project_id" type="text" />
+          <label for="mount-remote-path" class="field-label">
+            {{ t('mounts.remotePath') }}
+            <span class="required-indicator" aria-hidden="true">*</span>
+            <span class="sr-only">required</span>
+          </label>
+          <input id="mount-remote-path" v-model="form.remote_path" type="text" required aria-required="true" />
+          <label for="mount-project-id" class="field-label">
+            {{ t('dashboard.project') }}
+            <span class="required-indicator" aria-hidden="true">*</span>
+            <span class="sr-only">required</span>
+          </label>
+          <input id="mount-project-id" v-model="form.project_id" type="text" required aria-required="true" />
           <label for="mount-username">{{ t('auth.username') }}</label>
           <input id="mount-username" v-model="form.username" type="text" autocomplete="off" />
           <label for="mount-password">{{ t('auth.password') }}</label>
@@ -416,6 +428,15 @@ select {
   padding: var(--space-lg);
   display: grid;
   gap: var(--space-xs);
+}
+
+.field-label {
+  font-weight: var(--font-weight-bold);
+}
+
+.required-indicator {
+  color: var(--color-danger, #b91c1c);
+  margin-left: 0.15rem;
 }
 
 .dialog-actions {
