@@ -190,6 +190,8 @@ function openAddDialog(event) {
 
 function closeAddDialog() {
   showAddDialog.value = false
+  error.value = ''
+  resetForm()
 }
 
 function handleAddDialogKeydown(event) {
