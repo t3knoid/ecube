@@ -71,6 +71,21 @@ def test_add_mount_normalizes_project_id(manager_client, db):
     assert data["project_id"] == "PROJ-001"
 
 
+def test_network_mount_model_normalizes_project_id(db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="192.168.1.9:/exports/direct-model",
+        project_id="  proj-model  ",
+        local_mount_point="/nfs/direct-model",
+        status=MountStatus.MOUNTED,
+    )
+    db.add(mount)
+    db.commit()
+    db.refresh(mount)
+
+    assert mount.project_id == "PROJ-MODEL"
+
+
 def test_add_mount_rejects_client_local_mount_point(manager_client, db):
     response = manager_client.post(
         "/mounts",
