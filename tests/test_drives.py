@@ -66,6 +66,18 @@ def test_list_drives_filter_by_project_no_match(client, db):
     assert response.json() == []
 
 
+def test_list_drives_filter_by_project_normalizes_case_and_whitespace(client, db):
+    drive = UsbDrive(device_identifier="USB-NORM", current_state=DriveState.IN_USE, current_project_id="PROJ-001")
+    db.add(drive)
+    db.commit()
+
+    response = client.get("/drives", params={"project_id": "  proj-001  "})
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["device_identifier"] == "USB-NORM"
+
+
 def test_list_drives_empty_project_id_rejected(client, db):
     """GET /drives?project_id= (empty string) returns 422."""
     response = client.get("/drives", params={"project_id": ""})
@@ -176,6 +188,31 @@ def test_initialize_drive_allows_project_with_mounted_source(manager_client, db)
 
     assert response.status_code == 200
     assert response.json()["current_project_id"] == "PROJ-205"
+    assert response.json()["current_state"] == "IN_USE"
+
+
+def test_initialize_drive_normalizes_project_id_case_and_whitespace(manager_client, db):
+    from app.models.network import MountStatus, MountType, NetworkMount
+
+    drive = UsbDrive(
+        device_identifier="USB-WITH-NORMALIZED-MOUNT",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+    )
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="10.0.0.7:/exports/proj-777",
+        local_mount_point="/nfs/proj-777",
+        project_id="PROJ-777",
+        status=MountStatus.MOUNTED,
+    )
+    db.add_all([drive, mount])
+    db.commit()
+
+    response = manager_client.post(f"/drives/{drive.id}/initialize", json={"project_id": "  proj-777  "})
+
+    assert response.status_code == 200
+    assert response.json()["current_project_id"] == "PROJ-777"
     assert response.json()["current_state"] == "IN_USE"
 
 
