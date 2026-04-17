@@ -315,7 +315,7 @@ onBeforeUnmount(() => {
       </template>
     </DataTable>
 
-    <!-- Inline directory browser panels (one per browsed mount) -->
+    <!-- Inline directory browser panel (one per browsed mount) -->
     <section
       v-if="activeBrowsedMount"
       ref="browsePanelRef"
