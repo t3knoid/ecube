@@ -64,6 +64,10 @@ Table export_jobs {
   client_ip varchar(45)
   callback_url varchar
   created_at timestamptz
+
+  indexes {
+    project_id [name: 'ix_export_jobs_project_id']
+  }
 }
 
 Table network_mounts {
@@ -74,6 +78,12 @@ Table network_mounts {
   local_mount_point varchar [not null, unique]
   status mount_status [default: 'UNMOUNTED']
   last_checked_at timestamptz
+
+  indexes {
+    project_id [name: 'ix_network_mounts_project_id']
+    status [name: 'ix_network_mounts_status']
+    (status, project_id) [name: 'ix_network_mounts_status_project']
+  }
 }
 
 Table reconciliation_lock {
@@ -157,7 +167,10 @@ Table usb_drives {
   last_seen_at timestamptz
 
   indexes {
+    current_project_id [name: 'ix_usb_drives_current_project_id']
+    current_state [name: 'ix_usb_drives_current_state']
     mount_path [name: 'ix_usb_drives_mount_path']
+    (current_state, current_project_id) [name: 'ix_usb_drives_state_project']
   }
 }
 
