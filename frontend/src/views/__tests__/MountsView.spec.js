@@ -172,4 +172,22 @@ describe('MountsView removal flow', () => {
 
     expect(wrapper.find('#mount-type').exists()).toBe(false)
   })
+
+  it('does not dismiss the add mount dialog when the overlay is clicked', async () => {
+    mocks.getMounts.mockResolvedValue([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    expect(addButton).toBeTruthy()
+
+    await addButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('.dialog-overlay').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('#mount-type').exists()).toBe(true)
+  })
 })
