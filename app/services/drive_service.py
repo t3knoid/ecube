@@ -233,7 +233,16 @@ def initialize_drive(
                 client_ip=client_ip,
             )
         except Exception:
-            logger.error("Failed to write audit log for INIT_REJECTED_PROJECT_SOURCE_BUSY")
+            logger.error(
+                "Failed to write audit log for INIT_REJECTED_PROJECT_SOURCE_BUSY",
+                extra={
+                    "action": "INIT_REJECTED_PROJECT_SOURCE_BUSY",
+                    "drive_id": drive_id,
+                    "project_id": project_id,
+                    "user_id": actor,
+                    "client_ip": client_ip,
+                },
+            )
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     if not project_source:
@@ -254,7 +263,16 @@ def initialize_drive(
                 client_ip=client_ip,
             )
         except Exception:
-            logger.error("Failed to write audit log for INIT_REJECTED_NO_PROJECT_SOURCE")
+            logger.error(
+                "Failed to write audit log for INIT_REJECTED_NO_PROJECT_SOURCE",
+                extra={
+                    "action": "INIT_REJECTED_NO_PROJECT_SOURCE",
+                    "drive_id": drive_id,
+                    "project_id": project_id,
+                    "user_id": actor,
+                    "client_ip": client_ip,
+                },
+            )
         raise HTTPException(
             status_code=409,
             detail=(
