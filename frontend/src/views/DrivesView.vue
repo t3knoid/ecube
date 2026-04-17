@@ -114,7 +114,7 @@ async function loadDrives() {
   error.value = ''
   try {
     const params = {}
-    if (stateFilter.value === 'DISCONNECTED') {
+    if (stateFilter.value === 'ALL' || stateFilter.value === 'DISCONNECTED') {
       params.include_disconnected = true
     }
     drives.value = await getDrives(params)
@@ -131,7 +131,7 @@ async function rescan() {
   try {
     await refreshDrives()
     const previousState = stateFilter.value
-    const previousIncludesDisconnected = previousState === 'ALL' || previousState === 'EMPTY'
+    const previousIncludesDisconnected = previousState === 'ALL' || previousState === 'DISCONNECTED'
 
     // Rescan should always switch the UI to All States.
     if (previousState !== 'ALL') {
@@ -139,7 +139,7 @@ async function rescan() {
     }
 
     // The state watcher only reloads when disconnected-inclusion mode changes.
-    // When switching DISCONNECTED -> ALL (or staying on ALL), trigger the reload here.
+    // When staying on ALL, trigger the reload here.
     if (previousIncludesDisconnected) {
       await loadDrives()
     }
@@ -153,8 +153,8 @@ async function rescan() {
 watch(stateFilter, (newValue, oldValue) => {
   page.value = 1
 
-const nextIncludesDisconnected = newValue === 'ALL' || newValue === 'DISCONNECTED'
-    const previousIncludesDisconnected = oldValue === 'ALL' || oldValue === 'DISCONNECTED'
+  const nextIncludesDisconnected = newValue === 'ALL' || newValue === 'DISCONNECTED'
+  const previousIncludesDisconnected = oldValue === 'ALL' || oldValue === 'DISCONNECTED'
 
   if (nextIncludesDisconnected !== previousIncludesDisconnected) {
     loadDrives()
