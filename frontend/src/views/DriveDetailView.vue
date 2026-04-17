@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { getDrives, formatDrive, initializeDrive, mountDrive, prepareEjectDrive, refreshDrives } from '@/api/drives.js'
+import { getMounts } from '@/api/mounts.js'
 import { enablePort } from '@/api/admin.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
@@ -37,6 +38,8 @@ const showCocPrompt = ref(false)
 
 const filesystemType = ref('ext4')
 const projectId = ref('')
+const loadingProjects = ref(false)
+const mountedProjectOptions = ref([])
 
 const { driveStateLabel } = useStatusLabels()
 
@@ -60,6 +63,7 @@ const canMount = computed(
 const canEject = computed(
   () => drive.value?.current_state === 'IN_USE' && canManage.value,
 )
+const hasMountedProjectOptions = computed(() => mountedProjectOptions.value.length > 0)
 
 function formatBytes(value) {
   if (typeof value !== 'number' || value <= 0) return '-'
@@ -104,6 +108,38 @@ async function runFormat() {
   }
 }
 
+function normalizeMountedProjectOptions(mounts) {
+  return [...new Set(
+    (mounts || [])
+      .filter((mount) => mount?.status === 'MOUNTED')
+      .map((mount) => (typeof mount?.project_id === 'string' ? mount.project_id.trim() : ''))
+      .filter((value) => value && value.toUpperCase() !== 'UNASSIGNED'),
+  )].sort((left, right) => left.localeCompare(right))
+}
+
+async function loadMountedProjects() {
+  loadingProjects.value = true
+  try {
+    const mounts = await getMounts()
+    mountedProjectOptions.value = normalizeMountedProjectOptions(mounts)
+    const currentProject = typeof drive.value?.current_project_id === 'string'
+      ? drive.value.current_project_id.trim()
+      : ''
+
+    if (currentProject && mountedProjectOptions.value.includes(currentProject)) {
+      projectId.value = currentProject
+    } else {
+      projectId.value = mountedProjectOptions.value[0] || ''
+    }
+  } catch {
+    mountedProjectOptions.value = []
+    projectId.value = ''
+    error.value = t('common.errors.networkError')
+  } finally {
+    loadingProjects.value = false
+  }
+}
+
 async function runInitialize() {
   if (!drive.value || !projectId.value.trim()) return
   saving.value = true
@@ -137,8 +173,8 @@ async function runInitialize() {
 }
 
 function openInitializeDialog() {
-  projectId.value = drive.value?.current_project_id ?? ''
   showInitializeDialog.value = true
+  void loadMountedProjects()
 }
 
 async function runEnable() {
@@ -350,10 +386,14 @@ watch(driveId, () => {
             <template v-if="drive.current_project_id"> {{ t('drives.initializeProjectHint', { project: drive.current_project_id }) }}</template>
           </p>
           <label class="field-label" for="project-id">{{ t('dashboard.project') }}</label>
-          <input id="project-id" v-model="projectId" type="text" :readonly="!!drive.current_project_id" />
+          <select id="project-id" v-model="projectId" :disabled="loadingProjects || !hasMountedProjectOptions">
+            <option value="" disabled>{{ t('audit.selectProject') }}</option>
+            <option v-for="option in mountedProjectOptions" :key="option" :value="option">{{ option }}</option>
+          </select>
+          <p v-if="!loadingProjects && !hasMountedProjectOptions" class="muted">{{ t('drives.initializeNoProjects') }}</p>
           <div class="dialog-actions">
             <button class="btn" :disabled="saving" @click="showInitializeDialog = false">{{ t('common.actions.cancel') }}</button>
-            <button class="btn btn-primary" :disabled="saving || !projectId.trim()" @click="runInitialize">{{ t('drives.initialize') }}</button>
+            <button class="btn btn-primary" :disabled="saving || loadingProjects || !projectId.trim()" @click="runInitialize">{{ t('drives.initialize') }}</button>
           </div>
         </div>
       </div>

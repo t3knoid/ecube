@@ -13,6 +13,7 @@ from app.infrastructure import validate_device_path
 from app.models.hardware import DriveState, UsbDrive
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
+from app.repositories.mount_repository import MountRepository
 from app.utils.sanitize import sanitize_error_message
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,7 @@ def initialize_drive(
 ) -> UsbDrive:
     drive_repo = DriveRepository(db)
     audit_repo = AuditRepository(db)
+    mount_repo = MountRepository(db)
 
     drive = drive_repo.get_for_update(drive_id)
     if not drive:
@@ -201,6 +203,31 @@ def initialize_drive(
             detail=(
                 "Drive must have a recognized filesystem before initialization. "
                 f"Current filesystem_type: {current_val}"
+            ),
+        )
+
+    if not mount_repo.has_mounted_project(project_id):
+        try:
+            audit_repo.add(
+                action="INIT_REJECTED_NO_PROJECT_SOURCE",
+                user=actor,
+                project_id=project_id,
+                drive_id=drive_id,
+                details={
+                    "actor": actor,
+                    "drive_id": drive_id,
+                    "requested_project_id": project_id,
+                    "reason": "no_mounted_project_source",
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.error("Failed to write audit log for INIT_REJECTED_NO_PROJECT_SOURCE")
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"No mounted share is assigned to project {project_id}. "
+                "Mount a share for this project before initializing a drive."
             ),
         )
 

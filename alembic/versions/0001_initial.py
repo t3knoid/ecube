@@ -104,6 +104,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("remote_path", sa.String, nullable=False),
+        sa.Column("project_id", sa.String(), nullable=False, server_default="UNASSIGNED"),
         sa.Column("local_mount_point", sa.String, nullable=False, unique=True),
         sa.Column(
             "status",
