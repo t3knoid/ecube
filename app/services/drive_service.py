@@ -39,6 +39,37 @@ def _default_mount_provider() -> DriveMountProvider:
     return get_drive_mount()
 
 
+def _recoverable_prepare_eject_detail(
+    mount_path: Optional[str],
+    unmount_error: Optional[str],
+) -> Optional[str]:
+    """Return a safe, actionable conflict message for recoverable prepare-eject failures."""
+    if not mount_path or not unmount_error:
+        return None
+
+    normalized_error = unmount_error.lower()
+    if any(marker in normalized_error for marker in (
+        "target is busy",
+        "device or resource busy",
+        "busy",
+    )):
+        return (
+            "Drive is busy; close any shell, file browser, or process using the mounted drive and retry prepare-eject"
+        )
+
+    if any(marker in normalized_error for marker in (
+        "invalid device path",
+        "could not read",
+        "no such file",
+        "not mounted",
+        "no mount point",
+        "not a block device",
+    )):
+        return "Drive mount state is stale or changed; refresh drive status and retry prepare-eject"
+
+    return None
+
+
 def get_all_drives(
     db: Session,
     project_id: Optional[str] = None,
@@ -556,6 +587,11 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
     # Fail fast if the drive is not in the required IN_USE state.
     # Don't waste time on expensive OS operations for invalid preconditions.
     if initial_state != DriveState.IN_USE:
+        if drive.mount_path:
+            raise HTTPException(
+                status_code=409,
+                detail="Drive mount state is stale or changed; refresh drive status and retry prepare-eject",
+            )
         raise HTTPException(
             status_code=409,
             detail=f"Drive is not in IN_USE state; cannot prepare eject (current state: {initial_state.value})",
@@ -672,6 +708,23 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
             )
         except Exception:
             logger.exception("Failed to write audit log for DRIVE_EJECT_FAILED")
+
+        recoverable_detail = _recoverable_prepare_eject_detail(
+            drive.mount_path,
+            result.unmount_error,
+        )
+        if recoverable_detail:
+            logger.warning(
+                "Prepare-eject encountered a recoverable mount condition for drive %s device_name=%s reason=%s",
+                drive_id,
+                _redacted_device_name(initial_device_path),
+                sanitize_error_message(result.unmount_error, "Drive eject operation failed"),
+            )
+            raise HTTPException(
+                status_code=409,
+                detail=recoverable_detail,
+            )
+
         raise HTTPException(
             status_code=500,
             detail="Drive eject preparation failed",
