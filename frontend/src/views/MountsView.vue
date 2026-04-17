@@ -122,6 +122,16 @@ function trapFocusWithin(event, container) {
   }
 }
 
+function protectedValue(value) {
+  return value ? t('common.labels.protected') : '-'
+}
+
+function browseLabel(mount) {
+  return mount?.project_id
+    ? `${t('mounts.browse')} ${mount.project_id}`
+    : t('mounts.browse')
+}
+
 function formValid() {
   return !!form.value.type && !!form.value.remote_path.trim() && !!form.value.project_id.trim()
 }
@@ -231,7 +241,9 @@ async function toggleBrowse(mountId) {
   browsingMountId.value = browsingMountId.value === mountId ? null : mountId
   if (browsingMountId.value !== null) {
     await nextTick()
-    browsePanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    if (typeof browsePanelRef.value?.scrollIntoView === 'function') {
+      browsePanelRef.value.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
   }
 }
 
@@ -279,6 +291,8 @@ onBeforeUnmount(() => {
     <input v-model="search" type="text" :placeholder="t('mounts.searchPlaceholder')" :aria-label="t('mounts.searchPlaceholder')" />
 
     <DataTable :columns="columns" :rows="paged" :empty-text="t('mounts.empty')">
+      <template #cell-remote_path="{ row }">{{ protectedValue(row.remote_path) }}</template>
+      <template #cell-local_mount_point="{ row }">{{ protectedValue(row.local_mount_point) }}</template>
       <template #cell-status="{ row }"><StatusBadge :status="row.status" /></template>
       <template #cell-last_checked_at="{ row }">{{ toIso(row.last_checked_at) }}</template>
       <template #cell-actions="{ row }">
@@ -289,7 +303,7 @@ onBeforeUnmount(() => {
             :disabled="row.status !== 'MOUNTED' || !row.local_mount_point"
             :title="row.status !== 'MOUNTED' || !row.local_mount_point ? t('mounts.browseUnavailable') : ''"
             :aria-expanded="browsingMountId === row.id"
-            :aria-label="row.local_mount_point ? t('mounts.browse') + ' ' + row.local_mount_point : t('mounts.browse')"
+            :aria-label="browseLabel(row)"
             @click="toggleBrowse(row.id)"
           >
             {{ t('mounts.browse') }}
@@ -304,10 +318,10 @@ onBeforeUnmount(() => {
       v-if="activeBrowsedMount"
       ref="browsePanelRef"
       class="browse-panel"
-      :aria-label="t('browse.browseMountContents') + ': ' + activeBrowsedMount.local_mount_point"
+      :aria-label="browseLabel(activeBrowsedMount)"
     >
       <h3 class="browse-panel-title">
-        {{ t('browse.browseMountContents') }}: {{ activeBrowsedMount.local_mount_point }}
+        {{ t('browse.browseMountContents') }}: {{ activeBrowsedMount.project_id || t('common.labels.protected') }}
       </h3>
       <DirectoryBrowser
         :mount-path="activeBrowsedMount.local_mount_point"
