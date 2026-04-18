@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
@@ -10,6 +10,7 @@ import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
+import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -57,6 +58,10 @@ function progressPercent(job) {
   return Math.min(100, Math.round((job.copied_bytes / job.total_bytes) * 100))
 }
 
+function formatProjectId(value) {
+  return normalizeProjectId(value) || '-'
+}
+
 const filtered = computed(() => {
   const query = search.value.trim().toLowerCase()
   return jobs.value.filter((job) => {
@@ -79,7 +84,9 @@ const paged = computed(() => {
 async function loadSupportingData() {
   const [driveResult, mountResult] = await Promise.allSettled([getDrives(), getMounts()])
   drives.value = driveResult.status === 'fulfilled' ? driveResult.value : []
-  mounts.value = mountResult.status === 'fulfilled' ? mountResult.value : []
+  mounts.value = mountResult.status === 'fulfilled'
+    ? (mountResult.value || []).map((item) => normalizeProjectRecord(item, ['project_id']))
+    : []
 }
 
 async function loadJobs() {
@@ -87,7 +94,8 @@ async function loadJobs() {
   error.value = ''
   compatibilityNote.value = ''
   try {
-    jobs.value = await listJobs({ limit: 200 })
+    const response = await listJobs({ limit: 200 })
+    jobs.value = (response || []).map((item) => normalizeProjectRecord(item, ['project_id']))
   } catch {
     jobs.value = []
     compatibilityNote.value = t('jobs.listUnavailable')
@@ -109,13 +117,13 @@ async function submitCreateJob() {
   error.value = ''
   try {
     const payload = {
-      project_id: form.value.project_id.trim(),
+      project_id: normalizeProjectId(form.value.project_id),
       evidence_number: form.value.evidence_number.trim(),
       source_path: resolveSourcePath(),
       drive_id: form.value.drive_id ? Number(form.value.drive_id) : undefined,
       thread_count: Number(form.value.thread_count),
     }
-    const created = await createJob(payload)
+    const created = normalizeProjectRecord(await createJob(payload), ['project_id'])
     jobs.value = [created, ...jobs.value]
     showWizard.value = false
     wizardStep.value = 1
@@ -146,6 +154,16 @@ function canMoveNext() {
   if (wizardStep.value === 3) return !!form.value.project_id.trim() && !!form.value.evidence_number.trim() && !!form.value.source_path.trim()
   return true
 }
+
+watch(
+  () => form.value.project_id,
+  (value) => {
+    const normalized = normalizeProjectId(value)
+    if (value !== normalized) {
+      form.value.project_id = normalized
+    }
+  },
+)
 
 onMounted(async () => {
   await Promise.all([loadJobs(), loadSupportingData()])
@@ -181,6 +199,7 @@ onMounted(async () => {
     </div>
 
     <DataTable :columns="columns" :rows="paged" :empty-text="t('jobs.empty')">
+      <template #cell-project_id="{ row }">{{ formatProjectId(row.project_id) }}</template>
       <template #cell-status="{ row }">
         <StatusBadge :status="row.status" :label="jobStatusLabel(row.status)" />
       </template>
