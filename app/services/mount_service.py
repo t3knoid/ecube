@@ -18,7 +18,7 @@ from app.repositories.audit_repository import AuditRepository
 from app.repositories.mount_repository import MountRepository
 from app.schemas.network import MountCreate
 from app.config import settings
-from app.exceptions import EncodingError
+from app.exceptions import ConflictError, EncodingError
 from app.services.mount_check_utils import check_mounted_with_configured_timeout
 
 from app.utils.sanitize import is_encoding_error, normalize_project_id, sanitize_error_message
@@ -478,7 +478,9 @@ def _validate_remote_path_conflicts(
     candidate_type, candidate_host, candidate_path = _normalize_remote_reference(mount_type, remote_path)
 
     for existing in existing_mounts:
-        existing_type, existing_host, existing_path = _normalize_remote_reference(existing.type, existing.remote_path)
+        existing_mount_type = existing.type if isinstance(existing.type, MountType) else MountType(str(existing.type))
+        existing_remote_path = str(existing.remote_path)
+        existing_type, existing_host, existing_path = _normalize_remote_reference(existing_mount_type, existing_remote_path)
         if (candidate_type, candidate_host, candidate_path) == (existing_type, existing_host, existing_path):
             raise HTTPException(
                 status_code=409,
@@ -508,15 +510,17 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
     audit_repo = AuditRepository(db)
     provider = provider or _default_provider()
 
-    existing_mounts = mount_repo.list_all()
     try:
+        mount_repo.acquire_create_lock()
+        existing_mounts = mount_repo.list_all()
         _validate_remote_path_conflicts(
             mount_data.type,
             mount_data.remote_path,
             normalized_project_id,
             existing_mounts,
         )
-    except HTTPException as exc:
+    except (HTTPException, ConflictError) as exc:
+        rejection_message = str(exc.detail) if isinstance(exc, HTTPException) else exc.message
         try:
             audit_repo.add(
                 action="MOUNT_ADD_REJECTED_CONFLICT",
@@ -525,7 +529,7 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
                 details={
                     "project_id": normalized_project_id,
                     "status": "REJECTED",
-                    "message": str(exc.detail),
+                    "message": rejection_message,
                 },
                 client_ip=client_ip,
             )
