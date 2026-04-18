@@ -96,8 +96,8 @@ a {
   width: 2.75rem;
   height: 2.75rem;
   object-fit: contain;
-  border-radius: 0.5rem;
-  background: var(--surface);
+  border-radius: 0;
+  background: transparent;
 }
 
 .site-nav {
