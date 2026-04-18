@@ -38,10 +38,10 @@
     <rect x="688" y="354" width="24" height="18" rx="2" fill="#475569" />
     <g>
       <rect x="892" y="188" width="22" height="226" rx="3" fill="#d1d5db" />
-      <rect x="896" y="240" width="6" height="24" rx="2" fill="#2563eb" />
-      <rect x="904" y="240" width="6" height="24" rx="2" fill="#2563eb" />
-      <rect x="896" y="272" width="6" height="24" rx="2" fill="#2563eb" />
-      <rect x="904" y="272" width="6" height="24" rx="2" fill="#2563eb" />
+      <rect x="895" y="224" width="16" height="18" rx="3" fill="#2563eb" stroke="#1d4ed8" />
+      <rect x="895" y="248" width="16" height="18" rx="3" fill="#2563eb" stroke="#1d4ed8" />
+      <rect x="895" y="272" width="16" height="18" rx="3" fill="#2563eb" stroke="#1d4ed8" />
+      <rect x="895" y="296" width="16" height="18" rx="3" fill="#2563eb" stroke="#1d4ed8" />
     </g>
     <rect x="925" y="188" width="22" height="226" rx="3" fill="#d1d5db" />
     <rect x="958" y="188" width="22" height="226" rx="3" fill="#d1d5db" />
