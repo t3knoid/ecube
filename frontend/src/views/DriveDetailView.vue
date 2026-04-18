@@ -11,6 +11,7 @@ import StatusBadge from '@/components/common/StatusBadge.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
+import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -116,7 +117,8 @@ async function loadDrive() {
   clearBanners()
   try {
     const drives = await getDrives({ include_disconnected: true })
-    drive.value = drives.find((item) => item.id === driveId.value) || null
+    const next = drives.find((item) => item.id === driveId.value) || null
+    drive.value = next ? normalizeProjectRecord(next, ['current_project_id']) : null
     if (!drive.value) {
       error.value = t('drives.notFound')
     }
@@ -132,7 +134,10 @@ async function runFormat() {
   saving.value = true
   clearBanners()
   try {
-    drive.value = await formatDrive(drive.value.id, { filesystem_type: filesystemType.value })
+    drive.value = normalizeProjectRecord(
+      await formatDrive(drive.value.id, { filesystem_type: filesystemType.value }),
+      ['current_project_id'],
+    )
     infoMessage.value = t('drives.formatSuccess')
     showFormatDialog.value = false
   } catch {
@@ -146,7 +151,7 @@ function normalizeMountedProjectOptions(mounts) {
   return [...new Set(
     (mounts || [])
       .filter((mount) => mount?.status === 'MOUNTED')
-      .map((mount) => (typeof mount?.project_id === 'string' ? mount.project_id.trim() : ''))
+      .map((mount) => normalizeProjectId(mount?.project_id))
       .filter((value) => value && value.toUpperCase() !== 'UNASSIGNED'),
   )].sort((left, right) => left.localeCompare(right))
 }
@@ -157,7 +162,7 @@ async function loadMountedProjects() {
     const mounts = await getMounts()
     mountedProjectOptions.value = normalizeMountedProjectOptions(mounts)
     const currentProject = typeof drive.value?.current_project_id === 'string'
-      ? drive.value.current_project_id.trim()
+      ? normalizeProjectId(drive.value.current_project_id)
       : ''
 
     if (currentProject && mountedProjectOptions.value.includes(currentProject)) {
@@ -186,7 +191,10 @@ async function runInitialize() {
   saving.value = true
   clearBanners()
   try {
-    drive.value = await initializeDrive(drive.value.id, { project_id: projectId.value.trim() })
+    drive.value = normalizeProjectRecord(
+      await initializeDrive(drive.value.id, { project_id: normalizeProjectId(projectId.value) }),
+      ['current_project_id'],
+    )
     infoMessage.value = t('drives.initializeSuccess')
     showInitializeDialog.value = false
     projectId.value = ''
@@ -288,7 +296,7 @@ async function runMount() {
   saving.value = true
   clearBanners()
   try {
-    drive.value = await mountDrive(drive.value.id)
+    drive.value = normalizeProjectRecord(await mountDrive(drive.value.id), ['current_project_id'])
     infoMessage.value = t('drives.mountSuccess')
   } catch (err) {
     const status = err?.response?.status

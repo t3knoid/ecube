@@ -124,7 +124,7 @@ describe('MountsView removal flow', () => {
     expect(wrapper.text()).toContain(i18n.global.t('mounts.removeConfirmTitle'))
   })
 
-  it('submits the selected project when adding a mount', async () => {
+  it('uppercases the project ID as the operator types and submits it normalized', async () => {
     mocks.getMounts.mockResolvedValue([])
 
     const wrapper = mountView()
@@ -137,7 +137,10 @@ describe('MountsView removal flow', () => {
     await flushPromises()
 
     await wrapper.find('#mount-remote-path').setValue('//server/new-share')
-    await wrapper.find('#mount-project-id').setValue('PROJ-NEW')
+    await wrapper.find('#mount-project-id').setValue('proj-new')
+
+    expect(wrapper.find('#mount-project-id').element.value).toBe('PROJ-NEW')
+
     await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.create')).trigger('click')
     await flushPromises()
 
