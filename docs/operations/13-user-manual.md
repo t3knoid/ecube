@@ -327,7 +327,7 @@ Every drive moves through a defined set of states. Actions available in the UI d
 
 | State | Meaning | Actions available |
 |-----------|-------------------------------------------------------------------------|-----------------------------------|
-| `DISCONNECTED` | Drive is known to the system but not currently accessible — either not physically present, or present on a disabled port. | Enable port |
+| `DISCONNECTED` | Drive is known to the system but not currently accessible — either not physically present, or present on a disabled port. | Enable port when the drive is still physically detected on a known port |
 | `AVAILABLE` | Drive is present on an enabled port and ready to be formatted or assigned to a project. | Format, Initialize |
 | `IN_USE` | Drive is assigned to a project. Jobs can target this drive. | Prepare Eject |
 | `ARCHIVED` | Drive has been permanently handed off via the Chain of Custody workflow. | None — drive is read-only. |
@@ -440,6 +440,8 @@ The add-mount dialog supports common fields such as:
 - Credentials file
 
 Project assignment is required when creating a mount. Drives can only be initialized for projects that have at least one assigned share in the `MOUNTED` state.
+
+ECUBE rejects exact duplicate remote paths and blocks overlapping parent or child remote paths across different projects. Nested paths for the same project remain allowed. If two operators submit changes at the same time, one request may briefly return a conflict while ECUBE finishes the in-progress update.
 
 For security, the standard mount list and browse labels intentionally redact raw remote paths and local mount points in operator-facing views.
 
