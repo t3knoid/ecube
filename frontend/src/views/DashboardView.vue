@@ -42,6 +42,36 @@ function formatProjectId(value) {
   return normalizeProjectId(value) || '-'
 }
 
+function progressPercent(job) {
+  if (!job) return 0
+
+  const status = String(job.status || '').toUpperCase()
+  const totalBytes = Number(job.total_bytes || 0)
+  const copiedBytes = Number(job.copied_bytes || 0)
+  const totalFiles = Number(job.file_count || 0)
+  const filesSucceeded = Number(job.files_succeeded || 0)
+  const filesFailed = Number(job.files_failed || 0)
+  const finishedFiles = Math.min(totalFiles, filesSucceeded + filesFailed)
+
+  const bytePercent = totalBytes > 0
+    ? Math.max(0, Math.min(100, Math.round((copiedBytes / totalBytes) * 100)))
+    : 0
+  const filePercent = totalFiles > 0
+    ? Math.max(0, Math.min(100, Math.round((finishedFiles / totalFiles) * 100)))
+    : bytePercent
+
+  if (status === 'RUNNING' || status === 'VERIFYING') {
+    return Math.min(bytePercent || 100, filePercent || 100)
+  }
+
+  return totalBytes > 0 ? bytePercent : filePercent
+}
+
+function progressActive(job) {
+  const status = String(job?.status || '').toUpperCase()
+  return status === 'RUNNING' || status === 'VERIFYING'
+}
+
 async function refreshSnapshot() {
   const warnings = []
   const results = await Promise.allSettled([getDrives({ include_disconnected: true }), listJobs({ limit: 200 })])
@@ -133,7 +163,7 @@ onUnmounted(() => {
           <StatusBadge :status="row.status" />
         </template>
         <template #cell-progress="{ row }">
-          <ProgressBar :value="row.copied_bytes || 0" :total="row.total_bytes || 0" />
+          <ProgressBar :value="progressPercent(row)" :total="100" :active="progressActive(row)" />
         </template>
       </DataTable>
     </article>
