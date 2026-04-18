@@ -92,15 +92,12 @@ a {
   font-size: 0.88rem;
 }
 
-.brand-mark {
-  width: 2.5rem;
-  height: 2.5rem;
-  display: grid;
-  place-items: center;
-  border-radius: 0.75rem;
-  background: linear-gradient(135deg, var(--accent), #4f89e8);
-  color: white;
-  font-weight: 800;
+.brand-logo {
+  width: 2.75rem;
+  height: 2.75rem;
+  object-fit: contain;
+  border-radius: 0.5rem;
+  background: var(--surface);
 }
 
 .site-nav {
