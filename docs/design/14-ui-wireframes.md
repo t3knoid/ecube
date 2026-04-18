@@ -740,7 +740,7 @@ Accessible from the Drive Management screen via a "Manage Hubs" button. Visible 
 │              │  │    │           │              │           │ 12.4 GB      │ │
 │              │  └────┴───────────┴──────────────┴───────────┴──────────────┘ │
 │              │                                                               │
-│              │  Click a row to view job details, files, and actions.          │
+│              │  Use the Details action to view job details, files, and actions. │
 │              │                                                               │
 └──────────────┴───────────────────────────────────────────────────────────────┘
 ```
@@ -748,6 +748,7 @@ Accessible from the Drive Management screen via a "Manage Hubs" button. Visible 
 **Status indicators:**
 - ○ PENDING (gray) · ● RUNNING (blue, animated) · ◉ VERIFYING (orange)
 - ✔ COMPLETED (green) · ✖ FAILED (red)
+- Active progress remains conservative and should not display 100% until byte and finished-file progress agree
 
 ### 6b — Job Detail & Monitoring View (UC-6.3, UC-6.4, UC-6.5, UC-6.6)
 
