@@ -325,6 +325,23 @@ a {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.appliance-image-placeholder {
+  display: grid;
+  place-items: center;
+  min-height: 160px;
+  margin-bottom: 1rem;
+  border-radius: 14px;
+  border: 1px dashed #8fb0e3;
+  background: linear-gradient(135deg, #f7faff, #e7eef9);
+  color: var(--accent);
+  font-weight: 700;
+  text-align: center;
+}
+
+.appliance-image-placeholder span {
+  max-width: 10rem;
+}
+
 .tier-meta {
   margin-top: -0.3rem;
   color: var(--accent);
