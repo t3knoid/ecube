@@ -3,13 +3,15 @@
 | Field | Value |
 |---|---|
 | Title | ECUBE Secure Evidence Export Appliance |
-| Purpose | Provides a product overview of ECUBE covering its capabilities, use cases, and value proposition for eDiscovery teams. |
-| Updated on | 04/08/26 |
+| Purpose | Provides an appliance-focused overview of ECUBE covering its hardware-led value proposition, core capabilities, and deployment fit for eDiscovery teams. |
+| Updated on | 04/18/26 |
 | Audience | Legal teams, IT decision-makers, compliance officers, evaluators. |
 
 ## What Is ECUBE?
 
-ECUBE is a turnkey appliance that copies litigation and investigation data from network shares (NFS/SMB) to encrypted USB drives under strict chain-of-custody controls. Every file, every drive, and every operator action is logged in an immutable audit trail — purpose-built for legal hold compliance and forensic defensibility.
+ECUBE is a turnkey appliance and software platform that copies litigation and investigation data from network shares (NFS/SMB) to encrypted USB drives under strict chain-of-custody controls. Every file, every drive, and every operator action is logged in an immutable audit trail — purpose-built for legal hold compliance and forensic defensibility.
+
+The turnkey appliance story is central to the product: ECUBE is designed to run on validated hardware with dedicated USB 3.1 controller architecture so export performance stays predictable, scalable, and operationally safe.
 
 ---
 
@@ -17,7 +19,7 @@ ECUBE is a turnkey appliance that copies litigation and investigation data from 
 
 ### Multi-Drive Parallel Export
 
-Copy data to **4, 8, or 12 USB drives simultaneously** using dedicated per-port USB 3.0 controllers. Each port gets its own 5 Gbps channel — writing to one drive never slows another. Produce identical evidence sets for multiple parties in a single pass.
+Copy data to **4, 8, or 12 USB drives simultaneously** using dedicated USB 3.1 controller hardware engineered for sustained export throughput. Each controller path is selected to minimize contention so one active drive does not unnecessarily slow another. The result is faster, more predictable delivery of identical evidence sets for multiple parties in a single pass.
 
 ### Project Isolation — Enforced by Design
 
@@ -50,9 +52,29 @@ Supports local OS authentication (PAM), LDAP/Active Directory, and OIDC single s
 
 ### Web-Based Operator Interface
 
-A modern browser-based UI provides real-time visibility into drive status, job progress, mount health, and audit history. Role-aware navigation shows each operator only what they need.
+A modern browser-based UI provides real-time visibility into drive status, job progress, mount health, and audit history. The interface is intentionally simple and task-focused so each user sees the tools that matter for the job in front of them.
+
+That means:
+
+- IT administrators can focus on deployment, configuration, and infrastructure readiness;
+- supervisors can set up projects and prepare the environment for evidence handling;
+- processors can run export jobs without broad system access;
+- managers and auditors can review logs, status, and compliance activity without operational clutter.
+
+Role-aware navigation shows each operator only what they need.
 
 ---
+
+## Why the Turnkey Appliance Matters
+
+ECUBE is not just software dropped onto a generic workstation. The turnkey appliance combines the application with carefully chosen platform hardware so legal and forensic teams get repeatable export performance without trial-and-error tuning.
+
+Key appliance advantages:
+
+- validated USB 3.1 controller layouts for optimal concurrent write performance;
+- predictable port density and throughput planning;
+- reduced deployment risk compared with ad hoc operator PCs;
+- a cleaner chain-of-custody story because the export station is purpose-built.
 
 ## Hardware Tiers
 
@@ -123,4 +145,8 @@ Source Share (NFS/SMB)
 
 ## References
 
+- [00-marketing-index.md](00-marketing-index.md)
+- [01-website-strategy.md](01-website-strategy.md)
+- [02-website-sitemap-and-design.md](02-website-sitemap-and-design.md)
+- [03-demo-and-screenshot-plan.md](03-demo-and-screenshot-plan.md)
 - [docs/operations/00-operational-guide.md](../operations/00-operational-guide.md)
