@@ -11,6 +11,7 @@ import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -71,9 +72,8 @@ function _toDriveOption(drive) {
 function _toProjectList(drives) {
   return [...new Set(
     drives
-      .map((drive) => drive.current_project_id)
+      .map((drive) => normalizeProjectId(drive.current_project_id))
       .filter((value) => typeof value === 'string' && value.trim())
-      .map((value) => value.trim())
   )].sort((a, b) => a.localeCompare(b))
 }
 
@@ -200,7 +200,7 @@ async function loadAudit() {
 async function loadDriveOptions() {
   try {
     const drives = await getDrives({ state: ['IN_USE', 'AVAILABLE'] })
-    allActiveDrives.value = drives
+    allActiveDrives.value = (drives || []).map((item) => normalizeProjectRecord(item, ['current_project_id']))
   } catch {
     allActiveDrives.value = []
     cocError.value = t('common.errors.networkError')
@@ -217,7 +217,7 @@ function buildCocParams() {
     params.drive_sn = cocFilters.value.drive_sn.trim()
   }
   if (cocFilters.value.project_id.trim()) {
-    params.project_id = cocFilters.value.project_id.trim()
+    params.project_id = normalizeProjectId(cocFilters.value.project_id)
   }
   return params
 }
@@ -286,7 +286,7 @@ async function loadChainOfCustody() {
 function prepareHandoff(report) {
   handoffForm.value = {
     drive_id: String(report.drive_id),
-    project_id: report.project_id || '',
+    project_id: normalizeProjectId(report.project_id),
     possessor: '',
     delivery_time: '',
     received_by: '',
@@ -316,7 +316,7 @@ async function confirmHandoffSubmission() {
   try {
     const handoffResult = await confirmChainOfCustodyHandoff({
       drive_id: driveId,
-      project_id: handoffForm.value.project_id.trim() || undefined,
+      project_id: normalizeProjectId(handoffForm.value.project_id) || undefined,
       possessor: handoffForm.value.possessor.trim(),
       delivery_time: localDateTimeAsUtcIso(handoffForm.value.delivery_time),
       received_by: handoffForm.value.received_by.trim() || undefined,
@@ -402,7 +402,9 @@ function printCocReport() {
 function initCocFromRoute() {
   cocFilters.value.drive_id = typeof route.query.drive_id === 'string' ? route.query.drive_id : ''
   cocFilters.value.drive_sn = typeof route.query.drive_sn === 'string' ? route.query.drive_sn : ''
-  cocFilters.value.project_id = typeof route.query.project_id === 'string' ? route.query.project_id : ''
+  cocFilters.value.project_id = typeof route.query.project_id === 'string'
+    ? normalizeProjectId(route.query.project_id)
+    : ''
   if (route.query.coc === '1' && (cocFilters.value.drive_id || cocFilters.value.drive_sn || cocFilters.value.project_id)) {
     loadChainOfCustody()
   }
@@ -494,7 +496,7 @@ onMounted(() => {
             <StatusBadge :status="report.custody_complete ? 'COMPLETED' : 'PENDING'" :label="report.custody_complete ? t('audit.custodyComplete') : t('audit.custodyIncomplete')" />
           </header>
           <p class="muted">
-            {{ t('dashboard.project') }}: {{ report.project_id || '-' }}
+            {{ t('dashboard.project') }}: {{ normalizeProjectId(report.project_id) || '-' }}
             | {{ t('audit.deliveryTime') }}: {{ asUtcDate(report.delivery_time) }}
           </p>
 
