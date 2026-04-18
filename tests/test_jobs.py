@@ -34,6 +34,32 @@ def test_create_job(client, db):
     assert data["target_mount_path"] == "/mnt/ecube/create-001"
 
 
+def test_create_job_ignores_client_supplied_created_by(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-CREATE-BY-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-001",
+        mount_path="/mnt/ecube/create-by-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-001",
+            "evidence_number": "EV-CREATOR",
+            "source_path": "/data/evidence",
+            "created_by": "spoofed-user",
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["created_by"] == "test-user"
+    assert response.json()["created_by"] != "spoofed-user"
+
+
 def test_create_job_conflict_when_assigned_drive_not_mounted(client, db):
     drive = UsbDrive(
         device_identifier="USB-NOT-MOUNTED-001",
