@@ -43,8 +43,22 @@ async function mockSetupApis(page) {
 }
 
 async function mockCoreApis(page) {
-  await routeJson(page, '**/api/drives', [{ id: 1, current_state: 'AVAILABLE', device_identifier: '/dev/sdb', filesystem_type: 'ext4', capacity_bytes: 1000 }])
-  await routeJson(page, '**/api/mounts', [])
+  await routeJson(page, '**/api/drives', [{
+    id: 1,
+    current_state: 'AVAILABLE',
+    current_project_id: 'PRJ',
+    device_identifier: '/dev/sdb',
+    filesystem_type: 'ext4',
+    capacity_bytes: 1000,
+    mount_path: '/mnt/ecube/1',
+  }])
+  await routeJson(page, '**/api/mounts', [{
+    id: 7,
+    project_id: 'PRJ',
+    status: 'MOUNTED',
+    remote_path: '//server/project',
+    local_mount_point: '/nfs/project',
+  }])
   await routeJson(page, '**/api/users', { users: [{ username: 'frank', roles: ['admin'] }] })
   await routeJson(page, '**/api/admin/os-users', { users: [{ uid: 1001, username: 'frank', groups: ['ecube-admin'] }] })
   await routeJson(page, '**/api/jobs**', [{ id: 55, project_id: 'PRJ', status: 'RUNNING', copied_bytes: 20, total_bytes: 100 }])
@@ -78,10 +92,11 @@ async function mockCoreApis(page) {
   await routeJson(page, '**/api/introspection/jobs/55/debug', { files: [] })
 }
 
-async function openCreateJobWizard(page) {
+async function openCreateJobDialog(page) {
   await page.goto('/jobs')
   await page.getByRole('button', { name: /create/i }).click()
   await expect(page.locator('.dialog-panel')).toBeVisible()
+  await page.getByLabel('Project').selectOption('PRJ')
 }
 
 test('theme switch changes css variables', async ({ page }) => {
@@ -158,7 +173,7 @@ test('visual regression snapshots for key screens in default and dark themes', a
 
   for (const shot of shots) {
     if (shot.name === 'jobs-list') {
-      await openCreateJobWizard(page)
+      await openCreateJobDialog(page)
     } else {
       await page.goto(shot.path)
     }
@@ -184,7 +199,7 @@ test('visual regression snapshots for key screens in default and dark themes', a
 
   for (const shot of shots) {
     if (shot.name === 'jobs-list') {
-      await openCreateJobWizard(page)
+      await openCreateJobDialog(page)
     } else {
       await page.goto(shot.path)
     }
