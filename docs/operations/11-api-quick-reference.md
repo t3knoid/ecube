@@ -97,7 +97,7 @@ During initial setup, `POST /setup/database/test-connection`, `POST /setup/datab
 | POST | `/mounts/validate` | admin/manager | Validate all mounts |
 | DELETE | `/mounts/{mount_id}` | admin/manager | Remove mount |
 
-Project identifiers are canonicalized by trimming surrounding whitespace and converting the value to uppercase before storage and comparison.
+Project identifiers are canonicalized by trimming surrounding whitespace and converting the value to uppercase before storage and comparison. The mount-create endpoint also rejects exact duplicate remote sources and cross-project parent or child overlaps with `409 Conflict`; same-project nested sources remain allowed. A temporary `409 Conflict` can also be returned when another mount update is already in progress and holds the serialization lock.
 
 ---
 

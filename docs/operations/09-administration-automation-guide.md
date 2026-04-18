@@ -1351,8 +1351,9 @@ Example response:
 
 ### Add Mount
 
-Registers a new network mount and attempts to connect immediately. The
-resulting status reflects whether the mount succeeded.
+Registers a new network mount, assigns it to a project, and attempts to connect immediately. The resulting status reflects whether the mount succeeded.
+
+ECUBE rejects exact duplicate remote sources for all projects and rejects overlapping parent or child remote paths when the project assignment differs. Nested paths for the same project remain allowed. If another operator is updating mount configuration at the same time, ECUBE may return a transient `409 Conflict` instead of creating a duplicate entry.
 
 ```bash
 # Requires admin or manager role
@@ -1362,7 +1363,8 @@ curl -k -X POST https://localhost:8443/mounts \
   -H "Content-Type: application/json" \
   -d '{
     "type": "NFS",
-    "remote_path": "nfs.example.com:/evidence"
+    "remote_path": "nfs.example.com:/evidence",
+    "project_id": "PROJECT-42"
   }'
 
 # SMB mount with credentials
@@ -1372,16 +1374,15 @@ curl -k -X POST https://localhost:8443/mounts \
   -d '{
     "type": "SMB",
     "remote_path": "//fileserver/cases",
+    "project_id": "PROJECT-42",
     "username": "svc-ecube",
     "password": "s3cret"
   }'
 ```
 
-Response: returns the mount object with `status` reflecting the connection
-result (`MOUNTED` or `ERROR`).
+Response: returns the mount object with `status` reflecting the connection result (`MOUNTED` or `ERROR`). Conflicting remote-path requests return `409 Conflict` with a validation message.
 
-> **Note:** As an alternative to inline credentials, use `credentials_file`
-> to reference a file on the host containing credentials.
+> **Note:** As an alternative to inline credentials, use `credentials_file` to reference a file on the host containing credentials.
 
 ### Remove Mount
 
@@ -1508,6 +1509,7 @@ Every audit entry contains:
 | Action | Trigger |
 |--------|---------|
 | `MOUNT_ADDED` | Network mount registered and attempted |
+| `MOUNT_ADD_REJECTED_CONFLICT` | Duplicate or cross-project overlapping remote mount request rejected |
 | `MOUNT_REMOVED` | Network mount deleted |
 | `MOUNT_VALIDATED` | Mount connectivity re-tested |
 | `MOUNT_RECONCILED` | Mount state corrected during startup reconciliation (MOUNTED → UNMOUNTED/ERROR) |
