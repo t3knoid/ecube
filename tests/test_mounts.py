@@ -142,6 +142,135 @@ def test_add_mount_uses_unique_generated_local_mount_point(manager_client, db):
     assert second.json()["local_mount_point"] == "/nfs/evidence-2"
 
 
+def test_add_mount_acquires_create_lock(manager_client, db):
+    with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
+         patch("app.services.mount_service.MountRepository.acquire_create_lock") as mock_lock, \
+         patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        response = manager_client.post(
+            "/mounts",
+            json={"type": "NFS", "remote_path": "192.168.1.1:/exports/locked", "project_id": "PROJ-LOCK"},
+        )
+
+    assert response.status_code == 200
+    mock_lock.assert_called_once()
+
+
+def test_add_mount_rejects_exact_duplicate_remote_path_even_same_project(manager_client, db):
+    with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
+         patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        first = manager_client.post(
+            "/mounts",
+            json={"type": "NFS", "remote_path": "192.168.2.250:/mnt/Data/ecube/project1", "project_id": "PROJ-001"},
+        )
+        second = manager_client.post(
+            "/mounts",
+            json={"type": "NFS", "remote_path": "192.168.2.250:/mnt/Data/ecube/project1", "project_id": "PROJ-001"},
+        )
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+    assert "already configured" in second.json()["message"].lower()
+
+
+def test_add_mount_rejects_nested_remote_path_for_different_project(manager_client, db):
+    with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
+         patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        first = manager_client.post(
+            "/mounts",
+            json={"type": "NFS", "remote_path": "192.168.2.250:/mnt/Data/ecube/project1", "project_id": "PROJ-001"},
+        )
+        second = manager_client.post(
+            "/mounts",
+            json={"type": "NFS", "remote_path": "192.168.2.250:/mnt/Data/ecube/project1/myfolder", "project_id": "PROJ-002"},
+        )
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+    assert "overlap" in second.json()["message"].lower()
+
+
+def test_add_mount_rejects_parent_remote_path_for_different_project(manager_client, db):
+    with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
+         patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        first = manager_client.post(
+            "/mounts",
+            json={"type": "NFS", "remote_path": "192.168.2.250:/mnt/Data/ecube/project1/myfolder", "project_id": "PROJ-001"},
+        )
+        second = manager_client.post(
+            "/mounts",
+            json={"type": "NFS", "remote_path": "192.168.2.250:/mnt/Data/ecube/project1", "project_id": "PROJ-999"},
+        )
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+    assert "overlap" in second.json()["message"].lower()
+
+
+def test_add_mount_allows_nested_remote_path_for_same_project(manager_client, db):
+    with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
+         patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        first = manager_client.post(
+            "/mounts",
+            json={"type": "NFS", "remote_path": "192.168.2.250:/mnt/Data/ecube/project1", "project_id": "PROJ-001"},
+        )
+        second = manager_client.post(
+            "/mounts",
+            json={"type": "NFS", "remote_path": "192.168.2.250:/mnt/Data/ecube/project1/myfolder", "project_id": "PROJ-001"},
+        )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["project_id"] == "PROJ-001"
+
+
+def test_add_mount_rejects_exact_duplicate_smb_remote_path(manager_client, db):
+    with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
+         patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        first = manager_client.post(
+            "/mounts",
+            json={"type": "SMB", "remote_path": "//192.168.2.250/ecube/project1", "project_id": "PROJ-001"},
+        )
+        second = manager_client.post(
+            "/mounts",
+            json={"type": "SMB", "remote_path": "\\\\192.168.2.250\\ecube\\project1", "project_id": "PROJ-001"},
+        )
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+    assert "already configured" in second.json()["message"].lower()
+
+
+def test_add_mount_rejects_nested_smb_remote_path_for_different_project(manager_client, db):
+    with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
+         patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        first = manager_client.post(
+            "/mounts",
+            json={"type": "SMB", "remote_path": "//192.168.2.250/ecube/project1", "project_id": "PROJ-001"},
+        )
+        second = manager_client.post(
+            "/mounts",
+            json={"type": "SMB", "remote_path": "//192.168.2.250/ecube/project1/myfolder", "project_id": "PROJ-002"},
+        )
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+    assert "overlap" in second.json()["message"].lower()
+
+
 def test_add_mount_failure(manager_client, db):
     from app.models.audit import AuditLog
 
