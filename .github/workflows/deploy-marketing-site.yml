@@ -1,0 +1,52 @@
+name: Deploy Marketing Site
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - website/**
+      - docs/marketing/**
+      - frontend/e2e/theme.spec.js-snapshots/**
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare static site bundle
+        run: |
+          set -e
+          mkdir -p _site/assets
+          cp -R website/. _site/
+          cp frontend/e2e/theme.spec.js-snapshots/dashboard-default-chromium-linux.png _site/assets/dashboard.png
+          cp frontend/e2e/theme.spec.js-snapshots/jobs-list-default-chromium-linux.png _site/assets/jobs.png
+          cp frontend/e2e/theme.spec.js-snapshots/drives-default-chromium-linux.png _site/assets/drives.png
+          cp frontend/e2e/theme.spec.js-snapshots/audit-default-chromium-linux.png _site/assets/audit.png
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
