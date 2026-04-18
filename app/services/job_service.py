@@ -90,7 +90,7 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
                     detail="Drive belongs to a different project",
                 )
 
-            if drive.current_state != DriveState.AVAILABLE:
+            if drive.current_state not in (DriveState.AVAILABLE, DriveState.IN_USE):
                 db.rollback()
                 raise HTTPException(
                     status_code=409,
