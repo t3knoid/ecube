@@ -1081,6 +1081,15 @@ These tests exercise real hardware paths that must be validated during manual QA
 
 ### 12.6 End-to-End Copy Workflow
 
+#### 12.6.1 Job Progress and Source Guardrails
+
+| # | Test | Steps | Expected |
+|---|------|-------|----------|
+| 1 | Active job progress stays conservative | Start a multi-file job and observe the Dashboard, Jobs list, and Job Detail view while bytes advance faster than completed file rows | All three views stay below 100% until the finished-file counts indicate completion; no view reports 100% while status remains RUNNING or VERIFYING |
+| 2 | Completion summary is visible | Let a job finish and open its detail page | The detail screen shows start time, copy threads, files copied, total copied, elapsed time, and copy rate |
+| 3 | Mount-root source selection works | In Create Job, choose a mounted share and enter / as the source path | The job is created successfully and the selected mount root is used as the source |
+| 4 | Path traversal outside selected mount is blocked | In Create Job, choose a mounted share and enter a traversal path such as ../../etc | The UI/API rejects the request, no job is created, and the operator sees a validation-style error rather than a host path leak |
+
 Walk through the complete data export lifecycle:
 
 1. **Set up a test file share.** Create a local directory with known sample files and checksums:
@@ -1128,7 +1137,7 @@ Walk through the complete data export lifecycle:
 
 5. **Initialize the drive** — `POST /drives/{drive_id}/initialize` with `project_id: "PROJ-E2E"`.
 
-6. **Create a job** — `POST /jobs` with `source_path` set under the `local_mount_point` returned by step 2.
+6. **Create a job** — `POST /jobs` with the selected `mount_id` from step 2 and a `source_path` that stays inside that mounted share. Use `/` to target the share root or a relative subfolder path for a narrower source.
 
 7. **Start the job** — `POST /jobs/{job_id}/start`.
 
