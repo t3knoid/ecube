@@ -698,10 +698,10 @@ def test_run_copy_job_logs_job_completed_with_job_id(db, tmp_path, caplog):
 
     messages = [record.getMessage() for record in caplog.records]
     assert any(f"JOB_COMPLETED job_id={job.id}" in message for message in messages)
+    completed_messages = [message for message in messages if f"JOB_COMPLETED job_id={job.id}" in message]
+    assert completed_messages
     assert any(
-        f"source_path={source_dir}" in message
-        and f"target_mount_path={target_dir}" in message
-        and "thread_count=1" in message
+        "thread_count=1" in message
         and "started_at=" in message
         and "file_count=1" in message
         and "files_copied=1" in message
@@ -709,8 +709,10 @@ def test_run_copy_job_logs_job_completed_with_job_id(db, tmp_path, caplog):
         and "total_bytes=9" in message
         and "elapsed_seconds=" in message
         and "copy_rate_mb_s=" in message
-        for message in messages
+        for message in completed_messages
     )
+    assert all("source_path=" not in message for message in completed_messages)
+    assert all("target_mount_path=" not in message for message in completed_messages)
 
 
 def test_run_verify_job_emits_verification_completed_audit(db, tmp_path):
