@@ -123,6 +123,55 @@ def validate_source_path(
     return normalized
 
 
+def resolve_source_path(
+    value: object,
+    *,
+    mount_root: Optional[str] = None,
+    usb_mount_base_path: Optional[str] = None,
+    target_mount_path: Optional[str] = None,
+) -> str:
+    """Resolve a job source path, optionally anchoring it to a mounted share."""
+    value = strict_sanitize_string(value)
+    if not isinstance(value, str):
+        raise ValueError("Source path must be a string")
+
+    raw_value = value.strip()
+    if not raw_value:
+        raise ValueError("Source path is required")
+
+    if mount_root:
+        normalized_mount_root = os.path.normpath(str(mount_root).strip())
+        if not normalized_mount_root or normalized_mount_root == os.sep:
+            raise ValueError("Selected mounted share is unavailable")
+
+        if raw_value == os.sep:
+            candidate = normalized_mount_root
+        elif raw_value == normalized_mount_root or raw_value.startswith(normalized_mount_root + os.sep):
+            candidate = raw_value
+        else:
+            candidate = os.path.normpath(
+                os.path.join(normalized_mount_root, raw_value.lstrip("/\\"))
+            )
+
+        try:
+            if os.path.commonpath([candidate, normalized_mount_root]) != normalized_mount_root:
+                raise ValueError("Source path must stay within the selected mounted share")
+        except ValueError as exc:
+            raise ValueError("Source path must stay within the selected mounted share") from exc
+
+        return validate_source_path(
+            candidate,
+            usb_mount_base_path=usb_mount_base_path,
+            target_mount_path=target_mount_path,
+        )
+
+    return validate_source_path(
+        raw_value,
+        usb_mount_base_path=usb_mount_base_path,
+        target_mount_path=target_mount_path,
+    )
+
+
 _PATH_LIKE_RE = re.compile(r"(?<![A-Za-z0-9._-])/(?:[^\s'\"=:;,])+")
 
 
