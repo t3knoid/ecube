@@ -106,10 +106,23 @@ class FileRepository:
         """Return a single export file by primary key, or ``None``."""
         return self.db.get(ExportFile, file_id)
 
-    def list_by_job(self, job_id: int) -> List[ExportFile]:
-        """Return all files belonging to *job_id*."""
+    def list_by_job(self, job_id: int, *, limit: int | None = None) -> List[ExportFile]:
+        """Return files belonging to *job_id*, optionally capped by *limit*."""
+        query = (
+            self.db.query(ExportFile)
+            .filter(ExportFile.job_id == job_id)
+            .order_by(ExportFile.id)
+        )
+        if limit is not None:
+            query = query.limit(limit)
+        return query.all()
+
+    def count_by_job(self, job_id: int) -> int:
+        """Return the total number of files belonging to *job_id*."""
         return (
-            self.db.query(ExportFile).filter(ExportFile.job_id == job_id).all()
+            self.db.query(func.count())
+            .filter(ExportFile.job_id == job_id)
+            .scalar()
         )
 
     def list_done_by_job(self, job_id: int) -> List[ExportFile]:
@@ -290,6 +303,24 @@ class FileRepository:
             update(ExportJob)
             .where(ExportJob.id == job_id)
             .values(copied_bytes=ExportJob.copied_bytes + size_bytes)
+        )
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+
+    def decrement_job_bytes(self, job_id: int, size_bytes: int) -> None:
+        """Atomically subtract bytes from the parent job, clamping at zero."""
+        self.db.execute(
+            update(ExportJob)
+            .where(ExportJob.id == job_id)
+            .values(
+                copied_bytes=case(
+                    (ExportJob.copied_bytes > size_bytes, ExportJob.copied_bytes - size_bytes),
+                    else_=0,
+                )
+            )
         )
         try:
             self.db.commit()

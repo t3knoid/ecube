@@ -10,6 +10,12 @@ describe('ProgressBar', () => {
     expect(wrapper.find('.progress-bar').attributes('style')).toContain('25%')
   })
 
+  it('expands to fill available width when fullWidth is enabled', () => {
+    const wrapper = mount(ProgressBar, { props: { value: 50, total: 100, fullWidth: true }, global: { plugins: [i18n] } })
+    expect(wrapper.find('.progress-wrap').classes()).toContain('progress-wrap--full')
+    expect(wrapper.find('.progress-track').classes()).toContain('progress-track--full')
+  })
+
   it('clamps percentage to 100', () => {
     const wrapper = mount(ProgressBar, { props: { value: 200, total: 100 }, global: { plugins: [i18n] } })
     expect(wrapper.text()).toContain('100%')

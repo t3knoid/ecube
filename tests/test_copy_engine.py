@@ -83,6 +83,27 @@ def test_copy_file_failure(tmp_path):
     assert err is not None
 
 
+def test_copy_file_reports_chunk_progress(tmp_path):
+    """copy_file reports incremental byte progress as chunks are written."""
+    src = tmp_path / "chunked.bin"
+    dst = tmp_path / "chunked-copy.bin"
+    src.write_bytes(b"abcdefghij")
+
+    seen = []
+
+    with patch.object(copy_engine.settings, "copy_chunk_size_bytes", 4):
+        success, checksum, err = copy_engine.copy_file(
+            src,
+            dst,
+            progress_callback=seen.append,
+        )
+
+    assert success is True
+    assert checksum is not None
+    assert err is None
+    assert seen == [4, 4, 2]
+
+
 # ---------------------------------------------------------------------------
 # _process_file retry tests
 # ---------------------------------------------------------------------------
@@ -111,12 +132,12 @@ def test_process_file_succeeds_after_transient_failure(db, tmp_path):
     attempt_count = 0
     original_copy_file = copy_engine.copy_file
 
-    def _flaky_copy(src, dst, checksum_algorithm="sha256"):
+    def _flaky_copy(src, dst, checksum_algorithm="sha256", progress_callback=None):
         nonlocal attempt_count
         attempt_count += 1
         if attempt_count < 3:
             return False, None, "transient I/O error"
-        return original_copy_file(src, dst, checksum_algorithm)
+        return original_copy_file(src, dst, checksum_algorithm, progress_callback=progress_callback)
 
     target_dir = tmp_path / "target"
     target_dir.mkdir()
@@ -200,6 +221,38 @@ def test_process_file_no_retries_on_first_success(db, tmp_path):
     assert ef.retry_attempts == 0  # no retries needed
 
 
+def test_process_file_updates_copied_bytes_for_completed_copy(db, tmp_path):
+    """_process_file should advance the parent job byte counter when a file is copied."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    payload = b"abcdefghij"
+    test_file = source_dir / "progress.txt"
+    test_file.write_bytes(payload)
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), max_file_retries=0, retry_delay_seconds=0, target_mount_path=str(target_dir))
+
+    ef = ExportFile(
+        job_id=job.id,
+        relative_path="progress.txt",
+        size_bytes=len(payload),
+        status=FileStatus.PENDING,
+        retry_attempts=0,
+    )
+    db.add(ef)
+    db.commit()
+    db.refresh(ef)
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        copy_engine._process_file(ef.id, test_file, target_dir, max_retries=0, retry_delay=0)
+
+    db.expire_all()
+    refreshed_job = db.get(ExportJob, job.id)
+    assert refreshed_job.copied_bytes == len(payload)
+
+
 def test_process_file_retry_audit_entries_created(db, tmp_path):
     """FILE_COPY_RETRY audit entries are written for each retry attempt."""
     source_dir = tmp_path / "source"
@@ -223,12 +276,12 @@ def test_process_file_retry_audit_entries_created(db, tmp_path):
     original_copy_file = copy_engine.copy_file
     call_count = 0
 
-    def _fail_twice(src, dst, checksum_algorithm="sha256"):
+    def _fail_twice(src, dst, checksum_algorithm="sha256", progress_callback=None):
         nonlocal call_count
         call_count += 1
         if call_count <= 2:
             return False, None, "fail"
-        return original_copy_file(src, dst, checksum_algorithm)
+        return original_copy_file(src, dst, checksum_algorithm, progress_callback=progress_callback)
 
     target_dir = tmp_path / "target"
     target_dir.mkdir()
@@ -320,9 +373,9 @@ def test_run_copy_job_resume_skips_done_files(db, tmp_path):
     copy_call_paths: list[str] = []
     original_copy_file = copy_engine.copy_file
 
-    def _tracking_copy(src, dst, checksum_algorithm="sha256"):
+    def _tracking_copy(src, dst, checksum_algorithm="sha256", progress_callback=None):
         copy_call_paths.append(str(src))
-        return original_copy_file(src, dst, checksum_algorithm)
+        return original_copy_file(src, dst, checksum_algorithm, progress_callback=progress_callback)
 
     with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
         with patch("app.services.copy_engine.copy_file", side_effect=_tracking_copy):
@@ -406,6 +459,28 @@ def test_run_copy_job_failed_job_is_failed_status(db, tmp_path):
     db.refresh(job)
 
     assert job.status == JobStatus.FAILED
+
+
+def test_run_copy_job_marks_job_failed_when_source_scan_disappears(db, tmp_path):
+    """run_copy_job fails gracefully when the source path vanishes during scan."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "volatile.txt").write_bytes(b"data")
+
+    job = _make_job(db, str(source_dir), max_file_retries=0)
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch(
+            "app.services.copy_engine.scan_source_files",
+            side_effect=FileNotFoundError("/proc/12345 disappeared"),
+        ):
+            copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+
+    assert job.status == JobStatus.FAILED
+    assert job.completed_at is not None
 
 
 def test_run_copy_job_copied_bytes_excludes_previously_done_on_resume(db, tmp_path):
@@ -542,7 +617,15 @@ def test_run_copy_job_emits_job_completed_audit(db, tmp_path):
     )
     assert log is not None
     assert log.details["status"] == "COMPLETED"
+    assert log.details["thread_count"] == 1
+    assert log.details["started_at"] is not None
     assert log.details["error_count"] == 0
+    assert log.details["files_copied"] == 1
+    assert log.details["copied_bytes"] == 4
+    assert log.details["total_bytes"] == 4
+    assert log.details["elapsed_seconds"] >= 0
+    assert "copy_rate_mb_s" in log.details
+    assert log.details["copy_rate_mb_s"] >= 0
 
 
 def test_run_copy_job_emits_job_failed_audit(db, tmp_path):
@@ -572,6 +655,62 @@ def test_run_copy_job_emits_job_failed_audit(db, tmp_path):
     assert log is not None
     assert log.details["status"] == "FAILED"
     assert log.details["error_count"] > 0
+
+
+def test_run_copy_job_logs_job_id_on_failure(db, tmp_path, caplog):
+    """A failed copy job writes an application log entry with the job ID."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "bad.txt").write_bytes(b"data")
+
+    job = _make_job(db, str(source_dir), max_file_retries=0)
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch(
+            "app.services.copy_engine.copy_file",
+            return_value=(False, None, "disk full"),
+        ):
+            with patch(
+                "app.services.copy_engine._checksum_only",
+                return_value=(False, None, "disk full"),
+            ):
+                with caplog.at_level("ERROR"):
+                    copy_engine.run_copy_job(job.id)
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(f"job_id={job.id}" in message for message in messages)
+
+
+def test_run_copy_job_logs_job_completed_with_job_id(db, tmp_path, caplog):
+    """A successful copy job writes a completion log entry with the job ID."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "done.txt").write_bytes(b"completed")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with caplog.at_level("INFO"):
+            copy_engine.run_copy_job(job.id)
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(f"JOB_COMPLETED job_id={job.id}" in message for message in messages)
+    assert any(
+        f"source_path={source_dir}" in message
+        and f"target_mount_path={target_dir}" in message
+        and "thread_count=1" in message
+        and "started_at=" in message
+        and "file_count=1" in message
+        and "files_copied=1" in message
+        and "copied_bytes=9" in message
+        and "total_bytes=9" in message
+        and "elapsed_seconds=" in message
+        and "copy_rate_mb_s=" in message
+        for message in messages
+    )
 
 
 def test_run_verify_job_emits_verification_completed_audit(db, tmp_path):
