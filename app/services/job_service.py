@@ -11,6 +11,7 @@ from app.config import settings
 from app.exceptions import ECUBEException, EncodingError
 from app.models.hardware import DriveState, UsbDrive
 from app.models.jobs import DriveAssignment, ExportJob, JobStatus, Manifest
+from app.models.network import MountStatus
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
 from app.repositories.job_repository import (
@@ -18,9 +19,10 @@ from app.repositories.job_repository import (
     JobRepository,
     ManifestRepository,
 )
+from app.repositories.mount_repository import MountRepository
 from app.schemas.jobs import JobCreate, JobStart
 from app.services import copy_engine
-from app.utils.sanitize import is_encoding_error, validate_source_path
+from app.utils.sanitize import is_encoding_error, resolve_source_path, validate_source_path
 
 logger = logging.getLogger(__name__)
 
@@ -31,14 +33,43 @@ def list_jobs(db: Session, limit: int = 200) -> list[ExportJob]:
     return repo.list_recent(limit=limit)
 
 
+def _resolve_job_source_path(body: JobCreate, db: Session) -> str:
+    if body.mount_id is None:
+        try:
+            return resolve_source_path(
+                body.source_path,
+                usb_mount_base_path=settings.usb_mount_base_path,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    mount = MountRepository(db).get(body.mount_id)
+    if not mount:
+        raise HTTPException(status_code=404, detail="Mount not found")
+    if mount.project_id != body.project_id:
+        raise HTTPException(status_code=409, detail="Selected mount is not available for this project")
+    if mount.status != MountStatus.MOUNTED or not mount.local_mount_point:
+        raise HTTPException(status_code=409, detail="Selected mount is not mounted")
+
+    try:
+        return resolve_source_path(
+            body.source_path,
+            mount_root=mount.local_mount_point,
+            usb_mount_base_path=settings.usb_mount_base_path,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client_ip: Optional[str] = None) -> ExportJob:
     drive_repo = DriveRepository(db)
     audit_repo = AuditRepository(db)
+    resolved_source_path = _resolve_job_source_path(body, db)
 
     job = ExportJob(
         project_id=body.project_id,
         evidence_number=body.evidence_number,
-        source_path=validate_source_path(body.source_path, usb_mount_base_path=settings.usb_mount_base_path),
+        source_path=resolved_source_path,
         target_mount_path=body.target_mount_path,
         thread_count=body.thread_count,
         max_file_retries=body.max_file_retries,

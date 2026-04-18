@@ -186,7 +186,8 @@ describe('JobsView grouped create dialog', () => {
     expect(mocks.createJob).toHaveBeenCalledWith({
       project_id: 'PROJ-001',
       evidence_number: 'EVID-77',
-      source_path: '/nfs/project-001/folder/subfolder',
+      mount_id: 11,
+      source_path: 'folder/subfolder',
       drive_id: 1,
       thread_count: 3,
     })
@@ -215,7 +216,8 @@ describe('JobsView grouped create dialog', () => {
     expect(mocks.createJob).toHaveBeenCalledWith({
       project_id: 'PROJ-001',
       evidence_number: 'EVID-78',
-      source_path: '/nfs/project-001/folder/subfolder',
+      mount_id: 11,
+      source_path: '/folder/subfolder',
       drive_id: 1,
       thread_count: 4,
     })
@@ -242,7 +244,8 @@ describe('JobsView grouped create dialog', () => {
     expect(mocks.createJob).toHaveBeenCalledWith({
       project_id: 'PROJ-001',
       evidence_number: 'EVID-79',
-      source_path: '/nfs/project-001',
+      mount_id: 11,
+      source_path: '/',
       drive_id: 1,
       thread_count: 4,
     })
