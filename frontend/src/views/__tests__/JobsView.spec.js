@@ -71,8 +71,13 @@ function mountView() {
           template: `
             <div>
               <div class="rows-stub">{{ rows.length }}</div>
-              <div v-for="row in rows" :key="row.id" class="row-actions-stub">
-                <slot name="cell-actions" :row="row" />
+              <div v-for="row in rows" :key="row.id" class="row-stub">
+                <div class="row-progress-stub">
+                  <slot name="cell-progress" :row="row">{{ row.progress }}</slot>
+                </div>
+                <div class="row-actions-stub">
+                  <slot name="cell-actions" :row="row" />
+                </div>
               </div>
             </div>
           `,
@@ -277,6 +282,29 @@ describe('JobsView grouped create dialog', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Assigned drive is not mounted')
+  })
+
+  it('keeps running list progress aligned with completed file counts', async () => {
+    mocks.listJobs.mockResolvedValue([
+      {
+        id: 15,
+        project_id: 'PROJ-001',
+        evidence_number: 'EV-015',
+        status: 'RUNNING',
+        source_path: '/nfs/project-001',
+        total_bytes: 1000,
+        copied_bytes: 1000,
+        file_count: 5,
+        files_succeeded: 2,
+        files_failed: 0,
+      },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('.row-progress-stub').text()).toContain('40%')
+    expect(wrapper.find('.row-progress-stub').text()).not.toContain('100%')
   })
 
   it('uses Details as the row action label', async () => {
