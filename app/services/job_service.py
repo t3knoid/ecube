@@ -339,16 +339,25 @@ def start_job(
     assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
     active_drive_id = assignment.drive_id if assignment else None
 
-    logger.info(
-        f"JOB_STARTED job_id={job_id} project_id={job.project_id} "
-        f"drive_id={active_drive_id} source_path={job.source_path} "
-        f"target_mount_path={job.target_mount_path or '<none>'} actor={actor or 'system'}",
-        extra={
+    logger.debug(
+        "Job start context",
+        {
             "job_id": job_id,
             "project_id": job.project_id,
             "drive_id": active_drive_id,
             "source_path": job.source_path,
             "target_mount_path": job.target_mount_path,
+            "actor": actor or "system",
+        },
+    )
+    logger.info(
+        f"JOB_STARTED job_id={job_id} project_id={job.project_id} "
+        f"status={job.status.value} thread_count={job.thread_count} actor={actor or 'system'}",
+        extra={
+            "job_id": job_id,
+            "project_id": job.project_id,
+            "status": job.status.value,
+            "thread_count": job.thread_count,
             "actor": actor or "system",
         },
     )

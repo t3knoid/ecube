@@ -166,12 +166,13 @@ def test_start_job_writes_application_log_line(client, db, caplog):
 
     assert response.status_code == 200
     messages = [record.getMessage() for record in caplog.records]
-    assert any(f"JOB_STARTED job_id={job_id}" in message for message in messages)
-    assert any(
-        "source_path=/data/evidence" in message
-        and "target_mount_path=/mnt/ecube/start-log-001" in message
-        for message in messages
-    )
+    started_messages = [message for message in messages if f"JOB_STARTED job_id={job_id}" in message]
+
+    assert started_messages
+    assert any("project_id=PROJ-START-LOG-001" in message for message in started_messages)
+    assert all("source_path=" not in message for message in started_messages)
+    assert all("target_mount_path=" not in message for message in started_messages)
+    assert all("drive_id=" not in message for message in started_messages)
 
 
 def test_get_failed_job_includes_log_entry(client, db, tmp_path, monkeypatch):
