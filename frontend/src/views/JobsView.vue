@@ -54,12 +54,32 @@ const columns = computed(() => [
   { key: 'evidence_number', label: t('jobs.evidence') },
   { key: 'status', label: t('common.labels.status') },
   { key: 'progress', label: t('dashboard.progress') },
-  { key: 'actions', label: t('common.actions.edit'), align: 'center' },
+  { key: 'actions', label: '', align: 'center' },
 ])
 
 function progressPercent(job) {
-  if (!job || !job.total_bytes) return 0
-  return Math.min(100, Math.round((job.copied_bytes / job.total_bytes) * 100))
+  if (!job) return 0
+
+  const status = String(job.status || '').toUpperCase()
+  const totalBytes = Number(job.total_bytes || 0)
+  const copiedBytes = Number(job.copied_bytes || 0)
+  const totalFiles = Number(job.file_count || 0)
+  const filesSucceeded = Number(job.files_succeeded || 0)
+  const filesFailed = Number(job.files_failed || 0)
+  const finishedFiles = Math.min(totalFiles, filesSucceeded + filesFailed)
+
+  const bytePercent = totalBytes > 0
+    ? Math.max(0, Math.min(100, Math.round((copiedBytes / totalBytes) * 100)))
+    : 0
+  const filePercent = totalFiles > 0
+    ? Math.max(0, Math.min(100, Math.round((finishedFiles / totalFiles) * 100)))
+    : bytePercent
+
+  if (status === 'RUNNING' || status === 'VERIFYING') {
+    return Math.min(bytePercent || 100, filePercent || 100)
+  }
+
+  return totalBytes > 0 ? bytePercent : filePercent
 }
 
 function formatProjectId(value) {
@@ -212,11 +232,8 @@ function syncEligibleSelections() {
 }
 
 function resolveSourcePath() {
-  const mount = eligibleMounts.value.find((item) => item.id === Number(form.value.mount_id))
   const source = form.value.source_path.trim()
-  if (!mount || source.startsWith('/')) return source
-  const prefix = String(mount.local_mount_point || '').replace(/\/$/, '')
-  return `${prefix}/${source}`
+  return source || '/'
 }
 
 function buildJobError(err) {
@@ -252,6 +269,7 @@ async function submitCreateJob() {
     const payload = {
       project_id: selectedProject.value,
       evidence_number: form.value.evidence_number.trim(),
+      mount_id: Number(form.value.mount_id),
       source_path: resolveSourcePath(),
       drive_id: Number(form.value.drive_id),
       thread_count: Number(form.value.thread_count),
@@ -386,7 +404,7 @@ onBeforeUnmount(() => {
       <template #cell-progress="{ row }">{{ progressPercent(row) }}%</template>
       <template #cell-actions="{ row }">
         <button class="btn" @click="router.push({ name: 'job-detail', params: { id: row.id } })">
-          {{ t('jobs.open') }}
+          {{ t('jobs.details') }}
         </button>
       </template>
     </DataTable>

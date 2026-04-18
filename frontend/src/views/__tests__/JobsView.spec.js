@@ -68,7 +68,19 @@ function mountView() {
         teleport: true,
         DataTable: {
           props: ['rows'],
-          template: '<div class="rows-stub">{{ rows.length }}</div>',
+          template: `
+            <div>
+              <div class="rows-stub">{{ rows.length }}</div>
+              <div v-for="row in rows" :key="row.id" class="row-stub">
+                <div class="row-progress-stub">
+                  <slot name="cell-progress" :row="row">{{ row.progress }}</slot>
+                </div>
+                <div class="row-actions-stub">
+                  <slot name="cell-actions" :row="row" />
+                </div>
+              </div>
+            </div>
+          `,
         },
         Pagination: true,
         StatusBadge: {
@@ -179,12 +191,69 @@ describe('JobsView grouped create dialog', () => {
     expect(mocks.createJob).toHaveBeenCalledWith({
       project_id: 'PROJ-001',
       evidence_number: 'EVID-77',
-      source_path: '/nfs/project-001/folder/subfolder',
+      mount_id: 11,
+      source_path: 'folder/subfolder',
       drive_id: 1,
       thread_count: 3,
     })
     expect(mocks.startJob).toHaveBeenCalledWith(44)
     expect(mocks.push).toHaveBeenCalledWith({ name: 'job-detail', params: { id: 44 } })
+  })
+
+  it('keeps slash-prefixed source paths within the selected mount', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const createButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.create'))
+    await createButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#job-project').setValue('PROJ-001')
+    await flushPromises()
+    await wrapper.find('#job-evidence').setValue('EVID-78')
+    await wrapper.find('#job-mount').setValue('11')
+    await wrapper.find('#job-source-path').setValue('/folder/subfolder')
+    await wrapper.find('#job-drive').setValue('1')
+
+    await wrapper.find('#job-submit').trigger('click')
+    await flushPromises()
+
+    expect(mocks.createJob).toHaveBeenCalledWith({
+      project_id: 'PROJ-001',
+      evidence_number: 'EVID-78',
+      mount_id: 11,
+      source_path: '/folder/subfolder',
+      drive_id: 1,
+      thread_count: 4,
+    })
+  })
+
+  it('treats slash-only source input as the selected mount root', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const createButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.create'))
+    await createButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#job-project').setValue('PROJ-001')
+    await flushPromises()
+    await wrapper.find('#job-evidence').setValue('EVID-79')
+    await wrapper.find('#job-mount').setValue('11')
+    await wrapper.find('#job-source-path').setValue('/')
+    await wrapper.find('#job-drive').setValue('1')
+
+    await wrapper.find('#job-submit').trigger('click')
+    await flushPromises()
+
+    expect(mocks.createJob).toHaveBeenCalledWith({
+      project_id: 'PROJ-001',
+      evidence_number: 'EVID-79',
+      mount_id: 11,
+      source_path: '/',
+      drive_id: 1,
+      thread_count: 4,
+    })
   })
 
   it('surfaces a specific backend conflict instead of a generic validation message', async () => {
@@ -213,5 +282,40 @@ describe('JobsView grouped create dialog', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Assigned drive is not mounted')
+  })
+
+  it('keeps running list progress aligned with completed file counts', async () => {
+    mocks.listJobs.mockResolvedValue([
+      {
+        id: 15,
+        project_id: 'PROJ-001',
+        evidence_number: 'EV-015',
+        status: 'RUNNING',
+        source_path: '/nfs/project-001',
+        total_bytes: 1000,
+        copied_bytes: 1000,
+        file_count: 5,
+        files_succeeded: 2,
+        files_failed: 0,
+      },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('.row-progress-stub').text()).toContain('40%')
+    expect(wrapper.find('.row-progress-stub').text()).not.toContain('100%')
+  })
+
+  it('uses Details as the row action label', async () => {
+    mocks.listJobs.mockResolvedValue([
+      { id: 44, project_id: 'PROJ-001', evidence_number: 'EV-044', status: 'PENDING', source_path: '/nfs/project-001' },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Details')
+    expect(wrapper.text()).not.toContain('Open')
   })
 })
