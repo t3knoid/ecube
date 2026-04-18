@@ -236,6 +236,30 @@ def test_create_job_conflict_when_drive_has_different_project(client, db):
     assert response.status_code == 403
 
 
+def test_create_job_allows_explicit_mounted_in_use_drive(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-IN-USE-MOUNTED",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        mount_path="/mnt/ecube/in-use-mounted",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-001",
+            "evidence_number": "EV-010A",
+            "source_path": "/data/evidence",
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["target_mount_path"] == "/mnt/ecube/in-use-mounted"
+
+
 def test_create_job_conflict_when_drive_already_in_use(client, db):
     drive = UsbDrive(
         device_identifier="USB-IN-USE",
