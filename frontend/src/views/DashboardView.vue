@@ -8,6 +8,7 @@ import { usePolling } from '@/composables/usePolling.js'
 import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
+import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const { t } = useI18n()
 
@@ -37,18 +38,26 @@ const healthColumns = computed(() => [
   { key: 'progress', label: t('dashboard.progress') },
 ])
 
+function formatProjectId(value) {
+  return normalizeProjectId(value) || '-'
+}
+
 async function refreshSnapshot() {
   const warnings = []
   const results = await Promise.allSettled([getDrives({ include_disconnected: true }), listJobs({ limit: 200 })])
 
   if (results[0].status === 'fulfilled') {
-    drives.value = Array.isArray(results[0].value) ? results[0].value : []
+    drives.value = Array.isArray(results[0].value)
+      ? results[0].value.map((item) => normalizeProjectRecord(item, ['current_project_id']))
+      : []
   } else {
     warnings.push(t('dashboard.loadDrivesError'))
   }
 
   if (results[1].status === 'fulfilled') {
-    jobs.value = Array.isArray(results[1].value) ? results[1].value : []
+    jobs.value = Array.isArray(results[1].value)
+      ? results[1].value.map((item) => normalizeProjectRecord(item, ['project_id']))
+      : []
   } else {
     // Backward compatibility for servers that do not yet expose GET /jobs.
     jobs.value = []
@@ -119,6 +128,7 @@ onUnmounted(() => {
     <article class="panel">
       <h2>{{ t('jobs.activeJobs') }}</h2>
       <DataTable :columns="healthColumns" :rows="activeJobs" row-key="id" :empty-text="t('dashboard.noActiveJobs')">
+        <template #cell-project_id="{ row }">{{ formatProjectId(row.project_id) }}</template>
         <template #cell-status="{ row }">
           <StatusBadge :status="row.status" />
         </template>

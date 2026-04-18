@@ -7,6 +7,7 @@ import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
+import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const { t } = useI18n()
 
@@ -82,7 +83,8 @@ async function loadMounts() {
   loading.value = true
   error.value = ''
   try {
-    mounts.value = await getMounts()
+    const response = await getMounts()
+    mounts.value = (response || []).map((item) => normalizeProjectRecord(item, ['project_id']))
   } catch {
     error.value = t('common.errors.networkError')
   } finally {
@@ -126,9 +128,13 @@ function protectedValue(value) {
   return value ? t('common.labels.protected') : '-'
 }
 
+function formatProjectId(value) {
+  return normalizeProjectId(value) || '-'
+}
+
 function browseLabel(mount) {
   return mount?.project_id
-    ? `${t('mounts.browse')} ${mount.project_id}`
+    ? `${t('mounts.browse')} ${formatProjectId(mount.project_id)}`
     : t('mounts.browse')
 }
 
@@ -144,7 +150,7 @@ async function submitAddMount() {
     const payload = {
       type: form.value.type,
       remote_path: form.value.remote_path.trim(),
-      project_id: form.value.project_id.trim(),
+      project_id: normalizeProjectId(form.value.project_id),
       username: form.value.username.trim() || null,
       password: form.value.password || null,
       credentials_file: form.value.credentials_file.trim() || null,
@@ -164,7 +170,8 @@ async function runValidateAll() {
   loading.value = true
   error.value = ''
   try {
-    mounts.value = await validateAllMounts()
+    const response = await validateAllMounts()
+    mounts.value = (response || []).map((item) => normalizeProjectRecord(item, ['project_id']))
   } catch {
     error.value = t('common.errors.requestConflict')
   } finally {
@@ -175,7 +182,7 @@ async function runValidateAll() {
 async function runValidateOne(mountId) {
   error.value = ''
   try {
-    const next = await validateMount(mountId)
+    const next = normalizeProjectRecord(await validateMount(mountId), ['project_id'])
     const index = mounts.value.findIndex((item) => item.id === mountId)
     if (index >= 0) mounts.value[index] = next
   } catch {
@@ -186,6 +193,12 @@ async function runValidateOne(mountId) {
 function openAddDialog(event) {
   addDialogTriggerRef.value = event?.currentTarget instanceof HTMLElement ? event.currentTarget : document.activeElement
   showAddDialog.value = true
+  void nextTick(() => {
+    const target = addDialogRef.value?.querySelector('#mount-type')
+    if (target instanceof HTMLElement) {
+      target.focus()
+    }
+  })
 }
 
 function closeAddDialog() {
@@ -251,6 +264,16 @@ async function toggleBrowse(mountId) {
 
 onMounted(loadMounts)
 
+watch(
+  () => form.value.project_id,
+  (value) => {
+    const normalized = normalizeProjectId(value)
+    if (value !== normalized) {
+      form.value.project_id = normalized
+    }
+  },
+)
+
 watch(showAddDialog, async (open) => {
   if (open) {
     document.addEventListener('keydown', handleAddDialogKeydown)
@@ -293,6 +316,7 @@ onBeforeUnmount(() => {
     <input v-model="search" type="text" :placeholder="t('mounts.searchPlaceholder')" :aria-label="t('mounts.searchPlaceholder')" />
 
     <DataTable :columns="columns" :rows="paged" :empty-text="t('mounts.empty')">
+      <template #cell-project_id="{ row }">{{ formatProjectId(row.project_id) }}</template>
       <template #cell-remote_path="{ row }">{{ protectedValue(row.remote_path) }}</template>
       <template #cell-local_mount_point="{ row }">{{ protectedValue(row.local_mount_point) }}</template>
       <template #cell-status="{ row }"><StatusBadge :status="row.status" /></template>
@@ -323,7 +347,7 @@ onBeforeUnmount(() => {
       :aria-label="browseLabel(activeBrowsedMount)"
     >
       <h3 class="browse-panel-title">
-        {{ t('browse.browseMountContents') }}: {{ activeBrowsedMount.project_id || t('common.labels.protected') }}
+        {{ t('browse.browseMountContents') }}: {{ formatProjectId(activeBrowsedMount.project_id) }}
       </h3>
       <DirectoryBrowser
         :mount-path="activeBrowsedMount.local_mount_point"
