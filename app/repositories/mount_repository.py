@@ -1,5 +1,6 @@
 from typing import List, Optional
 
+from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -22,6 +23,34 @@ class MountRepository:
     def get(self, mount_id: int) -> Optional[NetworkMount]:
         """Return a single mount by primary key, or ``None``."""
         return self.db.get(NetworkMount, mount_id)
+
+    def acquire_create_lock(self) -> None:
+        """Serialize mount-creation validation and insert operations.
+
+        This protects the duplicate/overlap isolation checks from concurrent
+        requests that would otherwise both pass the pre-insert validation.
+        PostgreSQL uses a transaction-scoped advisory lock keyed to mount
+        creation; other backends fall back to row locking when available.
+        """
+        dialect = self.db.bind.dialect.name if self.db.bind is not None else ""
+        if dialect == "postgresql":
+            self.db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": 221212})
+            return
+
+        if dialect == "sqlite":
+            return
+
+        try:
+            self.db.query(NetworkMount.id).order_by(NetworkMount.id).with_for_update(nowait=True).all()
+        except OperationalError as exc:
+            self.db.rollback()
+            orig = getattr(exc, "orig", None)
+            sqlstate = getattr(orig, "pgcode", None) or getattr(orig, "sqlstate", None)
+            if sqlstate == "55P03":
+                raise ConflictError(
+                    "Network mount configuration is currently being updated by another operation."
+                ) from exc
+            raise
 
     def add(self, mount: NetworkMount) -> NetworkMount:
         """Persist a new mount and flush it to obtain its ID."""
