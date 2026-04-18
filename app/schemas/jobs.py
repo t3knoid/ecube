@@ -4,10 +4,11 @@ from pydantic import BaseModel, Field, StrictInt, field_validator
 from typing import Optional
 from urllib.parse import urlparse
 
+from app.config import settings
 from app.models.hardware import DriveState
 from app.models.jobs import JobStatus, FileStatus
 from app.schemas.types import StrictIntMixin
-from app.utils.sanitize import ProjectIdStr, SafeStr, StrictSafeStr
+from app.utils.sanitize import ProjectIdStr, SafeStr, StrictSafeStr, validate_source_path
 
 
 class FileHashesResponse(BaseModel):
@@ -62,6 +63,11 @@ class JobCreate(StrictIntMixin, BaseModel):
     created_by: Optional[SafeStr] = Field(default=None, description="Username of the job creator")
     callback_url: Optional[SafeStr] = Field(default=None, json_schema_extra={"pattern": "^https://[a-zA-Z0-9]"}, description="HTTPS URL to receive a POST callback when the job reaches a terminal state (COMPLETED or FAILED)")
 
+    @field_validator("source_path")
+    @classmethod
+    def _source_path_must_be_safe(cls, v: str) -> str:
+        return validate_source_path(v, usb_mount_base_path=settings.usb_mount_base_path)
+
     @field_validator("callback_url")
     @classmethod
     def _callback_url_must_be_valid_https(cls, v: Optional[str]) -> Optional[str]:
@@ -115,6 +121,8 @@ class JobFilesResponse(BaseModel):
     """Response for ``GET /jobs/{job_id}/files``."""
 
     job_id: int = Field(..., description="Parent export job ID")
+    total_files: int = Field(default=0, description="Total number of file rows available for this job")
+    returned_files: int = Field(default=0, description="Number of file rows included in this response")
     files: list[JobFileRowSchema] = Field(default_factory=list, description="File-level status rows for the job")
 
 
@@ -155,6 +163,7 @@ class ExportJobSchema(BaseModel):
     completed_at: Optional[datetime] = Field(default=None, description="When the job reached a terminal state")
     drive: Optional[DriveInfoSchema] = Field(default=None, description="Assigned drive metadata (null if no drive assigned)")
     error_summary: Optional[str] = Field(default=None, description="Brief summary of file failures (null on success)")
+    failure_log_entry: Optional[str] = Field(default=None, description="Correlated application log line for failed jobs (null on success)")
     client_ip: Optional[str] = Field(default=None, description="IP address of the client that created the job (null for background tasks or when redacted; 'unknown' when the client address could not be resolved)")
 
     model_config = {"from_attributes": True}

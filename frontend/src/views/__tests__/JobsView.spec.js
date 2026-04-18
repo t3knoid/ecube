@@ -68,7 +68,14 @@ function mountView() {
         teleport: true,
         DataTable: {
           props: ['rows'],
-          template: '<div class="rows-stub">{{ rows.length }}</div>',
+          template: `
+            <div>
+              <div class="rows-stub">{{ rows.length }}</div>
+              <div v-for="row in rows" :key="row.id" class="row-actions-stub">
+                <slot name="cell-actions" :row="row" />
+              </div>
+            </div>
+          `,
         },
         Pagination: true,
         StatusBadge: {
@@ -187,6 +194,60 @@ describe('JobsView grouped create dialog', () => {
     expect(mocks.push).toHaveBeenCalledWith({ name: 'job-detail', params: { id: 44 } })
   })
 
+  it('keeps slash-prefixed source paths within the selected mount', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const createButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.create'))
+    await createButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#job-project').setValue('PROJ-001')
+    await flushPromises()
+    await wrapper.find('#job-evidence').setValue('EVID-78')
+    await wrapper.find('#job-mount').setValue('11')
+    await wrapper.find('#job-source-path').setValue('/folder/subfolder')
+    await wrapper.find('#job-drive').setValue('1')
+
+    await wrapper.find('#job-submit').trigger('click')
+    await flushPromises()
+
+    expect(mocks.createJob).toHaveBeenCalledWith({
+      project_id: 'PROJ-001',
+      evidence_number: 'EVID-78',
+      source_path: '/nfs/project-001/folder/subfolder',
+      drive_id: 1,
+      thread_count: 4,
+    })
+  })
+
+  it('treats slash-only source input as the selected mount root', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const createButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.create'))
+    await createButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#job-project').setValue('PROJ-001')
+    await flushPromises()
+    await wrapper.find('#job-evidence').setValue('EVID-79')
+    await wrapper.find('#job-mount').setValue('11')
+    await wrapper.find('#job-source-path').setValue('/')
+    await wrapper.find('#job-drive').setValue('1')
+
+    await wrapper.find('#job-submit').trigger('click')
+    await flushPromises()
+
+    expect(mocks.createJob).toHaveBeenCalledWith({
+      project_id: 'PROJ-001',
+      evidence_number: 'EVID-79',
+      source_path: '/nfs/project-001',
+      drive_id: 1,
+      thread_count: 4,
+    })
+  })
+
   it('surfaces a specific backend conflict instead of a generic validation message', async () => {
     mocks.createJob.mockRejectedValue({
       response: {
@@ -213,5 +274,17 @@ describe('JobsView grouped create dialog', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Assigned drive is not mounted')
+  })
+
+  it('uses Details as the row action label', async () => {
+    mocks.listJobs.mockResolvedValue([
+      { id: 44, project_id: 'PROJ-001', evidence_number: 'EV-044', status: 'PENDING', source_path: '/nfs/project-001' },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Details')
+    expect(wrapper.text()).not.toContain('Open')
   })
 })
