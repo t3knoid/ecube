@@ -357,21 +357,38 @@ a {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.appliance-image-placeholder {
-  display: grid;
-  place-items: center;
-  min-height: 160px;
+.appliance-visual {
+  position: relative;
   margin-bottom: 1rem;
   border-radius: var(--radius);
-  border: 1px dashed #93c5fd;
+  border: 1px solid var(--border);
   background: linear-gradient(135deg, var(--bg), var(--surface-soft));
-  color: var(--accent);
-  font-weight: 700;
-  text-align: center;
+  overflow: hidden;
 }
 
-.appliance-image-placeholder span {
-  max-width: 10rem;
+.appliance-visual img {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+}
+
+.appliance-badge {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 1;
+  display: inline-flex;
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.92);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.appliance-note {
+  color: var(--muted);
+  font-size: 0.92rem;
 }
 
 .tier-meta {
