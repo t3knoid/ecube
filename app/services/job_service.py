@@ -70,7 +70,7 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
         project_id=body.project_id,
         evidence_number=body.evidence_number,
         source_path=resolved_source_path,
-        target_mount_path=body.target_mount_path,
+        target_mount_path=None,
         thread_count=body.thread_count,
         max_file_retries=body.max_file_retries,
         retry_delay_seconds=body.retry_delay_seconds,
@@ -141,7 +141,7 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
                     detail="Assigned drive is not mounted",
                 )
 
-            job.target_mount_path = body.target_mount_path or drive.mount_path
+            job.target_mount_path = drive.mount_path
             try:
                 job.source_path = validate_source_path(
                     job.source_path,
@@ -167,7 +167,7 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
                     status_code=409,
                     detail="Assigned drive is not mounted",
                 )
-            job.target_mount_path = body.target_mount_path or drive.mount_path
+            job.target_mount_path = drive.mount_path
             try:
                 job.source_path = validate_source_path(
                     job.source_path,
