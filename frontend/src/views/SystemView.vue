@@ -14,6 +14,7 @@ import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import { useAuthStore } from '@/stores/auth.js'
+import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -150,6 +151,10 @@ const workerQueueDisplay = computed(() => {
   return q
 })
 
+function formatProjectId(value) {
+  return normalizeProjectId(value) || t('dashboard.project')
+}
+
 function extractApiMessage(err) {
   const data = err?.response?.data || {}
   return String(data.message || data.detail || '').trim()
@@ -222,7 +227,7 @@ async function loadJobDebug() {
   loading.value = true
   error.value = ''
   try {
-    jobDebug.value = await getJobDebug(Number(jobDebugId.value))
+    jobDebug.value = normalizeProjectRecord(await getJobDebug(Number(jobDebugId.value)), ['project_id'])
   } catch (err) {
     const status = err?.response?.status
     if (status === 404) {
@@ -242,7 +247,9 @@ async function loadJobOptions() {
   jobsListUnavailable.value = false
   try {
     const response = await listJobs({ limit: 200 })
-    jobs.value = Array.isArray(response) ? response : []
+    jobs.value = Array.isArray(response)
+      ? response.map((item) => normalizeProjectRecord(item, ['project_id']))
+      : []
   } catch {
     jobs.value = []
     jobsListUnavailable.value = true
@@ -350,7 +357,7 @@ onMounted(loadTabData)
         <select id="job-picker" class="job-picker" :value="jobDebugId" @change="onJobPickerChange">
           <option value="">{{ t('system.jobPickerPlaceholder') }}</option>
           <option v-for="job in jobs" :key="job.id" :value="String(job.id)">
-            #{{ job.id }} - {{ job.project_id || t('dashboard.project') }} - {{ job.status || t('common.labels.unknown') }}
+            #{{ job.id }} - {{ formatProjectId(job.project_id) }} - {{ job.status || t('common.labels.unknown') }}
           </option>
         </select>
         <input v-model="jobDebugId" type="number" min="1" :placeholder="t('jobs.jobId')" />
@@ -361,7 +368,7 @@ onMounted(loadTabData)
       <div v-if="jobDebug" class="health-grid">
         <span>{{ t('jobs.jobId') }}</span><strong>{{ jobDebug.job_id }}</strong>
         <span>{{ t('common.labels.status') }}</span><StatusBadge :status="jobDebug.status" />
-        <span>{{ t('dashboard.project') }}</span><strong>{{ jobDebug.project_id }}</strong>
+        <span>{{ t('dashboard.project') }}</span><strong>{{ formatProjectId(jobDebug.project_id) }}</strong>
         <span>{{ t('dashboard.progress') }}</span><strong>{{ jobDebug.copied_bytes || 0 }} / {{ jobDebug.total_bytes || 0 }}</strong>
       </div>
 

@@ -10,6 +10,7 @@ import { usePolling } from '@/composables/usePolling.js'
 import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
+import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
 
 const route = useRoute()
@@ -68,7 +69,7 @@ async function loadDebug() {
 const jobPoller = usePolling(
   async () => {
     const next = await getJob(jobId.value)
-    job.value = next
+    job.value = normalizeProjectRecord(next, ['project_id'])
     await loadDebug()
     return next
   },
@@ -157,7 +158,7 @@ onUnmounted(() => {
     <article v-if="job" class="panel">
       <div class="job-header">
         <StatusBadge :status="job.status" />
-        <span>{{ t('dashboard.project') }}: {{ job.project_id }}</span>
+        <span>{{ t('dashboard.project') }}: {{ normalizeProjectId(job.project_id) || '-' }}</span>
         <span>{{ t('jobs.evidence') }}: {{ job.evidence_number }}</span>
       </div>
 
