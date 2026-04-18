@@ -8,6 +8,7 @@ import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
+import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const { t } = useI18n()
 const { driveStateLabel } = useStatusLabels()
@@ -55,6 +56,27 @@ function formatBytes(value) {
     unit += 1
   }
   return `${next.toFixed(next >= 10 ? 0 : 1)} ${units[unit]}`
+}
+
+function formatProjectId(value) {
+  return normalizeProjectId(value) || '-'
+}
+
+async function loadDrives() {
+  loading.value = true
+  error.value = ''
+  try {
+    const params = {}
+    if (stateFilter.value === 'ALL' || stateFilter.value === 'DISCONNECTED') {
+      params.include_disconnected = true
+    }
+    const response = await getDrives(params)
+    drives.value = (response || []).map((item) => normalizeProjectRecord(item, ['current_project_id']))
+  } catch {
+    error.value = t('common.errors.networkError')
+  } finally {
+    loading.value = false
+  }
 }
 
 const filtered = computed(() => {
@@ -106,22 +128,6 @@ function setSort(key) {
   } else {
     sortKey.value = key
     sortDir.value = 'asc'
-  }
-}
-
-async function loadDrives() {
-  loading.value = true
-  error.value = ''
-  try {
-    const params = {}
-    if (stateFilter.value === 'ALL' || stateFilter.value === 'DISCONNECTED') {
-      params.include_disconnected = true
-    }
-    drives.value = await getDrives(params)
-  } catch {
-    error.value = t('common.errors.networkError')
-  } finally {
-    loading.value = false
   }
 }
 
@@ -223,6 +229,9 @@ onMounted(loadDrives)
     </div>
 
     <DataTable :columns="columns" :rows="paged" :empty-text="t('drives.empty')">
+      <template #cell-current_project_id="{ row }">
+        {{ formatProjectId(row.current_project_id) }}
+      </template>
       <template #cell-current_state="{ row }">
         <StatusBadge :status="row.current_state" :label="driveStateLabel(row.current_state)" />
       </template>
