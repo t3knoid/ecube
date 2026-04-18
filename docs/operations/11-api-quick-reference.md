@@ -131,6 +131,10 @@ Compatibility note: To support project-to-source-path policy, use project source
 
 **Explicit Drive Selection:** When `drive_id` is provided, the destination drive must be project-compatible and currently mounted. A mounted drive already associated with the requested project remains valid when its state is `AVAILABLE` or `IN_USE`; unmounted or stale selections still return **409 Conflict**.
 
+**Mounted Source Resolution:** Current job creation also includes the selected mounted share identifier. The API resolves the final source path on the trusted backend, treats / as the selected share root, rejects traversal outside that share with **422**, and returns **404** or **409** if the selected mount is missing, unmounted, or assigned to a different project.
+
+**Progress Semantics:** Job list, dashboard, and detail views all use `copied_bytes` together with completed-file counters so active jobs do not appear 100% complete before file completion has caught up.
+
 **Webhook Callbacks:** Include `callback_url` (HTTPS only) when creating a job to receive a POST notification when the job reaches `COMPLETED` or `FAILED`. Makes up to 4 attempts on server errors with exponential backoff. Private/reserved IPs are blocked by default (SSRF protection). See the [Third-Party Integration Guide](09-third-party-integration.md) for payload details.
 
 ---

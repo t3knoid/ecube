@@ -53,14 +53,21 @@ class FileCompareResponse(BaseModel):
 class JobCreate(StrictIntMixin, BaseModel):
     project_id: ProjectIdStr = Field(..., min_length=1, description="Project ID for isolation enforcement")
     evidence_number: SafeStr = Field(..., min_length=1, description="Evidence case number or identifier")
-    source_path: StrictSafeStr = Field(..., min_length=1, description="Path to source data on network mount or local filesystem")
-    target_mount_path: Optional[StrictSafeStr] = Field(default=None, description="Alternative target mount; defaults to assigned drive")
+    source_path: StrictSafeStr = Field(..., min_length=1, description="Path to source data on the selected mounted share or local filesystem")
+    mount_id: Optional[StrictInt] = Field(default=None, ge=1, description="Mounted share selected as the trusted source root")
     drive_id: Optional[StrictInt] = Field(default=None, ge=1, description="Pre-assigned USB drive ID")
     thread_count: StrictInt = Field(default=4, ge=1, le=8, description="Number of parallel copy threads (1-8)")
     max_file_retries: StrictInt = Field(default=3, ge=0, le=100, description="Maximum number of retries for failed files (0-100)")
     retry_delay_seconds: StrictInt = Field(default=1, ge=0, le=3600, description="Delay between retries in seconds (0-3600)")
-    created_by: Optional[SafeStr] = Field(default=None, description="Username of the job creator")
     callback_url: Optional[SafeStr] = Field(default=None, json_schema_extra={"pattern": "^https://[a-zA-Z0-9]"}, description="HTTPS URL to receive a POST callback when the job reaches a terminal state (COMPLETED or FAILED)")
+
+    @field_validator("source_path")
+    @classmethod
+    def _source_path_must_not_be_blank(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Source path is required")
+        return v
 
     @field_validator("callback_url")
     @classmethod
@@ -115,6 +122,8 @@ class JobFilesResponse(BaseModel):
     """Response for ``GET /jobs/{job_id}/files``."""
 
     job_id: int = Field(..., description="Parent export job ID")
+    total_files: int = Field(default=0, description="Total number of file rows available for this job")
+    returned_files: int = Field(default=0, description="Number of file rows included in this response")
     files: list[JobFileRowSchema] = Field(default_factory=list, description="File-level status rows for the job")
 
 
@@ -155,6 +164,7 @@ class ExportJobSchema(BaseModel):
     completed_at: Optional[datetime] = Field(default=None, description="When the job reached a terminal state")
     drive: Optional[DriveInfoSchema] = Field(default=None, description="Assigned drive metadata (null if no drive assigned)")
     error_summary: Optional[str] = Field(default=None, description="Brief summary of file failures (null on success)")
+    failure_log_entry: Optional[str] = Field(default=None, description="Correlated application log line for failed jobs (null on success)")
     client_ip: Optional[str] = Field(default=None, description="IP address of the client that created the job (null for background tasks or when redacted; 'unknown' when the client address could not be resolved)")
 
     model_config = {"from_attributes": True}
