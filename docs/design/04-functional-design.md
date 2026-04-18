@@ -146,6 +146,9 @@ Every project-isolation decision is recorded:
 
 - Mount manager validates connectivity before exposing paths to job creation.
 - Reference counting prevents unmount while active jobs still depend on a mount.
+- Mount creation normalizes remote NFS and SMB references before validation so logically equivalent source paths are compared consistently.
+- Exact duplicate remote paths are always rejected; overlapping parent or child remote paths are rejected when the project assignment differs and are allowed only within the same project.
+- Validation and mount-row creation must be serialized so concurrent requests cannot bypass project-isolation checks.
 
 ### 4.6.1 Project Source Binding Design
 
