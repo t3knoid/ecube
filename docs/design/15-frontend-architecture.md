@@ -4,7 +4,7 @@
 |---|---|
 | Title | Frontend Architecture |
 | Purpose | Describes the ECUBE frontend technology stack, component architecture, state management, routing, and testing strategy. |
-| Updated on | 04/08/26 |
+| Updated on | 04/17/26 |
 | Audience | Engineers, implementers, frontend developers, and technical reviewers. |
 
 ## Table of Contents
@@ -489,7 +489,7 @@ Vue I18n 9.x provides the localization infrastructure. All user-visible strings 
 | UC-5.1 | Screen 5a: Mount List | `MountsView` |
 | UC-5.2 – UC-5.3 | Screen 5b: Add Mount | `MountsView` (dialog) |
 | UC-5.4 – UC-5.6 | Screen 5a: Inline actions | `MountsView` |
-| UC-6.1 | Screen 6c: Create Job | `JobsView` (wizard dialog) |
+| UC-6.1 | Screen 6c: Create Job | `JobsView` (grouped create dialog) |
 | UC-6.2 | Screen 6b: Start | `JobDetailView` |
 | UC-6.3 | Screen 6a/6b: Progress | `JobsView`, `JobDetailView` |
 | UC-6.4 | Screen 6b: Files table | `JobDetailView` |

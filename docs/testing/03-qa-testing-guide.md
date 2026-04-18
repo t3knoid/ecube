@@ -4,7 +4,7 @@
 |---|---|
 | Title | QA Testing Guide |
 | Purpose | Guides QA personnel through manual hands-on ECUBE UI and functional testing in a Linux-based test environment. |
-| Updated on | 04/11/26 |
+| Updated on | 04/17/26 |
 | Audience | QA personnel. |
 
 ## Table of Contents
@@ -610,6 +610,16 @@ curl -sk -X POST https://localhost:8443/jobs \
     "callback_url": "https://example.com/webhook"
   }' | jq
 ```
+
+#### 11.4a Jobs Page UI Workflow Checks
+
+For the current Jobs page UI, verify the grouped `Create Job` dialog behaves as follows:
+
+- When the dialog opens, only the `Project` field is active.
+- After selecting a project, the `Source` and `Destination` sections unlock and show only mounted project-matching sources and eligible mounted USB drives.
+- If no matching project, mount, or drive exists, the dialog shows the corresponding helper message instead of an empty or generic failure state.
+- If `Run job immediately` is checked, the created job transitions directly into the start flow after successful creation.
+- If the selected drive or mount becomes unavailable, the operator sees a specific conflict or availability message instead of a generic validation error.
 
 ### 11.5 Audit Logs
 
