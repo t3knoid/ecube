@@ -125,24 +125,34 @@ async function loadDrives() {
   }
 }
 
+async function resetToAllAndReload() {
+  const previousState = stateFilter.value
+  const previousIncludesDisconnected = previousState === 'ALL' || previousState === 'DISCONNECTED'
+
+  if (previousState !== 'ALL') {
+    stateFilter.value = 'ALL'
+  }
+
+  if (previousIncludesDisconnected) {
+    await loadDrives()
+  }
+}
+
+async function refreshList() {
+  error.value = ''
+  try {
+    await resetToAllAndReload()
+  } catch {
+    error.value = t('common.errors.networkError')
+  }
+}
+
 async function rescan() {
   refreshing.value = true
   error.value = ''
   try {
     await refreshDrives()
-    const previousState = stateFilter.value
-    const previousIncludesDisconnected = previousState === 'ALL' || previousState === 'DISCONNECTED'
-
-    // Rescan should always switch the UI to All States.
-    if (previousState !== 'ALL') {
-      stateFilter.value = 'ALL'
-    }
-
-    // The state watcher only reloads when disconnected-inclusion mode changes.
-    // When staying on ALL, trigger the reload here.
-    if (previousIncludesDisconnected) {
-      await loadDrives()
-    }
+    await resetToAllAndReload()
   } catch {
     error.value = t('common.errors.networkError')
   } finally {
@@ -183,7 +193,7 @@ onMounted(loadDrives)
     <header class="header-row">
       <h1>{{ t('drives.title') }}</h1>
       <div class="actions">
-        <button class="btn" @click="loadDrives">{{ t('common.actions.refresh') }}</button>
+        <button class="btn" @click="refreshList">{{ t('common.actions.refresh') }}</button>
         <button class="btn btn-primary" :disabled="refreshing" @click="rescan">
           {{ refreshing ? t('common.labels.loading') : t('drives.rescan') }}
         </button>
