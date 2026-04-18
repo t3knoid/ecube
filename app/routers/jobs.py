@@ -1,16 +1,20 @@
 import logging
+import os
+import re
 from typing import Dict, List, Tuple
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, require_roles
+from app.config import settings
 from app.database import get_db
 from app.repositories.job_repository import DriveAssignmentRepository, FileRepository
 from app.schemas.jobs import DriveInfoSchema, ExportJobSchema, JobCreate, JobFilesResponse, JobStart
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500
 from app.services import job_service
 from app.utils.client_ip import get_client_ip
+from app.utils.sanitize import redact_pathlike_substrings
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +45,92 @@ def _build_error_summary(files_failed: int, error_rows: List[Tuple[str, str]]) -
     return summary
 
 
+def _candidate_log_paths() -> list[str]:
+    """Return the configured app log and numeric rotations, newest first."""
+    if not settings.log_file:
+        return []
+
+    base_path = os.path.abspath(settings.log_file)
+    log_dir = os.path.dirname(base_path)
+    base_name = os.path.basename(base_path)
+    candidates = [base_path]
+
+    if not log_dir or not os.path.isdir(log_dir):
+        return candidates
+
+    rotation_pattern = re.compile(rf"^{re.escape(base_name)}\.(\d+)$")
+    rotations: list[tuple[int, str]] = []
+    try:
+        for entry in os.listdir(log_dir):
+            match = rotation_pattern.fullmatch(entry)
+            if match:
+                rotations.append((int(match.group(1)), os.path.join(log_dir, entry)))
+    except OSError:
+        return candidates
+
+    candidates.extend(path for _, path in sorted(rotations))
+    return candidates
+
+
+def _find_recent_log_match(needle: str | list[str]) -> str | None:
+    """Return the newest matching line from the app log family."""
+    needles = [needle] if isinstance(needle, str) else [term for term in needle if term]
+    lowered_needles = [term.lower() for term in needles]
+    if not lowered_needles:
+        return None
+
+    chunk_size = 64 * 1024
+
+    for path in _candidate_log_paths():
+        try:
+            with open(path, "rb") as handle:
+                handle.seek(0, os.SEEK_END)
+                position = handle.tell()
+                carry = b""
+
+                while position > 0:
+                    read_size = min(chunk_size, position)
+                    position -= read_size
+                    handle.seek(position)
+                    data = handle.read(read_size) + carry
+                    parts = data.split(b"\n")
+
+                    if position > 0:
+                        carry = parts[0]
+                        lines = parts[1:]
+                    else:
+                        carry = b""
+                        lines = parts
+
+                    for raw_line in reversed(lines):
+                        line = raw_line.decode("utf-8", errors="replace").strip()
+                        lowered_line = line.lower()
+                        if any(term in lowered_line for term in lowered_needles):
+                            return redact_pathlike_substrings(line)
+        except OSError:
+            continue
+
+    return None
+
+
+def _build_failure_log_entry(schema: ExportJobSchema) -> str | None:
+    """Return a real correlated application-log line for failed jobs."""
+    status_value = getattr(schema.status, "value", schema.status)
+    status = str(status_value or "").upper()
+    if status != "FAILED":
+        return None
+
+    search_terms = [
+        f"JOB_FAILED job_id={schema.id}",
+        f"FILE_COPY_FAILURE job_id={schema.id}",
+        f"JOB_TIMEOUT job_id={schema.id}",
+        f"Unexpected copy job failure for job {schema.id}",
+        f"path=/jobs/{schema.id}/start",
+        f"path=/jobs/{schema.id}/verify",
+    ]
+    return _find_recent_log_match(search_terms)
+
+
 def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
     """Serialize an ExportJob, enriching with derived fields and redacting client_ip.
 
@@ -59,6 +149,8 @@ def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
     if schema.files_failed:
         error_rows = file_repo.list_error_messages(job.id, limit=5)
         schema.error_summary = _build_error_summary(schema.files_failed, error_rows)
+
+    schema.failure_log_entry = _build_failure_log_entry(schema)
 
     # Nested drive info — select the most recent unreleased assignment
     assignment_repo = DriveAssignmentRepository(db)
@@ -111,6 +203,8 @@ def _enrich_jobs_bulk(
         if failed:
             error_rows = errors_map.get(job.id, [])
             schema.error_summary = _build_error_summary(failed, error_rows)
+
+        schema.failure_log_entry = None
 
         active = assignments_map.get(job.id)
         if active and getattr(active, "drive", None):
@@ -176,6 +270,7 @@ def get_job(
 @router.get("/{job_id}/files", response_model=JobFilesResponse, responses={**R_401, **R_403, **R_404, **R_422})
 def get_job_files(
     job_id: int,
+    limit: int = Query(default=200, ge=1, le=2000, description="Maximum number of file rows to return"),
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_ALL_ROLES),
 ):
@@ -187,15 +282,21 @@ def get_job_files(
     **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
     """
     job = job_service.get_job(job_id, db)
-    files = FileRepository(db).list_by_job(job.id)
-    return JobFilesResponse(job_id=job.id, files=files)
+    file_repo = FileRepository(db)
+    files = file_repo.list_by_job(job.id, limit=limit)
+    return JobFilesResponse(
+        job_id=job.id,
+        total_files=file_repo.count_by_job(job.id),
+        returned_files=len(files),
+        files=files,
+    )
 
 
 @router.post("/{job_id}/start", response_model=ExportJobSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
 def start_job(
     job_id: int,
-    body: JobStart,
     background_tasks: BackgroundTasks,
+    body: JobStart = Body(default_factory=JobStart),
     *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),

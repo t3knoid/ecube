@@ -508,6 +508,8 @@ Use the jobs table to review:
 - Current status
 - Progress percentage
 
+For active jobs, the progress value stays synchronized with both copied bytes and completed file counts. A running or verifying job does not show 100% until the finished-file totals also indicate completion.
+
 Common statuses include:
 
 - `PENDING`
@@ -535,6 +537,8 @@ Before creating a job, confirm:
 - The source mount and destination drive both match that project
 - The evidence number and source path are correct
 - If you enable `Run job immediately`, the job will start as soon as creation succeeds
+
+The source path is interpreted inside the selected mounted share. Entering only / uses the root of that share, and attempts to navigate outside the selected share are rejected before the job is created.
 
 ### 9.3 Opening a Job
 
@@ -570,6 +574,8 @@ Use them when appropriate:
 - `Start` to begin the job
 - `Verify` to run verification checks
 - `Manifest` to generate the manifest output
+
+When a job completes or fails, the detail view also shows a summary with the job start time, copy thread count, files copied, total copied, elapsed time, copy rate, and any failure reason or related log hint.
 
 ### 10.2 File List
 

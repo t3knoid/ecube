@@ -7,9 +7,11 @@ from typing import Optional, Tuple
 from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.exceptions import ECUBEException, EncodingError
 from app.models.hardware import DriveState, UsbDrive
 from app.models.jobs import DriveAssignment, ExportJob, JobStatus, Manifest
+from app.models.network import MountStatus
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
 from app.repositories.job_repository import (
@@ -17,9 +19,10 @@ from app.repositories.job_repository import (
     JobRepository,
     ManifestRepository,
 )
+from app.repositories.mount_repository import MountRepository
 from app.schemas.jobs import JobCreate, JobStart
 from app.services import copy_engine
-from app.utils.sanitize import is_encoding_error
+from app.utils.sanitize import is_encoding_error, resolve_source_path, validate_source_path
 
 logger = logging.getLogger(__name__)
 
@@ -30,19 +33,48 @@ def list_jobs(db: Session, limit: int = 200) -> list[ExportJob]:
     return repo.list_recent(limit=limit)
 
 
+def _resolve_job_source_path(body: JobCreate, db: Session) -> str:
+    if body.mount_id is None:
+        try:
+            return resolve_source_path(
+                body.source_path,
+                usb_mount_base_path=settings.usb_mount_base_path,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    mount = MountRepository(db).get(body.mount_id)
+    if not mount:
+        raise HTTPException(status_code=404, detail="Mount not found")
+    if mount.project_id != body.project_id:
+        raise HTTPException(status_code=409, detail="Selected mount is not available for this project")
+    if mount.status != MountStatus.MOUNTED or not mount.local_mount_point:
+        raise HTTPException(status_code=409, detail="Selected mount is not mounted")
+
+    try:
+        return resolve_source_path(
+            body.source_path,
+            mount_root=mount.local_mount_point,
+            usb_mount_base_path=settings.usb_mount_base_path,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client_ip: Optional[str] = None) -> ExportJob:
     drive_repo = DriveRepository(db)
     audit_repo = AuditRepository(db)
+    resolved_source_path = _resolve_job_source_path(body, db)
 
     job = ExportJob(
         project_id=body.project_id,
         evidence_number=body.evidence_number,
-        source_path=body.source_path,
-        target_mount_path=body.target_mount_path,
+        source_path=resolved_source_path,
+        target_mount_path=None,
         thread_count=body.thread_count,
         max_file_retries=body.max_file_retries,
         retry_delay_seconds=body.retry_delay_seconds,
-        created_by=body.created_by,
+        created_by=actor,
         callback_url=body.callback_url,
         client_ip=client_ip,
     )
@@ -109,7 +141,16 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
                     detail="Assigned drive is not mounted",
                 )
 
-            job.target_mount_path = body.target_mount_path or drive.mount_path
+            job.target_mount_path = drive.mount_path
+            try:
+                job.source_path = validate_source_path(
+                    job.source_path,
+                    usb_mount_base_path=settings.usb_mount_base_path,
+                    target_mount_path=job.target_mount_path,
+                )
+            except ValueError as exc:
+                db.rollback()
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
             db.add(DriveAssignment(drive_id=body.drive_id, job_id=job.id))
             drive.current_state = DriveState.IN_USE
             db.flush()  # validate assignment + drive state change
@@ -126,7 +167,16 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
                     status_code=409,
                     detail="Assigned drive is not mounted",
                 )
-            job.target_mount_path = body.target_mount_path or drive.mount_path
+            job.target_mount_path = drive.mount_path
+            try:
+                job.source_path = validate_source_path(
+                    job.source_path,
+                    usb_mount_base_path=settings.usb_mount_base_path,
+                    target_mount_path=job.target_mount_path,
+                )
+            except ValueError as exc:
+                db.rollback()
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
             db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
             drive.current_state = DriveState.IN_USE
             db.flush()
@@ -290,6 +340,15 @@ def start_job(
             status_code=409, detail=f"Job is already in status {job.status}"
         )
 
+    try:
+        job.source_path = validate_source_path(
+            job.source_path,
+            usb_mount_base_path=settings.usb_mount_base_path,
+            target_mount_path=job.target_mount_path,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     # Transition to RUNNING inside the locked transaction so that any concurrent
     # request arriving after this commit will observe the updated state and be
     # rejected with 409 before the background copy task begins.
@@ -308,9 +367,33 @@ def start_job(
             detail="Database error while starting job",
         )
 
+    assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
+    active_drive_id = assignment.drive_id if assignment else None
+
+    logger.debug(
+        "Job start context",
+        {
+            "job_id": job_id,
+            "project_id": job.project_id,
+            "drive_id": active_drive_id,
+            "source_path": job.source_path,
+            "target_mount_path": job.target_mount_path,
+            "actor": actor or "system",
+        },
+    )
+    logger.info(
+        f"JOB_STARTED job_id={job_id} project_id={job.project_id} "
+        f"status={job.status.value} thread_count={job.thread_count} actor={actor or 'system'}",
+        extra={
+            "job_id": job_id,
+            "project_id": job.project_id,
+            "status": job.status.value,
+            "thread_count": job.thread_count,
+            "actor": actor or "system",
+        },
+    )
+
     try:
-        assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
-        active_drive_id = assignment.drive_id if assignment else None
         audit_repo.add(
             action="JOB_STARTED",
             user=actor,
