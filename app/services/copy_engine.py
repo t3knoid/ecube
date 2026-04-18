@@ -168,6 +168,19 @@ def _calculate_copy_rate_mb_s(copied_bytes: int, elapsed_seconds: float) -> floa
     return round((copied_bytes / (1024 * 1024)) / elapsed_seconds, 2)
 
 
+def _log_job_path_context(job_id: int, source_path: str, target_mount_path: Optional[str], phase: str) -> None:
+    """Emit detailed path information at debug level only."""
+    logger.debug(
+        "Copy job path context",
+        {
+            "job_id": job_id,
+            "phase": phase,
+            "source_path": source_path,
+            "target_mount_path": target_mount_path,
+        },
+    )
+
+
 def _relative_path(f: Path, source: Path) -> Path:
     """Return *f* relative to *source* if *source* is a directory, else just the filename."""
     return f.relative_to(source) if source.is_dir() else Path(f.name)
@@ -499,17 +512,15 @@ def run_copy_job(job_id: int) -> None:
                     else:
                         elapsed_seconds = round(time.monotonic() - job_start, 2)
                         copy_rate_mb_s = _calculate_copy_rate_mb_s(job.copied_bytes or 0, elapsed_seconds)
+                        _log_job_path_context(job_id, job.source_path, job.target_mount_path, "timeout")
                         logger.error(
                             f"JOB_FAILED job_id={job_id} project_id={job.project_id} "
-                            f"source_path={job.source_path} target_mount_path={job.target_mount_path or '<none>'} "
                             f"status={job.status.value} failed_at={job.completed_at.isoformat() if job.completed_at else None} "
-                            f"files_copied={done_count} file_count={job.file_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} "
+                            f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} "
                             f"reason=timeout elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
                             extra={
                                 "job_id": job_id,
                                 "project_id": job.project_id,
-                                "source_path": job.source_path,
-                                "target_mount_path": job.target_mount_path,
                                 "status": job.status.value,
                                 "started_at": job.started_at.isoformat() if job.started_at else None,
                                 "thread_count": job.thread_count,
@@ -568,17 +579,15 @@ def run_copy_job(job_id: int) -> None:
                         audit_action = "JOB_COMPLETED" if job.status == JobStatus.COMPLETED else "JOB_FAILED"
                         elapsed_seconds = round(time.monotonic() - job_start, 2)
                         copy_rate_mb_s = _calculate_copy_rate_mb_s(job.copied_bytes or 0, elapsed_seconds)
+                        _log_job_path_context(job_id, job.source_path, job.target_mount_path, "copy-finished")
                         if job.status == JobStatus.FAILED:
                             logger.error(
                                 f"JOB_FAILED job_id={job_id} project_id={job.project_id} "
-                                f"source_path={job.source_path} target_mount_path={job.target_mount_path or '<none>'} "
                                 f"status={job.status.value} started_at={job.started_at.isoformat() if job.started_at else None} failed_at={job.completed_at.isoformat() if job.completed_at else None} "
                                 f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} error_count={error_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
                                 extra={
                                     "job_id": job_id,
                                     "project_id": job.project_id,
-                                    "source_path": job.source_path,
-                                    "target_mount_path": job.target_mount_path,
                                     "status": job.status.value,
                                     "started_at": job.started_at.isoformat() if job.started_at else None,
                                     "thread_count": job.thread_count,
@@ -594,14 +603,11 @@ def run_copy_job(job_id: int) -> None:
                         else:
                             logger.info(
                                 f"JOB_COMPLETED job_id={job_id} project_id={job.project_id} "
-                                f"source_path={job.source_path} target_mount_path={job.target_mount_path or '<none>'} "
                                 f"status={job.status.value} started_at={job.started_at.isoformat() if job.started_at else None} completed_at={job.completed_at.isoformat() if job.completed_at else None} "
                                 f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} error_count={error_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
                                 extra={
                                     "job_id": job_id,
                                     "project_id": job.project_id,
-                                    "source_path": job.source_path,
-                                    "target_mount_path": job.target_mount_path,
                                     "status": job.status.value,
                                     "started_at": job.started_at.isoformat() if job.started_at else None,
                                     "thread_count": job.thread_count,
@@ -669,17 +675,15 @@ def run_copy_job(job_id: int) -> None:
                 else:
                     elapsed_seconds = round(time.monotonic() - job_start, 2)
                     copy_rate_mb_s = _calculate_copy_rate_mb_s(job.copied_bytes or 0, elapsed_seconds)
+                    _log_job_path_context(job_id, job.source_path, job.target_mount_path, "copy-exception")
                     logger.error(
                         f"JOB_FAILED job_id={job_id} project_id={job.project_id} "
-                        f"source_path={job.source_path} target_mount_path={job.target_mount_path or '<none>'} "
                         f"status={JobStatus.FAILED.value} started_at={job.started_at.isoformat() if job.started_at else None} failed_at={job.completed_at.isoformat() if job.completed_at else None} "
                         f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} "
                         f"reason={safe_reason} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
                         extra={
                             "job_id": job_id,
                             "project_id": job.project_id,
-                            "source_path": job.source_path,
-                            "target_mount_path": job.target_mount_path,
                             "status": JobStatus.FAILED.value,
                             "started_at": job.started_at.isoformat() if job.started_at else None,
                             "thread_count": job.thread_count,
