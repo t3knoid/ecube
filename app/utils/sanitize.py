@@ -5,6 +5,7 @@ Pydantic validation but cause PostgreSQL to reject the value at insert
 time (issue #124).
 """
 
+import os
 import re
 from typing import Annotated, Optional
 
@@ -72,6 +73,56 @@ def normalize_project_id(value: object) -> object:
     return value.strip().upper()
 
 
+_DISALLOWED_SOURCE_PREFIXES = (
+    "/proc",
+    "/sys",
+    "/dev",
+    "/run",
+)
+
+
+def validate_source_path(
+    value: object,
+    *,
+    usb_mount_base_path: Optional[str] = None,
+    target_mount_path: Optional[str] = None,
+) -> str:
+    """Validate operator-provided source paths for copy jobs.
+
+    Prevents dangerous or confusing selections like the host root, pseudo
+    filesystems, or the ECUBE USB target area.
+    """
+    value = strict_sanitize_string(value)
+    if not isinstance(value, str):
+        raise ValueError("Source path must be a string")
+
+    normalized = os.path.normpath(value.strip())
+    if not normalized:
+        raise ValueError("Source path is required")
+    if normalized == os.sep:
+        raise ValueError("Source path must point to a specific evidence directory, not the system root")
+
+    for prefix in _DISALLOWED_SOURCE_PREFIXES:
+        if normalized == prefix or normalized.startswith(prefix + os.sep):
+            raise ValueError("Source path must not point to a system directory")
+
+    if usb_mount_base_path:
+        usb_root = os.path.normpath(str(usb_mount_base_path).strip())
+        if usb_root and usb_root != os.sep and (
+            normalized == usb_root or normalized.startswith(usb_root + os.sep)
+        ):
+            raise ValueError("Source path must not point to the ECUBE USB target area")
+
+    if target_mount_path:
+        target_root = os.path.normpath(str(target_mount_path).strip())
+        if target_root and target_root != os.sep and (
+            normalized == target_root or normalized.startswith(target_root + os.sep)
+        ):
+            raise ValueError("Source path must not point to the assigned target drive")
+
+    return normalized
+
+
 _PATH_LIKE_RE = re.compile(r"(?<![A-Za-z0-9._-])/(?:[^\s'\"=:;,])+")
 
 
@@ -79,7 +130,7 @@ def redact_pathlike_substrings(value: object, placeholder: str = "[redacted-path
     """Replace path-like substrings in error text with a safe placeholder."""
     if value is None:
         return ""
-    text = sanitize_string(str(value))
+    text = str(sanitize_string(str(value)))
     return _PATH_LIKE_RE.sub(placeholder, text)
 
 
@@ -171,7 +222,7 @@ def _sanitize_audit_value(value: object, key: Optional[str] = None) -> object:
     if key_lower in _AUDIT_SENSITIVE_KEYS:
         return _AUDIT_REDACTED
 
-    stripped = sanitize_string(value).strip()
+    stripped = str(sanitize_string(value)).strip()
     if key_lower == "path":
         return _AUDIT_REDACTED if any(stripped.startswith(prefix) for prefix in _SYSTEM_PATH_PREFIXES) else stripped
 
