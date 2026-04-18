@@ -38,6 +38,7 @@ jobs:
           cp frontend/e2e/theme.spec.js-snapshots/jobs-list-default-chromium-linux.png _site/assets/jobs.png
           cp frontend/e2e/theme.spec.js-snapshots/drives-default-chromium-linux.png _site/assets/drives.png
           cp frontend/e2e/theme.spec.js-snapshots/audit-default-chromium-linux.png _site/assets/audit.png
+          cp frontend/e2e/theme.spec.js-snapshots/mounts-default-chromium-linux.png _site/assets/shared-folder.png
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
