@@ -1,8 +1,10 @@
+import logging
 from unittest.mock import patch
 
+from app.models.audit import AuditLog
 from app.models.hardware import UsbDrive, DriveState
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus
-from app.models.audit import AuditLog
+from app.models.network import MountStatus, MountType, NetworkMount
 
 
 def test_create_job(client, db):
@@ -32,6 +34,57 @@ def test_create_job(client, db):
     assert data["target_mount_path"] == "/mnt/ecube/create-001"
 
 
+def test_create_job_ignores_client_supplied_created_by(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-CREATE-BY-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-001",
+        mount_path="/mnt/ecube/create-by-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-001",
+            "evidence_number": "EV-CREATOR",
+            "source_path": "/data/evidence",
+            "created_by": "spoofed-user",
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["created_by"] == "test-user"
+    assert response.json()["created_by"] != "spoofed-user"
+
+
+def test_create_job_ignores_client_supplied_target_mount_path(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-TARGET-OVERRIDE-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-001",
+        mount_path="/mnt/ecube/trusted-target-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-001",
+            "evidence_number": "EV-TARGET",
+            "source_path": "/data/evidence",
+            "target_mount_path": "/tmp/untrusted-target",
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["target_mount_path"] == "/mnt/ecube/trusted-target-001"
+
+
 def test_create_job_conflict_when_assigned_drive_not_mounted(client, db):
     drive = UsbDrive(
         device_identifier="USB-NOT-MOUNTED-001",
@@ -54,6 +107,94 @@ def test_create_job_conflict_when_assigned_drive_not_mounted(client, db):
 
     assert response.status_code == 409
     assert "not mounted" in response.json()["message"].lower()
+
+
+def test_create_job_rejects_root_source_path(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-ROOT-SOURCE-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-001",
+        mount_path="/mnt/ecube/root-source-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-001",
+            "evidence_number": "EV-ROOT",
+            "source_path": "/",
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 422
+    assert "source" in response.json()["message"].lower()
+
+
+def test_create_job_resolves_source_path_from_selected_mount(client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="server:/exports/project-001",
+        project_id="PROJ-001",
+        local_mount_point="/nfs/project-001",
+        status=MountStatus.MOUNTED,
+    )
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-RESOLVE-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-001",
+        mount_path="/mnt/ecube/mount-resolve-001",
+    )
+    db.add_all([mount, drive])
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-001",
+            "evidence_number": "EV-MOUNT-001",
+            "source_path": "/folder/subfolder",
+            "mount_id": mount.id,
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["source_path"] == "/nfs/project-001/folder/subfolder"
+
+
+def test_create_job_rejects_traversal_outside_selected_mount(client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="server:/exports/project-001",
+        project_id="PROJ-001",
+        local_mount_point="/nfs/project-001",
+        status=MountStatus.MOUNTED,
+    )
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-TRAVERSAL-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-001",
+        mount_path="/mnt/ecube/mount-traversal-001",
+    )
+    db.add_all([mount, drive])
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-001",
+            "evidence_number": "EV-MOUNT-TRAVERSAL",
+            "source_path": "../../etc",
+            "mount_id": mount.id,
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 422
+    assert "selected mounted share" in response.json()["message"].lower()
 
 
 def test_create_job_explicit_unbound_drive_writes_project_bound_audit(client, db):
@@ -111,6 +252,109 @@ def test_get_job(client, db):
 def test_get_job_not_found(client, db):
     response = client.get("/jobs/999")
     assert response.status_code == 404
+
+
+def test_start_job_writes_application_log_line(client, db, caplog):
+    drive = UsbDrive(
+        device_identifier="USB-START-LOG-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-START-LOG-001",
+        mount_path="/mnt/ecube/start-log-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    create_response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-START-LOG-001",
+            "evidence_number": "EV-START-LOG-001",
+            "source_path": "/data/evidence",
+            "drive_id": drive.id,
+        },
+    )
+    assert create_response.status_code == 200
+    job_id = create_response.json()["id"]
+
+    with patch("app.services.copy_engine.run_copy_job"):
+        with caplog.at_level(logging.INFO):
+            response = client.post(f"/jobs/{job_id}/start")
+
+    assert response.status_code == 200
+    messages = [record.getMessage() for record in caplog.records]
+    started_messages = [message for message in messages if f"JOB_STARTED job_id={job_id}" in message]
+
+    assert started_messages
+    assert any("project_id=PROJ-START-LOG-001" in message for message in started_messages)
+    assert all("source_path=" not in message for message in started_messages)
+    assert all("target_mount_path=" not in message for message in started_messages)
+    assert all("drive_id=" not in message for message in started_messages)
+
+
+def test_get_failed_job_includes_log_entry(client, db, tmp_path, monkeypatch):
+    from app.routers import jobs as jobs_router
+
+    job = ExportJob(
+        project_id="PROJ-FAILED-001",
+        evidence_number="EV-FAILED-001",
+        source_path="/data/failed",
+        status=JobStatus.FAILED,
+    )
+    db.add(job)
+    db.flush()
+    db.add(
+        ExportFile(
+            job_id=job.id,
+            relative_path="bad.txt",
+            status=FileStatus.ERROR,
+            error_message="Permission denied",
+        )
+    )
+    db.commit()
+
+    log_line = (
+        f"2026-04-18T10:22:33+0000 [ERROR] app.services.copy_engine: "
+        f"JOB_FAILED job_id={job.id} error_count=1 elapsed_seconds=0.42 reason=Permission denied"
+    )
+    log_path = tmp_path / "app.log"
+    log_path.write_text(log_line + "\n", encoding="utf-8")
+    monkeypatch.setattr(jobs_router.settings, "log_file", str(log_path))
+
+    response = client.get(f"/jobs/{job.id}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "FAILED"
+    assert data["failure_log_entry"] == log_line
+
+
+def test_get_failed_job_uses_request_exception_log_fallback(client, db, tmp_path, monkeypatch):
+    from app.routers import jobs as jobs_router
+
+    job = ExportJob(
+        project_id="PROJ-FAILED-REQ-001",
+        evidence_number="EV-FAILED-REQ-001",
+        source_path="/data/failed-request",
+        status=JobStatus.FAILED,
+    )
+    db.add(job)
+    db.commit()
+
+    log_text = "\n".join([
+        f"2026-04-18T07:55:17-0400 [ERROR] app.main: Unhandled exception trace_id=abc123 path=/jobs/{job.id}/start",
+        "FileNotFoundError: [Errno 2] No such file or directory: '/proc/361309'",
+    ])
+    log_path = tmp_path / "app.log"
+    log_path.write_text(log_text + "\n", encoding="utf-8")
+    monkeypatch.setattr(jobs_router.settings, "log_file", str(log_path))
+
+    response = client.get(f"/jobs/{job.id}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "FAILED"
+    assert "Unhandled exception" in data["failure_log_entry"]
+    assert "trace_id=abc123" in data["failure_log_entry"]
 
 
 def test_get_job_files_processor_allowed(client, db):

@@ -8,6 +8,7 @@ def test_thread_count_validation_on_create_job(admin_client, db):
         device_identifier="USB-THREAD-001",
         current_state=DriveState.AVAILABLE,
         current_project_id="PROJ-001",
+        mount_path="/mnt/ecube/thread-001",
     ))
     db.commit()
 
@@ -52,7 +53,7 @@ def test_thread_count_validation_on_create_job(admin_client, db):
 def test_thread_count_validation_on_start_job(admin_client, db):
     """Verify POST /jobs/{id}/start validates thread_count constraints."""
     from app.models.jobs import ExportJob
-    
+
     # Create a job first
     job = ExportJob(
         project_id='PROJ-001',
@@ -62,21 +63,21 @@ def test_thread_count_validation_on_start_job(admin_client, db):
     db.add(job)
     db.commit()
     db.refresh(job)
-    
+
     # Test thread_count=0 (too low)
     response = admin_client.post(
         f'/jobs/{job.id}/start',
         json={'thread_count': 0}
     )
     assert response.status_code == 422, f"Expected 422 for thread_count=0, got {response.status_code}"
-    
+
     # Test thread_count=100 (too high)
     response = admin_client.post(
         f'/jobs/{job.id}/start',
         json={'thread_count': 100}
     )
     assert response.status_code == 422, f"Expected 422 for thread_count=100, got {response.status_code}"
-    
+
     # Test thread_count=6 (valid)
     from unittest.mock import patch
     with patch("app.services.copy_engine.run_copy_job"):
@@ -85,3 +86,51 @@ def test_thread_count_validation_on_start_job(admin_client, db):
             json={'thread_count': 6}
         )
     assert response.status_code == 200
+
+
+def test_start_job_without_body_succeeds(admin_client, db):
+    """Verify POST /jobs/{id}/start accepts an empty body for configured jobs."""
+    from unittest.mock import patch
+
+    from app.models.jobs import ExportJob
+
+    job = ExportJob(
+        project_id='PROJ-001',
+        evidence_number='EV-NO-BODY',
+        source_path='/tmp',
+        thread_count=4,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    with patch("app.services.copy_engine.run_copy_job"):
+        response = admin_client.post(f'/jobs/{job.id}/start')
+
+    assert response.status_code == 200
+    assert response.json()['status'] == 'RUNNING'
+    assert response.json()['thread_count'] == 4
+
+
+def test_start_job_rejects_root_source_path(admin_client, db):
+    """Verify POST /jobs/{id}/start rejects the host root as an unsafe source path."""
+    from unittest.mock import patch
+
+    from app.models.jobs import ExportJob
+
+    job = ExportJob(
+        project_id='PROJ-001',
+        evidence_number='EV-ROOT-BLOCK',
+        source_path='/',
+        thread_count=4,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    with patch("app.services.copy_engine.run_copy_job") as run_copy_job:
+        response = admin_client.post(f'/jobs/{job.id}/start')
+
+    assert response.status_code == 422
+    assert 'source path' in response.json()['message'].lower()
+    run_copy_job.assert_not_called()
