@@ -496,7 +496,7 @@ The page includes:
 - A jobs table
 - Search and status filters
 - Refresh action
-- `Create Job` wizard
+- `Create Job` dialog
 
 ### 9.1 Viewing Jobs
 
@@ -518,19 +518,23 @@ Common statuses include:
 
 ### 9.2 Creating a Job
 
-The job wizard is a four-step flow:
+The current job-creation flow uses a grouped dialog instead of a four-step wizard.
 
-1. Select a target drive
-2. Select a source mount
-3. Enter project, evidence number, and source path
-4. Choose thread count and create the job
+The dialog is organized into four sections:
+
+1. `Job details` — project, evidence number, optional notes, and thread count
+2. `Source` — the mounted project source and source path
+3. `Destination` — the eligible mounted USB drive for the selected project
+4. `Execution` — the optional `Run job immediately` checkbox
+
+Only the `Project` field is active when the dialog opens. After you select a project, ECUBE unlocks the remaining fields and filters the available mounts and destination drives to project-matching, currently eligible resources.
 
 Before creating a job, confirm:
 
-- The correct destination drive is selected
-- The correct source mount is selected
-- The project ID matches the evidence being exported
-- The source path is correct relative to the selected mount
+- The correct project is selected first
+- The source mount and destination drive both match that project
+- The evidence number and source path are correct
+- If you enable `Run job immediately`, the job will start as soon as creation succeeds
 
 ### 9.3 Opening a Job
 
@@ -899,11 +903,11 @@ Notes:
 1. Confirm the correct drive is present and in the expected state.
 2. Confirm the source mount is available.
 3. Open `Jobs`.
-4. Create a new job.
-5. Select the drive and mount.
-6. Enter project ID, evidence number, and source path.
-7. Create the job and open its detail page.
-8. Start the job if required.
+4. Click `Create Job` to open the grouped dialog.
+5. Select the project first.
+6. Choose the filtered source mount and eligible destination drive, then enter the evidence number and source path.
+7. Create the job, or enable `Run job immediately` if you want it to start as soon as creation succeeds.
+8. Open the job detail page.
 9. Monitor progress until completion.
 10. Run verification and generate a manifest if required by your workflow.
 

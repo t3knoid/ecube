@@ -4,7 +4,7 @@
 |---|---|
 | Title | UI Use Cases |
 | Purpose | Provides a catalog of ECUBE user interface use cases that define expected UI behavior for design, development, and QA validation. |
-| Updated on | 04/11/26 |
+| Updated on | 04/17/26 |
 | Audience | UI designers, developers, QA. |
 
 ## Table of Contents
@@ -142,7 +142,7 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 | UC-6.7 | View file hashes (MD5/SHA-256) for an individual file | Admin, Auditor | admin, auditor |
 | UC-6.8 | Compare two files by hash | Admin, Auditor | admin, auditor |
 
-**UI Implication:** Job creation wizard (select source mount → select mounted destination drive → enter project/evidence metadata → configure threads → submit). When a mounted drive is selected, the target destination path is derived automatically from the drive mount point. If the assigned drive is not mounted, the UI/API flow returns a conflict that instructs the operator to mount the drive first. Job monitoring dashboard with progress bars, real-time byte counters, and per-file status table. Post-copy action buttons for Verify and Generate Manifest. End-to-end workflow guided experience: Source Mount → Drive Mount → Job → Copy → Verify → Manifest → Eject.
+**UI Implication:** Job creation now uses a grouped dialog rather than a step-by-step wizard. The operator selects a project first, which unlocks the `Job details`, `Source`, `Destination`, and `Execution` sections. Source mounts and destination drives are filtered to the selected project and currently eligible mounted resources, and the dialog exposes helper states when no projects, mounts, or drives are available. When a mounted drive is selected, the target destination path is derived automatically from the drive mount point. If the selected drive or mount becomes unavailable, the UI/API flow surfaces a specific conflict message. The dialog also provides an optional `Run job immediately` control. Job monitoring dashboard with progress bars, real-time byte counters, and per-file status table. Post-copy action buttons for Verify and Generate Manifest. End-to-end workflow guided experience: Source Mount → Drive Mount → Job → Copy → Verify → Manifest → Eject.
 
 ---
 
