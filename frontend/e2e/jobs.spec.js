@@ -15,8 +15,20 @@ test('jobs create, start, verify, and manifest flow', async ({ page }) => {
     thread_count: 4,
   }
 
-  await routeJson(page, '**/api/drives', [{ id: 1, device_identifier: '/dev/sdb' }])
-  await routeJson(page, '**/api/mounts', [{ id: 4, remote_path: '10.1.1.1:/share', local_mount_point: '/mnt/share' }])
+  await routeJson(page, '**/api/drives', [{
+    id: 1,
+    device_identifier: 'USB-001',
+    current_state: 'AVAILABLE',
+    current_project_id: 'P-77',
+    mount_path: '/mnt/ecube/1',
+  }])
+  await routeJson(page, '**/api/mounts', [{
+    id: 4,
+    project_id: 'P-77',
+    status: 'MOUNTED',
+    remote_path: '10.1.1.1:/share',
+    local_mount_point: '/mnt/share',
+  }])
 
   await page.route('**/api/jobs**', async (route) => {
     if (route.request().method() === 'GET') {
@@ -51,14 +63,12 @@ test('jobs create, start, verify, and manifest flow', async ({ page }) => {
 
   await page.goto('/jobs')
   await page.getByRole('button', { name: 'Create Job' }).click()
-  await page.getByLabel('Select drive').selectOption('1')
-  await page.getByRole('dialog').getByRole('button', { name: 'Next' }).click()
-  await page.getByLabel('Select mount source').selectOption('4')
-  await page.getByRole('dialog').getByRole('button', { name: 'Next' }).click()
-  await page.getByLabel('Project').fill('P-77')
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await page.getByLabel('Project').selectOption('P-77')
   await page.getByLabel('Evidence').fill('EV-77')
+  await page.getByLabel('Select mount').selectOption('4')
   await page.getByLabel('Source path').fill('folder')
-  await page.getByRole('dialog').getByRole('button', { name: 'Next' }).click()
+  await page.getByLabel('Select drive').selectOption('1')
   await page.getByRole('dialog').getByRole('button', { name: 'Create Job' }).click()
 
   await expect(page).toHaveURL(/\/jobs\/77$/)
