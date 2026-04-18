@@ -54,7 +54,7 @@ const columns = computed(() => [
   { key: 'evidence_number', label: t('jobs.evidence') },
   { key: 'status', label: t('common.labels.status') },
   { key: 'progress', label: t('dashboard.progress') },
-  { key: 'actions', label: t('common.actions.edit'), align: 'center' },
+  { key: 'actions', label: '', align: 'center' },
 ])
 
 function progressPercent(job) {
@@ -214,9 +214,14 @@ function syncEligibleSelections() {
 function resolveSourcePath() {
   const mount = eligibleMounts.value.find((item) => item.id === Number(form.value.mount_id))
   const source = form.value.source_path.trim()
-  if (!mount || source.startsWith('/')) return source
+  if (!mount) return source
+
   const prefix = String(mount.local_mount_point || '').replace(/\/$/, '')
-  return `${prefix}/${source}`
+  if (!prefix) return source
+  if (!source || source === '/') return prefix
+  if (source === prefix || source.startsWith(`${prefix}/`)) return source
+
+  return `${prefix}/${source.replace(/^\/+/, '')}`
 }
 
 function buildJobError(err) {
@@ -386,7 +391,7 @@ onBeforeUnmount(() => {
       <template #cell-progress="{ row }">{{ progressPercent(row) }}%</template>
       <template #cell-actions="{ row }">
         <button class="btn" @click="router.push({ name: 'job-detail', params: { id: row.id } })">
-          {{ t('jobs.open') }}
+          {{ t('jobs.details') }}
         </button>
       </template>
     </DataTable>
