@@ -55,7 +55,6 @@ class JobCreate(StrictIntMixin, BaseModel):
     evidence_number: SafeStr = Field(..., min_length=1, description="Evidence case number or identifier")
     source_path: StrictSafeStr = Field(..., min_length=1, description="Path to source data on the selected mounted share or local filesystem")
     mount_id: Optional[StrictInt] = Field(default=None, ge=1, description="Mounted share selected as the trusted source root")
-    target_mount_path: Optional[StrictSafeStr] = Field(default=None, description="Alternative target mount; defaults to assigned drive")
     drive_id: Optional[StrictInt] = Field(default=None, ge=1, description="Pre-assigned USB drive ID")
     thread_count: StrictInt = Field(default=4, ge=1, le=8, description="Number of parallel copy threads (1-8)")
     max_file_retries: StrictInt = Field(default=3, ge=0, le=100, description="Maximum number of retries for failed files (0-100)")

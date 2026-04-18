@@ -60,6 +60,31 @@ def test_create_job_ignores_client_supplied_created_by(client, db):
     assert response.json()["created_by"] != "spoofed-user"
 
 
+def test_create_job_ignores_client_supplied_target_mount_path(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-TARGET-OVERRIDE-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-001",
+        mount_path="/mnt/ecube/trusted-target-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-001",
+            "evidence_number": "EV-TARGET",
+            "source_path": "/data/evidence",
+            "target_mount_path": "/tmp/untrusted-target",
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["target_mount_path"] == "/mnt/ecube/trusted-target-001"
+
+
 def test_create_job_conflict_when_assigned_drive_not_mounted(client, db):
     drive = UsbDrive(
         device_identifier="USB-NOT-MOUNTED-001",
