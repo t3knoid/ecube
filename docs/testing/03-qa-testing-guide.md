@@ -1013,6 +1013,8 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 15 | Orphan drive stays DISCONNECTED | Discover a drive with no matching port (`port_id = NULL`), run `POST /drives/refresh` | Drive remains in `DISCONNECTED` state (unknown port treated as disabled); only visible with `include_disconnected=true` |
 | 16 | PORT_ENABLED audit log | `GET /audit?action=PORT_ENABLED` after enabling a port | Audit entry with `port_id`, `system_path`, `hub_id`, `enabled`, `path` |
 | 17 | PORT_DISABLED audit log | `GET /audit?action=PORT_DISABLED` after disabling a port | Audit entry with `port_id`, `system_path`, `hub_id`, `enabled`, `path` |
+| 18 | Enable Drive hidden for absent disconnected drive | Open the drive detail view for a historical `DISCONNECTED` drive with no detected device path | The operator does not see an actionable Enable Drive control |
+| 19 | Enable Drive available for physically detected disconnected drive | Insert a drive on a disabled but known port, refresh, then open drive detail as admin or manager | The Enable Drive action is available; after enable plus refresh the drive becomes `AVAILABLE` or remains `IN_USE` if already mounted |
 
 ### 12.4.4 Hub & Port Identification Enrichment
 
@@ -1047,6 +1049,11 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 5 | Validate missing mount | `POST /mounts/9999/validate` | 404, `NOT_FOUND` |
 | 6 | Processor cannot validate mounts | `POST /mounts/{mount_id}/validate` with processor token | 403, `FORBIDDEN` |
 | 7 | Mount validation audit trail | Validate a mount, then query `GET /audit?action=MOUNT_VALIDATED` | Audit entry records actor, mount id, and resulting status |
+| 8 | Reject exact duplicate remote path | Create a mount, then submit the same `remote_path` again for the same project | 409, `CONFLICT`, operator-readable message indicating the source is already configured |
+| 9 | Reject nested overlap across projects | Create a parent source for project A, then add a child path for project B | 409, `CONFLICT`, overlap message returned and request is not applied |
+| 10 | Allow nested path for same project | Create a parent source for project A, then add a child path for the same project | 200, second mount is accepted |
+| 11 | Normalize SMB path variants before duplicate check | Create an SMB mount with slash-separated path, then submit the same source with backslash separators | 409, `CONFLICT`, duplicate source rejected |
+| 12 | Reject concurrent duplicate submit | Submit two near-simultaneous add-mount requests for the same remote source from separate sessions | Only one mount is created; the competing request returns a safe conflict instead of producing duplicates |
 
 ### 12.5 USB Hardware Validation
 
