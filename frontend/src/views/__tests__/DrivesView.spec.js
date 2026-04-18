@@ -38,7 +38,15 @@ function mountView() {
       stubs: {
         DataTable: {
           props: ['rows', 'emptyText'],
-          template: '<div><slot v-for="row in rows" name="cell-actions" :row="row" /><div class="rows-count">{{ rows.length }}</div></div>',
+          template: `
+            <div>
+              <div v-for="row in rows" :key="row.id" class="row-stub">
+                <slot name="cell-current_project_id" :row="row" />
+                <slot name="cell-actions" :row="row" />
+              </div>
+              <div class="rows-count">{{ rows.length }}</div>
+            </div>
+          `,
         },
         Pagination: true,
         StatusBadge: {
@@ -110,6 +118,16 @@ describe('DrivesView rescan and filter loading', () => {
 
     expect(wrapper.find('select').element.value).toBe('ALL')
     expect(mocks.getDrives).toHaveBeenLastCalledWith({ include_disconnected: true })
+  })
+
+  it('renders project IDs in uppercase even when the data arrives mixed-case', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'proj-123' })])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('PROJ-123')
+    expect(wrapper.text()).not.toContain('proj-123')
   })
 
   it('shows the Browse action for a mounted available drive', async () => {
