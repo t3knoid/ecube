@@ -4,11 +4,10 @@ from pydantic import BaseModel, Field, StrictInt, field_validator
 from typing import Optional
 from urllib.parse import urlparse
 
-from app.config import settings
 from app.models.hardware import DriveState
 from app.models.jobs import JobStatus, FileStatus
 from app.schemas.types import StrictIntMixin
-from app.utils.sanitize import ProjectIdStr, SafeStr, StrictSafeStr, validate_source_path
+from app.utils.sanitize import ProjectIdStr, SafeStr, StrictSafeStr
 
 
 class FileHashesResponse(BaseModel):
@@ -54,7 +53,8 @@ class FileCompareResponse(BaseModel):
 class JobCreate(StrictIntMixin, BaseModel):
     project_id: ProjectIdStr = Field(..., min_length=1, description="Project ID for isolation enforcement")
     evidence_number: SafeStr = Field(..., min_length=1, description="Evidence case number or identifier")
-    source_path: StrictSafeStr = Field(..., min_length=1, description="Path to source data on network mount or local filesystem")
+    source_path: StrictSafeStr = Field(..., min_length=1, description="Path to source data on the selected mounted share or local filesystem")
+    mount_id: Optional[StrictInt] = Field(default=None, ge=1, description="Mounted share selected as the trusted source root")
     target_mount_path: Optional[StrictSafeStr] = Field(default=None, description="Alternative target mount; defaults to assigned drive")
     drive_id: Optional[StrictInt] = Field(default=None, ge=1, description="Pre-assigned USB drive ID")
     thread_count: StrictInt = Field(default=4, ge=1, le=8, description="Number of parallel copy threads (1-8)")
@@ -65,8 +65,11 @@ class JobCreate(StrictIntMixin, BaseModel):
 
     @field_validator("source_path")
     @classmethod
-    def _source_path_must_be_safe(cls, v: str) -> str:
-        return validate_source_path(v, usb_mount_base_path=settings.usb_mount_base_path)
+    def _source_path_must_not_be_blank(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Source path is required")
+        return v
 
     @field_validator("callback_url")
     @classmethod

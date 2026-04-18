@@ -1,9 +1,10 @@
 import logging
 from unittest.mock import patch
 
+from app.models.audit import AuditLog
 from app.models.hardware import UsbDrive, DriveState
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus
-from app.models.audit import AuditLog
+from app.models.network import MountStatus, MountType, NetworkMount
 
 
 def test_create_job(client, db):
@@ -79,6 +80,70 @@ def test_create_job_rejects_root_source_path(client, db):
 
     assert response.status_code == 422
     assert "source" in response.json()["message"].lower()
+
+
+def test_create_job_resolves_source_path_from_selected_mount(client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="server:/exports/project-001",
+        project_id="PROJ-001",
+        local_mount_point="/nfs/project-001",
+        status=MountStatus.MOUNTED,
+    )
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-RESOLVE-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-001",
+        mount_path="/mnt/ecube/mount-resolve-001",
+    )
+    db.add_all([mount, drive])
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-001",
+            "evidence_number": "EV-MOUNT-001",
+            "source_path": "/folder/subfolder",
+            "mount_id": mount.id,
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["source_path"] == "/nfs/project-001/folder/subfolder"
+
+
+def test_create_job_rejects_traversal_outside_selected_mount(client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="server:/exports/project-001",
+        project_id="PROJ-001",
+        local_mount_point="/nfs/project-001",
+        status=MountStatus.MOUNTED,
+    )
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-TRAVERSAL-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-001",
+        mount_path="/mnt/ecube/mount-traversal-001",
+    )
+    db.add_all([mount, drive])
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-001",
+            "evidence_number": "EV-MOUNT-TRAVERSAL",
+            "source_path": "../../etc",
+            "mount_id": mount.id,
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 422
+    assert "selected mounted share" in response.json()["message"].lower()
 
 
 def test_create_job_explicit_unbound_drive_writes_project_bound_audit(client, db):

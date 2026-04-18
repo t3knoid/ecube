@@ -212,16 +212,8 @@ function syncEligibleSelections() {
 }
 
 function resolveSourcePath() {
-  const mount = eligibleMounts.value.find((item) => item.id === Number(form.value.mount_id))
   const source = form.value.source_path.trim()
-  if (!mount) return source
-
-  const prefix = String(mount.local_mount_point || '').replace(/\/$/, '')
-  if (!prefix) return source
-  if (!source || source === '/') return prefix
-  if (source === prefix || source.startsWith(`${prefix}/`)) return source
-
-  return `${prefix}/${source.replace(/^\/+/, '')}`
+  return source || '/'
 }
 
 function buildJobError(err) {
@@ -257,6 +249,7 @@ async function submitCreateJob() {
     const payload = {
       project_id: selectedProject.value,
       evidence_number: form.value.evidence_number.trim(),
+      mount_id: Number(form.value.mount_id),
       source_path: resolveSourcePath(),
       drive_id: Number(form.value.drive_id),
       thread_count: Number(form.value.thread_count),
