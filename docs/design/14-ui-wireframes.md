@@ -4,7 +4,7 @@
 |---|---|
 | Title | ECUBE UI Wireframes |
 | Purpose | Provides reference wireframes illustrating the ECUBE user interface layout and key user interaction flows. |
-| Updated on | 04/11/26 |
+| Updated on | 04/17/26 |
 | Audience | UI designers, developers, and QA teams. |
 
 ## Table of Contents
@@ -808,31 +808,32 @@ Accessible from the Drive Management screen via a "Manage Hubs" button. Visible 
 | VERIFYING  | disabled | disabled | disabled |
 | FAILED     | disabled | enabled | enabled |
 
-### 6c — Create Job Wizard (UC-6.1)
+### 6c — Create Job Dialog (UC-6.1)
 
 ```
-┌─ New Export Job ─────────────────────────────────────────────────────────────┐
+┌─ Create Job ─────────────────────────────────────────────────────────────────┐
+│  Select a project first to unlock matching source and destination options.   │
 │                                                                              │
-│  Step 1:  Project & Evidence Metadata                                        │
-│  ─────────────────────────────────────                                       │
-│  Project ID:       [ PROJ-042                              ]                 │
-│  Evidence Number:  [ EV-2026-003                           ]                 │
+│  ┌─ Job details ──────────────────────────────────────────────────────────┐   │
+│  │ Project:         [ PROJ-042                                        ▾ ]│   │
+│  │ Evidence Number: [ EV-2026-003                                       ]│   │
+│  │ Notes:           [ Optional operator notes                           ]│   │
+│  │ Thread Count:    [ 4 ▾ ]                                              │   │
+│  └────────────────────────────────────────────────────────────────────────┘   │
 │                                                                              │
-│  Step 2:  Source                                                             │
-│  ─────────────────                                                           │
-│  Source Mount:      [ /nfs/evidence  (NFS — MOUNTED)     ▾ ]                 │
-│  Source Path:       [ /nfs/evidence/case-003               ]                 │
+│  ┌─ Source ───────────────────────────────────────────────────────────────┐   │
+│  │ Source Mount: [ //server/proj-042  (MOUNTED)                        ▾ ]│   │
+│  │ Source Path:  [ /nfs/proj-042/case-003                                ]│   │
+│  └────────────────────────────────────────────────────────────────────────┘   │
 │                                                                              │
-│  Step 3:  Target Drive                                                       │
-│  ─────────────────────                                                       │
-│  Drive:             [ #1 — 4C5300... — IN_USE — PROJ-042 ▾ ]                │
-│                     Only drives IN_USE for PROJ-042 are shown                │
+│  ┌─ Destination ──────────────────────────────────────────────────────────┐   │
+│  │ Drive:        [ #1 — USB-001 — mounted — PROJ-042                  ▾ ]│   │
+│  │               Only eligible mounted drives for PROJ-042 are shown     │   │
+│  └────────────────────────────────────────────────────────────────────────┘   │
 │                                                                              │
-│  Step 4:  Copy Settings                                                      │
-│  ──────────────────────                                                      │
-│  Thread Count:      [ 4 ▾ ]  (1–8)                                           │
-│  Max File Retries:  [ 3   ]                                                  │
-│  Retry Delay (sec): [ 1   ]                                                  │
+│  ┌─ Execution ────────────────────────────────────────────────────────────┐   │
+│  │ [ ] Run job immediately after creation                                 │   │
+│  └────────────────────────────────────────────────────────────────────────┘   │
 │                                                                              │
 │                                          [ Cancel ]   [ Create Job ]         │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -1320,7 +1321,7 @@ Used for: Format Drive (UC-4.4), Delete User (UC-3.8), Remove Mount (UC-5.4), Re
 | UC-5.1 | Screen 5a: Mount List |
 | UC-5.2 – UC-5.3 | Screen 5b: Add Mount Dialog |
 | UC-5.4 – UC-5.6 | Screen 5a: Mount List (inline actions) |
-| UC-6.1 | Screen 6c: Create Job Wizard |
+| UC-6.1 | Screen 6c: Create Job Dialog |
 | UC-6.2 | Screen 6b: Actions (Start button) |
 | UC-6.3 | Screen 6a: Job List, Screen 6b: Progress |
 | UC-6.4 | Screen 6b: Files table |

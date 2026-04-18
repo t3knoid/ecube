@@ -4,7 +4,7 @@
 |---|---|
 | Title | API Quick Reference |
 | Purpose | Provides a quick-reference guide to ECUBE API endpoints, authentication, and common request examples for operators and developers. |
-| Updated on | 04/09/26 |
+| Updated on | 04/17/26 |
 | Audience | Developers, operators, IT staff. |
 
 ## Table of Contents
@@ -128,6 +128,8 @@ Compatibility note: To support project-to-source-path policy, use project source
 | POST | `/jobs/{job_id}/manifest` | processor+ | Generate manifest document |
 
 **Automatic Drive Assignment:** When `drive_id` is omitted from `POST /jobs`, the system auto-selects a drive: picks the single project-bound `AVAILABLE` drive, or falls back to an unbound drive. Returns **409** if the drive is temporarily unavailable (retry), if multiple project-bound drives exist (caller must specify `drive_id`), or if no usable drive can be acquired for the requested project. In both auto-assign and explicit `drive_id` paths, unbound drives are automatically bound to the requested project.
+
+**Explicit Drive Selection:** When `drive_id` is provided, the destination drive must be project-compatible and currently mounted. A mounted drive already associated with the requested project remains valid when its state is `AVAILABLE` or `IN_USE`; unmounted or stale selections still return **409 Conflict**.
 
 **Webhook Callbacks:** Include `callback_url` (HTTPS only) when creating a job to receive a POST notification when the job reaches `COMPLETED` or `FAILED`. Makes up to 4 attempts on server errors with exponential backoff. Private/reserved IPs are blocked by default (SSRF protection). See the [Third-Party Integration Guide](09-third-party-integration.md) for payload details.
 
