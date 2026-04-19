@@ -17,7 +17,7 @@ class MountProvider(Protocol):
     """Platform-agnostic interface for OS-level mount/unmount operations."""
 
     def os_mount(self, mount_type: MountType, remote_path: str, local_mount_point: str,
-                 *, credentials_file: Optional[str] = None, username: Optional[str] = None) -> Tuple[bool, Optional[str]]:
+                 *, credentials_file: Optional[str] = None, username: Optional[str] = None, password: Optional[str] = None) -> Tuple[bool, Optional[str]]:
         """Mount a remote filesystem. Returns (success, error_message)."""
         ...
 
