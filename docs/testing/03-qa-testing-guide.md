@@ -1283,8 +1283,9 @@ Use this checklist after enabling demo mode and running the demo bootstrap comma
 | 4 | Direct API reset is blocked | Attempt password reset for a configured demo account through the admin API | 403 response with sanitized message; no internal details leaked |
 | 5 | Demo seed is repeatable | Run the seed command twice against the same demo data root | Sample jobs, files, and role mappings return to a known good state without duplication |
 | 6 | Demo reset is safe | Run the reset command for the seeded demo root, then try an unmanaged directory path | Managed demo content is removed; unmanaged directories are refused |
-| 7 | Audit trail exists | Query audit logs for demo bootstrap and denied password actions | Audit entries exist for seed, reset, and authorization denial events |
-| 8 | Sanitized sample data only | Review the staged demo share contents | Files are clearly marked synthetic and contain no production or customer evidence |
+| 7 | Numeric project references round-trip correctly | Seed a demo root whose `projects[]` use numeric `project_id` values and whose `job_seed.jobs[].id` is set to a stable integer such as `42` | The resulting metadata keeps the numeric project references, the seeded job is created for the expected project name, and the Jobs view or API shows the same numeric job ID |
+| 8 | Audit trail exists | Query audit logs for demo bootstrap and denied password actions | Audit entries exist for seed, reset, and authorization denial events |
+| 9 | Sanitized sample data only | Review the staged demo share contents | Files are clearly marked synthetic and contain no production or customer evidence |
 
 ### 12.10 Admin Log Viewing API
 
