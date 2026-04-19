@@ -1,0 +1,126 @@
+{
+  "managed_by": "ecube-demo-seed-v1",
+  "generated_at": "2026-04-19T19:22:35.749391+00:00",
+  "demo_config": {
+    "demo_mode": false,
+    "login_message": "Use the shared demo accounts below.",
+    "shared_password": "Scene.9Pratt",
+    "demo_disable_password_change": true,
+    "password_change_allowed": false,
+    "accounts": [
+      {
+        "username": "demo_admin",
+        "label": "Admin demo",
+        "description": "Full demo access for guided product walkthroughs.",
+        "roles": [
+          "admin"
+        ],
+        "password": "demo"
+      },
+      {
+        "username": "demo_manager",
+        "label": "Manager demo",
+        "description": "Drive lifecycle, mounts, and job visibility.",
+        "roles": [
+          "manager"
+        ],
+        "password": "demo"
+      },
+      {
+        "username": "demo_processor",
+        "label": "Processor demo",
+        "description": "Create and review sanitized export activity.",
+        "roles": [
+          "processor"
+        ],
+        "password": "demo"
+      },
+      {
+        "username": "demo_auditor",
+        "label": "Auditor demo",
+        "description": "Read-only audit and verification review.",
+        "roles": [
+          "auditor"
+        ],
+        "password": "demo"
+      }
+    ]
+  },
+  "usb_seed": {
+    "enabled": true,
+    "drives": [
+      {
+        "id": 1,
+        "port_system_path": "2-1",
+        "project_id": 1,
+        "device_identifier": "4C532000000605117325"
+      },
+      {
+        "id": 2,
+        "port_system_path": "2-2",
+        "project_id": 2,
+        "device_identifier": "0414150000001328"
+      }
+    ]
+  },
+  "mount_seed": {
+    "enabled": true,
+    "mounts": [
+      {
+        "id": 1,
+        "type": "NFS",
+        "remote_path": "fileserver:/mnt/Data/ecube/demo-case-001",
+        "project_id": 1,
+        "username": null,
+        "password": null,
+        "credentials_file": null
+      },
+      {
+        "id": 2,
+        "type": "SMB",
+        "remote_path": "//fileserver/demo-case-002",
+        "project_id": 2,
+        "username": null,
+        "password": null,
+        "credentials_file": null
+      }
+    ]
+  },
+  "job_seed": {
+    "enabled": true,
+    "jobs": [
+      {
+        "id": 101,
+        "project_id": 1,
+        "evidence_number": "EVID-DEMO-JOB-001",
+        "mount_id": 1,
+        "drive_id": 1,
+        "source_path": "/incoming",
+        "status": "PENDING"
+      },
+      {
+        "id": 102,
+        "project_id": 2,
+        "evidence_number": "EVID-DEMO-JOB-002",
+        "mount_id": 2,
+        "drive_id": 2,
+        "source_path": "/incoming",
+        "status": "PENDING"
+      }
+    ]
+  },
+  "projects": [
+    {
+      "project_id": 1,
+      "project_name": "DEMO-CASE-001",
+      "folder": "demo-case-001",
+      "sanitized": true
+    },
+    {
+      "project_id": 2,
+      "project_name": "DEMO-CASE-002",
+      "folder": "demo-case-002",
+      "sanitized": true
+    }
+  ]
+}

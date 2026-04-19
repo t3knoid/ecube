@@ -1,14 +1,20 @@
-from typing import Dict, List, Literal, Optional
+import json
+import logging
+import os
+from pathlib import Path
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, field_validator, model_validator
+
+logger = logging.getLogger(__name__)
 
 
 DEFAULT_READINESS_MOUNT_CHECK_TIMEOUT_SECONDS = 1.0
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(extra="ignore", env_ignore_empty=True)
 
     # Empty by default on fresh installs. The setup wizard writes this once
     # database connectivity is configured.
@@ -193,6 +199,39 @@ class Settings(BaseSettings):
 
     #: Number of minutes before a locally-issued JWT expires.
     token_expire_minutes: int = 60
+
+    # ---------------------------------------------------------------------------
+    # Demo deployment configuration
+    # ---------------------------------------------------------------------------
+
+    #: Enable the public demo experience on a standard ECUBE installation.
+    #: When ``True``, the login screen may display demo-safe guidance and the
+    #: backend may apply demo-specific policy restrictions.
+    demo_mode: bool = False
+
+    #: Optional public-safe guidance text shown on the login screen when demo
+    #: mode is enabled. This must never include internal-only deployment data.
+    demo_login_message: str = ""
+
+    #: Optional shared demo password shown publicly on the login screen for
+    #: disposable demo deployments. Only set this when the password is
+    #: intentionally meant to be visible to evaluators.
+    demo_shared_password: str = ""
+
+    #: Demo account metadata for the login panel and bootstrap flow. Public-safe
+    #: fields such as ``username``, ``label``, and ``description`` may be shown
+    #: on the login screen. Internal-only keys such as ``roles`` or ``password``
+    #: may also be supplied for the trusted demo bootstrap command and are never
+    #: exposed by the public auth metadata endpoint.
+    demo_accounts: List[Dict[str, Any]] = Field(default_factory=list)
+
+    #: Disable password-change operations for shared demo accounts when demo mode
+    #: is enabled.
+    demo_disable_password_change: bool = True
+
+    #: Dedicated demo-only root used by the bootstrap flow for staging
+    #: sanitized sample content.
+    demo_data_root: str = "./demo-data"
 
     # ---------------------------------------------------------------------------
     # Copy engine tuning
@@ -457,6 +496,92 @@ class Settings(BaseSettings):
     #: Enable TCP keepalive on the Redis socket to detect dead connections.
     redis_socket_keepalive: bool = True
 
+    def _demo_metadata_path(self) -> Path:
+        return Path(self.demo_data_root).expanduser().resolve() / "demo-metadata.json"
+
+    def _load_demo_metadata_payload(self) -> Dict[str, Any]:
+        """Load the raw demo metadata payload from the managed demo-data root."""
+        metadata_path = self._demo_metadata_path()
+        if not metadata_path.is_file():
+            return {}
+
+        try:
+            payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("Failed to load demo metadata", {"error": str(exc), "path": str(metadata_path)})
+            return {}
+
+        if isinstance(payload, dict):
+            return payload
+        return {}
+
+    def load_demo_metadata(self) -> Dict[str, Any]:
+        """Load effective demo runtime metadata from the managed demo-data root."""
+        payload = self._load_demo_metadata_payload()
+        if not payload:
+            return {}
+
+        config = payload.get("demo_config")
+        if isinstance(config, dict):
+            return config
+        return payload
+
+    def is_demo_mode_enabled(self) -> bool:
+        """Return the effective demo-mode state.
+
+        Once the demo bootstrap has seeded a managed demo root, the deployment
+        remains in demo mode until the managed root is reset or removed.
+        """
+        if bool(self.demo_mode):
+            return True
+
+        payload = self._load_demo_metadata_payload()
+        if not payload:
+            return False
+
+        config = payload.get("demo_config") if isinstance(payload.get("demo_config"), dict) else payload
+        if isinstance(config, dict) and "demo_mode" in config:
+            return bool(config.get("demo_mode"))
+
+        return payload.get("managed_by") == "ecube-demo-seed-v1"
+
+    def get_demo_login_message(self) -> str:
+        value = self.demo_login_message.strip()
+        if value:
+            return value
+        metadata_value = self.load_demo_metadata().get("login_message")
+        if isinstance(metadata_value, str):
+            return metadata_value.strip()
+        return ""
+
+    def get_demo_shared_password(self) -> str:
+        value = self.demo_shared_password.strip()
+        if value:
+            return value
+        metadata_value = self.load_demo_metadata().get("shared_password")
+        if isinstance(metadata_value, str):
+            return metadata_value.strip()
+        return ""
+
+    def get_demo_accounts(self) -> List[Dict[str, Any]]:
+        if self.demo_accounts:
+            return list(self.demo_accounts)
+        metadata = self.load_demo_metadata()
+        accounts = metadata.get("accounts", metadata.get("demo_accounts", []))
+        if isinstance(accounts, list):
+            return [account for account in accounts if isinstance(account, dict)]
+        return []
+
+    def get_demo_disable_password_change(self) -> bool:
+        metadata = self.load_demo_metadata()
+        if "demo_disable_password_change" in getattr(self, "model_fields_set", set()) or os.getenv("DEMO_DISABLE_PASSWORD_CHANGE") is not None:
+            return bool(self.demo_disable_password_change)
+        if "demo_disable_password_change" in metadata:
+            return bool(metadata["demo_disable_password_change"])
+        if "password_change_allowed" in metadata:
+            return not bool(metadata["password_change_allowed"])
+        return bool(self.demo_disable_password_change)
+
     @field_validator("serve_frontend_path", mode="before")
     @classmethod
     def _normalise_serve_frontend_path(cls, v: str) -> str:  # noqa: N805
@@ -490,11 +615,22 @@ class Settings(BaseSettings):
             )
         return normalised
 
-    @field_validator("session_cookie_domain", mode="before")
+    @field_validator(
+        "ldap_server",
+        "ldap_bind_dn",
+        "ldap_bind_password",
+        "ldap_base_dn",
+        "oidc_discovery_url",
+        "oidc_client_id",
+        "oidc_client_secret",
+        "oidc_audience",
+        "redis_url",
+        "session_cookie_domain",
+        mode="before",
+    )
     @classmethod
-    def _normalise_domain(cls, v: str | None) -> str | None:  # noqa: N805
-        """Treat blank strings as *unset* so ``SESSION_COOKIE_DOMAIN=``
-        in the environment behaves the same as omitting the variable."""
+    def _normalise_optional_strings(cls, v: str | None) -> str | None:  # noqa: N805
+        """Treat blank strings as unset so empty env values do not override defaults."""
         if isinstance(v, str) and v.strip() == "":
             return None
         return v
@@ -515,4 +651,4 @@ class Settings(BaseSettings):
         return self
 
 
-settings = Settings()
+settings = Settings(_env_file=".env")  # type: ignore[call-arg]

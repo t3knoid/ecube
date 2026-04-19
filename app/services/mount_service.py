@@ -39,15 +39,21 @@ class LinuxMountProvider:
     """Linux implementation using ``mount(8)``, ``umount(8)``, and ``mountpoint(1)``."""
 
     def os_mount(self, mount_type: MountType, remote_path: str, local_mount_point: str,
-                 *, credentials_file: Optional[str] = None, username: Optional[str] = None) -> Tuple[bool, Optional[str]]:
+                 *, credentials_file: Optional[str] = None, username: Optional[str] = None, password: Optional[str] = None) -> Tuple[bool, Optional[str]]:
         if mount_type == MountType.NFS:
             cmd = [settings.mount_binary_path, "-t", "nfs", remote_path, local_mount_point]
         else:
             cmd = [settings.mount_binary_path, "-t", "cifs", remote_path, local_mount_point]
             if credentials_file:
                 cmd += ["-o", f"credentials={credentials_file}"]
-            elif username:
-                cmd += ["-o", f"username={username}"]
+            else:
+                options: list[str] = []
+                if username:
+                    options.append(f"username={username}")
+                if password:
+                    options.append(f"password={password}")
+                if options:
+                    cmd += ["-o", ",".join(options)]
 
         cmd = _with_host_mount_namespace(cmd)
         mount_label = _redacted_mount_label(local_mount_point)
@@ -221,22 +227,23 @@ def _with_host_mount_namespace(cmd: list[str]) -> list[str]:
     if _in_host_mount_namespace():
         return _with_sudo(cmd)
 
+    nsenter = shutil.which("nsenter")
+    if nsenter:
+        if os.geteuid() != 0:
+            if not settings.use_sudo:
+                logger.warning("Mount namespace differs from host but sudo is disabled; using current namespace")
+                return cmd
+            return ["sudo", "-n", nsenter, "-t", "1", "-m", *cmd]
+
+        return [nsenter, "-t", "1", "-m", *cmd]
+
     ns_flag_cmd = _with_mount_namespace_flag(cmd)
     if ns_flag_cmd is not None:
+        logger.warning("Mount namespace differs from host and nsenter is unavailable; falling back to util-linux namespace flag")
         return _with_sudo(ns_flag_cmd)
 
-    nsenter = shutil.which("nsenter")
-    if not nsenter:
-        logger.warning("Mount namespace differs from host but nsenter is unavailable; using current namespace")
-        return _with_sudo(cmd)
-
-    if os.geteuid() != 0:
-        if not settings.use_sudo:
-            logger.warning("Mount namespace differs from host but sudo is disabled; using current namespace")
-            return cmd
-        return ["sudo", "-n", nsenter, "-t", "1", "-m", *cmd]
-
-    return [nsenter, "-t", "1", "-m", *cmd]
+    logger.warning("Mount namespace differs from host but no namespace helper is available; using current namespace")
+    return _with_sudo(cmd)
 
 
 def _mount_root_for_type(mount_type: MountType) -> str:
@@ -598,6 +605,7 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
                     mount.local_mount_point,
                     credentials_file=mount_data.credentials_file,
                     username=mount_data.username,
+                    password=mount_data.password,
                 )
         if success:
             mount.status = MountStatus.MOUNTED

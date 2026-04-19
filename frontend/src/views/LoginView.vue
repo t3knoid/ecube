@@ -1,68 +1,146 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import { useI18n } from 'vue-i18n'
-import { useAuthStore } from '@/stores/auth.js'
-import { useThemeStore } from '@/stores/theme.js'
-import { EXPIRED_QUERY_KEY, EXPIRED_QUERY_VALUE } from '@/constants/auth.js'
+import { ref, computed, watch, onMounted } from "vue";
+import { useRouter, useRoute } from "vue-router";
+import { useI18n } from "vue-i18n";
+import { getPublicAuthConfig } from "@/api/auth.js";
+import { useAuthStore } from "@/stores/auth.js";
+import { useThemeStore } from "@/stores/theme.js";
+import { EXPIRED_QUERY_KEY, EXPIRED_QUERY_VALUE } from "@/constants/auth.js";
 
-const router = useRouter()
-const route = useRoute()
-const { t } = useI18n()
-const authStore = useAuthStore()
-const themeStore = useThemeStore()
+const router = useRouter();
+const route = useRoute();
+const { t } = useI18n();
+const authStore = useAuthStore();
+const themeStore = useThemeStore();
 
-const username = ref('')
-const password = ref('')
-const error = ref('')
-const loading = ref(false)
-const logoLoadFailed = ref(false)
+const username = ref("");
+const password = ref("");
+const error = ref("");
+const loading = ref(false);
+const logoLoadFailed = ref(false);
+const publicAuthConfig = ref({
+  demo_mode_enabled: false,
+  login_message: null,
+  demo_accounts: [],
+  shared_password: null,
+  password_change_allowed: true,
+});
 
-const sessionExpired = computed(() => route.query[EXPIRED_QUERY_KEY] === EXPIRED_QUERY_VALUE)
-const showLogoImage = computed(() => Boolean(themeStore.currentLogo) && !logoLoadFailed.value)
+const sessionExpired = computed(
+  () => route.query[EXPIRED_QUERY_KEY] === EXPIRED_QUERY_VALUE,
+);
+const showLogoImage = computed(
+  () => Boolean(themeStore.currentLogo) && !logoLoadFailed.value,
+);
+const isSharedDemoPassword = computed(() => {
+  const value = publicAuthConfig.value.shared_password;
+  return typeof value === "string" && value.trim().length > 0;
+});
+const showDemoLoginPanel = computed(() => {
+  const config = publicAuthConfig.value;
+  return Boolean(
+    config.demo_mode_enabled &&
+    ((typeof config.login_message === "string" &&
+      config.login_message.trim()) ||
+      config.demo_accounts.length ||
+      (typeof config.shared_password === "string" &&
+        config.shared_password.trim())),
+  );
+});
 
 watch(
   () => themeStore.currentLogo,
   () => {
-    logoLoadFailed.value = false
+    logoLoadFailed.value = false;
   },
-)
+);
 
 function handleLogoError() {
-  logoLoadFailed.value = true
+  logoLoadFailed.value = true;
 }
 
-async function handleLogin() {
-  error.value = ''
-  loading.value = true
+onMounted(async () => {
   try {
-    await authStore.login(username.value, password.value)
-    router.push('/')
+    const config = await getPublicAuthConfig();
+    const normalizedConfig = {
+      demo_mode_enabled: Boolean(config?.demo_mode_enabled),
+      login_message:
+        typeof config?.login_message === "string" && config.login_message.trim()
+          ? config.login_message.trim()
+          : null,
+      demo_accounts: Array.isArray(config?.demo_accounts)
+        ? config.demo_accounts
+            .map((account) => ({
+              username:
+                typeof account?.username === "string"
+                  ? account.username.trim()
+                  : "",
+              label:
+                typeof account?.label === "string" ? account.label.trim() : "",
+              description:
+                typeof account?.description === "string"
+                  ? account.description.trim()
+                  : "",
+            }))
+            .filter((account) => account.username)
+        : [],
+      shared_password:
+        typeof config?.shared_password === "string" &&
+        config.shared_password.trim()
+          ? config.shared_password.trim()
+          : null,
+      password_change_allowed: config?.password_change_allowed !== false,
+    };
+    publicAuthConfig.value = normalizedConfig;
+    password.value = normalizedConfig.shared_password ?? "";
+  } catch {
+    publicAuthConfig.value = {
+      demo_mode_enabled: false,
+      login_message: null,
+      demo_accounts: [],
+      shared_password: null,
+      password_change_allowed: true,
+    };
+    password.value = "";
+  }
+});
+
+async function handleLogin() {
+  error.value = "";
+  loading.value = true;
+  try {
+    await authStore.login(username.value, password.value);
+    router.push("/");
   } catch (err) {
-    const responseData = err.response?.data || {}
-    if (typeof responseData.message === 'string' && responseData.message.trim()) {
-      error.value = responseData.message
+    const responseData = err.response?.data || {};
+    if (
+      typeof responseData.message === "string" &&
+      responseData.message.trim()
+    ) {
+      error.value = responseData.message;
     } else if (responseData.detail) {
-      const detail = responseData.detail
-      if (typeof detail === 'string') {
-        error.value = detail
+      const detail = responseData.detail;
+      if (typeof detail === "string") {
+        error.value = detail;
       } else if (Array.isArray(detail)) {
         // FastAPI 422 validation errors return detail as an array of objects
-        error.value = detail.map((d) => d.msg || String(d)).join('; ')
+        error.value = detail.map((d) => d.msg || String(d)).join("; ");
       } else {
-        error.value = t('common.errors.invalidRequest')
+        error.value = t("common.errors.invalidRequest");
       }
     } else if (err.response) {
       // Server returned an unexpected error status
-      error.value = t('common.errors.serverError', { status: err.response.status })
-    } else if (err.name === 'TokenError') {
-      error.value = err.message
+      error.value = t("common.errors.serverError", {
+        status: err.response.status,
+      });
+    } else if (err.name === "TokenError") {
+      error.value = err.message;
     } else {
       // No response at all — network/CORS/proxy failure
-      error.value = t('common.errors.networkError')
+      error.value = t("common.errors.networkError");
     }
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 </script>
@@ -79,19 +157,60 @@ async function handleLogin() {
             class="login-logo-image"
             @error="handleLogoError"
           />
-          <h1 class="login-title">{{ t('app.name') }}</h1>
+          <h1 class="login-title">{{ t("app.name") }}</h1>
         </div>
-        <p class="login-subtitle">{{ t('app.title') }}</p>
+        <p class="login-subtitle">{{ t("app.title") }}</p>
       </div>
 
       <div v-if="sessionExpired" class="session-expired-banner">
-        <p><strong>{{ t('auth.sessionExpired') }}</strong></p>
-        <p>{{ t('auth.sessionExpiredMessage') }}</p>
+        <p>
+          <strong>{{ t("auth.sessionExpired") }}</strong>
+        </p>
+        <p>{{ t("auth.sessionExpiredMessage") }}</p>
       </div>
+
+      <section
+        v-if="showDemoLoginPanel"
+        class="demo-login-panel"
+        aria-labelledby="demo-login-heading"
+      >
+        <p id="demo-login-heading" class="demo-login-heading">
+          <strong>{{ t("auth.demoAccess") }}</strong>
+        </p>
+        <p v-if="publicAuthConfig.login_message" class="demo-login-message">
+          {{ publicAuthConfig.login_message }}
+        </p>
+
+        <ul
+          v-if="publicAuthConfig.demo_accounts.length"
+          class="demo-account-list"
+        >
+          <li
+            v-for="account in publicAuthConfig.demo_accounts"
+            :key="account.username"
+            class="demo-account-item"
+          >
+            <span class="demo-account-name">{{ account.username }}</span>
+            <span v-if="account.label" class="demo-account-label">
+              — {{ account.label }}</span
+            >
+            <p v-if="account.description" class="demo-account-description">
+              {{ account.description }}
+            </p>
+          </li>
+        </ul>
+
+        <p
+          v-if="!publicAuthConfig.password_change_allowed"
+          class="demo-login-note"
+        >
+          {{ t("auth.demoPasswordManaged") }}
+        </p>
+      </section>
 
       <form class="login-form" @submit.prevent="handleLogin">
         <div class="form-group">
-          <label for="username">{{ t('auth.username') }}</label>
+          <label for="username">{{ t("auth.username") }}</label>
           <input
             id="username"
             v-model="username"
@@ -103,19 +222,20 @@ async function handleLogin() {
         </div>
 
         <div class="form-group">
-          <label for="password">{{ t('auth.password') }}</label>
+          <label for="password">{{ t("auth.password") }}</label>
           <input
             id="password"
             v-model="password"
             type="password"
             autocomplete="current-password"
             required
+            :readonly="isSharedDemoPassword"
             :disabled="loading"
           />
         </div>
 
         <button type="submit" class="btn btn-primary" :disabled="loading">
-          {{ loading ? t('auth.loggingIn') : t('auth.login') }}
+          {{ loading ? t("auth.loggingIn") : t("auth.login") }}
         </button>
       </form>
 
@@ -190,6 +310,51 @@ async function handleLogin() {
   padding: var(--space-sm) var(--space-md);
   margin-bottom: var(--space-md);
   text-align: center;
+}
+
+.demo-login-panel {
+  margin-bottom: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg-tertiary);
+}
+
+.demo-login-heading {
+  margin: 0 0 var(--space-xs);
+  color: var(--color-text-primary);
+}
+
+.demo-login-message,
+.demo-login-note {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.demo-login-note {
+  margin-top: var(--space-xs);
+}
+
+.demo-account-list {
+  margin: var(--space-sm) 0 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.demo-account-item {
+  color: var(--color-text-primary);
+}
+
+.demo-account-name {
+  font-weight: var(--font-weight-bold);
+}
+
+.demo-account-description {
+  margin: 0.2rem 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
 }
 
 .login-form {
