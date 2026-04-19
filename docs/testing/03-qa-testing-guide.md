@@ -1271,6 +1271,21 @@ Use this checklist to validate frontend behavior in the `Users` page for manual 
 | 7 | New user completion | Enter matching password/confirm values and submit | Dialog closes and newly created user appears in Users list with expected roles |
 | 8 | Directory-backed visibility | Link a directory-backed user with DB roles and refresh Users page | User is visible in list even if host-level fields are placeholders |
 
+### 12.9.2 Demo Mode Rollout Validation Checklist
+
+Use this checklist after enabling demo mode and running the demo bootstrap command on a normal installation.
+
+| # | Demo Check | Steps | Expected |
+|---|------------|-------|----------|
+| 1 | Public login guidance is shown | Enable demo mode, configure demo accounts, and open the login page | The login screen displays only the public-safe message plus username, label, and description fields |
+| 2 | No sensitive demo credentials are exposed | Inspect the login panel and browser network response for the public auth config | Passwords, internal paths, and private bootstrap-only fields are not present |
+| 3 | Demo password changes are blocked in UI | Sign in as admin and open the Users page for a shared demo account | Reset password action is hidden or unavailable for the demo account |
+| 4 | Direct API reset is blocked | Attempt password reset for a configured demo account through the admin API | 403 response with sanitized message; no internal details leaked |
+| 5 | Demo seed is repeatable | Run the seed command twice against the same demo data root | Sample jobs, files, and role mappings return to a known good state without duplication |
+| 6 | Demo reset is safe | Run the reset command for the seeded demo root, then try an unmanaged directory path | Managed demo content is removed; unmanaged directories are refused |
+| 7 | Audit trail exists | Query audit logs for demo bootstrap and denied password actions | Audit entries exist for seed, reset, and authorization denial events |
+| 8 | Sanitized sample data only | Review the staged demo share contents | Files are clearly marked synthetic and contain no production or customer evidence |
+
 ### 12.10 Admin Log Viewing API
 
 All admin log endpoints require the `admin` role.

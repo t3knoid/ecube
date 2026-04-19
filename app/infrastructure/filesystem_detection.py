@@ -44,15 +44,21 @@ class LinuxFilesystemDetector:
             logger.warning("Invalid device path for filesystem detection: %r", device_path)
             return "unknown"
 
-        # Primary: blkid
-        result = self._try_blkid(device_path)
-        if result is not None:
-            return result
+        # Primary: blkid on the raw device.
+        # For partitioned disks this may report "unformatted" even when the
+        # actual filesystem lives on a child partition, so we still fall back
+        # to lsblk before accepting that result.
+        blkid_result = self._try_blkid(device_path)
+        if blkid_result not in (None, "unformatted"):
+            return blkid_result
 
-        # Fallback: lsblk
-        result = self._try_lsblk(device_path)
-        if result is not None:
-            return result
+        # Fallback: lsblk, which walks child partitions recursively.
+        lsblk_result = self._try_lsblk(device_path)
+        if lsblk_result is not None:
+            return lsblk_result
+
+        if blkid_result == "unformatted":
+            return "unformatted"
 
         return "unknown"
 
