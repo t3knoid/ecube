@@ -92,7 +92,12 @@ def test_audit_repository_redacts_sensitive_error_details(db):
 
 class TestDriveAuditLogging:
     def test_initialize_drive_logs_actor(self, manager_client, db):
-        drive = UsbDrive(device_identifier="AUDIT-INIT", current_state=DriveState.AVAILABLE, filesystem_type="ext4")
+        drive = UsbDrive(
+            device_identifier="AUDIT-INIT",
+            current_state=DriveState.AVAILABLE,
+            filesystem_type="ext4",
+            mount_path="/mnt/ecube/audit-init",
+        )
         mount = NetworkMount(
             type=MountType.NFS,
             remote_path="server:/audit-init",

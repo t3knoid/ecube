@@ -843,13 +843,15 @@ Governance note: denied log access attempts by non-admin users are recorded in t
 4. Refresh or rescan the drive list until the new device appears.
 5. Open the drive detail page.
 6. If the drive is not yet formatted (state is `DISCONNECTED` or filesystem shows `unformatted`), format it using the intended filesystem.
-7. Click `Initialize`, choose the project from the dropdown list, and submit.
-8. Confirm the drive now shows `IN_USE` and the expected project association.
+7. If the drive is not yet mounted to the ECUBE-managed mount root, click `Mount` and wait for the mount path to appear.
+8. Click `Initialize`, choose the project from the dropdown list, and submit.
+9. Confirm the drive now shows `IN_USE` and the expected project association.
 
 Notes:
 
-- `processor` and `auditor` users can view drives but cannot perform format or initialize actions in the current UI.
+- `processor` and `auditor` users can view drives but cannot perform format, mount, or initialize actions in the current UI.
 - Only projects backed by an actively mounted share appear in the Initialize dropdown.
+- The destination drive itself must also already be mounted; otherwise ECUBE returns a conflict and records the rejection in the audit log.
 - Confirm the project carefully before initialization because project isolation is enforced after association.
 
 ### 14.1a Re-insert a Drive to Add More Data to the Same Project
@@ -862,11 +864,12 @@ If a drive was previously ejected and needs to receive more data for the same pr
 2. Confirm the project's source share is still configured and currently `MOUNTED`.
 3. Open `Drives` and locate the drive (state will be `AVAILABLE`).
 4. Open the drive detail page.
-5. Click `Initialize`. The previous project is selected automatically only if that project still has an eligible mounted share.
-6. Confirm and submit.
-7. The drive transitions back to `IN_USE` for the same project.
+5. If the drive is not mounted, click `Mount` and wait for the mount path to appear.
+6. Click `Initialize`. The previous project is selected automatically only if that project still has an eligible mounted share.
+7. Confirm and submit.
+8. The drive transitions back to `IN_USE` for the same project.
 
-No format is required when re-using the same project, but the mounted-share prerequisite still applies.
+No format is required when re-using the same project, but both the mounted-share and mounted-drive prerequisites still apply.
 
 ### 14.1b Re-assign a Drive to a Different Project
 
@@ -878,9 +881,10 @@ If a drive must be reassigned to a different project, a format is required to wi
 2. Open `Drives` and locate the drive (state must be `AVAILABLE`).
 3. Open the drive detail page.
 4. Click `Format` and select the target filesystem. Confirm the format.
-5. After formatting completes, click `Initialize`.
-6. Choose the new project from the dropdown and confirm.
-7. The drive transitions to `IN_USE` for the new project.
+5. If the drive is not yet mounted after formatting, click `Mount` and wait for the mount path to appear.
+6. Click `Initialize`.
+7. Choose the new project from the dropdown and confirm.
+8. The drive transitions to `IN_USE` for the new project.
 
 > **Warning:** Formatting permanently deletes all data on the drive. Verify that copies and chain-of-custody records for prior project data are complete before proceeding.
 

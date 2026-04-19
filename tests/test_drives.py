@@ -126,7 +126,12 @@ def test_list_drives_include_disconnected(client, db):
 def test_initialize_drive(manager_client, db):
     from app.models.network import MountStatus, MountType, NetworkMount
 
-    drive = UsbDrive(device_identifier="USB002", current_state=DriveState.AVAILABLE, filesystem_type="ext4")
+    drive = UsbDrive(
+        device_identifier="USB002",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        mount_path="/mnt/ecube/usb002",
+    )
     mount = NetworkMount(
         type=MountType.NFS,
         remote_path="10.0.0.1:/exports/proj-001",
@@ -144,6 +149,39 @@ def test_initialize_drive(manager_client, db):
     assert data["current_state"] == "IN_USE"
 
 
+def test_initialize_drive_rejects_unmounted_destination_drive(manager_client, db):
+    from app.models.audit import AuditLog
+    from app.models.network import MountStatus, MountType, NetworkMount
+
+    drive = UsbDrive(
+        device_identifier="USB-NOT-MOUNTED",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        mount_path=None,
+    )
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="10.0.0.10:/exports/proj-ready",
+        project_id="PROJ-READY",
+        local_mount_point="/nfs/proj-ready",
+        status=MountStatus.MOUNTED,
+    )
+    db.add_all([drive, mount])
+    db.commit()
+
+    response = manager_client.post(f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-READY"})
+
+    assert response.status_code == 409
+    assert response.json()["message"] == "Drive must be mounted before it can be initialized for a project."
+
+    log = db.query(AuditLog).filter(AuditLog.action == "INIT_REJECTED_NOT_MOUNTED").one()
+    assert log.project_id == "PROJ-READY"
+    assert log.drive_id == drive.id
+    assert log.details["requested_project_id"] == "PROJ-READY"
+    assert log.details["error_code"] == "DRIVE_NOT_MOUNTED"
+    assert log.details["message"] == "Drive is not mounted"
+
+
 def test_initialize_drive_rejects_project_without_mounted_source(manager_client, db):
     from app.models.audit import AuditLog
 
@@ -151,6 +189,7 @@ def test_initialize_drive_rejects_project_without_mounted_source(manager_client,
         device_identifier="USB-NO-MOUNT",
         current_state=DriveState.AVAILABLE,
         filesystem_type="ext4",
+        mount_path="/mnt/ecube/no-project-source",
     )
     db.add(drive)
     db.commit()
@@ -178,6 +217,7 @@ def test_initialize_drive_allows_project_with_mounted_source(manager_client, db)
         device_identifier="USB-WITH-MOUNT",
         current_state=DriveState.AVAILABLE,
         filesystem_type="ext4",
+        mount_path="/mnt/ecube/usb-with-mount",
     )
     mount = NetworkMount(
         type=MountType.NFS,
@@ -204,6 +244,7 @@ def test_initialize_drive_rejects_busy_project_source(manager_client, db):
         device_identifier="USB-BUSY-MOUNT",
         current_state=DriveState.AVAILABLE,
         filesystem_type="ext4",
+        mount_path="/mnt/ecube/usb-busy-mount",
     )
     mount = NetworkMount(
         type=MountType.NFS,
@@ -238,6 +279,7 @@ def test_initialize_drive_normalizes_project_id_case_and_whitespace(manager_clie
         device_identifier="USB-WITH-NORMALIZED-MOUNT",
         current_state=DriveState.AVAILABLE,
         filesystem_type="ext4",
+        mount_path="/mnt/ecube/usb-with-normalized-mount",
     )
     mount = NetworkMount(
         type=MountType.NFS,
