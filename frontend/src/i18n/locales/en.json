@@ -26,6 +26,9 @@
     "password": "Password",
     "sessionExpired": "Session Expired",
     "sessionExpiredMessage": "Your session has expired. Please log in again to continue.",
+    "demoAccess": "Demo Access",
+    "demoSharedPassword": "Shared password",
+    "demoPasswordManaged": "This is a shared demo environment. Demo account passwords are managed by the system.",
     "insufficientPermissions": "You do not have permission to access this resource.",
     "sessionExpiresIn": "Session expires in {minutes} minute | Session expires in {minutes} minutes",
     "sessionTimerShort": "{minutes}m"
@@ -275,6 +278,7 @@
     "passwordMismatch": "Passwords do not match",
     "passwordRequired": "Password is required",
     "resetPasswordUnavailable": "Reset unavailable for this account",
+    "demoManagementLocked": "Demo mode disables creating users and changing role assignments.",
     "showPassword": "Show password",
     "hidePassword": "Hide password"
   },
