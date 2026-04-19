@@ -993,6 +993,57 @@ EOF_PAM
 # ===========================================================================
 # DOWNLOAD / EXTRACT RELEASE PACKAGE (when --version is given)
 # ===========================================================================
+_prepare_local_frontend_bundle() {
+  local src_dir="$1"
+  local frontend_dir="${src_dir}/frontend"
+  local dist_dir="${frontend_dir}/dist"
+  local dist_index="${dist_dir}/index.html"
+
+  if [[ ! -d "${frontend_dir}" || ! -f "${frontend_dir}/package.json" ]]; then
+    return
+  fi
+
+  local should_build=false
+  local build_reason=""
+  if [[ ! -f "${dist_index}" ]]; then
+    should_build=true
+    build_reason="frontend dist/ is missing"
+  elif find \
+      "${frontend_dir}/src" \
+      "${frontend_dir}/public" \
+      "${frontend_dir}/index.html" \
+      "${frontend_dir}/package.json" \
+      "${frontend_dir}/vite.config.js" \
+      -type f -newer "${dist_index}" -print -quit 2>/dev/null | grep -q .; then
+    should_build=true
+    build_reason="frontend sources are newer than dist/"
+  fi
+
+  if [[ "${should_build}" != true ]]; then
+    info "Pre-built frontend dist/ is current — skipping rebuild."
+    return
+  fi
+
+  if ! command -v npm &>/dev/null; then
+    error "npm is required because ${build_reason}."
+    error "Install Node.js/npm or build manually: cd ${frontend_dir} && npm install && npm run build"
+    exit 1
+  fi
+
+  info "Rebuilding frontend bundle (${build_reason})..."
+  if [[ "${DRY_RUN}" == true ]]; then
+    echo "[DRY-RUN] Would run: cd ${frontend_dir} && npm install && npm run build"
+    return
+  fi
+
+  (
+    cd "${frontend_dir}"
+    npm install --no-fund --no-audit >/dev/null
+    npm run build >/dev/null
+  )
+  ok "Frontend bundle rebuilt at ${dist_dir}"
+}
+
 _maybe_download_release() {
   if [[ -z "${VERSION_TAG}" ]]; then
     # Running from an extracted release package: copy source files into
@@ -1003,6 +1054,7 @@ _maybe_download_release() {
     # Skip the copy when INSTALL_DIR is the package directory itself.
     local src_dir
     src_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+    _prepare_local_frontend_bundle "${src_dir}"
     local required_items=(app alembic alembic.ini pyproject.toml frontend/dist)
     local missing_items=()
     for item in "${required_items[@]}"; do
@@ -1411,7 +1463,8 @@ User=ecube
 Group=ecube
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=-${INSTALL_DIR}/.env
-ExecStart=${INSTALL_DIR}/venv/bin/uvicorn \
+Environment=PYTHONPATH=${INSTALL_DIR}
+ExecStart=${INSTALL_DIR}/venv/bin/python -m uvicorn \
   --host 0.0.0.0 \
   --port ${API_PORT} \
   app.main:app
@@ -1439,7 +1492,8 @@ User=ecube
 Group=ecube
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=-${INSTALL_DIR}/.env
-ExecStart=${INSTALL_DIR}/venv/bin/uvicorn \
+Environment=PYTHONPATH=${INSTALL_DIR}
+ExecStart=${INSTALL_DIR}/venv/bin/python -m uvicorn \
   --host 0.0.0.0 \
   --port ${API_PORT} \
   --ssl-keyfile=${INSTALL_DIR}/certs/key.pem \

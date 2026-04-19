@@ -5,13 +5,16 @@ implementation that shells out to ``mount(8)``.
 """
 from __future__ import annotations
 
+import grp
 import logging
 import os
+import pwd
 import subprocess
 from typing import Protocol
 
 from app.config import settings
 from app.infrastructure.device_path import validate_device_path
+from app.infrastructure.filesystem_detection import LinuxFilesystemDetector
 from app.infrastructure.mount_info import find_device_mount_point
 
 logger = logging.getLogger(__name__)
@@ -47,6 +50,62 @@ def _find_mountable_device(device_path: str) -> str:
     except OSError:
         pass
     return device_path
+
+
+def _service_owner_spec() -> str:
+    """Return the current service account as ``user:group`` for chown."""
+    uid = os.geteuid()
+    gid = os.getegid()
+    try:
+        user = pwd.getpwuid(uid).pw_name
+    except Exception:
+        user = str(uid)
+    try:
+        group = grp.getgrgid(gid).gr_name
+    except Exception:
+        group = str(gid)
+    return f"{user}:{group}"
+
+
+def _mount_options_for_filesystem(device_path: str) -> list[str]:
+    """Return extra mount arguments for filesystems that need explicit ownership."""
+    detected_fs = LinuxFilesystemDetector().detect(device_path)
+    if detected_fs in {"exfat", "vfat", "fat", "fat32", "msdos", "ntfs", "ntfs3"}:
+        uid = os.geteuid()
+        gid = os.getegid()
+        return ["-o", f"uid={uid},gid={gid},umask=022"]
+    return []
+
+
+def _ensure_mount_point_writable(mount_point: str) -> tuple[bool, str | None]:
+    """Best-effort ownership repair so the service account can write to the mount."""
+    required_mode = os.W_OK | os.X_OK
+    if os.access(mount_point, required_mode):
+        return True, None
+
+    try:
+        if settings.use_sudo and os.geteuid() != 0:
+            subprocess.run(
+                _with_sudo(["chown", _service_owner_spec(), mount_point]),
+                check=True,
+                capture_output=True,
+                timeout=settings.subprocess_timeout_seconds,
+            )
+        else:
+            os.chown(mount_point, os.geteuid(), os.getegid())
+    except subprocess.TimeoutExpired:
+        return False, f"mount succeeded but access repair timed out after {settings.subprocess_timeout_seconds}s"
+    except subprocess.CalledProcessError as exc:
+        stderr = (exc.stderr or b"").decode(errors="replace").strip()
+        if stderr:
+            return False, f"mount succeeded but access repair failed: {stderr}"
+        return False, "mount succeeded but access repair failed"
+    except OSError as exc:
+        return False, f"mount succeeded but access repair failed: {exc}"
+
+    if os.access(mount_point, required_mode):
+        return True, None
+    return False, f"mount succeeded but target {mount_point} is not writable by the ECUBE service account"
 
 
 # Mount-point lookup moved to app.infrastructure.mount_info
@@ -114,9 +173,16 @@ class LinuxDriveMount:
         except OSError as exc:
             return False, f"failed to create mount point {mount_point}: {exc}"
 
+        mount_command = [
+            settings.mount_binary_path,
+            *_mount_options_for_filesystem(mountable),
+            mountable,
+            mount_point,
+        ]
+
         try:
             subprocess.run(
-                _with_sudo([settings.mount_binary_path, mountable, mount_point]),
+                _with_sudo(mount_command),
                 check=True,
                 capture_output=True,
                 timeout=settings.subprocess_timeout_seconds,
@@ -160,6 +226,22 @@ class LinuxDriveMount:
                 str(exc),
             )
             return False, f"mount error: {exc}"
+
+        writable, access_error = _ensure_mount_point_writable(mount_point)
+        if not writable:
+            cleanup_ok, cleanup_error = self.unmount_drive(mount_point)
+            logger.warning(
+                "Drive mount access repair failed: device_name=%s mount_slot=%s cleanup_ok=%s reason=%s cleanup_reason=%s",
+                os.path.basename(mountable),
+                os.path.basename(mount_point.rstrip("/")),
+                cleanup_ok,
+                access_error or "mount target is not writable",
+                cleanup_error or "",
+            )
+            detail = access_error or "mount target is not writable by the ECUBE service account"
+            if not cleanup_ok and cleanup_error:
+                detail += f"; cleanup failed: {cleanup_error}"
+            return False, detail
 
         logger.info(
             "Drive mount succeeded: device_name=%s mount_slot=%s",

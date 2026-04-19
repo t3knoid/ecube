@@ -222,13 +222,9 @@ _AUDIT_SENSITIVE_KEYS = {
     "local_mount_point",
     "remote_path",
     "device_name",
-    "device_identifier",
     "system_path",
     "mount_label",
     "mount_slot",
-    "serial",
-    "serial_number",
-    "drive_sn",
     "dev",
 }
 _AUDIT_ERROR_TEXT_KEYS = {"error", "details", "raw_error"}
