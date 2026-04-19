@@ -22,6 +22,7 @@ from app.schemas.users import (
     UserRolesResponse,
 )
 from app.schemas.errors import R_400, R_401, R_403, R_422, R_500
+from app.services.demo_policy_service import enforce_user_management_write_allowed
 from app.utils.client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,16 @@ def set_user_roles(
 ) -> UserRolesResponse:
     """Set roles for a user (replaces all existing role assignments)."""
     _validate_username(username)
+    enforce_user_management_write_allowed(
+        db=db,
+        actor=current_user.username,
+        user_roles=current_user.roles,
+        path=str(request.url.path),
+        method=request.method,
+        attempted_action="set_user_roles",
+        client_ip=get_client_ip(request),
+        target_user=username,
+    )
 
     repo = UserRoleRepository(db)
     deduplicated = sorted(set(body.roles))
@@ -124,6 +135,16 @@ def delete_user_roles(
 ) -> UserRolesResponse:
     """Remove all role assignments for a user."""
     _validate_username(username)
+    enforce_user_management_write_allowed(
+        db=db,
+        actor=current_user.username,
+        user_roles=current_user.roles,
+        path=str(request.url.path),
+        method=request.method,
+        attempted_action="delete_user_roles",
+        client_ip=get_client_ip(request),
+        target_user=username,
+    )
     repo = UserRoleRepository(db)
     try:
         repo.delete_roles(username)

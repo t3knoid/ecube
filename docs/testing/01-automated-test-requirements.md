@@ -207,6 +207,7 @@ Backend coverage is enforced through breadth and critical path assertions across
 | Copy engine and concurrency | `test_copy_engine.py`, `test_concurrency.py`, `test_thread_count_validation.py` |
 | Introspection and callbacks | `test_introspection.py`, `test_callback.py` |
 | User/session/logging/config/migrations | `test_os_user_management.py`, `test_session_management.py`, `test_logging.py`, `test_config_settings.py`, `test_migrations.py` |
+| Demo mode rollout | `test_auth_login.py`, `test_os_user_management.py`, `test_demo_seed_service.py`, login and users view unit tests |
 | UI telemetry and sanitization | `test_ui_telemetry.py`, `test_unicode_sanitization.py` |
 | Help system (frontend + generation) | `frontend/e2e/help.spec.js`, frontend help modal unit tests, help-generation script determinism checks |
 
