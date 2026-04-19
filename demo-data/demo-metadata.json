@@ -2,7 +2,7 @@
   "managed_by": "ecube-demo-seed-v1",
   "generated_at": "2026-04-19T19:22:35.749391+00:00",
   "demo_config": {
-    "demo_mode": true,
+    "demo_mode": false,
     "login_message": "Use the shared demo accounts below.",
     "shared_password": "Scene.9Pratt",
     "demo_disable_password_change": true,
