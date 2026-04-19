@@ -69,7 +69,7 @@
       {
         "id": 1,
         "type": "NFS",
-        "remote_path": "192.168.2.250:/mnt/Data/ecube/demo-case-001",
+        "remote_path": "fileserver:/mnt/Data/ecube/demo-case-001",
         "project_id": "DEMO-CASE-001",
         "username": null,
         "password": null,
@@ -78,7 +78,7 @@
       {
         "id": 2,
         "type": "SMB",
-        "remote_path": "//192.168.2.250/demo-case-002",
+        "remote_path": "//fileserver/demo-case-002",
         "project_id": "DEMO-CASE-002",
         "username": null,
         "password": null,
