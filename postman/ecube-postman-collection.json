@@ -551,10 +551,22 @@
 									"value": "",
 									"disabled": true,
 									"description": "Filter drives by project ID"
+								},
+								{
+									"key": "state",
+									"value": "AVAILABLE",
+									"disabled": true,
+									"description": "Repeatable state filter: DISCONNECTED, AVAILABLE, IN_USE, ARCHIVED"
+								},
+								{
+									"key": "include_disconnected",
+									"value": "true",
+									"disabled": true,
+									"description": "Include DISCONNECTED drives in the default listing when no explicit state filter is used"
 								}
 							]
 						},
-						"description": "List all USB drives with state and project bindings. Optional project_id filter. Roles: admin, manager, processor, auditor."
+						"description": "List USB drives with state and project bindings. Supports optional project_id, repeatable state filters, and include_disconnected=true. Roles: admin, manager, processor, auditor."
 					}
 				},
 				{
@@ -607,7 +619,7 @@
 								}
 							]
 						},
-						"description": "Bind drive to a project and transition from AVAILABLE to IN_USE. Roles: admin, manager."
+						"description": "Bind a mounted drive to a project and transition it from AVAILABLE to IN_USE. Requires a recognized filesystem, a mounted destination drive, and a MOUNTED project source share. Roles: admin, manager."
 					}
 				},
 				{
@@ -643,6 +655,32 @@
 							]
 						},
 						"description": "Format drive with specified filesystem (ext4 or exfat). Drive must be AVAILABLE and unmounted. Roles: admin, manager."
+					}
+				},
+				{
+					"name": "Mount Drive",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/drives/{{drive_id}}/mount",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"drives",
+								"{{drive_id}}",
+								"mount"
+							],
+							"variable": [
+								{
+									"key": "drive_id",
+									"value": "1",
+									"description": "ID of the drive to mount"
+								}
+							]
+						},
+						"description": "Mount a drive to the managed ECUBE mount root. The drive must have a recognized filesystem and be in AVAILABLE or IN_USE state. Roles: admin, manager."
 					}
 				},
 				{
