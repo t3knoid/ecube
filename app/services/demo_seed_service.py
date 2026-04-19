@@ -62,9 +62,9 @@ _DEFAULT_DEMO_ACCOUNTS: list[dict[str, Any]] = [
 
 _DEFAULT_SAMPLE_PROJECTS: list[dict[str, Any]] = [
     {
-        "project_id": "DEMO-CASE-001",
+        "project_id": 1,
+        "project_name": "DEMO-CASE-001",
         "evidence_number": "EVID-001",
-        "title": "Synthetic internal investigation",
         "folder": "demo-case-001",
         "files": {
             "incoming/mailbox-summary.txt": "Synthetic demo content only. Mailbox summary for internal training review. No real evidence is stored here.\n",
@@ -72,9 +72,9 @@ _DEFAULT_SAMPLE_PROJECTS: list[dict[str, Any]] = [
         },
     },
     {
-        "project_id": "DEMO-CASE-002",
+        "project_id": 2,
+        "project_name": "DEMO-CASE-002",
         "evidence_number": "EVID-002",
-        "title": "Synthetic HR review sample",
         "folder": "demo-case-002",
         "files": {
             "incoming/chat-export.txt": "Synthetic chat export for product demonstration only. Do not use for real evidence or production decisions.\n",
@@ -120,6 +120,7 @@ def seed_demo_environment(
     """Seed a normal ECUBE install with demo-safe users, roles, sample data, and optional real USB and network mounts configured in demo-metadata.json."""
     root = _resolve_data_root(data_root)
     seed_metadata = _load_seed_metadata(root)
+    projects = _normalized_projects(seed_metadata)
     accounts = _configured_demo_accounts(seed_metadata)
     effective_shared_password = (
         shared_password
@@ -127,9 +128,9 @@ def seed_demo_environment(
         or settings.get_demo_shared_password()
         or None
     )
-    usb_seed_config = _normalized_usb_seed_config(seed_metadata.get("usb_seed"))
-    mount_seed_config = _normalized_mount_seed_config(seed_metadata.get("mount_seed"))
-    job_seed_config = _normalized_job_seed_config(seed_metadata.get("job_seed"))
+    usb_seed_config = _normalized_usb_seed_config(seed_metadata.get("usb_seed"), projects=projects)
+    mount_seed_config = _normalized_mount_seed_config(seed_metadata.get("mount_seed"), projects=projects)
+    job_seed_config = _normalized_job_seed_config(seed_metadata.get("job_seed"), projects=projects)
 
     jobs_removed = _delete_seeded_jobs(db)
     if jobs_removed:
@@ -143,6 +144,7 @@ def seed_demo_environment(
     files_staged = _stage_demo_files(
         root,
         accounts=accounts,
+        projects=projects,
         shared_password=effective_shared_password,
         seed_metadata=seed_metadata,
         usb_seed_config=usb_seed_config,
@@ -194,6 +196,7 @@ def seed_demo_environment(
         db,
         root,
         actor=actor,
+        projects=projects,
         job_seed_config=job_seed_config,
         usb_seed_config=usb_seed_config,
         mount_seed_config=mount_seed_config,
@@ -201,6 +204,7 @@ def seed_demo_environment(
     _write_demo_metadata(
         root,
         accounts=accounts,
+        projects=projects,
         shared_password=effective_shared_password,
         seed_metadata=seed_metadata,
         usb_seed_config=usb_seed_config,
@@ -214,7 +218,7 @@ def seed_demo_environment(
         details={
             "data_root": str(root),
             "usernames": [account["username"] for account in accounts],
-            "project_ids": [project["project_id"] for project in _DEFAULT_SAMPLE_PROJECTS],
+            "project_ids": [project["project_name"] for project in projects],
             "roles_removed": roles_removed,
             "jobs_removed": jobs_removed,
             "jobs_seeded": jobs_seeded,
@@ -223,9 +227,9 @@ def seed_demo_environment(
             "usb_drives_mounted": usb_drives_mounted,
             "network_mounts_seeded": network_mounts_seeded,
             "network_mounts_mounted": network_mounts_mounted,
-            "usb_project_ids": [entry["project_id"] for entry in usb_seed_config.get("drives", [])] if usb_seed_config["enabled"] else [],
-            "mount_project_ids": [entry["project_id"] for entry in mount_seed_config.get("mounts", [])] if mount_seed_config["enabled"] else [],
-            "job_project_ids": [entry["project_id"] for entry in job_seed_config.get("jobs", [])] if job_seed_config["enabled"] else [],
+            "usb_project_ids": [entry["project_name"] for entry in usb_seed_config.get("drives", [])] if usb_seed_config["enabled"] else [],
+            "mount_project_ids": [entry["project_name"] for entry in mount_seed_config.get("mounts", [])] if mount_seed_config["enabled"] else [],
+            "job_project_ids": [entry["project_name"] for entry in job_seed_config.get("jobs", [])] if job_seed_config["enabled"] else [],
         },
     )
 
@@ -352,7 +356,95 @@ def _normalized_seed_identifier(value: object, *, prefix: str, fallback: object 
     return f"{prefix}-{index}"
 
 
-def _normalized_job_seed_config(value: object) -> dict[str, Any]:
+def _normalized_projects(seed_metadata: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_projects = seed_metadata.get("projects")
+    if not isinstance(raw_projects, list) or not raw_projects:
+        return [dict(project) for project in _DEFAULT_SAMPLE_PROJECTS]
+
+    defaults_by_name = {str(project["project_name"]): project for project in _DEFAULT_SAMPLE_PROJECTS}
+    normalized_projects: list[dict[str, Any]] = []
+    seen_ids: set[int] = set()
+    seen_names: set[str] = set()
+
+    for index, raw in enumerate(raw_projects, start=1):
+        if not isinstance(raw, dict):
+            continue
+
+        requested_project_id = _optional_positive_int(raw.get("project_id"))
+        requested_project_name = _optional_seed_string(raw.get("project_name"))
+        if requested_project_name is None:
+            legacy_project_id = _optional_seed_string(raw.get("project_id"))
+            if legacy_project_id and not legacy_project_id.isdigit():
+                requested_project_name = legacy_project_id
+
+        if requested_project_name is None and requested_project_id is not None:
+            default_project = next((project for project in _DEFAULT_SAMPLE_PROJECTS if project["project_id"] == requested_project_id), None)
+            if default_project is not None:
+                requested_project_name = str(default_project["project_name"])
+
+        normalized_name = normalize_project_id(requested_project_name)
+        if not isinstance(normalized_name, str) or not normalized_name:
+            raise ValueError("projects[] requires a non-empty project_name")
+
+        default_project = defaults_by_name.get(normalized_name)
+        numeric_project_id = requested_project_id or (default_project["project_id"] if default_project is not None else index)
+        if numeric_project_id in seen_ids or normalized_name in seen_names:
+            continue
+
+        seen_ids.add(numeric_project_id)
+        seen_names.add(normalized_name)
+        normalized_projects.append(
+            {
+                "project_id": numeric_project_id,
+                "project_name": normalized_name,
+                "evidence_number": _optional_seed_string(raw.get("evidence_number"))
+                or (default_project.get("evidence_number") if default_project is not None else f"EVID-{numeric_project_id:03d}"),
+                "folder": _optional_seed_string(raw.get("folder"))
+                or (default_project.get("folder") if default_project is not None else f"project-{numeric_project_id}"),
+                "files": dict(default_project.get("files", {})) if default_project is not None else {},
+            }
+        )
+
+    return normalized_projects or [dict(project) for project in _DEFAULT_SAMPLE_PROJECTS]
+
+
+def _resolve_seed_project_reference(project_id: object, *, projects: list[dict[str, Any]]) -> tuple[int, str]:
+    if not projects:
+        raise ValueError("At least one demo project is required")
+
+    if project_id is None:
+        default_project = projects[0]
+        return int(default_project["project_id"]), str(default_project["project_name"])
+
+    numeric_project_id = _optional_positive_int(project_id)
+    if numeric_project_id is not None:
+        for project in projects:
+            if int(project["project_id"]) == numeric_project_id:
+                return numeric_project_id, str(project["project_name"])
+        raise ValueError(f"Unknown demo project_id reference: {numeric_project_id}")
+
+    normalized_name = normalize_project_id(project_id)
+    if not isinstance(normalized_name, str) or not normalized_name:
+        raise ValueError("project_id must not be empty")
+
+    for project in projects:
+        if str(project["project_name"]) == normalized_name:
+            return int(project["project_id"]), normalized_name
+
+    next_project_id = max((int(project["project_id"]) for project in projects), default=0) + 1
+    projects.append(
+        {
+            "project_id": next_project_id,
+            "project_name": normalized_name,
+            "evidence_number": f"EVID-{next_project_id:03d}",
+            "folder": f"project-{next_project_id}",
+            "files": {},
+        }
+    )
+    return next_project_id, normalized_name
+
+
+def _normalized_job_seed_config(value: object, *, projects: list[dict[str, Any]]) -> dict[str, Any]:
     config = value if isinstance(value, dict) else {}
     enabled = bool(config.get("enabled", False))
     entries: list[dict[str, Any]] = []
@@ -363,7 +455,7 @@ def _normalized_job_seed_config(value: object) -> dict[str, Any]:
         for index, raw in enumerate(raw_entries, start=1):
             if not isinstance(raw, dict):
                 continue
-            project_id = _resolve_seed_project_id(raw.get("project_id"))
+            project_ref, project_name = _resolve_seed_project_reference(raw.get("project_id"), projects=projects)
             evidence_number = _optional_seed_string(raw.get("evidence_number"))
             source_path = _optional_seed_string(raw.get("source_path"))
 
@@ -383,7 +475,8 @@ def _normalized_job_seed_config(value: object) -> dict[str, Any]:
             seen_jobs.add(job_id_key)
             entry = {
                 "id": job_id,
-                "project_id": project_id,
+                "project_id": project_ref,
+                "project_name": project_name,
                 "evidence_number": evidence_number,
                 "mount_id": mount_id,
                 "drive_id": drive_id,
@@ -402,7 +495,7 @@ def _normalized_job_seed_config(value: object) -> dict[str, Any]:
     }
 
 
-def _normalized_mount_seed_config(value: object) -> dict[str, Any]:
+def _normalized_mount_seed_config(value: object, *, projects: list[dict[str, Any]]) -> dict[str, Any]:
     config = value if isinstance(value, dict) else {}
     enabled = bool(config.get("enabled", False))
     entries: list[dict[str, Any]] = []
@@ -417,17 +510,18 @@ def _normalized_mount_seed_config(value: object) -> dict[str, Any]:
             remote_path = _optional_seed_string(raw.get("remote_path")) or ""
             if mount_type is None or not remote_path:
                 continue
-            project_id = _resolve_seed_project_id(raw.get("project_id"))
-            key = (mount_type.value, remote_path, project_id)
+            project_ref, project_name = _resolve_seed_project_reference(raw.get("project_id"), projects=projects)
+            key = (mount_type.value, remote_path, project_name)
             if key in seen_mounts:
                 continue
             seen_mounts.add(key)
             entries.append(
                 {
-                    "id": _normalized_seed_identifier(raw.get("id"), prefix="mount", fallback=project_id, index=index),
+                    "id": _normalized_seed_identifier(raw.get("id"), prefix="mount", fallback=project_name, index=index),
                     "type": mount_type,
                     "remote_path": remote_path,
-                    "project_id": project_id,
+                    "project_id": project_ref,
+                    "project_name": project_name,
                     "username": _optional_seed_string(raw.get("username")),
                     "password": _optional_seed_string(raw.get("password")),
                     "credentials_file": _optional_seed_string(raw.get("credentials_file")),
@@ -440,7 +534,7 @@ def _normalized_mount_seed_config(value: object) -> dict[str, Any]:
     }
 
 
-def _normalized_usb_seed_config(value: object) -> dict[str, Any]:
+def _normalized_usb_seed_config(value: object, *, projects: list[dict[str, Any]]) -> dict[str, Any]:
     config = value if isinstance(value, dict) else {}
     enabled = bool(config.get("enabled", False))
     entries: list[dict[str, Any]] = []
@@ -456,22 +550,26 @@ def _normalized_usb_seed_config(value: object) -> dict[str, Any]:
                 continue
             seen_ports.add(port_system_path)
             device_identifier = str(raw.get("device_identifier", "")).strip() or None
+            project_ref, project_name = _resolve_seed_project_reference(raw.get("project_id"), projects=projects)
             entries.append(
                 {
                     "id": _normalized_seed_identifier(raw.get("id"), prefix="usb", fallback=port_system_path, index=index),
                     "port_system_path": port_system_path,
-                    "project_id": _resolve_seed_project_id(raw.get("project_id")),
+                    "project_id": project_ref,
+                    "project_name": project_name,
                     "device_identifier": device_identifier,
                 }
             )
 
     legacy_port = str(config.get("port_system_path", "")).strip()
     if enabled and legacy_port and legacy_port not in seen_ports:
+        project_ref, project_name = _resolve_seed_project_reference(config.get("project_id"), projects=projects)
         entries.append(
             {
                 "id": _normalized_seed_identifier(config.get("id"), prefix="usb", fallback=legacy_port, index=len(entries) + 1),
                 "port_system_path": legacy_port,
-                "project_id": _resolve_seed_project_id(config.get("project_id")),
+                "project_id": project_ref,
+                "project_name": project_name,
                 "device_identifier": str(config.get("device_identifier", "")).strip() or None,
             }
         )
@@ -495,16 +593,6 @@ def _resolve_mount_type(value: object) -> MountType | None:
         return MountType(normalized)
     except ValueError:
         return None
-
-
-def _resolve_seed_project_id(project_id: str | None) -> str:
-    if project_id is None:
-        return _DEFAULT_SAMPLE_PROJECTS[0]["project_id"]
-
-    normalized = normalize_project_id(project_id)
-    if not isinstance(normalized, str) or not normalized:
-        raise ValueError("usb_project_id must not be empty")
-    return normalized
 
 
 def _select_seed_drive_for_port(
@@ -621,7 +709,7 @@ def _seed_connected_usb_drives(
             )
             continue
 
-        project_id = _resolve_seed_project_id(entry.get("project_id"))
+        project_id = str(entry.get("project_name") or "").strip()
         if not drive.filesystem_path:
             continue
         if drive.filesystem_type in {None, "unknown", "unformatted"}:
@@ -696,8 +784,8 @@ def _seed_configured_network_mounts(
     for entry in configured_entries:
         mount_type = entry.get("type")
         remote_path = str(entry.get("remote_path", "")).strip()
-        project_id = _resolve_seed_project_id(entry.get("project_id"))
-        if not isinstance(mount_type, MountType) or not remote_path:
+        project_id = str(entry.get("project_name") or "").strip()
+        if not isinstance(mount_type, MountType) or not remote_path or not project_id:
             continue
 
         existing = (
@@ -836,6 +924,7 @@ def _prepare_demo_root(root: Path) -> None:
 def _build_demo_metadata(
     *,
     accounts: list[dict[str, Any]],
+    projects: list[dict[str, Any]],
     shared_password: str | None,
     seed_metadata: dict[str, Any],
     usb_seed_config: dict[str, Any],
@@ -882,18 +971,59 @@ def _build_demo_metadata(
                 for account in accounts
             ],
         },
-        "usb_seed": usb_seed_config,
-        "mount_seed": mount_seed_config,
-        "job_seed": job_seed_config,
+        "usb_seed": {
+            "enabled": bool(usb_seed_config.get("enabled", False)),
+            "drives": [
+                {
+                    "id": entry.get("id"),
+                    "port_system_path": entry.get("port_system_path"),
+                    "project_id": entry.get("project_id"),
+                    "device_identifier": entry.get("device_identifier"),
+                }
+                for entry in usb_seed_config.get("drives", [])
+            ],
+        },
+        "mount_seed": {
+            "enabled": bool(mount_seed_config.get("enabled", False)),
+            "mounts": [
+                {
+                    "id": entry.get("id"),
+                    "type": entry.get("type").value if isinstance(entry.get("type"), MountType) else entry.get("type"),
+                    "remote_path": entry.get("remote_path"),
+                    "project_id": entry.get("project_id"),
+                    "username": entry.get("username"),
+                    "password": entry.get("password"),
+                    "credentials_file": entry.get("credentials_file"),
+                }
+                for entry in mount_seed_config.get("mounts", [])
+            ],
+        },
+        "job_seed": {
+            "enabled": bool(job_seed_config.get("enabled", False)),
+            "jobs": [
+                {
+                    "id": entry.get("id"),
+                    "project_id": entry.get("project_id"),
+                    "evidence_number": entry.get("evidence_number"),
+                    "mount_id": entry.get("mount_id"),
+                    "drive_id": entry.get("drive_id"),
+                    "source_path": entry.get("source_path"),
+                    "status": entry.get("status"),
+                    **({"mount_source_id": entry.get("mount_source_id")} if entry.get("mount_source_id") is not None else {}),
+                    **({"destination_usb_id": entry.get("destination_usb_id")} if entry.get("destination_usb_id") is not None else {}),
+                    **({"ui_job_id": entry.get("ui_job_id")} if entry.get("ui_job_id") is not None else {}),
+                }
+                for entry in job_seed_config.get("jobs", [])
+            ],
+        },
         "projects": [
             {
                 "project_id": project["project_id"],
-                "evidence_number": project["evidence_number"],
-                "title": project["title"],
+                "project_name": project["project_name"],
                 "folder": project["folder"],
                 "sanitized": True,
             }
-            for project in _DEFAULT_SAMPLE_PROJECTS
+            for project in projects
         ],
     }
 
@@ -902,6 +1032,7 @@ def _write_demo_metadata(
     root: Path,
     *,
     accounts: list[dict[str, Any]],
+    projects: list[dict[str, Any]],
     shared_password: str | None,
     seed_metadata: dict[str, Any],
     usb_seed_config: dict[str, Any],
@@ -910,6 +1041,7 @@ def _write_demo_metadata(
 ) -> None:
     metadata = _build_demo_metadata(
         accounts=accounts,
+        projects=projects,
         shared_password=shared_password,
         seed_metadata=seed_metadata,
         usb_seed_config=usb_seed_config,
@@ -923,6 +1055,7 @@ def _stage_demo_files(
     root: Path,
     *,
     accounts: list[dict[str, Any]],
+    projects: list[dict[str, Any]],
     shared_password: str | None,
     seed_metadata: dict[str, Any],
     usb_seed_config: dict[str, Any],
@@ -949,6 +1082,7 @@ def _stage_demo_files(
     _write_demo_metadata(
         root,
         accounts=accounts,
+        projects=projects,
         shared_password=shared_password,
         seed_metadata=seed_metadata,
         usb_seed_config=usb_seed_config,
@@ -957,9 +1091,9 @@ def _stage_demo_files(
     )
     files_staged += 1
 
-    for project in _DEFAULT_SAMPLE_PROJECTS:
-        project_root = root / project["folder"]
-        for relative_path, contents in project["files"].items():
+    for project in projects:
+        project_root = root / str(project["folder"])
+        for relative_path, contents in project.get("files", {}).items():
             target = project_root / relative_path
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(contents, encoding="utf-8")
@@ -973,6 +1107,7 @@ def _seed_demo_jobs(
     root: Path,
     *,
     actor: str,
+    projects: list[dict[str, Any]],
     job_seed_config: dict[str, Any],
     usb_seed_config: dict[str, Any],
     mount_seed_config: dict[str, Any],
@@ -990,12 +1125,12 @@ def _seed_demo_jobs(
     seeded_count = 0
     now = datetime.now(timezone.utc)
 
-    for project in _DEFAULT_SAMPLE_PROJECTS:
-        project_root = root / project["folder"]
-        files = project["files"]
+    for project in projects:
+        project_root = root / str(project["folder"])
+        files = project.get("files", {})
         total_bytes = sum(len(contents.encode("utf-8")) for contents in files.values())
         job = ExportJob(
-            project_id=project["project_id"],
+            project_id=project["project_name"],
             evidence_number=project["evidence_number"],
             source_path=str(project_root),
             target_mount_path=f"/demo/{project['folder']}",
@@ -1054,8 +1189,9 @@ def _synchronize_runtime_seed_ids(
         entry["id"] = drive.id
         if previous_drive_id is not None:
             drive_ids_by_previous_id[previous_drive_id] = drive.id
-        if isinstance(entry.get("project_id"), str):
-            drive_ids_by_project[entry["project_id"]] = drive.id
+        project_name = _optional_seed_string(entry.get("project_name"))
+        if project_name is not None:
+            drive_ids_by_project[project_name] = drive.id
 
     mount_ids_by_project: dict[str, int] = {}
     mount_ids_by_previous_id: dict[int, int] = {}
@@ -1066,7 +1202,7 @@ def _synchronize_runtime_seed_ids(
             .filter(
                 NetworkMount.type == entry.get("type"),
                 NetworkMount.remote_path == entry.get("remote_path"),
-                NetworkMount.project_id == entry.get("project_id"),
+                NetworkMount.project_id == entry.get("project_name"),
             )
             .order_by(NetworkMount.id)
             .first()
@@ -1076,11 +1212,12 @@ def _synchronize_runtime_seed_ids(
         entry["id"] = mount.id
         if previous_mount_id is not None:
             mount_ids_by_previous_id[previous_mount_id] = mount.id
-        if isinstance(entry.get("project_id"), str):
-            mount_ids_by_project[entry["project_id"]] = mount.id
+        project_name = _optional_seed_string(entry.get("project_name"))
+        if project_name is not None:
+            mount_ids_by_project[project_name] = mount.id
 
     for entry in job_seed_config.get("jobs", []):
-        project_id = _optional_seed_string(entry.get("project_id"))
+        project_id = _optional_seed_string(entry.get("project_name"))
         requested_mount_id = _optional_positive_int(entry.get("mount_id"))
         requested_drive_id = _optional_positive_int(entry.get("drive_id"))
 
@@ -1137,7 +1274,7 @@ def _seed_configured_demo_jobs(
             .filter(
                 NetworkMount.type == entry.get("type"),
                 NetworkMount.remote_path == entry.get("remote_path"),
-                NetworkMount.project_id == entry.get("project_id"),
+                NetworkMount.project_id == entry.get("project_name"),
             )
             .order_by(NetworkMount.id)
             .first()
@@ -1167,9 +1304,10 @@ def _seed_configured_demo_jobs(
             detail = f"drive_id={requested_drive_id}" if requested_drive_id is not None else f"destination_usb_id={destination_usb_id}"
             raise ValueError(f"Configured demo job references unknown drive: {detail}")
 
+        desired_job_id = _optional_positive_int(entry.get("id"))
         created = job_service.create_job(
             JobCreate(
-                project_id=entry["project_id"],
+                project_id=entry["project_name"],
                 evidence_number=entry["evidence_number"],
                 source_path=entry["source_path"],
                 mount_id=mount.id,
@@ -1177,7 +1315,10 @@ def _seed_configured_demo_jobs(
             ),
             db,
             actor=DEMO_SEED_MARKER,
+            seeded_job_id=desired_job_id,
         )
+        entry["id"] = created.id
+        entry["ui_job_id"] = created.id
 
         requested_status = _optional_seed_string(entry.get("status")) or JobStatus.PENDING.value
         try:

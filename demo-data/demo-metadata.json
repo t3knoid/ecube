@@ -52,13 +52,13 @@
       {
         "id": 1,
         "port_system_path": "2-1",
-        "project_id": "DEMO-CASE-001",
+        "project_id": 1,
         "device_identifier": "4C532000000605117325"
       },
       {
         "id": 2,
         "port_system_path": "2-2",
-        "project_id": "DEMO-CASE-002",
+        "project_id": 2,
         "device_identifier": "0414150000001328"
       }
     ]
@@ -70,7 +70,7 @@
         "id": 1,
         "type": "NFS",
         "remote_path": "fileserver:/mnt/Data/ecube/demo-case-001",
-        "project_id": "DEMO-CASE-001",
+        "project_id": 1,
         "username": null,
         "password": null,
         "credentials_file": null
@@ -79,7 +79,7 @@
         "id": 2,
         "type": "SMB",
         "remote_path": "//fileserver/demo-case-002",
-        "project_id": "DEMO-CASE-002",
+        "project_id": 2,
         "username": null,
         "password": null,
         "credentials_file": null
@@ -90,8 +90,8 @@
     "enabled": true,
     "jobs": [
       {
-        "id": "job-demo-case-001",
-        "project_id": "DEMO-CASE-001",
+        "id": 101,
+        "project_id": 1,
         "evidence_number": "EVID-DEMO-JOB-001",
         "mount_id": 1,
         "drive_id": 1,
@@ -99,8 +99,8 @@
         "status": "PENDING"
       },
       {
-        "id": "job-demo-case-002",
-        "project_id": "DEMO-CASE-002",
+        "id": 102,
+        "project_id": 2,
         "evidence_number": "EVID-DEMO-JOB-002",
         "mount_id": 2,
         "drive_id": 2,
@@ -111,16 +111,14 @@
   },
   "projects": [
     {
-      "project_id": "DEMO-CASE-001",
-      "evidence_number": "EVID-001",
-      "title": "Synthetic internal investigation",
+      "project_id": 1,
+      "project_name": "DEMO-CASE-001",
       "folder": "demo-case-001",
       "sanitized": true
     },
     {
-      "project_id": "DEMO-CASE-002",
-      "evidence_number": "EVID-002",
-      "title": "Synthetic HR review sample",
+      "project_id": 2,
+      "project_name": "DEMO-CASE-002",
       "folder": "demo-case-002",
       "sanitized": true
     }

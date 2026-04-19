@@ -290,11 +290,11 @@ def test_seed_demo_environment_can_seed_connected_usb_drives_from_metadata(db, t
 
     assert metadata["usb_seed"]["enabled"] is True
     assert metadata["usb_seed"]["drives"][0]["port_system_path"] == "1-1"
-    assert metadata["usb_seed"]["drives"][0]["project_id"] == "DEMO-CASE-001"
+    assert metadata["usb_seed"]["drives"][0]["project_id"] == 1
+    assert metadata["projects"][0]["project_name"] == "DEMO-CASE-001"
     assert result.usb_drives_seeded == 1
     assert result.usb_drives_mounted == 1
     assert len(mount_provider.mounted) == 1
-
 
 def test_seed_demo_environment_uses_current_usb_drive_when_port_has_history(db, tmp_path, monkeypatch):
     from app.infrastructure.usb_discovery import DiscoveredDrive, DiscoveredHub, DiscoveredPort, DiscoveredTopology
@@ -456,6 +456,109 @@ def test_seed_demo_environment_can_seed_network_mounts_from_metadata(db, tmp_pat
     assert provider.mounted[1]["credentials_file"] == "/tmp/demo-smb.creds"
 
 
+def test_seed_demo_environment_resolves_numeric_project_references(db, tmp_path, monkeypatch):
+    from app.infrastructure.usb_discovery import DiscoveredDrive, DiscoveredHub, DiscoveredPort, DiscoveredTopology
+    from app.services.demo_seed_service import DEMO_SEED_MARKER, seed_demo_environment
+
+    demo_root = tmp_path / "demo-share"
+    demo_root.mkdir()
+    (demo_root / "demo-metadata.json").write_text(
+        json.dumps(
+            {
+                "managed_by": "ecube-demo-seed-v1",
+                "projects": [
+                    {
+                        "project_id": 1,
+                        "project_name": "DEMO-CASE-001",
+                        "folder": "demo-case-001",
+                        "sanitized": True,
+                    }
+                ],
+                "usb_seed": {
+                    "enabled": True,
+                    "drives": [
+                        {
+                            "id": 99,
+                            "port_system_path": "1-1",
+                            "project_id": 1,
+                            "device_identifier": "usb-demo-001"
+                        }
+                    ]
+                },
+                "mount_seed": {
+                    "enabled": True,
+                    "mounts": [
+                        {
+                            "id": 77,
+                            "type": "NFS",
+                            "remote_path": "192.168.1.10:/exports/demo-case-001",
+                            "project_id": 1
+                        }
+                    ]
+                },
+                "job_seed": {
+                    "enabled": True,
+                    "jobs": [
+                        {
+                            "project_id": 1,
+                            "evidence_number": "EVID-JOB-001",
+                            "mount_id": 77,
+                            "drive_id": 99,
+                            "source_path": "/incoming"
+                        }
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "app.services.demo_seed_service.settings.demo_accounts",
+        [],
+        raising=False,
+    )
+
+    topology = DiscoveredTopology(
+        hubs=[DiscoveredHub(system_identifier="usb1", name="Demo hub")],
+        ports=[DiscoveredPort(hub_system_identifier="usb1", port_number=1, system_path="1-1")],
+        drives=[
+            DiscoveredDrive(
+                device_identifier="usb-demo-001",
+                port_system_path="1-1",
+                filesystem_path="/dev/sdz",
+                capacity_bytes=64 * 1024 * 1024,
+                mount_path=None,
+            )
+        ],
+    )
+
+    seed_demo_environment(
+        db,
+        data_root=demo_root,
+        provider=_FakeOsUserProvider(),
+        shared_password="SharedDemo#123",
+        actor="demo-seed-test",
+        topology_source=lambda: topology,
+        filesystem_detector=_FakeFilesystemDetector(),
+        mount_provider=_FakeDriveMountProvider(),
+        network_mount_provider=_FakeNetworkMountProvider(),
+    )
+
+    jobs = db.query(ExportJob).filter(ExportJob.created_by == DEMO_SEED_MARKER).order_by(ExportJob.id).all()
+    metadata = json.loads((demo_root / "demo-metadata.json").read_text(encoding="utf-8"))
+
+    assert len(jobs) == 1
+    assert jobs[0].project_id == "DEMO-CASE-001"
+    assert metadata["projects"][0]["project_id"] == 1
+    assert metadata["projects"][0]["project_name"] == "DEMO-CASE-001"
+    assert "evidence_number" not in metadata["projects"][0]
+    assert "title" not in metadata["projects"][0]
+    assert metadata["usb_seed"]["drives"][0]["project_id"] == 1
+    assert metadata["mount_seed"]["mounts"][0]["project_id"] == 1
+    assert metadata["job_seed"]["jobs"][0]["project_id"] == 1
+
+
 def test_seed_demo_environment_can_seed_jobs_from_component_ids(db, tmp_path, monkeypatch):
     from app.infrastructure.usb_discovery import DiscoveredDrive, DiscoveredHub, DiscoveredPort, DiscoveredTopology
     from app.services.demo_seed_service import DEMO_SEED_MARKER, seed_demo_environment
@@ -492,6 +595,7 @@ def test_seed_demo_environment_can_seed_jobs_from_component_ids(db, tmp_path, mo
                     "enabled": True,
                     "jobs": [
                         {
+                            "id": 42,
                             "project_id": "DEMO-CASE-001",
                             "evidence_number": "EVID-JOB-001",
                             "mount_id": 77,
@@ -553,6 +657,9 @@ def test_seed_demo_environment_can_seed_jobs_from_component_ids(db, tmp_path, mo
 
     assert metadata["usb_seed"]["drives"][0]["id"] == 1
     assert metadata["mount_seed"]["mounts"][0]["id"] == 1
+    assert metadata["job_seed"]["jobs"][0]["id"] == 42
+    assert jobs[0].id == 42
+    assert metadata["job_seed"]["jobs"][0]["ui_job_id"] == 42
     assert metadata["job_seed"]["jobs"][0]["drive_id"] == 1
     assert metadata["job_seed"]["jobs"][0]["mount_id"] == 1
     assert result.jobs_seeded == 1
