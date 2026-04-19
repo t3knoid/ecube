@@ -1,5 +1,6 @@
 """Tests for POST /auth/token local login endpoint."""
 
+import json
 import sys
 from unittest.mock import MagicMock, patch
 
@@ -305,6 +306,167 @@ def test_auth_token_endpoint_requires_no_auth(unauthenticated_client, db):
     )
 
     assert resp.status_code == 200
+
+
+def test_auth_public_config_returns_safe_defaults_when_demo_disabled(unauthenticated_client, monkeypatch):
+    """Public auth metadata should return empty safe defaults outside demo mode."""
+    monkeypatch.setattr(settings, "demo_mode", False, raising=False)
+    monkeypatch.setattr(settings, "demo_login_message", "Demo-only message", raising=False)
+    monkeypatch.setattr(
+        settings,
+        "demo_accounts",
+        [{"username": "demo_admin", "label": "Admin demo", "description": "Explore admin workflows"}],
+        raising=False,
+    )
+
+    resp = unauthenticated_client.get("/auth/public-config")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {
+        "demo_mode_enabled": False,
+        "login_message": None,
+        "demo_accounts": [],
+        "shared_password": None,
+        "password_change_allowed": True,
+    }
+
+
+def test_auth_public_config_returns_only_display_safe_demo_metadata(unauthenticated_client, monkeypatch):
+    """Public auth metadata should expose only approved demo-safe fields."""
+    monkeypatch.setattr(settings, "demo_mode", True, raising=False)
+    monkeypatch.setattr(settings, "demo_login_message", "Use the demo accounts below.", raising=False)
+    monkeypatch.setattr(settings, "demo_shared_password", "demo", raising=False)
+    monkeypatch.setattr(
+        settings,
+        "demo_accounts",
+        [
+            {
+                "username": "demo_manager",
+                "label": "Manager demo",
+                "description": "Explore drive lifecycle and job visibility.",
+                "password": "must-not-leak",
+            }
+        ],
+        raising=False,
+    )
+    monkeypatch.setattr(settings, "demo_disable_password_change", True, raising=False)
+
+    resp = unauthenticated_client.get("/auth/public-config")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["demo_mode_enabled"] is True
+    assert body["login_message"] == "Use the demo accounts below."
+    assert body["shared_password"] == "demo"
+    assert body["password_change_allowed"] is False
+    assert body["demo_accounts"] == [
+        {
+            "username": "demo_manager",
+            "label": "Manager demo",
+            "description": "Explore drive lifecycle and job visibility.",
+        }
+    ]
+    assert "must-not-leak" not in resp.text
+
+
+def test_auth_public_config_falls_back_to_demo_metadata_file(unauthenticated_client, monkeypatch, tmp_path):
+    """Demo metadata should be loaded from demo-data when env fields are omitted."""
+    demo_root = tmp_path / "demo-data"
+    demo_root.mkdir()
+    (demo_root / "demo-metadata.json").write_text(
+        json.dumps(
+            {
+                "managed_by": "ecube-demo-seed-v1",
+                "demo_config": {
+                    "demo_mode": True,
+                    "login_message": "Use the seeded demo accounts below.",
+                    "shared_password": "demo",
+                    "password_change_allowed": False,
+                    "accounts": [
+                        {
+                            "username": "demo_auditor",
+                            "label": "Auditor demo",
+                            "description": "Read-only audit review",
+                            "roles": ["auditor"],
+                            "password": "must-not-leak",
+                        }
+                    ],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(settings, "demo_mode", True, raising=False)
+    monkeypatch.setattr(settings, "demo_data_root", str(demo_root), raising=False)
+    monkeypatch.setattr(settings, "demo_login_message", "", raising=False)
+    monkeypatch.setattr(settings, "demo_shared_password", "", raising=False)
+    monkeypatch.setattr(settings, "demo_accounts", [], raising=False)
+    monkeypatch.setattr(settings, "demo_disable_password_change", True, raising=False)
+
+    resp = unauthenticated_client.get("/auth/public-config")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["demo_mode_enabled"] is True
+    assert body["login_message"] == "Use the seeded demo accounts below."
+    assert body["shared_password"] == "demo"
+    assert body["password_change_allowed"] is False
+    assert body["demo_accounts"] == [
+        {
+            "username": "demo_auditor",
+            "label": "Auditor demo",
+            "description": "Read-only audit review",
+        }
+    ]
+    assert "must-not-leak" not in resp.text
+
+
+def test_auth_public_config_stays_in_demo_mode_after_seed_even_if_env_flag_is_false(
+    unauthenticated_client, monkeypatch, tmp_path
+):
+    """A seeded demo should remain locked in demo mode until reset."""
+    demo_root = tmp_path / "demo-data"
+    demo_root.mkdir()
+    (demo_root / "demo-metadata.json").write_text(
+        json.dumps(
+            {
+                "managed_by": "ecube-demo-seed-v1",
+                "demo_config": {
+                    "demo_mode": True,
+                    "login_message": "Seeded demo remains active.",
+                    "accounts": [
+                        {
+                            "username": "demo_manager",
+                            "label": "Manager demo",
+                            "description": "Role review",
+                        }
+                    ],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(settings, "demo_mode", False, raising=False)
+    monkeypatch.setattr(settings, "demo_data_root", str(demo_root), raising=False)
+    monkeypatch.setattr(settings, "demo_login_message", "", raising=False)
+    monkeypatch.setattr(settings, "demo_accounts", [], raising=False)
+
+    resp = unauthenticated_client.get("/auth/public-config")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["demo_mode_enabled"] is True
+    assert body["login_message"] == "Seeded demo remains active."
+    assert body["demo_accounts"] == [
+        {
+            "username": "demo_manager",
+            "label": "Manager demo",
+            "description": "Role review",
+        }
+    ]
 
 
 # ---------------------------------------------------------------------------

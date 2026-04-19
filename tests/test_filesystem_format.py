@@ -229,6 +229,17 @@ class TestTryBlkid:
         with patch("app.infrastructure.filesystem_detection.subprocess.run", return_value=proc):
             assert detector._try_blkid("/dev/sdb") == "ext4"
 
+    def test_detect_falls_back_to_lsblk_when_whole_disk_blkid_is_unformatted(self):
+        """Partitioned drives should still resolve a child filesystem via lsblk."""
+        from unittest.mock import patch
+        from app.infrastructure.filesystem_detection import LinuxFilesystemDetector
+
+        detector = LinuxFilesystemDetector()
+        with patch("app.infrastructure.filesystem_detection.validate_device_path", return_value=True), \
+             patch.object(detector, "_try_blkid", return_value="unformatted"), \
+             patch.object(detector, "_try_lsblk", return_value="ext4"):
+            assert detector.detect("/dev/sda") == "ext4"
+
 
 # ===========================================================================
 # Part 1: Filesystem detection mapping

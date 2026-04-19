@@ -67,6 +67,28 @@ def _require_posix() -> None:
         )
 
 
+def _demo_account_usernames() -> set[str]:
+    """Return the configured demo-account usernames as a normalized set."""
+    usernames: set[str] = set()
+    for account in settings.get_demo_accounts() or []:
+        if isinstance(account, dict):
+            username = str(account.get("username", "")).strip()
+        else:
+            username = str(account).strip()
+        if username:
+            usernames.add(username)
+    return usernames
+
+
+def is_demo_account_password_locked(username: str) -> bool:
+    """Whether password changes are disabled for *username* in demo mode."""
+    return bool(
+        settings.is_demo_mode_enabled()
+        and settings.get_demo_disable_password_change()
+        and username in _demo_account_usernames()
+    )
+
+
 class LinuxOsUserProvider:
     """Linux implementation using ``useradd``, ``userdel``, ``chpasswd``, etc."""
 
@@ -448,6 +470,8 @@ def reset_password(username: str, password: str, *, _skip_managed_check: bool = 
     validate_password(password)
     if not user_exists(username):
         raise OSUserError(f"User '{username}' does not exist")
+    if is_demo_account_password_locked(username) and not _skip_managed_check:
+        raise AuthorizationError("Password changes are disabled for demo accounts in demo mode.")
     if not _skip_managed_check:
         _require_ecube_managed_user(username)
 

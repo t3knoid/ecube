@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   createOsUser: vi.fn(),
   getOsUsers: vi.fn(),
   resetOsUserPassword: vi.fn(),
+  getPublicAuthConfig: vi.fn(),
 }))
 
 vi.mock('@/api/users.js', () => ({
@@ -24,6 +25,10 @@ vi.mock('@/api/admin.js', () => ({
   resetOsUserPassword: (...args) => mocks.resetOsUserPassword(...args),
 }))
 
+vi.mock('@/api/auth.js', () => ({
+  getPublicAuthConfig: (...args) => mocks.getPublicAuthConfig(...args),
+}))
+
 function mountView() {
   return mount(UsersView, {
     global: {
@@ -31,7 +36,15 @@ function mountView() {
       stubs: {
         teleport: true,
         DataTable: {
-          template: '<div class="datatable-stub"><slot /></div>',
+          props: ['rows'],
+          template: `
+            <div class="datatable-stub">
+              <div v-for="row in rows" :key="row.username" class="datatable-row">
+                <slot name="cell-roles" :row="row" />
+                <slot name="cell-reset" :row="row" />
+              </div>
+            </div>
+          `,
         },
         Pagination: {
           template: '<div class="pagination-stub" />',
@@ -63,10 +76,17 @@ describe('UsersView existing OS-user confirmation flow', () => {
     mocks.createOsUser.mockReset()
     mocks.getOsUsers.mockReset()
     mocks.resetOsUserPassword.mockReset()
+    mocks.getPublicAuthConfig.mockReset()
 
     mocks.getUsers.mockResolvedValue({ users: [] })
     mocks.getOsUsers.mockResolvedValue({ users: [] })
     mocks.resetOsUserPassword.mockResolvedValue({ message: 'ok' })
+    mocks.getPublicAuthConfig.mockResolvedValue({
+      demo_mode_enabled: false,
+      login_message: null,
+      demo_accounts: [],
+      password_change_allowed: true,
+    })
   })
 
   it('shows confirmation dialog and confirms sync for existing OS user', async () => {
@@ -335,5 +355,66 @@ describe('UsersView existing OS-user confirmation flow', () => {
     })
     expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.setPassword'))).toBeFalsy()
     expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.createOsUser'))).toBeFalsy()
+  })
+
+  it('hides create and role-modification controls in demo mode', async () => {
+    mocks.getUsers.mockResolvedValue({
+      users: [{ username: 'demo_manager', roles: ['admin'] }],
+    })
+    mocks.getOsUsers.mockResolvedValue({
+      users: [{
+        username: 'demo_manager',
+        uid: 1001,
+        gid: 1001,
+        home: '/home/demo_manager',
+        shell: '/bin/bash',
+        groups: ['ecube-admins'],
+      }],
+    })
+    mocks.getPublicAuthConfig.mockResolvedValue({
+      demo_mode_enabled: true,
+      login_message: 'Use the shared demo accounts below.',
+      demo_accounts: [{ username: 'demo_manager', label: 'Manager demo', description: 'Demo account' }],
+      password_change_allowed: false,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const createButtons = wrapper.findAll('button').filter((node) => node.text() === i18n.global.t('users.createOsUser'))
+    expect(createButtons).toHaveLength(0)
+
+    const saveButtons = wrapper.findAll('button').filter((node) => node.text() === i18n.global.t('users.saveRoles'))
+    expect(saveButtons).toHaveLength(1)
+    expect(saveButtons[0].attributes('disabled')).toBeDefined()
+  })
+
+  it('hides password reset for configured demo accounts when demo policy disables changes', async () => {
+    mocks.getUsers.mockResolvedValue({
+      users: [{ username: 'demo_manager', roles: ['admin'] }],
+    })
+    mocks.getOsUsers.mockResolvedValue({
+      users: [{
+        username: 'demo_manager',
+        uid: 1001,
+        gid: 1001,
+        home: '/home/demo_manager',
+        shell: '/bin/bash',
+        groups: ['ecube-admins'],
+      }],
+    })
+    mocks.getPublicAuthConfig.mockResolvedValue({
+      demo_mode_enabled: true,
+      login_message: 'Use the shared demo accounts below.',
+      demo_accounts: [{ username: 'demo_manager', label: 'Manager demo', description: 'Demo account' }],
+      password_change_allowed: false,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('users.resetPasswordUnavailable'))
+    const resetButtons = wrapper.findAll('button').filter((node) => node.text() === i18n.global.t('users.resetPassword'))
+    expect(resetButtons).toHaveLength(0)
   })
 })
