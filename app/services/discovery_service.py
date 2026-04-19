@@ -283,8 +283,9 @@ def run_discovery_sync(
                 drives_updated.append(discovered_drive.device_identifier)
 
     # Mark drives absent from hardware as DISCONNECTED (unless IN_USE — project
-    # isolation must not be broken). Also clear stale device-path evidence so the
-    # UI does not treat historically known drives as currently present.
+    # isolation must not be broken). Also clear stale device-path evidence and
+    # stale port bindings so historical rows do not continue to occupy the same
+    # USB port after the device has been removed.
     all_db_drives: List[UsbDrive] = drive_repo.list_all()
     for drive in all_db_drives:
         if drive.device_identifier not in discovered_ids:
@@ -293,11 +294,13 @@ def run_discovery_sync(
 
             was_available = drive.current_state == DriveState.AVAILABLE
             had_stale_presence = drive.filesystem_path is not None or drive.mount_path is not None
+            had_stale_port_binding = drive.port_id is not None
 
-            if was_available or had_stale_presence:
+            if was_available or had_stale_presence or had_stale_port_binding:
                 drive.current_state = DriveState.DISCONNECTED
                 drive.filesystem_path = None
                 drive.mount_path = None
+                drive.port_id = None
                 try:
                     db.commit()
                 except Exception:

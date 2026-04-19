@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getUsers, setUserRoles, deleteUserRoles } from '@/api/users.js'
+import { getPublicAuthConfig } from '@/api/auth.js'
 import {
   createOsUser,
   getOsUsers,
@@ -19,6 +20,13 @@ const hiddenServiceAccounts = new Set(['www-data'])
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
+
+const publicAuthConfig = ref({
+  demo_mode_enabled: false,
+  login_message: null,
+  demo_accounts: [],
+  password_change_allowed: true,
+})
 
 const osUsers = ref([])
 const passwordResetTarget = ref('')
@@ -82,13 +90,36 @@ function isOsManageableUser(user) {
   return Array.isArray(user?.groups) && user.groups.some((group) => group.startsWith('ecube-'))
 }
 
+const demoPasswordLockedUsernames = computed(() => {
+  if (!publicAuthConfig.value?.demo_mode_enabled || publicAuthConfig.value?.password_change_allowed !== false) {
+    return new Set()
+  }
+  return new Set(
+    (publicAuthConfig.value?.demo_accounts || [])
+      .map((account) => account?.username)
+      .filter(Boolean),
+  )
+})
+
+function isDemoPasswordLockedUser(userOrUsername) {
+  const username = typeof userOrUsername === 'string' ? userOrUsername : userOrUsername?.username
+  return demoPasswordLockedUsernames.value.has(username)
+}
+
+const isDemoUserManagementReadOnly = computed(() => Boolean(publicAuthConfig.value?.demo_mode_enabled))
+
+function canResetPassword(user) {
+  return isOsManageableUser(user) && !isDemoPasswordLockedUser(user)
+}
+
 async function loadAll() {
   loading.value = true
   error.value = ''
   try {
-    const [roleResult, osUserResult] = await Promise.allSettled([
+    const [roleResult, osUserResult, publicConfigResult] = await Promise.allSettled([
       getUsers(),
       getOsUsers(),
+      getPublicAuthConfig(),
     ])
     if (osUserResult.status === 'rejected') {
       error.value = t('users.loadUsersError')
@@ -96,6 +127,14 @@ async function loadAll() {
     }
     if (roleResult.status === 'rejected') {
       error.value = t('users.loadRolesError')
+    }
+    if (publicConfigResult.status === 'fulfilled') {
+      publicAuthConfig.value = {
+        demo_mode_enabled: Boolean(publicConfigResult.value?.demo_mode_enabled),
+        login_message: publicConfigResult.value?.login_message ?? null,
+        demo_accounts: publicConfigResult.value?.demo_accounts || [],
+        password_change_allowed: publicConfigResult.value?.password_change_allowed !== false,
+      }
     }
     const roleUsers = roleResult.status === 'fulfilled' ? roleResult.value.users || [] : []
     const roleMap = new Map(
@@ -115,6 +154,11 @@ async function loadAll() {
 }
 
 async function saveRoles(user) {
+  if (isDemoUserManagementReadOnly.value) {
+    error.value = t('users.demoManagementLocked')
+    return
+  }
+
   saving.value = true
   error.value = ''
   try {
@@ -130,7 +174,9 @@ async function saveRoles(user) {
   } catch (err) {
     const status = err?.response?.status
     const code = err?.response?.data?.code
-    if (status === 409 || code === 'CONFLICT' || code === 'HTTP_409') {
+    if (status === 403 || code === 'FORBIDDEN' || code === 'HTTP_403') {
+      error.value = err?.response?.data?.message || t('users.demoManagementLocked')
+    } else if (status === 409 || code === 'CONFLICT' || code === 'HTTP_409') {
       error.value = t('common.errors.requestConflict')
     } else if (status === 422 || code === 'VALIDATION_ERROR' || code === 'HTTP_422' || code === 'OS_USER_PASSWORD_REQUIRED') {
       error.value = t('common.errors.validationFailed')
@@ -147,6 +193,12 @@ async function saveRoles(user) {
 }
 
 async function submitCreateOsUser(confirmExistingOsUser = null) {
+  if (isDemoUserManagementReadOnly.value) {
+    error.value = t('users.demoManagementLocked')
+    createUserDialog.value = false
+    return
+  }
+
   saving.value = true
   error.value = ''
   const payload = {
@@ -221,7 +273,9 @@ async function submitCreateOsUser(confirmExistingOsUser = null) {
     }
     const status = err?.response?.status
     const code = err?.response?.data?.code
-    if (status === 409 || code === 'CONFLICT' || code === 'HTTP_409') {
+    if (status === 403 || code === 'FORBIDDEN' || code === 'HTTP_403') {
+      error.value = err?.response?.data?.message || t('users.demoManagementLocked')
+    } else if (status === 409 || code === 'CONFLICT' || code === 'HTTP_409') {
       error.value = t('common.errors.requestConflict')
     } else if (status === 422 || code === 'VALIDATION_ERROR' || code === 'HTTP_422' || code === 'OS_USER_PASSWORD_REQUIRED') {
       error.value = t('common.errors.validationFailed')
@@ -346,6 +400,10 @@ function cancelPasswordDialog() {
 }
 
 async function submitResetPassword(username) {
+  if (isDemoPasswordLockedUser(username)) {
+    error.value = t('users.resetPasswordUnavailable')
+    return
+  }
   if (!passwordResetValue.value) return
   saving.value = true
   error.value = ''
@@ -380,6 +438,12 @@ function cancelResetPassword() {
 }
 
 function openResetPassword(username) {
+  if (isDemoPasswordLockedUser(username)) {
+    passwordResetTarget.value = ''
+    passwordResetValue.value = ''
+    error.value = t('users.resetPasswordUnavailable')
+    return
+  }
   passwordResetTarget.value = username
   passwordResetValue.value = ''
 }
@@ -398,26 +462,27 @@ onMounted(loadAll)
     <p v-if="error" class="error-banner">{{ error }}</p>
 
     <article class="panel">
+      <p v-if="isDemoUserManagementReadOnly" class="muted">{{ t('users.demoManagementLocked') }}</p>
       <div class="panel-actions">
-        <button class="btn btn-primary" @click="createUserDialog = true">{{ t('users.createOsUser') }}</button>
+        <button v-if="!isDemoUserManagementReadOnly" class="btn btn-primary" @click="createUserDialog = true">{{ t('users.createOsUser') }}</button>
       </div>
       <DataTable :columns="userColumns" :rows="pagedOsUsers" row-key="username" :empty-text="t('users.emptyOsUsers')">
         <template #cell-roles="{ row }">
           <div class="role-cell">
             <div class="role-grid">
               <label v-for="role in roles" :key="`${row.username}-${role}`">
-                <input v-model="row.roles" type="checkbox" :value="role" />
+                <input v-model="row.roles" type="checkbox" :value="role" :disabled="isDemoUserManagementReadOnly || saving" />
                 {{ roleLabel(role) }}
               </label>
             </div>
-            <button class="btn btn-primary" :disabled="saving || !hasRoleChanges(row)" @click="saveRoles(row)">{{ t('users.saveRoles') }}</button>
+            <button class="btn btn-primary" :disabled="isDemoUserManagementReadOnly || saving || !hasRoleChanges(row)" @click="saveRoles(row)">{{ t('users.saveRoles') }}</button>
           </div>
         </template>
         <template #cell-reset="{ row }">
           <div class="inline-reset">
-            <button v-if="isOsManageableUser(row)" class="btn" @click="openResetPassword(row.username)">{{ t('users.resetPassword') }}</button>
+            <button v-if="canResetPassword(row)" class="btn" @click="openResetPassword(row.username)">{{ t('users.resetPassword') }}</button>
             <span v-else class="muted">{{ t('users.resetPasswordUnavailable') }}</span>
-            <div v-if="isOsManageableUser(row) && passwordResetTarget === row.username" class="inline-form">
+            <div v-if="canResetPassword(row) && passwordResetTarget === row.username" class="inline-form">
               <input v-model="passwordResetValue" type="password" :placeholder="t('auth.password')" :aria-label="t('users.resetPassword')" autocomplete="new-password" />
               <button class="btn btn-primary" @click="submitResetPassword(row.username)">{{ t('users.savePassword') }}</button>
               <button class="btn" @click="cancelResetPassword">{{ t('common.actions.cancel') }}</button>

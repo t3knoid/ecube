@@ -1,9 +1,12 @@
-"""Authentication router — issues JWTs for locally authenticated users.
+"""Authentication router — issues JWTs and exposes public login metadata.
 
 The ``POST /auth/token`` endpoint is **unauthenticated** (it is the login
-route).  It validates OS credentials via PAM, determines ECUBE roles for the
+route). It validates OS credentials via PAM, determines ECUBE roles for the
 user (first from the DB ``user_roles`` table, then from OS group mappings via
 the configured role resolver), and returns a signed JWT.
+
+The ``GET /auth/public-config`` endpoint is also unauthenticated and returns
+only public-safe metadata that the login screen may use for demo deployments.
 """
 
 from __future__ import annotations
@@ -70,9 +73,64 @@ class TokenResponse(BaseModel):
     token_type: str = Field(default="bearer")
 
 
+class DemoAccountResponse(BaseModel):
+    username: str = Field(..., description="Demo-safe username for public display")
+    label: str = Field(default="", description="Short label for the demo account")
+    description: str = Field(default="", description="Role or usage description")
+
+
+class PublicAuthConfigResponse(BaseModel):
+    demo_mode_enabled: bool = Field(default=False, description="Whether demo mode is enabled")
+    login_message: str | None = Field(default=None, description="Optional public-safe login instructions")
+    demo_accounts: list[DemoAccountResponse] = Field(default_factory=list, description="Demo-safe accounts for display on the login screen")
+    shared_password: str | None = Field(default=None, description="Optional shared demo password intentionally shown on the login screen")
+    password_change_allowed: bool = Field(default=True, description="Whether password changes are allowed in the current deployment")
+
+
 # ---------------------------------------------------------------------------
-# Endpoint
+# Endpoints
 # ---------------------------------------------------------------------------
+
+
+@router.get("/public-config", response_model=PublicAuthConfigResponse)
+def public_auth_config() -> PublicAuthConfigResponse:
+    """Return public-safe auth metadata for the login screen.
+
+    This route intentionally exposes only display-safe demo information. It must
+    not leak internal paths, hardware details, private credentials, or other
+    sensitive configuration values.
+    """
+    if not settings.is_demo_mode_enabled():
+        return PublicAuthConfigResponse(
+            demo_mode_enabled=False,
+            login_message=None,
+            demo_accounts=[],
+            shared_password=None,
+            password_change_allowed=True,
+        )
+
+    accounts: list[DemoAccountResponse] = []
+    for raw_account in settings.get_demo_accounts():
+        try:
+            accounts.append(
+                DemoAccountResponse(
+                    username=str(raw_account.get("username", "")).strip(),
+                    label=str(raw_account.get("label", "")).strip(),
+                    description=str(raw_account.get("description", "")).strip(),
+                )
+            )
+        except AttributeError:
+            logger.warning("Ignoring invalid demo account config", {"type": type(raw_account).__name__})
+
+    accounts = [account for account in accounts if account.username]
+
+    return PublicAuthConfigResponse(
+        demo_mode_enabled=True,
+        login_message=settings.get_demo_login_message() or None,
+        demo_accounts=accounts,
+        shared_password=settings.get_demo_shared_password() or None,
+        password_change_allowed=not settings.get_demo_disable_password_change(),
+    )
 
 @router.post("/token", response_model=TokenResponse, responses={**R_400, **R_401, **R_403, **R_404, **R_422})
 def login(

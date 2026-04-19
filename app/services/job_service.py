@@ -5,6 +5,7 @@ import os
 from typing import Optional, Tuple
 
 from fastapi import BackgroundTasks, HTTPException
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -61,12 +62,24 @@ def _resolve_job_source_path(body: JobCreate, db: Session) -> str:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client_ip: Optional[str] = None) -> ExportJob:
+def create_job(
+    body: JobCreate,
+    db: Session,
+    actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
+    seeded_job_id: Optional[int] = None,
+) -> ExportJob:
     drive_repo = DriveRepository(db)
     audit_repo = AuditRepository(db)
     resolved_source_path = _resolve_job_source_path(body, db)
 
+    if seeded_job_id is not None:
+        existing_job = db.query(ExportJob).filter(ExportJob.id == seeded_job_id).one_or_none()
+        if existing_job is not None:
+            raise HTTPException(status_code=409, detail=f"Job id {seeded_job_id} already exists")
+
     job = ExportJob(
+        id=seeded_job_id,
         project_id=body.project_id,
         evidence_number=body.evidence_number,
         source_path=resolved_source_path,
@@ -180,6 +193,14 @@ def create_job(body: JobCreate, db: Session, actor: Optional[str] = None, client
             db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
             drive.current_state = DriveState.IN_USE
             db.flush()
+
+        if seeded_job_id is not None and getattr(db.bind.dialect, "name", None) == "postgresql":
+            db.execute(
+                text(
+                    "SELECT setval(pg_get_serial_sequence('export_jobs', 'id'), "
+                    "(SELECT COALESCE(MAX(id), 1) FROM export_jobs), true)"
+                )
+            )
 
         db.commit()
     except (HTTPException, ECUBEException):
