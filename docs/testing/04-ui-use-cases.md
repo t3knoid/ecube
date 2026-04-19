@@ -99,7 +99,7 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 | UC-4.2 | Filter/search drives by state (DISCONNECTED, AVAILABLE, IN_USE, ARCHIVED) | Any authenticated user | any |
 | UC-4.3 | Trigger USB discovery refresh | Admin, Manager | admin, manager |
 | UC-4.4 | Format a drive (select ext4 or exfat) | Admin, Manager | admin, manager |
-| UC-4.5 | Initialize a drive for a project from eligible mounted-share assignments | Admin, Manager | admin, manager |
+| UC-4.5 | Initialize a mounted drive for a project from eligible mounted-share assignments | Admin, Manager | admin, manager |
 | UC-4.6 | Mount a drive to the managed ECUBE mount root | Admin, Manager | admin, manager |
 | UC-4.7 | Prepare a drive for safe eject | Admin, Manager | admin, manager |
 | UC-4.8 | View drive detail (status, project, capacity, with protected device and path fields) | Any authenticated user | any |
@@ -110,7 +110,7 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 | UC-4.13 | Set/update hub location hint | Admin, Manager | admin, manager |
 | UC-4.14 | Set/update port friendly label | Admin, Manager | admin, manager |
 
-**UI Implication:** Drive inventory dashboard with state-based color indicators and a finite-state-machine visual. Action buttons (Format, Initialize, Mount, Eject) are contextually enabled based on current drive state. The drive detail screen shows project binding prominently, offers a Mount action for admin and manager users when the drive has a usable filesystem path and is not already mounted, and redacts sensitive device and path fields in standard operator views. The Enable Drive action is shown only for admin and manager users when a `DISCONNECTED` drive is still physically detected on a known port; historically known but absent drives remain non-actionable in the UI. The Initialize dialog now uses a project dropdown populated only from eligible mounted shares, blocks submission when no such share exists, and remains fully keyboard-operable. After Prepare Eject, the UI offers a direct path into the Chain of Custody report workflow. Port management panel (accessible to admin/manager) shows all USB ports with enable/disable toggles — disabled ports prevent drives from becoming AVAILABLE during discovery, and AVAILABLE drives on a subsequently disabled port are demoted to DISCONNECTED on the next sync. IN_USE drives are never affected by port enablement. Hub and port listing displays enriched hardware metadata (vendor/product IDs, link speed). Admins and managers can assign human-readable labels (hub location hints, port friendly labels) for easier physical identification.
+**UI Implication:** Drive inventory dashboard with state-based color indicators and a finite-state-machine visual. Action buttons (Format, Initialize, Mount, Eject) are contextually enabled based on current drive state. The drive detail screen shows project binding prominently, offers a Mount action for admin and manager users when the drive has a usable filesystem path and is not already mounted, and redacts sensitive device and path fields in standard operator views. The Enable Drive action is shown only for admin and manager users when a `DISCONNECTED` drive is still physically detected on a known port; historically known but absent drives remain non-actionable in the UI. The Initialize dialog now uses a project dropdown populated only from eligible mounted shares, remains blocked until the destination drive itself is mounted, disables submission when prerequisites are missing, and remains fully keyboard-operable. After Prepare Eject, the UI offers a direct path into the Chain of Custody report workflow. Port management panel (accessible to admin/manager) shows all USB ports with enable/disable toggles — disabled ports prevent drives from becoming AVAILABLE during discovery, and AVAILABLE drives on a subsequently disabled port are demoted to DISCONNECTED on the next sync. IN_USE drives are never affected by port enablement. Hub and port listing displays enriched hardware metadata (vendor/product IDs, link speed). Admins and managers can assign human-readable labels (hub location hints, port friendly labels) for easier physical identification.
 
 ---
 
@@ -238,7 +238,7 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 The primary operational workflow combines use cases across groups:
 
 1. **Setup** (one-time): UC-1.1 → UC-1.2 → UC-1.3 → UC-1.6 → UC-2.1
-2. **Prepare infrastructure**: UC-5.2/5.3 (add mounts) → UC-4.3 (discover drives) → UC-4.9/4.10 (enable ports) → UC-4.4 (format) → UC-4.5 (initialize for project) → UC-4.6 (mount drive)
+2. **Prepare infrastructure**: UC-5.2/5.3 (add mounts) → UC-4.3 (discover drives) → UC-4.9/4.10 (enable ports) → UC-4.4 (format) → UC-4.6 (mount drive) → UC-4.5 (initialize for project)
 3. **Execute export**: UC-6.1 (create job using the mounted destination) → UC-6.2 (start) → UC-6.3 (monitor) → UC-6.5 (verify) → UC-6.6 (manifest)
 4. **Eject & chain of custody**: UC-4.7 (prepare eject) → UC-7.8/7.10 (retrieve CoC) → UC-7.13 (confirm handoff) → UC-7.14 (dismiss warning) → UC-7.15 (save report for records) → drive transitions to `ARCHIVED`
 5. **Audit trail**: UC-7.1–7.7 (review operational audit) + UC-7.8–7.12 (validate handoff in compliance record)

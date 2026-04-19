@@ -958,21 +958,22 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 
 | # | Test | Expected |
 |---|------|----------|
-| 1 | Initialize an `AVAILABLE` drive with recognized filesystem | 200, state → `IN_USE` |
+| 1 | Initialize an `AVAILABLE`, mounted drive with a recognized filesystem | 200, state → `IN_USE` |
 | 2 | Initialize a drive with `filesystem_type=NULL` | 409, `CONFLICT` — must have recognized filesystem |
 | 3 | Initialize a drive with `filesystem_type=unformatted` | 409, `CONFLICT` — must have recognized filesystem |
 | 4 | Initialize a drive with `filesystem_type=unknown` | 409, `CONFLICT` — must have recognized filesystem |
 | 5 | Initialize a `DISCONNECTED` drive (not present / disabled port) | 409, `CONFLICT`; audit `INIT_REJECTED_NOT_AVAILABLE` recorded; note: `GET /drives` excludes disconnected drives by default — use `include_disconnected=true` to see them |
-| 6 | Mount an `AVAILABLE` or `IN_USE` drive with a recognized filesystem | 200, `mount_path` is populated |
-| 7 | Mount a drive with `filesystem_type=unknown`, `unformatted`, or `NULL` | 409, `CONFLICT` — must have recognized filesystem |
-| 8 | Prepare-eject an `IN_USE` drive | 200, state → `AVAILABLE`, `mount_path` cleared |
-| 9 | Prepare-eject an `AVAILABLE` drive | 409, `CONFLICT` |
-| 10 | Format-then-initialize-mount workflow: discover unformatted → format ext4 → initialize → mount | Each step succeeds; `mount_path` becomes populated |
-| 11 | Attempt to format an `IN_USE` drive | 409, `CONFLICT` — must be `AVAILABLE` |
-| 12 | Open the Initialize dialog when no eligible mounted project exists | UI shows a helper message, disables the project selector, and blocks submission |
-| 13 | View drive detail after initialization | Sensitive device and path fields are shown as `Protected` instead of raw internal identifiers |
-| 14 | View the mounts list and browse controls | Raw remote and local mount paths are redacted in the table; browse remains enabled only for mounted shares |
-| 15 | Operate the Initialize and Add Mount dialogs with keyboard only | Focus enters the dialog, Tab stays trapped within it, Escape closes it, and focus returns to the triggering control |
+| 6 | Initialize an `AVAILABLE` drive that is not mounted even though the project share is `MOUNTED` | 409, `CONFLICT`; audit `INIT_REJECTED_NOT_MOUNTED` recorded |
+| 7 | Mount an `AVAILABLE` or `IN_USE` drive with a recognized filesystem | 200, `mount_path` is populated |
+| 8 | Mount a drive with `filesystem_type=unknown`, `unformatted`, or `NULL` | 409, `CONFLICT` — must have recognized filesystem |
+| 9 | Prepare-eject an `IN_USE` drive | 200, state → `AVAILABLE`, `mount_path` cleared |
+| 10 | Prepare-eject an `AVAILABLE` drive | 409, `CONFLICT` |
+| 11 | Format-then-mount-initialize workflow: discover unformatted → format ext4 → mount → initialize | Each step succeeds; `mount_path` is populated before initialization and the drive transitions to `IN_USE` |
+| 12 | Attempt to format an `IN_USE` drive | 409, `CONFLICT` — must be `AVAILABLE` |
+| 13 | Open the Initialize dialog when no eligible mounted project exists | UI shows a helper message, disables the project selector, and blocks submission |
+| 14 | View drive detail after initialization | Sensitive device and path fields are shown as `Protected` instead of raw internal identifiers |
+| 15 | View the mounts list and browse controls | Raw remote and local mount paths are redacted in the table; browse remains enabled only for mounted shares |
+| 16 | Operate the Initialize and Add Mount dialogs with keyboard only | Focus enters the dialog, Tab stays trapped within it, Escape closes it, and focus returns to the triggering control |
 
 ### 12.4.1 Filesystem Detection
 
