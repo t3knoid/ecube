@@ -40,7 +40,7 @@ from app.database import get_db
 from app.repositories.audit_repository import AuditRepository, best_effort_audit
 from app.repositories.hardware_repository import HubRepository, PortRepository
 from app.repositories.user_role_repository import UserRoleRepository
-from app.exceptions import OSUserPasswordRequiredError
+from app.exceptions import AuthorizationError, OSUserPasswordRequiredError
 from app.schemas.admin import (
     AddOSGroupsRequest,
     CreateOSGroupRequest,
@@ -63,8 +63,9 @@ from app.schemas.hardware import HubUpdateRequest, PortEnableRequest, PortUpdate
 from app.infrastructure import get_drive_discovery, get_filesystem_detector, get_os_user_provider
 from app.infrastructure.os_user_protocol import OSUserError, OsUserProvider
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500, R_503, R_504
+from app.services.demo_policy_service import enforce_user_management_write_allowed
 from app.services.discovery_service import run_discovery_sync
-from app.services.os_user_service import validate_group_name, validate_username
+from app.services.os_user_service import is_demo_account_password_locked, validate_group_name, validate_username
 from app.constants import ECUBE_GROUPNAME_PATTERN, USERNAME_PATTERN, ECUBE_GROUP_ROLE_MAP, RESERVED_USERNAMES
 from app.utils.client_ip import get_client_ip
 from app.utils.sanitize import sanitize_error_message
@@ -651,6 +652,17 @@ def create_os_user(
             detail=f"Cannot create reserved username: {body.username}",
         )
 
+    enforce_user_management_write_allowed(
+        db=db,
+        actor=current_user.username,
+        user_roles=current_user.roles,
+        path=str(request.url.path),
+        method=request.method,
+        attempted_action="create_os_user",
+        client_ip=get_client_ip(request),
+        target_user=body.username,
+    )
+
     for group_name in effective_groups:
         try:
             validate_group_name(group_name)
@@ -980,6 +992,17 @@ def reset_os_user_password(
 ) -> dict:
     """Reset an OS user's password via ``chpasswd``."""
     _validate_path_username(username)
+
+    if is_demo_account_password_locked(username):
+        best_effort_audit(db, "AUTHORIZATION_DENIED", current_user.username, {
+            "path": str(request.url.path),
+            "method": request.method,
+            "required_roles": ["admin"],
+            "user_roles": current_user.roles,
+            "target_user": username,
+            "reason": "Password changes are disabled for demo accounts in demo mode.",
+        }, client_ip=get_client_ip(request))
+        raise AuthorizationError("Password changes are disabled for demo accounts in demo mode.")
 
     try:
         _get_provider().reset_password(username, body.password)

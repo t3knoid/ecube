@@ -145,6 +145,38 @@ class TestUserRoleEndpoints:
         resp = admin_client.get("/users/delme/roles")
         assert resp.json()["roles"] == []
 
+    def test_demo_mode_blocks_role_mutations(self, admin_client, db, monkeypatch):
+        from app.models.audit import AuditLog
+
+        monkeypatch.setattr(settings, "demo_mode", True, raising=False)
+
+        resp = admin_client.put("/users/demo-user/roles", json={"roles": ["manager"]})
+        assert resp.status_code == 403
+        assert "demo mode" in resp.json()["message"].lower()
+
+        logs = db.query(AuditLog).filter(AuditLog.action == "AUTHORIZATION_DENIED").all()
+        assert any(log.details.get("target_user") == "demo-user" for log in logs)
+
+    def test_seeded_demo_metadata_keeps_role_mutations_blocked_when_env_flag_is_false(self, admin_client, db, monkeypatch, tmp_path):
+        from app.models.audit import AuditLog
+
+        demo_root = tmp_path / "demo-data"
+        demo_root.mkdir()
+        (demo_root / "demo-metadata.json").write_text(
+            '{"managed_by":"ecube-demo-seed-v1","demo_config":{"demo_mode":true}}',
+            encoding="utf-8",
+        )
+
+        monkeypatch.setattr(settings, "demo_mode", False, raising=False)
+        monkeypatch.setattr(settings, "demo_data_root", str(demo_root), raising=False)
+
+        resp = admin_client.put("/users/demo-user/roles", json={"roles": ["manager"]})
+        assert resp.status_code == 403
+        assert "demo mode" in resp.json()["message"].lower()
+
+        logs = db.query(AuditLog).filter(AuditLog.action == "AUTHORIZATION_DENIED").all()
+        assert any(log.details.get("target_user") == "demo-user" for log in logs)
+
     def test_list_users_after_assignments(self, admin_client):
         admin_client.put("/users/a/roles", json={"roles": ["admin"]})
         admin_client.put("/users/b/roles", json={"roles": ["processor"]})
