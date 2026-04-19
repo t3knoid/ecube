@@ -244,6 +244,29 @@ def initialize_drive(
             ),
         )
 
+    if not drive.mount_path:
+        try:
+            audit_repo.add(
+                action="INIT_REJECTED_NOT_MOUNTED",
+                user=actor,
+                project_id=project_id,
+                drive_id=drive_id,
+                details={
+                    "actor": actor,
+                    "drive_id": drive_id,
+                    "requested_project_id": project_id,
+                    "error_code": "DRIVE_NOT_MOUNTED",
+                    "message": "Drive is not mounted",
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for INIT_REJECTED_NOT_MOUNTED")
+        raise HTTPException(
+            status_code=409,
+            detail="Drive must be mounted before it can be initialized for a project.",
+        )
+
     try:
         project_source = mount_repo.get_mounted_project_for_update(project_id)
     except ConflictError as exc:

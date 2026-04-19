@@ -141,7 +141,12 @@ class TestDriveAuthorization:
         from app.models.hardware import DriveState, UsbDrive
         from app.models.network import MountStatus, MountType, NetworkMount
 
-        drive = UsbDrive(device_identifier="AUTHZ-INIT-ADMIN", current_state=DriveState.AVAILABLE, filesystem_type="ext4")
+        drive = UsbDrive(
+            device_identifier="AUTHZ-INIT-ADMIN",
+            current_state=DriveState.AVAILABLE,
+            filesystem_type="ext4",
+            mount_path="/mnt/ecube/authz-init-admin",
+        )
         mount = NetworkMount(
             type=MountType.NFS,
             remote_path="server:/authz-admin",
@@ -158,7 +163,12 @@ class TestDriveAuthorization:
         from app.models.hardware import DriveState, UsbDrive
         from app.models.network import MountStatus, MountType, NetworkMount
 
-        drive = UsbDrive(device_identifier="AUTHZ-INIT-MGR", current_state=DriveState.AVAILABLE, filesystem_type="ext4")
+        drive = UsbDrive(
+            device_identifier="AUTHZ-INIT-MGR",
+            current_state=DriveState.AVAILABLE,
+            filesystem_type="ext4",
+            mount_path="/mnt/ecube/authz-init-mgr",
+        )
         mount = NetworkMount(
             type=MountType.NFS,
             remote_path="server:/authz-manager",
