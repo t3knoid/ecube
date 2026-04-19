@@ -1099,6 +1099,25 @@ class TestOSUserEndpoints:
         assert resp.status_code == 200
         assert "reset" in resp.json()["message"].lower()
 
+    @patch("app.services.os_user_service.subprocess.run")
+    def test_create_user_forbidden_in_demo_mode(self, mock_subprocess, admin_client, db, monkeypatch):
+        from app.models.audit import AuditLog
+
+        monkeypatch.setattr(settings, "demo_mode", True)
+
+        resp = admin_client.post("/admin/os-users", json={
+            "username": "newdemo",
+            "password": "StrongPass#123",
+            "roles": ["processor"],
+        })
+
+        assert resp.status_code == 403
+        assert "demo mode" in resp.json()["message"].lower()
+        mock_subprocess.assert_not_called()
+
+        logs = db.query(AuditLog).filter(AuditLog.action == "AUTHORIZATION_DENIED").all()
+        assert any(log.details.get("target_user") == "newdemo" for log in logs)
+
     def test_create_user_unsafe_password_rejected(self, admin_client):
         """Passwords with newlines or colons are rejected at the schema layer."""
         for bad_pw in ["pass\nword", "pass\rword", "user:pass"]:
@@ -1122,6 +1141,83 @@ class TestOSUserEndpoints:
         assert body["code"] == "VALIDATION_ERROR"
         assert "trace_id" in body
         assert "body -> password" in body["message"]
+
+    @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_reset_password_for_demo_account_is_forbidden_and_audited(
+        self,
+        mock_pwd,
+        mock_grp,
+        mock_subprocess,
+        admin_client,
+        db,
+        monkeypatch,
+    ):
+        mock_pwd.getpwnam.return_value = _make_pw(name="demo_manager")
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="ecube-admins", members=["demo_manager"]),
+        ]
+
+        monkeypatch.setattr(settings, "demo_mode", True)
+        monkeypatch.setattr(settings, "demo_disable_password_change", True)
+        monkeypatch.setattr(
+            settings,
+            "demo_accounts",
+            [{"username": "demo_manager", "label": "Manager demo"}],
+        )
+
+        sentinel_password = "SENTINEL-MUST-NOT-BE-LOGGED"
+        resp = admin_client.put(
+            "/admin/os-users/demo_manager/password",
+            json={"password": sentinel_password},
+        )
+
+        assert resp.status_code == 403
+        assert "demo account" in resp.json()["message"].lower()
+        mock_subprocess.assert_not_called()
+
+        from app.repositories.audit_repository import AuditRepository
+
+        logs = AuditRepository(db).query(action="AUTHORIZATION_DENIED")
+        matching = [
+            log for log in logs
+            if log.details.get("target_user") == "demo_manager"
+        ]
+        assert matching
+        assert sentinel_password not in str(matching[-1].details)
+
+    @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_reset_password_allows_trusted_demo_seed_override(
+        self,
+        mock_pwd,
+        mock_grp,
+        mock_subprocess,
+        monkeypatch,
+    ):
+        mock_pwd.getpwnam.return_value = _make_pw(name="demo_manager")
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="ecube-admins", members=["demo_manager"]),
+        ]
+        mock_subprocess.return_value = _ok_result()
+
+        monkeypatch.setattr(settings, "demo_mode", True)
+        monkeypatch.setattr(settings, "demo_disable_password_change", True)
+        monkeypatch.setattr(
+            settings,
+            "demo_accounts",
+            [{"username": "demo_manager", "label": "Manager demo"}],
+        )
+
+        os_user_service.reset_password(
+            "demo_manager",
+            "TrustedSeed#123",
+            _skip_managed_check=True,
+        )
+
+        mock_subprocess.assert_called_once()
 
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
