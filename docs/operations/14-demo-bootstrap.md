@@ -66,6 +66,7 @@ sudo -u postgres psql -c "CREATE DATABASE ecube OWNER ecube;"
 
 ```bash
 sudo bash -lc 'cd /opt/ecube && /opt/ecube/venv/bin/alembic upgrade head'
+```
 
 5. Restart the ECUBE service so the new configuration is loaded.
 
@@ -151,8 +152,9 @@ A typical file now contains both the staged project list and the runtime demo se
     "enabled": true,
     "drives": [
       {
+        "id": 1,
         "port_system_path": "1-1",
-        "project_id": "DEMO-CASE-001",
+        "project_id": 1,
         "device_identifier": "usb-demo-001"
       }
     ]
@@ -164,13 +166,13 @@ A typical file now contains both the staged project list and the runtime demo se
         "id": 17,
         "type": "NFS",
         "remote_path": "192.168.10.25:/exports/demo-case-001",
-        "project_id": "DEMO-CASE-001"
+        "project_id": 1
       },
       {
         "id": 14,
         "type": "SMB",
         "remote_path": "//fileserver/demo-share",
-        "project_id": "DEMO-CASE-002",
+        "project_id": 2,
         "username": "demo-user",
         "credentials_file": "/opt/ecube/demo-smb.creds"
       }
@@ -180,17 +182,31 @@ A typical file now contains both the staged project list and the runtime demo se
     "enabled": true,
     "jobs": [
       {
-        "id": "job-demo-case-001",
-        "project_id": "DEMO-CASE-001",
+        "id": 101,
+        "project_id": 1,
         "evidence_number": "EVID-DEMO-JOB-001",
         "mount_id": 17,
         "drive_id": 1,
         "source_path": "/incoming",
-        "status": "PENDING"
+        "status": "PENDING",
+        "ui_job_id": 101
       }
     ]
   },
-  "projects": []
+  "projects": [
+    {
+      "project_id": 1,
+      "project_name": "DEMO-CASE-001",
+      "folder": "demo-case-001",
+      "sanitized": true
+    },
+    {
+      "project_id": 2,
+      "project_name": "DEMO-CASE-002",
+      "folder": "demo-case-002",
+      "sanitized": true
+    }
+  ]
 }
 ```
 
@@ -351,11 +367,12 @@ The discovered ECUBE USB port path that must have a real device attached.
 
 #### usb_seed.drives[].project_id
 
-The project that the real USB device on that configured port should be bound to.
+The numeric demo project reference for the real USB device on that configured port.
 
-- Type: string
-- Example: `DEMO-CASE-001`
-- Effect: binds the attached USB device to the selected project for isolation and walkthrough behavior
+- Type: integer
+- Example: `1`
+- Effect: binds the attached USB device to the project described by `projects[].project_name`
+- Compatibility note: older metadata that still uses the string project name is normalized automatically during seed, but new metadata should use the numeric project ID
 
 #### usb_seed.drives[].device_identifier
 
@@ -383,7 +400,7 @@ Turns real NFS and SMB mount seeding on or off.
 List of explicit network-share-to-project mappings for the demo seed.
 
 - Type: array of mount seed objects
-- Requirement: each entry should identify the protocol, remote URI path, and associated project
+- Requirement: each entry should identify the protocol, remote URI path, and associated numeric demo project reference
 - Recommendation: define only the real shares you want included in the demonstration workflow
 
 #### mount_seed.mounts[].id
@@ -413,11 +430,11 @@ The real NFS export path or SMB URI that ECUBE should mount.
 
 #### mount_seed.mounts[].project_id
 
-The project that the mounted share should be associated with.
+The numeric demo project reference that the mounted share should be associated with.
 
-- Type: string
-- Example: `DEMO-CASE-001`
-- Effect: preserves project isolation for the demo workflow
+- Type: integer
+- Example: `1`
+- Effect: preserves project isolation for the demo workflow by resolving to the matching `projects[].project_name`
 
 #### mount_seed.mounts[].username
 
@@ -458,22 +475,32 @@ Turns metadata-driven job seeding on or off.
 List of job definitions that ECUBE should create during the demo seed.
 
 - Type: array of job seed objects
-- Requirement: each entry should define the project, evidence number, numeric source mount ID, numeric destination USB ID, and source path
+- Requirement: each entry should define the numeric demo project reference, evidence number, numeric source mount ID, numeric destination USB ID, and source path
 
 #### job_seed.jobs[].id
 
-Optional metadata label for the seeded job definition.
+Optional numeric seeded job ID.
 
-- Type: string
-- Example: `job-demo-case-001`
-- Note: this is only a metadata label for the JSON document; it is not the numeric job ID shown in the UI
+- Type: integer
+- Example: `101`
+- Effect: when provided, ECUBE uses this value as the actual `export_jobs.id` for the seeded database row
+- Recommendation: use a stable numeric value if you want the same walkthrough job ID after every reseed
+
+#### job_seed.jobs[].ui_job_id
+
+Runtime confirmation of the actual job ID created by seed.
+
+- Type: integer
+- Example: `101`
+- Effect: written back into the managed metadata after seeding so the JSON mirrors the real UI and database ID
 
 #### job_seed.jobs[].project_id
 
-The project the seeded job belongs to.
+The numeric demo project reference for the seeded job.
 
-- Type: string
-- Example: `DEMO-CASE-001`
+- Type: integer
+- Example: `1`
+- Effect: resolves to the matching `projects[].project_name` during trusted job creation
 
 #### job_seed.jobs[].evidence_number
 
@@ -516,32 +543,26 @@ Optional initial job status.
 
 ### projects
 
-List of seeded synthetic projects and their presentation metadata.
+List of seeded synthetic projects and their catalog metadata.
 
 - Type: array of project objects
-- Use for: demo-safe cases, sample evidence numbers, and folder layout under the demo root.
+- Use for: demo-safe case references, relational mapping, and folder layout under the demo root.
 
 #### projects[].project_id
 
-The ECUBE project identifier associated with the seeded sample content.
+Stable numeric demo project reference used by `usb_seed`, `mount_seed`, and `job_seed`.
+
+- Type: integer
+- Example: `1`
+- Use for: relational references inside the managed demo metadata.
+
+#### projects[].project_name
+
+The actual ECUBE project identifier associated with the seeded sample content.
 
 - Type: string
 - Example: `DEMO-CASE-001`
-- Use for: drive binding, mount association, and walkthrough scenarios.
-
-#### projects[].evidence_number
-
-Human-readable evidence or matter number shown in seeded job state.
-
-- Type: string
-- Example: `EVID-001`
-
-#### projects[].title
-
-Short descriptive title for the synthetic case.
-
-- Type: string
-- Example: `Synthetic internal investigation`
+- Use for: drive binding, mount association, and walkthrough scenarios shown in the UI and seeded database rows.
 
 #### projects[].folder
 
@@ -608,8 +629,9 @@ Use the following sample as a starting point for a managed demo deployment:
     "enabled": true,
     "drives": [
       {
+        "id": 1,
         "port_system_path": "1-1",
-        "project_id": "DEMO-CASE-001",
+        "project_id": 1,
         "device_identifier": "usb-demo-001"
       }
     ]
@@ -621,13 +643,13 @@ Use the following sample as a starting point for a managed demo deployment:
         "id": 17,
         "type": "NFS",
         "remote_path": "192.168.10.25:/exports/demo-case-001",
-        "project_id": "DEMO-CASE-001"
+        "project_id": 1
       },
       {
         "id": 14,
         "type": "SMB",
         "remote_path": "//fileserver/demo-share",
-        "project_id": "DEMO-CASE-002",
+        "project_id": 2,
         "username": "demo-user",
         "credentials_file": "/opt/ecube/demo-smb.creds"
       }
@@ -637,28 +659,27 @@ Use the following sample as a starting point for a managed demo deployment:
     "enabled": true,
     "jobs": [
       {
-        "id": "job-demo-case-001",
-        "project_id": "DEMO-CASE-001",
+        "id": 101,
+        "project_id": 1,
         "evidence_number": "EVID-DEMO-JOB-001",
         "mount_id": 17,
         "drive_id": 1,
         "source_path": "/incoming",
-        "status": "PENDING"
+        "status": "PENDING",
+        "ui_job_id": 101
       }
     ]
   },
   "projects": [
     {
-      "project_id": "DEMO-CASE-001",
-      "evidence_number": "EVID-001",
-      "title": "Synthetic internal investigation",
+      "project_id": 1,
+      "project_name": "DEMO-CASE-001",
       "folder": "demo-case-001",
       "sanitized": true
     },
     {
-      "project_id": "DEMO-CASE-002",
-      "evidence_number": "EVID-002",
-      "title": "Synthetic HR review sample",
+      "project_id": 2,
+      "project_name": "DEMO-CASE-002",
       "folder": "demo-case-002",
       "sanitized": true
     }
