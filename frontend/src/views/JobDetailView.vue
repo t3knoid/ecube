@@ -1,9 +1,9 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
-import { getJob, getJobFiles, startJob, verifyJob, generateManifest, updateJob, completeJob, deleteJob } from '@/api/jobs.js'
+import { getJob, getJobFiles, startJob, pauseJob, verifyJob, generateManifest, updateJob, completeJob, deleteJob } from '@/api/jobs.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import { getFileHashes, compareFiles } from '@/api/files.js'
 import { getDrives } from '@/api/drives.js'
@@ -45,6 +45,7 @@ const supportingDrives = ref([])
 const supportingMounts = ref([])
 const showEditDialog = ref(false)
 const showDeleteDialog = ref(false)
+const showPausePendingDialog = ref(false)
 
 const editForm = ref({
   project_id: '',
@@ -148,6 +149,15 @@ const canStart = computed(() => {
   const status = String(job.value?.status || '').toUpperCase()
   return canOperate.value && ['PENDING', 'FAILED', 'PAUSED'].includes(status)
 })
+
+const canPause = computed(() => canOperate.value && currentStatus.value === 'RUNNING')
+const isJobFullyComplete = computed(() => {
+  const status = currentStatus.value
+  if (status !== 'COMPLETED') return false
+  return progressMetrics.value.percent >= 100
+})
+const canVerify = computed(() => canOperate.value && isJobFullyComplete.value)
+const canGenerateManifest = computed(() => canOperate.value && isJobFullyComplete.value)
 
 const editEligibleMounts = computed(() => {
   const projectId = normalizeProjectId(editForm.value.project_id)
@@ -265,9 +275,8 @@ function formatMountLabel(mount) {
 
 function buildManifestPath(currentJob) {
   const targetPath = String(currentJob?.target_mount_path || '').trim().replace(/\/+$/, '')
-  const id = Number(currentJob?.id)
-  if (!targetPath || !Number.isInteger(id) || id <= 0) return ''
-  return `${targetPath}/manifest_${id}.json`
+  if (!targetPath) return ''
+  return `${targetPath}/manifest.json`
 }
 
 async function loadSupportingData() {
@@ -490,7 +499,13 @@ async function runAction(action) {
 
   try {
     if (action === 'start') {
+      showPausePendingDialog.value = false
       job.value = await startJob(job.value.id, { thread_count: job.value.thread_count || 4 })
+    } else if (action === 'pause') {
+      job.value = await pauseJob(job.value.id)
+      if (String(job.value?.status || '').toUpperCase() === 'PAUSING') {
+        showPausePendingDialog.value = true
+      }
     } else if (action === 'verify') {
       job.value = await verifyJob(job.value.id)
     } else {
@@ -537,6 +552,12 @@ async function runCompare() {
     error.value = buildJobError(err)
   }
 }
+
+watch(currentStatus, (status) => {
+  if (!['RUNNING', 'PAUSING'].includes(status)) {
+    showPausePendingDialog.value = false
+  }
+})
 
 onMounted(async () => {
   await refreshAll()
@@ -612,9 +633,10 @@ onUnmounted(() => {
       <div class="actions">
         <button class="btn" :disabled="!canEdit || acting" @click="openEditDialog">{{ t('common.actions.edit') }}</button>
         <button class="btn" :disabled="!canStart || acting" @click="runAction('start')">{{ t('jobs.start') }}</button>
+        <button class="btn" :disabled="!canPause || acting" @click="runAction('pause')">{{ t('jobs.pause') }}</button>
         <button class="btn" :disabled="!canComplete || acting" @click="runComplete">{{ t('jobs.complete') }}</button>
-        <button class="btn" :disabled="!canOperate || acting" @click="runAction('verify')">{{ t('jobs.verify') }}</button>
-        <button class="btn" :disabled="!canOperate || acting" @click="runAction('manifest')">{{ t('jobs.manifest') }}</button>
+        <button class="btn" :disabled="!canVerify || acting" @click="runAction('verify')">{{ t('jobs.verify') }}</button>
+        <button class="btn" :disabled="!canGenerateManifest || acting" @click="runAction('manifest')">{{ t('jobs.manifest') }}</button>
         <button v-if="canDelete" class="btn btn-danger" :disabled="acting" @click="showDeleteDialog = true">{{ t('common.actions.delete') }}</button>
       </div>
     </article>
@@ -739,6 +761,19 @@ onUnmounted(() => {
         </div>
       </article>
     </div>
+
+    <teleport to="body">
+      <div v-if="showPausePendingDialog" class="dialog-overlay" @click.self="showPausePendingDialog = false">
+        <div class="dialog-panel pause-wait-dialog" role="dialog" aria-modal="true" aria-labelledby="pause-wait-title">
+          <h2 id="pause-wait-title">{{ t('jobs.pauseRequestedTitle') }}</h2>
+          <p>{{ t('jobs.pauseRequestedMessage') }}</p>
+          <p v-if="job" class="muted">#{{ job.id }} • {{ job.status }}</p>
+          <div class="dialog-actions">
+            <button class="btn" @click="showPausePendingDialog = false">{{ t('common.actions.close') }}</button>
+          </div>
+        </div>
+      </div>
+    </teleport>
 
     <ConfirmDialog
       v-model="showDeleteDialog"
