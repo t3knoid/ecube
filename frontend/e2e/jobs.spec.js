@@ -64,11 +64,11 @@ test('jobs create, start, verify, and manifest flow', async ({ page }) => {
   await page.goto('/jobs')
   await page.getByRole('button', { name: 'Create Job' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
-  await page.getByLabel('Project').selectOption('P-77')
-  await page.getByLabel('Evidence').fill('EV-77')
-  await page.getByLabel('Select mount').selectOption('4')
-  await page.getByLabel('Source path').fill('folder')
-  await page.getByLabel('Select drive').selectOption('1')
+  await page.locator('#job-project').selectOption('P-77')
+  await page.locator('#job-evidence').fill('EV-77')
+  await page.locator('#job-mount').selectOption('4')
+  await page.locator('#job-source-path').fill('folder')
+  await page.locator('#job-drive').selectOption('1')
   await page.getByRole('dialog').getByRole('button', { name: 'Create Job' }).click()
 
   await expect(page).toHaveURL(/\/jobs\/77$/)
@@ -78,6 +78,69 @@ test('jobs create, start, verify, and manifest flow', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Verify' }).click()
   await page.getByRole('button', { name: 'Generate Manifest' }).click()
+
+  await expectNoCriticalA11yViolations(page)
+})
+
+test('jobs list supports safe pause and resume flow', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['admin'])
+
+  let listCalls = 0
+  let jobState = {
+    id: 89,
+    project_id: 'P-89',
+    evidence_number: 'EV-89',
+    status: 'RUNNING',
+    copied_bytes: 50,
+    total_bytes: 100,
+    thread_count: 2,
+    file_count: 2,
+    files_succeeded: 1,
+    active_duration_seconds: 90,
+  }
+
+  await routeJson(page, '**/api/drives', [])
+  await routeJson(page, '**/api/mounts', [])
+
+  await page.route('**/api/jobs**', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback()
+      return
+    }
+
+    listCalls += 1
+    if (jobState.status === 'PAUSING' && listCalls >= 3) {
+      jobState = { ...jobState, status: 'PAUSED' }
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([jobState]),
+    })
+  })
+
+  await page.route('**/api/jobs/89/pause', async (route) => {
+    jobState = { ...jobState, status: 'PAUSING' }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobState) })
+  })
+
+  await page.route('**/api/jobs/89/start', async (route) => {
+    jobState = { ...jobState, status: 'RUNNING' }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobState) })
+  })
+
+  await page.goto('/jobs')
+
+  await page.getByRole('button', { name: 'Pause' }).click()
+  await expect(page.getByText('Pause in progress', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Start' })).toBeDisabled()
+
+  await expect(page.getByText('Pause in progress', { exact: true })).toHaveCount(0, { timeout: 10000 })
+  await expect(page.getByRole('button', { name: 'Start' })).toBeEnabled({ timeout: 10000 })
+
+  await page.getByRole('button', { name: 'Start' }).click()
+  await expect(page.locator('.status-badge').filter({ hasText: 'Running' }).first()).toBeVisible()
 
   await expectNoCriticalA11yViolations(page)
 })
@@ -111,5 +174,5 @@ test('job detail polls and reflects status progression', async ({ page }) => {
   // Progress bar is rendered while in progress
   await expect(page.locator('.progress-bar')).toBeVisible()
   // Polling eventually advances to COMPLETED (polling interval is 3 s; allow up to 20 s)
-  await expect(page.getByText('COMPLETED')).toBeVisible({ timeout: 20000 })
+  await expect(page.getByText('COMPLETED', { exact: true })).toBeVisible({ timeout: 20000 })
 })

@@ -181,6 +181,29 @@ def _log_job_path_context(job_id: int, source_path: str, target_mount_path: Opti
     )
 
 
+def _normalize_started_at(value: Optional[datetime]) -> Optional[datetime]:
+    """Return a timezone-stable value for comparing job run ownership."""
+    if value is None:
+        return None
+    if value.tzinfo is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value.replace(tzinfo=None)
+
+
+def _calculate_total_active_seconds(
+    existing_seconds: Optional[int],
+    started_at: Optional[datetime],
+    ended_at: Optional[datetime] = None,
+) -> float:
+    """Return cumulative active run time across pause/resume cycles."""
+    total = float(existing_seconds or 0)
+    start = _normalize_started_at(started_at)
+    end = _normalize_started_at(ended_at or datetime.now(timezone.utc))
+    if start is None or end is None:
+        return max(0.0, total)
+    return max(0.0, total + max(0.0, (end - start).total_seconds()))
+
+
 def _relative_path(f: Path, source: Path) -> Path:
     """Return *f* relative to *source* if *source* is a directory, else just the filename."""
     return f.relative_to(source) if source.is_dir() else Path(f.name)
@@ -206,6 +229,18 @@ def _process_file(
 
         ef = file_repo.get(export_file_id)
         if ef is None:
+            return
+
+        job_repo = JobRepository(db)
+        job = job_repo.get(ef.job_id)
+        if job is None:
+            return
+        if job.status in (JobStatus.PAUSING, JobStatus.PAUSED):
+            ef.status = FileStatus.PENDING
+            try:
+                file_repo.save(ef)
+            except Exception:
+                logger.exception("DB commit failed restoring PENDING status for file %s", export_file_id)
             return
 
         ef.status = FileStatus.COPYING
@@ -368,10 +403,15 @@ def run_copy_job(job_id: int) -> None:
         job = job_repo.get(job_id)
         if not job:
             return
+        if job.status == JobStatus.PAUSED:
+            return
 
         job.status = JobStatus.RUNNING
         if not job.started_at:
             job.started_at = datetime.now(timezone.utc)
+        run_started_at = job.started_at
+        run_started_at_key = _normalize_started_at(run_started_at)
+        job.active_duration_seconds = int(job.active_duration_seconds or 0)
         job.completed_at = None
         try:
             job_repo.save(job)
@@ -454,6 +494,7 @@ def run_copy_job(job_id: int) -> None:
 
             timeout = settings.copy_job_timeout
             timed_out = False
+            pause_requested = False
 
             executor = ThreadPoolExecutor(max_workers=job.thread_count or settings.copy_default_thread_count)
             try:
@@ -468,6 +509,27 @@ def run_copy_job(job_id: int) -> None:
                         # Worker already recorded FileStatus.ERROR in its own session;
                         # unexpected exceptions are caught here to let other workers finish.
                         pass
+
+                    db.expire_all()
+                    latest_job = job_repo.get(job_id)
+                    latest_started_at_key = _normalize_started_at(
+                        latest_job.started_at if latest_job else None
+                    )
+                    if latest_job and latest_started_at_key and latest_started_at_key != run_started_at_key:
+                        for pending in futures:
+                            if not pending.done():
+                                pending.cancel()
+                        logger.info(
+                            "Skipping stale copy worker after newer resume",
+                            extra={"job_id": job_id, "started_at": str(run_started_at)},
+                        )
+                        return
+                    if latest_job and latest_job.status in (JobStatus.PAUSING, JobStatus.PAUSED):
+                        pause_requested = True
+                        for pending in futures:
+                            if not pending.done():
+                                pending.cancel()
+                        break
 
                     # Check timeout after each file completes.
                     if timeout > 0 and (time.monotonic() - job_start) > timeout:
@@ -489,9 +551,30 @@ def run_copy_job(job_id: int) -> None:
 
             job = job_repo.get(job_id)
             if job:
-                if timed_out:
+                if _normalize_started_at(job.started_at) != run_started_at_key:
+                    logger.info(
+                        "Skipping stale finalization for resumed copy job",
+                        extra={"job_id": job_id, "started_at": str(run_started_at)},
+                    )
+                    return
+                run_finished_at = datetime.now(timezone.utc)
+                total_active_seconds = _calculate_total_active_seconds(
+                    job.active_duration_seconds,
+                    run_started_at,
+                    run_finished_at,
+                )
+                job.active_duration_seconds = int(round(total_active_seconds))
+                all_files_finished = (done_count + error_count) >= int(job.file_count or 0)
+                if (pause_requested or job.status in (JobStatus.PAUSING, JobStatus.PAUSED)) and not all_files_finished:
+                    job.status = JobStatus.PAUSED
+                    job.completed_at = None
+                    try:
+                        job_repo.save(job)
+                    except Exception:
+                        logger.error("DB commit failed setting job %s to PAUSED", job_id)
+                elif timed_out:
                     job.status = JobStatus.FAILED
-                    job.completed_at = datetime.now(timezone.utc)
+                    job.completed_at = run_finished_at
                     try:
                         job_repo.save(job)
                     except Exception:
@@ -504,13 +587,13 @@ def run_copy_job(job_id: int) -> None:
                                     "intended_status": "FAILED",
                                     "reason": "timeout",
                                     "timeout_seconds": timeout,
-                                    "elapsed_seconds": round(time.monotonic() - job_start, 2),
+                                    "elapsed_seconds": round(total_active_seconds, 2),
                                 },
                             )
                         except Exception:
                             logger.error("Failed to write audit log for JOB_STATUS_PERSIST_FAILED")
                     else:
-                        elapsed_seconds = round(time.monotonic() - job_start, 2)
+                        elapsed_seconds = round(total_active_seconds, 2)
                         copy_rate_mb_s = _calculate_copy_rate_mb_s(job.copied_bytes or 0, elapsed_seconds)
                         _log_job_path_context(job_id, job.source_path, job.target_mount_path, "timeout")
                         logger.error(
@@ -570,14 +653,14 @@ def run_copy_job(job_id: int) -> None:
                                     "intended_status": job.status.value,
                                     "file_count": job.file_count,
                                     "error_count": error_count,
-                                    "elapsed_seconds": round(time.monotonic() - job_start, 2),
+                                    "elapsed_seconds": round(total_active_seconds, 2),
                                 },
                             )
                         except Exception:
                             logger.error("Failed to write audit log for JOB_STATUS_PERSIST_FAILED")
                     else:
                         audit_action = "JOB_COMPLETED" if job.status == JobStatus.COMPLETED else "JOB_FAILED"
-                        elapsed_seconds = round(time.monotonic() - job_start, 2)
+                        elapsed_seconds = round(total_active_seconds, 2)
                         copy_rate_mb_s = _calculate_copy_rate_mb_s(job.copied_bytes or 0, elapsed_seconds)
                         _log_job_path_context(job_id, job.source_path, job.target_mount_path, "copy-finished")
                         if job.status == JobStatus.FAILED:
@@ -653,8 +736,12 @@ def run_copy_job(job_id: int) -> None:
 
             job = job_repo.get(job_id)
             if job:
+                run_finished_at = datetime.now(timezone.utc)
                 job.status = JobStatus.FAILED
-                job.completed_at = datetime.now(timezone.utc)
+                job.completed_at = run_finished_at
+                job.active_duration_seconds = int(round(
+                    _calculate_total_active_seconds(job.active_duration_seconds, run_started_at, run_finished_at)
+                ))
                 try:
                     job_repo.save(job)
                 except Exception:
@@ -667,13 +754,13 @@ def run_copy_job(job_id: int) -> None:
                                 "intended_status": "FAILED",
                                 "reason": safe_reason,
                                 "phase": "copy",
-                                "elapsed_seconds": round(time.monotonic() - job_start, 2),
+                                "elapsed_seconds": round(job.active_duration_seconds or 0, 2),
                             },
                         )
                     except Exception:
                         logger.error("Failed to write audit log for JOB_STATUS_PERSIST_FAILED")
                 else:
-                    elapsed_seconds = round(time.monotonic() - job_start, 2)
+                    elapsed_seconds = round(job.active_duration_seconds or 0, 2)
                     copy_rate_mb_s = _calculate_copy_rate_mb_s(job.copied_bytes or 0, elapsed_seconds)
                     _log_job_path_context(job_id, job.source_path, job.target_mount_path, "copy-exception")
                     logger.error(

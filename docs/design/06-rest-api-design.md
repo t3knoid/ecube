@@ -783,7 +783,7 @@ Create a new job.
 
 ### `POST /jobs/{job_id}/start`
 
-Start job with thread count. Sets `started_by` to the authenticated user and `started_at` to the current timestamp. Resets `completed_at` to `null`. Accepts jobs in `PENDING` or `FAILED` status (allowing restart of failed jobs).
+Start job with thread count. Sets `started_by` to the authenticated user and `started_at` to the current timestamp. Resets `completed_at` to `null`. Accepts jobs in `PENDING`, `FAILED`, or `PAUSED` status, allowing a safe resume after an operator-requested pause.
 
 **Roles:** `admin`, `manager`, `processor`
 
@@ -792,13 +792,28 @@ Start job with thread count. Sets `started_by` to the authenticated user and `st
 - `401 Unauthorized` — Missing/invalid credentials
 - `403 Forbidden` — Insufficient role
 - `404 Not Found` — Job not found
-- `409 Conflict` — Job cannot be started from its current status
+- `409 Conflict` — Job cannot be started from its current status, including the intermediate `PAUSING` state
 - `422 Validation Error` — Invalid path/body parameters
+- `500 Internal Server Error` — Database error
+
+### `POST /jobs/{job_id}/pause`
+
+Request a safe pause for a running job. The endpoint returns immediately with the job in `PAUSING`; the background copy engine transitions the job to `PAUSED` after all in-flight copy threads finish their current work.
+
+**Roles:** `admin`, `manager`, `processor`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid credentials
+- `403 Forbidden` — Insufficient role
+- `404 Not Found` — Job not found
+- `409 Conflict` — Job is not currently in a pausable running state
+- `422 Validation Error` — Invalid path parameter
 - `500 Internal Server Error` — Database error
 
 ### `GET /jobs/{job_id}`
 
-Return job status, progress, file counts, timestamps, drive info, and error summary.
+Return job status, progress, file counts, timestamps, cumulative active duration, drive info, and error summary.
 
 **Roles:** `admin`, `manager`, `processor`, `auditor`
 
