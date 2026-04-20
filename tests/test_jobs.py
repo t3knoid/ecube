@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from app.models.audit import AuditLog
 from app.models.hardware import UsbDrive, DriveState
-from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus
+from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, Manifest
 from app.models.network import MountStatus, MountType, NetworkMount
 
 
@@ -548,6 +548,53 @@ def test_create_manifest_overwrites_manifest_json_and_includes_metadata(client, 
     assert manifest_payload["job_id"] == job.id
     assert manifest_payload["generated_by"] == "test-user"
     assert manifest_payload["generated_at"]
+
+
+def test_create_manifest_conflict_when_drive_not_mounted(client, db):
+    job = ExportJob(
+        project_id="PROJ-MANIFEST-MISSING-001",
+        evidence_number="EV-MANIFEST-MISSING-001",
+        source_path="/data/evidence",
+        target_mount_path=None,
+        status=JobStatus.COMPLETED,
+    )
+    db.add(job)
+    db.commit()
+
+    response = client.post(f"/jobs/{job.id}/manifest")
+
+    assert response.status_code == 409
+    assert "Assigned drive is not mounted" in response.text
+    assert db.query(Manifest).filter(Manifest.job_id == job.id).count() == 0
+
+    audit = db.query(AuditLog).filter(AuditLog.action == "MANIFEST_CREATE_FAILED", AuditLog.job_id == job.id).first()
+    assert audit is not None
+    assert audit.details["error"]
+
+
+def test_create_manifest_write_failure_returns_server_error_and_sanitized_audit(client, db, tmp_path):
+    job = ExportJob(
+        project_id="PROJ-MANIFEST-WRITE-001",
+        evidence_number="EV-MANIFEST-WRITE-001",
+        source_path="/data/evidence",
+        target_mount_path=str(tmp_path),
+        status=JobStatus.COMPLETED,
+    )
+    db.add(job)
+    db.commit()
+
+    with patch("builtins.open", side_effect=OSError("disk full: /tmp/private-path")):
+        response = client.post(f"/jobs/{job.id}/manifest")
+
+    assert response.status_code == 500
+    assert "Manifest file could not be written" in response.text
+    assert db.query(Manifest).filter(Manifest.job_id == job.id).count() == 0
+
+    audit = db.query(AuditLog).filter(AuditLog.action == "MANIFEST_CREATE_FAILED", AuditLog.job_id == job.id).first()
+    assert audit is not None
+    assert audit.details["error"]
+    assert "/tmp/private-path" not in json.dumps(audit.details)
+    assert "disk full" not in json.dumps(audit.details)
 
 
 def test_create_manifest_writes_application_log_line(client, db, caplog):
