@@ -1,19 +1,22 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
-import { getJob, getJobFiles, startJob, verifyJob, generateManifest } from '@/api/jobs.js'
+import { getJob, getJobFiles, startJob, pauseJob, verifyJob, generateManifest, updateJob, completeJob, deleteJob } from '@/api/jobs.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import { getFileHashes, compareFiles } from '@/api/files.js'
+import { getDrives } from '@/api/drives.js'
+import { getMounts } from '@/api/mounts.js'
 import { usePolling } from '@/composables/usePolling.js'
 import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
-import { useStatusLabels } from '@/composables/useStatusLabels.js'
 
 const route = useRoute()
+const router = useRouter()
 const { t } = useI18n()
 const authStore = useAuthStore()
 
@@ -30,16 +33,37 @@ const loading = ref(false)
 const filesLoading = ref(false)
 const acting = ref(false)
 const error = ref('')
+const infoMessage = ref('')
 const lastFileSnapshotKey = ref('')
 
 const selectedFileId = ref(null)
 const fileHashes = ref(null)
-const compareA = ref(null)
-const compareB = ref(null)
+const compareFileId = ref(null)
 const compareResult = ref(null)
+const supportingDrives = ref([])
+const supportingMounts = ref([])
+const showEditDialog = ref(false)
+const showDeleteDialog = ref(false)
+const showPausePendingDialog = ref(false)
+const editDialogRef = ref(null)
+const pauseDialogRef = ref(null)
+const dialogTriggerRef = ref(null)
+
+const editForm = ref({
+  project_id: '',
+  evidence_number: '',
+  mount_id: null,
+  source_path: '/',
+  drive_id: null,
+  thread_count: 4,
+})
 
 const canOperate = computed(() => authStore.hasAnyRole(['admin', 'manager', 'processor']))
 const canInspectHashes = computed(() => authStore.hasAnyRole(['admin', 'auditor']))
+const currentStatus = computed(() => String(job.value?.status || '').toUpperCase())
+const canEdit = computed(() => canOperate.value && ['PENDING', 'PAUSED', 'FAILED'].includes(currentStatus.value))
+const canComplete = computed(() => canOperate.value && ['PENDING', 'PAUSED', 'FAILED'].includes(currentStatus.value))
+const canDelete = computed(() => canOperate.value && currentStatus.value === 'PENDING')
 
 const fileColumns = computed(() => {
   const columns = [
@@ -73,6 +97,10 @@ const fileListNotice = computed(() => {
   const shown = Number(debug.value.returned_files || 0)
   return total > shown ? t('jobs.showingFiles', { shown, total }) : ''
 })
+
+const selectedCompareFile = computed(() => (
+  (debug.value.files || []).find((file) => Number(file.id) === Number(compareFileId.value)) || null
+))
 
 const progressMetrics = computed(() => {
   const currentJob = job.value || {}
@@ -126,6 +154,36 @@ const progressActive = computed(() => {
 const canStart = computed(() => {
   const status = String(job.value?.status || '').toUpperCase()
   return canOperate.value && ['PENDING', 'FAILED', 'PAUSED'].includes(status)
+})
+
+const canPause = computed(() => canOperate.value && currentStatus.value === 'RUNNING')
+const isJobFullyComplete = computed(() => {
+  const status = currentStatus.value
+  if (status !== 'COMPLETED') return false
+  return progressMetrics.value.percent >= 100
+})
+const canVerify = computed(() => canOperate.value && isJobFullyComplete.value)
+const canGenerateManifest = computed(() => canOperate.value && isJobFullyComplete.value)
+
+const editEligibleMounts = computed(() => {
+  const projectId = normalizeProjectId(editForm.value.project_id)
+  if (!projectId) return []
+  return supportingMounts.value.filter(
+    (mount) => String(mount?.status || '').toUpperCase() === 'MOUNTED'
+      && normalizeProjectId(mount?.project_id) === projectId,
+  )
+})
+
+const editEligibleDrives = computed(() => {
+  const projectId = normalizeProjectId(editForm.value.project_id)
+  if (!projectId) return []
+  return supportingDrives.value.filter((drive) => {
+    const state = String(drive?.current_state || '').toUpperCase()
+    const boundProject = normalizeProjectId(drive?.current_project_id)
+    return ['AVAILABLE', 'IN_USE'].includes(state)
+      && !!drive?.mount_path
+      && (!boundProject || boundProject === projectId)
+  })
 })
 
 function calculateDurationSeconds(currentJob) {
@@ -211,6 +269,191 @@ function formatCopyRate(bytesValue, totalSeconds) {
 
   const mbPerSecond = bytesValue / (1024 * 1024) / totalSeconds
   return `${mbPerSecond.toFixed(1)} MB/s`
+}
+
+function formatDriveLabel(drive) {
+  return `#${drive.id} - ${drive.device_identifier || '-'}`
+}
+
+function formatMountLabel(mount) {
+  return mount?.remote_path || t('jobs.chooseMount')
+}
+
+function buildManifestPath(currentJob) {
+  const targetPath = String(currentJob?.target_mount_path || '').trim().replace(/\/+$/, '')
+  if (!targetPath) return ''
+  return `${targetPath}/manifest.json`
+}
+
+async function loadSupportingData() {
+  const [driveResult, mountResult] = await Promise.allSettled([getDrives(), getMounts()])
+  supportingDrives.value = driveResult.status === 'fulfilled'
+    ? (driveResult.value || []).map((item) => normalizeProjectRecord(item, ['current_project_id']))
+    : []
+  supportingMounts.value = mountResult.status === 'fulfilled'
+    ? (mountResult.value || []).map((item) => normalizeProjectRecord(item, ['project_id']))
+    : []
+}
+
+function inferMountForJob(currentJob) {
+  const projectId = normalizeProjectId(currentJob?.project_id)
+  const sourcePath = String(currentJob?.source_path || '')
+  const match = supportingMounts.value
+    .filter((mount) => String(mount?.status || '').toUpperCase() === 'MOUNTED' && normalizeProjectId(mount?.project_id) === projectId)
+    .sort((left, right) => String(right?.local_mount_point || '').length - String(left?.local_mount_point || '').length)
+    .find((mount) => {
+      const root = String(mount?.local_mount_point || '')
+      return root && (sourcePath === root || sourcePath.startsWith(`${root}/`))
+    })
+  return match || null
+}
+
+function buildEditSourcePath(currentJob, mount) {
+  const sourcePath = String(currentJob?.source_path || '').trim()
+  const root = String(mount?.local_mount_point || '').trim()
+  if (!sourcePath) return '/'
+  if (!root) return sourcePath
+  if (sourcePath === root) return '/'
+  if (sourcePath.startsWith(`${root}/`)) {
+    return sourcePath.slice(root.length) || '/'
+  }
+  return sourcePath
+}
+
+function trapFocusWithin(event, container) {
+  if (!container) return
+  const focusable = Array.from(
+    container.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'),
+  ).filter((element) => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true')
+
+  if (!focusable.length) return
+
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  const active = document.activeElement
+
+  if (event.shiftKey && active === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
+function closeEditDialog() {
+  showEditDialog.value = false
+}
+
+function closePausePendingDialog() {
+  showPausePendingDialog.value = false
+}
+
+function handleDialogKeydown(event) {
+  if (showEditDialog.value) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeEditDialog()
+      return
+    }
+    if (event.key === 'Tab') {
+      trapFocusWithin(event, editDialogRef.value)
+    }
+    return
+  }
+
+  if (showPausePendingDialog.value) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closePausePendingDialog()
+      return
+    }
+    if (event.key === 'Tab') {
+      trapFocusWithin(event, pauseDialogRef.value)
+    }
+  }
+}
+
+async function openEditDialog() {
+  if (!job.value || !canEdit.value) return
+  dialogTriggerRef.value = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  error.value = ''
+  await loadSupportingData()
+  const inferredMount = inferMountForJob(job.value)
+  editForm.value = {
+    project_id: normalizeProjectId(job.value.project_id) || '',
+    evidence_number: String(job.value.evidence_number || ''),
+    mount_id: inferredMount?.id ?? null,
+    source_path: buildEditSourcePath(job.value, inferredMount),
+    drive_id: job.value.drive?.id ?? null,
+    thread_count: Number(job.value.thread_count || 4),
+  }
+  showEditDialog.value = true
+}
+
+function editFormReady() {
+  return !!normalizeProjectId(editForm.value.project_id)
+    && !!String(editForm.value.evidence_number || '').trim()
+    && !!String(editForm.value.source_path || '').trim()
+    && editForm.value.mount_id != null
+    && editForm.value.drive_id != null
+}
+
+async function submitEditJob() {
+  if (!job.value || !editFormReady()) return
+  acting.value = true
+  error.value = ''
+  try {
+    const updated = await updateJob(job.value.id, {
+      project_id: normalizeProjectId(editForm.value.project_id),
+      evidence_number: String(editForm.value.evidence_number || '').trim(),
+      mount_id: Number(editForm.value.mount_id),
+      source_path: String(editForm.value.source_path || '').trim(),
+      drive_id: Number(editForm.value.drive_id),
+      thread_count: Number(editForm.value.thread_count || 4),
+      max_file_retries: Number(job.value.max_file_retries || 3),
+      retry_delay_seconds: Number(job.value.retry_delay_seconds || 1),
+      callback_url: job.value.callback_url || null,
+    })
+    job.value = normalizeProjectRecord(updated, ['project_id'])
+    closeEditDialog()
+    await refreshAll()
+  } catch (err) {
+    error.value = buildJobError(err)
+  } finally {
+    acting.value = false
+  }
+}
+
+async function runComplete() {
+  if (!job.value || !canComplete.value) return
+  acting.value = true
+  error.value = ''
+  try {
+    job.value = normalizeProjectRecord(await completeJob(job.value.id), ['project_id'])
+    await refreshAll()
+    jobPoller.stop()
+  } catch (err) {
+    error.value = buildJobError(err)
+  } finally {
+    acting.value = false
+  }
+}
+
+async function confirmDelete() {
+  if (!job.value || !canDelete.value) return
+  acting.value = true
+  error.value = ''
+  try {
+    await deleteJob(job.value.id)
+    showDeleteDialog.value = false
+    jobPoller.stop()
+    router.push({ name: 'jobs' })
+  } catch (err) {
+    error.value = buildJobError(err)
+  } finally {
+    acting.value = false
+  }
 }
 
 async function loadDebug(force = false) {
@@ -307,15 +550,38 @@ async function runAction(action) {
   if (!job.value) return
   acting.value = true
   error.value = ''
+  infoMessage.value = ''
+  const manifestContext = action === 'manifest'
+    ? {
+        id: job.value.id,
+        target_mount_path: job.value.target_mount_path,
+      }
+    : null
+
   try {
     if (action === 'start') {
+      closePausePendingDialog()
       job.value = await startJob(job.value.id, { thread_count: job.value.thread_count || 4 })
+    } else if (action === 'pause') {
+      dialogTriggerRef.value = document.activeElement instanceof HTMLElement ? document.activeElement : null
+      job.value = await pauseJob(job.value.id)
+      if (String(job.value?.status || '').toUpperCase() === 'PAUSING') {
+        showPausePendingDialog.value = true
+      }
     } else if (action === 'verify') {
       job.value = await verifyJob(job.value.id)
     } else {
       job.value = await generateManifest(job.value.id)
     }
     await refreshAll()
+
+    if (action === 'manifest') {
+      const manifestPath = buildManifestPath(job.value || manifestContext)
+      infoMessage.value = manifestPath
+        ? t('jobs.manifestSuccessWithPath', { path: manifestPath })
+        : t('jobs.manifestSuccess')
+    }
+
     if (isTerminalStatus(job.value?.status)) {
       jobPoller.stop()
     } else {
@@ -328,9 +594,14 @@ async function runAction(action) {
   }
 }
 
+function formatCompareValue(value) {
+  return value == null || value === '' ? '-' : String(value)
+}
+
 async function loadHashes(fileId) {
   if (!canInspectHashes.value) return
   selectedFileId.value = fileId
+  compareFileId.value = fileId
   fileHashes.value = null
   try {
     fileHashes.value = await getFileHashes(fileId)
@@ -340,14 +611,65 @@ async function loadHashes(fileId) {
 }
 
 async function runCompare() {
-  if (!compareA.value || !compareB.value) return
+  if (!compareFileId.value) return
   compareResult.value = null
+  error.value = ''
   try {
-    compareResult.value = await compareFiles({ file_id_a: Number(compareA.value), file_id_b: Number(compareB.value) })
+    compareResult.value = await compareFiles({ file_id_a: Number(compareFileId.value), file_id_b: Number(compareFileId.value) })
   } catch (err) {
     error.value = buildJobError(err)
   }
 }
+
+watch(currentStatus, (status) => {
+  if (!['RUNNING', 'PAUSING'].includes(status)) {
+    closePausePendingDialog()
+  }
+})
+
+watch(showEditDialog, async (open) => {
+  if (open) {
+    document.addEventListener('keydown', handleDialogKeydown)
+    await nextTick()
+    const target = editDialogRef.value?.querySelector('#job-evidence')
+    if (target instanceof HTMLElement) {
+      target.focus()
+    }
+    return
+  }
+
+  if (!showPausePendingDialog.value) {
+    document.removeEventListener('keydown', handleDialogKeydown)
+  }
+  const trigger = dialogTriggerRef.value
+  dialogTriggerRef.value = null
+  await nextTick()
+  if (trigger instanceof HTMLElement) {
+    trigger.focus()
+  }
+})
+
+watch(showPausePendingDialog, async (open) => {
+  if (open) {
+    document.addEventListener('keydown', handleDialogKeydown)
+    await nextTick()
+    const target = pauseDialogRef.value?.querySelector('button')
+    if (target instanceof HTMLElement) {
+      target.focus()
+    }
+    return
+  }
+
+  if (!showEditDialog.value) {
+    document.removeEventListener('keydown', handleDialogKeydown)
+  }
+  const trigger = dialogTriggerRef.value
+  dialogTriggerRef.value = null
+  await nextTick()
+  if (trigger instanceof HTMLElement) {
+    trigger.focus()
+  }
+})
 
 onMounted(async () => {
   await refreshAll()
@@ -357,6 +679,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  document.removeEventListener('keydown', handleDialogKeydown)
   jobPoller.stop()
 })
 </script>
@@ -370,6 +693,7 @@ onUnmounted(() => {
 
     <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
     <p v-if="error" class="error-banner">{{ error }}</p>
+    <p v-if="infoMessage" class="ok-banner wrap-anywhere" role="status" aria-live="polite">{{ infoMessage }}</p>
 
     <article v-if="job" class="panel">
       <div class="job-header">
@@ -420,9 +744,13 @@ onUnmounted(() => {
       </div>
 
       <div class="actions">
+        <button class="btn" :disabled="!canEdit || acting" @click="openEditDialog">{{ t('common.actions.edit') }}</button>
         <button class="btn" :disabled="!canStart || acting" @click="runAction('start')">{{ t('jobs.start') }}</button>
-        <button class="btn" :disabled="!canOperate || acting" @click="runAction('verify')">{{ t('jobs.verify') }}</button>
-        <button class="btn" :disabled="!canOperate || acting" @click="runAction('manifest')">{{ t('jobs.manifest') }}</button>
+        <button class="btn" :disabled="!canPause || acting" @click="runAction('pause')">{{ t('jobs.pause') }}</button>
+        <button class="btn" :disabled="!canComplete || acting" @click="runComplete">{{ t('jobs.complete') }}</button>
+        <button class="btn" :disabled="!canVerify || acting" @click="runAction('verify')">{{ t('jobs.verify') }}</button>
+        <button class="btn" :disabled="!canGenerateManifest || acting" @click="runAction('manifest')">{{ t('jobs.manifest') }}</button>
+        <button v-if="canDelete" class="btn btn-danger" :disabled="acting" @click="showDeleteDialog = true">{{ t('common.actions.delete') }}</button>
       </div>
     </article>
 
@@ -446,6 +774,64 @@ onUnmounted(() => {
       </DataTable>
     </article>
 
+    <teleport to="body">
+      <div v-if="showEditDialog" class="dialog-overlay" @click.self="closeEditDialog">
+        <div ref="editDialogRef" class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="job-edit-title">
+          <h2 id="job-edit-title">{{ t('jobs.editDialog') }}</h2>
+          <p class="muted">{{ t('jobs.editDialogDescription') }}</p>
+
+          <div class="dialog-groups">
+            <fieldset class="dialog-group">
+              <legend>{{ t('jobs.jobDetailsGroup') }}</legend>
+
+              <label for="job-project">{{ t('dashboard.project') }}</label>
+              <input id="job-project" :value="editForm.project_id" type="text" disabled />
+
+              <label for="job-evidence">{{ t('jobs.evidence') }}</label>
+              <input id="job-evidence" v-model="editForm.evidence_number" type="text" />
+
+              <label for="job-thread-count">{{ t('jobs.threadCount') }}</label>
+              <input id="job-thread-count" v-model.number="editForm.thread_count" type="number" min="1" max="8" />
+            </fieldset>
+
+            <fieldset class="dialog-group">
+              <legend>{{ t('jobs.sourceGroup') }}</legend>
+
+              <label for="job-mount">{{ t('jobs.selectMount') }}</label>
+              <select id="job-mount" v-model="editForm.mount_id">
+                <option :value="null">{{ t('jobs.chooseMount') }}</option>
+                <option v-for="mount in editEligibleMounts" :key="mount.id" :value="mount.id">
+                  {{ formatMountLabel(mount) }}
+                </option>
+              </select>
+
+              <label for="job-source-path">{{ t('jobs.sourcePath') }}</label>
+              <input id="job-source-path" v-model="editForm.source_path" type="text" :placeholder="t('jobs.sourcePathHint')" />
+            </fieldset>
+
+            <fieldset class="dialog-group">
+              <legend>{{ t('jobs.destinationGroup') }}</legend>
+
+              <label for="job-drive">{{ t('jobs.selectDrive') }}</label>
+              <select id="job-drive" v-model="editForm.drive_id">
+                <option :value="null">{{ t('jobs.chooseDrive') }}</option>
+                <option v-for="drive in editEligibleDrives" :key="drive.id" :value="drive.id">
+                  {{ formatDriveLabel(drive) }}
+                </option>
+              </select>
+            </fieldset>
+          </div>
+
+          <div class="dialog-actions">
+            <button class="btn" :disabled="acting" @click="closeEditDialog">{{ t('common.actions.cancel') }}</button>
+            <button id="job-submit" class="btn btn-primary" :disabled="acting || !editFormReady()" @click="submitEditJob">
+              {{ acting ? t('common.labels.loading') : t('jobs.saveChanges') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </teleport>
+
     <div class="split-grid">
       <article class="panel">
         <h2>{{ t('jobs.hashViewer') }}</h2>
@@ -460,34 +846,62 @@ onUnmounted(() => {
 
       <article class="panel">
         <h2>{{ t('jobs.compareTitle') }}</h2>
+        <p class="muted">{{ t('jobs.compareHelp') }}</p>
         <div class="compare-form">
-          <label for="compare-file-a">{{ t('jobs.fileA') }}</label>
-          <select id="compare-file-a" v-model="compareA">
+          <label for="compare-file-source">{{ t('jobs.fileA') }}</label>
+          <select id="compare-file-source" v-model="compareFileId">
             <option :value="null">-</option>
-            <option v-for="file in debug.files || []" :key="`a-${file.id}`" :value="file.id">
+            <option v-for="file in debug.files || []" :key="`compare-${file.id}`" :value="file.id">
               #{{ file.id }} {{ file.relative_path }}
             </option>
           </select>
-          <label for="compare-file-b">{{ t('jobs.fileB') }}</label>
-          <select id="compare-file-b" v-model="compareB">
-            <option :value="null">-</option>
-            <option v-for="file in debug.files || []" :key="`b-${file.id}`" :value="file.id">
-              #{{ file.id }} {{ file.relative_path }}
-            </option>
-          </select>
-          <button class="btn" :disabled="!compareA || !compareB" @click="runCompare">
+          <label>{{ t('jobs.fileB') }}</label>
+          <strong class="mono wrap-anywhere">{{ selectedCompareFile ? `#${selectedCompareFile.id} ${selectedCompareFile.relative_path}` : '-' }}</strong>
+          <button class="btn" :disabled="!compareFileId" @click="runCompare">
             {{ t('jobs.compare') }}
           </button>
         </div>
 
-        <div v-if="compareResult" class="hash-grid">
-          <span>{{ t('jobs.compareMatch') }}</span><StatusBadge :status="compareResult.match" />
-          <span>{{ t('jobs.hashMatch') }}</span><StatusBadge :status="compareResult.hash_match" />
-          <span>{{ t('jobs.sizeMatch') }}</span><StatusBadge :status="compareResult.size_match" />
-          <span>{{ t('jobs.pathMatch') }}</span><StatusBadge :status="compareResult.path_match" />
+        <div v-if="compareResult" class="compare-results">
+          <div class="hash-grid">
+            <span>{{ t('jobs.compareMatch') }}</span><StatusBadge :status="compareResult.match" />
+            <span>{{ t('jobs.hashMatch') }}</span><StatusBadge :status="compareResult.hash_match" />
+            <span>{{ t('jobs.sizeMatch') }}</span><StatusBadge :status="compareResult.size_match" />
+            <span>{{ t('jobs.pathMatch') }}</span><StatusBadge :status="compareResult.path_match" />
+          </div>
+          <div class="compare-detail-grid">
+            <span></span><strong>{{ t('jobs.fileA') }}</strong><strong>{{ t('jobs.fileB') }}</strong>
+            <span>{{ t('jobs.path') }}</span><strong class="mono wrap-anywhere">{{ formatCompareValue(compareResult.file_a?.relative_path) }}</strong><strong class="mono wrap-anywhere">{{ formatCompareValue(compareResult.file_b?.relative_path) }}</strong>
+            <span>{{ t('common.labels.size') }}</span><strong>{{ formatCompareValue(compareResult.file_a?.size_bytes) }}</strong><strong>{{ formatCompareValue(compareResult.file_b?.size_bytes) }}</strong>
+            <span>{{ t('jobs.sha256') }}</span><strong class="mono wrap-anywhere">{{ formatCompareValue(compareResult.file_a?.sha256 || compareResult.file_a?.md5) }}</strong><strong class="mono wrap-anywhere">{{ formatCompareValue(compareResult.file_b?.sha256 || compareResult.file_b?.md5) }}</strong>
+          </div>
         </div>
       </article>
     </div>
+
+    <teleport to="body">
+      <div v-if="showPausePendingDialog" class="dialog-overlay" @click.self="closePausePendingDialog">
+        <div ref="pauseDialogRef" class="dialog-panel pause-wait-dialog" role="dialog" aria-modal="true" aria-labelledby="pause-wait-title">
+          <h2 id="pause-wait-title">{{ t('jobs.pauseRequestedTitle') }}</h2>
+          <p>{{ t('jobs.pauseRequestedMessage') }}</p>
+          <p v-if="job" class="muted">#{{ job.id }} • {{ job.status }}</p>
+          <div class="dialog-actions">
+            <button class="btn" @click="closePausePendingDialog">{{ t('common.actions.close') }}</button>
+          </div>
+        </div>
+      </div>
+    </teleport>
+
+    <ConfirmDialog
+      v-model="showDeleteDialog"
+      :title="t('jobs.deleteConfirmTitle')"
+      :message="t('jobs.deleteConfirmBody')"
+      :confirm-label="t('common.actions.delete')"
+      :cancel-label="t('common.actions.cancel')"
+      :busy="acting"
+      dangerous
+      @confirm="confirmDelete"
+    />
   </section>
 </template>
 
@@ -502,6 +916,52 @@ onUnmounted(() => {
 .actions,
 .split-grid {
   display: flex;
+  gap: var(--space-sm);
+}
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, var(--color-bg-primary) 30%, #000000);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+}
+
+.dialog-panel {
+  width: min(760px, 100%);
+  max-height: min(90vh, 900px);
+  overflow: auto;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-lg);
+  display: grid;
+  gap: var(--space-md);
+}
+
+.dialog-groups {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.dialog-group {
+  display: grid;
+  gap: var(--space-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  padding: var(--space-md);
+}
+
+.dialog-group legend {
+  padding: 0 var(--space-xs);
+  font-weight: 600;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
   gap: var(--space-sm);
 }
 
@@ -544,6 +1004,18 @@ select {
   grid-template-columns: 120px 1fr;
   gap: var(--space-xs) var(--space-sm);
   align-items: center;
+}
+
+.compare-results {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.compare-detail-grid {
+  display: grid;
+  grid-template-columns: 120px repeat(2, minmax(0, 1fr));
+  gap: var(--space-xs) var(--space-sm);
+  align-items: start;
 }
 
 .mono {
@@ -601,6 +1073,14 @@ select {
   color: var(--color-alert-danger-text);
   background: var(--color-alert-danger-bg);
   border: 1px solid var(--color-alert-danger-border);
+  border-radius: var(--border-radius);
+  padding: var(--space-sm);
+}
+
+.ok-banner {
+  color: var(--color-ok-banner-text, #14532d);
+  background: var(--color-ok-banner-bg, #dcfce7);
+  border: 1px solid var(--color-ok-banner-border, #86efac);
   border-radius: var(--border-radius);
   padding: var(--space-sm);
 }

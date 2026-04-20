@@ -562,32 +562,37 @@ Open a job to view details and perform follow-up actions.
 
 > **Access Summary**
 > **Page visibility:** `admin`, `manager`, `processor`, `auditor`
-> **Restricted actions:** `Start`, `Verify`, and `Manifest` actions are enabled for `admin`, `manager`, and `processor`. Hash inspection and debug-oriented file views are enabled for `admin` and `auditor`.
+> **Restricted actions:** `Edit`, `Start`, `Pause`, `Complete`, `Verify`, and `Manifest` are enabled for `admin`, `manager`, and `processor` when the current job state allows them. `Delete` is shown only for eligible pending jobs. Hash inspection and source/destination comparison remain available to `admin` and `auditor`.
 
 The job detail page provides deeper inspection and follow-up controls.
 
 Typical functions include:
 
-- Start a pending job
+- Edit a pending, paused, or failed job before resuming work
+- Start a pending job or resume a paused one
 - Pause a running job and resume it later
-- Trigger verification
-- Generate a manifest
+- Manually complete a safe non-active job when required by the workflow
+- Generate a manifest and confirm where it was written
 - Review copied files
 - Inspect hashes for individual files
-- Compare two files
+- Compare a file's source version against its copied destination version
 
-### 10.1 Starting, Verifying, and Generating a Manifest
+### 10.1 Editing, Starting, Pausing, Completing, Verifying, and Generating a Manifest
 
 Action buttons are shown near the top of the job detail screen.
 
 Use them when appropriate:
 
+- `Edit` to adjust evidence number, source path, drive, or thread count for a `PENDING`, `PAUSED`, or `FAILED` job
 - `Start` to begin a new job or resume a paused one
 - `Pause` to request a safe stop after the current copy work finishes
-- `Verify` to run verification checks
-- `Manifest` to generate the manifest output
+- `Complete` to manually mark a pending, paused, or failed job as complete when the operational workflow requires it
+- `Verify` to run verification checks once the job is fully complete
+- `Manifest` to generate the manifest output once the job is fully complete
 
-When a pause is requested, the Jobs page shows a `Pause in progress` dialog while ECUBE waits for active copy threads to drain. The Start action remains unavailable during `PAUSING` and becomes available again once the job reaches `PAUSED`.
+When a pause is requested, the Jobs list and Job Detail page can show a `Pause in progress` dialog while ECUBE waits for active copy threads to drain. The Start action remains unavailable during `PAUSING` and becomes available again once the job reaches `PAUSED`.
+
+Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed `manifest.json` file on the destination drive.
 
 When a job is paused, completed, or fails, the detail view shows a summary with the job start time, copy thread count, files copied, total copied, elapsed time, copy rate, and any failure reason or related log hint. Elapsed time and copy rate remain cumulative across pause and resume cycles.
 
@@ -607,18 +612,18 @@ Users with sufficient permissions can inspect file hashes, including values such
 - MD5
 - SHA-256
 
-### 10.4 Compare Two Files
+### 10.4 Compare Source and Destination
 
-The compare panel lets you select two files and evaluate whether they match.
+The compare panel now uses clear `Source` and `Destination` terminology. After you load hashes for an exported file, choose that file in the compare selector to evaluate the original source version against the copied destination version.
 
-Comparison output can include:
+Comparison output includes:
 
 - Overall match
 - Hash match
 - Size match
 - Path match
 
-This is useful when reviewing evidence consistency or confirming repeatability after copy or verification steps.
+This is useful when reviewing evidence consistency or confirming repeatability after copy or verification steps. If either side is unavailable, ECUBE shows a sanitized conflict message instead of exposing raw filesystem details.
 
 ![Job detail page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/job-detail-default-chromium-linux.png)
 
