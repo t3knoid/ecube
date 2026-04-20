@@ -43,9 +43,10 @@ function buildDrive(overrides = {}) {
   return {
     id: 1,
     device_identifier: 'USB-001',
+    port_system_path: '2-1',
     current_state: 'AVAILABLE',
     current_project_id: null,
-    // mount_path removed
+    mount_path: '/mnt/ecube/1',
     ...overrides,
   }
 }
@@ -114,8 +115,8 @@ describe('JobsView grouped create dialog', () => {
       buildDrive({ id: 1, current_project_id: 'PROJ-001' }),
       buildDrive({ id: 2, current_project_id: null }),
       buildDrive({ id: 3, current_project_id: 'PROJ-999' }),
-      buildDrive({ id: 4, device_identifier: 'USB-004', current_state: 'IN_USE', current_project_id: 'PROJ-001' }),
-      buildDrive({ id: 5, current_project_id: 'PROJ-001' }),
+      buildDrive({ id: 4, device_identifier: 'USB-004', port_system_path: '2-4', current_state: 'IN_USE', current_project_id: 'PROJ-001' }),
+      buildDrive({ id: 5, current_project_id: 'PROJ-001', mount_path: null }),
     ])
     mocks.getMounts.mockResolvedValue([
       buildMount({ id: 11, project_id: 'PROJ-001', status: 'MOUNTED' }),
@@ -162,8 +163,13 @@ describe('JobsView grouped create dialog', () => {
     const driveOptions = wrapper.find('#job-drive').findAll('option').map((node) => node.text())
     const mountOptions = wrapper.find('#job-mount').findAll('option').map((node) => node.text())
 
-    expect(driveOptions.join(' ')).toContain('USB-001')
-    expect(driveOptions.join(' ')).toContain('USB-004')
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.selectDrive'))
+    expect(driveOptions.join(' ')).toContain('2-1')
+    expect(driveOptions.join(' ')).toContain('2-4')
+    expect(driveOptions.join(' ')).not.toContain('#1 -')
+    expect(driveOptions.join(' ')).not.toContain('#4 -')
+    expect(driveOptions.join(' ')).not.toContain('USB-001')
+    expect(driveOptions.join(' ')).not.toContain('USB-004')
     expect(driveOptions.join(' ')).not.toContain('#3')
     expect(driveOptions.join(' ')).not.toContain('#5')
 
