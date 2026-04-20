@@ -388,7 +388,7 @@ sudo -u postgres psql -c "DROP OWNED BY ecubeadmin; DROP ROLE IF EXISTS ecubeadm
 
 ### Migration Naming
 
-Migrations are numbered sequentially: `0001_initial.py`, `0002_retry_resume.py`, etc.
+Migrations use sequential revision IDs. While ECUBE remains pre-release, the baseline migration may still be amended in place when the history is intentionally collapsed; once the schema is locked for release, all further changes must use new sequential revision files.
 
 ---
 

@@ -189,6 +189,37 @@ test('Enable Drive shows error banner when PATCH port call fails', async ({ page
 // Original admin flows
 // ---------------------------------------------------------------------------
 
+test('prepare eject surfaces busy-drive detail without trapping the dialog', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['admin'])
+
+  const drive = {
+    id: 7,
+    device_identifier: '/dev/sdg',
+    filesystem_path: '/mnt/usb7',
+    filesystem_type: 'ext4',
+    capacity_bytes: 1073741824,
+    current_state: 'IN_USE',
+    current_project_id: 'PRJ-777',
+    mount_path: '/mnt/ecube/7',
+  }
+
+  await routeJson(page, '**/api/drives', () => [drive])
+  await page.route('**/api/drives/7/prepare-eject', async (route) => {
+    await route.fulfill({
+      status: 409,
+      contentType: 'application/json',
+      body: JSON.stringify({ detail: 'Drive is busy; close any shell, file browser, or process using the mounted drive and retry prepare-eject' }),
+    })
+  })
+
+  await page.goto('/drives/7')
+  await page.getByRole('button', { name: 'Prepare Eject' }).first().click()
+  await page.getByRole('button', { name: 'Prepare Eject' }).last().click()
+
+  await expect(page.locator('.error-banner').filter({ hasText: 'Drive is busy; close any shell, file browser, or process using the mounted drive and retry prepare-eject' })).toBeVisible()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+})
+
 test('drives list and drive detail admin flows', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
@@ -200,13 +231,25 @@ test('drives list and drive detail admin flows', async ({ page }) => {
     capacity_bytes: 1073741824,
     current_state: 'AVAILABLE',
     current_project_id: null,
+    mount_path: null,
   }
 
   await routeJson(page, '**/api/drives', () => [drive])
   await routeJson(page, '**/api/drives/refresh', { ok: true })
+  await routeJson(page, '**/api/mounts', [{
+    id: 4,
+    project_id: 'PRJ-112',
+    status: 'MOUNTED',
+    remote_path: '10.1.1.1:/share',
+    local_mount_point: '/mnt/share',
+  }])
 
   await page.route('**/api/drives/1/format', async (route) => {
     drive.filesystem_type = route.request().postDataJSON().filesystem_type || 'ext4'
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(drive) })
+  })
+  await page.route('**/api/drives/1/mount', async (route) => {
+    drive.mount_path = '/mnt/ecube/1'
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(drive) })
   })
   await page.route('**/api/drives/1/initialize', async (route) => {
@@ -228,8 +271,11 @@ test('drives list and drive detail admin flows', async ({ page }) => {
   await page.getByRole('button', { name: 'Format' }).last().click()
   await expect(page.getByText('Drive format request submitted.')).toBeVisible()
 
-  await page.getByRole('button', { name: 'Initialize' }).first().click()
-  await page.getByLabel('Project').fill('PRJ-112')
+  await page.getByRole('button', { name: 'Mount' }).click()
+  await expect(page.getByText('Drive mounted successfully.')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Initialize' }).click()
+  await page.locator('#project-id').selectOption('PRJ-112')
   await page.getByRole('button', { name: 'Initialize' }).last().click()
   await expect(page.getByText('Drive initialized successfully.')).toBeVisible()
 
