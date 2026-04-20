@@ -140,6 +140,7 @@ class DriveInfoSchema(BaseModel):
     """Subset of drive metadata embedded in job responses."""
 
     id: int = Field(..., description="Unique identifier for the drive")
+    port_system_path: Optional[str] = Field(default=None, description="Port-based USB identifier (for example '2-1')")
     device_identifier: str = Field(..., description="Stable hardware identifier for the drive")
     filesystem_path: Optional[str] = Field(default=None, description="Current OS block device node (e.g. /dev/sdb)")
     capacity_bytes: Optional[int] = Field(default=None, description="Total storage capacity in bytes")

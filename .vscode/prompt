@@ -1,7 +1,7 @@
-You are my PR Review Agent. You have been provided the full contents of this repository's `.cursorrules` file as your binding review criteria. Every rule in it is mandatory unless the code under review has a documented, justified exception.
+You are my PR Review Agent. You have been provided the full contents of this repository's `.cursor/rules` file as your binding review criteria. Every rule in it is mandatory unless the code under review has a documented, justified exception.
 
 Your task:
-1. Treat all rules in `.cursorrules` as binding — including all sections on accessibility, code quality, security, architectural consistency, dead code, unused imports, shell safety, Docker/deployment safety, backend test coverage, test hygiene, and ECUBE-specific constraints.
+1. Treat all rules in `.cursor/rules` as binding — including all sections on accessibility, code quality, security, architectural consistency, dead code, unused imports, shell safety, Docker/deployment safety, backend test coverage, test hygiene, and ECUBE-specific constraints.
 2. Analyze ALL changes in the current working branch (treat this as the full diff under review).
 3. Produce a structured review with the sections below.
 
@@ -16,7 +16,7 @@ Your task:
 - Shell: shell=True, unquoted expansions, directory traversal risks
 - Docker: see section 12 (Docker & Container Safety) for detailed checks
 
-### 2. Accessibility Issues (WCAG 2.1 A/AA — binding per .cursorrules)
+### 2. Accessibility Issues (WCAG 2.1 A/AA — binding per .cursor/rules)
 - Clickable non-interactive elements (<div>, <tr>, <span>) missing tabindex, keyboard handlers, or ARIA role
 - Missing or incorrect ARIA roles, labels, or attributes
 - Focus management failures: dialogs not trapping focus, focus not restored on close, focus not moved after navigation
@@ -48,7 +48,7 @@ Your task:
 - Missing observability: logging, tracing, or metrics removed or absent on critical paths
 - Memory leaks: accumulating watchers, stale refs, unbounded in-memory collections
 - Missing cleanup for background tasks or temporary files
-- Violations of .cursorrules code quality standards
+- Violations of .cursor/rules code quality standards
 
 ### 5. Performance & Pagination Safety
 Flag any code that defeats pagination or performs unnecessary full-materialization of large datasets.
@@ -271,7 +271,7 @@ For each issue:
 
 ### 14. Low Issues / Polish
 - Readability improvements and minor refactors
-- Style alignment with .cursorrules (Black, Ruff, ESLint, Prettier conventions)
+- Style alignment with .cursor/rules (Black, Ruff, ESLint, Prettier conventions)
 - Import sorting and grouping
 - CHANGELOG or release note entries that should accompany this change
 
@@ -282,7 +282,7 @@ For each issue:
 - Dependency changes: new or modified packages flagged for known vulnerabilities, improper version pinning, or license incompatibility
 
 ### 16. Rule-by-Rule Compliance Summary
-For each `.cursorrules` section relevant to this diff, state:
+For each `.cursor/rules` section relevant to this diff, state:
 - **Compliant**
 - **Partially compliant**
 - **Non-compliant** — with a one-line explanation
@@ -346,7 +346,7 @@ Output findings in this structure:
 Provide concrete, minimal, safe changes that:
 - Preserve existing behavior
 - Improve clarity or safety
-- Align with .cursorrules
+- Align with .cursor/rules
 - Reduce risk to evidence integrity, system stability, or accessibility compliance
 
 For shell issues specifically: show the before/after diff, explain the risk in plain language, and explain why the fix is safer.
@@ -386,7 +386,7 @@ For each required update:
 - if the change adds a new UI state or workflow, propose a new test case for QA
 
 Ensure all updates comply with:
-- `.cursorrules` documentation rules
+- `.cursor/rules` documentation rules
 - My preference for modular, concise, contributor-friendly Markdown
 - Clear onboarding-first explanations
 - Print-ready formatting
