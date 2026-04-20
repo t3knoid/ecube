@@ -10,7 +10,15 @@ from app.auth import CurrentUser, require_roles
 from app.config import settings
 from app.database import get_db
 from app.repositories.job_repository import DriveAssignmentRepository, FileRepository
-from app.schemas.jobs import DriveInfoSchema, ExportJobSchema, JobCreate, JobFilesResponse, JobStart
+from app.schemas.jobs import (
+    DriveInfoSchema,
+    ExportJobSchema,
+    JobCreate,
+    JobDeleteResponse,
+    JobFilesResponse,
+    JobStart,
+    JobUpdate,
+)
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500
 from app.services import job_service
 from app.utils.client_ip import get_client_ip
@@ -251,6 +259,44 @@ def create_job(
     return _redact_ip(job, current_user, db)
 
 
+@router.put("/{job_id}", response_model=ExportJobSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
+def update_job(
+    job_id: int,
+    body: JobUpdate,
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
+    request: Request,
+):
+    """Update a non-active job from the Job Detail workflow.
+
+    Editing is limited to safe non-active states so that project isolation and
+    drive assignments remain consistent.
+
+    **Roles:** ``admin``, ``manager``, ``processor``
+    """
+    job = job_service.update_job(job_id, body, db, actor=current_user.username, client_ip=get_client_ip(request))
+    return _redact_ip(job, current_user, db)
+
+
+@router.delete("/{job_id}", response_model=JobDeleteResponse, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
+def delete_job(
+    job_id: int,
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
+    request: Request,
+):
+    """Delete a job that has not yet started.
+
+    Only ``PENDING`` jobs may be removed so that in-flight evidence operations
+    are never destroyed from the UI.
+
+    **Roles:** ``admin``, ``manager``, ``processor``
+    """
+    return job_service.delete_job(job_id, db, actor=current_user.username, client_ip=get_client_ip(request))
+
+
 @router.get("/{job_id}", response_model=ExportJobSchema, responses={**R_401, **R_403, **R_404, **R_422})
 def get_job(
     job_id: int,
@@ -310,6 +356,24 @@ def start_job(
     **Roles:** ``admin``, ``manager``, ``processor``
     """
     job = job_service.start_job(job_id, body, background_tasks, db, actor=current_user.username, client_ip=get_client_ip(request))
+    return _redact_ip(job, current_user, db)
+
+
+@router.post("/{job_id}/complete", response_model=ExportJobSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
+def complete_job(
+    job_id: int,
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
+    request: Request,
+):
+    """Manually mark a safe non-active job as completed.
+
+    This override is limited to non-active states and records an audit entry.
+
+    **Roles:** ``admin``, ``manager``, ``processor``
+    """
+    job = job_service.complete_job(job_id, db, actor=current_user.username, client_ip=get_client_ip(request))
     return _redact_ip(job, current_user, db)
 
 

@@ -28,6 +28,21 @@ export function pauseJob(jobId) {
   return toData(apiClient.post(`${API_BASE}/jobs/${id}/pause`))
 }
 
+export function updateJob(jobId, payload) {
+  const id = normalizeJobId(jobId)
+  return toData(apiClient.put(`${API_BASE}/jobs/${id}`, payload))
+}
+
+export function completeJob(jobId) {
+  const id = normalizeJobId(jobId)
+  return toData(apiClient.post(`${API_BASE}/jobs/${id}/complete`))
+}
+
+export function deleteJob(jobId) {
+  const id = normalizeJobId(jobId)
+  return toData(apiClient.delete(`${API_BASE}/jobs/${id}`))
+}
+
 export function getJob(jobId) {
   const id = normalizeJobId(jobId)
   return toData(apiClient.get(`${API_BASE}/jobs/${id}`))
