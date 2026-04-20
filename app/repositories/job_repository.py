@@ -6,6 +6,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, joinedload
 
 from app.exceptions import ConflictError
+from app.models.hardware import UsbDrive
 from app.models.jobs import (
     DriveAssignment,
     ExportFile,
@@ -350,6 +351,7 @@ class DriveAssignmentRepository:
         """Return the most recent unreleased assignment for *job_id*, or ``None``."""
         return (
             self.db.query(DriveAssignment)
+            .options(joinedload(DriveAssignment.drive).joinedload(UsbDrive.port))
             .filter(
                 DriveAssignment.job_id == job_id,
                 DriveAssignment.released_at.is_(None),
@@ -370,7 +372,7 @@ class DriveAssignmentRepository:
             return {}
         rows = (
             self.db.query(DriveAssignment)
-            .options(joinedload(DriveAssignment.drive))
+            .options(joinedload(DriveAssignment.drive).joinedload(UsbDrive.port))
             .filter(
                 DriveAssignment.job_id.in_(job_ids),
                 DriveAssignment.released_at.is_(None),

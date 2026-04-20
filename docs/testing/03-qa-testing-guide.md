@@ -1078,12 +1078,13 @@ These tests exercise real hardware paths that must be validated during manual QA
 | # | Test | Steps | Expected |
 |---|------|-------|----------|
 | 1 | Hot-plug detection | Plug in a USB drive, wait 30 seconds | `GET /drives` shows the new drive (in `DISCONNECTED` state if port is disabled, or `AVAILABLE` if port is enabled); disconnected drives require `include_disconnected=true` |
-| 2 | USB topology | `GET /introspection/usb/topology` | Shows real hub serial numbers, port numbers, connected devices |
+| 2 | USB topology | `GET /introspection/usb/topology` and open the System `USB Topology` tab | Shows real device values, serial numbers when available, sorted `Device` order, and no rows with entirely empty USB metadata |
 | 3 | Physical eject | Initialize drive → prepare-eject → physically remove | After the next discovery cycle, `GET /drives?include_disconnected=true` lists the drive with `current_state=DISCONNECTED`; audit shows `DRIVE_EJECT_PREPARED` |
-| 4 | Re-plug same drive | Remove and re-insert the same drive | Drive reappears as `AVAILABLE` with same `device_identifier` (after discovery cycle) |
+| 4 | Re-plug same drive | Remove and re-insert the same drive | Drive reappears as `AVAILABLE` with the same `port_system_path`/Device value and the same stable `device_identifier` (after discovery cycle) |
 | 5 | Multiple drives | Plug in 2+ drives simultaneously | All drives appear in `/drives`; each can be initialized to different projects |
 | 6 | Sync + unmount | Initialize drive, create/start a job, then prepare-eject | Filesystem flushed and unmounted before eject (verify via `mount` command — no partitions from that drive should be listed) |
 | 7 | Disabled port blocks AVAILABLE | Disable a port, plug in a drive to that port, run discovery | Drive appears in `DISCONNECTED` state (visible with `include_disconnected=true`); enable port + refresh → drive transitions to `AVAILABLE` |
+| 8 | Device and serial columns stay aligned across UI | Open Drives, Jobs, and Create/Edit Job for the same connected drive | Drives shows `Device` plus `Serial Number`; Jobs list shows the same `Device` value; destination selector is labeled `Select device` and uses the same port-based label |
 
 ### 12.6 End-to-End Copy Workflow
 
@@ -1095,6 +1096,7 @@ These tests exercise real hardware paths that must be validated during manual QA
 | 2 | Completion summary is visible | Let a job finish and open its detail page | The detail screen shows start time, copy threads, files copied, total copied, elapsed time, and copy rate |
 | 3 | Mount-root source selection works | In Create Job, choose a mounted share and enter / as the source path | The job is created successfully and the selected mount root is used as the source |
 | 4 | Path traversal outside selected mount is blocked | In Create Job, choose a mounted share and enter a traversal path such as ../../etc | The UI/API rejects the request, no job is created, and the operator sees a validation-style error rather than a host path leak |
+| 5 | Destination selector uses device label | Open Create Job or edit an eligible job after selecting a project | The destination control is labeled `Select device`, each option uses the port-based `Device` value, and the Jobs list shows the same value in its `Device` column |
 
 #### 12.6.2 Job Detail Lifecycle Controls
 

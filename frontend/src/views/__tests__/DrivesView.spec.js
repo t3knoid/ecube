@@ -22,6 +22,8 @@ function buildDrive(overrides = {}) {
   return {
     id: 1,
     device_identifier: 'USB-001',
+    port_system_path: '2-1',
+    serial_number: 'SN-001',
     filesystem_type: 'ext4',
     capacity_bytes: 1024,
     // mount_path removed
@@ -37,10 +39,13 @@ function mountView() {
       plugins: [i18n],
       stubs: {
         DataTable: {
-          props: ['rows', 'emptyText'],
+          props: ['rows', 'columns', 'emptyText'],
           template: `
             <div>
+              <div class="column-labels">{{ (columns || []).map((column) => column.label).join(' ') }}</div>
               <div v-for="row in rows" :key="row.id" class="row-stub">
+                <span class="row-device">{{ row.port_system_path || '-' }}</span>
+                <span class="row-serial">{{ row.serial_number || '-' }}</span>
                 <slot name="cell-current_project_id" :row="row" />
                 <slot name="cell-actions" :row="row" />
               </div>
@@ -130,13 +135,31 @@ describe('DrivesView rescan and filter loading', () => {
     expect(wrapper.text()).not.toContain('proj-123')
   })
 
-  it('shows the Browse action for a mounted available drive', async () => {
+  it('shows port-based device and serial number in separate columns', async () => {
+    mocks.getDrives.mockResolvedValue([
+      buildDrive({
+        device_identifier: 'SER-ONLY',
+        port_system_path: '2-4',
+        serial_number: 'SER-ONLY',
+      }),
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('drives.device'))
+    expect(wrapper.text()).toContain(i18n.global.t('drives.serialNumber'))
+    expect(wrapper.text()).toContain('2-4')
+    expect(wrapper.text()).toContain('SER-ONLY')
+  })
+
+  it('does not show the removed Browse action for a mounted available drive', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'AVAILABLE' })])
 
     const wrapper = mountView()
     await flushPromises()
 
     const labels = wrapper.findAll('button').map((node) => node.text())
-    expect(labels).toContain(i18n.global.t('drives.browse'))
+    expect(labels).not.toContain(i18n.global.t('drives.browse'))
   })
 })

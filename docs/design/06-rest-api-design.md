@@ -695,7 +695,9 @@ All job endpoints that return a single job use the `ExportJobSchema` response, w
 | Field | Type | Description |
 |-------|------|-------------|
 | `id` | integer | Unique drive identifier |
+| `port_system_path` | string or null | Port-based USB identifier used as the UI `Device` value |
 | `device_identifier` | string | Stable hardware identifier |
+| `serial_number` | string or null | USB serial number when available |
 | `filesystem_path` | string or null | OS block device node (e.g. `/dev/sdb`) |
 | `capacity_bytes` | integer or null | Total storage capacity in bytes |
 | `filesystem_type` | string or null | Detected filesystem label |
@@ -727,7 +729,9 @@ All job endpoints that return a single job use the `ExportJobSchema` response, w
   "completed_at": "2026-03-18T14:45:00Z",
   "drive": {
     "id": 3,
+        "port_system_path": "2-1",
     "device_identifier": "usb-Generic_Flash_Disk_12345-0:0",
+        "serial_number": "4C530000220226223012",
     "filesystem_path": "/dev/sdb1",
     "capacity_bytes": 64023257088,
     "filesystem_type": "exfat",
