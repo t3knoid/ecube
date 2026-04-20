@@ -458,6 +458,70 @@ def test_start_already_running_job(client, db):
     assert response.status_code == 409
 
 
+def test_pause_job_running_state(client, db):
+    job = ExportJob(
+        project_id="PROJ-PAUSE-001",
+        evidence_number="EV-PAUSE-001",
+        source_path="/data/evidence",
+        status=JobStatus.RUNNING,
+    )
+    db.add(job)
+    db.commit()
+
+    response = client.post(f"/jobs/{job.id}/pause")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "PAUSING"
+    db.refresh(job)
+    assert job.status == JobStatus.PAUSING
+
+
+def test_start_paused_job(client, db):
+    job = ExportJob(
+        project_id="PROJ-PAUSE-003",
+        evidence_number="EV-PAUSE-003",
+        source_path="/data/evidence",
+        status=JobStatus.PAUSED,
+        thread_count=2,
+    )
+    db.add(job)
+    db.commit()
+
+    with patch("app.services.copy_engine.run_copy_job"):
+        response = client.post(f"/jobs/{job.id}/start", json={})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "RUNNING"
+
+
+def test_start_pausing_job_conflict(client, db):
+    job = ExportJob(
+        project_id="PROJ-PAUSE-004",
+        evidence_number="EV-PAUSE-004",
+        source_path="/data/evidence",
+        status=JobStatus.PAUSING,
+    )
+    db.add(job)
+    db.commit()
+
+    response = client.post(f"/jobs/{job.id}/start", json={})
+    assert response.status_code == 409
+
+
+def test_pause_job_status_conflict(client, db):
+    job = ExportJob(
+        project_id="PROJ-PAUSE-002",
+        evidence_number="EV-PAUSE-002",
+        source_path="/data/evidence",
+        status=JobStatus.PENDING,
+    )
+    db.add(job)
+    db.commit()
+
+    response = client.post(f"/jobs/{job.id}/pause")
+    assert response.status_code == 409
+
+
 def test_create_job_conflict_when_drive_has_different_project(client, db):
     drive = UsbDrive(
         device_identifier="USB-PRJ-CONFLICT",

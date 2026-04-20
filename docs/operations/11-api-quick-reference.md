@@ -121,11 +121,14 @@ Compatibility note: To support project-to-source-path policy, use project source
 | Method | Endpoint | Role | Description |
 | ------ | -------- | -------- | ----------- |
 | POST | `/jobs` | processor+ | Create new export job (omit `drive_id` for auto-assignment) |
-| GET | `/jobs/{job_id}` | admin/manager/processor/auditor | Get job detail (status, progress) |
+| GET | `/jobs/{job_id}` | admin/manager/processor/auditor | Get job detail, including progress and cumulative active duration |
 | GET | `/jobs/{job_id}/files` | admin/manager/processor/auditor | List operator-safe file status rows for the job |
-| POST | `/jobs/{job_id}/start` | processor | Start copy operation |
+| POST | `/jobs/{job_id}/start` | processor+ | Start a new job or resume a paused job |
+| POST | `/jobs/{job_id}/pause` | processor+ | Request a safe pause for a running job; returns `PAUSING` until in-flight work drains |
 | POST | `/jobs/{job_id}/verify` | processor+ | Verify data integrity |
 | POST | `/jobs/{job_id}/manifest` | processor+ | Generate manifest document |
+
+**Pause and Resume Semantics:** `POST /jobs/{job_id}/pause` moves a running job into `PAUSING` immediately and into `PAUSED` once the active copy threads finish their current work. `POST /jobs/{job_id}/start` can then resume the job from `PAUSED`; attempts to start while a job is still `PAUSING` return **409 Conflict**.
 
 **Automatic Drive Assignment:** When `drive_id` is omitted from `POST /jobs`, the system auto-selects a drive: picks the single project-bound `AVAILABLE` drive, or falls back to an unbound drive. Returns **409** if the drive is temporarily unavailable (retry), if multiple project-bound drives exist (caller must specify `drive_id`), or if no usable drive can be acquired for the requested project. In both auto-assign and explicit `drive_id` paths, unbound drives are automatically bound to the requested project.
 
