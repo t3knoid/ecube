@@ -441,7 +441,7 @@ onBeforeUnmount(() => {
         <div><strong>{{ t('common.labels.id') }}</strong><span>{{ drive.id }}</span></div>
         <div><strong>{{ t('drives.device') }}</strong><span>{{ protectedValue(drive.device_identifier) }}</span></div>
         <div><strong>{{ t('drives.filesystemPath') }}</strong><span>{{ protectedValue(drive.filesystem_path) }}</span></div>
-        <div><strong>{{ t('drives.mountPoint') }}</strong><span>{{ protectedValue(drive.mount_path) }}</span></div>
+        <!-- Mount Point field removed -->
         <div><strong>{{ t('drives.filesystem') }}</strong><span>{{ drive.filesystem_type || '-' }}</span></div>
         <div><strong>{{ t('common.labels.size') }}</strong><span>{{ formatBytes(drive.capacity_bytes) }}</span></div>
         <div><strong>{{ t('dashboard.project') }}</strong><span>{{ drive.current_project_id || '-' }}</span></div>
@@ -479,18 +479,7 @@ onBeforeUnmount(() => {
     </ConfirmDialog>
 
     <!-- Browse section — shown when the drive currently exposes a mount path -->
-    <section v-if="drive && drive.mount_path" class="browse-section">
-      <button
-        class="browse-toggle btn"
-        :aria-expanded="browseExpanded"
-        @click="browseExpanded = !browseExpanded"
-      >
-        <span aria-hidden="true">{{ browseExpanded ? '▼' : '▶' }}</span> {{ t('browse.browseContents') }}
-      </button>
-      <div v-if="browseExpanded" class="browse-panel">
-        <DirectoryBrowser :mount-path="drive.mount_path" />
-      </div>
-    </section>
+    <!-- Browse section removed with mount_path field -->
 
     <ConfirmDialog
       v-model="showEjectDialog"
