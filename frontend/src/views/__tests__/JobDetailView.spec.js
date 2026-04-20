@@ -344,6 +344,49 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain('5.0 MB/s')
   })
 
+  it('uses source and destination terminology for file comparison', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 100,
+      total_bytes: 100,
+      file_count: 1,
+      files_succeeded: 1,
+      files_failed: 0,
+    })
+    mocks.getJobFiles.mockResolvedValue({ files: [{ id: 9, relative_path: 'doc.txt', status: 'DONE', checksum: 'abc' }] })
+    mocks.compareFiles.mockResolvedValue({
+      match: true,
+      hash_match: true,
+      size_match: true,
+      path_match: true,
+      file_a: { file_id: 9, relative_path: 'doc.txt', size_bytes: 12, sha256: 'abc' },
+      file_b: { file_id: 9, relative_path: 'doc.txt', size_bytes: 12, sha256: 'abc' },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Source')
+    expect(wrapper.text()).toContain('Destination')
+    expect(wrapper.text()).not.toContain('File A')
+    expect(wrapper.text()).not.toContain('File B')
+
+    await wrapper.find('#compare-file-source').setValue('9')
+    const compareButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.compare'))
+    expect(compareButton).toBeTruthy()
+    await compareButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.compareFiles).toHaveBeenCalledWith({ file_id_a: 9, file_id_b: 9 })
+    expect(wrapper.text()).toContain('doc.txt')
+  })
+
   it('shows a pause-in-progress dialog after pausing a running job', async () => {
     mocks.getJob.mockResolvedValue({
       id: 6,
