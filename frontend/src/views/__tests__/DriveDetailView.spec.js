@@ -67,7 +67,15 @@ function mountView() {
       stubs: {
         teleport: true,
         ConfirmDialog: {
-          template: '<div><slot /></div>',
+          props: ['modelValue', 'confirmLabel', 'cancelLabel', 'busy'],
+          emits: ['update:modelValue', 'confirm', 'cancel'],
+          template: `
+            <div v-if="modelValue" class="confirm-dialog-stub">
+              <slot />
+              <button class="confirm-dialog-cancel" @click="$emit('update:modelValue', false); $emit('cancel')">{{ cancelLabel }}</button>
+              <button class="confirm-dialog-confirm" :disabled="busy" @click="$emit('confirm')">{{ confirmLabel }}</button>
+            </div>
+          `,
         },
         DirectoryBrowser: {
           template: '<div class="directory-browser-stub" />',
@@ -280,5 +288,32 @@ describe('DriveDetailView mount workflow', () => {
     const projectSelect = wrapper.find('#project-id')
     expect(projectSelect.attributes('required')).toBeDefined()
     expect(projectSelect.attributes('aria-required')).toBe('true')
+  })
+
+  it('closes the prepare-eject dialog and shows the backend detail when eject fails', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'IN_USE', mount_path: '/mnt/ecube/7' })])
+    mocks.prepareEjectDrive.mockRejectedValue({
+      response: {
+        status: 409,
+        data: { detail: 'Drive is busy; close any shell, file browser, or process using the mounted drive and retry prepare-eject' },
+      },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const ejectButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.prepareEject'))
+    expect(ejectButton).toBeTruthy()
+
+    await ejectButton.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.confirm-dialog-stub').exists()).toBe(true)
+
+    await wrapper.find('.confirm-dialog-confirm').trigger('click')
+    await flushPromises()
+
+    expect(mocks.prepareEjectDrive).toHaveBeenCalledWith(7)
+    expect(wrapper.find('.confirm-dialog-stub').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Drive is busy; close any shell, file browser, or process using the mounted drive and retry prepare-eject')
   })
 })

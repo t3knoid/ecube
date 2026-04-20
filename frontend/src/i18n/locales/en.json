@@ -123,6 +123,9 @@
     "sourcePathHint": "Path inside the selected mount, for example: folder/subfolder",
     "threadCount": "Thread count",
     "start": "Start",
+    "pause": "Pause",
+    "pauseRequestedTitle": "Pause in progress",
+    "pauseRequestedMessage": "Waiting for active copy threads to finish the current work before the pause completes. Start will be available once the job is fully paused.",
     "verify": "Verify",
     "manifest": "Generate Manifest",
     "completionSummary": "Completion summary",
@@ -159,6 +162,8 @@
     "statuses": {
       "pending": "Pending",
       "running": "Running",
+      "pausing": "Pausing",
+      "paused": "Paused",
       "verifying": "Verifying",
       "completed": "Completed",
       "failed": "Failed"
