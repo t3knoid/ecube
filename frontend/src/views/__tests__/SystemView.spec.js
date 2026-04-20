@@ -97,7 +97,7 @@ describe('SystemView USB topology tab', () => {
     mocks.listJobs.mockResolvedValue([])
   })
 
-  it('hides devices only if Manufacturer, Product, Vendor ID, and Product ID are all empty, and sorts by device column', async () => {
+  it('hides devices only if Serial Number, Manufacturer, Product, Vendor ID, and Product ID are all empty, and sorts by device column', async () => {
     const usbDevices = [
       { device: '', manufacturer: '', product: '', idVendor: '', idProduct: '' },
       { device: 'usb3', manufacturer: 'B', product: 'Y', idVendor: '1234', idProduct: '5678' },
@@ -106,6 +106,7 @@ describe('SystemView USB topology tab', () => {
       { device: 'usb2', manufacturer: '', product: '', idVendor: '', idProduct: '' },
       { device: 'usb4', manufacturer: '', product: '', idVendor: '', idProduct: '1' },
       { device: 'usb5', manufacturer: '', product: 'Z', idVendor: '', idProduct: '' },
+      { device: 'usb6', serial: 'SER-USB-006', manufacturer: '', product: '', idVendor: '', idProduct: '' },
     ]
     mocks.getUsbTopology.mockResolvedValue({ devices: usbDevices })
 
@@ -122,13 +123,16 @@ describe('SystemView USB topology tab', () => {
     const idx3 = text.indexOf('usb3')
     const idx4 = text.indexOf('usb4')
     const idx5 = text.indexOf('usb5')
+    const idx6 = text.indexOf('usb6')
     expect(idx1).toBeGreaterThan(-1)
     expect(idx3).toBeGreaterThan(-1)
     expect(idx4).toBeGreaterThan(-1)
     expect(idx5).toBeGreaterThan(-1)
+    expect(idx6).toBeGreaterThan(-1)
     expect(idx1).toBeLessThan(idx3)
     expect(idx3).toBeLessThan(idx4)
     expect(idx4).toBeLessThan(idx5)
+    expect(idx5).toBeLessThan(idx6)
     expect(text).not.toMatch(/^\s*$/m)
   })
 
