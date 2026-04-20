@@ -1,3 +1,4 @@
+import json
 import logging
 from unittest.mock import patch
 
@@ -520,6 +521,33 @@ def test_pause_job_status_conflict(client, db):
 
     response = client.post(f"/jobs/{job.id}/pause")
     assert response.status_code == 409
+
+
+def test_create_manifest_overwrites_manifest_json_and_includes_metadata(client, db, tmp_path):
+    job = ExportJob(
+        project_id="PROJ-MANIFEST-DATA-001",
+        evidence_number="EV-MANIFEST-DATA-001",
+        source_path="/data/evidence",
+        target_mount_path=str(tmp_path),
+        status=JobStatus.PENDING,
+    )
+    db.add(job)
+    db.commit()
+
+    first_response = client.post(f"/jobs/{job.id}/manifest")
+    second_response = client.post(f"/jobs/{job.id}/manifest")
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+
+    manifest_path = tmp_path / "manifest.json"
+    assert manifest_path.exists()
+    assert list(tmp_path.glob("manifest*.json")) == [manifest_path]
+
+    manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest_payload["job_id"] == job.id
+    assert manifest_payload["generated_by"] == "test-user"
+    assert manifest_payload["generated_at"]
 
 
 def test_create_manifest_writes_application_log_line(client, db, caplog):

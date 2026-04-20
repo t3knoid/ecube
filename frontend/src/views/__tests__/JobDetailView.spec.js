@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getJobFiles: vi.fn(),
   startJob: vi.fn(),
   verifyJob: vi.fn(),
+  pauseJob: vi.fn(),
   generateManifest: vi.fn(),
   updateJob: vi.fn(),
   completeJob: vi.fn(),
@@ -39,6 +40,7 @@ vi.mock('@/api/jobs.js', () => ({
   getJobFiles: (...args) => mocks.getJobFiles(...args),
   startJob: (...args) => mocks.startJob(...args),
   verifyJob: (...args) => mocks.verifyJob(...args),
+  pauseJob: (...args) => mocks.pauseJob(...args),
   generateManifest: (...args) => mocks.generateManifest(...args),
   updateJob: (...args) => mocks.updateJob(...args),
   completeJob: (...args) => mocks.completeJob(...args),
@@ -110,6 +112,7 @@ describe('JobDetailView start action', () => {
     mocks.getJobFiles.mockReset()
     mocks.startJob.mockReset()
     mocks.verifyJob.mockReset()
+    mocks.pauseJob.mockReset()
     mocks.generateManifest.mockReset()
     mocks.updateJob.mockReset()
     mocks.completeJob.mockReset()
@@ -145,6 +148,7 @@ describe('JobDetailView start action', () => {
       { id: 4, project_id: 'PROJ-001', status: 'MOUNTED', remote_path: 'server:/exports/project-001', local_mount_point: '/nfs/project-001' },
     ])
     mocks.updateJob.mockResolvedValue({ id: 6, status: 'PENDING', project_id: 'PROJ-001', evidence_number: 'EV-UPDATED', thread_count: 4, copied_bytes: 0, total_bytes: 0, source_path: '/nfs/project-001/updated', target_mount_path: '/mnt/ecube/1' })
+    mocks.pauseJob.mockResolvedValue({ id: 6, status: 'PAUSING', project_id: 'PROJ-001', evidence_number: 'EV-006', thread_count: 4, copied_bytes: 0, total_bytes: 0, source_path: '/nfs/project-001/evidence', target_mount_path: '/mnt/ecube/1' })
     mocks.completeJob.mockResolvedValue({ id: 6, status: 'COMPLETED', project_id: 'PROJ-001', evidence_number: 'EV-006', thread_count: 4, copied_bytes: 0, total_bytes: 0 })
     mocks.deleteJob.mockResolvedValue({ status: 'deleted' })
   })
@@ -276,6 +280,34 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain('1.5 KB / 483 MB')
   })
 
+  it('keeps verify and manifest disabled until the job reaches 100%', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'RUNNING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 50,
+      total_bytes: 100,
+      file_count: 2,
+      files_succeeded: 1,
+      files_failed: 0,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const verifyButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.verify'))
+    const manifestButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.manifest'))
+
+    expect(verifyButton).toBeTruthy()
+    expect(manifestButton).toBeTruthy()
+    expect(verifyButton.attributes('disabled')).toBeDefined()
+    expect(manifestButton.attributes('disabled')).toBeDefined()
+  })
+
   it('shows a completion summary with start time, copy threads, and transfer metrics', async () => {
     mocks.getJob.mockResolvedValue({
       id: 6,
@@ -312,6 +344,34 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain('5.0 MB/s')
   })
 
+  it('shows a pause-in-progress dialog after pausing a running job', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'RUNNING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 50,
+      total_bytes: 100,
+      file_count: 2,
+      files_succeeded: 1,
+      files_failed: 0,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const pauseButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.pause'))
+    expect(pauseButton).toBeTruthy()
+    await pauseButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.pauseJob).toHaveBeenCalledWith(6)
+    expect(wrapper.text()).toContain('Pause in progress')
+  })
+
   it('shows a success banner after generating a manifest', async () => {
     mocks.getJob.mockResolvedValue({
       id: 6,
@@ -335,7 +395,7 @@ describe('JobDetailView start action', () => {
 
     expect(mocks.generateManifest).toHaveBeenCalledWith(6)
     expect(wrapper.text()).toContain('Manifest generated successfully.')
-    expect(wrapper.text()).toContain('/mnt/ecube/1/manifest_6.json')
+    expect(wrapper.text()).toContain('/mnt/ecube/1/manifest.json')
   })
 
   it('uses accumulated active duration after pause and resume cycles', async () => {

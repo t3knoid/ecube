@@ -795,10 +795,14 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
     job = job_repo.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    generated_at = datetime.now(timezone.utc).isoformat()
+    generated_by = actor or "system"
     manifest_data = {
         "job_id": job.id,
         "project_id": job.project_id,
         "evidence_number": job.evidence_number,
+        "generated_at": generated_at,
+        "generated_by": generated_by,
         "files": [
             {
                 "path": f.relative_path,
@@ -815,7 +819,7 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
     if not job.target_mount_path:
         manifest_error = "Assigned drive is not mounted"
     else:
-        candidate_path = os.path.join(job.target_mount_path, f"manifest_{job.id}.json")
+        candidate_path = os.path.join(job.target_mount_path, "manifest.json")
         manifest_name = os.path.basename(candidate_path)
         try:
             os.makedirs(job.target_mount_path, exist_ok=True)
@@ -867,6 +871,8 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
                 "project_id": job.project_id,
                 "drive_id": active_drive_id,
                 "manifest_file": manifest_name,
+                "generated_at": generated_at,
+                "generated_by": generated_by,
                 "error": manifest_error,
             },
             client_ip=client_ip,
