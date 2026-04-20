@@ -781,6 +781,36 @@ Create a new job.
 - `422 Validation Error` — Invalid request body (includes non-HTTPS `callback_url`)
 - `500 Internal Server Error` — Database error
 
+### `PUT /jobs/{job_id}`
+
+Update a non-active job from the Job Detail workflow. Editing is limited to `PENDING`, `PAUSED`, and `FAILED` jobs so project isolation and drive assignments remain consistent. The existing project binding cannot be changed.
+
+**Roles:** `admin`, `manager`, `processor`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid credentials
+- `403 Forbidden` — Insufficient role or drive belongs to another project
+- `404 Not Found` — Job or drive not found
+- `409 Conflict` — Job is active, drive is unavailable, or the job no longer has a valid assignment
+- `422 Validation Error` — Invalid request body or source-path traversal outside the selected mount
+- `500 Internal Server Error` — Database error
+
+### `DELETE /jobs/{job_id}`
+
+Delete a job that has not yet started. This releases the current drive assignment and writes an audit entry.
+
+**Roles:** `admin`, `manager`, `processor`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid credentials
+- `403 Forbidden` — Insufficient role
+- `404 Not Found` — Job not found
+- `409 Conflict` — Only pending jobs can be deleted
+- `422 Validation Error` — Invalid path parameter
+- `500 Internal Server Error` — Database error
+
 ### `POST /jobs/{job_id}/start`
 
 Start job with thread count. Sets `started_by` to the authenticated user and `started_at` to the current timestamp. Resets `completed_at` to `null`. Accepts jobs in `PENDING`, `FAILED`, or `PAUSED` status, allowing a safe resume after an operator-requested pause.
@@ -808,6 +838,21 @@ Request a safe pause for a running job. The endpoint returns immediately with th
 - `403 Forbidden` — Insufficient role
 - `404 Not Found` — Job not found
 - `409 Conflict` — Job is not currently in a pausable running state
+- `422 Validation Error` — Invalid path parameter
+- `500 Internal Server Error` — Database error
+
+### `POST /jobs/{job_id}/complete`
+
+Manually mark a safe non-active job as completed. This override is limited to `PENDING`, `PAUSED`, and `FAILED` states and always records an audit entry.
+
+**Roles:** `admin`, `manager`, `processor`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid credentials
+- `403 Forbidden` — Insufficient role
+- `404 Not Found` — Job not found
+- `409 Conflict` — Only pending, paused, or failed jobs can be manually completed
 - `422 Validation Error` — Invalid path parameter
 - `500 Internal Server Error` — Database error
 
@@ -864,7 +909,7 @@ copy status metadata without requiring introspection-only debug access.
 
 ### `POST /jobs/{job_id}/verify`
 
-Re-verify checksums.
+Re-verify checksums after the job is fully complete. The Job Detail UI keeps this action disabled until the job status is `COMPLETED` and the progress model has reached 100%.
 
 **Roles:** `admin`, `manager`, `processor`
 
@@ -878,7 +923,7 @@ Re-verify checksums.
 
 ### `POST /jobs/{job_id}/manifest`
 
-Regenerate manifest.
+Regenerate the manifest and refresh the single destination-side `manifest.json` file. The operator UI shows a visible success banner with the resolved output path.
 
 **Roles:** `admin`, `manager`, `processor`
 
@@ -951,7 +996,7 @@ Compute MD5/SHA‑256 for a file.
 
 ### `POST /files/compare`
 
-Compare two files by hash/size/path.
+Compare two files by hash, size, and path. When the same export-file identifier is submitted for both sides, ECUBE interprets the request as a source-versus-destination comparison for that exported record and returns a sanitized `409 Conflict` if either side is unavailable.
 
 **Roles:** `admin`, `auditor`
 

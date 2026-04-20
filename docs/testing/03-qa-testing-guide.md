@@ -4,7 +4,7 @@
 |---|---|
 | Title | QA Testing Guide |
 | Purpose | Guides QA personnel through manual hands-on ECUBE UI and functional testing in a Linux-based test environment. |
-| Updated on | 04/17/26 |
+| Updated on | 04/20/26 |
 | Audience | QA personnel. |
 
 ## Table of Contents
@@ -1096,6 +1096,18 @@ These tests exercise real hardware paths that must be validated during manual QA
 | 3 | Mount-root source selection works | In Create Job, choose a mounted share and enter / as the source path | The job is created successfully and the selected mount root is used as the source |
 | 4 | Path traversal outside selected mount is blocked | In Create Job, choose a mounted share and enter a traversal path such as ../../etc | The UI/API rejects the request, no job is created, and the operator sees a validation-style error rather than a host path leak |
 
+#### 12.6.2 Job Detail Lifecycle Controls
+
+| # | Test | Steps | Expected |
+|---|------|-------|----------|
+| 1 | Edit a non-active job | Open a `PENDING`, `PAUSED`, or `FAILED` job, click `Edit`, change evidence number and source path, then save | Updated values persist on the detail page and the job remains bound to the same project |
+| 2 | Complete action is status-aware | Open one `PENDING` or `PAUSED` job and one `RUNNING` job | `Complete` is available only for the non-active job; the running job does not allow manual completion |
+| 3 | Delete pending job requires confirmation | Open a `PENDING` job, click `Delete`, confirm the dialog | The job is removed, the UI returns to the Jobs list, and the drive assignment is released |
+| 4 | Verify and Manifest are gated by real completion | Open a job that is still copying and watch the action bar, then open the same job after it reaches `COMPLETED` with 100% progress | `Verify` and `Generate Manifest` stay disabled until the job is truly complete, then become available |
+| 5 | Pause-in-progress feedback appears on Job Detail | Pause a running job from the detail page | A `Pause in progress` dialog appears until the job transitions to `PAUSED`, and `Start` stays unavailable during `PAUSING` |
+| 6 | Source versus destination compare is clear | Click `View Hashes` for a file, then run the compare action from Job Detail | Results show `Source`, `Destination`, and match details for path, size, and checksum; missing sides produce a sanitized conflict message |
+| 7 | Manifest success feedback shows a stable path | Generate the manifest twice for the same completed job | The UI shows a success banner with the destination path and the same `manifest.json` file is refreshed rather than multiplied |
+
 Walk through the complete data export lifecycle:
 
 1. **Set up a test file share.** Create a local directory with known sample files and checksums:
@@ -1165,7 +1177,7 @@ Walk through the complete data export lifecycle:
 13. **Check audit trail** — `GET /audit` — confirm the complete chain:
     `MOUNT_ADDED → PORT_ENABLED → DRIVE_FORMATTED → DRIVE_INITIALIZED → JOB_CREATED → JOB_STARTED → JOB_COMPLETED → DRIVE_EJECT_PREPARED`
 
-### 12.6.1 Job Callback URL Notifications
+### 12.6.3 Job Callback URL Notifications
 
 Use a controlled HTTPS webhook sink when validating callback behavior.
 
