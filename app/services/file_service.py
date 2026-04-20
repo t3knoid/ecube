@@ -38,24 +38,47 @@ def _compute_hashes(file_path: Path) -> tuple[Optional[str], Optional[str]]:
         return None, None
 
 
-def _resolve_file_path(ef: ExportFile, db: Session) -> Optional[Path]:
-    """Return the on-disk path for *ef* using its parent job's target or source path."""
+def _resolve_source_file_path(ef: ExportFile, db: Session) -> Optional[Path]:
+    """Return the source-side on-disk path for *ef*."""
     job = JobRepository(db).get(ef.job_id)
-    if job is None:
+    if job is None or not job.source_path:
         return None
-    base = job.target_mount_path or job.source_path
-    if not base:
-        return None
-    return Path(base) / ef.relative_path
+    return Path(job.source_path) / ef.relative_path
 
 
-def _file_to_item(ef: ExportFile, db: Session) -> FileCompareItem:
-    """Build a :class:`FileCompareItem` from an ExportFile, computing hashes live."""
+def _resolve_destination_file_path(ef: ExportFile, db: Session) -> Optional[Path]:
+    """Return the destination-side on-disk path for *ef*."""
+    job = JobRepository(db).get(ef.job_id)
+    if job is None or not job.target_mount_path:
+        return None
+    return Path(job.target_mount_path) / ef.relative_path
+
+
+def _resolve_file_path(ef: ExportFile, db: Session) -> Optional[Path]:
+    """Return the most relevant on-disk path for *ef*.
+
+    Prefer the copied destination file when present; fall back to the source
+    path for older or partially populated jobs.
+    """
+    return _resolve_destination_file_path(ef, db) or _resolve_source_file_path(ef, db)
+
+
+def _file_to_item_from_path(
+    ef: ExportFile,
+    file_path: Optional[Path],
+    *,
+    checksum_fallback: Optional[str] = None,
+) -> FileCompareItem:
+    """Build a :class:`FileCompareItem` for a specific source or destination path."""
     md5: Optional[str] = None
-    sha256: Optional[str] = ef.checksum  # stored SHA-256 from copy engine
+    sha256: Optional[str] = checksum_fallback
+    size_bytes: Optional[int] = ef.size_bytes
 
-    file_path = _resolve_file_path(ef, db)
     if file_path is not None and _path_accessible(file_path):
+        try:
+            size_bytes = file_path.stat().st_size
+        except OSError:
+            pass
         md5, sha256_live = _compute_hashes(file_path)
         if sha256_live is not None:
             sha256 = sha256_live
@@ -65,7 +88,16 @@ def _file_to_item(ef: ExportFile, db: Session) -> FileCompareItem:
         relative_path=ef.relative_path,
         md5=md5,
         sha256=sha256,
-        size_bytes=ef.size_bytes,
+        size_bytes=size_bytes,
+    )
+
+
+def _file_to_item(ef: ExportFile, db: Session) -> FileCompareItem:
+    """Build a :class:`FileCompareItem` from an ExportFile, computing hashes live."""
+    return _file_to_item_from_path(
+        ef,
+        _resolve_file_path(ef, db),
+        checksum_fallback=ef.checksum,
     )
 
 
@@ -136,8 +168,22 @@ def compare_files(
     if ef_b is None:
         raise HTTPException(status_code=404, detail=f"File {body.file_id_b} not found")
 
-    item_a = _file_to_item(ef_a, db)
-    item_b = _file_to_item(ef_b, db)
+    compare_mode = "generic"
+    if body.file_id_a == body.file_id_b:
+        source_path = _resolve_source_file_path(ef_a, db)
+        if source_path is None or not _path_accessible(source_path):
+            raise HTTPException(status_code=409, detail="Source file is unavailable for comparison")
+
+        destination_path = _resolve_destination_file_path(ef_a, db)
+        if destination_path is None or not _path_accessible(destination_path):
+            raise HTTPException(status_code=409, detail="Destination file is unavailable for comparison")
+
+        item_a = _file_to_item_from_path(ef_a, source_path)
+        item_b = _file_to_item_from_path(ef_a, destination_path, checksum_fallback=ef_a.checksum)
+        compare_mode = "source_destination"
+    else:
+        item_a = _file_to_item(ef_a, db)
+        item_b = _file_to_item(ef_b, db)
 
     # Compare each dimension, treating None as "unknown" (not a mismatch).
     if item_a.sha256 is not None and item_b.sha256 is not None:
@@ -166,6 +212,7 @@ def compare_files(
         details={
             "file_id_a": body.file_id_a,
             "file_id_b": body.file_id_b,
+            "compare_mode": compare_mode,
             "match": match,
             "hash_match": hash_match,
             "size_match": size_match,
