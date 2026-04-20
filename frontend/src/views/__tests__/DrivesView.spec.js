@@ -24,7 +24,7 @@ function buildDrive(overrides = {}) {
     device_identifier: 'USB-001',
     filesystem_type: 'ext4',
     capacity_bytes: 1024,
-    mount_path: null,
+    // mount_path removed
     current_state: 'AVAILABLE',
     current_project_id: null,
     ...overrides,
@@ -131,7 +131,7 @@ describe('DrivesView rescan and filter loading', () => {
   })
 
   it('shows the Browse action for a mounted available drive', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/1', current_state: 'AVAILABLE' })])
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'AVAILABLE' })])
 
     const wrapper = mountView()
     await flushPromises()
