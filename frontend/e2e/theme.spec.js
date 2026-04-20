@@ -48,6 +48,8 @@ async function mockCoreApis(page) {
     current_state: 'AVAILABLE',
     current_project_id: 'PRJ',
     device_identifier: '/dev/sdb',
+    port_system_path: '2-1',
+    serial_number: 'SER-001',
     filesystem_type: 'ext4',
     capacity_bytes: 1000,
     mount_path: '/mnt/ecube/1',
@@ -61,7 +63,7 @@ async function mockCoreApis(page) {
   }])
   await routeJson(page, '**/api/users', { users: [{ username: 'frank', roles: ['admin'] }] })
   await routeJson(page, '**/api/admin/os-users', { users: [{ uid: 1001, username: 'frank', groups: ['ecube-admin'] }] })
-  await routeJson(page, '**/api/jobs**', [{ id: 55, project_id: 'PRJ', status: 'RUNNING', copied_bytes: 20, total_bytes: 100 }])
+  await routeJson(page, '**/api/jobs**', [{ id: 55, project_id: 'PRJ', status: 'RUNNING', copied_bytes: 20, total_bytes: 100, evidence_number: 'EV-055', drive: { id: 1, port_system_path: '2-1', device_identifier: '/dev/sdb' } }])
   await routeJson(page, /\/api\/audit(?!\/)/, [{ id: 1, user: 'frank', action: 'LOGIN', timestamp: '2026-03-29T00:00:00Z', details: {} }])
   await routeJson(page, '**/api/introspection/system-health', {
     status: 'ok',
@@ -87,7 +89,7 @@ async function mockCoreApis(page) {
       { key: 'db_pool_recycle_seconds', value: -1, requires_restart: true },
     ],
   })
-  await routeJson(page, '**/api/jobs/55', { id: 55, project_id: 'PRJ', evidence_number: 'EV', status: 'RUNNING', copied_bytes: 20, total_bytes: 100 })
+  await routeJson(page, '**/api/jobs/55', { id: 55, project_id: 'PRJ', evidence_number: 'EV', status: 'RUNNING', copied_bytes: 20, total_bytes: 100, drive: { id: 1, port_system_path: '2-1', device_identifier: '/dev/sdb' } })
   await routeJson(page, '**/api/jobs/55/files', { files: [] })
   await routeJson(page, '**/api/introspection/jobs/55/debug', { files: [] })
 }
@@ -96,7 +98,7 @@ async function openCreateJobDialog(page) {
   await page.goto('/jobs')
   await page.getByRole('button', { name: /create/i }).click()
   await expect(page.locator('.dialog-panel')).toBeVisible()
-  await page.getByLabel('Project').selectOption('PRJ')
+  await page.locator('#job-project').selectOption('PRJ')
 }
 
 test('theme switch changes css variables', async ({ page }) => {
