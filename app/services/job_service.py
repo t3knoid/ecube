@@ -859,6 +859,9 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
     job_row = _row(job)
     job_project_id = cast(Optional[str], job_row.project_id)
     target_mount_path = cast(Optional[str], job_row.target_mount_path)
+    assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
+    assignment_row = _row(assignment) if assignment is not None else None
+    active_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
     generated_at = datetime.now(timezone.utc).isoformat()
     generated_by = actor or "system"
     manifest_data = {
@@ -877,33 +880,58 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
         ],
     }
 
-    manifest_path = None
-    manifest_name = None
-    manifest_error = None
+    def audit_manifest_failure(error_message: str, manifest_file: Optional[str] = None) -> None:
+        try:
+            audit_repo.add(
+                action="MANIFEST_CREATE_FAILED",
+                user=actor,
+                project_id=job_project_id,
+                drive_id=active_drive_id,
+                job_id=job_id,
+                details={
+                    "project_id": job_project_id,
+                    "drive_id": active_drive_id,
+                    "manifest_file": manifest_file,
+                    "generated_at": generated_at,
+                    "generated_by": generated_by,
+                    "error": error_message,
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.error("Failed to write audit log for MANIFEST_CREATE_FAILED")
+
     if not target_mount_path:
         manifest_error = "Assigned drive is not mounted"
-    else:
-        candidate_path = os.path.join(target_mount_path, "manifest.json")
-        manifest_name = os.path.basename(candidate_path)
-        try:
-            os.makedirs(target_mount_path, exist_ok=True)
-            with open(candidate_path, "w", encoding="utf-8") as fp:
-                json.dump(manifest_data, fp, indent=2)
-            manifest_path = candidate_path
-        except Exception as exc:
-            manifest_error = "Manifest file could not be written"
-            logger.warning(
-                "Manifest file write failed",
-                extra={"job_id": job_id, "project_id": job_project_id},
-            )
-            logger.debug(
-                "Manifest file write failure details",
-                {"path": candidate_path, "raw_error": str(exc)},
-            )
+        logger.warning(
+            "Manifest generation rejected",
+            extra={"job_id": job_id, "project_id": job_project_id, "reason": "drive_not_mounted"},
+        )
+        audit_manifest_failure(manifest_error)
+        raise HTTPException(status_code=409, detail=manifest_error)
+
+    candidate_path = os.path.join(target_mount_path, "manifest.json")
+    manifest_name = os.path.basename(candidate_path)
+    try:
+        os.makedirs(target_mount_path, exist_ok=True)
+        with open(candidate_path, "w", encoding="utf-8") as fp:
+            json.dump(manifest_data, fp, indent=2)
+    except Exception as exc:
+        manifest_error = "Manifest file could not be written"
+        logger.warning(
+            "Manifest file write failed",
+            extra={"job_id": job_id, "project_id": job_project_id},
+        )
+        logger.debug(
+            "Manifest file write failure details",
+            {"path": candidate_path, "raw_error": str(exc)},
+        )
+        audit_manifest_failure(manifest_error, manifest_name)
+        raise HTTPException(status_code=500, detail=manifest_error) from exc
 
     try:
         manifest_repo.add(
-            Manifest(job_id=job_id, manifest_path=manifest_path, format="JSON")
+            Manifest(job_id=job_id, manifest_path=candidate_path, format="JSON")
         )
     except Exception:
         logger.error("DB commit failed while creating manifest for job %s", job_id)
@@ -912,17 +940,14 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
             detail="Database error while creating manifest",
         )
 
-    assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
-    assignment_row = _row(assignment) if assignment is not None else None
-    active_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
     logger.info(
-        f"MANIFEST_CREATED job_id={job_id} project_id={job_project_id} format=JSON actor={actor or 'system'} result={'written' if manifest_path else 'recorded'}",
+        f"MANIFEST_CREATED job_id={job_id} project_id={job_project_id} format=JSON actor={actor or 'system'} result=written",
         extra={
             "job_id": job_id,
             "project_id": job_project_id,
             "drive_id": active_drive_id,
             "actor": actor or "system",
-            "result": "written" if manifest_path else "recorded",
+            "result": "written",
         },
     )
     try:
@@ -938,7 +963,7 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
                 "manifest_file": manifest_name,
                 "generated_at": generated_at,
                 "generated_by": generated_by,
-                "error": manifest_error,
+                "error": None,
             },
             client_ip=client_ip,
         )
