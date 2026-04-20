@@ -74,6 +74,7 @@ vi.mock('@/composables/usePolling.js', () => ({
 
 function mountView() {
   return mount(JobDetailView, {
+    attachTo: document.body,
     global: {
       plugins: [i18n],
       stubs: {
@@ -413,6 +414,58 @@ describe('JobDetailView start action', () => {
 
     expect(mocks.pauseJob).toHaveBeenCalledWith(6)
     expect(wrapper.text()).toContain('Pause in progress')
+  })
+
+  it('moves focus into the edit dialog and closes it on Escape', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
+    expect(editButton).toBeTruthy()
+    await editButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('#job-evidence').exists()).toBe(true)
+    expect(document.activeElement?.id).toBe('job-evidence')
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+
+    expect(wrapper.find('#job-evidence').exists()).toBe(false)
+  })
+
+  it('moves focus into the pause dialog and closes it on Escape', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'RUNNING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 50,
+      total_bytes: 100,
+      file_count: 2,
+      files_succeeded: 1,
+      files_failed: 0,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const pauseButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.pause'))
+    expect(pauseButton).toBeTruthy()
+    await pauseButton.trigger('click')
+    await flushPromises()
+
+    const closeButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.close'))
+    expect(closeButton).toBeTruthy()
+    expect(document.activeElement?.textContent).toContain(i18n.global.t('common.actions.close'))
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Pause in progress')
   })
 
   it('shows a success banner after generating a manifest', async () => {
