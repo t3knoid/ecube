@@ -52,6 +52,16 @@
 			"type": "string"
 		},
 		{
+			"key": "project_id",
+			"value": "PROJECT-001",
+			"type": "string"
+		},
+		{
+			"key": "job_file_limit",
+			"value": "200",
+			"type": "string"
+		},
+		{
 			"key": "drive_id",
 			"value": "1",
 			"type": "string"
@@ -251,6 +261,44 @@
 		{
 			"name": "Auth",
 			"item": [
+				{
+					"name": "Public Auth Config",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Public auth config returns 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test('Public auth config contains demo_mode_enabled', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('demo_mode_enabled');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/public-config",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"public-config"
+							]
+						},
+						"description": "Return public-safe login metadata for demo deployments. No auth required."
+					}
+				},
 				{
 					"name": "Login",
 					"event": [
@@ -842,8 +890,78 @@
 			]
 		},
 		{
+			"name": "Browse",
+			"item": [
+				{
+					"name": "Browse Directory",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/browse?path=/mnt/ecube&page=1&page_size=100",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"browse"
+							],
+							"query": [
+								{
+									"key": "path",
+									"value": "/mnt/ecube",
+									"description": "An active ECUBE-managed mount root"
+								},
+								{
+									"key": "subdir",
+									"value": "",
+									"disabled": true,
+									"description": "Optional relative subdirectory within the mount root"
+								},
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number"
+								},
+								{
+									"key": "page_size",
+									"value": "100",
+									"description": "Entries per page, up to 500"
+								}
+							]
+						},
+						"description": "List directory contents for an active USB drive or registered network mount root. Roles: admin, manager, processor, auditor."
+					}
+				}
+			]
+		},
+		{
 			"name": "Jobs",
 			"item": [
+				{
+					"name": "List Jobs",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "50",
+									"disabled": true,
+									"description": "Maximum number of jobs to return (1-1000)"
+								}
+							]
+						},
+						"description": "List the most recent export jobs ordered by creation time descending. Roles: admin, manager, processor, auditor."
+					}
+				},
 				{
 					"name": "Create Job (Explicit Drive)",
 					"request": {
@@ -922,6 +1040,65 @@
 					}
 				},
 				{
+					"name": "Update Job",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"project_id\": \"{{project_id}}\",\n  \"evidence_number\": \"EV-001-UPDATED\",\n  \"source_path\": \"/mnt/source/evidence-updated\",\n  \"drive_id\": 1,\n  \"thread_count\": 4,\n  \"max_file_retries\": 3,\n  \"retry_delay_seconds\": 1,\n  \"callback_url\": \"https://example.com/webhook/job-complete\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}"
+							],
+							"variable": [
+								{
+									"key": "job_id",
+									"value": "1",
+									"description": "ID of the job to update"
+								}
+							]
+						},
+						"description": "Update a non-active job from the Job Detail workflow. Roles: admin, manager, processor."
+					}
+				},
+				{
+					"name": "Delete Job",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}"
+							],
+							"variable": [
+								{
+									"key": "job_id",
+									"value": "1",
+									"description": "ID of the pending job to delete"
+								}
+							]
+						},
+						"description": "Delete a job that has not yet started. Only PENDING jobs may be removed. Roles: admin, manager, processor."
+					}
+				},
+				{
 					"name": "Start Job",
 					"request": {
 						"method": "POST",
@@ -954,6 +1131,58 @@
 							]
 						},
 						"description": "Launch copy process in background. State transitions to RUNNING. Sets started_by to the authenticated user and records started_at timestamp. Roles: admin, manager, processor."
+					}
+				},
+				{
+					"name": "Pause Job",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}/pause",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}",
+								"pause"
+							],
+							"variable": [
+								{
+									"key": "job_id",
+									"value": "1",
+									"description": "ID of the running job to pause"
+								}
+							]
+						},
+						"description": "Request a safe pause for an actively running export job. Roles: admin, manager, processor."
+					}
+				},
+				{
+					"name": "Complete Job",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}/complete",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}",
+								"complete"
+							],
+							"variable": [
+								{
+									"key": "job_id",
+									"value": "1",
+									"description": "ID of the paused or otherwise safe non-active job to complete"
+								}
+							]
+						},
+						"description": "Manually mark a safe non-active job as completed and record an audit entry. Roles: admin, manager, processor."
 					}
 				},
 				{
@@ -1014,7 +1243,7 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/jobs/{{job_id}}/files",
+							"raw": "{{base_url}}/jobs/{{job_id}}/files?limit={{job_file_limit}}",
 							"host": [
 								"{{base_url}}"
 							],
@@ -1022,6 +1251,13 @@
 								"jobs",
 								"{{job_id}}",
 								"files"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "{{job_file_limit}}",
+									"description": "Maximum number of file rows to return (1-2000)"
+								}
 							],
 							"variable": [
 								{
@@ -1031,7 +1267,7 @@
 								}
 							]
 						},
-						"description": "Retrieve file rows and copy/verify status for a specific export job."
+						"description": "Retrieve operator-safe file status rows for a specific export job. Roles: admin, manager, processor, auditor."
 					}
 				}
 			]
@@ -1286,12 +1522,102 @@
 								{
 									"key": "offset",
 									"value": "0",
-									"disabled": true,
 									"description": "Pagination offset"
 								}
 							]
 						},
 						"description": "Return audit logs with optional filters. Immutable, append-only records. Roles: admin, manager, auditor."
+					}
+				},
+				{
+					"name": "Chain of Custody Report",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Chain of custody report returns an expected status', function () {",
+									"    pm.expect([200, 404, 409, 410, 422]).to.include(pm.response.code);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/audit/chain-of-custody",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"audit",
+								"chain-of-custody"
+							],
+							"query": [
+								{
+									"key": "drive_id",
+									"value": "{{drive_id}}",
+									"description": "Authoritative drive selector when provided"
+								},
+								{
+									"key": "drive_sn",
+									"value": "",
+									"disabled": true,
+									"description": "Drive device identifier or serial"
+								},
+								{
+									"key": "project_id",
+									"value": "{{project_id}}",
+									"disabled": true,
+									"description": "Project selector when querying by project"
+								}
+							]
+						},
+						"description": "Return chain-of-custody report sections by drive or project selectors. Selector precedence is drive_id, then drive_sn, then project_id. Roles: admin, manager, auditor."
+					}
+				},
+				{
+					"name": "Record Handoff",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Record handoff returns an expected status', function () {",
+									"    pm.expect([200, 404, 409, 410, 422]).to.include(pm.response.code);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"drive_id\": 1,\n  \"project_id\": \"{{project_id}}\",\n  \"possessor\": \"Evidence Intake\",\n  \"delivery_time\": \"2026-04-20T12:00:00Z\",\n  \"received_by\": \"Records Officer\",\n  \"receipt_ref\": \"CHAIN-001\",\n  \"notes\": \"Transferred for secure storage\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/audit/chain-of-custody/handoff",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"audit",
+								"chain-of-custody",
+								"handoff"
+							]
+						},
+						"description": "Record a legal custody transfer as an append-only audit event. Roles: admin, manager."
 					}
 				}
 			]
