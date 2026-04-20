@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.exceptions import ECUBEException, EncodingError
 from app.models.hardware import DriveState, UsbDrive
-from app.models.jobs import DriveAssignment, ExportJob, JobStatus, Manifest
+from app.models.jobs import DriveAssignment, ExportFile, ExportJob, JobStatus, Manifest
 from app.models.network import MountStatus
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
@@ -21,7 +21,7 @@ from app.repositories.job_repository import (
     ManifestRepository,
 )
 from app.repositories.mount_repository import MountRepository
-from app.schemas.jobs import JobCreate, JobStart
+from app.schemas.jobs import JobCreate, JobStart, JobUpdate
 from app.services import copy_engine
 from app.utils.sanitize import is_encoding_error, resolve_source_path, validate_source_path
 
@@ -342,6 +342,254 @@ def get_job(job_id: int, db: Session) -> ExportJob:
     return job
 
 
+def _require_editable_job(job: ExportJob) -> None:
+    if job.status not in (JobStatus.PENDING, JobStatus.PAUSED, JobStatus.FAILED):
+        raise HTTPException(
+            status_code=409,
+            detail="Only pending, paused, or failed jobs can be edited from Job Detail",
+        )
+
+
+def _other_active_assignments_for_drive(db: Session, drive_id: int, *, exclude_job_id: Optional[int] = None) -> int:
+    query = db.query(DriveAssignment).filter(
+        DriveAssignment.drive_id == drive_id,
+        DriveAssignment.released_at.is_(None),
+    )
+    if exclude_job_id is not None:
+        query = query.filter(DriveAssignment.job_id != exclude_job_id)
+    return query.count()
+
+
+def update_job(
+    job_id: int,
+    body: JobUpdate,
+    db: Session,
+    actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
+) -> ExportJob:
+    job_repo = JobRepository(db)
+    drive_repo = DriveRepository(db)
+    assignment_repo = DriveAssignmentRepository(db)
+    audit_repo = AuditRepository(db)
+
+    job = job_repo.get_for_update(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _require_editable_job(job)
+
+    if body.project_id != job.project_id:
+        raise HTTPException(
+            status_code=409,
+            detail="Project cannot be changed for an existing job",
+        )
+
+    resolved_source_path = _resolve_job_source_path(body, db)
+    active_assignment = assignment_repo.get_active_for_job(job_id)
+    current_drive_id = active_assignment.drive_id if active_assignment else None
+    requested_drive_id = body.drive_id or current_drive_id
+    if requested_drive_id is None:
+        raise HTTPException(status_code=409, detail="Job has no assigned drive")
+
+    drive = drive_repo.get_for_update(requested_drive_id)
+    if not drive:
+        raise HTTPException(status_code=404, detail="Drive not found")
+    if getattr(drive, "current_project_id", None) not in (None, job.project_id):
+        raise HTTPException(status_code=403, detail="Drive belongs to a different project")
+    if drive.current_state not in (DriveState.AVAILABLE, DriveState.IN_USE):
+        raise HTTPException(status_code=409, detail="Drive is not available")
+    if not drive.mount_path:
+        raise HTTPException(status_code=409, detail="Assigned drive is not mounted")
+
+    if drive.current_project_id is None:
+        drive.current_project_id = job.project_id
+
+    try:
+        validated_source_path = validate_source_path(
+            resolved_source_path,
+            usb_mount_base_path=settings.usb_mount_base_path,
+            target_mount_path=drive.mount_path,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    changed_fields: list[str] = []
+    if job.evidence_number != body.evidence_number:
+        changed_fields.append("evidence_number")
+    if job.source_path != validated_source_path:
+        changed_fields.append("source_path")
+    if int(job.thread_count or 0) != int(body.thread_count):
+        changed_fields.append("thread_count")
+    if int(job.max_file_retries or 0) != int(body.max_file_retries):
+        changed_fields.append("max_file_retries")
+    if int(job.retry_delay_seconds or 0) != int(body.retry_delay_seconds):
+        changed_fields.append("retry_delay_seconds")
+    if current_drive_id != requested_drive_id:
+        changed_fields.append("drive_id")
+
+    if active_assignment and current_drive_id != requested_drive_id:
+        active_assignment.released_at = datetime.now(timezone.utc)
+        previous_drive = drive_repo.get_for_update(current_drive_id)
+        if previous_drive and _other_active_assignments_for_drive(db, previous_drive.id, exclude_job_id=job_id) == 0:
+            previous_drive.current_state = DriveState.AVAILABLE
+        db.add(DriveAssignment(drive_id=requested_drive_id, job_id=job_id))
+    elif active_assignment is None:
+        db.add(DriveAssignment(drive_id=requested_drive_id, job_id=job_id))
+
+    drive.current_state = DriveState.IN_USE
+    job.evidence_number = body.evidence_number
+    job.source_path = validated_source_path
+    job.target_mount_path = drive.mount_path
+    job.thread_count = body.thread_count
+    job.max_file_retries = body.max_file_retries
+    job.retry_delay_seconds = body.retry_delay_seconds
+    job.callback_url = body.callback_url
+
+    try:
+        job_repo.save(job)
+    except Exception:
+        logger.exception("DB commit failed while updating job %s", job_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Database error while updating job",
+        )
+
+    try:
+        audit_repo.add(
+            action="JOB_UPDATED",
+            user=actor,
+            project_id=job.project_id,
+            drive_id=requested_drive_id,
+            job_id=job_id,
+            details={
+                "project_id": job.project_id,
+                "drive_id": requested_drive_id,
+                "updated_fields": changed_fields,
+            },
+            client_ip=client_ip,
+        )
+    except Exception:
+        logger.exception("Failed to write audit log for JOB_UPDATED")
+
+    db.refresh(job)
+    return job
+
+
+def complete_job(
+    job_id: int,
+    db: Session,
+    actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
+) -> ExportJob:
+    job_repo = JobRepository(db)
+    audit_repo = AuditRepository(db)
+
+    job = job_repo.get_for_update(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status not in (JobStatus.PENDING, JobStatus.PAUSED, JobStatus.FAILED):
+        raise HTTPException(
+            status_code=409,
+            detail="Only pending, paused, or failed jobs can be manually completed",
+        )
+
+    previous_status = job.status.value
+    job.status = JobStatus.COMPLETED
+    if job.completed_at is None:
+        job.completed_at = datetime.now(timezone.utc)
+
+    try:
+        job_repo.save(job)
+    except Exception:
+        logger.exception("DB commit failed while completing job %s", job_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Database error while completing job",
+        )
+
+    try:
+        assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
+        active_drive_id = assignment.drive_id if assignment else None
+        audit_repo.add(
+            action="JOB_COMPLETED_MANUALLY",
+            user=actor,
+            project_id=job.project_id,
+            drive_id=active_drive_id,
+            job_id=job_id,
+            details={
+                "project_id": job.project_id,
+                "previous_status": previous_status,
+            },
+            client_ip=client_ip,
+        )
+    except Exception:
+        logger.exception("Failed to write audit log for JOB_COMPLETED_MANUALLY")
+
+    db.refresh(job)
+    return job
+
+
+def delete_job(
+    job_id: int,
+    db: Session,
+    actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
+) -> dict[str, object]:
+    job_repo = JobRepository(db)
+    drive_repo = DriveRepository(db)
+    audit_repo = AuditRepository(db)
+
+    job = job_repo.get_for_update(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != JobStatus.PENDING:
+        raise HTTPException(
+            status_code=409,
+            detail="Only pending jobs can be deleted",
+        )
+
+    project_id = job.project_id
+    assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
+    drive_id = assignment.drive_id if assignment else None
+
+    if assignment is not None:
+        drive = drive_repo.get_for_update(assignment.drive_id)
+        if drive and _other_active_assignments_for_drive(db, assignment.drive_id, exclude_job_id=job_id) == 0:
+            drive.current_state = DriveState.AVAILABLE
+
+    db.query(Manifest).filter(Manifest.job_id == job_id).delete(synchronize_session=False)
+    db.query(ExportFile).filter(ExportFile.job_id == job_id).delete(synchronize_session=False)
+    db.query(DriveAssignment).filter(DriveAssignment.job_id == job_id).delete(synchronize_session=False)
+    db.delete(job)
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("DB commit failed while deleting job %s", job_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Database error while deleting job",
+        )
+
+    try:
+        audit_repo.add(
+            action="JOB_DELETED",
+            user=actor,
+            project_id=project_id,
+            drive_id=drive_id,
+            details={
+                "job_id": job_id,
+                "project_id": project_id,
+                "drive_id": drive_id,
+            },
+            client_ip=client_ip,
+        )
+    except Exception:
+        logger.exception("Failed to write audit log for JOB_DELETED")
+
+    return {"job_id": job_id, "status": "deleted"}
+
+
 def start_job(
     job_id: int,
     body: JobStart,
@@ -547,7 +795,6 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
     job = job_repo.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-
     manifest_data = {
         "job_id": job.id,
         "project_id": job.project_id,
@@ -563,18 +810,28 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
     }
 
     manifest_path = None
+    manifest_name = None
     manifest_error = None
-    if job.target_mount_path:
-        manifest_path = os.path.join(
-            job.target_mount_path, f"manifest_{job.id}.json"
-        )
+    if not job.target_mount_path:
+        manifest_error = "Assigned drive is not mounted"
+    else:
+        candidate_path = os.path.join(job.target_mount_path, f"manifest_{job.id}.json")
+        manifest_name = os.path.basename(candidate_path)
         try:
             os.makedirs(job.target_mount_path, exist_ok=True)
-            with open(manifest_path, "w") as fp:
+            with open(candidate_path, "w", encoding="utf-8") as fp:
                 json.dump(manifest_data, fp, indent=2)
+            manifest_path = candidate_path
         except Exception as exc:
-            manifest_error = str(exc)
-            manifest_path = None
+            manifest_error = "Manifest file could not be written"
+            logger.warning(
+                "Manifest file write failed",
+                extra={"job_id": job_id, "project_id": job.project_id},
+            )
+            logger.debug(
+                "Manifest file write failure details",
+                {"path": candidate_path, "raw_error": str(exc)},
+            )
 
     try:
         manifest_repo.add(
@@ -586,9 +843,20 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
             status_code=500,
             detail="Database error while creating manifest",
         )
+
+    assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
+    active_drive_id = assignment.drive_id if assignment else None
+    logger.info(
+        f"MANIFEST_CREATED job_id={job_id} project_id={job.project_id} format=JSON actor={actor or 'system'} result={'written' if manifest_path else 'recorded'}",
+        extra={
+            "job_id": job_id,
+            "project_id": job.project_id,
+            "drive_id": active_drive_id,
+            "actor": actor or "system",
+            "result": "written" if manifest_path else "recorded",
+        },
+    )
     try:
-        assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
-        active_drive_id = assignment.drive_id if assignment else None
         audit_repo.add(
             action="MANIFEST_CREATED",
             user=actor,
@@ -598,7 +866,7 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
             details={
                 "project_id": job.project_id,
                 "drive_id": active_drive_id,
-                "manifest_path": manifest_path,
+                "manifest_file": manifest_name,
                 "error": manifest_error,
             },
             client_ip=client_ip,
