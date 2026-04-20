@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 from app.exceptions import ConflictError
 from app.infrastructure.drive_eject import EjectResult
-from app.models.hardware import UsbDrive, DriveState
+from app.models.hardware import UsbDrive, DriveState, UsbHub, UsbPort
 from app.services import drive_service
 
 
@@ -38,6 +38,27 @@ def test_list_drives_with_data(client, db):
     ids = [d["device_identifier"] for d in data]
     assert "USB001" in ids
     assert ids.count("USB001") == 1
+
+
+def test_list_drives_exposes_port_and_serial_identifiers(client, db):
+    hub = UsbHub(name="Hub Ticket260", system_identifier="hub-ticket260-drives")
+    db.add(hub)
+    db.flush()
+
+    port = UsbPort(hub_id=hub.id, port_number=91, system_path="9-1", enabled=True)
+    db.add(port)
+    db.flush()
+
+    drive = UsbDrive(device_identifier="SER-001", port_id=port.id, current_state=DriveState.AVAILABLE)
+    db.add(drive)
+    db.commit()
+
+    response = client.get("/drives")
+    assert response.status_code == 200
+    payload = response.json()
+    match = next(item for item in payload if item["id"] == drive.id)
+    assert match["port_system_path"] == "9-1"
+    assert match["serial_number"] == "SER-001"
 
 
 def test_list_drives_filter_by_project(client, db):

@@ -143,7 +143,7 @@ describe('JobDetailView start action', () => {
     })
     mocks.getJobFiles.mockResolvedValue({ files: [] })
     mocks.getDrives.mockResolvedValue([
-      { id: 1, device_identifier: 'USB-001', current_project_id: 'PROJ-001', current_state: 'AVAILABLE', mount_path: '/mnt/ecube/1' },
+      { id: 1, device_identifier: 'USB-001', port_system_path: '2-1', current_project_id: 'PROJ-001', current_state: 'AVAILABLE', mount_path: '/mnt/ecube/1' },
     ])
     mocks.getMounts.mockResolvedValue([
       { id: 4, project_id: 'PROJ-001', status: 'MOUNTED', remote_path: 'server:/exports/project-001', local_mount_point: '/nfs/project-001' },
@@ -543,6 +543,11 @@ describe('JobDetailView start action', () => {
     await flushPromises()
 
     expect(wrapper.find('#job-evidence').element.value).toBe('EV-006')
+    const driveOptions = wrapper.find('#job-drive').findAll('option').map((node) => node.text())
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.selectDrive'))
+    expect(driveOptions.join(' ')).toContain('2-1')
+    expect(driveOptions.join(' ')).not.toContain('#1 -')
+    expect(driveOptions.join(' ')).not.toContain('USB-001')
     await wrapper.find('#job-evidence').setValue('EV-UPDATED')
     await wrapper.find('#job-mount').setValue('4')
     await wrapper.find('#job-drive').setValue('1')

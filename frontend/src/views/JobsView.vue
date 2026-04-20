@@ -56,6 +56,7 @@ const columns = computed(() => [
   { key: 'id', label: t('common.labels.id'), align: 'right' },
   { key: 'project_id', label: t('dashboard.project') },
   { key: 'evidence_number', label: t('jobs.evidence') },
+  { key: 'device', label: t('jobs.device') },
   { key: 'status', label: t('common.labels.status') },
   { key: 'progress', label: t('dashboard.progress') },
   { key: 'actions', label: '', align: 'center' },
@@ -145,7 +146,11 @@ function formatProjectId(value) {
 }
 
 function formatDriveLabel(drive) {
-  return `#${drive.id} - ${drive.device_identifier || '-'}`
+  return drive.port_system_path || '-'
+}
+
+function formatJobDevice(job) {
+  return job?.drive?.port_system_path || '-'
 }
 
 function formatMountLabel(mount) {
@@ -191,7 +196,7 @@ const filtered = computed(() => {
   return jobs.value.filter((job) => {
     const status = String(job.status || '').toUpperCase()
     const matchesStatus = statusFilter.value === 'ALL' || status === statusFilter.value
-    const text = [job.project_id, job.evidence_number, String(job.id), job.source_path]
+    const text = [job.project_id, job.evidence_number, formatJobDevice(job), String(job.id), job.source_path]
       .filter(Boolean)
       .join(' ')
       .toLowerCase()
@@ -486,6 +491,7 @@ onBeforeUnmount(() => {
 
     <DataTable :columns="columns" :rows="paged" :empty-text="t('jobs.empty')">
       <template #cell-project_id="{ row }">{{ formatProjectId(row.project_id) }}</template>
+      <template #cell-device="{ row }">{{ formatJobDevice(row) }}</template>
       <template #cell-status="{ row }">
         <StatusBadge :status="row.status" :label="jobStatusLabel(row.status)" />
       </template>

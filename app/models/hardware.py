@@ -64,6 +64,17 @@ class UsbDrive(Base):
     port = relationship("UsbPort", back_populates="drives")
     assignments = relationship("DriveAssignment", back_populates="drive")
 
+    @property
+    def port_system_path(self):
+        return self.port.system_path if self.port else None
+
+    @property
+    def serial_number(self):
+        port_system_path = self.port_system_path
+        if port_system_path and self.device_identifier == port_system_path:
+            return None
+        return self.device_identifier or None
+
     @validates("current_project_id")
     def _normalize_current_project_id(self, _key, value):
         normalized = normalize_project_id(value)

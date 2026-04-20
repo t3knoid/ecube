@@ -313,7 +313,8 @@ The `Drives` page shows detected USB drives and their current state.
 
 Typical drive fields include:
 
-- Device identifier
+- Device (port-based identifier such as `2-1`)
+- Serial Number
 - Filesystem type
 - Capacity
 - Assigned project
@@ -348,7 +349,7 @@ Use the page controls to:
 
 - Refresh the current drive list
 - Trigger a rescan of connected drives
-- Search by device or project information
+- Search by device, serial number, or project information
 - Filter by drive state
 - Sort results
 
@@ -356,7 +357,7 @@ Use the page controls to:
 
 Selecting a drive opens a detail view showing:
 
-- Drive identifiers and filesystem details, with sensitive device and path values shown as `Protected` in standard operator views when appropriate
+- The port-based `Device` value, the separate `Serial Number` value, and filesystem details, with sensitive path values shown as `Protected` in standard operator views when appropriate
 - Current project assignment
 - Current status badge
 - Available actions such as format, initialize, and prepare eject
@@ -511,6 +512,7 @@ Use the jobs table to review:
 - Job ID
 - Project ID
 - Evidence number
+- Device
 - Current status
 - Progress percentage
 
@@ -536,10 +538,12 @@ The dialog is organized into four sections:
 
 1. `Job details` — project, evidence number, optional notes, and thread count
 2. `Source` — the mounted project source and source path
-3. `Destination` — the eligible mounted USB drive for the selected project
+3. `Destination` — the eligible mounted USB device for the selected project
 4. `Execution` — the optional `Run job immediately` checkbox
 
 Only the `Project` field is active when the dialog opens. After you select a project, ECUBE unlocks the remaining fields and filters the available mounts and destination drives to project-matching, currently eligible resources.
+
+The destination selector is labeled `Select device` and shows the same port-based `Device` value used elsewhere in the UI, rather than a serial number or `#id` prefix.
 
 Before creating a job, confirm:
 
@@ -788,6 +792,8 @@ This page is useful when:
 - Investigating system errors or performance issues via application logs (admin-only)
 
 End users who only perform evidence exports may rarely need this page. Administrators and support personnel are more likely to use it during troubleshooting.
+
+In the `USB Topology` tab, ECUBE shows a sorted device table that includes `Device` and `Serial Number` columns. Rows with no meaningful USB metadata are hidden so the list stays focused on useful hardware entries.
 
 ![System page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/system-default-chromium-linux.png)
 
