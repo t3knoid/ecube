@@ -81,6 +81,8 @@
     "initializeTitle": "Initialize drive",
     "projectWarning": "Project binding is enforced for all writes.",
     "initializeProjectHint": "This drive was last used for project \"{project}\".",
+    "initializeMountedDestination": "Mounted destination: {mount}",
+    "initializeMountRequired": "Mount this drive before confirming initialization.",
     "initializeNoProjects": "No mounted shares have assigned projects. Add a mount first."
   },
   "jobs": {

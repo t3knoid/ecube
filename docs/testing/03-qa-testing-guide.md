@@ -971,9 +971,10 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 11 | Format-then-mount-initialize workflow: discover unformatted → format ext4 → mount → initialize | Each step succeeds; `mount_path` is populated before initialization and the drive transitions to `IN_USE` |
 | 12 | Attempt to format an `IN_USE` drive | 409, `CONFLICT` — must be `AVAILABLE` |
 | 13 | Open the Initialize dialog when no eligible mounted project exists | UI shows a helper message, disables the project selector, and blocks submission |
-| 14 | View drive detail after initialization | Sensitive device and path fields are shown as `Protected` instead of raw internal identifiers |
-| 15 | View the mounts list and browse controls | Raw remote and local mount paths are redacted in the table; browse remains enabled only for mounted shares |
-| 16 | Operate the Initialize and Add Mount dialogs with keyboard only | Focus enters the dialog, Tab stays trapped within it, Escape closes it, and focus returns to the triggering control |
+| 14 | Open Initialize for an AVAILABLE, mounted drive that already has a project binding, then click Cancel | The dialog shows the mounted destination context and any valid prior project selection; after cancel, the drive state, project binding, and Initialize availability remain unchanged |
+| 15 | View drive detail after initialization | Sensitive device and path fields are shown as `Protected` instead of raw internal identifiers |
+| 16 | View the mounts list and browse controls | Raw remote and local mount paths are redacted in the table; browse remains enabled only for mounted shares |
+| 17 | Operate the Initialize and Add Mount dialogs with keyboard only | Focus enters the dialog, Tab stays trapped within it, Escape closes it, and focus returns to the triggering control |
 
 ### 12.4.1 Filesystem Detection
 
