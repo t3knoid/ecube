@@ -6,6 +6,8 @@ Project ECUBE {
 Enum job_status {
   PENDING
   RUNNING
+  PAUSING
+  PAUSED
   COMPLETED
   FAILED
   VERIFYING
@@ -57,6 +59,7 @@ Table export_jobs {
   thread_count int [default: 4]
   max_file_retries int [default: 3]
   retry_delay_seconds int [default: 1]
+  active_duration_seconds int [not null, default: 0]
   started_at timestamptz
   completed_at timestamptz
   created_by varchar

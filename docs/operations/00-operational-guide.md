@@ -71,7 +71,7 @@ ECUBE consists of three components:
    - No roles from either source → 403 Forbidden
 5. JWT issued with resolved roles
 6. Each subsequent API call validates roles from JWT claims
-7. Role checked against operation (e.g., "processor" can start jobs, "auditor" can only read)
+7. Role checked against operation (e.g., "processor" can create, start, pause, and resume jobs, while "auditor" can only read)
 8. Operation executed (e.g., mount network share, initialize drive, start copy)
 9. All actions logged to audit table with timestamp, user, action, result
 
@@ -81,7 +81,7 @@ ECUBE consists of three components:
 |------|----------------|
 | **admin** | Unrestricted access to all operations |
 | **manager** | Drive lifecycle, mount management, job oversight |
-| **processor** | Create and start jobs, view status |
+| **processor** | Create, start, pause, and resume jobs; view status |
 | **auditor** | Read-only access to audit logs, file metadata |
 
 ---

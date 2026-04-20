@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   listJobs: vi.fn(),
   createJob: vi.fn(),
   startJob: vi.fn(),
+  pauseJob: vi.fn(),
   getDrives: vi.fn(),
   getMounts: vi.fn(),
   hasAnyRole: vi.fn(),
@@ -27,6 +28,7 @@ vi.mock('@/api/jobs.js', () => ({
   listJobs: (...args) => mocks.listJobs(...args),
   createJob: (...args) => mocks.createJob(...args),
   startJob: (...args) => mocks.startJob(...args),
+  pauseJob: (...args) => mocks.pauseJob(...args),
 }))
 
 vi.mock('@/api/drives.js', () => ({
@@ -98,6 +100,7 @@ describe('JobsView grouped create dialog', () => {
     mocks.listJobs.mockReset()
     mocks.createJob.mockReset()
     mocks.startJob.mockReset()
+    mocks.pauseJob.mockReset()
     mocks.getDrives.mockReset()
     mocks.getMounts.mockReset()
     mocks.hasAnyRole.mockReset()
@@ -106,6 +109,7 @@ describe('JobsView grouped create dialog', () => {
     mocks.listJobs.mockResolvedValue([])
     mocks.createJob.mockResolvedValue({ id: 44, project_id: 'PROJ-001', status: 'PENDING' })
     mocks.startJob.mockResolvedValue({ id: 44, project_id: 'PROJ-001', status: 'RUNNING' })
+    mocks.pauseJob.mockResolvedValue({ id: 45, project_id: 'PROJ-001', status: 'PAUSING' })
     mocks.getDrives.mockResolvedValue([
       buildDrive({ id: 1, current_project_id: 'PROJ-001' }),
       buildDrive({ id: 2, current_project_id: null }),
@@ -317,5 +321,89 @@ describe('JobsView grouped create dialog', () => {
 
     expect(wrapper.text()).toContain('Details')
     expect(wrapper.text()).not.toContain('Open')
+  })
+
+  it('shows Start and Pause controls with state-aware availability', async () => {
+    mocks.listJobs.mockResolvedValue([
+      { id: 44, project_id: 'PROJ-001', evidence_number: 'EV-044', status: 'PENDING', source_path: '/nfs/project-001' },
+      { id: 45, project_id: 'PROJ-001', evidence_number: 'EV-045', status: 'RUNNING', source_path: '/nfs/project-001' },
+      { id: 46, project_id: 'PROJ-001', evidence_number: 'EV-046', status: 'PAUSING', source_path: '/nfs/project-001' },
+      { id: 47, project_id: 'PROJ-001', evidence_number: 'EV-047', status: 'PAUSED', source_path: '/nfs/project-001' },
+      { id: 48, project_id: 'PROJ-001', evidence_number: 'EV-048', status: 'COMPLETED', source_path: '/nfs/project-001' },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const rowActions = wrapper.findAll('.row-actions-stub')
+
+    const pendingButtons = rowActions[0].findAll('button')
+    expect(pendingButtons.map((button) => button.text())).toEqual(['Details', 'Start', 'Pause'])
+    expect(pendingButtons[1].attributes('disabled')).toBeUndefined()
+    expect(pendingButtons[2].attributes('disabled')).toBeDefined()
+
+    const runningButtons = rowActions[1].findAll('button')
+    expect(runningButtons[1].attributes('disabled')).toBeDefined()
+    expect(runningButtons[2].attributes('disabled')).toBeUndefined()
+
+    const pausingButtons = rowActions[2].findAll('button')
+    expect(pausingButtons[1].attributes('disabled')).toBeDefined()
+    expect(pausingButtons[2].attributes('disabled')).toBeDefined()
+
+    const pausedButtons = rowActions[3].findAll('button')
+    expect(pausedButtons[1].attributes('disabled')).toBeUndefined()
+    expect(pausedButtons[2].attributes('disabled')).toBeDefined()
+
+    const completedButtons = rowActions[4].findAll('button')
+    expect(completedButtons[1].attributes('disabled')).toBeDefined()
+    expect(completedButtons[2].attributes('disabled')).toBeDefined()
+  })
+
+  it('shows a waiting dialog while a pause request is completing', async () => {
+    mocks.listJobs
+      .mockResolvedValueOnce([
+        { id: 45, project_id: 'PROJ-001', evidence_number: 'EV-045', status: 'RUNNING', source_path: '/nfs/project-001', thread_count: 2 },
+      ])
+      .mockResolvedValueOnce([
+        { id: 45, project_id: 'PROJ-001', evidence_number: 'EV-045', status: 'PAUSING', source_path: '/nfs/project-001', thread_count: 2 },
+      ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const runningButtons = wrapper.findAll('.row-actions-stub')[0].findAll('button')
+    await runningButtons[2].trigger('click')
+    await flushPromises()
+
+    expect(mocks.pauseJob).toHaveBeenCalledWith(45)
+    expect(wrapper.text()).toContain('Pause in progress')
+    expect(wrapper.text()).toContain('Waiting for active copy threads to finish')
+
+    const refreshedButtons = wrapper.findAll('.row-actions-stub')[0].findAll('button')
+    expect(refreshedButtons[1].attributes('disabled')).toBeDefined()
+    expect(refreshedButtons[2].attributes('disabled')).toBeDefined()
+  })
+
+  it('starts and pauses a selected job from the list', async () => {
+    mocks.listJobs.mockResolvedValue([
+      { id: 44, project_id: 'PROJ-001', evidence_number: 'EV-044', status: 'PENDING', source_path: '/nfs/project-001', thread_count: 4 },
+      { id: 45, project_id: 'PROJ-001', evidence_number: 'EV-045', status: 'RUNNING', source_path: '/nfs/project-001', thread_count: 2 },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const rowActions = wrapper.findAll('.row-actions-stub')
+    const pendingButtons = rowActions[0].findAll('button')
+    const runningButtons = rowActions[1].findAll('button')
+
+    await pendingButtons[1].trigger('click')
+    await flushPromises()
+    expect(mocks.startJob).toHaveBeenCalledWith(44, { thread_count: 4 })
+
+    await runningButtons[2].trigger('click')
+    await flushPromises()
+    expect(mocks.pauseJob).toHaveBeenCalledWith(45)
+    expect(mocks.listJobs).toHaveBeenCalledTimes(3)
   })
 })

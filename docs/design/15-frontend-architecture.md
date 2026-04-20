@@ -529,7 +529,8 @@ Vue I18n 9.x provides the localization infrastructure. All user-visible strings 
 | Eject drive | ✔ | ✔ | ✗ | ✗ |
 | Add/remove mount | ✔ | ✔ | ✗ | ✗ |
 | Create job | ✔ | ✔ | ✔ | ✗ |
-| Start job | ✔ | ✔ | ✔ | ✗ |
+| Start/resume job | ✔ | ✔ | ✔ | ✗ |
+| Pause job | ✔ | ✔ | ✔ | ✗ |
 | Verify/manifest | ✔ | ✔ | ✔ | ✗ |
 | View file hashes | ✔ | ✗ | ✗ | ✔ |
 | Compare files | ✔ | ✗ | ✗ | ✔ |

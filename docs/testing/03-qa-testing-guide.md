@@ -620,6 +620,10 @@ For the current Jobs page UI, verify the grouped `Create Job` dialog behaves as 
 - If no matching project, mount, or drive exists, the dialog shows the corresponding helper message instead of an empty or generic failure state.
 - If `Run job immediately` is checked, the created job transitions directly into the start flow after successful creation.
 - If the selected drive or mount becomes unavailable, the operator sees a specific conflict or availability message instead of a generic validation error.
+- Authorized rows expose `Details`, `Start`, and `Pause` actions with state-aware enablement.
+- Pressing `Pause` on a running job shows a `Pause in progress` dialog while the system waits for in-flight copy threads to finish.
+- The `Start` action remains disabled during `PAUSING` and becomes available again once the job reaches `PAUSED`.
+- After a pause and resume cycle, the final duration and copy-rate summary remain additive across the full run rather than resetting to only the most recent segment.
 
 ### 11.5 Audit Logs
 
@@ -1182,7 +1186,9 @@ Use a controlled HTTPS webhook sink when validating callback behavior.
 | 2 | `GET /jobs/99999/files` | 404, `NOT_FOUND` |
 | 3 | `DELETE /mounts/99999` | 404, `NOT_FOUND` |
 | 4 | Start an already-running job | 409, `CONFLICT` |
-| 5 | All error responses | JSON body includes `code`, `message`, and `trace_id` |
+| 5 | Pause a running job | 200, job status transitions to `PAUSING` |
+| 6 | Start a job while it is `PAUSING` | 409, `CONFLICT` |
+| 7 | All error responses | JSON body includes `code`, `message`, and `trace_id` |
 | 6 | `POST /drives/999/format` with `{"filesystem_type": "ext4"}` | 404, `NOT_FOUND` |
 | 7 | `POST /drives/{drive_id}/format` with `{"filesystem_type": "ntfs"}` | 422, validation error |
 | 8 | `POST /drives/{drive_id}/format` with empty body | 422 |
