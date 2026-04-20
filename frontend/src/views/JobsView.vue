@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
-import { listJobs, createJob, startJob } from '@/api/jobs.js'
+import { listJobs, createJob, startJob, pauseJob } from '@/api/jobs.js'
 import { getDrives } from '@/api/drives.js'
 import { getMounts } from '@/api/mounts.js'
 import { normalizeErrorMessage } from '@/api/client.js'
@@ -23,10 +23,14 @@ const drives = ref([])
 const mounts = ref([])
 const loading = ref(false)
 const saving = ref(false)
+const actingJobId = ref(null)
+const jobsRefreshTimer = ref(null)
 const error = ref('')
 const compatibilityNote = ref('')
 
 const showCreateDialog = ref(false)
+const showPausePendingDialog = ref(false)
+const pausePendingJobId = ref(null)
 const createDialogRef = ref(null)
 const createDialogTriggerRef = ref(null)
 
@@ -57,6 +61,60 @@ const columns = computed(() => [
   { key: 'actions', label: '', align: 'center' },
 ])
 
+function normalizeJobStatus(status) {
+  return String(status || '').toUpperCase()
+}
+
+function isRowActionBusy(job) {
+  return Number(actingJobId.value) === Number(job?.id)
+}
+
+function canStartJob(job) {
+  return canOperate.value && ['PENDING', 'FAILED', 'PAUSED'].includes(normalizeJobStatus(job?.status))
+}
+
+function canPauseJob(job) {
+  return canOperate.value && normalizeJobStatus(job?.status) === 'RUNNING'
+}
+
+const pausePendingJob = computed(() => (
+  jobs.value.find((job) => Number(job.id) === Number(pausePendingJobId.value)) || null
+))
+
+async function runJobAction(job, action) {
+  if (!job || isRowActionBusy(job)) return
+
+  const allowStart = action === 'start' && canStartJob(job)
+  const allowPause = action === 'pause' && canPauseJob(job)
+  if (!allowStart && !allowPause) return
+
+  actingJobId.value = job.id
+  error.value = ''
+  try {
+    const updated = normalizeProjectRecord(
+      action === 'start'
+        ? await startJob(job.id, { thread_count: Number(job.thread_count || 4) })
+        : await pauseJob(job.id),
+      ['project_id'],
+    )
+
+    jobs.value = jobs.value.map((item) => (Number(item.id) === Number(updated.id) ? updated : item))
+    if (action === 'pause' && normalizeJobStatus(updated.status) === 'PAUSING') {
+      pausePendingJobId.value = updated.id
+      showPausePendingDialog.value = true
+    }
+    if (action === 'start') {
+      pausePendingJobId.value = null
+      showPausePendingDialog.value = false
+    }
+    await loadJobs()
+  } catch (err) {
+    error.value = buildJobError(err)
+  } finally {
+    actingJobId.value = null
+  }
+}
+
 function progressPercent(job) {
   if (!job) return 0
 
@@ -75,7 +133,7 @@ function progressPercent(job) {
     ? Math.max(0, Math.min(100, Math.round((finishedFiles / totalFiles) * 100)))
     : bytePercent
 
-  if (status === 'RUNNING' || status === 'VERIFYING') {
+  if (status === 'RUNNING' || status === 'PAUSING' || status === 'VERIFYING') {
     return Math.min(bytePercent || 100, filePercent || 100)
   }
 
@@ -196,6 +254,22 @@ async function loadSupportingData() {
   mounts.value = mountResult.status === 'fulfilled'
     ? (mountResult.value || []).map((item) => normalizeProjectRecord(item, ['project_id']))
     : []
+}
+
+function stopJobsRefreshTimer() {
+  if (jobsRefreshTimer.value != null) {
+    window.clearInterval(jobsRefreshTimer.value)
+    jobsRefreshTimer.value = null
+  }
+}
+
+function syncJobsRefreshTimer() {
+  stopJobsRefreshTimer()
+  const hasActiveJobs = jobs.value.some((job) => ['RUNNING', 'PAUSING', 'VERIFYING'].includes(normalizeJobStatus(job?.status)))
+  if (!hasActiveJobs) return
+  jobsRefreshTimer.value = window.setInterval(() => {
+    void loadJobs()
+  }, 3000)
 }
 
 async function loadJobs() {
@@ -359,12 +433,24 @@ watch(showCreateDialog, async (open) => {
   }
 })
 
+watch(jobs, () => {
+  syncJobsRefreshTimer()
+  if (pausePendingJobId.value == null) return
+  const status = normalizeJobStatus(pausePendingJob.value?.status)
+  if (!status || status !== 'PAUSING') {
+    pausePendingJobId.value = null
+    showPausePendingDialog.value = false
+  }
+})
+
 onMounted(async () => {
   await Promise.all([loadJobs(), loadSupportingData()])
+  syncJobsRefreshTimer()
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleCreateDialogKeydown)
+  stopJobsRefreshTimer()
 })
 </script>
 
@@ -390,6 +476,8 @@ onBeforeUnmount(() => {
         <option value="ALL">{{ t('jobs.allStatuses') }}</option>
         <option value="PENDING">{{ t('jobs.statuses.pending') }}</option>
         <option value="RUNNING">{{ t('jobs.statuses.running') }}</option>
+        <option value="PAUSING">{{ t('jobs.statuses.pausing') }}</option>
+        <option value="PAUSED">{{ t('jobs.statuses.paused') }}</option>
         <option value="VERIFYING">{{ t('jobs.statuses.verifying') }}</option>
         <option value="COMPLETED">{{ t('jobs.statuses.completed') }}</option>
         <option value="FAILED">{{ t('jobs.statuses.failed') }}</option>
@@ -403,13 +491,34 @@ onBeforeUnmount(() => {
       </template>
       <template #cell-progress="{ row }">{{ progressPercent(row) }}%</template>
       <template #cell-actions="{ row }">
-        <button class="btn" @click="router.push({ name: 'job-detail', params: { id: row.id } })">
-          {{ t('jobs.details') }}
-        </button>
+        <div class="row-actions">
+          <button class="btn" @click="router.push({ name: 'job-detail', params: { id: row.id } })">
+            {{ t('jobs.details') }}
+          </button>
+          <button class="btn" :disabled="!canStartJob(row) || isRowActionBusy(row)" @click="runJobAction(row, 'start')">
+            {{ t('jobs.start') }}
+          </button>
+          <button class="btn" :disabled="!canPauseJob(row) || isRowActionBusy(row)" @click="runJobAction(row, 'pause')">
+            {{ t('jobs.pause') }}
+          </button>
+        </div>
       </template>
     </DataTable>
 
     <Pagination v-model:page="page" :page-size="pageSize" :total="filtered.length" />
+
+    <teleport to="body">
+      <div v-if="showPausePendingDialog" class="dialog-overlay" @click.self="showPausePendingDialog = false">
+        <div class="dialog-panel pause-wait-dialog" role="dialog" aria-modal="true" aria-labelledby="pause-wait-title">
+          <h2 id="pause-wait-title">{{ t('jobs.pauseRequestedTitle') }}</h2>
+          <p>{{ t('jobs.pauseRequestedMessage') }}</p>
+          <p v-if="pausePendingJob" class="muted">#{{ pausePendingJob.id }} • {{ jobStatusLabel(pausePendingJob.status) }}</p>
+          <div class="dialog-actions">
+            <button class="btn" @click="showPausePendingDialog = false">{{ t('common.actions.close') }}</button>
+          </div>
+        </div>
+      </div>
+    </teleport>
 
     <teleport to="body">
       <div v-if="showCreateDialog" class="dialog-overlay" @click.self="closeCreateDialog">
@@ -509,6 +618,18 @@ onBeforeUnmount(() => {
 
 .filters {
   flex-wrap: wrap;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-sm);
+}
+
+.row-actions :deep(.btn),
+.row-actions .btn {
+  min-width: 5.75rem;
 }
 
 input,
