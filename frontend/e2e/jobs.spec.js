@@ -2,17 +2,23 @@ import { test, expect } from '@playwright/test'
 import { setupAuthenticatedPage, routeJson } from './helpers/app.js'
 import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
 
-test('jobs create, start, verify, and manifest flow', async ({ page }) => {
+test('jobs create, start, compare, and manifest flow', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
-  const createdJob = {
+  let jobState = {
     id: 77,
     project_id: 'P-77',
     evidence_number: 'EV-77',
     status: 'PENDING',
     copied_bytes: 0,
     total_bytes: 100,
+    file_count: 1,
+    files_succeeded: 0,
+    files_failed: 0,
     thread_count: 4,
+    source_path: '/mnt/share/folder',
+    target_mount_path: '/mnt/ecube/1',
+    drive: { id: 1 },
   }
 
   await routeJson(page, '**/api/drives', [{
@@ -31,35 +37,66 @@ test('jobs create, start, verify, and manifest flow', async ({ page }) => {
   }])
 
   await page.route('**/api/jobs**', async (route) => {
-    if (route.request().method() === 'GET') {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([createdJob]) })
+    const method = route.request().method()
+    const url = route.request().url()
+
+    if (method === 'GET' && /\/api\/jobs(?:\?|$)/.test(url)) {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([jobState]) })
       return
     }
-    if (route.request().method() === 'POST') {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(createdJob) })
+    if (method === 'POST' && /\/api\/jobs(?:\?|$)/.test(url)) {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobState) })
       return
     }
     await route.fallback()
   })
 
-  let jobState = { ...createdJob }
   await page.route('**/api/jobs/77', async (route) => {
+    if (route.request().method() === 'PUT') {
+      const payload = route.request().postDataJSON()
+      jobState = {
+        ...jobState,
+        ...payload,
+        source_path: '/mnt/share/updated-folder',
+      }
+    }
+
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobState) })
   })
-  await routeJson(page, '**/api/jobs/77/files', { files: [{ id: 101, relative_path: 'a.txt', status: 'COMPLETED', checksum: 'abc' }] })
+
+  await routeJson(page, '**/api/jobs/77/files', {
+    total_files: 1,
+    returned_files: 1,
+    files: [{ id: 101, relative_path: 'a.txt', status: 'COMPLETED', checksum: 'abc' }],
+  })
+  await routeJson(page, '**/api/introspection/jobs/77/debug', { files: [{ id: 101, relative_path: 'a.txt', status: 'COMPLETED', checksum: 'abc' }] })
+  await routeJson(page, '**/api/files/101/hashes', { file_id: 101, relative_path: 'a.txt', md5: 'md5-abc', sha256: 'sha-abc', size_bytes: 12 })
+  await page.route('**/api/files/compare', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        match: true,
+        hash_match: true,
+        size_match: true,
+        path_match: true,
+        file_a: { file_id: 101, relative_path: 'a.txt', size_bytes: 12, sha256: 'sha-abc' },
+        file_b: { file_id: 101, relative_path: 'a.txt', size_bytes: 12, sha256: 'sha-abc' },
+      }),
+    })
+  })
   await page.route('**/api/jobs/77/start', async (route) => {
-    jobState = { ...jobState, status: 'RUNNING', copied_bytes: 50 }
+    jobState = { ...jobState, status: 'COMPLETED', copied_bytes: 100, total_bytes: 100, files_succeeded: 1 }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobState) })
   })
   await page.route('**/api/jobs/77/verify', async (route) => {
-    jobState = { ...jobState, status: 'VERIFYING', copied_bytes: 100 }
+    jobState = { ...jobState, status: 'COMPLETED', copied_bytes: 100, total_bytes: 100, files_succeeded: 1 }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobState) })
   })
   await page.route('**/api/jobs/77/manifest', async (route) => {
-    jobState = { ...jobState, status: 'COMPLETED', copied_bytes: 100 }
+    jobState = { ...jobState, status: 'COMPLETED', copied_bytes: 100, total_bytes: 100, files_succeeded: 1 }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobState) })
   })
-  await routeJson(page, '**/api/introspection/jobs/77/debug', { files: [{ id: 101, relative_path: 'a.txt', status: 'COMPLETED', checksum: 'abc' }] })
 
   await page.goto('/jobs')
   await page.getByRole('button', { name: 'Create Job' }).click()
@@ -72,12 +109,36 @@ test('jobs create, start, verify, and manifest flow', async ({ page }) => {
   await page.getByRole('dialog').getByRole('button', { name: 'Create Job' }).click()
 
   await expect(page).toHaveURL(/\/jobs\/77$/)
-  await page.getByRole('button', { name: 'Start' }).click()
-  // After starting, the job enters RUNNING state; the progress bar should be visible
-  await expect(page.locator('.progress-bar')).toBeVisible()
 
-  await page.getByRole('button', { name: 'Verify' }).click()
+  await page.getByRole('button', { name: 'Edit' }).click()
+  await expect(page.getByRole('heading', { name: 'Edit Job' })).toBeVisible()
+  await page.locator('#job-evidence').fill('EV-77-UPDATED')
+  await page.locator('#job-mount').selectOption('4')
+  await page.locator('#job-drive').selectOption('1')
+  await page.locator('#job-source-path').fill('/updated-folder')
+  await page.locator('#job-submit').click()
+  await expect(page.getByText('EV-77-UPDATED')).toBeVisible()
+
+  await expect(page.getByRole('button', { name: 'Verify' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Generate Manifest' })).toBeDisabled()
+
+  await page.getByRole('button', { name: 'Start' }).click()
+  await expect(page.locator('.progress-bar')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Verify' })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'Generate Manifest' })).toBeEnabled()
+
+  await expect(page.locator('.status-badge').filter({ hasText: 'COMPLETED' }).first()).toBeVisible()
+  await expect(page.getByText('Source / Destination Compare')).toBeVisible()
+  await page.getByRole('button', { name: 'View Hashes' }).click()
+  await page.locator('#compare-file-source').selectOption('101')
+  await page.getByRole('button', { name: 'Compare' }).click()
+  await expect(page.getByText('Overall Match')).toBeVisible()
+  await expect(page.getByText('Hash Match')).toBeVisible()
+  await expect(page.getByText('Path Match')).toBeVisible()
+
   await page.getByRole('button', { name: 'Generate Manifest' }).click()
+  await expect(page.getByText('Manifest generated successfully.')).toBeVisible()
+  await expect(page.getByText('/mnt/ecube/1/manifest.json')).toBeVisible()
 
   await expectNoCriticalA11yViolations(page)
 })
@@ -174,5 +235,5 @@ test('job detail polls and reflects status progression', async ({ page }) => {
   // Progress bar is rendered while in progress
   await expect(page.locator('.progress-bar')).toBeVisible()
   // Polling eventually advances to COMPLETED (polling interval is 3 s; allow up to 20 s)
-  await expect(page.getByText('COMPLETED', { exact: true })).toBeVisible({ timeout: 20000 })
+  await expect(page.locator('.status-badge').filter({ hasText: 'COMPLETED' }).first()).toBeVisible({ timeout: 20000 })
 })
