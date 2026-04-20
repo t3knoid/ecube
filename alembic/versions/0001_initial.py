@@ -135,7 +135,7 @@ def upgrade() -> None:
         sa.Column(
             "status",
             sa.Enum(
-                "PENDING", "RUNNING", "COMPLETED", "FAILED", "VERIFYING",
+                "PENDING", "RUNNING", "PAUSING", "PAUSED", "COMPLETED", "FAILED", "VERIFYING",
                 name="jobstatus",
                 native_enum=False,
             ),
@@ -147,6 +147,7 @@ def upgrade() -> None:
         sa.Column("thread_count", sa.Integer, default=4),
         sa.Column("max_file_retries", sa.Integer(), nullable=True, server_default="3"),
         sa.Column("retry_delay_seconds", sa.Integer(), nullable=True, server_default="1"),
+        sa.Column("active_duration_seconds", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_by", sa.String, nullable=True),
@@ -287,6 +288,14 @@ def downgrade() -> None:
     op.execute(sa.text("DROP INDEX IF EXISTS ix_audit_logs_action_timestamp"))
     op.execute(sa.text("DROP INDEX IF EXISTS ix_audit_logs_drive_timestamp"))
     op.execute(sa.text("DROP INDEX IF EXISTS ix_audit_logs_project_timestamp"))
+    op.drop_index("ix_export_jobs_project_id", table_name="export_jobs")
+    op.drop_index("ix_network_mounts_status_project", table_name="network_mounts")
+    op.drop_index("ix_network_mounts_project_id", table_name="network_mounts")
+    op.drop_index("ix_network_mounts_status", table_name="network_mounts")
+    op.drop_index("ix_usb_drives_state_project", table_name="usb_drives")
+    op.drop_index("ix_usb_drives_current_project_id", table_name="usb_drives")
+    op.drop_index("ix_usb_drives_current_state", table_name="usb_drives")
+    op.drop_index("ix_usb_drives_mount_path", table_name="usb_drives")
     op.drop_table("reconciliation_lock")
     op.drop_table("system_initialization")
     op.drop_table("user_roles")
@@ -295,15 +304,7 @@ def downgrade() -> None:
     op.drop_table("manifests")
     op.drop_table("export_files")
     op.drop_table("export_jobs")
-    op.drop_index("ix_export_jobs_project_id", table_name="export_jobs")
-    op.drop_index("ix_network_mounts_status_project", table_name="network_mounts")
-    op.drop_index("ix_network_mounts_project_id", table_name="network_mounts")
-    op.drop_index("ix_network_mounts_status", table_name="network_mounts")
     op.drop_table("network_mounts")
-    op.drop_index("ix_usb_drives_state_project", table_name="usb_drives")
-    op.drop_index("ix_usb_drives_current_project_id", table_name="usb_drives")
-    op.drop_index("ix_usb_drives_current_state", table_name="usb_drives")
-    op.drop_index("ix_usb_drives_mount_path", table_name="usb_drives")
     op.drop_table("usb_drives")
     op.drop_table("usb_ports")
     op.drop_table("usb_hubs")

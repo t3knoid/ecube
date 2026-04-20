@@ -23,6 +23,11 @@ export function startJob(jobId, payload = {}) {
   return toData(apiClient.post(`${API_BASE}/jobs/${id}/start`, payload))
 }
 
+export function pauseJob(jobId) {
+  const id = normalizeJobId(jobId)
+  return toData(apiClient.post(`${API_BASE}/jobs/${id}/pause`))
+}
+
 export function getJob(jobId) {
   const id = normalizeJobId(jobId)
   return toData(apiClient.get(`${API_BASE}/jobs/${id}`))
