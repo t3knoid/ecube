@@ -93,6 +93,7 @@
     "activeJobs": "Active Jobs",
     "jobId": "Job ID",
     "evidence": "Evidence",
+    "device": "Device",
     "create": "Create Job",
     "createDialog": "Create Job",
     "dialogDescription": "Select a project first to unlock the matching source and destination options.",

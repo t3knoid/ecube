@@ -3,7 +3,7 @@ import logging
 from unittest.mock import patch
 
 from app.models.audit import AuditLog
-from app.models.hardware import UsbDrive, DriveState
+from app.models.hardware import UsbDrive, DriveState, UsbHub, UsbPort
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, Manifest
 from app.models.network import MountStatus, MountType, NetworkMount
 
@@ -918,8 +918,15 @@ def test_job_response_includes_started_by(client, db):
 
 def test_completed_job_with_all_fields(client, db):
     """A completed job with files and a drive should include all enriched fields."""
+    hub = UsbHub(name="Job detail hub", system_identifier="job-detail-hub")
+    db.add(hub)
+    db.flush()
+    port = UsbPort(hub_id=hub.id, port_number=11, system_path="9-11", enabled=True)
+    db.add(port)
+    db.flush()
     drive = UsbDrive(
         device_identifier="USB-ENRICH-001",
+        port_id=port.id,
         current_state=DriveState.IN_USE,
         current_project_id="PROJ-ENRICH",
         capacity_bytes=64_000_000_000,
@@ -970,6 +977,7 @@ def test_completed_job_with_all_fields(client, db):
     # Drive info
     assert data["drive"] is not None
     assert data["drive"]["id"] == drive.id
+    assert data["drive"]["port_system_path"] == "9-11"
     assert data["drive"]["device_identifier"] == "USB-ENRICH-001"
     assert data["drive"]["capacity_bytes"] == 64_000_000_000
     assert data["drive"]["filesystem_type"] == "exfat"
@@ -1425,8 +1433,15 @@ def test_list_jobs_includes_error_summary_for_failed_jobs(client, db):
 
 def test_list_jobs_includes_drive_info(client, db):
     """Bulk enrichment should include nested drive info."""
+    hub = UsbHub(name="Job list hub", system_identifier="job-list-hub")
+    db.add(hub)
+    db.flush()
+    port = UsbPort(hub_id=hub.id, port_number=12, system_path="9-12", enabled=True)
+    db.add(port)
+    db.flush()
     drive = UsbDrive(
         device_identifier="USB-BULK-DRV",
+        port_id=port.id,
         current_state=DriveState.IN_USE,
         current_project_id="PROJ-BULK-DRV",
         capacity_bytes=32_000_000_000,
@@ -1449,6 +1464,7 @@ def test_list_jobs_includes_drive_info(client, db):
     assert response.status_code == 200
     data = response.json()
     assert data[0]["drive"] is not None
+    assert data[0]["drive"]["port_system_path"] == "9-12"
     assert data[0]["drive"]["device_identifier"] == "USB-BULK-DRV"
     assert data[0]["drive"]["capacity_bytes"] == 32_000_000_000
 
