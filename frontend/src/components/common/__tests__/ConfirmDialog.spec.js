@@ -85,4 +85,25 @@ describe('ConfirmDialog', () => {
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([false])
     wrapper.unmount()
   })
+
+  it('still allows cancel dismissal while busy', async () => {
+    const wrapper = mount(ConfirmDialog, {
+      props: {
+        modelValue: true,
+        title: 'Confirm',
+        confirmLabel: 'Yes',
+        cancelLabel: 'No',
+        busy: true,
+      },
+      global: {
+        stubs: {
+          teleport: true,
+        },
+      },
+    })
+
+    await wrapper.findAll('button')[0].trigger('click')
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([false])
+    wrapper.unmount()
+  })
 })

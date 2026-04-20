@@ -156,6 +156,7 @@ class ExportJobSchema(BaseModel):
     thread_count: int = Field(..., ge=1, le=8, description="Number of parallel threads used (1-8)")
     max_file_retries: int = Field(default=3, ge=0, description="Maximum number of retries for failed files (0+)")
     retry_delay_seconds: int = Field(default=1, ge=0, description="Delay between retries in seconds (0+)")
+    active_duration_seconds: int = Field(default=0, ge=0, description="Total active copy duration across all run/resume cycles in seconds")
     created_by: Optional[str] = Field(default=None, description="Username of the job creator")
     started_by: Optional[str] = Field(default=None, description="Username of the user who started the job")
     callback_url: Optional[str] = Field(default=None, description="HTTPS callback URL (null if none was provided)")

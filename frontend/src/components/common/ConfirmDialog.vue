@@ -47,7 +47,6 @@ const describedBy = computed(() => {
 })
 
 function close() {
-  if (props.busy) return
   emit('update:modelValue', false)
   emit('cancel')
 }
@@ -96,7 +95,7 @@ onUnmounted(() => {
           <slot />
         </div>
         <div class="dialog-actions">
-          <button class="btn" :disabled="busy" @click="close">{{ cancelLabel }}</button>
+          <button class="btn" @click="close">{{ cancelLabel }}</button>
           <button
             class="btn"
             :class="dangerous ? 'btn-danger' : 'btn-primary'"
