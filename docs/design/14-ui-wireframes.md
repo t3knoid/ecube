@@ -501,15 +501,15 @@ The default landing page after login. Provides an at-a-glance overview of system
 │  ◎ Dashboard │                                                               │
 │  ◉ Drives    │  Filter: [ All States ▾ ]   Search: [ __________________ 🔍] │
 │  ◎ Mounts    │                                                               │
-│  ◎ Jobs      │  ┌────┬─────────────────────┬────────┬───────┬───────────────┐│
-│  ◎ Audit     │  │ ID │ Device Identifier    │ State  │ FS    │ Project       ││
-│              │  ├────┼─────────────────────┼────────┼───────┼───────────────┤│
-│              │  │ 1  │ 4C53000022022622301 │🟢IN_USE│ ext4  │ PROJ-042      ││
-│              │  │ 2  │ A1B2C3D4E5F60001    │🟡AVAIL │ exfat │ —             ││
-│              │  │ 3  │ 7F8E9D0A1B2C3456    │🟡AVAIL │ ext4  │ —             ││
-│              │  │ 4  │ B2C3D4E5F6070002    │🟢IN_USE│ ext4  │ PROJ-001      ││
-│              │  │ 5  │ C3D4E5F607080003    │⚪DISCON│ —     │ —             ││
-│              │  └────┴─────────────────────┴────────┴───────┴───────────────┘│
+│  ◎ Jobs      │  ┌────┬────────┬──────────────────┬────────┬───────┬─────────┐│
+│  ◎ Audit     │  │ ID │ Device │ Serial Number    │ State  │ FS    │ Project ││
+│              │  ├────┼────────┼──────────────────┼────────┼───────┼─────────┤│
+│              │  │ 1  │ 2-1    │ 4C53000022022…   │🟢IN_USE│ ext4  │ PROJ-042││
+│              │  │ 2  │ 2-2    │ A1B2C3D4E5F6…    │🟡AVAIL │ exfat │ —       ││
+│              │  │ 3  │ 2-3    │ 7F8E9D0A1B2C…    │🟡AVAIL │ ext4  │ —       ││
+│              │  │ 4  │ 2-4    │ B2C3D4E5F607…    │🟢IN_USE│ ext4  │ PROJ-001││
+│              │  │ 5  │ 2-5    │ —                │⚪DISCON│ —     │ —       ││
+│              │  └────┴────────┴──────────────────┴────────┴───────┴─────────┘│
 │              │                                                               │
 │              │  Click a row to view drive details and available actions.      │
 │              │                                                               │
@@ -534,10 +534,11 @@ Shown when a drive row is selected (slide-out panel or detail page).
 ```
 ┌─ Drive Detail ───────────────────────────────────────────────────────────────┐
 │                                                                              │
-│  Drive #2 — A1B2C3D4E5F60001                              State: 🟡AVAILABLE│
+│  Drive #2 — 2-2                                          State: 🟡AVAILABLE│
 │                                                                              │
 │  ┌─ Properties ────────────────────────────────────────────────────────┐     │
-│  │  Device Identifier:   A1B2C3D4E5F60001                              │     │
+│  │  Device:              2-2                                           │     │
+│  │  Serial Number:       A1B2C3D4E5F60001                              │     │
 │  │  Filesystem Path:     /dev/sdh                                      │     │
 │  │  Port:                4                                             │     │
 │  │  Capacity:            64.0 GB (64,023,257,088 bytes)                │     │
@@ -1018,19 +1019,17 @@ and management remain available through admin API endpoints only.
 ```
 │  Tab: [ Health ] [USB Topology] [ Block Devices ] [ Logs ]                   │
 │                                                                              │
-│  ┌─ USB Device Tree ───────────────────────────────────────────────────────┐ │
-│  │                                                                         │ │
-│  │  📦 usb1 — Linux Foundation — Root Hub                                  │ │
-│  │   ├── 📦 1-1 — Genesys Logic — USB Hub                                 │ │
-│  │   │    ├── 💾 1-1.1 — SanDisk — Ultra (port 1)                         │ │
-│  │   │    ├── 💾 1-1.2 — Kingston — DataTraveler (port 2)                  │ │
-│  │   │    ├── (empty port 3)                                               │ │
-│  │   │    └── 💾 1-1.4 — Samsung — Flash Drive (port 4)                    │ │
-│  │   └── 📦 1-2 — Genesys Logic — USB Hub                                 │ │
-│  │        ├── (empty port 1)                                               │ │
-│  │        └── 💾 1-2.2 — Seagate — Portable (port 2)                      │ │
-│  │                                                                         │ │
+│  ┌─ USB Devices ───────────────────────────────────────────────────────────┐ │
+│  │ Device │ Serial Number │ Manufacturer   │ Product        │ VID  │ PID │ │
+│  │ ────── ┼───────────────┼────────────────┼────────────────┼──────┼───── │ │
+│  │ 1-1    │ HUB-001       │ Genesys Logic  │ USB Hub        │ 05e3 │ 0610│ │
+│  │ 1-1.1  │ SD-0001       │ SanDisk        │ Ultra          │ 0781 │ 5583│ │
+│  │ 1-1.2  │ KNG-0002      │ Kingston       │ DataTraveler   │ 0951 │ 1666│ │
+│  │ 1-1.4  │ SMS-0004      │ Samsung        │ Flash Drive    │ 04e8 │ 61f5│ │
+│  │ 1-2.2  │ SEG-0005      │ Seagate        │ Portable       │ 0bc2 │ 2322│ │
 │  └─────────────────────────────────────────────────────────────────────────┘ │
+
+Sorted by `Device`; rows with no meaningful USB metadata are hidden.
 ```
 
 ### 9c — Application Logs Tab (UC-8.7, UC-8.8)
