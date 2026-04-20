@@ -73,7 +73,9 @@ class IntrospectionDriveItem(BaseModel):
     """Single drive in the inventory snapshot."""
 
     id: int = Field(..., description="Unique drive identifier")
+    port_system_path: Optional[str] = Field(default=None, description="Port-based USB identifier (for example '2-1')")
     device_identifier: str = Field(..., description="Stable hardware identifier")
+    serial_number: Optional[str] = Field(default=None, description="USB serial number when available")
     capacity_bytes: Optional[int] = Field(default=None, description="Storage capacity in bytes")
     current_state: Optional[str] = Field(default=None, description="Drive state (DISCONNECTED, AVAILABLE, IN_USE)")
     current_project_id: Optional[str] = Field(default=None, description="Bound project ID")
@@ -96,6 +98,7 @@ class UsbDeviceInfo(BaseModel):
     """Single USB device from sysfs enumeration."""
 
     device: str = Field(..., description="Device name from sysfs")
+    serial: Optional[str] = Field(default=None, description="USB serial number")
     idVendor: Optional[str] = Field(default=None, description="USB vendor ID")
     idProduct: Optional[str] = Field(default=None, description="USB product ID")
     product: Optional[str] = Field(default=None, description="Product description")

@@ -52,6 +52,7 @@ const tabColumns = computed(() => {
   if (activeTab.value === 'usb') {
     return [
       { key: 'device', label: t('system.device') },
+      { key: 'serial', label: t('system.serialNumber') },
       { key: 'manufacturer', label: t('system.manufacturer') },
       { key: 'product', label: t('system.product') },
       { key: 'idVendor', label: t('system.vendorId') },
@@ -85,15 +86,14 @@ const tabColumns = computed(() => {
 })
 
 
-// Helper: true if all relevant fields are empty/null/blank
-// Hide only if Manufacturer, Product, Vendor ID, and Product ID are all empty
+// Hide only if Serial Number, Manufacturer, Product, Vendor ID, and Product ID are all empty
 function isUsbDeviceEmpty(device) {
-  if (!device) return true;
-  const fields = ['manufacturer', 'product', 'idVendor', 'idProduct'];
+  if (!device) return true
+  const fields = ['serial', 'manufacturer', 'product', 'idVendor', 'idProduct']
   return fields.every((key) => {
-    const v = device[key];
-    return v === undefined || v === null || String(v).trim() === '';
-  });
+    const v = device[key]
+    return v === undefined || v === null || String(v).trim() === ''
+  })
 }
 
 const filteredSortedUsbDevices = computed(() => {
@@ -101,19 +101,19 @@ const filteredSortedUsbDevices = computed(() => {
     .filter((dev) => !isUsbDeviceEmpty(dev))
     .slice() // shallow copy for sort
     .sort((a, b) => {
-      const av = a.device || '';
-      const bv = b.device || '';
-      return av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' });
-    });
-});
+      const av = a.device || ''
+      const bv = b.device || ''
+      return av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' })
+    })
+})
 
 const tabRows = computed(() => {
-  if (activeTab.value === 'usb') return filteredSortedUsbDevices.value;
-  if (activeTab.value === 'block') return blockDevices.value;
-  if (activeTab.value === 'mounts') return mounts.value;
-  if (activeTab.value === 'logs') return logs.value;
-  return [];
-});
+  if (activeTab.value === 'usb') return filteredSortedUsbDevices.value
+  if (activeTab.value === 'block') return blockDevices.value
+  if (activeTab.value === 'mounts') return mounts.value
+  if (activeTab.value === 'logs') return logs.value
+  return []
+})
 
 const pagedRows = computed(() => {
   const start = (page.value - 1) * pageSize.value

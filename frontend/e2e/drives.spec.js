@@ -10,6 +10,8 @@ function makeEmptyDrive(overrides = {}) {
   return {
     id: 2,
     device_identifier: '/dev/sdc',
+    port_system_path: '2-7',
+    serial_number: 'SER-002',
     filesystem_path: null,
     filesystem_type: null,
     capacity_bytes: 1073741824,
@@ -195,6 +197,8 @@ test('prepare eject surfaces busy-drive detail without trapping the dialog', asy
   const drive = {
     id: 7,
     device_identifier: '/dev/sdg',
+    port_system_path: '2-8',
+    serial_number: 'SER-007',
     filesystem_path: '/mnt/usb7',
     filesystem_type: 'ext4',
     capacity_bytes: 1073741824,
@@ -226,6 +230,8 @@ test('drives list and drive detail admin flows', async ({ page }) => {
   const drive = {
     id: 1,
     device_identifier: '/dev/sdb',
+    port_system_path: '2-1',
+    serial_number: 'SER-001',
     filesystem_path: '/mnt/usb1',
     filesystem_type: 'ext4',
     capacity_bytes: 1073741824,
@@ -264,6 +270,10 @@ test('drives list and drive detail admin flows', async ({ page }) => {
 
   await page.goto('/drives')
   await expect(page.getByRole('heading', { name: 'Drives' })).toBeVisible()
+  await expect(page.getByRole('table').getByText('Device')).toBeVisible()
+  await expect(page.getByRole('table').getByText('Serial Number')).toBeVisible()
+  await expect(page.getByText('2-1')).toBeVisible()
+  await expect(page.getByText('SER-001')).toBeVisible()
   await page.getByRole('button', { name: 'Details' }).click()
 
   await expect(page).toHaveURL(/\/drives\/1$/)
