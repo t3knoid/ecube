@@ -31,6 +31,17 @@ function clearBanners() {
   warnMessage.value = ''
 }
 
+async function focusInitializeProjectField() {
+  await nextTick()
+  const target = initializeProjectRef.value
+  if (target instanceof HTMLSelectElement) {
+    if (target.disabled) {
+      await nextTick()
+    }
+    target.focus()
+  }
+}
+
 function trapFocusWithin(event, container) {
   if (!container) return
   const focusable = Array.from(
@@ -63,6 +74,7 @@ const projectId = ref('')
 const loadingProjects = ref(false)
 const mountedProjectOptions = ref([])
 const initializeDialogRef = ref(null)
+const initializeProjectRef = ref(null)
 const initializeTriggerRef = ref(null)
 
 const initializeDialogTitleId = 'drive-initialize-dialog-title'
@@ -82,8 +94,9 @@ const canEnable = computed(
 const canFormat = computed(
   () => drive.value?.current_state === 'AVAILABLE' && canManage.value,
 )
+const hasMountedDestination = computed(() => !!drive.value?.mount_path)
 const canInitialize = computed(
-  () => drive.value?.current_state === 'AVAILABLE' && canManage.value,
+  () => drive.value?.current_state === 'AVAILABLE' && hasMountedDestination.value && canManage.value,
 )
 const canMount = computed(
   () => canManage.value
@@ -91,6 +104,11 @@ const canMount = computed(
     && !drive.value?.mount_path
     && !!drive.value?.filesystem_path,
 )
+const initializeMountedDestinationText = computed(() => (
+  hasMountedDestination.value
+    ? t('drives.initializeMountedDestination', { mount: protectedValue(drive.value?.mount_path) })
+    : t('drives.initializeMountRequired')
+))
 const canEject = computed(
   () => drive.value?.current_state === 'IN_USE' && canManage.value,
 )
@@ -156,32 +174,32 @@ function normalizeMountedProjectOptions(mounts) {
   )].sort((left, right) => left.localeCompare(right))
 }
 
+function resetInitializeProjectSelection() {
+  const currentProject = typeof drive.value?.current_project_id === 'string'
+    ? normalizeProjectId(drive.value.current_project_id)
+    : ''
+
+  if (currentProject && mountedProjectOptions.value.includes(currentProject)) {
+    projectId.value = currentProject
+  } else {
+    projectId.value = mountedProjectOptions.value[0] || ''
+  }
+}
+
 async function loadMountedProjects() {
   loadingProjects.value = true
   try {
     const mounts = await getMounts()
     mountedProjectOptions.value = normalizeMountedProjectOptions(mounts)
-    const currentProject = typeof drive.value?.current_project_id === 'string'
-      ? normalizeProjectId(drive.value.current_project_id)
-      : ''
-
-    if (currentProject && mountedProjectOptions.value.includes(currentProject)) {
-      projectId.value = currentProject
-    } else {
-      projectId.value = mountedProjectOptions.value[0] || ''
-    }
+    resetInitializeProjectSelection()
   } catch {
     mountedProjectOptions.value = []
     projectId.value = ''
     error.value = t('common.errors.networkError')
   } finally {
     loadingProjects.value = false
-    await nextTick()
     if (showInitializeDialog.value) {
-      const target = initializeDialogRef.value?.querySelector('#project-id')
-      if (target instanceof HTMLElement) {
-        target.focus()
-      }
+      await focusInitializeProjectField()
     }
   }
 }
@@ -228,6 +246,7 @@ function openInitializeDialog(event) {
 }
 
 function closeInitializeDialog() {
+  resetInitializeProjectSelection()
   showInitializeDialog.value = false
 }
 
@@ -357,11 +376,7 @@ watch(driveId, () => {
 watch(showInitializeDialog, async (open) => {
   if (open) {
     document.addEventListener('keydown', handleInitializeDialogKeydown)
-    await nextTick()
-    const target = initializeDialogRef.value?.querySelector('#project-id')
-    if (target instanceof HTMLElement) {
-      target.focus()
-    }
+    await focusInitializeProjectField()
     return
   }
 
@@ -483,12 +498,13 @@ onBeforeUnmount(() => {
             {{ t('drives.projectWarning') }}
             <template v-if="drive.current_project_id"> {{ t('drives.initializeProjectHint', { project: drive.current_project_id }) }}</template>
           </p>
+          <p class="muted">{{ initializeMountedDestinationText }}</p>
           <label class="field-label" for="project-id">
             {{ t('dashboard.project') }}
             <span class="required-indicator" aria-hidden="true">*</span>
             <span class="sr-only">required</span>
           </label>
-          <select id="project-id" v-model="projectId" :disabled="loadingProjects || !hasMountedProjectOptions" required aria-required="true">
+          <select ref="initializeProjectRef" id="project-id" v-model="projectId" :disabled="loadingProjects || !hasMountedProjectOptions" required aria-required="true">
             <option value="" disabled>{{ t('audit.selectProject') }}</option>
             <option v-for="option in mountedProjectOptions" :key="option" :value="option">{{ option }}</option>
           </select>
