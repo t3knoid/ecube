@@ -1,1 +1,0 @@
-DATABASE_URL=postgresql://ecube:ecube@localhost:5432/ecube

@@ -15,7 +15,7 @@ Use `scripts/run_newman_smoke.sh` for a fast local confidence check before commi
 The script is aligned with the Schemathesis runner and will:
 
 - Start the ECUBE Docker Compose stack (`docker-compose.ecube.yml`).
-- Wait for `/health`.
+- Wait for `/health/live`.
 - Generate an admin JWT automatically (unless you pass `ECUBE_TOKEN`).
 - Run smoke requests from the Postman collection.
 - Tear down containers on exit.
@@ -25,7 +25,7 @@ The script is aligned with the Schemathesis runner and will:
 ## Quick Start
 
 ```bash
-cd /Users/frank/ecube
+cd /path/to/ecube
 ./scripts/run_newman_smoke.sh
 ```
 
