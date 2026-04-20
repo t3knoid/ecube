@@ -85,6 +85,8 @@ During initial setup, `POST /setup/database/test-connection`, `POST /setup/datab
 | POST | `/drives/{drive_id}/format` | admin/manager | Format drive with `ext4` or `exfat`; drive must be AVAILABLE and unmounted |
 | POST | `/drives/{drive_id}/prepare-eject` | admin/manager | Flush filesystem + unmount all partitions; transitions drive to AVAILABLE on success, stays IN_USE on failure |
 
+Drive responses include both the stable `device_identifier` and the port-based `port_system_path` used as the UI `Device` value. When available, `serial_number` is exposed separately so operator views can show the physical port-based label and the device serial at the same time.
+
 ---
 
 ## Mounts (`/mounts`)
@@ -140,6 +142,8 @@ Compatibility note: To support project-to-source-path policy, use project source
 **Automatic Drive Assignment:** When `drive_id` is omitted from `POST /jobs`, the system auto-selects a drive: picks the single project-bound `AVAILABLE` drive, or falls back to an unbound drive. Returns **409** if the drive is temporarily unavailable (retry), if multiple project-bound drives exist (caller must specify `drive_id`), or if no usable drive can be acquired for the requested project. In both auto-assign and explicit `drive_id` paths, unbound drives are automatically bound to the requested project.
 
 **Explicit Drive Selection:** When `drive_id` is provided, the destination drive must be project-compatible and currently mounted. A mounted drive already associated with the requested project remains valid when its state is `AVAILABLE` or `IN_USE`; unmounted or stale selections still return **409 Conflict**.
+
+**Device Display Semantics:** Job responses may include `drive.port_system_path`, which is the port-based value shown in the Jobs list and the Create/Edit Job destination selector. The stable `device_identifier` remains available in the payload as a separate hardware identifier.
 
 **Mounted Source Resolution:** Current job creation also includes the selected mounted share identifier. The API resolves the final source path on the trusted backend, treats / as the selected share root, rejects traversal outside that share with **422**, and returns **404** or **409** if the selected mount is missing, unmounted, or assigned to a different project.
 
@@ -260,6 +264,8 @@ Common errors for admin log endpoints: `401` (missing/invalid token), `403` (non
 | GET | `/introspection/mounts` | all | Mount inventory and status |
 | GET | `/introspection/system-health` | all | Database and job engine health |
 | GET | `/introspection/jobs/{job_id}/debug` | admin,auditor | Debug info for specific job |
+
+`GET /introspection/drives` includes the port-based `port_system_path` and separate `serial_number` for each registered drive. `GET /introspection/usb/topology` includes a `serial` field when sysfs exposes one.
 
 ---
 
