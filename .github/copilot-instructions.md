@@ -47,7 +47,7 @@ Use `require_roles(*roles)` for every endpoint.
 ## 3. Security & Safety Rules
 
 - All security-relevant events must be logged to `audit_logs`.
-- Internal paths, credentials, and hardware identifiers must not appear in API responses.
+- Internal paths and credentials must not appear in API responses.
 - All user input used in filesystem paths or shell commands must be sanitized.
 - Directory traversal must be prevented (normalize paths).
 - `eval`, `exec`, and dynamic code execution are forbidden.
