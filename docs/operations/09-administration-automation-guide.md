@@ -385,7 +385,7 @@ OIDC_GROUP_ROLE_MAP='{"evidence-admins@example.com": ["admin"]}'
 | ------ | ------------- |
 | **admin** | Unrestricted access to all operations |
 | **manager** | Drive lifecycle, mount management, job oversight |
-| **processor** | Create and start jobs, view status |
+| **processor** | Create, start, pause, and resume jobs; view status |
 | **auditor** | Read-only access to audit logs, file metadata |
 
 ### Assigning Roles

@@ -412,6 +412,8 @@ After a successful prepare-eject:
 - The drive **cannot** be initialized for a *different* project until it has been formatted.
 - The drive can be physically removed once the operation completes.
 
+If ECUBE reports that the drive is still busy, the confirmation dialog closes cleanly and the page shows a specific retry message. Close any open shell, file browser, or process still using the mounted drive, then retry `Prepare Eject`.
+
 > To permanently retire a drive after removal, use the Chain of Custody handoff workflow on the `Audit` page. Confirming a handoff transitions the drive to `ARCHIVED`.
 
 ---
@@ -512,15 +514,19 @@ Use the jobs table to review:
 - Current status
 - Progress percentage
 
-For active jobs, the progress value stays synchronized with both copied bytes and completed file counts. A running or verifying job does not show 100% until the finished-file totals also indicate completion.
+For active jobs, the progress value stays synchronized with both copied bytes and completed file counts. A running, pausing, or verifying job does not show 100% until the finished-file totals also indicate completion.
 
 Common statuses include:
 
 - `PENDING`
 - `RUNNING`
+- `PAUSING`
+- `PAUSED`
 - `VERIFYING`
 - `COMPLETED`
 - `FAILED`
+
+The jobs table also exposes row-level `Details`, `Start`, and `Pause` actions for authorized operators. `PAUSING` means ECUBE is waiting for in-flight copy threads to finish their current work before the job becomes fully `PAUSED`.
 
 ### 9.2 Creating a Job
 
@@ -563,6 +569,7 @@ The job detail page provides deeper inspection and follow-up controls.
 Typical functions include:
 
 - Start a pending job
+- Pause a running job and resume it later
 - Trigger verification
 - Generate a manifest
 - Review copied files
@@ -575,11 +582,14 @@ Action buttons are shown near the top of the job detail screen.
 
 Use them when appropriate:
 
-- `Start` to begin the job
+- `Start` to begin a new job or resume a paused one
+- `Pause` to request a safe stop after the current copy work finishes
 - `Verify` to run verification checks
 - `Manifest` to generate the manifest output
 
-When a job completes or fails, the detail view also shows a summary with the job start time, copy thread count, files copied, total copied, elapsed time, copy rate, and any failure reason or related log hint.
+When a pause is requested, the Jobs page shows a `Pause in progress` dialog while ECUBE waits for active copy threads to drain. The Start action remains unavailable during `PAUSING` and becomes available again once the job reaches `PAUSED`.
+
+When a job is paused, completed, or fails, the detail view shows a summary with the job start time, copy thread count, files copied, total copied, elapsed time, copy rate, and any failure reason or related log hint. Elapsed time and copy rate remain cumulative across pause and resume cycles.
 
 ### 10.2 File List
 
