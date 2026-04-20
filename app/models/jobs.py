@@ -9,6 +9,8 @@ import enum
 class JobStatus(str, enum.Enum):
     PENDING = "PENDING"
     RUNNING = "RUNNING"
+    PAUSING = "PAUSING"
+    PAUSED = "PAUSED"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     VERIFYING = "VERIFYING"
@@ -36,6 +38,7 @@ class ExportJob(Base):
     thread_count = Column(Integer, default=4)
     max_file_retries = Column(Integer, default=3)
     retry_delay_seconds = Column(Integer, default=1)
+    active_duration_seconds = Column(Integer, default=0, nullable=False)
     started_at = Column(DateTime(timezone=True))
     completed_at = Column(DateTime(timezone=True))
     created_by = Column(String)

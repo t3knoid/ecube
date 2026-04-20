@@ -263,4 +263,31 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain('Copy rate')
     expect(wrapper.text()).toContain('5.0 MB/s')
   })
+
+  it('uses accumulated active duration after pause and resume cycles', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'PAUSED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 10485760,
+      total_bytes: 10485760,
+      file_count: 4,
+      files_succeeded: 3,
+      files_failed: 0,
+      started_at: '2026-04-18T10:05:00Z',
+      completed_at: null,
+      active_duration_seconds: 125,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Completion summary')
+    expect(wrapper.text()).toContain('2m 5s')
+    expect(wrapper.text()).toContain('0.1 MB/s')
+  })
 })

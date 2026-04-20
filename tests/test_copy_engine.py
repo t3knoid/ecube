@@ -1,5 +1,6 @@
 """Tests for retry/resume semantics in the copy engine."""
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -436,6 +437,67 @@ def test_run_copy_job_resume_adds_new_source_files(db, tmp_path):
     assert files["new_file.txt"].status == FileStatus.DONE
 
 
+def test_stale_paused_run_does_not_override_resumed_job(db, tmp_path):
+    """An older paused worker must not reset a newer resumed run back to PAUSED."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "resume.txt").write_bytes(b"resume data")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    original_started_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    resumed_started_at = original_started_at + timedelta(seconds=30)
+    job.status = JobStatus.RUNNING
+    job.started_at = original_started_at
+    db.commit()
+
+    class _FakeFuture:
+        def result(self):
+            return None
+
+        def done(self):
+            return False
+
+        def cancel(self):
+            return None
+
+    class _FakeExecutor:
+        def __init__(self, *args, **kwargs):
+            self.futures = []
+
+        def submit(self, fn, *args, **kwargs):
+            future = _FakeFuture()
+            self.futures.append(future)
+            return future
+
+        def shutdown(self, wait=True, cancel_futures=True):
+            resumed_job = db.get(ExportJob, job.id)
+            resumed_job.status = JobStatus.RUNNING
+            resumed_job.started_at = resumed_started_at
+            resumed_job.completed_at = None
+            db.commit()
+
+    def _fake_as_completed(futures):
+        paused_job = db.get(ExportJob, job.id)
+        paused_job.status = JobStatus.PAUSED
+        db.commit()
+        for future in list(futures):
+            yield future
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine.ThreadPoolExecutor", _FakeExecutor):
+            with patch("app.services.copy_engine.as_completed", side_effect=_fake_as_completed):
+                copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+
+    assert job.status == JobStatus.RUNNING
+    assert job.started_at == resumed_started_at.replace(tzinfo=None)
+
+
 def test_run_copy_job_failed_job_is_failed_status(db, tmp_path):
     """run_copy_job marks the job FAILED when any file errors out."""
     source_dir = tmp_path / "source"
@@ -564,6 +626,141 @@ def test_run_copy_job_with_retry_recovers_on_resume(db, tmp_path):
     files = db.query(ExportFile).filter(ExportFile.job_id == job.id).all()
     assert len(files) == 1
     assert files[0].status == FileStatus.DONE
+
+
+def test_run_copy_job_accumulates_active_duration_on_resume(db, tmp_path):
+    """Completed jobs retain previously accrued active duration after resume."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "file.txt").write_bytes(b"content")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.status = JobStatus.RUNNING
+    job.active_duration_seconds = 5
+    job.started_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    db.commit()
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine._calculate_total_active_seconds", return_value=12):
+            copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+
+    assert job.status == JobStatus.COMPLETED
+    assert job.active_duration_seconds == 12
+
+
+def test_pause_request_after_last_file_still_completes_job(db, tmp_path):
+    """A late pause request must not leave an already-finished job stuck in PAUSED."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "done.txt").write_bytes(b"done")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.status = JobStatus.RUNNING
+    job.started_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    db.commit()
+
+    class _FinishedFuture:
+        def result(self):
+            return None
+
+        def done(self):
+            return True
+
+        def cancel(self):
+            return None
+
+    class _Executor:
+        def __init__(self, *args, **kwargs):
+            self.future = _FinishedFuture()
+
+        def submit(self, fn, *args, **kwargs):
+            return self.future
+
+        def shutdown(self, wait=True, cancel_futures=True):
+            return None
+
+    def _late_pause(futures):
+        export_file = db.query(ExportFile).filter(ExportFile.job_id == job.id).one()
+        export_file.status = FileStatus.DONE
+        paused_job = db.get(ExportJob, job.id)
+        paused_job.copied_bytes = export_file.size_bytes or 0
+        paused_job.status = JobStatus.PAUSING
+        db.commit()
+        for future in list(futures):
+            yield future
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine.ThreadPoolExecutor", _Executor):
+            with patch("app.services.copy_engine.as_completed", side_effect=_late_pause):
+                copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+
+    assert job.status == JobStatus.COMPLETED
+
+
+def test_pause_request_after_last_failed_file_still_fails_job(db, tmp_path):
+    """A late pause request must not override a terminal failed result."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "failed.txt").write_bytes(b"failed")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.status = JobStatus.RUNNING
+    job.started_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    db.commit()
+
+    class _FinishedFuture:
+        def result(self):
+            return None
+
+        def done(self):
+            return True
+
+        def cancel(self):
+            return None
+
+    class _Executor:
+        def __init__(self, *args, **kwargs):
+            self.future = _FinishedFuture()
+
+        def submit(self, fn, *args, **kwargs):
+            return self.future
+
+        def shutdown(self, wait=True, cancel_futures=True):
+            return None
+
+    def _late_pause_after_error(futures):
+        export_file = db.query(ExportFile).filter(ExportFile.job_id == job.id).one()
+        export_file.status = FileStatus.ERROR
+        paused_job = db.get(ExportJob, job.id)
+        paused_job.status = JobStatus.PAUSING
+        db.commit()
+        for future in list(futures):
+            yield future
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine.ThreadPoolExecutor", _Executor):
+            with patch("app.services.copy_engine.as_completed", side_effect=_late_pause_after_error):
+                copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+
+    assert job.status == JobStatus.FAILED
 
 
 # ---------------------------------------------------------------------------
