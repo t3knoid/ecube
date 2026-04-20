@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 import json
 import logging
 import os
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple, cast
 
 from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy import text
@@ -28,6 +28,11 @@ from app.utils.sanitize import is_encoding_error, resolve_source_path, validate_
 logger = logging.getLogger(__name__)
 
 
+def _row(instance: object) -> Any:
+    """Expose SQLAlchemy model instances using their runtime attribute types."""
+    return cast(Any, instance)
+
+
 def list_jobs(db: Session, limit: int = 200) -> list[ExportJob]:
     """Return the most recent export jobs."""
     repo = JobRepository(db)
@@ -47,15 +52,21 @@ def _resolve_job_source_path(body: JobCreate, db: Session) -> str:
     mount = MountRepository(db).get(body.mount_id)
     if not mount:
         raise HTTPException(status_code=404, detail="Mount not found")
-    if mount.project_id != body.project_id:
+
+    mount_row = _row(mount)
+    mount_project_id = cast(Optional[str], mount_row.project_id)
+    mount_status = cast(MountStatus, mount_row.status)
+    mount_root = cast(Optional[str], mount_row.local_mount_point)
+
+    if mount_project_id != body.project_id:
         raise HTTPException(status_code=409, detail="Selected mount is not available for this project")
-    if mount.status != MountStatus.MOUNTED or not mount.local_mount_point:
+    if mount_status != MountStatus.MOUNTED or not mount_root:
         raise HTTPException(status_code=409, detail="Selected mount is not mounted")
 
     try:
         return resolve_source_path(
             body.source_path,
-            mount_root=mount.local_mount_point,
+            mount_root=mount_root,
             usb_mount_base_path=settings.usb_mount_base_path,
         )
     except ValueError as exc:
@@ -91,6 +102,7 @@ def create_job(
         callback_url=body.callback_url,
         client_ip=client_ip,
     )
+    job_row = _row(job)
 
     # Use a single transaction for the entire create-job-with-drive flow.
     # flush() obtains IDs without committing, so a failure at any step
@@ -107,8 +119,13 @@ def create_job(
                 db.rollback()
                 raise HTTPException(status_code=404, detail="Drive not found")
 
+            drive_row = _row(drive)
+            current_project_id = cast(Optional[str], drive_row.current_project_id)
+            current_state = cast(DriveState, drive_row.current_state)
+            mount_path = cast(Optional[str], drive_row.mount_path)
+
             # Enforce project isolation
-            if getattr(drive, "current_project_id", None) not in (None, body.project_id):
+            if current_project_id not in (None, body.project_id):
                 db.rollback()
                 try:
                     audit_repo.add(
@@ -122,7 +139,7 @@ def create_job(
                         details={
                             "actor": actor,
                             "drive_id": body.drive_id,
-                            "existing_project_id": drive.current_project_id,
+                            "existing_project_id": current_project_id,
                             "requested_project_id": body.project_id,
                             "attempted_project_id": body.project_id,
                         },
@@ -135,7 +152,7 @@ def create_job(
                     detail="Drive belongs to a different project",
                 )
 
-            if drive.current_state not in (DriveState.AVAILABLE, DriveState.IN_USE):
+            if current_state not in (DriveState.AVAILABLE, DriveState.IN_USE):
                 db.rollback()
                 raise HTTPException(
                     status_code=409,
@@ -143,29 +160,29 @@ def create_job(
                 )
 
             # Bind the drive to this project if currently unbound.
-            if drive.current_project_id is None:
-                drive.current_project_id = body.project_id
+            if current_project_id is None:
+                drive_row.current_project_id = body.project_id
                 explicit_bound = True
 
-            if not drive.mount_path:
+            if not mount_path:
                 db.rollback()
                 raise HTTPException(
                     status_code=409,
                     detail="Assigned drive is not mounted",
                 )
 
-            job.target_mount_path = drive.mount_path
+            job_row.target_mount_path = mount_path
             try:
-                job.source_path = validate_source_path(
-                    job.source_path,
+                job_row.source_path = validate_source_path(
+                    cast(str, job_row.source_path),
                     usb_mount_base_path=settings.usb_mount_base_path,
-                    target_mount_path=job.target_mount_path,
+                    target_mount_path=mount_path,
                 )
             except ValueError as exc:
                 db.rollback()
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
-            db.add(DriveAssignment(drive_id=body.drive_id, job_id=job.id))
-            drive.current_state = DriveState.IN_USE
+            db.add(DriveAssignment(drive_id=body.drive_id, job_id=cast(int, job_row.id)))
+            drive_row.current_state = DriveState.IN_USE
             db.flush()  # validate assignment + drive state change
         else:
             # Auto-assign a drive when drive_id is omitted
@@ -174,27 +191,30 @@ def create_job(
                 drive_repo=drive_repo,
                 db=db,
             )
-            if not drive.mount_path:
+            drive_row = _row(drive)
+            mount_path = cast(Optional[str], drive_row.mount_path)
+            if not mount_path:
                 db.rollback()
                 raise HTTPException(
                     status_code=409,
                     detail="Assigned drive is not mounted",
                 )
-            job.target_mount_path = drive.mount_path
+            job_row.target_mount_path = mount_path
             try:
-                job.source_path = validate_source_path(
-                    job.source_path,
+                job_row.source_path = validate_source_path(
+                    cast(str, job_row.source_path),
                     usb_mount_base_path=settings.usb_mount_base_path,
-                    target_mount_path=job.target_mount_path,
+                    target_mount_path=mount_path,
                 )
             except ValueError as exc:
                 db.rollback()
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
-            db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
-            drive.current_state = DriveState.IN_USE
+            db.add(DriveAssignment(drive_id=cast(int, drive_row.id), job_id=cast(int, job_row.id)))
+            drive_row.current_state = DriveState.IN_USE
             db.flush()
 
-        if seeded_job_id is not None and getattr(db.bind.dialect, "name", None) == "postgresql":
+        bind = db.get_bind()
+        if seeded_job_id is not None and getattr(bind.dialect, "name", None) == "postgresql":
             db.execute(
                 text(
                     "SELECT setval(pg_get_serial_sequence('export_jobs', 'id'), "
@@ -216,6 +236,8 @@ def create_job(
         )
 
     db.refresh(job)
+    created_job_id = cast(int, job_row.id)
+    selected_drive_id = cast(int, drive_row.id)
 
     # Best-effort audit logging — failures never abort job creation.
     try:
@@ -223,7 +245,7 @@ def create_job(
             audit_repo.add(
                 action="DRIVE_PROJECT_BOUND",
                 user=actor,
-                job_id=job.id,
+                job_id=created_job_id,
                 details={"drive_id": body.drive_id, "project_id": body.project_id},
                 client_ip=client_ip,
             )
@@ -236,16 +258,16 @@ def create_job(
                 audit_repo.add(
                     action="DRIVE_PROJECT_BOUND",
                     user=actor,
-                    job_id=job.id,
-                    details={"drive_id": drive.id, "project_id": body.project_id},
+                    job_id=created_job_id,
+                    details={"drive_id": selected_drive_id, "project_id": body.project_id},
                     client_ip=client_ip,
                 )
             audit_repo.add(
                 action="DRIVE_AUTO_ASSIGNED",
                 user=actor,
-                job_id=job.id,
+                job_id=created_job_id,
                 details={
-                    "drive_id": drive.id,
+                    "drive_id": selected_drive_id,
                     "project_id": body.project_id,
                     "selection": auto_selection,
                 },
@@ -258,7 +280,7 @@ def create_job(
         audit_repo.add(
             action="JOB_CREATED",
             user=actor,
-            job_id=job.id,
+            job_id=created_job_id,
             details={"project_id": body.project_id},
             client_ip=client_ip,
         )
@@ -323,7 +345,8 @@ def _auto_assign_drive(
     # --- Unbound fallback path (project_count == 0) ---
     drive = drive_repo.get_next_unbound_available()
     if drive:
-        drive.current_project_id = project_id
+        drive_row = _row(drive)
+        drive_row.current_project_id = project_id
         return drive, "unbound_fallback"
 
     # Either no unbound AVAILABLE drives exist, or they are all
@@ -343,7 +366,8 @@ def get_job(job_id: int, db: Session) -> ExportJob:
 
 
 def _require_editable_job(job: ExportJob) -> None:
-    if job.status not in (JobStatus.PENDING, JobStatus.PAUSED, JobStatus.FAILED):
+    job_row = _row(job)
+    if cast(JobStatus, job_row.status) not in (JobStatus.PENDING, JobStatus.PAUSED, JobStatus.FAILED):
         raise HTTPException(
             status_code=409,
             detail="Only pending, paused, or failed jobs can be edited from Job Detail",
@@ -375,9 +399,11 @@ def update_job(
     job = job_repo.get_for_update(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    job_row = _row(job)
     _require_editable_job(job)
 
-    if body.project_id != job.project_id:
+    if body.project_id != cast(Optional[str], job_row.project_id):
         raise HTTPException(
             status_code=409,
             detail="Project cannot be changed for an existing job",
@@ -385,64 +411,75 @@ def update_job(
 
     resolved_source_path = _resolve_job_source_path(body, db)
     active_assignment = assignment_repo.get_active_for_job(job_id)
-    current_drive_id = active_assignment.drive_id if active_assignment else None
-    requested_drive_id = body.drive_id or current_drive_id
+    assignment_row = _row(active_assignment) if active_assignment is not None else None
+    current_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
+    requested_drive_id = body.drive_id if body.drive_id is not None else current_drive_id
     if requested_drive_id is None:
         raise HTTPException(status_code=409, detail="Job has no assigned drive")
 
-    drive = drive_repo.get_for_update(requested_drive_id)
+    drive = drive_repo.get_for_update(int(requested_drive_id))
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
-    if getattr(drive, "current_project_id", None) not in (None, job.project_id):
+
+    drive_row = _row(drive)
+    drive_project_id = cast(Optional[str], drive_row.current_project_id)
+    drive_state = cast(DriveState, drive_row.current_state)
+    drive_mount_path = cast(Optional[str], drive_row.mount_path)
+
+    if drive_project_id not in (None, cast(Optional[str], job_row.project_id)):
         raise HTTPException(status_code=403, detail="Drive belongs to a different project")
-    if drive.current_state not in (DriveState.AVAILABLE, DriveState.IN_USE):
+    if drive_state not in (DriveState.AVAILABLE, DriveState.IN_USE):
         raise HTTPException(status_code=409, detail="Drive is not available")
-    if not drive.mount_path:
+    if not drive_mount_path:
         raise HTTPException(status_code=409, detail="Assigned drive is not mounted")
 
-    if drive.current_project_id is None:
-        drive.current_project_id = job.project_id
+    if drive_project_id is None:
+        drive_row.current_project_id = cast(Optional[str], job_row.project_id)
 
     try:
         validated_source_path = validate_source_path(
             resolved_source_path,
             usb_mount_base_path=settings.usb_mount_base_path,
-            target_mount_path=drive.mount_path,
+            target_mount_path=drive_mount_path,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     changed_fields: list[str] = []
-    if job.evidence_number != body.evidence_number:
+    if cast(Optional[str], job_row.evidence_number) != body.evidence_number:
         changed_fields.append("evidence_number")
-    if job.source_path != validated_source_path:
+    if cast(Optional[str], job_row.source_path) != validated_source_path:
         changed_fields.append("source_path")
-    if int(job.thread_count or 0) != int(body.thread_count):
+    if int(cast(Optional[int], job_row.thread_count) or 0) != int(body.thread_count):
         changed_fields.append("thread_count")
-    if int(job.max_file_retries or 0) != int(body.max_file_retries):
+    if int(cast(Optional[int], job_row.max_file_retries) or 0) != int(body.max_file_retries):
         changed_fields.append("max_file_retries")
-    if int(job.retry_delay_seconds or 0) != int(body.retry_delay_seconds):
+    if int(cast(Optional[int], job_row.retry_delay_seconds) or 0) != int(body.retry_delay_seconds):
         changed_fields.append("retry_delay_seconds")
     if current_drive_id != requested_drive_id:
         changed_fields.append("drive_id")
 
-    if active_assignment and current_drive_id != requested_drive_id:
-        active_assignment.released_at = datetime.now(timezone.utc)
-        previous_drive = drive_repo.get_for_update(current_drive_id)
-        if previous_drive and _other_active_assignments_for_drive(db, previous_drive.id, exclude_job_id=job_id) == 0:
-            previous_drive.current_state = DriveState.AVAILABLE
-        db.add(DriveAssignment(drive_id=requested_drive_id, job_id=job_id))
-    elif active_assignment is None:
-        db.add(DriveAssignment(drive_id=requested_drive_id, job_id=job_id))
+    if assignment_row is not None and current_drive_id != requested_drive_id:
+        assignment_row.released_at = datetime.now(timezone.utc)
+        if current_drive_id is not None:
+            previous_drive = drive_repo.get_for_update(int(current_drive_id))
+            if previous_drive:
+                previous_drive_row = _row(previous_drive)
+                previous_drive_id = cast(int, previous_drive_row.id)
+                if _other_active_assignments_for_drive(db, previous_drive_id, exclude_job_id=job_id) == 0:
+                    previous_drive_row.current_state = DriveState.AVAILABLE
+        db.add(DriveAssignment(drive_id=int(requested_drive_id), job_id=job_id))
+    elif assignment_row is None:
+        db.add(DriveAssignment(drive_id=int(requested_drive_id), job_id=job_id))
 
-    drive.current_state = DriveState.IN_USE
-    job.evidence_number = body.evidence_number
-    job.source_path = validated_source_path
-    job.target_mount_path = drive.mount_path
-    job.thread_count = body.thread_count
-    job.max_file_retries = body.max_file_retries
-    job.retry_delay_seconds = body.retry_delay_seconds
-    job.callback_url = body.callback_url
+    drive_row.current_state = DriveState.IN_USE
+    job_row.evidence_number = body.evidence_number
+    job_row.source_path = validated_source_path
+    job_row.target_mount_path = drive_mount_path
+    job_row.thread_count = int(body.thread_count)
+    job_row.max_file_retries = int(body.max_file_retries)
+    job_row.retry_delay_seconds = int(body.retry_delay_seconds)
+    job_row.callback_url = body.callback_url
 
     try:
         job_repo.save(job)
@@ -457,12 +494,12 @@ def update_job(
         audit_repo.add(
             action="JOB_UPDATED",
             user=actor,
-            project_id=job.project_id,
-            drive_id=requested_drive_id,
+            project_id=cast(Optional[str], job_row.project_id),
+            drive_id=int(requested_drive_id),
             job_id=job_id,
             details={
-                "project_id": job.project_id,
-                "drive_id": requested_drive_id,
+                "project_id": cast(Optional[str], job_row.project_id),
+                "drive_id": int(requested_drive_id),
                 "updated_fields": changed_fields,
             },
             client_ip=client_ip,
@@ -486,16 +523,19 @@ def complete_job(
     job = job_repo.get_for_update(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.status not in (JobStatus.PENDING, JobStatus.PAUSED, JobStatus.FAILED):
+
+    job_row = _row(job)
+    current_status = cast(JobStatus, job_row.status)
+    if current_status not in (JobStatus.PENDING, JobStatus.PAUSED, JobStatus.FAILED):
         raise HTTPException(
             status_code=409,
             detail="Only pending, paused, or failed jobs can be manually completed",
         )
 
-    previous_status = job.status.value
-    job.status = JobStatus.COMPLETED
-    if job.completed_at is None:
-        job.completed_at = datetime.now(timezone.utc)
+    previous_status = current_status.value
+    job_row.status = JobStatus.COMPLETED
+    if cast(Optional[datetime], job_row.completed_at) is None:
+        job_row.completed_at = datetime.now(timezone.utc)
 
     try:
         job_repo.save(job)
@@ -508,15 +548,16 @@ def complete_job(
 
     try:
         assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
-        active_drive_id = assignment.drive_id if assignment else None
+        assignment_row = _row(assignment) if assignment is not None else None
+        active_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
         audit_repo.add(
             action="JOB_COMPLETED_MANUALLY",
             user=actor,
-            project_id=job.project_id,
+            project_id=cast(Optional[str], job_row.project_id),
             drive_id=active_drive_id,
             job_id=job_id,
             details={
-                "project_id": job.project_id,
+                "project_id": cast(Optional[str], job_row.project_id),
                 "previous_status": previous_status,
             },
             client_ip=client_ip,
@@ -541,20 +582,24 @@ def delete_job(
     job = job_repo.get_for_update(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.status != JobStatus.PENDING:
+
+    job_row = _row(job)
+    if cast(JobStatus, job_row.status) != JobStatus.PENDING:
         raise HTTPException(
             status_code=409,
             detail="Only pending jobs can be deleted",
         )
 
-    project_id = job.project_id
+    project_id = cast(Optional[str], job_row.project_id)
     assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
-    drive_id = assignment.drive_id if assignment else None
+    assignment_row = _row(assignment) if assignment is not None else None
+    drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
 
-    if assignment is not None:
-        drive = drive_repo.get_for_update(assignment.drive_id)
-        if drive and _other_active_assignments_for_drive(db, assignment.drive_id, exclude_job_id=job_id) == 0:
-            drive.current_state = DriveState.AVAILABLE
+    if drive_id is not None:
+        drive = drive_repo.get_for_update(int(drive_id))
+        if drive and _other_active_assignments_for_drive(db, int(drive_id), exclude_job_id=job_id) == 0:
+            drive_row = _row(drive)
+            drive_row.current_state = DriveState.AVAILABLE
 
     db.query(Manifest).filter(Manifest.job_id == job_id).delete(synchronize_session=False)
     db.query(ExportFile).filter(ExportFile.job_id == job_id).delete(synchronize_session=False)
@@ -604,16 +649,19 @@ def start_job(
     job = job_repo.get_for_update(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.status not in (JobStatus.PENDING, JobStatus.FAILED, JobStatus.PAUSED):
+
+    job_row = _row(job)
+    current_status = cast(JobStatus, job_row.status)
+    if current_status not in (JobStatus.PENDING, JobStatus.FAILED, JobStatus.PAUSED):
         raise HTTPException(
-            status_code=409, detail=f"Job is already in status {job.status}"
+            status_code=409, detail=f"Job is already in status {current_status}"
         )
 
     try:
-        job.source_path = validate_source_path(
-            job.source_path,
+        job_row.source_path = validate_source_path(
+            cast(str, job_row.source_path),
             usb_mount_base_path=settings.usb_mount_base_path,
-            target_mount_path=job.target_mount_path,
+            target_mount_path=cast(Optional[str], job_row.target_mount_path),
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -621,13 +669,13 @@ def start_job(
     # Transition to RUNNING inside the locked transaction so that any concurrent
     # request arriving after this commit will observe the updated state and be
     # rejected with 409 before the background copy task begins.
-    job.status = JobStatus.RUNNING
-    job.started_by = actor
-    job.started_at = datetime.now(timezone.utc)
-    job.active_duration_seconds = int(job.active_duration_seconds or 0)
-    job.completed_at = None
+    job_row.status = JobStatus.RUNNING
+    job_row.started_by = actor
+    job_row.started_at = datetime.now(timezone.utc)
+    job_row.active_duration_seconds = int(cast(Optional[int], job_row.active_duration_seconds) or 0)
+    job_row.completed_at = None
     if body.thread_count:
-        job.thread_count = body.thread_count
+        job_row.thread_count = int(body.thread_count)
     try:
         job_repo.save(job)
     except Exception:
@@ -638,27 +686,30 @@ def start_job(
         )
 
     assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
-    active_drive_id = assignment.drive_id if assignment else None
+    assignment_row = _row(assignment) if assignment is not None else None
+    active_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
+    job_project_id = cast(Optional[str], job_row.project_id)
+    job_status = cast(JobStatus, job_row.status)
 
     logger.debug(
         "Job start context",
         {
             "job_id": job_id,
-            "project_id": job.project_id,
+            "project_id": job_project_id,
             "drive_id": active_drive_id,
-            "source_path": job.source_path,
-            "target_mount_path": job.target_mount_path,
+            "source_path": cast(Optional[str], job_row.source_path),
+            "target_mount_path": cast(Optional[str], job_row.target_mount_path),
             "actor": actor or "system",
         },
     )
     logger.info(
-        f"JOB_STARTED job_id={job_id} project_id={job.project_id} "
-        f"status={job.status.value} thread_count={job.thread_count} actor={actor or 'system'}",
+        f"JOB_STARTED job_id={job_id} project_id={job_project_id} "
+        f"status={job_status.value} thread_count={job_row.thread_count} actor={actor or 'system'}",
         extra={
             "job_id": job_id,
-            "project_id": job.project_id,
-            "status": job.status.value,
-            "thread_count": job.thread_count,
+            "project_id": job_project_id,
+            "status": job_status.value,
+            "thread_count": cast(Optional[int], job_row.thread_count),
             "actor": actor or "system",
         },
     )
@@ -667,11 +718,11 @@ def start_job(
         audit_repo.add(
             action="JOB_STARTED",
             user=actor,
-            project_id=job.project_id,
+            project_id=job_project_id,
             drive_id=active_drive_id,
             job_id=job_id,
             details={
-                "project_id": job.project_id,
+                "project_id": job_project_id,
                 "drive_id": active_drive_id,
             },
             client_ip=client_ip,
@@ -695,11 +746,14 @@ def pause_job(
     job = job_repo.get_for_update(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.status != JobStatus.RUNNING:
-        raise HTTPException(status_code=409, detail=f"Job is already in status {job.status}")
 
-    job.status = JobStatus.PAUSING
-    job.completed_at = None
+    job_row = _row(job)
+    current_status = cast(JobStatus, job_row.status)
+    if current_status != JobStatus.RUNNING:
+        raise HTTPException(status_code=409, detail=f"Job is already in status {current_status}")
+
+    job_row.status = JobStatus.PAUSING
+    job_row.completed_at = None
     try:
         job_repo.save(job)
     except Exception:
@@ -710,14 +764,17 @@ def pause_job(
         )
 
     assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
-    active_drive_id = assignment.drive_id if assignment else None
+    assignment_row = _row(assignment) if assignment is not None else None
+    active_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
+    job_project_id = cast(Optional[str], job_row.project_id)
+    job_status = cast(JobStatus, job_row.status)
 
     logger.info(
-        f"JOB_PAUSE_REQUESTED job_id={job_id} project_id={job.project_id} status={job.status.value} actor={actor or 'system'}",
+        f"JOB_PAUSE_REQUESTED job_id={job_id} project_id={job_project_id} status={job_status.value} actor={actor or 'system'}",
         extra={
             "job_id": job_id,
-            "project_id": job.project_id,
-            "status": job.status.value,
+            "project_id": job_project_id,
+            "status": job_status.value,
             "actor": actor or "system",
         },
     )
@@ -726,11 +783,11 @@ def pause_job(
         audit_repo.add(
             action="JOB_PAUSE_REQUESTED",
             user=actor,
-            project_id=job.project_id,
+            project_id=job_project_id,
             drive_id=active_drive_id,
             job_id=job_id,
             details={
-                "project_id": job.project_id,
+                "project_id": job_project_id,
                 "drive_id": active_drive_id,
             },
             client_ip=client_ip,
@@ -756,7 +813,8 @@ def verify_job(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    job.status = JobStatus.VERIFYING
+    job_row = _row(job)
+    job_row.status = JobStatus.VERIFYING
     try:
         job_repo.save(job)
     except Exception:
@@ -767,15 +825,17 @@ def verify_job(
         )
     try:
         assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
-        active_drive_id = assignment.drive_id if assignment else None
+        assignment_row = _row(assignment) if assignment is not None else None
+        active_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
+        job_project_id = cast(Optional[str], job_row.project_id)
         audit_repo.add(
             action="JOB_VERIFY_STARTED",
             user=actor,
-            project_id=job.project_id,
+            project_id=job_project_id,
             drive_id=active_drive_id,
             job_id=job_id,
             details={
-                "project_id": job.project_id,
+                "project_id": job_project_id,
                 "drive_id": active_drive_id,
             },
             client_ip=client_ip,
@@ -795,12 +855,16 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
     job = job_repo.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    job_row = _row(job)
+    job_project_id = cast(Optional[str], job_row.project_id)
+    target_mount_path = cast(Optional[str], job_row.target_mount_path)
     generated_at = datetime.now(timezone.utc).isoformat()
     generated_by = actor or "system"
     manifest_data = {
-        "job_id": job.id,
-        "project_id": job.project_id,
-        "evidence_number": job.evidence_number,
+        "job_id": cast(int, job_row.id),
+        "project_id": job_project_id,
+        "evidence_number": cast(Optional[str], job_row.evidence_number),
         "generated_at": generated_at,
         "generated_by": generated_by,
         "files": [
@@ -816,13 +880,13 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
     manifest_path = None
     manifest_name = None
     manifest_error = None
-    if not job.target_mount_path:
+    if not target_mount_path:
         manifest_error = "Assigned drive is not mounted"
     else:
-        candidate_path = os.path.join(job.target_mount_path, "manifest.json")
+        candidate_path = os.path.join(target_mount_path, "manifest.json")
         manifest_name = os.path.basename(candidate_path)
         try:
-            os.makedirs(job.target_mount_path, exist_ok=True)
+            os.makedirs(target_mount_path, exist_ok=True)
             with open(candidate_path, "w", encoding="utf-8") as fp:
                 json.dump(manifest_data, fp, indent=2)
             manifest_path = candidate_path
@@ -830,7 +894,7 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
             manifest_error = "Manifest file could not be written"
             logger.warning(
                 "Manifest file write failed",
-                extra={"job_id": job_id, "project_id": job.project_id},
+                extra={"job_id": job_id, "project_id": job_project_id},
             )
             logger.debug(
                 "Manifest file write failure details",
@@ -849,12 +913,13 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
         )
 
     assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
-    active_drive_id = assignment.drive_id if assignment else None
+    assignment_row = _row(assignment) if assignment is not None else None
+    active_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
     logger.info(
-        f"MANIFEST_CREATED job_id={job_id} project_id={job.project_id} format=JSON actor={actor or 'system'} result={'written' if manifest_path else 'recorded'}",
+        f"MANIFEST_CREATED job_id={job_id} project_id={job_project_id} format=JSON actor={actor or 'system'} result={'written' if manifest_path else 'recorded'}",
         extra={
             "job_id": job_id,
-            "project_id": job.project_id,
+            "project_id": job_project_id,
             "drive_id": active_drive_id,
             "actor": actor or "system",
             "result": "written" if manifest_path else "recorded",
@@ -864,11 +929,11 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
         audit_repo.add(
             action="MANIFEST_CREATED",
             user=actor,
-            project_id=job.project_id,
+            project_id=job_project_id,
             drive_id=active_drive_id,
             job_id=job_id,
             details={
-                "project_id": job.project_id,
+                "project_id": job_project_id,
                 "drive_id": active_drive_id,
                 "manifest_file": manifest_name,
                 "generated_at": generated_at,
