@@ -38,8 +38,7 @@ const lastFileSnapshotKey = ref('')
 
 const selectedFileId = ref(null)
 const fileHashes = ref(null)
-const compareA = ref(null)
-const compareB = ref(null)
+const compareFileId = ref(null)
 const compareResult = ref(null)
 const supportingDrives = ref([])
 const supportingMounts = ref([])
@@ -95,6 +94,10 @@ const fileListNotice = computed(() => {
   const shown = Number(debug.value.returned_files || 0)
   return total > shown ? t('jobs.showingFiles', { shown, total }) : ''
 })
+
+const selectedCompareFile = computed(() => (
+  (debug.value.files || []).find((file) => Number(file.id) === Number(compareFileId.value)) || null
+))
 
 const progressMetrics = computed(() => {
   const currentJob = job.value || {}
@@ -532,9 +535,14 @@ async function runAction(action) {
   }
 }
 
+function formatCompareValue(value) {
+  return value == null || value === '' ? '-' : String(value)
+}
+
 async function loadHashes(fileId) {
   if (!canInspectHashes.value) return
   selectedFileId.value = fileId
+  compareFileId.value = fileId
   fileHashes.value = null
   try {
     fileHashes.value = await getFileHashes(fileId)
@@ -544,10 +552,11 @@ async function loadHashes(fileId) {
 }
 
 async function runCompare() {
-  if (!compareA.value || !compareB.value) return
+  if (!compareFileId.value) return
   compareResult.value = null
+  error.value = ''
   try {
-    compareResult.value = await compareFiles({ file_id_a: Number(compareA.value), file_id_b: Number(compareB.value) })
+    compareResult.value = await compareFiles({ file_id_a: Number(compareFileId.value), file_id_b: Number(compareFileId.value) })
   } catch (err) {
     error.value = buildJobError(err)
   }
@@ -733,31 +742,35 @@ onUnmounted(() => {
 
       <article class="panel">
         <h2>{{ t('jobs.compareTitle') }}</h2>
+        <p class="muted">{{ t('jobs.compareHelp') }}</p>
         <div class="compare-form">
-          <label for="compare-file-a">{{ t('jobs.fileA') }}</label>
-          <select id="compare-file-a" v-model="compareA">
+          <label for="compare-file-source">{{ t('jobs.fileA') }}</label>
+          <select id="compare-file-source" v-model="compareFileId">
             <option :value="null">-</option>
-            <option v-for="file in debug.files || []" :key="`a-${file.id}`" :value="file.id">
+            <option v-for="file in debug.files || []" :key="`compare-${file.id}`" :value="file.id">
               #{{ file.id }} {{ file.relative_path }}
             </option>
           </select>
-          <label for="compare-file-b">{{ t('jobs.fileB') }}</label>
-          <select id="compare-file-b" v-model="compareB">
-            <option :value="null">-</option>
-            <option v-for="file in debug.files || []" :key="`b-${file.id}`" :value="file.id">
-              #{{ file.id }} {{ file.relative_path }}
-            </option>
-          </select>
-          <button class="btn" :disabled="!compareA || !compareB" @click="runCompare">
+          <label>{{ t('jobs.fileB') }}</label>
+          <strong class="mono wrap-anywhere">{{ selectedCompareFile ? `#${selectedCompareFile.id} ${selectedCompareFile.relative_path}` : '-' }}</strong>
+          <button class="btn" :disabled="!compareFileId" @click="runCompare">
             {{ t('jobs.compare') }}
           </button>
         </div>
 
-        <div v-if="compareResult" class="hash-grid">
-          <span>{{ t('jobs.compareMatch') }}</span><StatusBadge :status="compareResult.match" />
-          <span>{{ t('jobs.hashMatch') }}</span><StatusBadge :status="compareResult.hash_match" />
-          <span>{{ t('jobs.sizeMatch') }}</span><StatusBadge :status="compareResult.size_match" />
-          <span>{{ t('jobs.pathMatch') }}</span><StatusBadge :status="compareResult.path_match" />
+        <div v-if="compareResult" class="compare-results">
+          <div class="hash-grid">
+            <span>{{ t('jobs.compareMatch') }}</span><StatusBadge :status="compareResult.match" />
+            <span>{{ t('jobs.hashMatch') }}</span><StatusBadge :status="compareResult.hash_match" />
+            <span>{{ t('jobs.sizeMatch') }}</span><StatusBadge :status="compareResult.size_match" />
+            <span>{{ t('jobs.pathMatch') }}</span><StatusBadge :status="compareResult.path_match" />
+          </div>
+          <div class="compare-detail-grid">
+            <span></span><strong>{{ t('jobs.fileA') }}</strong><strong>{{ t('jobs.fileB') }}</strong>
+            <span>{{ t('jobs.path') }}</span><strong class="mono wrap-anywhere">{{ formatCompareValue(compareResult.file_a?.relative_path) }}</strong><strong class="mono wrap-anywhere">{{ formatCompareValue(compareResult.file_b?.relative_path) }}</strong>
+            <span>{{ t('common.labels.size') }}</span><strong>{{ formatCompareValue(compareResult.file_a?.size_bytes) }}</strong><strong>{{ formatCompareValue(compareResult.file_b?.size_bytes) }}</strong>
+            <span>{{ t('jobs.sha256') }}</span><strong class="mono wrap-anywhere">{{ formatCompareValue(compareResult.file_a?.sha256 || compareResult.file_a?.md5) }}</strong><strong class="mono wrap-anywhere">{{ formatCompareValue(compareResult.file_b?.sha256 || compareResult.file_b?.md5) }}</strong>
+          </div>
         </div>
       </article>
     </div>
@@ -887,6 +900,18 @@ select {
   grid-template-columns: 120px 1fr;
   gap: var(--space-xs) var(--space-sm);
   align-items: center;
+}
+
+.compare-results {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.compare-detail-grid {
+  display: grid;
+  grid-template-columns: 120px repeat(2, minmax(0, 1fr));
+  gap: var(--space-xs) var(--space-sm);
+  align-items: start;
 }
 
 .mono {
