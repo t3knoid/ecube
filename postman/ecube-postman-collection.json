@@ -105,6 +105,11 @@
 			"key": "filename",
 			"value": "ecube.log",
 			"type": "string"
+		},
+		{
+			"key": "log_source",
+			"value": "app",
+			"type": "string"
 		}
 	],
 	"item": [
@@ -576,6 +581,13 @@
 									"",
 									"pm.test('Response is an array', function () {",
 									"    pm.expect(pm.response.json()).to.be.an('array');",
+									"});",
+									"",
+									"pm.test('Drive items expose device and serial fields when present', function () {",
+									"    var drives = pm.response.json();",
+									"    if (!Array.isArray(drives) || drives.length === 0) return;",
+									"    pm.expect(drives[0]).to.have.property('port_system_path');",
+									"    pm.expect(drives[0]).to.have.property('serial_number');",
 									"});"
 								],
 								"type": "text/javascript"
@@ -804,7 +816,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"type\": \"SMB\",\n  \"remote_path\": \"//server/share\",\n  \"local_mount_point\": \"/mnt/evidence\",\n  \"username\": \"user\",\n  \"password\": \"password\"\n}"
+							"raw": "{\n  \"type\": \"SMB\",\n  \"remote_path\": \"//server/share\",\n  \"project_id\": \"{{project_id}}\",\n  \"username\": \"user\",\n  \"password\": \"password\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/mounts",
@@ -815,7 +827,7 @@
 								"mounts"
 							]
 						},
-						"description": "Register a new network mount (SMB/NFS). Required fields: type (SMB or NFS), remote_path, local_mount_point. Optional: username, password, credentials_file. Roles: admin, manager."
+						"description": "Register a new network mount (SMB/NFS). Required fields: type, remote_path, project_id. Optional: username, password, credentials_file. The response includes the managed local_mount_point assigned by ECUBE. Roles: admin, manager."
 					}
 				},
 				{
@@ -1036,7 +1048,7 @@
 								}
 							]
 						},
-						"description": "Retrieve job state, progress, timestamps, file counts, drive info, and error summary. Roles: admin, manager, processor, auditor."
+						"description": "Retrieve job state, progress, timestamps, file counts, drive info, and error summary. Embedded drive metadata includes the port-based device field as drive.port_system_path when available. Roles: admin, manager, processor, auditor."
 					}
 				},
 				{
@@ -1484,6 +1496,18 @@
 							],
 							"query": [
 								{
+									"key": "project_id",
+									"value": "",
+									"disabled": true,
+									"description": "Filter by project ID"
+								},
+								{
+									"key": "drive_id",
+									"value": "",
+									"disabled": true,
+									"description": "Filter by drive ID"
+								},
+								{
 									"key": "user",
 									"value": "",
 									"disabled": true,
@@ -1526,7 +1550,7 @@
 								}
 							]
 						},
-						"description": "Return audit logs with optional filters. Immutable, append-only records. Roles: admin, manager, auditor."
+						"description": "Return audit logs with optional filters. Supports project_id and drive_id in addition to user, action, job_id, and time range. client_ip is redacted for manager callers. Roles: admin, manager, auditor."
 					}
 				},
 				{
@@ -1640,7 +1664,55 @@
 								"logs"
 							]
 						},
-						"description": "List available log files with metadata (size, timestamps). Any authenticated user."
+						"description": "List available log files with metadata (size, timestamps). Requires admin role."
+					}
+				},
+				{
+					"name": "View Log Lines",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/logs/view?source={{log_source}}&limit=200&offset=0",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"logs",
+								"view"
+							],
+							"query": [
+								{
+									"key": "source",
+									"value": "{{log_source}}",
+									"description": "Allowlisted log source name, for example app"
+								},
+								{
+									"key": "limit",
+									"value": "200",
+									"description": "Maximum number of redacted log lines to return (1-1000)"
+								},
+								{
+									"key": "offset",
+									"value": "0",
+									"description": "Number of newest matching lines to skip"
+								},
+								{
+									"key": "search",
+									"value": "",
+									"disabled": true,
+									"description": "Optional case-insensitive substring filter"
+								},
+								{
+									"key": "reverse",
+									"value": "false",
+									"disabled": true,
+									"description": "Return newest-first when true"
+								}
+							]
+						},
+						"description": "Return recent redacted log lines from an allowlisted source. Requires admin role."
 					}
 				},
 				{
@@ -1666,7 +1738,7 @@
 								}
 							]
 						},
-						"description": "Download a specific log file. Protected against path traversal. Any authenticated user."
+						"description": "Download a specific log file. Protected against path traversal. Requires admin role."
 					}
 				}
 			]
