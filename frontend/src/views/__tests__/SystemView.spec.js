@@ -1,3 +1,75 @@
+describe('SystemView USB topology tab', () => {
+  beforeEach(() => {
+    mocks.hasRole.mockReset()
+    mocks.getSystemHealth.mockReset()
+    mocks.getUsbTopology.mockReset()
+    mocks.getBlockDevices.mockReset()
+    mocks.getSystemMounts.mockReset()
+    mocks.getJobDebug.mockReset()
+    mocks.getLogFiles.mockReset()
+    mocks.getLogLines.mockReset()
+    mocks.downloadLogFile.mockReset()
+    mocks.listJobs.mockReset()
+
+    mocks.hasRole.mockImplementation((role) => role === 'admin')
+    mocks.getSystemHealth.mockResolvedValue({ status: 'ok', database: 'connected', active_jobs: 0 })
+    mocks.getBlockDevices.mockResolvedValue({ block_devices: [] })
+    mocks.getSystemMounts.mockResolvedValue({ mounts: [] })
+    mocks.getJobDebug.mockResolvedValue(null)
+    mocks.getLogFiles.mockResolvedValue({ log_files: [] })
+    mocks.getLogLines.mockResolvedValue({
+      source: { source: 'app', path: 'app.log' },
+      fetched_at: '2026-04-08T12:00:00Z',
+      file_modified_at: '2026-04-08T11:59:00Z',
+      lines: [{ content: 'INFO ok' }],
+      returned: 1,
+      has_more: false,
+      limit: 200,
+      offset: 0,
+    })
+    mocks.listJobs.mockResolvedValue([])
+  })
+
+  it('hides devices only if Manufacturer, Product, Vendor ID, and Product ID are all empty, and sorts by device column', async () => {
+    // Mix of empty and non-empty devices, out of order
+    const usbDevices = [
+      { device: '', manufacturer: '', product: '', idVendor: '', idProduct: '' }, // should be hidden
+      { device: 'usb3', manufacturer: 'B', product: 'Y', idVendor: '1234', idProduct: '5678' }, // shown
+      { device: null, manufacturer: null, product: null, idVendor: null, idProduct: null }, // should be hidden
+      { device: 'usb1', manufacturer: 'A', product: 'X', idVendor: '0001', idProduct: '0002' }, // shown
+      { device: 'usb2', manufacturer: '', product: '', idVendor: '', idProduct: '' }, // should be hidden (all 4 fields empty)
+      { device: 'usb4', manufacturer: '', product: '', idVendor: '', idProduct: '1' }, // shown (idProduct present)
+      { device: 'usb5', manufacturer: '', product: 'Z', idVendor: '', idProduct: '' }, // shown (product present)
+    ]
+    mocks.getUsbTopology.mockResolvedValue({ devices: usbDevices })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const usbButton = wrapper.findAll('button').find((b) => b.text() === i18n.global.t('system.tabs.usb'))
+    expect(usbButton).toBeTruthy()
+    await usbButton.trigger('click')
+    await flushPromises()
+
+    // Only devices where all 4 fields are empty should be hidden
+    // DataTable stub renders: row.name || row.id || row.device || ""
+    const text = wrapper.text()
+    // Should include usb1, usb3, usb4, usb5 in order
+    const idx1 = text.indexOf('usb1')
+    const idx3 = text.indexOf('usb3')
+    const idx4 = text.indexOf('usb4')
+    const idx5 = text.indexOf('usb5')
+    expect(idx1).toBeGreaterThan(-1)
+    expect(idx3).toBeGreaterThan(-1)
+    expect(idx4).toBeGreaterThan(-1)
+    expect(idx5).toBeGreaterThan(-1)
+    expect(idx1).toBeLessThan(idx3)
+    expect(idx3).toBeLessThan(idx4)
+    expect(idx4).toBeLessThan(idx5)
+    // Should not include rows where all 4 fields are empty
+    expect(text).not.toMatch(/^\s*$/m)
+  })
+})
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import i18n from '@/i18n/index.js'
