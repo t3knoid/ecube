@@ -57,6 +57,7 @@ else
       LOCAL_GROUP_ROLE_MAP='{"evidence-admins": ["admin"]}' \
       SECRET_KEY="$ECUBE_SECRET_KEY" \
       POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-ecube}" \
+      DATABASE_URL="${ECUBE_DATABASE_URL:-}" \
       $ECUBE_COMPOSE_CMD -p "$ECUBE_COMPOSE_PROJECT" -f "$ECUBE_COMPOSE_FILE" up -d --build \
         --force-recreate \
         2>&1
