@@ -522,6 +522,166 @@ def test_pause_job_status_conflict(client, db):
     assert response.status_code == 409
 
 
+def test_create_manifest_writes_application_log_line(client, db, caplog):
+    drive = UsbDrive(
+        device_identifier="USB-MANIFEST-LOG-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-MANIFEST-LOG-001",
+        mount_path="/tmp/ecube-manifest-log-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    create_response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-MANIFEST-LOG-001",
+            "evidence_number": "EV-MANIFEST-LOG-001",
+            "source_path": "/data/evidence",
+            "drive_id": drive.id,
+        },
+    )
+    assert create_response.status_code == 200
+    job_id = create_response.json()["id"]
+
+    with caplog.at_level(logging.INFO):
+        response = client.post(f"/jobs/{job_id}/manifest")
+
+    assert response.status_code == 200
+    messages = [record.getMessage() for record in caplog.records]
+    manifest_messages = [message for message in messages if f"MANIFEST_CREATED job_id={job_id}" in message]
+    assert manifest_messages
+    assert all("manifest_path=" not in message for message in manifest_messages)
+
+
+def test_complete_job_from_paused_state_writes_audit_log(client, db):
+    job = ExportJob(
+        project_id="PROJ-COMPLETE-001",
+        evidence_number="EV-COMPLETE-001",
+        source_path="/data/evidence",
+        status=JobStatus.PAUSED,
+    )
+    db.add(job)
+    db.commit()
+
+    response = client.post(f"/jobs/{job.id}/complete")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "COMPLETED"
+    db.refresh(job)
+    assert job.status == JobStatus.COMPLETED
+    audit = db.query(AuditLog).filter(AuditLog.action == "JOB_COMPLETED_MANUALLY", AuditLog.job_id == job.id).first()
+    assert audit is not None
+
+
+def test_update_pending_job_reassigns_drive_and_updates_fields(client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="server:/exports/project-001",
+        project_id="PROJ-EDIT-001",
+        local_mount_point="/nfs/project-001",
+        status=MountStatus.MOUNTED,
+    )
+    drive_one = UsbDrive(
+        device_identifier="USB-EDIT-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-EDIT-001",
+        mount_path="/mnt/ecube/edit-001",
+    )
+    drive_two = UsbDrive(
+        device_identifier="USB-EDIT-002",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-EDIT-001",
+        mount_path="/mnt/ecube/edit-002",
+    )
+    db.add_all([mount, drive_one, drive_two])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-EDIT-001",
+        evidence_number="EV-EDIT-001",
+        source_path="/nfs/project-001/original",
+        target_mount_path="/mnt/ecube/edit-001",
+        status=JobStatus.PENDING,
+        thread_count=2,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive_one.id, job_id=job.id))
+    db.commit()
+
+    response = client.put(
+        f"/jobs/{job.id}",
+        json={
+            "project_id": "PROJ-EDIT-001",
+            "evidence_number": "EV-EDIT-UPDATED",
+            "source_path": "/updated/folder",
+            "mount_id": mount.id,
+            "drive_id": drive_two.id,
+            "thread_count": 6,
+            "max_file_retries": 3,
+            "retry_delay_seconds": 1,
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["evidence_number"] == "EV-EDIT-UPDATED"
+    assert data["source_path"] == "/nfs/project-001/updated/folder"
+    assert data["target_mount_path"] == "/mnt/ecube/edit-002"
+    assert data["thread_count"] == 6
+    db.refresh(job)
+    db.refresh(drive_one)
+    db.refresh(drive_two)
+    assert drive_one.current_state == DriveState.AVAILABLE
+    assert drive_two.current_state == DriveState.IN_USE
+
+
+def test_delete_pending_job_removes_job_and_releases_drive(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-DELETE-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-DELETE-001",
+        mount_path="/mnt/ecube/delete-001",
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-DELETE-001",
+        evidence_number="EV-DELETE-001",
+        source_path="/data/delete",
+        target_mount_path="/mnt/ecube/delete-001",
+        status=JobStatus.PENDING,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    response = client.delete(f"/jobs/{job.id}")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "deleted"
+    assert db.get(ExportJob, job.id) is None
+    db.refresh(drive)
+    assert drive.current_state == DriveState.AVAILABLE
+
+
+def test_delete_running_job_conflict(client, db):
+    job = ExportJob(
+        project_id="PROJ-DELETE-002",
+        evidence_number="EV-DELETE-002",
+        source_path="/data/delete-2",
+        status=JobStatus.RUNNING,
+    )
+    db.add(job)
+    db.commit()
+
+    response = client.delete(f"/jobs/{job.id}")
+    assert response.status_code == 409
+
+
 def test_create_job_conflict_when_drive_has_different_project(client, db):
     drive = UsbDrive(
         device_identifier="USB-PRJ-CONFLICT",

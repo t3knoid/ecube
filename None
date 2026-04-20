@@ -1,1 +1,2 @@
 DATABASE_URL=postgresql://ecube:ecube@localhost:5432/ecube
+LOG_FILE=/var/log/ecube/app.log
