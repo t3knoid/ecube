@@ -313,6 +313,25 @@ def start_job(
     return _redact_ip(job, current_user, db)
 
 
+@router.post("/{job_id}/pause", response_model=ExportJobSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
+def pause_job(
+    job_id: int,
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
+    request: Request,
+):
+    """Request a safe pause for an actively running export job.
+
+    The job enters ``PAUSING`` immediately and transitions to ``PAUSED`` once
+    in-flight copy threads finish their current work.
+
+    **Roles:** ``admin``, ``manager``, ``processor``
+    """
+    job = job_service.pause_job(job_id, db, actor=current_user.username, client_ip=get_client_ip(request))
+    return _redact_ip(job, current_user, db)
+
+
 @router.post("/{job_id}/verify", response_model=ExportJobSchema, responses={**R_401, **R_403, **R_404, **R_422, **R_500})
 def verify_job(
     job_id: int,

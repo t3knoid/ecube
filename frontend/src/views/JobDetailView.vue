@@ -91,11 +91,11 @@ const progressMetrics = computed(() => {
     ? Math.max(0, Math.min(100, Math.round((finishedFiles / totalFiles) * 100)))
     : bytePercent
 
-  const percent = (status === 'RUNNING' || status === 'VERIFYING')
+  const percent = (status === 'RUNNING' || status === 'PAUSING' || status === 'VERIFYING')
     ? Math.min(bytePercent || 100, filePercent || 100)
     : (totalBytes > 0 ? bytePercent : filePercent)
 
-  const displayCopiedBytes = (status === 'RUNNING' || status === 'VERIFYING') && totalBytes > 0 && bytePercent > percent
+  const displayCopiedBytes = (status === 'RUNNING' || status === 'PAUSING' || status === 'VERIFYING') && totalBytes > 0 && bytePercent > percent
     ? Math.min(copiedBytes, Math.floor((percent / 100) * totalBytes))
     : copiedBytes
 
@@ -120,13 +120,46 @@ const progressLabel = computed(() => {
 
 const progressActive = computed(() => {
   const status = String(job.value?.status || '').toUpperCase()
-  return status === 'RUNNING' || status === 'VERIFYING'
+  return status === 'RUNNING' || status === 'PAUSING' || status === 'VERIFYING'
 })
+
+const canStart = computed(() => {
+  const status = String(job.value?.status || '').toUpperCase()
+  return canOperate.value && ['PENDING', 'FAILED', 'PAUSED'].includes(status)
+})
+
+function calculateDurationSeconds(currentJob) {
+  if (!currentJob) return null
+
+  const status = String(currentJob.status || '').toUpperCase()
+  const storedSeconds = Number(currentJob.active_duration_seconds || 0)
+  if (['RUNNING', 'PAUSING', 'VERIFYING'].includes(status) && currentJob.started_at) {
+    const started = new Date(currentJob.started_at)
+    if (!Number.isNaN(started.getTime())) {
+      const liveSeconds = Math.max(0, Math.round((Date.now() - started.getTime()) / 1000))
+      return storedSeconds + liveSeconds
+    }
+  }
+
+  if (storedSeconds > 0) return storedSeconds
+
+  if (currentJob.started_at && currentJob.completed_at) {
+    const started = new Date(currentJob.started_at)
+    const completed = new Date(currentJob.completed_at)
+    if (!Number.isNaN(started.getTime()) && !Number.isNaN(completed.getTime())) {
+      return Math.max(0, Math.round((completed.getTime() - started.getTime()) / 1000))
+    }
+  }
+
+  return null
+}
 
 const completionSummary = computed(() => {
   if (!job.value) return null
   const status = String(job.value.status || '').toUpperCase()
-  if (status !== 'COMPLETED' && status !== 'FAILED') return null
+  if (status !== 'COMPLETED' && status !== 'FAILED' && status !== 'PAUSED') return null
+
+  const durationSeconds = calculateDurationSeconds(job.value)
 
   return {
     startedAt: formatTimestamp(job.value.started_at),
@@ -134,8 +167,8 @@ const completionSummary = computed(() => {
     filesCopied: Number(job.value.files_succeeded || 0),
     totalFiles: Number(job.value.file_count || 0),
     totalCopied: formatBytes(Number(job.value.copied_bytes || 0)),
-    duration: formatDuration(job.value.started_at, job.value.completed_at),
-    copyRate: formatCopyRate(Number(job.value.copied_bytes || 0), job.value.started_at, job.value.completed_at),
+    duration: formatDuration(durationSeconds),
+    copyRate: formatCopyRate(Number(job.value.copied_bytes || 0), durationSeconds),
     completedAt: formatTimestamp(job.value.completed_at),
   }
 })
@@ -160,13 +193,9 @@ function formatTimestamp(value) {
   return parsed.toLocaleString()
 }
 
-function formatDuration(startedAt, completedAt) {
-  if (!startedAt || !completedAt) return '-'
-  const started = new Date(startedAt)
-  const completed = new Date(completedAt)
-  if (Number.isNaN(started.getTime()) || Number.isNaN(completed.getTime())) return '-'
+function formatDuration(totalSeconds) {
+  if (typeof totalSeconds !== 'number' || totalSeconds < 0) return '-'
 
-  const totalSeconds = Math.max(0, Math.round((completed.getTime() - started.getTime()) / 1000))
   const hours = Math.floor(totalSeconds / 3600)
   const minutes = Math.floor((totalSeconds % 3600) / 60)
   const seconds = totalSeconds % 60
@@ -176,13 +205,8 @@ function formatDuration(startedAt, completedAt) {
   return `${seconds}s`
 }
 
-function formatCopyRate(bytesValue, startedAt, completedAt) {
-  if (typeof bytesValue !== 'number' || bytesValue < 0 || !startedAt || !completedAt) return '-'
-  const started = new Date(startedAt)
-  const completed = new Date(completedAt)
-  if (Number.isNaN(started.getTime()) || Number.isNaN(completed.getTime())) return '-'
-
-  const totalSeconds = Math.max(0, (completed.getTime() - started.getTime()) / 1000)
+function formatCopyRate(bytesValue, totalSeconds) {
+  if (typeof bytesValue !== 'number' || bytesValue < 0 || typeof totalSeconds !== 'number') return '-'
   if (totalSeconds <= 0 || bytesValue === 0) return '0.0 MB/s'
 
   const mbPerSecond = bytesValue / (1024 * 1024) / totalSeconds
@@ -396,7 +420,7 @@ onUnmounted(() => {
       </div>
 
       <div class="actions">
-        <button class="btn" :disabled="!canOperate || acting" @click="runAction('start')">{{ t('jobs.start') }}</button>
+        <button class="btn" :disabled="!canStart || acting" @click="runAction('start')">{{ t('jobs.start') }}</button>
         <button class="btn" :disabled="!canOperate || acting" @click="runAction('verify')">{{ t('jobs.verify') }}</button>
         <button class="btn" :disabled="!canOperate || acting" @click="runAction('manifest')">{{ t('jobs.manifest') }}</button>
       </div>
