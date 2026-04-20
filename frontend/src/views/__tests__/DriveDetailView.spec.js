@@ -138,6 +138,17 @@ describe('DriveDetailView mount workflow', () => {
     expect(labels).not.toContain(i18n.global.t('drives.mount'))
   })
 
+  it('disables the Format action when the drive is mounted', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/7', current_state: 'AVAILABLE' })])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const formatButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.format'))
+    expect(formatButton).toBeTruthy()
+    expect(formatButton.attributes('disabled')).toBeDefined()
+  })
+
   it('shows the Browse control when the drive has a mount path', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/7' })])
 

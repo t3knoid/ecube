@@ -92,7 +92,7 @@ const canEnable = computed(
     && canManage.value,
 )
 const canFormat = computed(
-  () => drive.value?.current_state === 'AVAILABLE' && canManage.value,
+  () => drive.value?.current_state === 'AVAILABLE' && !drive.value?.mount_path && canManage.value,
 )
 const hasMountedDestination = computed(() => !!drive.value?.mount_path)
 const canInitialize = computed(

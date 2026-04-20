@@ -376,6 +376,8 @@ Current UI options include:
 
 Formatting removes all existing data and clears the project binding. After formatting, the drive can be initialized for any project that has an eligible mounted share.
 
+The Format action is unavailable while the drive is mounted. If the drive is currently mounted, use the appropriate unmount or prepare-eject workflow first.
+
 Confirm the target drive carefully before proceeding.
 
 ### 7.5 Initializing a Drive
