@@ -471,8 +471,8 @@ onBeforeUnmount(() => {
     <p v-if="compatibilityNote" class="muted">{{ compatibilityNote }}</p>
 
     <div class="filters">
-      <input v-model="search" type="text" :placeholder="t('jobs.searchPlaceholder')" />
-      <select v-model="statusFilter">
+      <input v-model="search" type="text" :placeholder="t('jobs.searchPlaceholder')" :aria-label="t('jobs.searchPlaceholder')" />
+      <select v-model="statusFilter" :aria-label="t('common.labels.status')">
         <option value="ALL">{{ t('jobs.allStatuses') }}</option>
         <option value="PENDING">{{ t('jobs.statuses.pending') }}</option>
         <option value="RUNNING">{{ t('jobs.statuses.running') }}</option>
