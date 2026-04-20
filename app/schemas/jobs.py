@@ -94,6 +94,15 @@ class JobStart(StrictIntMixin, BaseModel):
     thread_count: Optional[StrictInt] = Field(default=None, ge=1, le=8, description="Override thread count for this job start (1-8, optional)")
 
 
+class JobUpdate(JobCreate):
+    """Full job update payload for editable non-active jobs."""
+
+
+class JobDeleteResponse(BaseModel):
+    job_id: int = Field(..., description="ID of the deleted job")
+    status: str = Field(..., description="Deletion result status")
+
+
 class ExportFileSchema(BaseModel):
     id: int = Field(..., description="Unique identifier for the file")
     job_id: int = Field(..., description="ID of the parent export job")
