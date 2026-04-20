@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
@@ -45,6 +45,9 @@ const supportingMounts = ref([])
 const showEditDialog = ref(false)
 const showDeleteDialog = ref(false)
 const showPausePendingDialog = ref(false)
+const editDialogRef = ref(null)
+const pauseDialogRef = ref(null)
+const dialogTriggerRef = ref(null)
 
 const editForm = ref({
   project_id: '',
@@ -317,8 +320,63 @@ function buildEditSourcePath(currentJob, mount) {
   return sourcePath
 }
 
+function trapFocusWithin(event, container) {
+  if (!container) return
+  const focusable = Array.from(
+    container.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'),
+  ).filter((element) => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true')
+
+  if (!focusable.length) return
+
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  const active = document.activeElement
+
+  if (event.shiftKey && active === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
+function closeEditDialog() {
+  showEditDialog.value = false
+}
+
+function closePausePendingDialog() {
+  showPausePendingDialog.value = false
+}
+
+function handleDialogKeydown(event) {
+  if (showEditDialog.value) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeEditDialog()
+      return
+    }
+    if (event.key === 'Tab') {
+      trapFocusWithin(event, editDialogRef.value)
+    }
+    return
+  }
+
+  if (showPausePendingDialog.value) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closePausePendingDialog()
+      return
+    }
+    if (event.key === 'Tab') {
+      trapFocusWithin(event, pauseDialogRef.value)
+    }
+  }
+}
+
 async function openEditDialog() {
   if (!job.value || !canEdit.value) return
+  dialogTriggerRef.value = document.activeElement instanceof HTMLElement ? document.activeElement : null
   error.value = ''
   await loadSupportingData()
   const inferredMount = inferMountForJob(job.value)
@@ -358,7 +416,7 @@ async function submitEditJob() {
       callback_url: job.value.callback_url || null,
     })
     job.value = normalizeProjectRecord(updated, ['project_id'])
-    showEditDialog.value = false
+    closeEditDialog()
     await refreshAll()
   } catch (err) {
     error.value = buildJobError(err)
@@ -502,9 +560,10 @@ async function runAction(action) {
 
   try {
     if (action === 'start') {
-      showPausePendingDialog.value = false
+      closePausePendingDialog()
       job.value = await startJob(job.value.id, { thread_count: job.value.thread_count || 4 })
     } else if (action === 'pause') {
+      dialogTriggerRef.value = document.activeElement instanceof HTMLElement ? document.activeElement : null
       job.value = await pauseJob(job.value.id)
       if (String(job.value?.status || '').toUpperCase() === 'PAUSING') {
         showPausePendingDialog.value = true
@@ -564,7 +623,51 @@ async function runCompare() {
 
 watch(currentStatus, (status) => {
   if (!['RUNNING', 'PAUSING'].includes(status)) {
-    showPausePendingDialog.value = false
+    closePausePendingDialog()
+  }
+})
+
+watch(showEditDialog, async (open) => {
+  if (open) {
+    document.addEventListener('keydown', handleDialogKeydown)
+    await nextTick()
+    const target = editDialogRef.value?.querySelector('#job-evidence')
+    if (target instanceof HTMLElement) {
+      target.focus()
+    }
+    return
+  }
+
+  if (!showPausePendingDialog.value) {
+    document.removeEventListener('keydown', handleDialogKeydown)
+  }
+  const trigger = dialogTriggerRef.value
+  dialogTriggerRef.value = null
+  await nextTick()
+  if (trigger instanceof HTMLElement) {
+    trigger.focus()
+  }
+})
+
+watch(showPausePendingDialog, async (open) => {
+  if (open) {
+    document.addEventListener('keydown', handleDialogKeydown)
+    await nextTick()
+    const target = pauseDialogRef.value?.querySelector('button')
+    if (target instanceof HTMLElement) {
+      target.focus()
+    }
+    return
+  }
+
+  if (!showEditDialog.value) {
+    document.removeEventListener('keydown', handleDialogKeydown)
+  }
+  const trigger = dialogTriggerRef.value
+  dialogTriggerRef.value = null
+  await nextTick()
+  if (trigger instanceof HTMLElement) {
+    trigger.focus()
   }
 })
 
@@ -576,6 +679,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  document.removeEventListener('keydown', handleDialogKeydown)
   jobPoller.stop()
 })
 </script>
@@ -671,8 +775,8 @@ onUnmounted(() => {
     </article>
 
     <teleport to="body">
-      <div v-if="showEditDialog" class="dialog-overlay" @click.self="showEditDialog = false">
-        <div class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="job-edit-title">
+      <div v-if="showEditDialog" class="dialog-overlay" @click.self="closeEditDialog">
+        <div ref="editDialogRef" class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="job-edit-title">
           <h2 id="job-edit-title">{{ t('jobs.editDialog') }}</h2>
           <p class="muted">{{ t('jobs.editDialogDescription') }}</p>
 
@@ -719,7 +823,7 @@ onUnmounted(() => {
           </div>
 
           <div class="dialog-actions">
-            <button class="btn" :disabled="acting" @click="showEditDialog = false">{{ t('common.actions.cancel') }}</button>
+            <button class="btn" :disabled="acting" @click="closeEditDialog">{{ t('common.actions.cancel') }}</button>
             <button id="job-submit" class="btn btn-primary" :disabled="acting || !editFormReady()" @click="submitEditJob">
               {{ acting ? t('common.labels.loading') : t('jobs.saveChanges') }}
             </button>
@@ -776,13 +880,13 @@ onUnmounted(() => {
     </div>
 
     <teleport to="body">
-      <div v-if="showPausePendingDialog" class="dialog-overlay" @click.self="showPausePendingDialog = false">
-        <div class="dialog-panel pause-wait-dialog" role="dialog" aria-modal="true" aria-labelledby="pause-wait-title">
+      <div v-if="showPausePendingDialog" class="dialog-overlay" @click.self="closePausePendingDialog">
+        <div ref="pauseDialogRef" class="dialog-panel pause-wait-dialog" role="dialog" aria-modal="true" aria-labelledby="pause-wait-title">
           <h2 id="pause-wait-title">{{ t('jobs.pauseRequestedTitle') }}</h2>
           <p>{{ t('jobs.pauseRequestedMessage') }}</p>
           <p v-if="job" class="muted">#{{ job.id }} • {{ job.status }}</p>
           <div class="dialog-actions">
-            <button class="btn" @click="showPausePendingDialog = false">{{ t('common.actions.close') }}</button>
+            <button class="btn" @click="closePausePendingDialog">{{ t('common.actions.close') }}</button>
           </div>
         </div>
       </div>
