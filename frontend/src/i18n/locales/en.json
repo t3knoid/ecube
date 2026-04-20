@@ -44,6 +44,7 @@
       "archived": "Archived"
     },
     "device": "Device",
+    "serialNumber": "Serial Number",
     "filesystem": "Filesystem",
     "filesystemPath": "Filesystem Path",
     "rescan": "Rescan",
@@ -314,6 +315,7 @@
       "job-debug": "Job Debug"
     },
     "device": "Device",
+    "serialNumber": "Serial Number",
     "manufacturer": "Manufacturer",
     "product": "Product",
     "vendorId": "Vendor ID",

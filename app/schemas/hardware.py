@@ -32,12 +32,20 @@ class UsbPortSchema(BaseModel):
 class UsbDriveSchema(BaseModel):
     id: int = Field(..., description="Unique identifier for the drive")
     port_id: Optional[int] = Field(default=None, description="ID of the port the drive is connected to")
+    port_system_path: Optional[str] = Field(
+        default=None,
+        description="Port-based USB identifier for the parent port (for example '2-1')",
+    )
     device_identifier: str = Field(
         ...,
         description=(
             "Stable hardware identifier for the drive (USB serial when available, otherwise sysfs path); "
             "distinct from the /dev block node reported in filesystem_path"
         ),
+    )
+    serial_number: Optional[str] = Field(
+        default=None,
+        description="USB serial number when available; null when the stable identifier falls back to the port path",
     )
     filesystem_path: Optional[str] = Field(
         default=None,
