@@ -40,7 +40,6 @@ const columns = computed(() => [
   { key: 'device_identifier', label: t('drives.device') },
   { key: 'filesystem_type', label: t('drives.filesystem') },
   { key: 'capacity_bytes', label: t('common.labels.size'), align: 'right' },
-  { key: 'mount_path', label: t('drives.mountPoint') },
   { key: 'current_state', label: t('common.labels.status') },
   { key: 'current_project_id', label: t('dashboard.project') },
   { key: 'actions', label: '', align: 'center' },
@@ -89,7 +88,6 @@ const filtered = computed(() => {
       drive.filesystem_type,
       drive.current_project_id,
       drive.filesystem_path,
-      drive.mount_path,
       String(drive.id),
     ]
       .filter(Boolean)
@@ -241,33 +239,13 @@ onMounted(loadDrives)
       <template #cell-actions="{ row }">
         <div class="row-actions">
           <button class="btn" @click="openDrive(row)">{{ t('drives.details') }}</button>
-          <button
-            v-if="row.mount_path"
-            class="btn"
-            :aria-expanded="browsingDriveId === row.id"
-            :aria-label="t('drives.browse') + ' ' + row.device_identifier"
-            @click="toggleBrowse(row.id)"
-          >
-            {{ t('drives.browse') }}
-          </button>
+          <!-- Browse button removed with mount_path field -->
         </div>
       </template>
     </DataTable>
 
     <!-- Inline directory browser panel -->
-    <section
-      v-if="activeBrowsedDrive"
-      ref="browsePanelRef"
-      class="browse-panel"
-      :aria-label="t('browse.browseContents') + ': ' + activeBrowsedDrive.device_identifier"
-    >
-      <h3 class="browse-panel-title">
-        {{ t('browse.browseContents') }}: {{ activeBrowsedDrive.device_identifier }}
-      </h3>
-      <DirectoryBrowser
-        :mount-path="activeBrowsedDrive.mount_path"
-      />
-    </section>
+    <!-- Browse panel removed with mount_path field -->
 
     <Pagination v-model:page="page" :page-size="pageSize" :total="sorted.length" />
   </section>
