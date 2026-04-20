@@ -272,7 +272,7 @@ function formatCopyRate(bytesValue, totalSeconds) {
 }
 
 function formatDriveLabel(drive) {
-  return `#${drive.id} - ${drive.device_identifier || '-'}`
+  return drive.port_system_path || drive.device_identifier || '-'
 }
 
 function formatMountLabel(mount) {
