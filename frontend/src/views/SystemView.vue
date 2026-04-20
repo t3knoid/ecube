@@ -84,13 +84,36 @@ const tabColumns = computed(() => {
   return []
 })
 
+
+// Helper: true if all relevant fields are empty/null/blank
+// Hide only if Manufacturer, Product, Vendor ID, and Product ID are all empty
+function isUsbDeviceEmpty(device) {
+  if (!device) return true;
+  const fields = ['manufacturer', 'product', 'idVendor', 'idProduct'];
+  return fields.every((key) => {
+    const v = device[key];
+    return v === undefined || v === null || String(v).trim() === '';
+  });
+}
+
+const filteredSortedUsbDevices = computed(() => {
+  return usbDevices.value
+    .filter((dev) => !isUsbDeviceEmpty(dev))
+    .slice() // shallow copy for sort
+    .sort((a, b) => {
+      const av = a.device || '';
+      const bv = b.device || '';
+      return av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' });
+    });
+});
+
 const tabRows = computed(() => {
-  if (activeTab.value === 'usb') return usbDevices.value
-  if (activeTab.value === 'block') return blockDevices.value
-  if (activeTab.value === 'mounts') return mounts.value
-  if (activeTab.value === 'logs') return logs.value
-  return []
-})
+  if (activeTab.value === 'usb') return filteredSortedUsbDevices.value;
+  if (activeTab.value === 'block') return blockDevices.value;
+  if (activeTab.value === 'mounts') return mounts.value;
+  if (activeTab.value === 'logs') return logs.value;
+  return [];
+});
 
 const pagedRows = computed(() => {
   const start = (page.value - 1) * pageSize.value
