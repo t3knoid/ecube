@@ -387,8 +387,10 @@ Initialization now requires at least one network share that is both assigned to 
 When you open the Initialize dialog:
 
 - The **Project** field is shown as a dropdown populated from distinct project IDs on mounted shares only.
+- The dialog also shows the mounted destination context for the selected USB drive while still redacting the raw internal path from standard operator views.
 - If the drive has a previous project assignment and that project still has an eligible mounted share, that project is pre-selected.
 - If no eligible mounted project exists, the dialog shows a helper message telling you to add and mount a share first.
+- Canceling the dialog does not change the drive state, project binding, or action availability.
 
 Before initializing a drive:
 
