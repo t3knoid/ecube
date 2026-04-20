@@ -742,6 +742,10 @@ def test_delete_pending_job_removes_job_and_releases_drive(client, db):
     db.refresh(drive)
     assert drive.current_state == DriveState.AVAILABLE
 
+    audit = db.query(AuditLog).filter(AuditLog.action == "JOB_DELETED", AuditLog.job_id == job.id).first()
+    assert audit is not None
+    assert audit.details["job_id"] == job.id
+
 
 def test_delete_running_job_conflict(client, db):
     job = ExportJob(
