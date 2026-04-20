@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock, mock_open, patch
 
+from app.models.hardware import DriveState, UsbDrive, UsbHub, UsbPort
+
 
 def test_system_health(client, db):
     response = client.get("/introspection/system-health")
@@ -135,6 +137,60 @@ def test_usb_topology(client, db):
     response = client.get("/introspection/usb/topology")
     assert response.status_code == 200
     assert "devices" in response.json()
+
+
+def test_usb_topology_includes_serial_when_available(client, db):
+    file_values = {
+        "/sys/bus/usb/devices/2-1/serial": "SER-USB-001",
+        "/sys/bus/usb/devices/2-1/idVendor": "abcd",
+        "/sys/bus/usb/devices/2-1/idProduct": "1234",
+        "/sys/bus/usb/devices/2-1/product": "Evidence Drive",
+        "/sys/bus/usb/devices/2-1/manufacturer": "ECUBE",
+    }
+
+    def _open_side_effect(path, *args, **kwargs):
+        handle = mock_open(read_data=file_values[path]).return_value
+        handle.__iter__.return_value = file_values[path].splitlines(True)
+        return handle
+
+    with (
+        patch("app.routers.introspection.os.path.exists", return_value=True),
+        patch("app.routers.introspection.os.listdir", return_value=["2-1"]),
+        patch("app.routers.introspection.os.path.isfile", return_value=True),
+        patch("builtins.open", side_effect=_open_side_effect),
+    ):
+        response = client.get("/introspection/usb/topology")
+
+    assert response.status_code == 200
+    assert response.json()["devices"] == [{
+        "device": "2-1",
+        "serial": "SER-USB-001",
+        "idVendor": "abcd",
+        "idProduct": "1234",
+        "product": "Evidence Drive",
+        "manufacturer": "ECUBE",
+    }]
+
+
+def test_introspection_drives_exposes_port_and_serial_identifiers(auditor_client, db):
+    hub = UsbHub(name="Hub Ticket260", system_identifier="hub-ticket260-introspection")
+    db.add(hub)
+    db.flush()
+
+    port = UsbPort(hub_id=hub.id, port_number=92, system_path="9-2", enabled=True)
+    db.add(port)
+    db.flush()
+
+    drive = UsbDrive(device_identifier="SER-INV-001", port_id=port.id, current_state=DriveState.AVAILABLE)
+    db.add(drive)
+    db.commit()
+
+    response = auditor_client.get("/introspection/drives")
+    assert response.status_code == 200
+    payload = response.json()["drives"]
+    match = next(item for item in payload if item["id"] == drive.id)
+    assert match["port_system_path"] == "9-2"
+    assert match["serial_number"] == "SER-INV-001"
 
 
 def test_system_health_degraded(client, db):

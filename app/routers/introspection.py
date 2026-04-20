@@ -87,7 +87,9 @@ def drives_inventory(
         "drives": [
             {
                 "id": d.id,
+                "port_system_path": d.port.system_path if d.port else None,
                 "device_identifier": d.device_identifier,
+                "serial_number": (None if d.port and d.device_identifier == d.port.system_path else d.device_identifier),
                 "capacity_bytes": d.capacity_bytes,
                 "current_state": d.current_state.value if d.current_state else None,
                 "current_project_id": d.current_project_id,
@@ -116,7 +118,7 @@ def usb_topology(_: CurrentUser = Depends(_ALL_ROLES)):
             for dev in os.listdir(usb_path):
                 dev_path = os.path.join(usb_path, dev)
                 info = {"device": dev}
-                for attr in ["idVendor", "idProduct", "product", "manufacturer"]:
+                for attr in ["serial", "idVendor", "idProduct", "product", "manufacturer"]:
                     attr_file = os.path.join(dev_path, attr)
                     if os.path.isfile(attr_file):
                         try:

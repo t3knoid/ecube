@@ -339,8 +339,14 @@ def test_drive_assignment_repo_add(db):
 def test_drive_assignment_repo_get_active_for_job(db):
     from datetime import datetime, timezone
 
-    drive1 = UsbDrive(device_identifier="USB-ACT-01", current_state=DriveState.AVAILABLE)
-    drive2 = UsbDrive(device_identifier="USB-ACT-02", current_state=DriveState.IN_USE)
+    hub = _make_hub(db)
+    port1 = UsbPort(hub_id=hub.id, port_number=11, system_path="9-21", enabled=True)
+    port2 = UsbPort(hub_id=hub.id, port_number=12, system_path="9-22", enabled=True)
+    db.add_all([port1, port2])
+    db.commit()
+
+    drive1 = UsbDrive(device_identifier="USB-ACT-01", port_id=port1.id, current_state=DriveState.AVAILABLE)
+    drive2 = UsbDrive(device_identifier="USB-ACT-02", port_id=port2.id, current_state=DriveState.IN_USE)
     job = ExportJob(project_id="P", evidence_number="E", source_path="/src")
     db.add_all([drive1, drive2, job])
     db.commit()
@@ -356,9 +362,12 @@ def test_drive_assignment_repo_get_active_for_job(db):
     a2 = repo.add(DriveAssignment(drive_id=drive2.id, job_id=job.id))
 
     active = repo.get_active_for_job(job.id)
+    db.expunge_all()
+
     assert active is not None
     assert active.id == a2.id
     assert active.drive_id == drive2.id
+    assert active.drive.port_system_path == "9-22"
 
     # No active assignment for a non-existent job
     assert repo.get_active_for_job(99999) is None
@@ -780,8 +789,14 @@ def test_bulk_list_error_messages_no_errors_returns_empty(db):
 
 def test_bulk_get_active_for_jobs_multiple_jobs(db):
     """bulk_get_active_for_jobs returns the active assignment per job."""
-    d1 = UsbDrive(device_identifier="USB-BA-01", current_state=DriveState.IN_USE)
-    d2 = UsbDrive(device_identifier="USB-BA-02", current_state=DriveState.IN_USE)
+    hub = _make_hub(db)
+    p1 = UsbPort(hub_id=hub.id, port_number=21, system_path="9-31", enabled=True)
+    p2 = UsbPort(hub_id=hub.id, port_number=22, system_path="9-32", enabled=True)
+    db.add_all([p1, p2])
+    db.commit()
+
+    d1 = UsbDrive(device_identifier="USB-BA-01", port_id=p1.id, current_state=DriveState.IN_USE)
+    d2 = UsbDrive(device_identifier="USB-BA-02", port_id=p2.id, current_state=DriveState.IN_USE)
     j1 = ExportJob(project_id="P", evidence_number="E1", source_path="/src")
     j2 = ExportJob(project_id="P", evidence_number="E2", source_path="/src")
     db.add_all([d1, d2, j1, j2])
@@ -792,9 +807,12 @@ def test_bulk_get_active_for_jobs_multiple_jobs(db):
     repo.add(DriveAssignment(drive_id=d2.id, job_id=j2.id))
 
     result = repo.bulk_get_active_for_jobs([j1.id, j2.id])
+    db.expunge_all()
 
     assert result[j1.id].drive_id == d1.id
     assert result[j2.id].drive_id == d2.id
+    assert result[j1.id].drive.port_system_path == "9-31"
+    assert result[j2.id].drive.port_system_path == "9-32"
 
 
 def test_bulk_get_active_for_jobs_empty_job_ids(db):

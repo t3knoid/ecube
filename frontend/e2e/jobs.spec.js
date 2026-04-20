@@ -18,12 +18,14 @@ test('jobs create, start, compare, and manifest flow', async ({ page }) => {
     thread_count: 4,
     source_path: '/mnt/share/folder',
     target_mount_path: '/mnt/ecube/1',
-    drive: { id: 1 },
+    drive: { id: 1, port_system_path: '2-1', device_identifier: 'USB-001' },
   }
 
   await routeJson(page, '**/api/drives', [{
     id: 1,
     device_identifier: 'USB-001',
+    port_system_path: '2-1',
+    serial_number: 'SER-001',
     current_state: 'AVAILABLE',
     current_project_id: 'P-77',
     mount_path: '/mnt/ecube/1',
@@ -99,19 +101,25 @@ test('jobs create, start, compare, and manifest flow', async ({ page }) => {
   })
 
   await page.goto('/jobs')
+  await expect(page.getByText('Device')).toBeVisible()
+  await expect(page.getByText('2-1')).toBeVisible()
   await page.getByRole('button', { name: 'Create Job' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
+  await expect(page.getByLabel('Select device')).toBeVisible()
   await page.locator('#job-project').selectOption('P-77')
   await page.locator('#job-evidence').fill('EV-77')
   await page.locator('#job-mount').selectOption('4')
   await page.locator('#job-source-path').fill('folder')
   await page.locator('#job-drive').selectOption('1')
+  await expect(page.locator('#job-drive')).toContainText('2-1')
+  await expect(page.locator('#job-drive')).not.toContainText('USB-001')
   await page.getByRole('dialog').getByRole('button', { name: 'Create Job' }).click()
 
   await expect(page).toHaveURL(/\/jobs\/77$/)
 
   await page.getByRole('button', { name: 'Edit' }).click()
   await expect(page.getByRole('heading', { name: 'Edit Job' })).toBeVisible()
+  await expect(page.getByLabel('Select device')).toBeVisible()
   await page.locator('#job-evidence').fill('EV-77-UPDATED')
   await page.locator('#job-mount').selectOption('4')
   await page.locator('#job-drive').selectOption('1')
@@ -158,6 +166,7 @@ test('jobs list supports safe pause and resume flow', async ({ page }) => {
     file_count: 2,
     files_succeeded: 1,
     active_duration_seconds: 90,
+    drive: { id: 9, port_system_path: '2-9', device_identifier: 'USB-009' },
   }
 
   await routeJson(page, '**/api/drives', [])
@@ -192,6 +201,8 @@ test('jobs list supports safe pause and resume flow', async ({ page }) => {
   })
 
   await page.goto('/jobs')
+  await expect(page.getByText('Device')).toBeVisible()
+  await expect(page.getByText('2-9')).toBeVisible()
 
   await page.getByRole('button', { name: 'Pause' }).click()
   await expect(page.getByText('Pause in progress', { exact: true })).toBeVisible()
