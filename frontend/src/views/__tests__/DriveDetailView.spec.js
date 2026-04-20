@@ -50,7 +50,7 @@ function buildDrive(overrides = {}) {
     device_identifier: 'USB-DETAIL-007',
     filesystem_path: '/dev/sdb1',
     filesystem_type: 'ext4',
-    mount_path: null,
+    mount_path: '/mnt/ecube/7',
     current_state: 'AVAILABLE',
     current_project_id: 'PROJ-007',
     capacity_bytes: 1024,
@@ -106,6 +106,8 @@ describe('DriveDetailView mount workflow', () => {
   })
 
   it('shows the Mount action for managers and updates the mount point after success', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: null })])
+
     const wrapper = mountView()
     await flushPromises()
 
@@ -169,6 +171,36 @@ describe('DriveDetailView mount workflow', () => {
     expect(options).toContain('PROJ-007')
     expect(options).toContain('PROJ-999')
     expect(options.filter((text) => text === 'PROJ-007')).toHaveLength(1)
+  })
+
+  it('shows mounted-drive context and leaves state unchanged when initialize is canceled', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/7', current_project_id: 'PROJ-007' })])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const initializeButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.initialize'))
+    expect(initializeButton).toBeTruthy()
+
+    await initializeButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('drives.initializeMountedDestination', {
+      mount: i18n.global.t('common.labels.protected'),
+    }))
+
+    const cancelButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.cancel'))
+    expect(cancelButton).toBeTruthy()
+
+    await cancelButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.initializeDrive).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('PROJ-007')
+    expect(wrapper.find('#project-id').exists()).toBe(false)
+
+    const labels = wrapper.findAll('button').map((node) => node.text())
+    expect(labels).toContain(i18n.global.t('drives.initialize'))
   })
 
   it('shows the empty helper and disables initialize submission when no mounted project exists', async () => {
