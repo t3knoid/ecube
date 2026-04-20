@@ -622,6 +622,7 @@ def delete_job(
             user=actor,
             project_id=project_id,
             drive_id=drive_id,
+            job_id=job_id,
             details={
                 "job_id": job_id,
                 "project_id": project_id,
