@@ -72,6 +72,7 @@ ecube_compose_up() {
     LOCAL_GROUP_ROLE_MAP='{"evidence-admins": ["admin"]}' \
     SECRET_KEY="$ECUBE_SECRET_KEY" \
     POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-ecube}" \
+    DATABASE_URL="${ECUBE_DATABASE_URL:-}" \
     $ECUBE_COMPOSE_CMD -p "$ECUBE_COMPOSE_PROJECT" -f "$ECUBE_COMPOSE_FILE" up -d --build \
       --force-recreate \
       2>&1
@@ -80,9 +81,9 @@ ecube_compose_up() {
 ecube_wait_for_health() {
   local base_url="$1"
   local elapsed=0
-  echo "==> Waiting for API on $base_url/health …"
+  echo "==> Waiting for API on $base_url/health/live …"
   while [ "$elapsed" -lt "$ECUBE_MAX_WAIT" ]; do
-    if curl -sf "$base_url/health" >/dev/null 2>&1; then
+    if curl -sf "$base_url/health/live" >/dev/null 2>&1; then
       echo "    API is ready."
       return 0
     fi
@@ -96,7 +97,7 @@ ecube_wait_for_health() {
 
 ecube_assert_health() {
   local base_url="$1"
-  if ! curl -sS -m 3 "$base_url/health" >/dev/null; then
+  if ! curl -sS -m 3 "$base_url/health/live" >/dev/null; then
     echo "ERROR: API is not reachable at $base_url (health check failed)." >&2
     return 1
   fi
@@ -108,7 +109,7 @@ fi  # end built-in compose helper fallback
 HOST_PORT="${HOST_PORT:-8000}"
 POSTGRES_HOST_PORT="${POSTGRES_HOST_PORT:-5432}"
 SECRET_KEY="${SECRET_KEY:-change-me-in-production-please-rotate-32b}"
-MAX_WAIT="${SCHEMATHESIS_MAX_WAIT:-60}"        # seconds to wait for /health
+MAX_WAIT="${SCHEMATHESIS_MAX_WAIT:-60}"        # seconds to wait for /health/live
 MAX_EXAMPLES="${SCHEMATHESIS_MAX_EXAMPLES:-5}"
 REQUEST_TIMEOUT="${SCHEMATHESIS_REQUEST_TIMEOUT:-10}"
 PHASES="${SCHEMATHESIS_PHASES:-coverage}"
@@ -166,13 +167,18 @@ else
 fi
 
 # ---- Tear-down helper ----
+_env_file="$PROJECT_ROOT/.env"
+_env_backup=""
+
 cleanup() {
   ecube_compose_down
+  if [[ -n "${_env_backup:-}" && -f "$_env_backup" ]]; then
+    mv "$_env_backup" "$_env_file"
+  fi
 }
 trap cleanup EXIT
 
 # Ensure .env exists on the host so the bind mount works correctly.
-_env_file="$PROJECT_ROOT/.env"
 if [[ ! -f "$_env_file" ]]; then
   cat > "$_env_file" <<ENVEOF
 SECRET_KEY=$SECRET_KEY
@@ -182,9 +188,10 @@ POSTGRES_DB=ecube
 ENVEOF
 fi
 
-# The test needs DATABASE_URL so the app connects to the compose postgres
-# service and reports /health/ready as 200 instead of 503.
-# Derive from the effective POSTGRES_* values (env vars take precedence,
+# The test needs a compose-safe DATABASE_URL so the container connects to the
+# postgres service on the Docker network rather than any host-local value that
+# may already be present in .env.
+# Derive it from the effective POSTGRES_* values (env vars take precedence,
 # then .env, then defaults) so credentials stay in sync with the stack.
 _pg_user="${POSTGRES_USER:-$(sed -n 's/^POSTGRES_USER=//p' "$_env_file" | head -1)}"
 _pg_user="${_pg_user:-ecube}"
@@ -193,14 +200,13 @@ _pg_pass="${_pg_pass:-ecube}"
 _pg_db="${POSTGRES_DB:-$(sed -n 's/^POSTGRES_DB=//p' "$_env_file" | head -1)}"
 _pg_db="${_pg_db:-ecube}"
 _smoke_db_url="postgresql://${_pg_user}:${_pg_pass}@postgres:5432/${_pg_db}"
-_current_db_url=$(sed -n 's/^DATABASE_URL=//p' "$_env_file" | head -1)
-# Strip one layer of surrounding quotes.
-_current_db_url="${_current_db_url#\"}" ; _current_db_url="${_current_db_url%\"}"
-_current_db_url="${_current_db_url#\'}" ; _current_db_url="${_current_db_url%\'}"
-if [[ -z "$_current_db_url" ]]; then
-  sed -i '/^DATABASE_URL=/d' "$_env_file" 2>/dev/null || true
-  printf 'DATABASE_URL=%s\n' "$_smoke_db_url" >> "$_env_file"
-fi
+ECUBE_DATABASE_URL="$_smoke_db_url"
+export ECUBE_DATABASE_URL
+
+_env_backup="$(mktemp)"
+cp "$_env_file" "$_env_backup"
+sed -i '/^DATABASE_URL=/d' "$_env_file" 2>/dev/null || true
+printf 'DATABASE_URL=%s\n' "$ECUBE_DATABASE_URL" >> "$_env_file"
 
 ecube_compose_up
 ecube_wait_for_health "http://localhost:${HOST_PORT}"

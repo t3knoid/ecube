@@ -173,6 +173,76 @@ def test_compare_files_match(admin_client, db):
     assert data["path_match"] is True
 
 
+def test_compare_same_file_id_compares_source_and_destination(admin_client, db, tmp_path):
+    source_root = tmp_path / "source"
+    destination_root = tmp_path / "destination"
+    source_root.mkdir()
+    destination_root.mkdir()
+    (source_root / "doc.txt").write_text("source-version", encoding="utf-8")
+    (destination_root / "doc.txt").write_text("destination-version", encoding="utf-8")
+
+    job = ExportJob(
+        project_id="PROJ-COMPARE-001",
+        evidence_number="EV-COMPARE-001",
+        source_path=str(source_root),
+        target_mount_path=str(destination_root),
+        status=JobStatus.COMPLETED,
+        total_bytes=32,
+        copied_bytes=32,
+        file_count=1,
+        thread_count=4,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    export_file = _make_file(db, job.id, relative_path="doc.txt", size_bytes=19, checksum="a" * 64)
+
+    response = admin_client.post(
+        "/files/compare",
+        json={"file_id_a": export_file.id, "file_id_b": export_file.id},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["path_match"] is True
+    assert data["hash_match"] is False
+    assert data["match"] is False
+
+
+def test_compare_same_file_id_returns_clear_error_when_destination_missing(admin_client, db, tmp_path):
+    source_root = tmp_path / "source"
+    destination_root = tmp_path / "destination"
+    source_root.mkdir()
+    destination_root.mkdir()
+    (source_root / "doc.txt").write_text("source-version", encoding="utf-8")
+
+    job = ExportJob(
+        project_id="PROJ-COMPARE-002",
+        evidence_number="EV-COMPARE-002",
+        source_path=str(source_root),
+        target_mount_path=str(destination_root),
+        status=JobStatus.COMPLETED,
+        total_bytes=16,
+        copied_bytes=16,
+        file_count=1,
+        thread_count=4,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    export_file = _make_file(db, job.id, relative_path="doc.txt", size_bytes=14, checksum="a" * 64)
+
+    response = admin_client.post(
+        "/files/compare",
+        json={"file_id_a": export_file.id, "file_id_b": export_file.id},
+    )
+
+    assert response.status_code == 409
+    assert "Destination file is unavailable for comparison" in response.text
+
+
 def test_compare_files_hash_mismatch(admin_client, db):
     """Different checksums → match=False, hash_match=False."""
     job = _make_job(db)

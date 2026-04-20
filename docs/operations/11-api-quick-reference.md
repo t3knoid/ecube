@@ -121,14 +121,21 @@ Compatibility note: To support project-to-source-path policy, use project source
 | Method | Endpoint | Role | Description |
 | ------ | -------- | -------- | ----------- |
 | POST | `/jobs` | processor+ | Create new export job (omit `drive_id` for auto-assignment) |
+| PUT | `/jobs/{job_id}` | processor+ | Update a pending, paused, or failed job from the Job Detail page |
+| DELETE | `/jobs/{job_id}` | processor+ | Delete a pending job and release its current drive assignment |
 | GET | `/jobs/{job_id}` | admin/manager/processor/auditor | Get job detail, including progress and cumulative active duration |
 | GET | `/jobs/{job_id}/files` | admin/manager/processor/auditor | List operator-safe file status rows for the job |
 | POST | `/jobs/{job_id}/start` | processor+ | Start a new job or resume a paused job |
 | POST | `/jobs/{job_id}/pause` | processor+ | Request a safe pause for a running job; returns `PAUSING` until in-flight work drains |
-| POST | `/jobs/{job_id}/verify` | processor+ | Verify data integrity |
-| POST | `/jobs/{job_id}/manifest` | processor+ | Generate manifest document |
+| POST | `/jobs/{job_id}/complete` | processor+ | Manually mark a pending, paused, or failed job as completed |
+| POST | `/jobs/{job_id}/verify` | processor+ | Verify copied data after the job is fully complete |
+| POST | `/jobs/{job_id}/manifest` | processor+ | Write or refresh `manifest.json` on the destination drive |
 
 **Pause and Resume Semantics:** `POST /jobs/{job_id}/pause` moves a running job into `PAUSING` immediately and into `PAUSED` once the active copy threads finish their current work. `POST /jobs/{job_id}/start` can then resume the job from `PAUSED`; attempts to start while a job is still `PAUSING` return **409 Conflict**.
+
+**Job Detail Lifecycle Controls:** Edit and Complete are limited to `PENDING`, `PAUSED`, and `FAILED` jobs. Delete is limited to `PENDING` jobs only, and the project binding on an existing job cannot be changed during edit.
+
+**Manifest and Compare Semantics:** Verify and Manifest remain disabled in the UI until the job is truly complete at 100%. Manifest generation overwrites the same `manifest.json` file on the destination drive and shows its location in the UI. When the same exported record is selected for file comparison, ECUBE compares the original source file against the copied destination version and returns a sanitized **409 Conflict** if either side is unavailable.
 
 **Automatic Drive Assignment:** When `drive_id` is omitted from `POST /jobs`, the system auto-selects a drive: picks the single project-bound `AVAILABLE` drive, or falls back to an unbound drive. Returns **409** if the drive is temporarily unavailable (retry), if multiple project-bound drives exist (caller must specify `drive_id`), or if no usable drive can be acquired for the requested project. In both auto-assign and explicit `drive_id` paths, unbound drives are automatically bound to the requested project.
 
