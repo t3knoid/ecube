@@ -1,7 +1,7 @@
 from typing import List, Optional, Sequence
 
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.utils.sanitize import normalize_project_id
 
@@ -17,12 +17,13 @@ class DriveRepository:
 
     def list_all(self) -> List[UsbDrive]:
         """Return all drives."""
-        return self.db.query(UsbDrive).all()
+        return self.db.query(UsbDrive).options(joinedload(UsbDrive.port)).all()
 
     def list_by_states(self, states: Sequence[DriveState]) -> List[UsbDrive]:
         """Return drives whose ``current_state`` is one of *states*."""
         return (
             self.db.query(UsbDrive)
+            .options(joinedload(UsbDrive.port))
             .filter(UsbDrive.current_state.in_(states))
             .all()
         )
@@ -34,6 +35,7 @@ class DriveRepository:
             return []
         return (
             self.db.query(UsbDrive)
+            .options(joinedload(UsbDrive.port))
             .filter(UsbDrive.current_project_id == normalized_project_id)
             .all()
         )
