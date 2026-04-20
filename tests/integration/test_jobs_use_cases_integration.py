@@ -237,13 +237,22 @@ def test_create_manifest_writes_record_file_and_audit(integration_client, integr
     )
     job_id = create_response.json()["id"]
 
-    response = integration_client.post(f"/jobs/{job_id}/manifest")
-    assert response.status_code == 200
+    first_response = integration_client.post(f"/jobs/{job_id}/manifest")
+    assert first_response.status_code == 200
+    second_response = integration_client.post(f"/jobs/{job_id}/manifest")
+    assert second_response.status_code == 200
 
-    manifest = integration_db.query(Manifest).filter(Manifest.job_id == job_id).first()
+    manifest = integration_db.query(Manifest).filter(Manifest.job_id == job_id).order_by(Manifest.id.desc()).first()
     assert manifest is not None
     assert manifest.manifest_path is not None
-    assert Path(manifest.manifest_path).exists()
+    assert manifest.manifest_path.endswith('/manifest.json')
+    manifest_file = Path(manifest.manifest_path)
+    assert manifest_file.exists()
+    assert list(target_path.glob('manifest*.json')) == [manifest_file]
+
+    manifest_data = manifest_file.read_text(encoding='utf-8')
+    assert '"generated_by": "test-user"' in manifest_data
+    assert '"generated_at":' in manifest_data
 
     audit = (
         integration_db.query(AuditLog)
