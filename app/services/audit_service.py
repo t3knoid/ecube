@@ -47,6 +47,7 @@ _ACTION_LABELS = {
     "JOB_FAILED": "Copy operation failed",
     "JOB_VERIFY_STARTED": "Job verification started",
     "MANIFEST_CREATED": "Manifest generated",
+    "MANIFEST_CREATE_FAILED": "Manifest generation failed",
     "DRIVE_EJECT_PREPARED": "Drive prepared for eject",
     "DRIVE_EJECT_FAILED": "Drive eject preparation failed",
     "COC_HANDOFF_CONFIRMED": "Custody handoff confirmed",
