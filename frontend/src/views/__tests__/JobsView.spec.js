@@ -70,11 +70,17 @@ function mountView() {
       stubs: {
         teleport: true,
         DataTable: {
-          props: ['rows'],
+          props: ['columns', 'rows'],
           template: `
             <div>
+              <div class="columns-stub">{{ columns.map((column) => column.label).join('|') }}</div>
               <div class="rows-stub">{{ rows.length }}</div>
               <div v-for="row in rows" :key="row.id" class="row-stub">
+                <div class="row-values-stub">
+                  <span v-for="column in columns" :key="column.key" class="cell-stub">
+                    <slot :name="'cell-' + column.key" :row="row" :value="row[column.key]" :column="column">{{ row[column.key] ?? '-' }}</slot>
+                  </span>
+                </div>
                 <div class="row-progress-stub">
                   <slot name="cell-progress" :row="row">{{ row.progress }}</slot>
                 </div>
@@ -319,14 +325,51 @@ describe('JobsView grouped create dialog', () => {
 
   it('uses Details as the row action label', async () => {
     mocks.listJobs.mockResolvedValue([
-      { id: 44, project_id: 'PROJ-001', evidence_number: 'EV-044', status: 'PENDING', source_path: '/nfs/project-001' },
+      {
+        id: 44,
+        project_id: 'PROJ-001',
+        evidence_number: 'EV-044',
+        status: 'PENDING',
+        source_path: '/nfs/project-001',
+        drive: { id: 1, port_system_path: '2-1', device_identifier: 'USB-001' },
+      },
     ])
 
     const wrapper = mountView()
     await flushPromises()
 
+    expect(wrapper.find('.columns-stub').text().split('|')).toEqual([
+      'ID',
+      'Project',
+      'Evidence',
+      'Device',
+      'Status',
+      'Progress',
+      '',
+    ])
+    expect(wrapper.find('.row-values-stub').text()).toContain('2-1')
+    expect(wrapper.find('.row-values-stub').text()).not.toContain('USB-001')
     expect(wrapper.text()).toContain('Details')
     expect(wrapper.text()).not.toContain('Open')
+  })
+
+  it('does not fall back to the drive serial when the device value is missing', async () => {
+    mocks.listJobs.mockResolvedValue([
+      {
+        id: 44,
+        project_id: 'PROJ-001',
+        evidence_number: 'EV-044',
+        status: 'PENDING',
+        source_path: '/nfs/project-001',
+        drive: { id: 1, port_system_path: null, device_identifier: 'USB-001' },
+      },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('.row-values-stub').text()).toContain('-')
+    expect(wrapper.find('.row-values-stub').text()).not.toContain('USB-001')
   })
 
   it('shows Start and Pause controls with state-aware availability', async () => {
