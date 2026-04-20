@@ -50,7 +50,7 @@ function buildDrive(overrides = {}) {
     device_identifier: 'USB-DETAIL-007',
     filesystem_path: '/dev/sdb1',
     filesystem_type: 'ext4',
-    mount_path: '/mnt/ecube/7',
+    // mount_path removed
     current_state: 'AVAILABLE',
     current_project_id: 'PROJ-007',
     capacity_bytes: 1024,
@@ -110,11 +110,11 @@ describe('DriveDetailView mount workflow', () => {
       { id: 3, status: 'MOUNTED', project_id: 'PROJ-007' },
       { id: 4, status: 'UNMOUNTED', project_id: 'PROJ-HIDDEN' },
     ])
-    mocks.mountDrive.mockResolvedValue(buildDrive({ mount_path: '/mnt/ecube/7' }))
+    mocks.mountDrive.mockResolvedValue(buildDrive({}))
   })
 
   it('shows the Mount action for managers and updates the mount point after success', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: null })])
+    mocks.getDrives.mockResolvedValue([buildDrive({})])
 
     const wrapper = mountView()
     await flushPromises()
@@ -137,7 +137,7 @@ describe('DriveDetailView mount workflow', () => {
   })
 
   it('hides the Mount action when the drive is already mounted', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/7' })])
+    mocks.getDrives.mockResolvedValue([buildDrive({})])
 
     const wrapper = mountView()
     await flushPromises()
@@ -147,7 +147,7 @@ describe('DriveDetailView mount workflow', () => {
   })
 
   it('disables the Format action when the drive is mounted', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/7', current_state: 'AVAILABLE' })])
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'AVAILABLE' })])
 
     const wrapper = mountView()
     await flushPromises()
@@ -158,7 +158,7 @@ describe('DriveDetailView mount workflow', () => {
   })
 
   it('shows the Browse control when the drive has a mount path', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/7' })])
+    mocks.getDrives.mockResolvedValue([buildDrive({})])
 
     const wrapper = mountView()
     await flushPromises()
@@ -193,7 +193,7 @@ describe('DriveDetailView mount workflow', () => {
   })
 
   it('shows mounted-drive context and leaves state unchanged when initialize is canceled', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/7', current_project_id: 'PROJ-007' })])
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-007' })])
 
     const wrapper = mountView()
     await flushPromises()
@@ -291,7 +291,7 @@ describe('DriveDetailView mount workflow', () => {
   })
 
   it('closes the prepare-eject dialog and shows the backend detail when eject fails', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'IN_USE', mount_path: '/mnt/ecube/7' })])
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'IN_USE' })])
     mocks.prepareEjectDrive.mockRejectedValue({
       response: {
         status: 409,

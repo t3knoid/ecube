@@ -45,7 +45,7 @@ function buildDrive(overrides = {}) {
     device_identifier: 'USB-001',
     current_state: 'AVAILABLE',
     current_project_id: null,
-    mount_path: '/mnt/ecube/1',
+    // mount_path removed
     ...overrides,
   }
 }
@@ -115,7 +115,7 @@ describe('JobsView grouped create dialog', () => {
       buildDrive({ id: 2, current_project_id: null }),
       buildDrive({ id: 3, current_project_id: 'PROJ-999' }),
       buildDrive({ id: 4, device_identifier: 'USB-004', current_state: 'IN_USE', current_project_id: 'PROJ-001' }),
-      buildDrive({ id: 5, mount_path: null, current_project_id: 'PROJ-001' }),
+      buildDrive({ id: 5, current_project_id: 'PROJ-001' }),
     ])
     mocks.getMounts.mockResolvedValue([
       buildMount({ id: 11, project_id: 'PROJ-001', status: 'MOUNTED' }),
