@@ -4,7 +4,7 @@
 |---|---|
 | Title | UI Use Cases |
 | Purpose | Provides a catalog of ECUBE user interface use cases that define expected UI behavior for design, development, and QA validation. |
-| Updated on | 04/17/26 |
+| Updated on | 04/20/26 |
 | Audience | UI designers, developers, QA. |
 
 ## Table of Contents
@@ -137,14 +137,17 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 | UC-6.2 | Start a copy job | Admin, Manager, Processor | admin, manager, processor |
 | UC-6.2a | Pause a running copy job | Admin, Manager, Processor | admin, manager, processor |
 | UC-6.2b | Resume a paused copy job | Admin, Manager, Processor | admin, manager, processor |
+| UC-6.2c | Edit a pending, paused, or failed job from Job Detail | Admin, Manager, Processor | admin, manager, processor |
+| UC-6.2d | Manually complete a safe non-active job | Admin, Manager, Processor | admin, manager, processor |
+| UC-6.2e | Delete a pending job with confirmation | Admin, Manager, Processor | admin, manager, processor |
 | UC-6.3 | Monitor job progress (status, bytes copied, file count) | Any authenticated user | any |
 | UC-6.4 | View per-file status within a job | Any authenticated user | any |
 | UC-6.5 | Verify copied data (post-copy hash verification) | Admin, Manager, Processor | admin, manager, processor |
 | UC-6.6 | Generate manifest on USB drive | Admin, Manager, Processor | admin, manager, processor |
 | UC-6.7 | View file hashes (MD5/SHA-256) for an individual file | Admin, Auditor | admin, auditor |
-| UC-6.8 | Compare two files by hash | Admin, Auditor | admin, auditor |
+| UC-6.8 | Compare the source and destination versions of an exported file | Admin, Auditor | admin, auditor |
 
-**UI Implication:** Job creation now uses a grouped dialog rather than a step-by-step wizard. The operator selects a project first, which unlocks the `Job details`, `Source`, `Destination`, and `Execution` sections. Source mounts and destination drives are filtered to the selected project and currently eligible mounted resources, and the dialog exposes helper states when no projects, mounts, or drives are available. The source path is resolved on the trusted backend relative to the selected mounted share, / selects the mounted-share root, and traversal outside that share is blocked. When a mounted drive is selected, the target destination path is derived automatically from the drive mount point. If the selected drive or mount becomes unavailable, the UI/API flow surfaces a specific conflict message. The dialog also provides an optional `Run job immediately` control. The Jobs list now exposes row-level `Details`, `Start`, and `Pause` controls with state-aware availability, and a `Pause in progress` dialog informs the operator while active copy threads drain toward the `PAUSED` state. Dashboard, Jobs list, and Job Detail progress displays stay synchronized and conservative while a job is active so operators do not see 100% before file completion catches up. Paused, completed, and failed jobs expose a summary with start time, copy threads, files copied, total copied, elapsed time, copy rate, and failure context, and those timing metrics remain cumulative across pause and resume cycles. End-to-end workflow guided experience: Source Mount → Drive Mount → Job → Copy → Pause/Resume as needed → Verify → Manifest → Eject.
+**UI Implication:** Job creation now uses a grouped dialog rather than a step-by-step wizard. The operator selects a project first, which unlocks the `Job details`, `Source`, `Destination`, and `Execution` sections. Source mounts and destination drives are filtered to the selected project and currently eligible mounted resources, and the dialog exposes helper states when no projects, mounts, or drives are available. The source path is resolved on the trusted backend relative to the selected mounted share, / selects the mounted-share root, and traversal outside that share is blocked. When a mounted drive is selected, the target destination path is derived automatically from the drive mount point. If the selected drive or mount becomes unavailable, the UI/API flow surfaces a specific conflict message. The dialog also provides an optional `Run job immediately` control. The Jobs list now exposes row-level `Details`, `Start`, and `Pause` controls with state-aware availability, and a `Pause in progress` dialog informs the operator while active copy threads drain toward the `PAUSED` state. The Job Detail page adds `Edit`, `Complete`, and pending-only `Delete` controls, keeps `Verify` and `Generate Manifest` disabled until the job is truly 100% complete, and shows a visible success banner with the stable manifest location after generation. The compare panel now uses `Source` and `Destination` terminology to compare the original file against the copied result. Dashboard, Jobs list, and Job Detail progress displays stay synchronized and conservative while a job is active so operators do not see 100% before file completion catches up. Paused, completed, and failed jobs expose a summary with start time, copy threads, files copied, total copied, elapsed time, copy rate, and failure context, and those timing metrics remain cumulative across pause and resume cycles. End-to-end workflow guided experience: Source Mount → Drive Mount → Job → Optional Edit → Copy → Pause/Resume as needed → Verify → Manifest → Eject.
 
 ---
 
@@ -241,7 +244,7 @@ The primary operational workflow combines use cases across groups:
 
 1. **Setup** (one-time): UC-1.1 → UC-1.2 → UC-1.3 → UC-1.6 → UC-2.1
 2. **Prepare infrastructure**: UC-5.2/5.3 (add mounts) → UC-4.3 (discover drives) → UC-4.9/4.10 (enable ports) → UC-4.4 (format) → UC-4.6 (mount drive) → UC-4.5 (initialize for project)
-3. **Execute export**: UC-6.1 (create job using the mounted destination) → UC-6.2 (start) → UC-6.3 (monitor) → UC-6.5 (verify) → UC-6.6 (manifest)
+3. **Execute export**: UC-6.1 (create job using the mounted destination) → UC-6.2c (optional edit before run) → UC-6.2 (start) → UC-6.3 (monitor) → UC-6.2a/UC-6.2b (pause/resume if needed) → UC-6.5 (verify once fully complete) → UC-6.6 (manifest)
 4. **Eject & chain of custody**: UC-4.7 (prepare eject) → UC-7.8/7.10 (retrieve CoC) → UC-7.13 (confirm handoff) → UC-7.14 (dismiss warning) → UC-7.15 (save report for records) → drive transitions to `ARCHIVED`
 5. **Audit trail**: UC-7.1–7.7 (review operational audit) + UC-7.8–7.12 (validate handoff in compliance record)
 6. **Operational tuning (admin, optional)**: UC-9.1 → UC-9.2/UC-9.4 → UC-9.5 → UC-9.6
