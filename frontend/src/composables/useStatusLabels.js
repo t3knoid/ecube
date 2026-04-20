@@ -10,6 +10,8 @@ const DRIVE_STATE_KEYS = {
 const JOB_STATUS_KEYS = {
   PENDING: 'jobs.statuses.pending',
   RUNNING: 'jobs.statuses.running',
+  PAUSING: 'jobs.statuses.pausing',
+  PAUSED: 'jobs.statuses.paused',
   VERIFYING: 'jobs.statuses.verifying',
   COMPLETED: 'jobs.statuses.completed',
   FAILED: 'jobs.statuses.failed',

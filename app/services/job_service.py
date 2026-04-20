@@ -356,7 +356,7 @@ def start_job(
     job = job_repo.get_for_update(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.status not in (JobStatus.PENDING, JobStatus.FAILED):
+    if job.status not in (JobStatus.PENDING, JobStatus.FAILED, JobStatus.PAUSED):
         raise HTTPException(
             status_code=409, detail=f"Job is already in status {job.status}"
         )
@@ -376,6 +376,7 @@ def start_job(
     job.status = JobStatus.RUNNING
     job.started_by = actor
     job.started_at = datetime.now(timezone.utc)
+    job.active_duration_seconds = int(job.active_duration_seconds or 0)
     job.completed_at = None
     if body.thread_count:
         job.thread_count = body.thread_count
@@ -430,6 +431,65 @@ def start_job(
     except Exception:
         logger.exception("Failed to write audit log for JOB_STARTED")
     background_tasks.add_task(copy_engine.run_copy_job, job_id)
+    db.refresh(job)
+    return job
+
+
+def pause_job(
+    job_id: int,
+    db: Session,
+    actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
+) -> ExportJob:
+    job_repo = JobRepository(db)
+    audit_repo = AuditRepository(db)
+
+    job = job_repo.get_for_update(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != JobStatus.RUNNING:
+        raise HTTPException(status_code=409, detail=f"Job is already in status {job.status}")
+
+    job.status = JobStatus.PAUSING
+    job.completed_at = None
+    try:
+        job_repo.save(job)
+    except Exception:
+        logger.exception("DB commit failed while pausing job %s", job_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Database error while pausing job",
+        )
+
+    assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
+    active_drive_id = assignment.drive_id if assignment else None
+
+    logger.info(
+        f"JOB_PAUSE_REQUESTED job_id={job_id} project_id={job.project_id} status={job.status.value} actor={actor or 'system'}",
+        extra={
+            "job_id": job_id,
+            "project_id": job.project_id,
+            "status": job.status.value,
+            "actor": actor or "system",
+        },
+    )
+
+    try:
+        audit_repo.add(
+            action="JOB_PAUSE_REQUESTED",
+            user=actor,
+            project_id=job.project_id,
+            drive_id=active_drive_id,
+            job_id=job_id,
+            details={
+                "project_id": job.project_id,
+                "drive_id": active_drive_id,
+            },
+            client_ip=client_ip,
+        )
+    except Exception:
+        logger.exception("Failed to write audit log for JOB_PAUSE_REQUESTED")
+
     db.refresh(job)
     return job
 
