@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.auth import CurrentUser, require_roles
 from app.config import settings
 from app.database import get_db
+from app.models.jobs import JobStatus
 from app.repositories.job_repository import DriveAssignmentRepository, FileRepository
 from app.schemas.jobs import (
     DriveInfoSchema,
@@ -225,6 +226,9 @@ def _enrich_jobs_bulk(
 @router.get("", response_model=list[ExportJobSchema], responses={**R_401, **R_403, **R_422})
 def list_jobs(
     limit: int = Query(default=200, ge=1, le=1000, description="Maximum number of jobs to return"),
+    offset: int = Query(default=0, ge=0, description="Number of jobs to skip before returning results"),
+    drive_id: int | None = Query(default=None, ge=1, description="Filter jobs by currently assigned drive ID"),
+    statuses: list[JobStatus] | None = Query(default=None, description="Filter jobs by status"),
     *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ALL_ROLES),
@@ -236,7 +240,13 @@ def list_jobs(
 
     **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
     """
-    jobs = job_service.list_jobs(db, limit=limit)
+    jobs = job_service.list_jobs(
+        db,
+        limit=limit,
+        offset=offset,
+        drive_id=drive_id,
+        statuses=tuple(statuses) if statuses else None,
+    )
     return _enrich_jobs_bulk(jobs, current_user, db)
 
 

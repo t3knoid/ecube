@@ -8,6 +8,22 @@ from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, 
 from app.models.network import MountStatus, MountType, NetworkMount
 
 
+def _create_assigned_job(db, *, drive, project_id, evidence_number, source_path, status):
+    job = ExportJob(
+        project_id=project_id,
+        evidence_number=evidence_number,
+        source_path=source_path,
+        target_mount_path=drive.mount_path,
+        status=status,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+    db.refresh(job)
+    return job
+
+
 def test_create_job(client, db):
     drive = UsbDrive(
         device_identifier="USB-CREATE-001",
@@ -223,6 +239,287 @@ def test_create_job_explicit_unbound_drive_writes_project_bound_audit(client, db
     assert audit is not None
     assert audit.details["drive_id"] == drive.id
     assert audit.details["project_id"] == "PROJ-BOUND"
+
+
+def test_create_job_rejects_exact_duplicate_source_path_on_same_drive(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-OVERLAP-EXACT-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-OVERLAP",
+        mount_path="/mnt/ecube/overlap-exact-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    existing = _create_assigned_job(
+        db,
+        drive=drive,
+        project_id="PROJ-OVERLAP",
+        evidence_number="EV-EXISTING-001",
+        source_path="//server/proj-A/Evidence1",
+        status=JobStatus.PENDING,
+    )
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-OVERLAP",
+            "evidence_number": "EV-NEW-001",
+            "source_path": "//server/proj-A/Evidence1",
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "SOURCE_OVERLAP"
+    assert f"job #{existing.id}" in response.json()["message"]
+    assert "exact source path" in response.json()["message"]
+
+
+def test_create_job_rejects_ancestor_source_path_overlap_on_same_drive(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-OVERLAP-ANCESTOR-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-OVERLAP",
+        mount_path="/mnt/ecube/overlap-ancestor-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    existing = _create_assigned_job(
+        db,
+        drive=drive,
+        project_id="PROJ-OVERLAP",
+        evidence_number="EV-EXISTING-002",
+        source_path="//server/proj-A/Evidence1",
+        status=JobStatus.RUNNING,
+    )
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-OVERLAP",
+            "evidence_number": "EV-NEW-002",
+            "source_path": "//server/proj-A",
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "SOURCE_OVERLAP"
+    assert f"(#{existing.id})" in response.json()["message"]
+    assert "subdirectory of the requested source" in response.json()["message"]
+
+
+def test_create_job_rejects_descendant_source_path_overlap_on_same_drive(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-OVERLAP-DESC-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-OVERLAP",
+        mount_path="/mnt/ecube/overlap-desc-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    existing = _create_assigned_job(
+        db,
+        drive=drive,
+        project_id="PROJ-OVERLAP",
+        evidence_number="EV-EXISTING-003",
+        source_path="//server/proj-A",
+        status=JobStatus.VERIFYING,
+    )
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-OVERLAP",
+            "evidence_number": "EV-NEW-003",
+            "source_path": "//server/proj-A/Evidence1/SubFolder",
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "SOURCE_OVERLAP"
+    assert f"(#{existing.id})" in response.json()["message"]
+    assert "already copies from a parent path" in response.json()["message"]
+
+
+def test_create_job_rejects_overlap_for_paused_job_on_same_drive(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-OVERLAP-PAUSED-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-OVERLAP",
+        mount_path="/mnt/ecube/overlap-paused-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    existing = _create_assigned_job(
+        db,
+        drive=drive,
+        project_id="PROJ-OVERLAP",
+        evidence_number="EV-EXISTING-PAUSED-001",
+        source_path="//server/proj-A/Evidence1",
+        status=JobStatus.PAUSED,
+    )
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-OVERLAP",
+            "evidence_number": "EV-NEW-PAUSED-001",
+            "source_path": "//server/proj-A/Evidence1",
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "SOURCE_OVERLAP"
+    assert f"job #{existing.id}" in response.json()["message"]
+
+
+def test_create_job_allows_sibling_source_paths_on_same_drive(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-OVERLAP-SIBLING-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-OVERLAP",
+        mount_path="/mnt/ecube/overlap-sibling-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    _create_assigned_job(
+        db,
+        drive=drive,
+        project_id="PROJ-OVERLAP",
+        evidence_number="EV-EXISTING-004",
+        source_path="//server/proj-A/Evidence1",
+        status=JobStatus.RUNNING,
+    )
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-OVERLAP",
+            "evidence_number": "EV-NEW-004",
+            "source_path": "//server/proj-A/Evidence2",
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 200
+
+
+def test_create_job_allows_same_source_path_on_different_drive(client, db):
+    first_drive = UsbDrive(
+        device_identifier="USB-OVERLAP-FIRST-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-OVERLAP",
+        mount_path="/mnt/ecube/overlap-first-001",
+    )
+    second_drive = UsbDrive(
+        device_identifier="USB-OVERLAP-SECOND-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-OVERLAP",
+        mount_path="/mnt/ecube/overlap-second-001",
+    )
+    db.add_all([first_drive, second_drive])
+    db.commit()
+
+    _create_assigned_job(
+        db,
+        drive=first_drive,
+        project_id="PROJ-OVERLAP",
+        evidence_number="EV-EXISTING-005",
+        source_path="//server/proj-A/Evidence1",
+        status=JobStatus.RUNNING,
+    )
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-OVERLAP",
+            "evidence_number": "EV-NEW-005",
+            "source_path": "//server/proj-A/Evidence1",
+            "drive_id": second_drive.id,
+        },
+    )
+
+    assert response.status_code == 200
+
+
+def test_create_job_overlap_check_ignores_completed_and_failed_jobs(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-OVERLAP-TERMINAL-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-OVERLAP",
+        mount_path="/mnt/ecube/overlap-terminal-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    _create_assigned_job(
+        db,
+        drive=drive,
+        project_id="PROJ-OVERLAP",
+        evidence_number="EV-EXISTING-006",
+        source_path="//server/proj-A/Evidence1",
+        status=JobStatus.COMPLETED,
+    )
+    _create_assigned_job(
+        db,
+        drive=drive,
+        project_id="PROJ-OVERLAP",
+        evidence_number="EV-EXISTING-007",
+        source_path="//server/proj-A/Evidence1/SubFolder",
+        status=JobStatus.FAILED,
+    )
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-OVERLAP",
+            "evidence_number": "EV-NEW-006",
+            "source_path": "//server/proj-A/Evidence1",
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 200
+
+
+def test_create_job_overlap_check_respects_component_boundaries(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-OVERLAP-BOUNDARY-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-OVERLAP",
+        mount_path="/mnt/ecube/overlap-boundary-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    _create_assigned_job(
+        db,
+        drive=drive,
+        project_id="PROJ-OVERLAP",
+        evidence_number="EV-EXISTING-008",
+        source_path="//server/proj-A/Evidence1",
+        status=JobStatus.PENDING,
+    )
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-OVERLAP",
+            "evidence_number": "EV-NEW-007",
+            "source_path": "//server/proj-A/Evidence10",
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 200
 
 
 def test_get_job(client, db):
@@ -710,6 +1007,134 @@ def test_update_pending_job_reassigns_drive_and_updates_fields(client, db):
     db.refresh(drive_two)
     assert drive_one.current_state == DriveState.AVAILABLE
     assert drive_two.current_state == DriveState.IN_USE
+
+
+def test_update_job_rejects_exact_duplicate_source_path_on_same_drive(client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="server:/exports/project-overlap",
+        project_id="PROJ-EDIT-OVERLAP",
+        local_mount_point="/nfs/project-overlap",
+        status=MountStatus.MOUNTED,
+    )
+    drive = UsbDrive(
+        device_identifier="USB-EDIT-OVERLAP-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-EDIT-OVERLAP",
+        mount_path="/mnt/ecube/edit-overlap-001",
+    )
+    db.add_all([mount, drive])
+    db.flush()
+
+    existing = _create_assigned_job(
+        db,
+        drive=drive,
+        project_id="PROJ-EDIT-OVERLAP",
+        evidence_number="EV-EXISTING-EDIT-001",
+        source_path="/nfs/project-overlap/existing",
+        status=JobStatus.PENDING,
+    )
+
+    editable = ExportJob(
+        project_id="PROJ-EDIT-OVERLAP",
+        evidence_number="EV-EDIT-OVERLAP-001",
+        source_path="/nfs/project-overlap/original",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.PENDING,
+        thread_count=2,
+    )
+    db.add(editable)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=editable.id))
+    db.commit()
+
+    response = client.put(
+        f"/jobs/{editable.id}",
+        json={
+            "project_id": "PROJ-EDIT-OVERLAP",
+            "evidence_number": "EV-EDIT-OVERLAP-001",
+            "source_path": "/existing",
+            "mount_id": mount.id,
+            "drive_id": drive.id,
+            "thread_count": 2,
+            "max_file_retries": 3,
+            "retry_delay_seconds": 1,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "SOURCE_OVERLAP"
+    assert f"job #{existing.id}" in response.json()["message"]
+
+    db.refresh(editable)
+    assert editable.source_path == "/nfs/project-overlap/original"
+
+
+def test_update_job_rejects_overlap_when_reassigning_drive(client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="server:/exports/project-overlap-two",
+        project_id="PROJ-EDIT-OVERLAP-2",
+        local_mount_point="/nfs/project-overlap-two",
+        status=MountStatus.MOUNTED,
+    )
+    drive_one = UsbDrive(
+        device_identifier="USB-EDIT-OVERLAP-DRIVE-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-EDIT-OVERLAP-2",
+        mount_path="/mnt/ecube/edit-overlap-drive-001",
+    )
+    drive_two = UsbDrive(
+        device_identifier="USB-EDIT-OVERLAP-DRIVE-002",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-EDIT-OVERLAP-2",
+        mount_path="/mnt/ecube/edit-overlap-drive-002",
+    )
+    db.add_all([mount, drive_one, drive_two])
+    db.flush()
+
+    existing = _create_assigned_job(
+        db,
+        drive=drive_two,
+        project_id="PROJ-EDIT-OVERLAP-2",
+        evidence_number="EV-EXISTING-EDIT-002",
+        source_path="/nfs/project-overlap-two/existing/root",
+        status=JobStatus.RUNNING,
+    )
+
+    editable = ExportJob(
+        project_id="PROJ-EDIT-OVERLAP-2",
+        evidence_number="EV-EDIT-OVERLAP-002",
+        source_path="/nfs/project-overlap-two/original",
+        target_mount_path=drive_one.mount_path,
+        status=JobStatus.PENDING,
+        thread_count=2,
+    )
+    db.add(editable)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive_one.id, job_id=editable.id))
+    db.commit()
+
+    response = client.put(
+        f"/jobs/{editable.id}",
+        json={
+            "project_id": "PROJ-EDIT-OVERLAP-2",
+            "evidence_number": "EV-EDIT-OVERLAP-002",
+            "source_path": "/existing",
+            "mount_id": mount.id,
+            "drive_id": drive_two.id,
+            "thread_count": 2,
+            "max_file_retries": 3,
+            "retry_delay_seconds": 1,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "SOURCE_OVERLAP"
+    assert f"(#{existing.id})" in response.json()["message"]
+
+    db.refresh(editable)
+    assert editable.target_mount_path == drive_one.mount_path
 
 
 def test_delete_pending_job_removes_job_and_releases_drive(client, db):
@@ -1370,6 +1795,112 @@ def test_list_jobs_custom_limit(client, db):
     response = client.get("/jobs", params={"limit": 2})
     assert response.status_code == 200
     assert len(response.json()) == 2
+
+
+def test_list_jobs_filters_by_drive_and_statuses(client, db):
+    drive_one = UsbDrive(
+        device_identifier="USB-LIST-FILTER-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-LIST-FILTER",
+        mount_path="/mnt/ecube/list-filter-001",
+    )
+    drive_two = UsbDrive(
+        device_identifier="USB-LIST-FILTER-002",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-LIST-FILTER",
+        mount_path="/mnt/ecube/list-filter-002",
+    )
+    db.add_all([drive_one, drive_two])
+    db.flush()
+
+    matching = _create_assigned_job(
+        db,
+        drive=drive_one,
+        project_id="PROJ-LIST-FILTER",
+        evidence_number="EV-LIST-FILTER-001",
+        source_path="//server/proj-A/Evidence1",
+        status=JobStatus.PAUSED,
+    )
+    _create_assigned_job(
+        db,
+        drive=drive_one,
+        project_id="PROJ-LIST-FILTER",
+        evidence_number="EV-LIST-FILTER-002",
+        source_path="//server/proj-A/Evidence2",
+        status=JobStatus.COMPLETED,
+    )
+    _create_assigned_job(
+        db,
+        drive=drive_two,
+        project_id="PROJ-LIST-FILTER",
+        evidence_number="EV-LIST-FILTER-003",
+        source_path="//server/proj-A/Evidence3",
+        status=JobStatus.PAUSED,
+    )
+
+    response = client.get(
+        "/jobs",
+        params=[("drive_id", drive_one.id), ("statuses", "PAUSED"), ("statuses", "PAUSING")],
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["id"] == matching.id
+
+
+def test_list_jobs_filters_support_offset(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-LIST-OFFSET-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-LIST-OFFSET",
+        mount_path="/mnt/ecube/list-offset-001",
+    )
+    db.add(drive)
+    db.flush()
+
+    first = _create_assigned_job(
+        db,
+        drive=drive,
+        project_id="PROJ-LIST-OFFSET",
+        evidence_number="EV-LIST-OFFSET-001",
+        source_path="//server/proj-A/Evidence1",
+        status=JobStatus.RUNNING,
+    )
+    second = _create_assigned_job(
+        db,
+        drive=drive,
+        project_id="PROJ-LIST-OFFSET",
+        evidence_number="EV-LIST-OFFSET-002",
+        source_path="//server/proj-A/Evidence2",
+        status=JobStatus.PAUSED,
+    )
+    third = _create_assigned_job(
+        db,
+        drive=drive,
+        project_id="PROJ-LIST-OFFSET",
+        evidence_number="EV-LIST-OFFSET-003",
+        source_path="//server/proj-A/Evidence3",
+        status=JobStatus.PENDING,
+    )
+
+    response = client.get(
+        "/jobs",
+        params=[
+            ("limit", 1),
+            ("offset", 1),
+            ("drive_id", drive.id),
+            ("statuses", "PENDING"),
+            ("statuses", "RUNNING"),
+            ("statuses", "PAUSED"),
+        ],
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["id"] == second.id
+    assert {first.id, second.id, third.id} >= {data[0]["id"]}
 
 
 def test_list_jobs_limit_below_minimum_returns_422(client, db):
