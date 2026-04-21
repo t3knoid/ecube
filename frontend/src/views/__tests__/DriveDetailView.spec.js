@@ -50,7 +50,7 @@ function buildDrive(overrides = {}) {
     device_identifier: 'USB-DETAIL-007',
     filesystem_path: '/dev/sdb1',
     filesystem_type: 'ext4',
-    // mount_path removed
+    mount_path: null,
     current_state: 'AVAILABLE',
     current_project_id: 'PROJ-007',
     capacity_bytes: 1024,
@@ -137,7 +137,7 @@ describe('DriveDetailView mount workflow', () => {
   })
 
   it('hides the Mount action when the drive is already mounted', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({})])
+    mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/7' })])
 
     const wrapper = mountView()
     await flushPromises()
@@ -147,7 +147,7 @@ describe('DriveDetailView mount workflow', () => {
   })
 
   it('disables the Format action when the drive is mounted', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'AVAILABLE' })])
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'AVAILABLE', mount_path: '/mnt/ecube/7' })])
 
     const wrapper = mountView()
     await flushPromises()
@@ -158,9 +158,17 @@ describe('DriveDetailView mount workflow', () => {
   })
 
   it('shows the Browse control when the drive has a mount path', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({})])
+    mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/7' })])
 
     const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('drives.browse'))
+
+    const browseButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.browse'))
+    expect(browseButton).toBeTruthy()
+
+    await browseButton.trigger('click')
     await flushPromises()
 
     expect(wrapper.text()).toContain(i18n.global.t('browse.browseContents'))
@@ -177,6 +185,8 @@ describe('DriveDetailView mount workflow', () => {
   })
 
   it('populates initialize options from distinct mounted share projects', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/7' })])
+
     const wrapper = mountView()
     await flushPromises()
 
@@ -193,7 +203,7 @@ describe('DriveDetailView mount workflow', () => {
   })
 
   it('shows mounted-drive context and leaves state unchanged when initialize is canceled', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-007' })])
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-007', mount_path: '/mnt/ecube/7' })])
 
     const wrapper = mountView()
     await flushPromises()
@@ -224,6 +234,7 @@ describe('DriveDetailView mount workflow', () => {
 
   it('shows the empty helper and disables initialize submission when no mounted project exists', async () => {
     mocks.getMounts.mockResolvedValue([])
+    mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/7' })])
 
     const wrapper = mountView()
     await flushPromises()
@@ -240,6 +251,8 @@ describe('DriveDetailView mount workflow', () => {
   })
 
   it('moves focus into the initialize dialog and closes it on Escape', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/7' })])
+
     const wrapper = mountView()
     await flushPromises()
 
@@ -260,6 +273,8 @@ describe('DriveDetailView mount workflow', () => {
   })
 
   it('does not dismiss the initialize dialog when the overlay is clicked', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/7' })])
+
     const wrapper = mountView()
     await flushPromises()
 
@@ -276,6 +291,8 @@ describe('DriveDetailView mount workflow', () => {
   })
 
   it('marks the initialize project selection as required', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/7' })])
+
     const wrapper = mountView()
     await flushPromises()
 
