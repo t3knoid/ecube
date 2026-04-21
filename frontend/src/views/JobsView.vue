@@ -27,7 +27,8 @@ const loading = ref(false)
 const saving = ref(false)
 const actingJobId = ref(null)
 const jobsRefreshTimer = ref(null)
-const error = ref('')
+const pageError = ref('')
+const createDialogError = ref('')
 const compatibilityNote = ref('')
 
 const showCreateDialog = ref(false)
@@ -94,7 +95,7 @@ async function runJobAction(job, action) {
   if (!allowStart && !allowPause) return
 
   actingJobId.value = job.id
-  error.value = ''
+  pageError.value = ''
   try {
     const updated = normalizeProjectRecord(
       action === 'start'
@@ -114,7 +115,7 @@ async function runJobAction(job, action) {
     }
     await loadJobs()
   } catch (err) {
-    error.value = buildJobError(err)
+    pageError.value = buildJobError(err)
   } finally {
     actingJobId.value = null
   }
@@ -284,7 +285,7 @@ function syncJobsRefreshTimer() {
 
 async function loadJobs() {
   loading.value = true
-  error.value = ''
+  pageError.value = ''
   compatibilityNote.value = ''
   try {
     const response = await listJobs({ limit: 200 })
@@ -375,7 +376,7 @@ async function submitCreateJob() {
   if (!formReady()) return
 
   saving.value = true
-  error.value = ''
+  createDialogError.value = ''
   try {
     await loadSupportingData()
     syncEligibleSelections()
@@ -384,14 +385,14 @@ async function submitCreateJob() {
     const mountStillEligible = eligibleMounts.value.some((mount) => Number(mount.id) === Number(form.value.mount_id))
 
     if (!driveStillEligible || !mountStillEligible) {
-      error.value = t('jobs.selectionUnavailable')
+      createDialogError.value = t('jobs.selectionUnavailable')
       return
     }
 
     const overlapCandidates = await loadOverlapCandidates(form.value.drive_id)
     const overlapConflict = findSourceOverlapConflict(overlapCandidates)
     if (overlapConflict) {
-      error.value = buildOverlapErrorMessage(overlapConflict.job, overlapConflict.overlapType)
+      createDialogError.value = buildOverlapErrorMessage(overlapConflict.job, overlapConflict.overlapType)
       return
     }
 
@@ -416,7 +417,7 @@ async function submitCreateJob() {
       } catch (err) {
         jobs.value = [created, ...jobs.value.filter((job) => job.id !== created.id)]
         closeCreateDialog()
-        error.value = buildJobError(err) || t('jobs.autoStartFailed')
+        pageError.value = buildJobError(err) || t('jobs.autoStartFailed')
         return
       }
     }
@@ -425,7 +426,7 @@ async function submitCreateJob() {
     closeCreateDialog()
     router.push({ name: 'job-detail', params: { id: created.id } })
   } catch (err) {
-    error.value = buildJobError(err)
+    createDialogError.value = buildJobError(err)
   } finally {
     saving.value = false
   }
@@ -434,13 +435,14 @@ async function submitCreateJob() {
 function openCreateDialog(event) {
   createDialogTriggerRef.value = event?.currentTarget instanceof HTMLElement ? event.currentTarget : document.activeElement
   resetForm()
-  error.value = ''
+  createDialogError.value = ''
   showCreateDialog.value = true
   void loadSupportingData()
 }
 
 function closeCreateDialog() {
   showCreateDialog.value = false
+  createDialogError.value = ''
   resetForm()
 }
 
@@ -522,7 +524,7 @@ onBeforeUnmount(() => {
     </header>
 
     <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
-    <p v-if="error" class="error-banner" role="alert" aria-live="assertive">{{ error }}</p>
+    <p v-if="pageError" class="error-banner" role="alert" aria-live="assertive">{{ pageError }}</p>
     <p v-if="compatibilityNote" class="muted">{{ compatibilityNote }}</p>
 
     <div class="filters">
@@ -579,70 +581,74 @@ onBeforeUnmount(() => {
     <teleport to="body">
       <div v-if="showCreateDialog" class="dialog-overlay" @click.self="closeCreateDialog">
         <div ref="createDialogRef" class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="job-create-title">
-          <h2 id="job-create-title">{{ t('jobs.createDialog') }}</h2>
-          <p class="muted">{{ t('jobs.dialogDescription') }}</p>
-
-          <div class="dialog-groups">
-            <fieldset class="dialog-group">
-              <legend>{{ t('jobs.jobDetailsGroup') }}</legend>
-
-              <label for="job-project">{{ t('dashboard.project') }}</label>
-              <select id="job-project" v-model="form.project_id">
-                <option value="">{{ t('jobs.chooseProject') }}</option>
-                <option v-for="project in availableProjects" :key="project" :value="project">{{ project }}</option>
-              </select>
-
-              <label for="job-evidence">{{ t('jobs.evidence') }}</label>
-              <input id="job-evidence" v-model="form.evidence_number" type="text" :disabled="!projectSelected" />
-
-              <label for="job-notes">{{ t('jobs.additionalNotes') }}</label>
-              <textarea id="job-notes" v-model="form.notes" rows="3" :disabled="!projectSelected" :placeholder="t('jobs.notesHint')"></textarea>
-
-              <label for="job-thread-count">{{ t('jobs.threadCount') }}</label>
-              <input id="job-thread-count" v-model.number="form.thread_count" type="number" min="1" max="8" :disabled="!projectSelected" />
-            </fieldset>
-
-            <fieldset class="dialog-group">
-              <legend>{{ t('jobs.sourceGroup') }}</legend>
-
-              <label for="job-mount">{{ t('jobs.selectMount') }}</label>
-              <select id="job-mount" v-model="form.mount_id" :disabled="!projectSelected">
-                <option :value="null">{{ t('jobs.chooseMount') }}</option>
-                <option v-for="mount in eligibleMounts" :key="mount.id" :value="mount.id">
-                  {{ formatMountLabel(mount) }}
-                </option>
-              </select>
-
-              <label for="job-source-path">{{ t('jobs.sourcePath') }}</label>
-              <input id="job-source-path" v-model="form.source_path" type="text" :disabled="!projectSelected" :placeholder="t('jobs.sourcePathHint')" />
-            </fieldset>
-
-            <fieldset class="dialog-group">
-              <legend>{{ t('jobs.destinationGroup') }}</legend>
-
-              <label for="job-drive">{{ t('jobs.selectDrive') }}</label>
-              <select id="job-drive" v-model="form.drive_id" :disabled="!projectSelected">
-                <option :value="null">{{ t('jobs.chooseDrive') }}</option>
-                <option v-for="drive in eligibleDrives" :key="drive.id" :value="drive.id">
-                  {{ formatDriveLabel(drive) }}
-                </option>
-              </select>
-            </fieldset>
-
-            <fieldset class="dialog-group">
-              <legend>{{ t('jobs.executionGroup') }}</legend>
-              <label class="checkbox-row" for="job-run-immediately">
-                <input id="job-run-immediately" v-model="form.run_immediately" type="checkbox" :disabled="!projectSelected" />
-                <span>{{ t('jobs.runImmediately') }}</span>
-              </label>
-            </fieldset>
+          <div class="dialog-header job-create-summary">
+            <h2 id="job-create-title">{{ t('jobs.createDialog') }}</h2>
+            <p class="muted">{{ t('jobs.dialogDescription') }}</p>
+            <p v-if="createDialogError" class="error-banner dialog-error-banner" role="alert" aria-live="assertive">{{ createDialogError }}</p>
+            <p v-if="!availableProjects.length" class="muted">{{ t('jobs.noProjectsAvailable') }}</p>
+            <p v-else-if="projectSelected && !eligibleMounts.length" class="muted">{{ t('jobs.noEligibleMounts') }}</p>
+            <p v-else-if="projectSelected && !eligibleDrives.length" class="muted">{{ t('jobs.noEligibleDrives') }}</p>
           </div>
 
-          <p v-if="!availableProjects.length" class="muted">{{ t('jobs.noProjectsAvailable') }}</p>
-          <p v-else-if="projectSelected && !eligibleMounts.length" class="muted">{{ t('jobs.noEligibleMounts') }}</p>
-          <p v-else-if="projectSelected && !eligibleDrives.length" class="muted">{{ t('jobs.noEligibleDrives') }}</p>
+          <div class="dialog-body job-create-scroll-region">
+            <div class="dialog-groups">
+              <fieldset class="dialog-group">
+                <legend>{{ t('jobs.jobDetailsGroup') }}</legend>
 
-          <div class="dialog-actions">
+                <label for="job-project">{{ t('dashboard.project') }}</label>
+                <select id="job-project" v-model="form.project_id">
+                  <option value="">{{ t('jobs.chooseProject') }}</option>
+                  <option v-for="project in availableProjects" :key="project" :value="project">{{ project }}</option>
+                </select>
+
+                <label for="job-evidence">{{ t('jobs.evidence') }}</label>
+                <input id="job-evidence" v-model="form.evidence_number" type="text" :disabled="!projectSelected" />
+
+                <label for="job-notes">{{ t('jobs.additionalNotes') }}</label>
+                <textarea id="job-notes" v-model="form.notes" rows="3" :disabled="!projectSelected" :placeholder="t('jobs.notesHint')"></textarea>
+
+                <label for="job-thread-count">{{ t('jobs.threadCount') }}</label>
+                <input id="job-thread-count" v-model.number="form.thread_count" type="number" min="1" max="8" :disabled="!projectSelected" />
+              </fieldset>
+
+              <fieldset class="dialog-group">
+                <legend>{{ t('jobs.sourceGroup') }}</legend>
+
+                <label for="job-mount">{{ t('jobs.selectMount') }}</label>
+                <select id="job-mount" v-model="form.mount_id" :disabled="!projectSelected">
+                  <option :value="null">{{ t('jobs.chooseMount') }}</option>
+                  <option v-for="mount in eligibleMounts" :key="mount.id" :value="mount.id">
+                    {{ formatMountLabel(mount) }}
+                  </option>
+                </select>
+
+                <label for="job-source-path">{{ t('jobs.sourcePath') }}</label>
+                <input id="job-source-path" v-model="form.source_path" type="text" :disabled="!projectSelected" :placeholder="t('jobs.sourcePathHint')" />
+              </fieldset>
+
+              <fieldset class="dialog-group">
+                <legend>{{ t('jobs.destinationGroup') }}</legend>
+
+                <label for="job-drive">{{ t('jobs.selectDrive') }}</label>
+                <select id="job-drive" v-model="form.drive_id" :disabled="!projectSelected">
+                  <option :value="null">{{ t('jobs.chooseDrive') }}</option>
+                  <option v-for="drive in eligibleDrives" :key="drive.id" :value="drive.id">
+                    {{ formatDriveLabel(drive) }}
+                  </option>
+                </select>
+              </fieldset>
+
+              <fieldset class="dialog-group">
+                <legend>{{ t('jobs.executionGroup') }}</legend>
+                <label class="checkbox-row" for="job-run-immediately">
+                  <input id="job-run-immediately" v-model="form.run_immediately" type="checkbox" :disabled="!projectSelected" />
+                  <span>{{ t('jobs.runImmediately') }}</span>
+                </label>
+              </fieldset>
+            </div>
+          </div>
+
+          <div class="dialog-actions dialog-footer">
             <button class="btn" @click="closeCreateDialog">{{ t('common.actions.cancel') }}</button>
             <button id="job-submit" class="btn btn-primary" :disabled="saving || !formReady()" @click="submitCreateJob">
               {{ saving ? t('common.labels.loading') : t('jobs.create') }}
@@ -726,7 +732,7 @@ textarea {
 .dialog-panel {
   width: min(760px, 100%);
   max-height: min(90vh, 900px);
-  overflow: auto;
+  overflow: hidden;
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-lg);
@@ -734,6 +740,35 @@ textarea {
   padding: var(--space-lg);
   display: grid;
   gap: var(--space-md);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.dialog-header,
+.dialog-footer {
+  flex-shrink: 0;
+}
+
+.dialog-body {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: var(--space-xs);
+}
+
+.job-create-summary {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-bg-secondary);
+  padding-bottom: var(--space-xs);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dialog-error-banner {
+  margin: 0;
+}
+
+.job-create-scroll-region {
+  display: grid;
 }
 
 .dialog-groups {
