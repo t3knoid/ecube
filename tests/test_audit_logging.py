@@ -18,7 +18,7 @@ import pytest
 
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
-from app.models.jobs import ExportFile, ExportJob, FileStatus, JobStatus
+from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.repositories.audit_repository import AuditRepository
 
@@ -341,6 +341,51 @@ class TestJobAuditLogging:
         assert entry.details["existing_project_id"] == "PROJ-OTHER"
         assert entry.details["requested_project_id"] == "PROJ-DIFFERENT"
         assert entry.details["attempted_project_id"] == "PROJ-DIFFERENT"
+
+    def test_job_create_source_overlap_logs_actor(self, client, db):
+        drive = UsbDrive(
+            device_identifier="AUDIT-JOB-OVERLAP",
+            current_state=DriveState.IN_USE,
+            current_project_id="PROJ-AUDIT",
+            mount_path="/mnt/ecube/audit-job-overlap",
+        )
+        db.add(drive)
+        db.flush()
+
+        existing_job = ExportJob(
+            project_id="PROJ-AUDIT",
+            evidence_number="EV-EXISTING-OVERLAP",
+            source_path="//server/proj-A/Evidence1",
+            target_mount_path=drive.mount_path,
+            status=JobStatus.PENDING,
+        )
+        db.add(existing_job)
+        db.flush()
+        db.add(DriveAssignment(drive_id=drive.id, job_id=existing_job.id))
+        db.commit()
+
+        response = client.post(
+            "/jobs",
+            json={
+                "project_id": "PROJ-AUDIT",
+                "evidence_number": "EV-OVERLAP",
+                "source_path": "//server/proj-A/Evidence1",
+                "drive_id": drive.id,
+            },
+        )
+        assert response.status_code == 409
+
+        entry = _audit_by_action(db, "JOB_REJECTED_SOURCE_OVERLAP")
+        assert entry is not None
+        assert entry.user == "test-user"
+        assert entry.project_id == "PROJ-AUDIT"
+        assert entry.drive_id == drive.id
+        assert entry.job_id is None
+        assert entry.details["actor"] == "test-user"
+        assert entry.details["overlapping_job_id"] == existing_job.id
+        assert entry.details["overlap_type"] == "exact"
+        assert entry.details["new_source_path"] == "[redacted-path]"
+        assert entry.details["existing_source_path"] == "[redacted-path]"
 
     def test_start_job_logs_actor(self, client, db):
         self._add_drive(db, "PROJ-AUDIT", "USB-AUDIT-START")
