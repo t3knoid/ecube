@@ -109,6 +109,7 @@ def seed_demo_environment(
     db: Session,
     *,
     data_root: str | Path | None = None,
+    metadata_path: str | Path | None = None,
     provider: OsUserProvider | None = None,
     shared_password: str | None = None,
     actor: str = "system",
@@ -119,7 +120,7 @@ def seed_demo_environment(
 ) -> DemoSeedResult:
     """Seed a normal ECUBE install with demo-safe users, roles, sample data, and optional real USB and network mounts configured in demo-metadata.json."""
     root = _resolve_data_root(data_root)
-    seed_metadata = _load_seed_metadata(root)
+    seed_metadata = _load_seed_metadata(root, metadata_path=metadata_path)
     projects = _normalized_projects(seed_metadata)
     accounts = _configured_demo_accounts(seed_metadata)
     effective_shared_password = (
@@ -194,9 +195,7 @@ def seed_demo_environment(
 
     jobs_seeded = _seed_demo_jobs(
         db,
-        root,
         actor=actor,
-        projects=projects,
         job_seed_config=job_seed_config,
         usb_seed_config=usb_seed_config,
         mount_seed_config=mount_seed_config,
@@ -229,7 +228,7 @@ def seed_demo_environment(
             "network_mounts_mounted": network_mounts_mounted,
             "usb_project_ids": [entry["project_name"] for entry in usb_seed_config.get("drives", [])] if usb_seed_config["enabled"] else [],
             "mount_project_ids": [entry["project_name"] for entry in mount_seed_config.get("mounts", [])] if mount_seed_config["enabled"] else [],
-            "job_project_ids": [entry["project_name"] for entry in job_seed_config.get("jobs", [])] if job_seed_config["enabled"] else [],
+            "job_project_ids": [entry["project_name"] for entry in job_seed_config.get("jobs", [])],
         },
     )
 
@@ -286,14 +285,20 @@ def _resolve_data_root(data_root: str | Path | None) -> Path:
     return Path(raw_path).expanduser().resolve()
 
 
-def _load_seed_metadata(root: Path) -> dict[str, Any]:
-    metadata_path = root / "demo-metadata.json"
-    if not metadata_path.is_file():
+def _load_seed_metadata(root: Path, metadata_path: str | Path | None = None) -> dict[str, Any]:
+    resolved_metadata_path: Path
+    if metadata_path is not None:
+        resolved_metadata_path = Path(metadata_path).expanduser().resolve()
+    else:
+        install_root_metadata = Path(__file__).resolve().parents[2] / "demo-metadata.json"
+        resolved_metadata_path = install_root_metadata if install_root_metadata.is_file() else root / "demo-metadata.json"
+
+    if not resolved_metadata_path.is_file():
         return {}
     try:
-        payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+        payload = json.loads(resolved_metadata_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        logger.warning("Failed to read demo seed metadata template", extra={"path": str(metadata_path)})
+        logger.warning("Failed to read demo seed metadata template", extra={"path": str(resolved_metadata_path)})
         return {}
     return payload if isinstance(payload, dict) else {}
 
@@ -446,7 +451,6 @@ def _resolve_seed_project_reference(project_id: object, *, projects: list[dict[s
 
 def _normalized_job_seed_config(value: object, *, projects: list[dict[str, Any]]) -> dict[str, Any]:
     config = value if isinstance(value, dict) else {}
-    enabled = bool(config.get("enabled", False))
     entries: list[dict[str, Any]] = []
     seen_jobs: set[str] = set()
 
@@ -489,10 +493,7 @@ def _normalized_job_seed_config(value: object, *, projects: list[dict[str, Any]]
                 entry["destination_usb_id"] = destination_usb_id
             entries.append(entry)
 
-    return {
-        "enabled": enabled,
-        "jobs": entries,
-    }
+    return {"jobs": entries}
 
 
 def _normalized_mount_seed_config(value: object, *, projects: list[dict[str, Any]]) -> dict[str, Any]:
@@ -999,7 +1000,6 @@ def _build_demo_metadata(
             ],
         },
         "job_seed": {
-            "enabled": bool(job_seed_config.get("enabled", False)),
             "jobs": [
                 {
                     "id": entry.get("id"),
@@ -1104,62 +1104,22 @@ def _stage_demo_files(
 
 def _seed_demo_jobs(
     db: Session,
-    root: Path,
     *,
     actor: str,
-    projects: list[dict[str, Any]],
     job_seed_config: dict[str, Any],
     usb_seed_config: dict[str, Any],
     mount_seed_config: dict[str, Any],
 ) -> int:
     configured_jobs = list(job_seed_config.get("jobs") or [])
-    if job_seed_config.get("enabled") and configured_jobs:
-        return _seed_configured_demo_jobs(
-            db,
-            actor=actor,
-            configured_jobs=configured_jobs,
-            usb_seed_config=usb_seed_config,
-            mount_seed_config=mount_seed_config,
-        )
-
-    seeded_count = 0
-    now = datetime.now(timezone.utc)
-
-    for project in projects:
-        project_root = root / str(project["folder"])
-        files = project.get("files", {})
-        total_bytes = sum(len(contents.encode("utf-8")) for contents in files.values())
-        job = ExportJob(
-            project_id=project["project_name"],
-            evidence_number=project["evidence_number"],
-            source_path=str(project_root),
-            target_mount_path=f"/demo/{project['folder']}",
-            status=JobStatus.COMPLETED,
-            total_bytes=total_bytes,
-            copied_bytes=total_bytes,
-            file_count=len(files),
-            created_by=DEMO_SEED_MARKER,
-            started_by=DEMO_SEED_MARKER,
-            started_at=now,
-            completed_at=now,
-        )
-        db.add(job)
-        db.flush()
-
-        for relative_path, contents in files.items():
-            db.add(
-                ExportFile(
-                    job_id=job.id,
-                    relative_path=relative_path,
-                    size_bytes=len(contents.encode("utf-8")),
-                    checksum=None,
-                    status=FileStatus.DONE,
-                )
-            )
-        seeded_count += 1
-
-    db.commit()
-    return seeded_count
+    if not configured_jobs:
+        return 0
+    return _seed_configured_demo_jobs(
+        db,
+        actor=actor,
+        configured_jobs=configured_jobs,
+        usb_seed_config=usb_seed_config,
+        mount_seed_config=mount_seed_config,
+    )
 
 
 def _synchronize_runtime_seed_ids(

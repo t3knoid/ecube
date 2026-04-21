@@ -49,6 +49,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Dedicated demo-only directory used for staged sample files.",
     )
+    parser.add_argument(
+        "--metadata-path",
+        default=None,
+        help="Path to the demo-metadata.json file to use for seeding. Defaults to <install-root>/demo-metadata.json when present.",
+    )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -99,6 +104,7 @@ def main(argv: list[str] | None = None) -> int:
             result = seed_demo_environment(
                 db,
                 data_root=args.data_root,
+                metadata_path=args.metadata_path,
                 provider=provider,
                 shared_password=args.shared_password,
                 actor=args.actor,
