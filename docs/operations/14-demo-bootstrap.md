@@ -16,7 +16,7 @@
 - [Validation checklist](#validation-checklist)
 - [Safety notes](#safety-notes)
 
-ECUBE demo mode uses a normal installation plus a supported post-install seed step.
+ECUBE demo mode uses a normal installation plus installer-configured post-install demo tasks.
 
 ## Purpose
 
@@ -40,7 +40,7 @@ Minimal `.env` configuration:
 DEMO_MODE=true
 ```
 
-The seed workflow writes the rest of the demo runtime settings into the managed `demo-metadata.json` file inside the demo data root. That metadata can include the login message, shared demo password, password-change policy, and demo account definitions.
+For a native install, the installer generates `/opt/ecube/demo-metadata.json` and uses that file as the source of truth for the post-install demo workflow. That metadata can include the login message, shared demo password, password-change policy, demo account definitions, USB drive mappings, network mount mappings, and seeded job definitions.
 
 If you want to override the defaults before the first seed, you may still set `DEMO_LOGIN_MESSAGE`, `DEMO_SHARED_PASSWORD`, `DEMO_DISABLE_PASSWORD_CHANGE`, `DEMO_DATA_ROOT`, or `DEMO_ACCOUNTS` in `.env`, but they are no longer required for a standard demo deployment.
 
@@ -48,44 +48,59 @@ Only the username, label, description, and the optional shared demo password are
 
 ## Post-install demo setup steps
 
-1. Install ECUBE.
-2. Edit the deployment environment file, usually `/opt/ecube/.env`, set `DATABASE_URL` for the target PostgreSQL instance, and confirm `DEMO_MODE=true`. The following example sets the DATABASE_URL to a local PostgreSQL instance.
+1. Connect the USB drives that should participate in the demo before running the installer. The installer discovers the currently attached USB devices and generates one demo project, one USB seed entry, one network mount, and one pending demo job per discovered drive.
 
-```env
-DEMO_MODE=true
-DATABASE_URL=postgresql://ecube:ecube@localhost/ecube
-```
-
-3. Create the `ecube` database if it does not already exist.
+2. Install ECUBE with demo post-install task configuration enabled and provide the network-share server IP or hostname.
 
 ```bash
-sudo -u postgres psql -c "CREATE DATABASE ecube OWNER ecube;"
+sudo ./install.sh --demo --server 192.168.2.250
 ```
 
-4. Run the ECUBE schema migrations manually.
+3. If you only want the installer to generate `/opt/ecube/demo-metadata.json` and stop before updating `.env`, creating the database, or running Alembic, add `--metadata-only`.
 
 ```bash
-sudo bash -lc 'cd /opt/ecube && /opt/ecube/venv/bin/alembic upgrade head'
+sudo ./install.sh --demo --metadata-only --server 192.168.2.250
 ```
 
-5. Restart the ECUBE service so the new configuration is loaded.
+If you want `--metadata-only` to write the generated file somewhere else, pass `--metadata-output` with an absolute file path.
 
 ```bash
-sudo systemctl restart ecube
+sudo ./install.sh --demo --metadata-only --server 192.168.2.250 --metadata-output /tmp/demo-metadata.json
 ```
 
-6. If you want to preconfigure demo accounts, messaging, USB seeding, or mount seeding, create or edit the target `demo-metadata.json` file in the demo data root.
-7. Run the seed command to stage the demo-safe content and create the managed demo accounts.
+In `--metadata-only` mode, the installer does not install or upgrade the ECUBE application, does not start services, and does not attempt any USB or network mount operations. It only discovers the currently attached USB devices and writes the generated metadata file.
 
-For a native install, the command lives inside the ECUBE virtual environment and should be run from the ECUBE install root so it reads the appliance environment file:
+4. Review the generated `/opt/ecube/demo-metadata.json` file. The installer builds the file from scratch, starting with the default demo configuration block and demo accounts, then generates the USB, mount, job, and project sections from live USB discovery.
+
+When `--demo` is set, the installer updates `.env` with `DEMO_MODE=true`, ensures `DATABASE_URL` is set to `postgresql://ecube:ecube@localhost/ecube` when missing, creates the local `ecube` database if it does not already exist, runs `alembic upgrade head`, generates `/opt/ecube/demo-metadata.json` from the connected USB drives and `--server`, and prints the post-install demo seed command you should run after staging the shares.
+
+If `DATABASE_URL` already points at a different PostgreSQL instance, the installer preserves it and skips local database creation.
+
+5. Stage the server-side share content using the generated metadata. The installer prints these paths in its completion summary, and the generated metadata is the source of truth.
+
+For each generated NFS mount, create the exported directory and add an `incoming/` subdirectory containing sanitized demo files:
 
 ```bash
-sudo bash -lc 'cd /opt/ecube && /opt/ecube/venv/bin/ecube-demo-bootstrap --data-root /opt/ecube/demo-data seed --shared-password "Choose-A-Strong-Demo-Password"'
+sudo mkdir -p /mnt/Data/ecube/demo-case-001/incoming
+```
+
+For each generated SMB mount, create a share whose root name matches the case folder and add an `incoming/` subdirectory containing sanitized demo files:
+
+```text
+//192.168.2.250/demo-case-002
+```
+
+Each generated job reads from `/incoming`, so the staged demo content must live under that subdirectory for both NFS and SMB shares.
+
+6. After staging the share content, run the demo bootstrap manually. For a native install, the command lives inside the ECUBE virtual environment and should be run from the ECUBE install root so it reads the appliance environment file:
+
+```bash
+sudo bash -lc 'cd /opt/ecube && /opt/ecube/venv/bin/ecube-demo-bootstrap --metadata-path /opt/ecube/demo-metadata.json seed 
 ```
 
 If the shared password contains shell-special characters such as `$`, escape them for the inner shell when using `sudo bash -lc`, or choose a password value that does not rely on shell expansion.
 
-8. Sign in and verify that the demo login guidance appears and that shared demo account password resets are blocked.
+7. Sign in and verify that the demo login guidance appears and that shared demo account password resets are blocked.
 
 The seed command is safe to rerun for managed demo state. Each pass removes the previously seeded demo jobs and role assignments, recreates the managed demo root, stages the built-in sample content again, and writes a fresh audit entry.
 
@@ -94,11 +109,13 @@ The seed command is safe to rerun for managed demo state. Each pass removes the 
 Use this command shape when running the bootstrap manually:
 
 ```bash
-ecube-demo-bootstrap [--actor NAME] [--data-root PATH] seed [--shared-password "..."] [--skip-os-users]
-ecube-demo-bootstrap [--actor NAME] [--data-root PATH] reset
+ecube-demo-bootstrap [--actor NAME] [--data-root PATH] [--metadata-path PATH] seed [--shared-password "..."] [--skip-os-users]
+ecube-demo-bootstrap [--actor NAME] [--data-root PATH] [--metadata-path PATH] reset
 ```
 
-Place `--data-root` and `--actor` before `seed` or `reset`. These are global options, so if they are placed after the subcommand the CLI will reject them.
+Place `--data-root`, `--metadata-path`, and `--actor` before `seed` or `reset`. These are global options, so if they are placed after the subcommand the CLI will reject them.
+
+Keep the subcommand on the same shell command line. If you stop after `--metadata-path ...demo-metadata.json` and press Enter before adding `seed` or `reset`, the CLI exits with `the following arguments are required: command`.
 
 Use `--skip-os-users` when you only want to seed the database and demo files and do not want ECUBE to create or reset host OS accounts.
 
@@ -179,7 +196,6 @@ A typical file now contains both the staged project list and the runtime demo se
     ]
   },
   "job_seed": {
-    "enabled": true,
     "jobs": [
       {
         "id": 101,
@@ -469,14 +485,7 @@ Optional host path to a credentials file used for SMB mounting.
 
 ### job_seed
 
-This object controls whether the demo bootstrap should create job records from the trusted component references defined in the metadata.
-
-#### job_seed.enabled
-
-Turns metadata-driven job seeding on or off.
-
-- Type: boolean
-- Typical value: `false` by default, `true` when you want seeded jobs created from the configured mount and USB references
+This object defines the job records that the demo bootstrap should create from the trusted component references defined in the metadata.
 
 #### job_seed.jobs
 
@@ -664,7 +673,6 @@ Use the following sample as a starting point for a managed demo deployment:
     ]
   },
   "job_seed": {
-    "enabled": true,
     "jobs": [
       {
         "id": 101,

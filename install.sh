@@ -72,6 +72,11 @@ VERSION_TAG=""
 DROP_DATABASE=false
 BACKEND_NO_TLS=false
 FIREWALL_CIDR=""
+DEMO_INSTALL=false
+DEMO_METADATA_ONLY=false
+DEMO_SERVER=""
+DEMO_METADATA_OUTPUT=""
+DEFAULT_DATABASE_URL="postgresql://ecube:ecube@localhost/ecube"
 
 # Credentials for the PostgreSQL superuser created during installation.
 # Populated by _provision_pg_superuser and printed in the post-install summary
@@ -116,6 +121,15 @@ Options:
                          Must be exact format: v<major>.<minor>.<patch> (e.g. v0.2.0).
                          Pre-releases, build metadata, and tags without a leading v
                          are not supported.
+  --demo                 Enable demo mode and run post-install demo bootstrap tasks.
+  --metadata-only        With --demo, only generate demo-metadata.json and skip
+                         DATABASE_URL updates, database creation, migrations,
+                         and demo bootstrap seeding.
+  --metadata-output FILE With --demo --metadata-only, write the generated
+                         demo-metadata.json to FILE instead of the default
+                         /opt/ecube/demo-metadata.json.
+  --server HOST          Override the host/IP used in demo network-share metadata.
+                         Applies to NFS and SMB remote_path entries when --demo is set.
   --uninstall            Remove ECUBE from this host
   --drop-database        With --uninstall, also drop the configured application
                          database (best-effort; requires sufficient DB privileges)
@@ -165,8 +179,467 @@ _extract_database_url_from_env() {
   _extract_env_value "$1" "DATABASE_URL"
 }
 
+_validate_metadata_output_arg() {
+  local flag="$1" val="$2"
+  if [[ "${val}" != /* ]]; then
+    echo "ERROR: ${flag} must be an absolute file path." >&2
+    exit 1
+  fi
+  if [[ "${val}" =~ [^A-Za-z0-9_./-] ]]; then
+    echo "ERROR: ${flag} path may only contain letters, digits, '.', '_', '-', and '/' (got '${val}')." >&2
+    exit 1
+  fi
+  if [[ "${val}" == */ ]]; then
+    echo "ERROR: ${flag} must point to a file, not a directory." >&2
+    exit 1
+  fi
+}
+
+_metadata_output_path() {
+  if [[ "${DEMO_METADATA_ONLY}" == true && -n "${DEMO_METADATA_OUTPUT}" ]]; then
+    printf '%s' "${DEMO_METADATA_OUTPUT}"
+    return 0
+  fi
+
+  printf '%s' "${INSTALL_DIR}/demo-metadata.json"
+}
+
 _extract_setup_admin_username_from_env() {
   _extract_env_value "$1" "SETUP_DEFAULT_ADMIN_USERNAME"
+}
+
+_upsert_env_value() {
+  local env_file="$1" var_name="$2" var_value="$3"
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    echo "[DRY-RUN] Would set ${var_name} in ${env_file}"
+    return 0
+  fi
+
+  install -d -m 0755 "$(dirname "${env_file}")"
+  [[ -f "${env_file}" ]] || : > "${env_file}"
+
+  python3.11 - <<'PY' "${env_file}" "${var_name}" "${var_value}"
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+var_name = sys.argv[2]
+var_value = sys.argv[3]
+text = path.read_text(encoding="utf-8") if path.exists() else ""
+lines = text.splitlines()
+updated = False
+
+for index, line in enumerate(lines):
+    if line.startswith(f"{var_name}="):
+        lines[index] = f"{var_name}={var_value}"
+        updated = True
+
+new_text = "\n".join(lines)
+if updated:
+    new_text = f"{new_text}\n" if new_text else f"{var_name}={var_value}\n"
+else:
+    if new_text:
+        new_text = f"{new_text}\n{var_name}={var_value}\n"
+    else:
+        new_text = f"{var_name}={var_value}\n"
+
+path.write_text(new_text, encoding="utf-8")
+PY
+
+  chown ecube:ecube "${env_file}" 2>/dev/null || true
+  chmod 600 "${env_file}" 2>/dev/null || true
+}
+
+_metadata_shared_password() {
+  python3.11 - <<'PY' "$1"
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+try:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+except Exception:
+    print("")
+    raise SystemExit(0)
+
+value = payload.get("demo_config", {}).get("shared_password") if isinstance(payload, dict) else None
+print(value.strip() if isinstance(value, str) else "")
+PY
+}
+
+_discover_demo_usb_devices_json() {
+  local device_glob="${DEMO_USB_DEVICE_GLOB:-/dev/sd?}"
+  local allow_nonblock="${DEMO_USB_ALLOW_NONBLOCK:-false}"
+  local current_id=1
+  local first=true
+
+  printf '['
+  while IFS= read -r dev; do
+    if [[ "${allow_nonblock}" == true ]]; then
+      [[ -e "${dev}" ]] || continue
+    else
+      [[ -b "${dev}" ]] || continue
+    fi
+
+    local props=""
+    props="$(udevadm info --query=property --name="${dev}" 2>/dev/null || true)"
+    [[ -n "${props}" ]] || continue
+
+    local serial=""
+    local devpath=""
+    local port=""
+    serial="$(printf '%s\n' "${props}" | sed -n 's/^ID_SERIAL_SHORT=//p' | head -n1)"
+    devpath="$(printf '%s\n' "${props}" | sed -n 's/^DEVPATH=//p' | head -n1)"
+
+    if [[ "${devpath}" != *"/usb"* ]]; then
+      continue
+    fi
+
+    port="$(printf '%s\n' "${devpath}" | sed -n 's#.*\/usb[0-9]\+/\([0-9][0-9-]*\)\(/.*\|:[0-9].*\)$#\1#p' | head -n1)"
+    if [[ -z "${port}" || -z "${serial}" ]]; then
+      continue
+    fi
+
+    if [[ "${first}" == false ]]; then
+      printf ','
+    fi
+
+    printf '{"id":%s,"port_system_path":"%s","device_identifier":"%s"}' "${current_id}" "${port}" "${serial}"
+    first=false
+    current_id=$((current_id + 1))
+  done < <(compgen -G "${device_glob}" || true)
+  printf ']\n'
+}
+
+_ensure_database_url() {
+  local env_file="$1"
+  local configured_url=""
+
+  configured_url="$(_extract_database_url_from_env "${env_file}" || true)"
+  if [[ -n "${configured_url}" ]]; then
+    printf '%s\n' "${configured_url}"
+    return 0
+  fi
+
+  _upsert_env_value "${env_file}" "DATABASE_URL" "${DEFAULT_DATABASE_URL}"
+  printf '%s\n' "${DEFAULT_DATABASE_URL}"
+}
+
+_database_provision_values() {
+  python3.11 - <<'PY' "$1"
+from urllib.parse import urlparse
+import sys
+
+database_url = sys.argv[1].strip()
+parsed = urlparse(database_url)
+database_name = parsed.path.lstrip("/")
+database_user = parsed.username or ""
+database_host = (parsed.hostname or "").lower()
+is_local = database_host in {"", "localhost", "127.0.0.1", "::1"}
+
+if not database_name or not database_user:
+    raise SystemExit(1)
+
+print(f"{database_user}\t{database_name}\t{database_host}\t{1 if is_local else 0}")
+PY
+}
+
+_ensure_local_application_database_exists() {
+  local database_url="$1"
+  local parsed_values=""
+
+  if ! parsed_values="$(_database_provision_values "${database_url}")"; then
+    error "Unable to determine PostgreSQL database/user from DATABASE_URL=${database_url}"
+    exit 1
+  fi
+
+  local database_user=""
+  local database_name=""
+  local database_host=""
+  local is_local_database=""
+  IFS=$'\t' read -r database_user database_name database_host is_local_database <<<"${parsed_values}"
+
+  if [[ "${is_local_database}" != "1" ]]; then
+    info "DATABASE_URL points to non-local PostgreSQL host '${database_host}' — skipping database creation."
+    return 0
+  fi
+
+  if ! _is_valid_db_user "${database_user}" || ! _is_valid_db_name "${database_name}"; then
+    error "Refusing to provision database with invalid DATABASE_URL-derived names."
+    exit 1
+  fi
+
+  if ! command -v psql &>/dev/null; then
+    error "psql is required to create the local PostgreSQL database '${database_name}'."
+    exit 1
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    echo "[DRY-RUN] Would create local PostgreSQL database '${database_name}' owned by '${database_user}' if missing"
+    return 0
+  fi
+
+  if ! sudo -u postgres psql -d postgres -c "SELECT 1" >/dev/null 2>&1; then
+    error "Unable to reach local PostgreSQL as the postgres OS user."
+    exit 1
+  fi
+
+  local escaped_database_name_literal="${database_name//\'/\'\'}"
+  if sudo -u postgres psql -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '${escaped_database_name_literal}'" 2>/dev/null | grep -q 1; then
+    info "PostgreSQL database '${database_name}' already exists — skipping creation."
+    return 0
+  fi
+
+  local escaped_database_name_identifier="${database_name//\"/\"\"}"
+  local escaped_database_user_identifier="${database_user//\"/\"\"}"
+  sudo -u postgres psql -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"${escaped_database_name_identifier}\" OWNER \"${escaped_database_user_identifier}\";" >/dev/null
+  ok "Created PostgreSQL database '${database_name}' owned by '${database_user}'"
+}
+
+_run_in_install_dir_as_ecube() {
+  local -a env_args=()
+  while [[ $# -gt 0 && "$1" == *=* ]]; do
+    env_args+=("$1")
+    shift
+  done
+  local -a cmd=("$@")
+
+  (
+    cd "${INSTALL_DIR}"
+    if command -v runuser &>/dev/null; then
+      run env "${env_args[@]}" runuser -u ecube -- "${cmd[@]}"
+    else
+      run env "${env_args[@]}" sudo -u ecube "${cmd[@]}"
+    fi
+  )
+}
+
+_run_alembic_upgrade() {
+  local database_url="$1"
+  info "Running Alembic migrations..."
+  _run_in_install_dir_as_ecube \
+    "DATABASE_URL=${database_url}" \
+    "PYTHONPATH=${INSTALL_DIR}" \
+    "${INSTALL_DIR}/venv/bin/alembic" upgrade head
+  ok "Database schema upgraded"
+}
+
+_generate_demo_metadata() {
+  local target_metadata="$1"
+  local server_override="$2"
+  local usb_entries_json="$3"
+
+  if [[ -z "${server_override}" ]]; then
+  error "--demo requires --server so network share metadata can be generated."
+  exit 1
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+  echo "[DRY-RUN] Would generate demo metadata at ${target_metadata}"
+  echo "[DRY-RUN] Would discover attached USB drives via udevadm"
+  echo "[DRY-RUN] Would generate NFS and SMB remote paths using ${server_override}"
+    return 0
+  fi
+
+  install -d -m 0755 "$(dirname "${target_metadata}")"
+  python3.11 - <<'PY' "${target_metadata}" "${server_override}" "${usb_entries_json}"
+import json
+import sys
+
+from pathlib import Path
+
+target_path = Path(sys.argv[1])
+server_override = sys.argv[2].strip()
+usb_entries = json.loads(sys.argv[3])
+
+if not usb_entries:
+  raise SystemExit("No connected USB drives were discovered for demo metadata generation.")
+
+drives = []
+mounts = []
+
+for index, entry in enumerate(usb_entries, start=1):
+  folder = f"demo-case-{index:03d}"
+  mount_type = "NFS" if index % 2 == 1 else "SMB"
+  remote_path = (
+    f"{server_override}:/mnt/Data/ecube/{folder}"
+    if mount_type == "NFS"
+    else f"//{server_override}/{folder}"
+  )
+
+  drives.append(
+    {
+      "id": index,
+      "port_system_path": entry["port_system_path"],
+      "project_id": index,
+      "device_identifier": entry["device_identifier"],
+    }
+  )
+  mounts.append(
+    {
+      "id": index,
+      "type": mount_type,
+      "remote_path": remote_path,
+      "project_id": index,
+      "username": None,
+      "password": None,
+      "credentials_file": None,
+    }
+  )
+
+projects = []
+for drive, mount in zip(drives, mounts):
+  remote_path = mount["remote_path"]
+  if mount["type"] == "NFS":
+    folder = remote_path.split(":", 1)[1].rstrip("/").rsplit("/", 1)[-1]
+  else:
+    folder = remote_path.rstrip("/").rsplit("/", 1)[-1]
+
+  projects.append(
+    {
+      "project_id": drive["project_id"],
+      "project_name": f"DEMO-CASE-{drive['project_id']:03d}",
+      "folder": folder,
+      "sanitized": True,
+    }
+  )
+
+jobs = []
+for drive, mount in zip(drives, mounts):
+  jobs.append(
+    {
+      "id": 100 + drive["project_id"],
+      "project_id": drive["project_id"],
+      "evidence_number": f"EVID-DEMO-JOB-{drive['project_id']:03d}",
+      "mount_id": mount["id"],
+      "drive_id": drive["id"],
+      "source_path": "/incoming",
+      "status": "PENDING",
+    }
+  )
+
+payload = {
+  "managed_by": "ecube-demo-seed-v1",
+  "generated_at": None,
+  "demo_config": {
+    "demo_mode": True,
+    "login_message": "Use the shared demo accounts below.",
+    "shared_password": "Scene.9Pratt",
+    "demo_disable_password_change": True,
+    "password_change_allowed": False,
+    "accounts": [
+      {
+        "username": "demo_admin",
+        "label": "Admin demo",
+        "description": "Full demo access for guided product walkthroughs.",
+        "roles": ["admin"],
+      },
+      {
+        "username": "demo_manager",
+        "label": "Manager demo",
+        "description": "Drive lifecycle, mounts, and job visibility.",
+        "roles": ["manager"],
+      },
+      {
+        "username": "demo_processor",
+        "label": "Processor demo",
+        "description": "Create and review sanitized export activity.",
+        "roles": ["processor"],
+      },
+      {
+        "username": "demo_auditor",
+        "label": "Auditor demo",
+        "description": "Read-only audit and verification review.",
+        "roles": ["auditor"],
+      },
+    ],
+  },
+  "usb_seed": {
+    "enabled": True,
+    "drives": drives,
+  },
+  "mount_seed": {
+    "enabled": True,
+    "mounts": mounts,
+  },
+  "job_seed": {
+    "jobs": jobs,
+  },
+  "projects": projects,
+}
+
+target_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+  chown -R ecube:ecube "$(dirname "${target_metadata}")" 2>/dev/null || true
+  chown ecube:ecube "${target_metadata}" 2>/dev/null || true
+  chmod 644 "${target_metadata}" 2>/dev/null || true
+  ok "Demo metadata generated at ${target_metadata}"
+}
+
+_print_demo_share_staging_guidance() {
+  local metadata_path="$1"
+
+  [[ -f "${metadata_path}" ]] || return 0
+
+  echo -e "  Stage the server shares before starting demo jobs:"
+  python3.11 - <<'PY' "${metadata_path}"
+import json
+from pathlib import Path
+import sys
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+mounts = payload.get("mount_seed", {}).get("mounts", [])
+for entry in mounts:
+  if not isinstance(entry, dict):
+    continue
+  remote_path = str(entry.get("remote_path") or "").strip()
+  mount_type = str(entry.get("type") or "").strip().upper()
+  if mount_type == "NFS" and ":" in remote_path:
+    _, export_path = remote_path.split(":", 1)
+    print(f"    NFS export: {remote_path}  create {export_path}/incoming and stage sanitized files there")
+  elif mount_type in {"SMB", "CIFS"}:
+    share_name = remote_path.rsplit("/", 1)[-1]
+    print(f"    SMB share:  {remote_path}  create share '{share_name}' with an incoming/ directory and stage sanitized files there")
+PY
+  echo ""
+}
+
+_print_demo_seed_command() {
+  local metadata_path="$1"
+
+  echo -e "  Post-install demo seed:"
+  echo -e "    sudo bash -lc 'cd ${INSTALL_DIR} && ${INSTALL_DIR}/venv/bin/ecube-demo-bootstrap --data-root ${INSTALL_DIR}/demo-data --metadata-path ${metadata_path} seed --shared-password \"Choose-A-Strong-Demo-Password\"'"
+  echo ""
+}
+
+_run_demo_install_tasks() {
+  [[ "${DEMO_INSTALL}" == true ]] || return 0
+
+  header "\n── Demo bootstrap ───────────────────────────────────────────"
+
+  local env_file="${INSTALL_DIR}/.env"
+  local demo_data_dir="${INSTALL_DIR}/demo-data"
+  local target_metadata="$(_metadata_output_path)"
+  local database_url=""
+  local usb_entries_json=""
+
+  if [[ "${DEMO_METADATA_ONLY}" == true ]]; then
+    header "\n── Demo metadata generation ───────────────────────────────────"
+    usb_entries_json="$(_discover_demo_usb_devices_json)"
+    _generate_demo_metadata "${target_metadata}" "${DEMO_SERVER}" "${usb_entries_json}"
+    return 0
+  fi
+
+  _upsert_env_value "${env_file}" "DEMO_MODE" "true"
+  _upsert_env_value "${env_file}" "DEMO_DATA_ROOT" "${demo_data_dir}"
+
+  database_url="$(_ensure_database_url "${env_file}")"
+  _ensure_local_application_database_exists "${database_url}"
+  _run_alembic_upgrade "${database_url}"
+  usb_entries_json="$(_discover_demo_usb_devices_json)"
+  _generate_demo_metadata "${target_metadata}" "${DEMO_SERVER}" "${usb_entries_json}"
 }
 
 _cleanup_pg_superuser_role() {
@@ -545,6 +1018,16 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       VERSION_TAG="$2"; shift 2 ;;
+    --demo)           DEMO_INSTALL=true; shift ;;
+    --metadata-only)  DEMO_METADATA_ONLY=true; shift ;;
+    --metadata-output)
+      _require_arg "$1" "${2-}"
+      _validate_metadata_output_arg "$1" "$2"
+      DEMO_METADATA_OUTPUT="$2"; shift 2 ;;
+    --server)
+      _require_arg "$1" "${2-}"
+      _validate_host_arg "--server" "$2"
+      DEMO_SERVER="$2"; shift 2 ;;
     --uninstall)      UNINSTALL=true; shift ;;
     --drop-database)  DROP_DATABASE=true; shift ;;
     --dry-run)        DRY_RUN=true; shift ;;
@@ -558,6 +1041,26 @@ done
 # ---------------------------------------------------------------------------
 if [[ "${BACKEND_NO_TLS}" == true ]]; then
   [[ "${_EXPLICIT_API_PORT}" == false ]] && API_PORT="80"
+fi
+
+if [[ "${DEMO_INSTALL}" != true && ( -n "${DEMO_SERVER}" || -n "${DEMO_METADATA_OUTPUT}" ) ]]; then
+  error "--server and --metadata-output may only be used together with --demo."
+  exit 1
+fi
+
+if [[ "${DEMO_METADATA_ONLY}" == true && "${DEMO_INSTALL}" != true ]]; then
+  error "--metadata-only may only be used together with --demo."
+  exit 1
+fi
+
+if [[ -n "${DEMO_METADATA_OUTPUT}" && "${DEMO_METADATA_ONLY}" != true ]]; then
+  error "--metadata-output may only be used together with --demo --metadata-only."
+  exit 1
+fi
+
+if [[ "${DEMO_INSTALL}" == true && -z "${DEMO_SERVER}" ]]; then
+  error "--demo requires --server so demo network shares can be generated."
+  exit 1
 fi
 # ---------------------------------------------------------------------------
 
@@ -1324,17 +1827,20 @@ install_backend() {
   # 9. Systemd unit
   _write_systemd_unit
 
-  # 10. Reload and start
+  # 10. Create a PostgreSQL superuser for use in the setup wizard.
+  _provision_pg_superuser
+
+  # 11. Optional demo bootstrap for seeded demo installs.
+  _run_demo_install_tasks
+
+  # 12. Reload and start
   run systemctl daemon-reload
   run systemctl enable ecube.service
   run systemctl restart ecube.service
   ok "ecube.service started and enabled"
 
-  # 11. Health check
+  # 13. Health check
   _wait_for_healthy
-
-  # 12. Create a PostgreSQL superuser for use in the setup wizard.
-  _provision_pg_superuser
 }
 
 _write_env_file() {
@@ -1912,6 +2418,20 @@ print_summary() {
     echo -e "  setup wizard database provisioning screen."
     echo ""
   fi
+  if [[ "${DEMO_INSTALL}" == true ]]; then
+    if [[ "${DEMO_METADATA_ONLY}" == true ]]; then
+      echo -e "  Demo mode:    metadata-only"
+    else
+      echo -e "  Demo mode:    post-install tasks configured"
+    fi
+    echo -e "  Demo data:    ${INSTALL_DIR}/demo-data"
+    if [[ -n "${DEMO_SERVER}" ]]; then
+      echo -e "  Demo server:  ${DEMO_SERVER}"
+    fi
+    echo ""
+    _print_demo_share_staging_guidance "${INSTALL_DIR}/demo-metadata.json"
+    _print_demo_seed_command "${INSTALL_DIR}/demo-metadata.json"
+  fi
   echo -e "  Service management:"
   echo -e "    sudo systemctl start   ecube"
   echo -e "    sudo systemctl stop    ecube"
@@ -1921,6 +2441,21 @@ print_summary() {
   echo -e "  Logs:"
   echo -e "    sudo journalctl -u ecube -f"
   echo ""
+  echo -e "  Install log: ${LOG_FILE}"
+  echo -e "${C_BOLD}=======================================================${C_RESET}"
+}
+
+print_demo_metadata_summary() {
+  echo ""
+  echo -e "${C_BOLD}=======================================================${C_RESET}"
+  echo -e "${C_GREEN}  Demo metadata generated successfully${C_RESET}"
+  echo -e "${C_BOLD}=======================================================${C_RESET}"
+  echo -e "  Metadata:     $(_metadata_output_path)"
+  if [[ -n "${DEMO_SERVER}" ]]; then
+    echo -e "  Demo server:  ${DEMO_SERVER}"
+  fi
+  echo ""
+  _print_demo_share_staging_guidance "$(_metadata_output_path)"
   echo -e "  Install log: ${LOG_FILE}"
   echo -e "${C_BOLD}=======================================================${C_RESET}"
 }
@@ -1939,6 +2474,12 @@ main() {
   header "\n${C_BOLD}ECUBE Installer${C_RESET}"
   [[ "${DRY_RUN}" == true ]] && warn "DRY-RUN mode: no changes will be made."
 
+  if [[ "${DEMO_INSTALL}" == true && "${DEMO_METADATA_ONLY}" == true ]]; then
+    _run_demo_install_tasks
+    print_demo_metadata_summary
+    exit 0
+  fi
+
   # Stop running ECUBE service before pre-flight port checks so that a
   # re-run or upgrade does not fail because the port is already occupied by
   # the currently-installed instance.
@@ -1955,4 +2496,6 @@ main() {
   print_summary
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
