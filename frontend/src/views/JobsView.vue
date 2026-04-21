@@ -54,6 +54,7 @@ const form = ref({
 
 const canOperate = computed(() => authStore.hasAnyRole(['admin', 'manager', 'processor']))
 const ACTIVE_OVERLAP_STATUSES = new Set(['PENDING', 'RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING'])
+const OVERLAP_QUERY_LIMIT = 1000
 
 const columns = computed(() => [
   { key: 'id', label: t('common.labels.id'), align: 'right' },
@@ -246,12 +247,23 @@ async function loadSupportingData() {
 async function loadOverlapCandidates(driveId) {
   if (!driveId) return []
 
-  const response = await listJobs({
-    limit: 1000,
-    drive_id: Number(driveId),
-    statuses: Array.from(ACTIVE_OVERLAP_STATUSES),
-  })
-  return (response || []).map((item) => normalizeProjectRecord(item, ['project_id']))
+  const overlapCandidates = []
+  let offset = 0
+
+  while (true) {
+    const response = await listJobs({
+      limit: OVERLAP_QUERY_LIMIT,
+      offset,
+      drive_id: Number(driveId),
+      statuses: Array.from(ACTIVE_OVERLAP_STATUSES),
+    })
+    const batch = (response || []).map((item) => normalizeProjectRecord(item, ['project_id']))
+    overlapCandidates.push(...batch)
+    if (batch.length < OVERLAP_QUERY_LIMIT) {
+      return overlapCandidates
+    }
+    offset += batch.length
+  }
 }
 
 function stopJobsRefreshTimer() {

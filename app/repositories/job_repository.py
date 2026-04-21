@@ -92,6 +92,7 @@ class JobRepository:
         self,
         limit: int = 200,
         *,
+        offset: int = 0,
         drive_id: Optional[int] = None,
         statuses: Optional[Iterable[JobStatus]] = None,
     ) -> List[ExportJob]:
@@ -114,6 +115,7 @@ class JobRepository:
         return (
             query.distinct()
             .order_by(ExportJob.created_at.desc(), ExportJob.id.desc())
+            .offset(offset)
             .limit(limit)
             .all()
         )
