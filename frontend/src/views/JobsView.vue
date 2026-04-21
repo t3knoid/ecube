@@ -12,6 +12,7 @@ import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
 import { calculateJobProgress } from '@/utils/jobProgress.js'
+import { classifySourcePathOverlap, resolveMountedSourcePath } from '@/utils/pathOverlap.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const router = useRouter()
@@ -52,6 +53,8 @@ const form = ref({
 })
 
 const canOperate = computed(() => authStore.hasAnyRole(['admin', 'manager', 'processor']))
+const ACTIVE_OVERLAP_STATUSES = new Set(['PENDING', 'RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING'])
+const OVERLAP_QUERY_LIMIT = 1000
 
 const columns = computed(() => [
   { key: 'id', label: t('common.labels.id'), align: 'right' },
@@ -241,6 +244,28 @@ async function loadSupportingData() {
     : []
 }
 
+async function loadOverlapCandidates(driveId) {
+  if (!driveId) return []
+
+  const overlapCandidates = []
+  let offset = 0
+
+  while (true) {
+    const response = await listJobs({
+      limit: OVERLAP_QUERY_LIMIT,
+      offset,
+      drive_id: Number(driveId),
+      statuses: Array.from(ACTIVE_OVERLAP_STATUSES),
+    })
+    const batch = (response || []).map((item) => normalizeProjectRecord(item, ['project_id']))
+    overlapCandidates.push(...batch)
+    if (batch.length < OVERLAP_QUERY_LIMIT) {
+      return overlapCandidates
+    }
+    offset += batch.length
+  }
+}
+
 function stopJobsRefreshTimer() {
   if (jobsRefreshTimer.value != null) {
     window.clearInterval(jobsRefreshTimer.value)
@@ -295,6 +320,44 @@ function resolveSourcePath() {
   return source || '/'
 }
 
+function selectedMountRoot() {
+  const mount = mounts.value.find((item) => Number(item?.id) === Number(form.value.mount_id))
+  return String(mount?.local_mount_point || '').trim()
+}
+
+function buildOverlapErrorMessage(job, overlapType) {
+  const jobId = Number(job?.id)
+  if (overlapType === 'exact') {
+    return t('jobs.overlapConflictExact', { jobId })
+  }
+  if (overlapType === 'ancestor') {
+    return t('jobs.overlapConflictAncestor', { jobId })
+  }
+  return t('jobs.overlapConflictDescendant', { jobId })
+}
+
+function findSourceOverlapConflict(candidateJobs) {
+  const driveId = Number(form.value.drive_id)
+  const mountRoot = selectedMountRoot()
+  const sourcePath = resolveMountedSourcePath(resolveSourcePath(), mountRoot)
+
+  if (!driveId || !mountRoot || !sourcePath) {
+    return null
+  }
+
+  for (const job of candidateJobs) {
+    if (!ACTIVE_OVERLAP_STATUSES.has(normalizeJobStatus(job?.status))) continue
+    if (Number(job?.drive?.id) !== driveId) continue
+
+    const overlapType = classifySourcePathOverlap(job?.source_path, sourcePath)
+    if (overlapType !== 'none') {
+      return { job, overlapType }
+    }
+  }
+
+  return null
+}
+
 function buildJobError(err) {
   const status = err?.response?.status
   const detail = normalizeErrorMessage(err?.response?.data, '')
@@ -322,6 +385,13 @@ async function submitCreateJob() {
 
     if (!driveStillEligible || !mountStillEligible) {
       error.value = t('jobs.selectionUnavailable')
+      return
+    }
+
+    const overlapCandidates = await loadOverlapCandidates(form.value.drive_id)
+    const overlapConflict = findSourceOverlapConflict(overlapCandidates)
+    if (overlapConflict) {
+      error.value = buildOverlapErrorMessage(overlapConflict.job, overlapConflict.overlapType)
       return
     }
 
