@@ -11,9 +11,15 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  rootLabel: {
+    type: String,
+    default: '',
+  },
 })
 
 const { t } = useI18n()
+
+const displayedRootLabel = computed(() => props.rootLabel || props.mountPath)
 
 // --- State ---
 const subdir = ref('')
@@ -150,7 +156,7 @@ function onRowArrowKey(event) {
   <div class="directory-browser">
     <!-- Breadcrumb trail -->
     <nav class="breadcrumb" aria-label="breadcrumb">
-      <button class="crumb-btn" @click="navigateToCrumb(-1)">{{ mountPath }}</button>
+      <button class="crumb-btn" @click="navigateToCrumb(-1)">{{ displayedRootLabel }}</button>
       <template v-for="(crumb, index) in breadcrumbs" :key="index">
         <span class="crumb-sep" aria-hidden="true">/</span>
         <span
