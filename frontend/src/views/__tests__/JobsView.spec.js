@@ -144,6 +144,8 @@ describe('JobsView grouped create dialog', () => {
     expect(wrapper.text()).toContain('Source')
     expect(wrapper.text()).toContain('Destination')
     expect(wrapper.text()).toContain('Execution')
+    expect(wrapper.find('.job-create-summary').exists()).toBe(true)
+    expect(wrapper.find('.job-create-scroll-region').exists()).toBe(true)
 
     expect(wrapper.find('#job-project').attributes('disabled')).toBeUndefined()
     expect(wrapper.find('#job-evidence').attributes('disabled')).toBeDefined()
@@ -339,6 +341,45 @@ describe('JobsView grouped create dialog', () => {
       statuses: ['PENDING', 'RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING'],
     })
     expect(wrapper.text()).toContain('A job is already copying from this exact source path to the selected drive (job #55).')
+  })
+
+  it('keeps the create-dialog warning visible after a jobs refresh', async () => {
+    mocks.listJobs
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 55,
+          project_id: 'PROJ-001',
+          evidence_number: 'EV-055',
+          status: 'RUNNING',
+          source_path: '/nfs/project-001/Evidence1',
+          drive: { id: 1, port_system_path: '2-1', device_identifier: 'USB-001' },
+        },
+      ])
+      .mockResolvedValueOnce([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const createButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.create'))
+    await createButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#job-project').setValue('PROJ-001')
+    await flushPromises()
+    await wrapper.find('#job-evidence').setValue('EVID-OVERLAP')
+    await wrapper.find('#job-mount').setValue('11')
+    await wrapper.find('#job-source-path').setValue('Evidence1')
+    await wrapper.find('#job-drive').setValue('1')
+
+    await wrapper.find('#job-submit').trigger('click')
+    await flushPromises()
+
+    const refreshButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.refresh'))
+    await refreshButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.dialog-error-banner').text()).toContain('A job is already copying from this exact source path to the selected drive (job #55).')
   })
 
   it('checks additional overlap pages before allowing create submission', async () => {
