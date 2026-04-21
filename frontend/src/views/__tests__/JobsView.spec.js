@@ -323,6 +323,29 @@ describe('JobsView grouped create dialog', () => {
     expect(wrapper.find('.row-progress-stub').text()).not.toContain('100%')
   })
 
+  it('does not show 100% when running progress rounds down to 0%', async () => {
+    mocks.listJobs.mockResolvedValue([
+      {
+        id: 16,
+        project_id: 'PROJ-001',
+        evidence_number: 'EV-016',
+        status: 'RUNNING',
+        source_path: '/nfs/project-001',
+        total_bytes: 27 * 1024 * 1024 * 1024,
+        copied_bytes: 136 * 1024 * 1024,
+        file_count: 5000,
+        files_succeeded: 0,
+        files_failed: 0,
+      },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('.row-progress-stub').text()).toContain('0%')
+    expect(wrapper.find('.row-progress-stub').text()).not.toContain('100%')
+  })
+
   it('uses Details as the row action label', async () => {
     mocks.listJobs.mockResolvedValue([
       {
