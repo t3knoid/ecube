@@ -125,10 +125,14 @@ def _reject_source_path_overlap(
     )
 
     for existing_job in active_jobs:
-        if exclude_job_id is not None and existing_job.id == exclude_job_id:
+        existing_job_row = _row(existing_job)
+        existing_job_id = cast(int, existing_job_row.id)
+        existing_source_path = cast(str, existing_job_row.source_path)
+
+        if exclude_job_id is not None and existing_job_id == exclude_job_id:
             continue
 
-        overlap_type = classify_source_path_overlap(existing_job.source_path, new_source_path)
+        overlap_type = classify_source_path_overlap(existing_source_path, new_source_path)
         if overlap_type == "none":
             continue
 
@@ -144,17 +148,25 @@ def _reject_source_path_overlap(
                     "drive_id": drive_id,
                     "project_id": project_id,
                     "new_source_path": new_source_path,
-                    "existing_source_path": existing_job.source_path,
-                    "overlapping_job_id": existing_job.id,
+                    "existing_source_path": existing_source_path,
+                    "overlapping_job_id": existing_job_id,
                     "overlap_type": overlap_type,
                 },
                 client_ip=client_ip,
             )
         except Exception:
-            logger.exception("Failed to write audit log for JOB_REJECTED_SOURCE_OVERLAP")
+            logger.exception(
+                "Failed to write audit log for JOB_REJECTED_SOURCE_OVERLAP",
+                {
+                    "project_id": project_id,
+                    "drive_id": drive_id,
+                    "overlapping_job_id": existing_job_id,
+                    "overlap_type": overlap_type,
+                },
+            )
 
         raise ConflictError(
-            _build_source_overlap_message(overlap_type, drive_id, existing_job.id),
+            _build_source_overlap_message(overlap_type, drive_id, existing_job_id),
             code="SOURCE_OVERLAP",
         )
 
