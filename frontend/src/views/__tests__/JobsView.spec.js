@@ -153,6 +153,7 @@ describe('JobsView grouped create dialog', () => {
     expect(wrapper.find('#job-thread-count').attributes('disabled')).toBeDefined()
     expect(wrapper.find('#job-mount').attributes('disabled')).toBeDefined()
     expect(wrapper.find('#job-source-path').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('#job-source-path').element.value).toBe('/')
     expect(wrapper.find('#job-drive').attributes('disabled')).toBeDefined()
     expect(wrapper.find('#job-run-immediately').attributes('disabled')).toBeDefined()
   })
