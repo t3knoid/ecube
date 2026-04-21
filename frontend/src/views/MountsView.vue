@@ -51,8 +51,6 @@ const columns = computed(() => [
   { key: 'id', label: t('common.labels.id'), align: 'right' },
   { key: 'type', label: t('common.labels.type') },
   { key: 'project_id', label: t('dashboard.project') },
-  { key: 'remote_path', label: t('mounts.remotePath') },
-  { key: 'local_mount_point', label: t('mounts.localPath') },
   { key: 'status', label: t('common.labels.status') },
   { key: 'last_checked_at', label: t('mounts.lastChecked') },
   { key: 'actions', label: '', align: 'center' },
@@ -136,6 +134,12 @@ function browseLabel(mount) {
   return mount?.project_id
     ? `${t('mounts.browse')} ${formatProjectId(mount.project_id)}`
     : t('mounts.browse')
+}
+
+function mountRootLabel(mount) {
+  const mountPath = String(mount?.local_mount_point || '').trim()
+  const parts = mountPath.split('/').filter(Boolean)
+  return parts.at(-1) || t('mounts.browse')
 }
 
 function formValid() {
@@ -317,8 +321,6 @@ onBeforeUnmount(() => {
 
     <DataTable :columns="columns" :rows="paged" :empty-text="t('mounts.empty')">
       <template #cell-project_id="{ row }">{{ formatProjectId(row.project_id) }}</template>
-      <template #cell-remote_path="{ row }">{{ protectedValue(row.remote_path) }}</template>
-      <template #cell-local_mount_point="{ row }">{{ protectedValue(row.local_mount_point) }}</template>
       <template #cell-status="{ row }"><StatusBadge :status="row.status" /></template>
       <template #cell-last_checked_at="{ row }">{{ toIso(row.last_checked_at) }}</template>
       <template #cell-actions="{ row }">
@@ -351,6 +353,7 @@ onBeforeUnmount(() => {
       </h3>
       <DirectoryBrowser
         :mount-path="activeBrowsedMount.local_mount_point"
+        :root-label="mountRootLabel(activeBrowsedMount)"
       />
     </section>
 
