@@ -26,7 +26,7 @@ function buildDrive(overrides = {}) {
     serial_number: 'SN-001',
     filesystem_type: 'ext4',
     capacity_bytes: 1024,
-    // mount_path removed
+    mount_path: null,
     current_state: 'AVAILABLE',
     current_project_id: null,
     ...overrides,
@@ -153,13 +153,13 @@ describe('DrivesView rescan and filter loading', () => {
     expect(wrapper.text()).toContain('SER-ONLY')
   })
 
-  it('does not show the removed Browse action for a mounted available drive', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'AVAILABLE' })])
+  it('shows the Browse action for a mounted available drive', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'AVAILABLE', mount_path: '/mnt/ecube/1' })])
 
     const wrapper = mountView()
     await flushPromises()
 
     const labels = wrapper.findAll('button').map((node) => node.text())
-    expect(labels).not.toContain(i18n.global.t('drives.browse'))
+    expect(labels).toContain(i18n.global.t('drives.browse'))
   })
 })

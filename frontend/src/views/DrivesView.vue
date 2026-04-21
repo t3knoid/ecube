@@ -248,13 +248,30 @@ onMounted(loadDrives)
       <template #cell-actions="{ row }">
         <div class="row-actions">
           <button class="btn" @click="openDrive(row)">{{ t('drives.details') }}</button>
-          <!-- Browse button removed with mount_path field -->
+          <button
+            v-if="row.mount_path"
+            class="btn"
+            @click="toggleBrowse(row.id)"
+          >
+            {{ t('drives.browse') }}
+          </button>
         </div>
       </template>
     </DataTable>
 
-    <!-- Inline directory browser panel -->
-    <!-- Browse panel removed with mount_path field -->
+    <section
+      v-if="activeBrowsedDrive?.mount_path"
+      ref="browsePanelRef"
+      class="browse-panel"
+    >
+      <header class="browse-panel-header">
+        <h2>{{ t('browse.browseContents') }}</h2>
+        <button class="btn" @click="toggleBrowse(activeBrowsedDrive.id)">
+          {{ t('common.actions.close') }}
+        </button>
+      </header>
+      <DirectoryBrowser :mount-path="activeBrowsedDrive.mount_path" />
+    </section>
 
     <Pagination v-model:page="page" :page-size="pageSize" :total="sorted.length" />
   </section>
@@ -281,6 +298,22 @@ onMounted(loadDrives)
 
 .filters {
   flex-wrap: wrap;
+}
+
+.browse-panel {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-bg-secondary);
+}
+
+.browse-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
 }
 
 input,
