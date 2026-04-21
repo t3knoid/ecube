@@ -20,6 +20,38 @@ from app.infrastructure.mount_info import find_device_mount_point
 logger = logging.getLogger(__name__)
 
 
+def _log_drive_mount_debug_failure(
+    message: str,
+    *,
+    device_path: str,
+    mount_point: str,
+    returncode: int | None = None,
+    raw_error: object = None,
+) -> None:
+    raw_text = "" if raw_error is None else str(raw_error).strip()
+    if not raw_text:
+        raw_text = "(empty)"
+
+    if returncode is None:
+        logger.debug(
+            "%s: device_path=%s mount_point=%s raw_error=%s",
+            message,
+            device_path,
+            mount_point,
+            raw_text,
+        )
+        return
+
+    logger.debug(
+        "%s: device_path=%s mount_point=%s returncode=%s raw_error=%s",
+        message,
+        device_path,
+        mount_point,
+        returncode,
+        raw_text,
+    )
+
+
 def _with_sudo(cmd: list[str]) -> list[str]:
     if settings.use_sudo and os.geteuid() != 0:
         return ["sudo", "-n", *cmd]
@@ -194,6 +226,12 @@ class LinuxDriveMount:
                 os.path.basename(mount_point.rstrip("/")),
                 settings.subprocess_timeout_seconds,
             )
+            _log_drive_mount_debug_failure(
+                "Drive mount timeout details",
+                device_path=mountable,
+                mount_point=mount_point,
+                raw_error=f"mount timed out after {settings.subprocess_timeout_seconds}s",
+            )
             return False, f"mount timed out after {settings.subprocess_timeout_seconds}s"
         except subprocess.CalledProcessError as exc:
             stderr = (exc.stderr or b"").decode(errors="replace").strip()
@@ -203,6 +241,13 @@ class LinuxDriveMount:
                 os.path.basename(mount_point.rstrip("/")),
                 exc.returncode,
                 stderr or "mount command failed",
+            )
+            _log_drive_mount_debug_failure(
+                "Drive mount raw error",
+                device_path=mountable,
+                mount_point=mount_point,
+                returncode=exc.returncode,
+                raw_error=stderr or exc,
             )
             if stderr and "already mounted" in stderr.lower():
                 actual = find_device_mount_point(mountable)
@@ -225,6 +270,12 @@ class LinuxDriveMount:
                 os.path.basename(mount_point.rstrip("/")),
                 str(exc),
             )
+            _log_drive_mount_debug_failure(
+                "Drive mount OS error details",
+                device_path=mountable,
+                mount_point=mount_point,
+                raw_error=exc,
+            )
             return False, f"mount error: {exc}"
 
         writable, access_error = _ensure_mount_point_writable(mount_point)
@@ -237,6 +288,15 @@ class LinuxDriveMount:
                 cleanup_ok,
                 access_error or "mount target is not writable",
                 cleanup_error or "",
+            )
+            _log_drive_mount_debug_failure(
+                "Drive mount access repair details",
+                device_path=mountable,
+                mount_point=mount_point,
+                raw_error=(
+                    f"access_error={access_error or 'mount target is not writable'}; "
+                    f"cleanup_error={cleanup_error or ''}"
+                ),
             )
             detail = access_error or "mount target is not writable by the ECUBE service account"
             if not cleanup_ok and cleanup_error:

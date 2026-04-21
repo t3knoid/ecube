@@ -4,6 +4,8 @@ These tests exercise the path-safety checks (absolute, direct-child of
 usb_mount_base_path) without actually calling mount(8).
 """
 
+import subprocess
+
 from unittest.mock import patch
 
 from app.infrastructure.drive_mount import LinuxDriveMount
@@ -171,3 +173,41 @@ def test_mount_drive_fails_when_mount_point_remains_unwritable():
 
     assert ok is False
     assert "not writable" in err
+
+
+def test_mount_drive_logs_raw_debug_error(caplog):
+    """Debug logs should retain the unsanitized mount helper error text."""
+    dm = LinuxDriveMount()
+    with patch("app.infrastructure.drive_mount.settings") as mock_settings:
+        mock_settings.usb_mount_base_path = _BASE
+        mock_settings.sysfs_block_path = "/sys/block"
+        mock_settings.mount_binary_path = "/bin/mount"
+        mock_settings.use_sudo = False
+        mock_settings.subprocess_timeout_seconds = 10
+        mock_settings.procfs_mounts_path = "/proc/mounts"
+        with patch("os.path.realpath", side_effect=lambda p: p):
+            with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
+                with patch("app.infrastructure.drive_mount.LinuxFilesystemDetector.detect", return_value="ext4"):
+                    with patch("os.makedirs"):
+                        with patch(
+                            "subprocess.run",
+                            side_effect=subprocess.CalledProcessError(
+                                returncode=32,
+                                cmd=["/bin/mount"],
+                                stderr=b"mount: /dev/sdb: permission denied while mounting /mnt/ecube/7",
+                            ),
+                        ):
+                            with caplog.at_level("DEBUG"):
+                                ok, err = dm.mount_drive(_VALID_DEVICE, f"{_BASE}/7")
+
+    assert ok is False
+    assert "permission denied" in (err or "")
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("Drive mount command failed" in message for message in messages)
+    assert any(
+        "Drive mount raw error" in message
+        and "/dev/sdb" in message
+        and "/mnt/ecube/7" in message
+        and "permission denied while mounting /mnt/ecube/7" in message
+        for message in messages
+    )
