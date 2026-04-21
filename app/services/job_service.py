@@ -47,12 +47,13 @@ def list_jobs(
     db: Session,
     limit: int = 200,
     *,
+    offset: int = 0,
     drive_id: Optional[int] = None,
     statuses: Optional[tuple[JobStatus, ...]] = None,
 ) -> list[ExportJob]:
     """Return the most recent export jobs."""
     repo = JobRepository(db)
-    return repo.list_recent(limit=limit, drive_id=drive_id, statuses=statuses)
+    return repo.list_recent(limit=limit, offset=offset, drive_id=drive_id, statuses=statuses)
 
 
 def _resolve_job_source_path(body: JobCreate, db: Session) -> str:
