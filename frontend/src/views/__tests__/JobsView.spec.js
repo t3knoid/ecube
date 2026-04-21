@@ -333,6 +333,39 @@ describe('JobsView grouped create dialog', () => {
     expect(wrapper.text()).toContain('A job is already copying from this exact source path to the selected drive (job #55).')
   })
 
+  it('treats paused jobs as overlap conflicts in the UI before submitting create job', async () => {
+    mocks.listJobs.mockResolvedValue([
+      {
+        id: 56,
+        project_id: 'PROJ-001',
+        evidence_number: 'EV-056',
+        status: 'PAUSED',
+        source_path: '/nfs/project-001/Evidence1',
+        drive: { id: 1, port_system_path: '2-1', device_identifier: 'USB-001' },
+      },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const createButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.create'))
+    await createButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#job-project').setValue('PROJ-001')
+    await flushPromises()
+    await wrapper.find('#job-evidence').setValue('EVID-PAUSED-OVERLAP')
+    await wrapper.find('#job-mount').setValue('11')
+    await wrapper.find('#job-source-path').setValue('Evidence1')
+    await wrapper.find('#job-drive').setValue('1')
+
+    await wrapper.find('#job-submit').trigger('click')
+    await flushPromises()
+
+    expect(mocks.createJob).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('A job is already copying from this exact source path to the selected drive (job #56).')
+  })
+
   it('keeps running list progress aligned with completed file counts', async () => {
     mocks.listJobs.mockResolvedValue([
       {

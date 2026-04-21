@@ -346,6 +346,40 @@ def test_create_job_rejects_descendant_source_path_overlap_on_same_drive(client,
     assert "already copies from a parent path" in response.json()["message"]
 
 
+def test_create_job_rejects_overlap_for_paused_job_on_same_drive(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-OVERLAP-PAUSED-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-OVERLAP",
+        mount_path="/mnt/ecube/overlap-paused-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    existing = _create_assigned_job(
+        db,
+        drive=drive,
+        project_id="PROJ-OVERLAP",
+        evidence_number="EV-EXISTING-PAUSED-001",
+        source_path="//server/proj-A/Evidence1",
+        status=JobStatus.PAUSED,
+    )
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-OVERLAP",
+            "evidence_number": "EV-NEW-PAUSED-001",
+            "source_path": "//server/proj-A/Evidence1",
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "SOURCE_OVERLAP"
+    assert f"job #{existing.id}" in response.json()["message"]
+
+
 def test_create_job_allows_sibling_source_paths_on_same_drive(client, db):
     drive = UsbDrive(
         device_identifier="USB-OVERLAP-SIBLING-001",
