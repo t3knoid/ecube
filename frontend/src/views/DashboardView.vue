@@ -8,6 +8,7 @@ import { usePolling } from '@/composables/usePolling.js'
 import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
+import { calculateJobProgress, isJobProgressActive } from '@/utils/jobProgress.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const { t } = useI18n()
@@ -43,33 +44,11 @@ function formatProjectId(value) {
 }
 
 function progressPercent(job) {
-  if (!job) return 0
-
-  const status = String(job.status || '').toUpperCase()
-  const totalBytes = Number(job.total_bytes || 0)
-  const copiedBytes = Number(job.copied_bytes || 0)
-  const totalFiles = Number(job.file_count || 0)
-  const filesSucceeded = Number(job.files_succeeded || 0)
-  const filesFailed = Number(job.files_failed || 0)
-  const finishedFiles = Math.min(totalFiles, filesSucceeded + filesFailed)
-
-  const bytePercent = totalBytes > 0
-    ? Math.max(0, Math.min(100, Math.round((copiedBytes / totalBytes) * 100)))
-    : 0
-  const filePercent = totalFiles > 0
-    ? Math.max(0, Math.min(100, Math.round((finishedFiles / totalFiles) * 100)))
-    : bytePercent
-
-  if (status === 'RUNNING' || status === 'VERIFYING') {
-    return Math.min(bytePercent || 100, filePercent || 100)
-  }
-
-  return totalBytes > 0 ? bytePercent : filePercent
+  return calculateJobProgress(job).percent
 }
 
 function progressActive(job) {
-  const status = String(job?.status || '').toUpperCase()
-  return status === 'RUNNING' || status === 'VERIFYING'
+  return isJobProgressActive(job)
 }
 
 async function refreshSnapshot() {
