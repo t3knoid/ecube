@@ -107,6 +107,7 @@ def _reject_source_path_overlap(
     project_id: str,
     drive_id: int,
     new_source_path: str,
+    exclude_job_id: Optional[int] = None,
 ) -> None:
     assignment_repo = DriveAssignmentRepository(db)
     active_jobs = assignment_repo.list_active_jobs_for_drive(
@@ -115,6 +116,9 @@ def _reject_source_path_overlap(
     )
 
     for existing_job in active_jobs:
+        if exclude_job_id is not None and existing_job.id == exclude_job_id:
+            continue
+
         overlap_type = classify_source_path_overlap(existing_job.source_path, new_source_path)
         if overlap_type == "none":
             continue
@@ -535,6 +539,17 @@ def update_job(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    _reject_source_path_overlap(
+        db=db,
+        audit_repo=audit_repo,
+        actor=actor,
+        client_ip=client_ip,
+        project_id=cast(str, job_row.project_id),
+        drive_id=int(requested_drive_id),
+        new_source_path=validated_source_path,
+        exclude_job_id=job_id,
+    )
 
     changed_fields: list[str] = []
     if cast(Optional[str], job_row.evidence_number) != body.evidence_number:
