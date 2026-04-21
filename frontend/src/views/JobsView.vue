@@ -243,6 +243,17 @@ async function loadSupportingData() {
     : []
 }
 
+async function loadOverlapCandidates(driveId) {
+  if (!driveId) return []
+
+  const response = await listJobs({
+    limit: 1000,
+    drive_id: Number(driveId),
+    statuses: Array.from(ACTIVE_OVERLAP_STATUSES),
+  })
+  return (response || []).map((item) => normalizeProjectRecord(item, ['project_id']))
+}
+
 function stopJobsRefreshTimer() {
   if (jobsRefreshTimer.value != null) {
     window.clearInterval(jobsRefreshTimer.value)
@@ -313,7 +324,7 @@ function buildOverlapErrorMessage(job, overlapType) {
   return t('jobs.overlapConflictDescendant', { jobId })
 }
 
-function findSourceOverlapConflict() {
+function findSourceOverlapConflict(candidateJobs) {
   const driveId = Number(form.value.drive_id)
   const mountRoot = selectedMountRoot()
   const sourcePath = resolveMountedSourcePath(resolveSourcePath(), mountRoot)
@@ -322,7 +333,7 @@ function findSourceOverlapConflict() {
     return null
   }
 
-  for (const job of jobs.value) {
+  for (const job of candidateJobs) {
     if (!ACTIVE_OVERLAP_STATUSES.has(normalizeJobStatus(job?.status))) continue
     if (Number(job?.drive?.id) !== driveId) continue
 
@@ -365,7 +376,8 @@ async function submitCreateJob() {
       return
     }
 
-    const overlapConflict = findSourceOverlapConflict()
+    const overlapCandidates = await loadOverlapCandidates(form.value.drive_id)
+    const overlapConflict = findSourceOverlapConflict(overlapCandidates)
     if (overlapConflict) {
       error.value = buildOverlapErrorMessage(overlapConflict.job, overlapConflict.overlapType)
       return
