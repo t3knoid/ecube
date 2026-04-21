@@ -975,6 +975,134 @@ def test_update_pending_job_reassigns_drive_and_updates_fields(client, db):
     assert drive_two.current_state == DriveState.IN_USE
 
 
+def test_update_job_rejects_exact_duplicate_source_path_on_same_drive(client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="server:/exports/project-overlap",
+        project_id="PROJ-EDIT-OVERLAP",
+        local_mount_point="/nfs/project-overlap",
+        status=MountStatus.MOUNTED,
+    )
+    drive = UsbDrive(
+        device_identifier="USB-EDIT-OVERLAP-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-EDIT-OVERLAP",
+        mount_path="/mnt/ecube/edit-overlap-001",
+    )
+    db.add_all([mount, drive])
+    db.flush()
+
+    existing = _create_assigned_job(
+        db,
+        drive=drive,
+        project_id="PROJ-EDIT-OVERLAP",
+        evidence_number="EV-EXISTING-EDIT-001",
+        source_path="/nfs/project-overlap/existing",
+        status=JobStatus.PENDING,
+    )
+
+    editable = ExportJob(
+        project_id="PROJ-EDIT-OVERLAP",
+        evidence_number="EV-EDIT-OVERLAP-001",
+        source_path="/nfs/project-overlap/original",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.PENDING,
+        thread_count=2,
+    )
+    db.add(editable)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=editable.id))
+    db.commit()
+
+    response = client.put(
+        f"/jobs/{editable.id}",
+        json={
+            "project_id": "PROJ-EDIT-OVERLAP",
+            "evidence_number": "EV-EDIT-OVERLAP-001",
+            "source_path": "/existing",
+            "mount_id": mount.id,
+            "drive_id": drive.id,
+            "thread_count": 2,
+            "max_file_retries": 3,
+            "retry_delay_seconds": 1,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "SOURCE_OVERLAP"
+    assert f"job #{existing.id}" in response.json()["message"]
+
+    db.refresh(editable)
+    assert editable.source_path == "/nfs/project-overlap/original"
+
+
+def test_update_job_rejects_overlap_when_reassigning_drive(client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="server:/exports/project-overlap-two",
+        project_id="PROJ-EDIT-OVERLAP-2",
+        local_mount_point="/nfs/project-overlap-two",
+        status=MountStatus.MOUNTED,
+    )
+    drive_one = UsbDrive(
+        device_identifier="USB-EDIT-OVERLAP-DRIVE-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-EDIT-OVERLAP-2",
+        mount_path="/mnt/ecube/edit-overlap-drive-001",
+    )
+    drive_two = UsbDrive(
+        device_identifier="USB-EDIT-OVERLAP-DRIVE-002",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-EDIT-OVERLAP-2",
+        mount_path="/mnt/ecube/edit-overlap-drive-002",
+    )
+    db.add_all([mount, drive_one, drive_two])
+    db.flush()
+
+    existing = _create_assigned_job(
+        db,
+        drive=drive_two,
+        project_id="PROJ-EDIT-OVERLAP-2",
+        evidence_number="EV-EXISTING-EDIT-002",
+        source_path="/nfs/project-overlap-two/existing/root",
+        status=JobStatus.RUNNING,
+    )
+
+    editable = ExportJob(
+        project_id="PROJ-EDIT-OVERLAP-2",
+        evidence_number="EV-EDIT-OVERLAP-002",
+        source_path="/nfs/project-overlap-two/original",
+        target_mount_path=drive_one.mount_path,
+        status=JobStatus.PENDING,
+        thread_count=2,
+    )
+    db.add(editable)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive_one.id, job_id=editable.id))
+    db.commit()
+
+    response = client.put(
+        f"/jobs/{editable.id}",
+        json={
+            "project_id": "PROJ-EDIT-OVERLAP-2",
+            "evidence_number": "EV-EDIT-OVERLAP-002",
+            "source_path": "/existing",
+            "mount_id": mount.id,
+            "drive_id": drive_two.id,
+            "thread_count": 2,
+            "max_file_retries": 3,
+            "retry_delay_seconds": 1,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "SOURCE_OVERLAP"
+    assert f"(#{existing.id})" in response.json()["message"]
+
+    db.refresh(editable)
+    assert editable.target_mount_path == drive_one.mount_path
+
+
 def test_delete_pending_job_removes_job_and_releases_drive(client, db):
     drive = UsbDrive(
         device_identifier="USB-DELETE-001",

@@ -12,6 +12,7 @@ import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
 import { calculateJobProgress } from '@/utils/jobProgress.js'
+import { classifySourcePathOverlap, resolveMountedSourcePath } from '@/utils/pathOverlap.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const router = useRouter()
@@ -52,6 +53,7 @@ const form = ref({
 })
 
 const canOperate = computed(() => authStore.hasAnyRole(['admin', 'manager', 'processor']))
+const ACTIVE_OVERLAP_STATUSES = new Set(['PENDING', 'RUNNING', 'VERIFYING'])
 
 const columns = computed(() => [
   { key: 'id', label: t('common.labels.id'), align: 'right' },
@@ -295,6 +297,44 @@ function resolveSourcePath() {
   return source || '/'
 }
 
+function selectedMountRoot() {
+  const mount = mounts.value.find((item) => Number(item?.id) === Number(form.value.mount_id))
+  return String(mount?.local_mount_point || '').trim()
+}
+
+function buildOverlapErrorMessage(job, overlapType) {
+  const jobId = Number(job?.id)
+  if (overlapType === 'exact') {
+    return t('jobs.overlapConflictExact', { jobId })
+  }
+  if (overlapType === 'ancestor') {
+    return t('jobs.overlapConflictAncestor', { jobId })
+  }
+  return t('jobs.overlapConflictDescendant', { jobId })
+}
+
+function findSourceOverlapConflict() {
+  const driveId = Number(form.value.drive_id)
+  const mountRoot = selectedMountRoot()
+  const sourcePath = resolveMountedSourcePath(resolveSourcePath(), mountRoot)
+
+  if (!driveId || !mountRoot || !sourcePath) {
+    return null
+  }
+
+  for (const job of jobs.value) {
+    if (!ACTIVE_OVERLAP_STATUSES.has(normalizeJobStatus(job?.status))) continue
+    if (Number(job?.drive?.id) !== driveId) continue
+
+    const overlapType = classifySourcePathOverlap(job?.source_path, sourcePath)
+    if (overlapType !== 'none') {
+      return { job, overlapType }
+    }
+  }
+
+  return null
+}
+
 function buildJobError(err) {
   const status = err?.response?.status
   const detail = normalizeErrorMessage(err?.response?.data, '')
@@ -322,6 +362,12 @@ async function submitCreateJob() {
 
     if (!driveStillEligible || !mountStillEligible) {
       error.value = t('jobs.selectionUnavailable')
+      return
+    }
+
+    const overlapConflict = findSourceOverlapConflict()
+    if (overlapConflict) {
+      error.value = buildOverlapErrorMessage(overlapConflict.job, overlapConflict.overlapType)
       return
     }
 
