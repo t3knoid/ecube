@@ -301,16 +301,18 @@ describe('JobsView grouped create dialog', () => {
   })
 
   it('rejects an overlapping source path in the UI before submitting create job', async () => {
-    mocks.listJobs.mockResolvedValue([
-      {
-        id: 55,
-        project_id: 'PROJ-001',
-        evidence_number: 'EV-055',
-        status: 'RUNNING',
-        source_path: '/nfs/project-001/Evidence1',
-        drive: { id: 1, port_system_path: '2-1', device_identifier: 'USB-001' },
-      },
-    ])
+    mocks.listJobs
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 55,
+          project_id: 'PROJ-001',
+          evidence_number: 'EV-055',
+          status: 'RUNNING',
+          source_path: '/nfs/project-001/Evidence1',
+          drive: { id: 1, port_system_path: '2-1', device_identifier: 'USB-001' },
+        },
+      ])
 
     const wrapper = mountView()
     await flushPromises()
@@ -330,20 +332,27 @@ describe('JobsView grouped create dialog', () => {
     await flushPromises()
 
     expect(mocks.createJob).not.toHaveBeenCalled()
+    expect(mocks.listJobs).toHaveBeenLastCalledWith({
+      limit: 1000,
+      drive_id: 1,
+      statuses: ['PENDING', 'RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING'],
+    })
     expect(wrapper.text()).toContain('A job is already copying from this exact source path to the selected drive (job #55).')
   })
 
   it('treats paused jobs as overlap conflicts in the UI before submitting create job', async () => {
-    mocks.listJobs.mockResolvedValue([
-      {
-        id: 56,
-        project_id: 'PROJ-001',
-        evidence_number: 'EV-056',
-        status: 'PAUSED',
-        source_path: '/nfs/project-001/Evidence1',
-        drive: { id: 1, port_system_path: '2-1', device_identifier: 'USB-001' },
-      },
-    ])
+    mocks.listJobs
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 56,
+          project_id: 'PROJ-001',
+          evidence_number: 'EV-056',
+          status: 'PAUSED',
+          source_path: '/nfs/project-001/Evidence1',
+          drive: { id: 1, port_system_path: '2-1', device_identifier: 'USB-001' },
+        },
+      ])
 
     const wrapper = mountView()
     await flushPromises()

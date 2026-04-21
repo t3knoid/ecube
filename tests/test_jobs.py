@@ -1797,6 +1797,58 @@ def test_list_jobs_custom_limit(client, db):
     assert len(response.json()) == 2
 
 
+def test_list_jobs_filters_by_drive_and_statuses(client, db):
+    drive_one = UsbDrive(
+        device_identifier="USB-LIST-FILTER-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-LIST-FILTER",
+        mount_path="/mnt/ecube/list-filter-001",
+    )
+    drive_two = UsbDrive(
+        device_identifier="USB-LIST-FILTER-002",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-LIST-FILTER",
+        mount_path="/mnt/ecube/list-filter-002",
+    )
+    db.add_all([drive_one, drive_two])
+    db.flush()
+
+    matching = _create_assigned_job(
+        db,
+        drive=drive_one,
+        project_id="PROJ-LIST-FILTER",
+        evidence_number="EV-LIST-FILTER-001",
+        source_path="//server/proj-A/Evidence1",
+        status=JobStatus.PAUSED,
+    )
+    _create_assigned_job(
+        db,
+        drive=drive_one,
+        project_id="PROJ-LIST-FILTER",
+        evidence_number="EV-LIST-FILTER-002",
+        source_path="//server/proj-A/Evidence2",
+        status=JobStatus.COMPLETED,
+    )
+    _create_assigned_job(
+        db,
+        drive=drive_two,
+        project_id="PROJ-LIST-FILTER",
+        evidence_number="EV-LIST-FILTER-003",
+        source_path="//server/proj-A/Evidence3",
+        status=JobStatus.PAUSED,
+    )
+
+    response = client.get(
+        "/jobs",
+        params=[("drive_id", drive_one.id), ("statuses", "PAUSED"), ("statuses", "PAUSING")],
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["id"] == matching.id
+
+
 def test_list_jobs_limit_below_minimum_returns_422(client, db):
     """limit=0 violates ge=1 constraint and should return 422."""
     response = client.get("/jobs", params={"limit": 0})
