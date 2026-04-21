@@ -48,4 +48,22 @@ describe('jobs api helpers', () => {
     expect(get).not.toHaveBeenCalled()
     expect(post).not.toHaveBeenCalled()
   })
+
+  it('serializes repeated job status filters without bracket suffixes', async () => {
+    const { listJobs } = await import('@/api/jobs.js')
+
+    await listJobs({
+      limit: 1000,
+      drive_id: 1,
+      statuses: ['PENDING', 'RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING'],
+    })
+
+    expect(get).toHaveBeenCalledTimes(1)
+    const [, config] = get.mock.calls[0]
+    expect(config.params).toBeInstanceOf(URLSearchParams)
+    expect(config.params.toString()).toBe(
+      'limit=1000&drive_id=1&statuses=PENDING&statuses=RUNNING&statuses=PAUSING&statuses=PAUSED&statuses=VERIFYING',
+    )
+    expect(toData).toHaveBeenCalled()
+  })
 })
