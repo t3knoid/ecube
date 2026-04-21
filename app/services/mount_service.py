@@ -35,6 +35,34 @@ def _default_provider() -> "MountProvider":
 logger = logging.getLogger(__name__)
 
 
+def _log_mount_debug_failure(
+    message: str,
+    *,
+    local_mount_point: str,
+    mount_type: MountType | None = None,
+    remote_path: str | None = None,
+    returncode: int | None = None,
+    raw_error: object = None,
+) -> None:
+    raw_text = "" if raw_error is None else str(raw_error).strip()
+    if not raw_text:
+        raw_text = "(empty)"
+
+    context_parts = [f"local_mount_point={local_mount_point}"]
+    if mount_type is not None:
+        context_parts.insert(0, f"type={mount_type.value}")
+    if remote_path is not None:
+        context_parts.append(f"remote_path={remote_path}")
+    if returncode is not None:
+        context_parts.append(f"returncode={returncode}")
+
+    if returncode is None:
+        logger.debug("%s: %s raw_error=%s", message, " ".join(context_parts), raw_text)
+        return
+
+    logger.debug("%s: %s raw_error=%s", message, " ".join(context_parts), raw_text)
+
+
 class LinuxMountProvider:
     """Linux implementation using ``mount(8)``, ``umount(8)``, and ``mountpoint(1)``."""
 
@@ -75,6 +103,14 @@ class LinuxMountProvider:
             result.returncode,
             sanitize_error_message(error, "Mount command failed"),
         )
+        _log_mount_debug_failure(
+            "Mount command raw error",
+            mount_type=mount_type,
+            remote_path=remote_path,
+            local_mount_point=local_mount_point,
+            returncode=result.returncode,
+            raw_error=error,
+        )
 
         # Some environments have /etc/fstab entries for the target path with options
         # that conflict with on-demand API mounts.
@@ -104,6 +140,14 @@ class LinuxMountProvider:
                         mount_label,
                         direct_result.returncode,
                         sanitize_error_message(direct_error, "Direct NFS helper mount failed"),
+                    )
+                    _log_mount_debug_failure(
+                        "Direct NFS helper raw error",
+                        mount_type=mount_type,
+                        remote_path=remote_path,
+                        local_mount_point=local_mount_point,
+                        returncode=direct_result.returncode,
+                        raw_error=direct_error,
                     )
                     retry_error = direct_error
 
@@ -138,6 +182,12 @@ class LinuxMountProvider:
                     result.returncode,
                     sanitize_error_message(error, "Unmount command failed"),
                 )
+                _log_mount_debug_failure(
+                    "Unmount command raw error",
+                    local_mount_point=local_mount_point,
+                    returncode=result.returncode,
+                    raw_error=error,
+                )
                 return False, error
             logger.info("Unmount command succeeded for mount_label=%s", mount_label)
             return True, None
@@ -146,6 +196,11 @@ class LinuxMountProvider:
                 "Unmount command raised exception for mount_label=%s reason=%s",
                 _redacted_mount_label(local_mount_point),
                 sanitize_error_message(exc, "Unmount command failed"),
+            )
+            _log_mount_debug_failure(
+                "Unmount command exception details",
+                local_mount_point=local_mount_point,
+                raw_error=exc,
             )
             return False, str(exc)
 
@@ -593,10 +648,24 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
                 actor or "system",
                 sanitize_error_message(create_dir_error, "Mountpoint preparation failed"),
             )
+            _log_mount_debug_failure(
+                "Mountpoint preparation raw error",
+                mount_type=mount_data.type,
+                remote_path=mount_data.remote_path,
+                local_mount_point=str(mount.local_mount_point),
+                raw_error=create_dir_error,
+            )
             success, error = False, create_dir_error
         else:
             owner_error = _validate_mount_directory_owner(mount.local_mount_point)
             if owner_error:
+                _log_mount_debug_failure(
+                    "Mountpoint ownership raw error",
+                    mount_type=mount_data.type,
+                    remote_path=mount_data.remote_path,
+                    local_mount_point=str(mount.local_mount_point),
+                    raw_error=owner_error,
+                )
                 success, error = False, owner_error
             else:
                 success, error = provider.os_mount(
