@@ -40,9 +40,10 @@ function mountView() {
       stubs: {
         teleport: true,
         DataTable: {
-          props: ['rows'],
+          props: ['rows', 'columns'],
           template: `
             <div>
+              <div class="column-labels">{{ (columns || []).map((column) => column.label).join('|') }}</div>
               <div v-for="row in rows" :key="row.id" class="row-stub">
                 <slot name="cell-actions" :row="row" />
               </div>
@@ -69,7 +70,8 @@ function mountView() {
           `,
         },
         DirectoryBrowser: {
-          template: '<div class="directory-browser-stub" />',
+          props: ['mountPath', 'rootLabel'],
+          template: '<div class="directory-browser-stub">{{ rootLabel || mountPath }}</div>',
         },
       },
     },
@@ -228,7 +230,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('does not expose raw mount paths in browse labels', async () => {
-    mocks.getMounts.mockResolvedValue([buildMount({ status: 'MOUNTED' })])
+    mocks.getMounts.mockResolvedValue([buildMount({ status: 'MOUNTED', local_mount_point: '/smb/demo-case-002' })])
 
     const wrapper = mountView()
     await flushPromises()
@@ -240,7 +242,19 @@ describe('MountsView removal flow', () => {
     await browseButton.trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).not.toContain('/smb/project2')
+    expect(wrapper.text()).not.toContain('/smb/demo-case-002')
+    expect(wrapper.find('.directory-browser-stub').text()).toContain('demo-case-002')
+  })
+
+  it('does not render remote or local path columns in the mounts table', async () => {
+    mocks.getMounts.mockResolvedValue([buildMount()])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const labels = wrapper.find('.column-labels').text()
+    expect(labels).not.toContain(i18n.global.t('mounts.remotePath'))
+    expect(labels).not.toContain(i18n.global.t('mounts.localPath'))
   })
 
   it('clears password and credentials fields when the dialog closes', async () => {
