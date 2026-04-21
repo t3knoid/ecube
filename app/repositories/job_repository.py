@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from sqlalchemy import case, func, update
 from sqlalchemy.exc import OperationalError
@@ -88,10 +88,31 @@ class JobRepository:
             .count()
         )
 
-    def list_recent(self, limit: int = 200) -> List[ExportJob]:
-        """Return the most recent jobs ordered by creation time descending."""
+    def list_recent(
+        self,
+        limit: int = 200,
+        *,
+        drive_id: Optional[int] = None,
+        statuses: Optional[Iterable[JobStatus]] = None,
+    ) -> List[ExportJob]:
+        """Return recent jobs ordered by creation time descending.
+
+        Optional filters can scope the result to jobs currently assigned to a
+        specific drive and/or to specific job statuses.
+        """
+        query = self.db.query(ExportJob)
+
+        if drive_id is not None:
+            query = query.join(DriveAssignment, DriveAssignment.job_id == ExportJob.id).filter(
+                DriveAssignment.drive_id == drive_id,
+                DriveAssignment.released_at.is_(None),
+            )
+
+        if statuses:
+            query = query.filter(ExportJob.status.in_(tuple(statuses)))
+
         return (
-            self.db.query(ExportJob)
+            query.distinct()
             .order_by(ExportJob.created_at.desc(), ExportJob.id.desc())
             .limit(limit)
             .all()
