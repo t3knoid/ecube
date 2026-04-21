@@ -12,6 +12,7 @@ from app.models.jobs import (
     ExportFile,
     ExportJob,
     FileStatus,
+    JobStatus,
     Manifest,
 )
 
@@ -390,6 +391,26 @@ class DriveAssignmentRepository:
             if assignment.job_id not in result:
                 result[assignment.job_id] = assignment
         return result
+
+    def list_active_jobs_for_drive(
+        self,
+        drive_id: int,
+        *,
+        statuses: tuple[JobStatus, ...],
+    ) -> List[ExportJob]:
+        """Return active jobs assigned to *drive_id* with unreleased assignments."""
+        return (
+            self.db.query(ExportJob)
+            .join(DriveAssignment, DriveAssignment.job_id == ExportJob.id)
+            .filter(
+                DriveAssignment.drive_id == drive_id,
+                DriveAssignment.released_at.is_(None),
+                ExportJob.status.in_(statuses),
+            )
+            .distinct()
+            .order_by(ExportJob.created_at.desc(), ExportJob.id.desc())
+            .all()
+        )
 
 
 class ManifestRepository:
