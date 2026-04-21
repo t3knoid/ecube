@@ -32,6 +32,8 @@ logger = logging.getLogger(__name__)
 _ACTIVE_SOURCE_OVERLAP_STATUSES = (
     JobStatus.PENDING,
     JobStatus.RUNNING,
+    JobStatus.PAUSING,
+    JobStatus.PAUSED,
     JobStatus.VERIFYING,
 )
 
