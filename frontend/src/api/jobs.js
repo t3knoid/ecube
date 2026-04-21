@@ -2,6 +2,25 @@ import apiClient from './client.js'
 import { toData } from './data.js'
 import { API_BASE } from '@/constants/routes.js'
 
+function buildQueryParams(params = {}) {
+  const query = new URLSearchParams()
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value == null) continue
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item != null) {
+          query.append(key, String(item))
+        }
+      }
+      continue
+    }
+    query.append(key, String(value))
+  }
+
+  return query
+}
+
 function normalizeJobId(jobId) {
   const normalized = Number(jobId)
   if (!Number.isInteger(normalized) || normalized < 1) {
@@ -11,7 +30,7 @@ function normalizeJobId(jobId) {
 }
 
 export function listJobs(params = {}) {
-  return toData(apiClient.get(`${API_BASE}/jobs`, { params }))
+  return toData(apiClient.get(`${API_BASE}/jobs`, { params: buildQueryParams(params) }))
 }
 
 export function createJob(payload) {
