@@ -83,4 +83,24 @@ describe('DashboardView active jobs', () => {
 
     expect(wrapper.find('.progress-stub').text()).toBe('40/100')
   })
+
+  it('does not show 100% when a running job is still below 1%', async () => {
+    mocks.listJobs.mockResolvedValue([
+      {
+        id: 16,
+        project_id: 'PROJ-001',
+        status: 'RUNNING',
+        copied_bytes: 136 * 1024 * 1024,
+        total_bytes: 27 * 1024 * 1024 * 1024,
+        file_count: 5000,
+        files_succeeded: 0,
+        files_failed: 0,
+      },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('.progress-stub').text()).toBe('0/100')
+  })
 })
