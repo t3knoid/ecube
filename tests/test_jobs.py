@@ -1849,6 +1849,60 @@ def test_list_jobs_filters_by_drive_and_statuses(client, db):
     assert data[0]["id"] == matching.id
 
 
+def test_list_jobs_filters_support_offset(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-LIST-OFFSET-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-LIST-OFFSET",
+        mount_path="/mnt/ecube/list-offset-001",
+    )
+    db.add(drive)
+    db.flush()
+
+    first = _create_assigned_job(
+        db,
+        drive=drive,
+        project_id="PROJ-LIST-OFFSET",
+        evidence_number="EV-LIST-OFFSET-001",
+        source_path="//server/proj-A/Evidence1",
+        status=JobStatus.RUNNING,
+    )
+    second = _create_assigned_job(
+        db,
+        drive=drive,
+        project_id="PROJ-LIST-OFFSET",
+        evidence_number="EV-LIST-OFFSET-002",
+        source_path="//server/proj-A/Evidence2",
+        status=JobStatus.PAUSED,
+    )
+    third = _create_assigned_job(
+        db,
+        drive=drive,
+        project_id="PROJ-LIST-OFFSET",
+        evidence_number="EV-LIST-OFFSET-003",
+        source_path="//server/proj-A/Evidence3",
+        status=JobStatus.PENDING,
+    )
+
+    response = client.get(
+        "/jobs",
+        params=[
+            ("limit", 1),
+            ("offset", 1),
+            ("drive_id", drive.id),
+            ("statuses", "PENDING"),
+            ("statuses", "RUNNING"),
+            ("statuses", "PAUSED"),
+        ],
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["id"] == second.id
+    assert {first.id, second.id, third.id} >= {data[0]["id"]}
+
+
 def test_list_jobs_limit_below_minimum_returns_422(client, db):
     """limit=0 violates ge=1 constraint and should return 422."""
     response = client.get("/jobs", params={"limit": 0})
