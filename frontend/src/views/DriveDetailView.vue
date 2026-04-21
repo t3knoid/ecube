@@ -112,6 +112,7 @@ const initializeMountedDestinationText = computed(() => (
 const canEject = computed(
   () => drive.value?.current_state === 'IN_USE' && canManage.value,
 )
+const canBrowse = computed(() => !!drive.value?.mount_path)
 const hasMountedProjectOptions = computed(() => mountedProjectOptions.value.length > 0)
 
 function formatBytes(value) {
@@ -451,6 +452,7 @@ onBeforeUnmount(() => {
       <div class="action-row">
         <button v-if="canEnable" class="btn btn-primary" :disabled="saving" @click="runEnable">{{ t('drives.enable') }}</button>
         <button v-if="canMount" class="btn" :disabled="saving" @click="runMount">{{ t('drives.mount') }}</button>
+        <button v-if="canBrowse" class="btn" @click="browseExpanded = !browseExpanded">{{ t('drives.browse') }}</button>
         <button class="btn" :disabled="!canFormat || saving" @click="showFormatDialog = true">{{ t('drives.format') }}</button>
         <button class="btn" :disabled="!canInitialize || saving" @click="openInitializeDialog">{{ t('drives.initialize') }}</button>
         <button class="btn btn-danger" :disabled="!canEject || saving" @click="showEjectDialog = true">{{ t('drives.prepareEject') }}</button>
@@ -478,8 +480,13 @@ onBeforeUnmount(() => {
       </div>
     </ConfirmDialog>
 
-    <!-- Browse section — shown when the drive currently exposes a mount path -->
-    <!-- Browse section removed with mount_path field -->
+    <section v-if="browseExpanded && drive?.mount_path" class="browse-panel">
+      <header class="browse-panel-header">
+        <h2>{{ t('browse.browseContents') }}</h2>
+        <button class="btn" @click="browseExpanded = false">{{ t('common.actions.close') }}</button>
+      </header>
+      <DirectoryBrowser :mount-path="drive.mount_path" />
+    </section>
 
     <ConfirmDialog
       v-model="showEjectDialog"
@@ -554,6 +561,22 @@ onBeforeUnmount(() => {
   border-radius: var(--border-radius-lg);
   background: var(--color-bg-secondary);
   padding: var(--space-md);
+}
+
+.browse-panel {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-bg-secondary);
+}
+
+.browse-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
 }
 
 .detail-grid {
