@@ -53,7 +53,7 @@ const form = ref({
 })
 
 const canOperate = computed(() => authStore.hasAnyRole(['admin', 'manager', 'processor']))
-const ACTIVE_OVERLAP_STATUSES = new Set(['PENDING', 'RUNNING', 'VERIFYING'])
+const ACTIVE_OVERLAP_STATUSES = new Set(['PENDING', 'RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING'])
 
 const columns = computed(() => [
   { key: 'id', label: t('common.labels.id'), align: 'right' },
