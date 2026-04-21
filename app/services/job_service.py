@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.exceptions import ECUBEException, EncodingError
+from app.exceptions import ConflictError, ECUBEException, EncodingError
 from app.models.hardware import DriveState, UsbDrive
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, JobStatus, Manifest
 from app.models.network import MountStatus
@@ -24,8 +24,16 @@ from app.repositories.mount_repository import MountRepository
 from app.schemas.jobs import JobCreate, JobStart, JobUpdate
 from app.services import copy_engine
 from app.utils.sanitize import is_encoding_error, resolve_source_path, validate_source_path
+from app.utils.path_overlap import classify_source_path_overlap
 
 logger = logging.getLogger(__name__)
+
+
+_ACTIVE_SOURCE_OVERLAP_STATUSES = (
+    JobStatus.PENDING,
+    JobStatus.RUNNING,
+    JobStatus.VERIFYING,
+)
 
 
 def _row(instance: object) -> Any:
@@ -71,6 +79,71 @@ def _resolve_job_source_path(body: JobCreate, db: Session) -> str:
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _build_source_overlap_message(overlap_type: str, drive_id: int, existing_job_id: int) -> str:
+    if overlap_type == "exact":
+        return (
+            f"A job is already copying from this exact source path to drive {drive_id} "
+            f"(job #{existing_job_id})."
+        )
+    if overlap_type == "ancestor":
+        return (
+            f"An existing job (#{existing_job_id}) copies from a subdirectory of the requested source. "
+            "The parent path would duplicate that content."
+        )
+    return (
+        f"An existing job (#{existing_job_id}) already copies from a parent path that includes "
+        "the requested source."
+    )
+
+
+def _reject_source_path_overlap(
+    *,
+    db: Session,
+    audit_repo: AuditRepository,
+    actor: Optional[str],
+    client_ip: Optional[str],
+    project_id: str,
+    drive_id: int,
+    new_source_path: str,
+) -> None:
+    assignment_repo = DriveAssignmentRepository(db)
+    active_jobs = assignment_repo.list_active_jobs_for_drive(
+        drive_id,
+        statuses=_ACTIVE_SOURCE_OVERLAP_STATUSES,
+    )
+
+    for existing_job in active_jobs:
+        overlap_type = classify_source_path_overlap(existing_job.source_path, new_source_path)
+        if overlap_type == "none":
+            continue
+
+        db.rollback()
+        try:
+            audit_repo.add(
+                action="JOB_REJECTED_SOURCE_OVERLAP",
+                user=actor,
+                project_id=project_id,
+                drive_id=drive_id,
+                details={
+                    "actor": actor,
+                    "drive_id": drive_id,
+                    "project_id": project_id,
+                    "new_source_path": new_source_path,
+                    "existing_source_path": existing_job.source_path,
+                    "overlapping_job_id": existing_job.id,
+                    "overlap_type": overlap_type,
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for JOB_REJECTED_SOURCE_OVERLAP")
+
+        raise ConflictError(
+            _build_source_overlap_message(overlap_type, drive_id, existing_job.id),
+            code="SOURCE_OVERLAP",
+        )
 
 
 def create_job(
@@ -181,6 +254,15 @@ def create_job(
             except ValueError as exc:
                 db.rollback()
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
+            _reject_source_path_overlap(
+                db=db,
+                audit_repo=audit_repo,
+                actor=actor,
+                client_ip=client_ip,
+                project_id=body.project_id,
+                drive_id=body.drive_id,
+                new_source_path=cast(str, job_row.source_path),
+            )
             db.add(DriveAssignment(drive_id=body.drive_id, job_id=cast(int, job_row.id)))
             drive_row.current_state = DriveState.IN_USE
             db.flush()  # validate assignment + drive state change
@@ -209,6 +291,15 @@ def create_job(
             except ValueError as exc:
                 db.rollback()
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
+            _reject_source_path_overlap(
+                db=db,
+                audit_repo=audit_repo,
+                actor=actor,
+                client_ip=client_ip,
+                project_id=body.project_id,
+                drive_id=cast(int, drive_row.id),
+                new_source_path=cast(str, job_row.source_path),
+            )
             db.add(DriveAssignment(drive_id=cast(int, drive_row.id), job_id=cast(int, job_row.id)))
             drive_row.current_state = DriveState.IN_USE
             db.flush()
