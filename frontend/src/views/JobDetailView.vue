@@ -13,6 +13,7 @@ import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import { calculateJobProgress, isJobProgressActive } from '@/utils/jobProgress.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const route = useRoute()
@@ -103,38 +104,16 @@ const selectedCompareFile = computed(() => (
 ))
 
 const progressMetrics = computed(() => {
-  const currentJob = job.value || {}
-  const status = String(currentJob.status || '').toUpperCase()
-  const totalBytes = Number(currentJob.total_bytes || 0)
-  const copiedBytes = Number(currentJob.copied_bytes || 0)
-  const totalFiles = Number(currentJob.file_count || 0)
-  const filesSucceeded = Number(currentJob.files_succeeded || 0)
-  const filesFailed = Number(currentJob.files_failed || 0)
-  const finishedFiles = Math.min(totalFiles, filesSucceeded + filesFailed)
-
-  const bytePercent = totalBytes > 0
-    ? Math.max(0, Math.min(100, Math.round((copiedBytes / totalBytes) * 100)))
-    : 0
-  const filePercent = totalFiles > 0
-    ? Math.max(0, Math.min(100, Math.round((finishedFiles / totalFiles) * 100)))
-    : bytePercent
-
-  const percent = (status === 'RUNNING' || status === 'PAUSING' || status === 'VERIFYING')
-    ? Math.min(bytePercent || 100, filePercent || 100)
-    : (totalBytes > 0 ? bytePercent : filePercent)
-
-  const displayCopiedBytes = (status === 'RUNNING' || status === 'PAUSING' || status === 'VERIFYING') && totalBytes > 0 && bytePercent > percent
-    ? Math.min(copiedBytes, Math.floor((percent / 100) * totalBytes))
-    : copiedBytes
+  const metrics = calculateJobProgress(job.value)
 
   return {
     total: 100,
-    value: percent,
-    percent,
-    totalBytes,
-    copiedBytes: displayCopiedBytes,
-    totalFiles,
-    finishedFiles,
+    value: metrics.percent,
+    percent: metrics.percent,
+    totalBytes: metrics.totalBytes,
+    copiedBytes: metrics.copiedBytes,
+    totalFiles: metrics.totalFiles,
+    finishedFiles: metrics.finishedFiles,
   }
 })
 
@@ -147,8 +126,7 @@ const progressLabel = computed(() => {
 })
 
 const progressActive = computed(() => {
-  const status = String(job.value?.status || '').toUpperCase()
-  return status === 'RUNNING' || status === 'PAUSING' || status === 'VERIFYING'
+  return isJobProgressActive(job.value)
 })
 
 const canStart = computed(() => {
