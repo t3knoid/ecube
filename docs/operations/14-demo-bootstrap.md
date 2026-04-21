@@ -383,6 +383,14 @@ Optional expected hardware identifier for the device attached at the configured 
 - Effect: when provided, ECUBE only seeds the USB drive if the actual attached device matches this identifier exactly
 - Recommendation: replace any sample placeholder with the actual discovered identifier, or omit this property if you want the binding to rely on the configured USB port alone
 
+To enumerate ready-to-paste `usb_seed.drives` objects for the currently connected host USB disks, run the repository helper from the project root.
+
+```bash
+bash ./scripts/print_demo_usb_seed_json.sh
+```
+
+The helper prints comma-separated JSON objects containing `id`, `port_system_path`, `project_id`, and `device_identifier`. Pass a different project ID as the first argument or a different starting ID as the second argument when you want to prepare entries for another demo project, for example `bash ./scripts/print_demo_usb_seed_json.sh 2 10`.
+
 ### mount_seed
 
 This object controls whether the demo bootstrap should register and mount real network shares that are reachable from the host during seed time.
@@ -709,6 +717,12 @@ If you want the seed flow to prepare only the database and demo directory while 
 
 ```bash
 sudo bash -lc 'cd /opt/ecube && /opt/ecube/venv/bin/ecube-demo-bootstrap --data-root /opt/ecube/demo-data seed --skip-os-users'
+```
+
+If you need to populate `usb_seed.drives` before running the seed, generate the host USB entries first from the repository root and paste the output into `demo-metadata.json`.
+
+```bash
+bash ./scripts/print_demo_usb_seed_json.sh
 ```
 
 ## Running from source in demo mode
