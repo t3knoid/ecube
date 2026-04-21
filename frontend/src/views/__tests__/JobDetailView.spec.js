@@ -281,6 +281,31 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain('1.5 KB / 483 MB')
   })
 
+  it('does not show 100% while a running job is still below 1%', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'RUNNING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 136 * 1024 * 1024,
+      total_bytes: 27 * 1024 * 1024 * 1024,
+      file_count: 5000,
+      files_succeeded: 0,
+      files_failed: 0,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const progress = wrapper.find('.progressbar-stub').text()
+    expect(progress).toContain('0|100|')
+    expect(progress).not.toContain('100|100|')
+    expect(wrapper.text()).toContain('136 MB / 27 GB')
+  })
+
   it('keeps verify and manifest disabled until the job reaches 100%', async () => {
     mocks.getJob.mockResolvedValue({
       id: 6,
