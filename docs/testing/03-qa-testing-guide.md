@@ -1097,6 +1097,7 @@ These tests exercise real hardware paths that must be validated during manual QA
 | 3 | Mount-root source selection works | In Create Job, choose a mounted share and enter / as the source path | The job is created successfully and the selected mount root is used as the source |
 | 4 | Path traversal outside selected mount is blocked | In Create Job, choose a mounted share and enter a traversal path such as ../../etc | The UI/API rejects the request, no job is created, and the operator sees a validation-style error rather than a host path leak |
 | 5 | Destination selector uses device label | Open Create Job or edit an eligible job after selecting a project | The destination control is labeled `Select device`, each option uses the port-based `Device` value, and the Jobs list shows the same value in its `Device` column |
+| 6 | Failed job timeout summary is visible | Configure or simulate a timed-out copy job, then open Job Detail after the job reaches `FAILED` | The detail screen shows `Copy job timed out before all files completed` as the failure summary instead of a generic file-row fallback |
 
 #### 12.6.2 Job Detail Lifecycle Controls
 
@@ -1109,6 +1110,8 @@ These tests exercise real hardware paths that must be validated during manual QA
 | 5 | Pause-in-progress feedback appears on Job Detail | Pause a running job from the detail page | A `Pause in progress` dialog appears until the job transitions to `PAUSED`, and `Start` stays unavailable during `PAUSING` |
 | 6 | Source versus destination compare is clear | Click `View Hashes` for a file, then run the compare action from Job Detail | Results show `Source`, `Destination`, and match details for path, size, and checksum; missing sides produce a sanitized conflict message |
 | 7 | Manifest success feedback shows a stable path | Generate the manifest twice for the same completed job | The UI shows a success banner with the destination path and the same `manifest.json` file is refreshed rather than multiplied |
+| 8 | Persisted failure reason outranks file summary | Open a failed job that has both a persisted job-level failure reason and file error rows | Job Detail shows the persisted failure reason first and does not replace it with the derived `error_summary` |
+| 9 | Unexpected copy failures redact absolute paths | Trigger a failed copy tied to a known file, then open Job Detail | The failure summary uses `Unexpected copy failure` with optional `source:` and `destination:` relative hints, and no absolute `/mnt/...` or `/nfs/...` path appears in the UI |
 
 Walk through the complete data export lifecycle:
 
