@@ -61,6 +61,36 @@ def test_list_drives_exposes_port_and_serial_identifiers(client, db):
     assert match["serial_number"] == "SER-001"
 
 
+def test_list_drives_exposes_safe_usb_metadata_and_readable_label(client, db):
+    hub = UsbHub(name="Hub Ticket217", system_identifier="hub-ticket217-drives")
+    db.add(hub)
+    db.flush()
+
+    port = UsbPort(hub_id=hub.id, port_number=7, system_path="9-7", enabled=True, speed="5000")
+    db.add(port)
+    db.flush()
+
+    drive = UsbDrive(
+        device_identifier="SER-7777",
+        manufacturer="Kingston",
+        product_name="DataTraveler",
+        port_id=port.id,
+        current_state=DriveState.AVAILABLE,
+    )
+    db.add(drive)
+    db.commit()
+
+    response = client.get("/drives")
+    assert response.status_code == 200
+    payload = response.json()
+    match = next(item for item in payload if item["id"] == drive.id)
+    assert match["manufacturer"] == "Kingston"
+    assert match["product_name"] == "DataTraveler"
+    assert match["port_number"] == 7
+    assert match["speed"] == "5000"
+    assert match["display_device_label"] == "Kingston DataTraveler - Port 7"
+
+
 def test_list_drives_filter_by_project(client, db):
     """GET /drives?project_id= returns only matching drives."""
     d1 = UsbDrive(device_identifier="USB-A", current_state=DriveState.IN_USE, current_project_id="PROJ-001")

@@ -72,6 +72,8 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer, primary_key=True),
         sa.Column("port_id", sa.Integer, sa.ForeignKey("usb_ports.id"), nullable=True),
         sa.Column("device_identifier", sa.String, unique=True, nullable=False),
+        sa.Column("manufacturer", sa.String(), nullable=True),
+        sa.Column("product_name", sa.String(), nullable=True),
         sa.Column("filesystem_path", sa.String, nullable=True),
         sa.Column("filesystem_type", sa.String(), nullable=True),
         sa.Column("capacity_bytes", sa.BigInteger, nullable=True),

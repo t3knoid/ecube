@@ -2,6 +2,7 @@ from sqlalchemy import Boolean, Column, Integer, String, BigInteger, Enum, Forei
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.sql import func
 from app.database import Base
+from app.utils.drive_identity import build_readable_device_label
 from app.utils.sanitize import normalize_project_id
 import enum
 
@@ -49,6 +50,8 @@ class UsbDrive(Base):
     id = Column(Integer, primary_key=True)
     port_id = Column(Integer, ForeignKey("usb_ports.id"), nullable=True)
     device_identifier = Column(String, unique=True, nullable=False)
+    manufacturer = Column(String, nullable=True)
+    product_name = Column(String, nullable=True)
     filesystem_path = Column(String)
     capacity_bytes = Column(BigInteger)
     encryption_status = Column(String)
@@ -69,11 +72,28 @@ class UsbDrive(Base):
         return self.port.system_path if self.port else None
 
     @property
+    def port_number(self):
+        return self.port.port_number if self.port else None
+
+    @property
+    def speed(self):
+        return self.port.speed if self.port else None
+
+    @property
     def serial_number(self):
         port_system_path = self.port_system_path
         if port_system_path and self.device_identifier == port_system_path:
             return None
         return self.device_identifier or None
+
+    @property
+    def display_device_label(self):
+        return build_readable_device_label(
+            self.manufacturer,
+            self.product_name,
+            self.port_number,
+            fallback_label=self.port_system_path or self.device_identifier,
+        )
 
     @validates("current_project_id")
     def _normalize_current_project_id(self, _key, value):
