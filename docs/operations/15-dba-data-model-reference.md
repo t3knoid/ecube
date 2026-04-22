@@ -68,7 +68,7 @@ Key relationships:
 
 ### Job Domain
 
-- `export_jobs`: top-level export lifecycle and throughput metadata.
+- `export_jobs`: top-level export lifecycle, throughput metadata, and the persisted sanitized `failure_reason` used for failed-job triage.
 - `export_files`: per-file copy/verify tracking rows.
 - `manifests`: manifest artifacts generated per job.
 - `drive_assignments`: assignment history linking drives to jobs.
