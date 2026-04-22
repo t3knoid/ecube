@@ -223,6 +223,7 @@ onMounted(loadDrives)
         <option value="serial_number">{{ t('drives.serialNumber') }}</option>
         <option value="filesystem_type">{{ t('drives.filesystem') }}</option>
         <option value="current_state">{{ t('common.labels.status') }}</option>
+        <option value="current_project_id">{{ t('dashboard.project') }}</option>
       </select>
       <button class="btn" @click="setSort(sortKey)">
         {{ sortDir === 'asc' ? t('drives.sortAsc') : t('drives.sortDesc') }}
