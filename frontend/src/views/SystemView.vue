@@ -236,6 +236,20 @@ function extractApiMessage(err) {
   return String(data.message || data.detail || '').trim()
 }
 
+function resolveLogViewError(err, fallbackMessage) {
+  const status = err?.response?.status
+  if (status === 403) {
+    return t('auth.insufficientPermissions')
+  }
+  if (status === 404) {
+    return extractApiMessage(err) || fallbackMessage
+  }
+  if (status === 503) {
+    return t('system.logsUnavailable')
+  }
+  return extractApiMessage(err) || t('common.errors.requestConflict')
+}
+
 async function fetchLogLines() {
   if (!logViewer.value.source) {
     logView.value = null
@@ -324,15 +338,10 @@ async function loadTabData() {
 
       const err = linesError || filesError
       if (err) {
-        const status = err?.response?.status
-        if (status === 403) {
-          error.value = t('auth.insufficientPermissions')
-        } else if (status === 404) {
+        if (err === filesError && err?.response?.status === 404) {
           error.value = t('system.logsNotConfigured')
-        } else if (status === 503) {
-          error.value = t('system.logsUnavailable')
         } else {
-          error.value = extractApiMessage(err) || t('common.errors.requestConflict')
+          error.value = resolveLogViewError(err, t('system.logsUnavailable'))
         }
       }
     }
@@ -440,16 +449,7 @@ async function loadOlderLogLines() {
     await fetchLogLines()
     await setLogViewerScrollPosition('top')
   } catch (err) {
-    const status = err?.response?.status
-    if (status === 403) {
-      error.value = t('auth.insufficientPermissions')
-    } else if (status === 404) {
-      error.value = t('system.logsNotConfigured')
-    } else if (status === 503) {
-      error.value = t('system.logsUnavailable')
-    } else {
-      error.value = extractApiMessage(err) || t('common.errors.requestConflict')
-    }
+    error.value = resolveLogViewError(err, t('system.logsUnavailable'))
   } finally {
     loadingLogPage.value = false
   }
@@ -465,16 +465,7 @@ async function loadNewerLogLines() {
     await fetchLogLines()
     await setLogViewerScrollPosition('bottom')
   } catch (err) {
-    const status = err?.response?.status
-    if (status === 403) {
-      error.value = t('auth.insufficientPermissions')
-    } else if (status === 404) {
-      error.value = t('system.logsNotConfigured')
-    } else if (status === 503) {
-      error.value = t('system.logsUnavailable')
-    } else {
-      error.value = extractApiMessage(err) || t('common.errors.requestConflict')
-    }
+    error.value = resolveLogViewError(err, t('system.logsUnavailable'))
   } finally {
     loadingLogPage.value = false
   }
