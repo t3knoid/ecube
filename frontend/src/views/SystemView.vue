@@ -623,7 +623,9 @@ onMounted(loadTabData)
         </button>
       </div>
 
-      <pre ref="logViewerElement" class="log-viewer" tabindex="0" @scroll="onLogViewerScroll">{{ logViewerText || t('system.logViewerEmpty') }}</pre>
+      <div ref="logViewerElement" class="log-viewer" tabindex="0" @scroll="onLogViewerScroll">
+        <pre class="log-viewer-content">{{ logViewerText || t('system.logViewerEmpty') }}</pre>
+      </div>
     </article>
 
     <article v-else class="panel">
@@ -684,18 +686,46 @@ onMounted(loadTabData)
 }
 
 .log-viewer {
-  margin: 0;
   min-height: 220px;
   max-height: 420px;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+  scrollbar-width: auto;
+  scrollbar-color: var(--color-border) var(--color-bg-secondary);
   padding: var(--space-sm);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius);
   background: var(--color-bg-input);
   color: var(--color-text-primary);
+}
+
+.log-viewer-content {
+  margin: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   font-size: 0.85rem;
   line-height: 1.4;
+  min-width: 100%;
+}
+
+.log-viewer::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.log-viewer::-webkit-scrollbar-track {
+  background: var(--color-bg-secondary);
+  border-left: 1px solid var(--color-border);
+}
+
+.log-viewer::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 999px;
+  border: 2px solid var(--color-bg-secondary);
+}
+
+.log-viewer::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-secondary);
 }
 
 .job-picker-label {
