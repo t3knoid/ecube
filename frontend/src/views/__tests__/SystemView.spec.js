@@ -295,6 +295,33 @@ describe('SystemView logs tab', () => {
     expect(wrapper.text()).not.toContain('/var/log/ecube/app.log')
   })
 
+  it('labels log lines with rollover source names when viewing a log family', async () => {
+    mocks.getLogLines.mockResolvedValue({
+      source: { source: 'app', path: 'app.log*' },
+      fetched_at: '2026-04-08T12:00:00Z',
+      file_modified_at: '2026-04-08T11:59:00Z',
+      lines: [
+        { content: 'ERROR newer', source_path: 'app.log' },
+        { content: 'ERROR older', source_path: 'app.log.1' },
+      ],
+      returned: 2,
+      has_more: false,
+      limit: 200,
+      offset: 0,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const logsButton = wrapper.findAll('button').find((b) => b.text() === i18n.global.t('system.tabs.logs'))
+    await logsButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('app.log*')
+    expect(wrapper.text()).toContain('[app.log] ERROR newer')
+    expect(wrapper.text()).toContain('[app.log.1] ERROR older')
+  })
+
   it('hides logs tab for non-admin users', async () => {
     mocks.hasRole.mockReturnValue(false)
 
