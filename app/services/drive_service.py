@@ -15,9 +15,27 @@ from app.models.hardware import DriveState, UsbDrive
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
 from app.repositories.mount_repository import MountRepository
+from app.utils.drive_identity import mask_serial_number
 from app.utils.sanitize import normalize_project_id, sanitize_error_message
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_drive_log_context(drive: UsbDrive, *, reason: Optional[str] = None) -> dict:
+    context = {
+        "drive_id": drive.id,
+        "device_label": getattr(drive, "display_device_label", drive.device_identifier),
+        "manufacturer": getattr(drive, "manufacturer", None),
+        "product_name": getattr(drive, "product_name", None),
+        "port_number": getattr(drive, "port_number", None),
+        "speed": getattr(drive, "speed", None),
+        "serial_number_present": bool(getattr(drive, "serial_number", None)),
+        "serial_number_masked": mask_serial_number(getattr(drive, "serial_number", None)),
+        "current_state": drive.current_state.value if drive.current_state else None,
+    }
+    if reason:
+        context["reason"] = reason
+    return context
 
 
 def _redacted_device_name(path: Optional[str]) -> Optional[str]:
@@ -434,12 +452,11 @@ def mount_drive(
     success, error = provider.mount_drive(initial_filesystem_path, mount_point)
     if not success:
         logger.warning(
-            "Drive mount failed: drive_id=%s device_name=%s filesystem_type=%s mount_slot=%s reason=%s",
-            drive_id,
-            _redacted_device_name(initial_filesystem_path),
-            drive.filesystem_type,
-            _redacted_device_name(mount_point),
-            sanitize_error_message(error, "Mount provider reported failure"),
+            "Drive mount failed",
+            {
+                **_safe_drive_log_context(drive, reason=sanitize_error_message(error, "Mount provider reported failure")),
+                "filesystem_type": drive.filesystem_type,
+            },
         )
         try:
             audit_repo.add(
@@ -587,6 +604,15 @@ def mount_drive(
         )
     except Exception:
         logger.exception("Failed to write audit log for DRIVE_MOUNTED")
+
+    logger.info(
+        "Drive mounted",
+        {
+            **_safe_drive_log_context(drive),
+            "filesystem_type": drive.filesystem_type,
+            "project_id": drive.current_project_id,
+        },
+    )
 
     return drive
 

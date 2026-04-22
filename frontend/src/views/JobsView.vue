@@ -11,6 +11,7 @@ import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
+import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { calculateJobProgress } from '@/utils/jobProgress.js'
 import { classifySourcePathOverlap, resolveMountedSourcePath } from '@/utils/pathOverlap.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
@@ -134,11 +135,11 @@ function formatProjectId(value) {
 }
 
 function formatDriveLabel(drive) {
-  return drive.port_system_path || '-'
+  return formatDriveIdentity(drive)
 }
 
 function formatJobDevice(job) {
-  return job?.drive?.port_system_path || '-'
+  return formatDriveIdentity(job?.drive)
 }
 
 function formatMountLabel(mount) {
