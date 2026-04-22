@@ -13,6 +13,7 @@ import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { calculateJobProgress, isJobProgressActive } from '@/utils/jobProgress.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
@@ -256,7 +257,7 @@ function formatCopyRate(bytesValue, totalSeconds) {
 }
 
 function formatDriveLabel(drive) {
-  return drive.port_system_path || '-'
+  return formatDriveIdentity(drive)
 }
 
 function formatMountLabel(mount) {
