@@ -116,11 +116,15 @@ const progressMetrics = computed(() => {
     copiedBytes: metrics.copiedBytes,
     totalFiles: metrics.totalFiles,
     finishedFiles: metrics.finishedFiles,
+    initializing: metrics.initializing,
   }
 })
 
 const progressLabel = computed(() => {
   const metrics = progressMetrics.value
+  if (metrics.initializing) {
+    return t('jobs.progressPreparing')
+  }
   if (metrics.totalFiles > 0) {
     return `${metrics.percent}% • ${metrics.finishedFiles}/${metrics.totalFiles} ${t('jobs.files').toLowerCase()}`
   }
@@ -682,6 +686,7 @@ onUnmounted(() => {
         :full-width="true"
         :active="progressActive"
       />
+      <p v-if="progressMetrics.initializing" class="muted">{{ t('jobs.progressPreparingDetail') }}</p>
       <p class="muted">{{ formatBytes(progressMetrics.copiedBytes) }} / {{ formatBytes(progressMetrics.totalBytes) }}</p>
 
       <div v-if="completionSummary" class="completion-summary" aria-live="polite">
