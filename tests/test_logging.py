@@ -139,6 +139,36 @@ class TestTextFormatter:
         assert "app.services.drive_service" in output
         assert "drive not found" in output
 
+    def test_includes_structured_context_fields(self):
+        formatter = TextFormatter()
+        logger = logging.getLogger("test.text.extra")
+        logger.handlers.clear()
+        handler = logging.StreamHandler()
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+
+        record = logger.makeRecord(
+            name="test.text.extra",
+            level=logging.INFO,
+            fn="",
+            lno=0,
+            msg="DRIVE_FORMATTED",
+            args=(),
+            exc_info=None,
+            extra={
+                "drive_id": 7,
+                "filesystem_type": "ext4",
+                "user_id": "manager",
+            },
+        )
+
+        output = formatter.format(record)
+        assert "DRIVE_FORMATTED" in output
+        assert '"user_id": "manager"' in output
+        assert '"drive_id": 7' in output
+        assert '"filesystem_type": "ext4"' in output
+
 
 # ---------------------------------------------------------------------------
 # configure_logging tests
