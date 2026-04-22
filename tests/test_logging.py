@@ -746,6 +746,86 @@ class TestAdminLogsEndpoints:
                 assert "abc.def.ghi" not in joined
                 assert "[REDACTED]" in joined
 
+    def test_view_logs_include_rotated_family_entries_in_newest_first_order(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            rotated_path = os.path.join(tmpdir, "app.log.1")
+            with open(rotated_path, "w") as f:
+                f.write("INFO older 1\n")
+                f.write("ERROR older 2\n")
+            with open(log_path, "w") as f:
+                f.write("WARN newer 3\n")
+                f.write("ERROR newer 4\n")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = admin_client.get(
+                    "/admin/logs/view",
+                    params={"source": "app", "limit": 4, "reverse": True},
+                )
+
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["source"]["path"] == "app.log*"
+            assert [row["content"] for row in data["lines"]] == [
+                "ERROR newer 4",
+                "WARN newer 3",
+                "ERROR older 2",
+                "INFO older 1",
+            ]
+            assert [row["source_path"] for row in data["lines"]] == [
+                "app.log",
+                "app.log",
+                "app.log.1",
+                "app.log.1",
+            ]
+
+    def test_view_logs_search_includes_rotated_family_entries(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            rotated_path = os.path.join(tmpdir, "app.log.1")
+            with open(rotated_path, "w") as f:
+                f.write("ERROR rotated failure\n")
+            with open(log_path, "w") as f:
+                f.write("INFO current healthy\n")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = admin_client.get(
+                    "/admin/logs/view",
+                    params={"source": "app", "search": "rotated", "limit": 10},
+                )
+
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["returned"] == 1
+            assert data["lines"][0]["content"] == "ERROR rotated failure"
+            assert data["lines"][0]["source_path"] == "app.log.1"
+
+    def test_view_logs_uses_streaming_directory_iteration_for_log_family(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            rotated_path = os.path.join(tmpdir, "app.log.1")
+            with open(rotated_path, "w") as f:
+                f.write("ERROR rotated failure\n")
+            with open(log_path, "w") as f:
+                f.write("INFO current healthy\n")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                with patch("app.routers.admin.os.listdir", side_effect=AssertionError("view endpoint should not materialize the full directory listing")):
+                    resp = admin_client.get(
+                        "/admin/logs/view",
+                        params={"source": "app", "limit": 2, "reverse": True},
+                    )
+
+            assert resp.status_code == 200
+            data = resp.json()
+            assert [row["content"] for row in data["lines"]] == [
+                "INFO current healthy",
+                "ERROR rotated failure",
+            ]
+
     def test_view_logs_records_audit_trail(self, admin_client, db):
         from app.repositories.audit_repository import AuditRepository
 
@@ -768,6 +848,7 @@ class TestAdminLogsEndpoints:
                 assert entries[0].details.get("source") == "app"
                 assert entries[0].details.get("limit") == 1
                 assert entries[0].details.get("log_file") == "app.log"
+                assert entries[0].details.get("family_count") == 1
                 assert "path" not in entries[0].details
 
     def test_view_logs_returns_lines_when_stat_fails(self, admin_client):
@@ -788,5 +869,6 @@ class TestAdminLogsEndpoints:
                 data = resp.json()
                 assert data["returned"] == 1
                 assert data["lines"][0]["content"] == "line"
+                assert data["lines"][0]["source_path"] == "app.log"
                 assert data["source"]["path"] == "app.log"
                 assert data["file_modified_at"] is None
