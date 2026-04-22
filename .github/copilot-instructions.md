@@ -78,8 +78,33 @@ Debug logs **may include**:
 - raw provider errors  
 - raw exception strings  
 
+### Info/warning/error logging (strict)
+These levels must **not** include:
+- raw provider errors
+- absolute filesystem paths
+- device identifiers
+- sensitive OS details
+
+Exception:
+- application logs may mirror structured audit metadata for operator-visible audit events when each mirrored field is already sanitized, redacted, or otherwise safe for normal logs. This allows info/warning/error log output to carry the same safe context as the persisted audit record for events such as drive lifecycle or formatting actions.
+- under this exception, paths must still be redacted rather than emitted as raw host paths, and device identity must still be masked, summarized, or replaced with a safe operator label rather than logged verbatim.
+
 Examples:
 ```python
 logger.debug("Provider error", {"raw_error": str(err)})
 logger.debug("Resolved mount path", {"path": mount_path})
 logger.debug("Device node", {"dev": "/dev/sdb1"})
+```
+
+## 5. Audit Log Redaction & Provider Error Safety
+
+- Audit logs must never contain:
+  - raw provider errors
+  - raw exception strings
+  - absolute filesystem paths
+  - unredacted mount paths
+- Exception:
+  - audit records may include stable drive-identifying or USB-topology metadata when the purpose of the event is chain-of-custody, discovery, or hardware traceability. This includes fields such as a drive identifier, port identifier, vendor/product identifiers, or other non-secret hardware identity attributes needed to reconstruct which device was observed.
+  - under this exception, host filesystem paths and mount paths must still be redacted, and provider/error text must still be sanitized rather than stored verbatim.
+
+- Audit logs must use structured, sanitized, or redacted error information.

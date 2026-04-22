@@ -51,11 +51,14 @@ def _simple_topology(
     port_path: str = "1-1",
     drive_id: str = "SN-ABC123",
 ) -> DiscoveredTopology:
-    hub = DiscoveredHub(system_identifier=hub_id, name="Test Hub")
+    hub = DiscoveredHub(system_identifier=hub_id, name="Test Hub", vendor_id="1d6b", product_id="0002")
     port = DiscoveredPort(
         hub_system_identifier=hub_id,
         port_number=1,
         system_path=port_path,
+        vendor_id="0781",
+        product_id="5583",
+        speed="5000",
     )
     drive = DiscoveredDrive(
         device_identifier=drive_id,
@@ -138,6 +141,80 @@ def test_initial_sync_audit_includes_safe_drive_metadata_shape(db):
     assert observed[0]["serial_number_present"] is True
     assert observed[0]["serial_number_masked"].endswith("C123")
     assert "filesystem_path" not in observed[0]
+
+
+def test_initial_sync_emits_drive_discovered_audit_log(db):
+    run_discovery_sync(db, actor="admin-user", topology_source=_simple_topology, filesystem_detector=_NULL_DETECTOR)
+
+    log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_DISCOVERED").one()
+    drive = db.query(UsbDrive).one()
+    assert log.user == "admin-user"
+    assert log.drive_id == drive.id
+    assert log.details["drive_id"] == drive.id
+    assert log.details["device_identifier"] == drive.device_identifier
+    assert log.details["device_label"] == "SanDisk Ultra - Port 1"
+    assert log.details["filesystem_path"] == "[redacted]"
+    assert log.details["filesystem_type"] == "unformatted"
+    assert log.details["capacity_bytes"] == 64_000_000_000
+    assert log.details["port_number"] == 1
+    assert log.details["vendor_id"] == "0781"
+    assert log.details["product_id"] == "5583"
+    assert log.details["speed"] == "5000"
+    assert log.details["discovery_actor"] == "admin-user"
+    assert log.details["serial_number_masked"].endswith("C123")
+    assert log.details["discovered_at"]
+
+
+def test_initial_sync_drive_discovered_audit_handles_missing_optional_fields(db):
+    topology = DiscoveredTopology(
+        hubs=[DiscoveredHub(system_identifier="usb1", name="Test Hub")],
+        ports=[DiscoveredPort(hub_system_identifier="usb1", port_number=1, system_path="1-1")],
+        drives=[DiscoveredDrive(device_identifier="SN-NOMETA", port_system_path="1-1")],
+    )
+
+    run_discovery_sync(db, actor="admin-user", topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+
+    log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_DISCOVERED").one()
+    assert log.details["manufacturer"] is None
+    assert log.details["product_name"] is None
+    assert log.details["filesystem_path"] is None
+    assert log.details["filesystem_type"] is None
+    assert log.details["capacity_bytes"] is None
+    assert log.details["vendor_id"] is None
+    assert log.details["product_id"] is None
+    assert log.details["speed"] is None
+
+
+def test_sync_does_not_duplicate_drive_discovered_audit_for_unchanged_drive(db):
+    topology = _simple_topology()
+    run_discovery_sync(db, actor="admin-user", topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    run_discovery_sync(db, actor="admin-user", topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+
+    assert db.query(AuditLog).filter(AuditLog.action == "DRIVE_DISCOVERED").count() == 1
+
+
+def test_initial_sync_continues_when_drive_discovered_audit_write_fails(db, monkeypatch):
+    from app.repositories.audit_repository import AuditRepository
+
+    original_add = AuditRepository.add
+
+    def flaky_add(self, action, *args, **kwargs):
+        if action == "DRIVE_DISCOVERED":
+            raise RuntimeError("audit unavailable")
+        return original_add(self, action, *args, **kwargs)
+
+    monkeypatch.setattr(AuditRepository, "add", flaky_add)
+
+    summary = run_discovery_sync(
+        db,
+        actor="admin-user",
+        topology_source=_simple_topology,
+        filesystem_detector=_NULL_DETECTOR,
+    )
+
+    assert summary["drives_inserted"] == 1
+    assert db.query(UsbDrive).count() == 1
+    assert db.query(AuditLog).filter(AuditLog.action == "USB_DISCOVERY_SYNC").count() == 1
 
 
 def test_initial_sync_emits_app_log_lines(db, caplog):

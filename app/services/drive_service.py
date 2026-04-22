@@ -10,11 +10,12 @@ from app.exceptions import ConflictError
 from app.infrastructure.drive_eject import DriveEjectProvider
 from app.infrastructure.drive_format import DriveFormatter
 from app.infrastructure.drive_mount import DriveMountProvider
-from app.infrastructure import validate_device_path
+from app.infrastructure import FilesystemDetector, validate_device_path
 from app.models.hardware import DriveState, UsbDrive
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
 from app.repositories.mount_repository import MountRepository
+from app.services.audit_service import log_and_audit
 from app.utils.drive_identity import mask_serial_number
 from app.utils.sanitize import normalize_project_id, sanitize_error_message
 
@@ -788,6 +789,7 @@ def format_drive(
     db: Session,
     *,
     formatter: DriveFormatter,
+    filesystem_detector: FilesystemDetector,
     actor: Optional[str] = None,
     client_ip: Optional[str] = None,
 ) -> UsbDrive:
@@ -848,6 +850,34 @@ def format_drive(
             detail=f"Drive format failed: {exc}",
         )
 
+    detected_filesystem_type: Optional[str] = None
+    try:
+        detected = filesystem_detector.detect(drive.filesystem_path)
+        if detected not in {None, "unknown", "unformatted"}:
+            detected_filesystem_type = detected
+    except Exception as exc:
+        logger.debug(
+            "Post-format filesystem detection failed",
+            extra={
+                "drive_id": drive_id,
+                "filesystem_path": drive.filesystem_path,
+                "raw_error": str(exc),
+            },
+        )
+
+    free_bytes: Optional[int] = None
+    try:
+        free_bytes = formatter.probe_free_bytes(drive.filesystem_path, filesystem_type)
+    except Exception as exc:
+        logger.debug(
+            "Post-format free-space probe failed",
+            extra={
+                "drive_id": drive_id,
+                "filesystem_path": drive.filesystem_path,
+                "raw_error": str(exc),
+            },
+        )
+
     drive.filesystem_type = filesystem_type
     # Formatting wipes all previous data, so the project binding is cleared.
     # The drive is now clean and can be initialized for any project.
@@ -879,15 +909,18 @@ def format_drive(
         )
 
     try:
-        audit_repo.add(
+        log_and_audit(
+            db,
             action="DRIVE_FORMATTED",
-            user=actor,
+            actor_id=actor,
             project_id=prior_project_id,
             drive_id=drive_id,
-            details={
-                "drive_id": drive_id,
+            metadata={
                 "filesystem_path": drive.filesystem_path,
                 "filesystem_type": filesystem_type,
+                "detected_filesystem_type": detected_filesystem_type,
+                "free_bytes": free_bytes,
+                "capacity_bytes": drive.capacity_bytes,
                 "actor": actor,
             },
             client_ip=client_ip,

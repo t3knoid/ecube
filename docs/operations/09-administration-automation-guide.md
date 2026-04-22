@@ -1478,8 +1478,9 @@ Every audit entry contains:
 
 | Action | Trigger |
 |--------|---------|
+| `DRIVE_DISCOVERED` | New drive inserted and recorded during discovery sync |
 | `DRIVE_INITIALIZED` | Drive bound to a project |
-| `DRIVE_FORMATTED` | Drive filesystem formatted |
+| `DRIVE_FORMATTED` | Drive filesystem formatted, with best-effort post-format filesystem and free-space details |
 | `DRIVE_FORMAT_FAILED` | Drive format operation failed |
 | `DRIVE_FORMAT_DB_UPDATE_FAILED` | Format succeeded but DB update failed |
 | `DRIVE_EJECT_PREPARED` | Drive flushed and unmounted for removal |
