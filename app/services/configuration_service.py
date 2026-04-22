@@ -193,11 +193,11 @@ def _apply_runtime_changes(changed_settings: List[str]) -> None:
         configure_logging()
         changed_log_fields = sorted(name for name in changed_settings if name in log_fields)
         logging.getLogger().warning(
-            "CONFIGURATION_LOGGING_REINITIALIZED changed_log_fields=%s log_level=%s log_format=%s log_file=%s",
-            changed_log_fields,
-            settings.log_level,
-            settings.log_format,
-            settings.log_file,
+            "CONFIGURATION_LOGGING_REINITIALIZED "
+            f"changed_log_fields={changed_log_fields} "
+            f"log_level={settings.log_level} "
+            f"log_format={settings.log_format} "
+            f"file_logging={'enabled' if settings.log_file else 'disabled'}"
         )
         # Flush all handlers to ensure marker is written before control returns to caller.
         root_logger = logging.getLogger()

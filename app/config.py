@@ -146,9 +146,9 @@ class Settings(BaseSettings):
     #: structured JSON (suitable for log aggregation / compliance tooling).
     log_format: Literal["text", "json"] = "text"
 
-    #: Optional path to a log file.  When set, a
+    #: Standard ECUBE application log path. When set, a
     #: :class:`~logging.handlers.RotatingFileHandler` is attached.
-    log_file: Optional[str] = None
+    log_file: Optional[str] = "/var/log/ecube/app.log"
 
     #: Maximum size (bytes) of a single log file before rotation.  Default 10 MB.
     log_file_max_bytes: int = 10_485_760
