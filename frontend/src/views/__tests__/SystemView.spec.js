@@ -45,6 +45,22 @@ async function flushPromises() {
   await Promise.resolve()
 }
 
+function setScrollMetrics(element, { scrollTop, scrollHeight = 400, clientHeight = 100 }) {
+  Object.defineProperty(element, 'scrollHeight', {
+    configurable: true,
+    value: scrollHeight,
+  })
+  Object.defineProperty(element, 'clientHeight', {
+    configurable: true,
+    value: clientHeight,
+  })
+  Object.defineProperty(element, 'scrollTop', {
+    configurable: true,
+    writable: true,
+    value: scrollTop,
+  })
+}
+
 function mountView() {
   return mount(SystemView, {
     global: {
@@ -180,9 +196,9 @@ describe('SystemView logs tab', () => {
     mocks.getBlockDevices.mockResolvedValue({ block_devices: [] })
     mocks.getSystemMounts.mockResolvedValue({ mounts: [] })
     mocks.getJobDebug.mockResolvedValue(null)
-    mocks.getLogFiles.mockResolvedValue({ log_files: [] })
+    mocks.getLogFiles.mockResolvedValue({ log_files: [{ name: 'app.log', size: 64, modified: '2026-04-08T11:59:00Z' }] })
     mocks.getLogLines.mockResolvedValue({
-      source: { source: 'app', path: 'app.log' },
+      source: { source: 'app.log', path: 'app.log' },
       fetched_at: '2026-04-08T12:00:00Z',
       file_modified_at: '2026-04-08T11:59:00Z',
       lines: [{ content: 'ERROR password=[REDACTED]' }],
@@ -206,6 +222,7 @@ describe('SystemView logs tab', () => {
 
     expect(mocks.getLogLines).toHaveBeenCalled()
     const lastCallArgs = mocks.getLogLines.mock.calls.at(-1)?.[0] || {}
+    expect(lastCallArgs.source).toBe('app.log')
     expect(lastCallArgs.reverse).toBe(true)
     expect(wrapper.text()).toContain('[REDACTED]')
     expect(wrapper.text()).toContain('app.log')
@@ -254,7 +271,7 @@ describe('SystemView logs tab', () => {
     expect(wrapper.text()).toContain(i18n.global.t('system.logsUnavailable'))
   })
 
-  it('still shows downloadable log files when log line fetch fails', async () => {
+  it('keeps the selected source options when log line fetch fails', async () => {
     mocks.getLogFiles.mockResolvedValue({
       log_files: [{ name: 'app.log', size: 64, modified: '2026-04-08T11:59:00Z' }],
     })
@@ -269,7 +286,7 @@ describe('SystemView logs tab', () => {
 
     expect(mocks.getLogFiles).toHaveBeenCalled()
     expect(mocks.getLogLines).toHaveBeenCalled()
-    expect(wrapper.text()).toContain('app.log')
+    expect(wrapper.find('#log-source').text()).toContain('app.log')
   })
 
   it('renders basename only when API returns an absolute source path', async () => {
@@ -297,7 +314,7 @@ describe('SystemView logs tab', () => {
 
   it('labels log lines with rollover source names when viewing a log family', async () => {
     mocks.getLogLines.mockResolvedValue({
-      source: { source: 'app', path: 'app.log*' },
+      source: { source: 'app.log', path: 'app.log' },
       fetched_at: '2026-04-08T12:00:00Z',
       file_modified_at: '2026-04-08T11:59:00Z',
       lines: [
@@ -317,9 +334,223 @@ describe('SystemView logs tab', () => {
     await logsButton.trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('app.log*')
-    expect(wrapper.text()).toContain('[app.log] ERROR newer')
+    expect(wrapper.text()).toContain('ERROR newer')
+    expect(wrapper.text()).not.toContain('[app.log] ERROR newer')
     expect(wrapper.text()).toContain('[app.log.1] ERROR older')
+  })
+
+  it('offers rollover files in the source selector and requests the selected file', async () => {
+    mocks.getLogFiles.mockResolvedValue({
+      log_files: [
+        { name: 'app.log', size: 64, modified: '2026-04-08T11:59:00Z' },
+        { name: 'app.log.1', size: 32, modified: '2026-04-08T11:00:00Z' },
+      ],
+    })
+    mocks.getLogLines.mockResolvedValue({
+      source: { source: 'app.log.1', path: 'app.log.1' },
+      fetched_at: '2026-04-08T12:00:00Z',
+      file_modified_at: '2026-04-08T11:00:00Z',
+      lines: [{ content: 'ERROR older', source_path: 'app.log.1' }],
+      returned: 1,
+      has_more: false,
+      limit: 200,
+      offset: 0,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const logsButton = wrapper.findAll('button').find((b) => b.text() === i18n.global.t('system.tabs.logs'))
+    await logsButton.trigger('click')
+    await flushPromises()
+
+    const sourceSelect = wrapper.find('#log-source')
+    expect(sourceSelect.text()).toContain('app.log')
+    expect(sourceSelect.text()).toContain('app.log.1')
+    expect(sourceSelect.text()).not.toContain('app.log*')
+
+    await sourceSelect.setValue('app.log.1')
+    await flushPromises()
+
+    const lastCallArgs = mocks.getLogLines.mock.calls.at(-1)?.[0] || {}
+    expect(lastCallArgs.source).toBe('app.log.1')
+  })
+
+  it('loads older log lines when more content is available', async () => {
+    mocks.getLogLines
+      .mockResolvedValueOnce({
+        source: { source: 'app.log', path: 'app.log' },
+        fetched_at: '2026-04-08T12:00:00Z',
+        file_modified_at: '2026-04-08T11:59:00Z',
+        lines: [{ content: 'line 200', source_path: 'app.log' }],
+        returned: 1,
+        has_more: true,
+        limit: 200,
+        offset: 0,
+      })
+      .mockResolvedValueOnce({
+        source: { source: 'app.log', path: 'app.log' },
+        fetched_at: '2026-04-08T12:00:01Z',
+        file_modified_at: '2026-04-08T11:59:00Z',
+        lines: [{ content: 'line 199', source_path: 'app.log' }],
+        returned: 1,
+        has_more: false,
+        limit: 200,
+        offset: 1,
+      })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const logsButton = wrapper.findAll('button').find((b) => b.text() === i18n.global.t('system.tabs.logs'))
+    await logsButton.trigger('click')
+    await flushPromises()
+
+    const viewer = wrapper.find('.log-viewer')
+    setScrollMetrics(viewer.element, { scrollTop: 300 })
+
+    await viewer.trigger('scroll')
+    await flushPromises()
+
+    const lastCallArgs = mocks.getLogLines.mock.calls.at(-1)?.[0] || {}
+    expect(lastCallArgs.offset).toBe(1)
+    expect(wrapper.text()).toContain('line 199')
+    expect(wrapper.text()).not.toContain('line 200')
+  })
+
+  it('does not immediately page again from the programmatic scroll reposition after loading older lines', async () => {
+    mocks.getLogLines
+      .mockResolvedValueOnce({
+        source: { source: 'app.log', path: 'app.log' },
+        fetched_at: '2026-04-08T12:00:00Z',
+        file_modified_at: '2026-04-08T11:59:00Z',
+        lines: [{ content: 'line 200', source_path: 'app.log' }],
+        returned: 1,
+        has_more: true,
+        limit: 200,
+        offset: 0,
+      })
+      .mockResolvedValueOnce({
+        source: { source: 'app.log', path: 'app.log' },
+        fetched_at: '2026-04-08T12:00:01Z',
+        file_modified_at: '2026-04-08T11:59:00Z',
+        lines: [{ content: 'line 199', source_path: 'app.log' }],
+        returned: 1,
+        has_more: true,
+        limit: 200,
+        offset: 1,
+      })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const logsButton = wrapper.findAll('button').find((b) => b.text() === i18n.global.t('system.tabs.logs'))
+    await logsButton.trigger('click')
+    await flushPromises()
+
+    const viewer = wrapper.find('.log-viewer')
+    setScrollMetrics(viewer.element, { scrollTop: 300 })
+    await viewer.trigger('scroll')
+    await flushPromises()
+
+    setScrollMetrics(viewer.element, { scrollTop: 24 })
+    await viewer.trigger('scroll')
+    await flushPromises()
+
+    expect(mocks.getLogLines).toHaveBeenCalledTimes(2)
+  })
+
+  it('loads newer log lines without retaining every older page in memory', async () => {
+    mocks.getLogLines
+      .mockResolvedValueOnce({
+        source: { source: 'app.log', path: 'app.log' },
+        fetched_at: '2026-04-08T12:00:00Z',
+        file_modified_at: '2026-04-08T11:59:00Z',
+        lines: [{ content: 'line 200', source_path: 'app.log' }],
+        returned: 1,
+        has_more: true,
+        limit: 200,
+        offset: 0,
+      })
+      .mockResolvedValueOnce({
+        source: { source: 'app.log', path: 'app.log' },
+        fetched_at: '2026-04-08T12:00:01Z',
+        file_modified_at: '2026-04-08T11:59:00Z',
+        lines: [{ content: 'line 199', source_path: 'app.log' }],
+        returned: 1,
+        has_more: false,
+        limit: 200,
+        offset: 1,
+      })
+      .mockResolvedValueOnce({
+        source: { source: 'app.log', path: 'app.log' },
+        fetched_at: '2026-04-08T12:00:02Z',
+        file_modified_at: '2026-04-08T11:59:00Z',
+        lines: [{ content: 'line 200', source_path: 'app.log' }],
+        returned: 1,
+        has_more: true,
+        limit: 200,
+        offset: 0,
+      })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const logsButton = wrapper.findAll('button').find((b) => b.text() === i18n.global.t('system.tabs.logs'))
+    await logsButton.trigger('click')
+    await flushPromises()
+
+    const viewer = wrapper.find('.log-viewer')
+    setScrollMetrics(viewer.element, { scrollTop: 300 })
+    await viewer.trigger('scroll')
+    await flushPromises()
+
+    setScrollMetrics(viewer.element, { scrollTop: 0 })
+    await viewer.trigger('scroll')
+    await flushPromises()
+
+    const lastCallArgs = mocks.getLogLines.mock.calls.at(-1)?.[0] || {}
+    expect(lastCallArgs.offset).toBe(0)
+    expect(wrapper.text()).toContain('line 200')
+    expect(wrapper.text()).not.toContain('line 199')
+  })
+
+  it('downloads the currently selected log file from the toolbar button', async () => {
+    mocks.getLogFiles.mockResolvedValue({
+      log_files: [
+        { name: 'app.log', size: 64, modified: '2026-04-08T11:59:00Z' },
+        { name: 'app.log.1', size: 32, modified: '2026-04-08T11:00:00Z' },
+      ],
+    })
+    mocks.downloadLogFile.mockResolvedValue({
+      data: new Blob(['test']),
+      headers: { 'content-type': 'text/plain' },
+    })
+
+    const appendChildSpy = vi.spyOn(document.body, 'appendChild')
+    const removeChildSpy = vi.spyOn(document.body, 'removeChild')
+    const createObjectURLSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test')
+    const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const logsButton = wrapper.findAll('button').find((b) => b.text() === i18n.global.t('system.tabs.logs'))
+    await logsButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#log-source').setValue('app.log.1')
+
+    const downloadButton = wrapper.findAll('button').find((b) => b.text() === i18n.global.t('system.download'))
+    await downloadButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.downloadLogFile).toHaveBeenCalledWith('app.log.1')
+
+    appendChildSpy.mockRestore()
+    removeChildSpy.mockRestore()
+    createObjectURLSpy.mockRestore()
+    revokeObjectURLSpy.mockRestore()
   })
 
   it('hides logs tab for non-admin users', async () => {

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   getSystemHealth,
@@ -38,12 +38,17 @@ const blockDevices = ref([])
 const mounts = ref([])
 const logs = ref([])
 const downloadingLogName = ref('')
-const logViewer = ref({ source: 'app', search: '', limit: 200, offset: 0, reverse: true })
+const logViewer = ref({ source: '', search: '', limit: 200, offset: 0, reverse: true })
 const logView = ref(null)
 const jobDebug = ref(null)
 const jobDebugId = ref('')
 const jobs = ref([])
 const jobsListUnavailable = ref(false)
+const loadingLogPage = ref(false)
+const logViewerElement = ref(null)
+const suppressedLogViewerScrollTop = ref(null)
+
+const LOG_SCROLL_THRESHOLD = 24
 
 const page = ref(1)
 const pageSize = ref(10)
@@ -111,13 +116,36 @@ const tabRows = computed(() => {
   if (activeTab.value === 'usb') return filteredSortedUsbDevices.value
   if (activeTab.value === 'block') return blockDevices.value
   if (activeTab.value === 'mounts') return mounts.value
-  if (activeTab.value === 'logs') return logs.value
   return []
 })
 
 const pagedRows = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return tabRows.value.slice(start, start + pageSize.value)
+})
+
+const logSourceOptions = computed(() => {
+  const options = []
+  for (const row of logs.value || []) {
+    const name = String(row?.name || '').trim()
+    if (!name || options.some((option) => option.value === name)) continue
+    options.push({ value: name, label: name })
+  }
+  return options
+})
+
+const selectedLogDownloadName = computed(() => {
+  const source = String(logViewer.value.source || '').trim()
+  if (!source) return ''
+  return logSourceOptions.value.some((option) => option.value === source) ? source : ''
+})
+
+const canLoadOlderLogLines = computed(() => {
+  return Boolean(logViewer.value.source && logView.value?.has_more && !loading.value && !loadingLogPage.value)
+})
+
+const canLoadNewerLogLines = computed(() => {
+  return Boolean(logViewer.value.source && logViewer.value.offset > 0 && !loading.value && !loadingLogPage.value)
 })
 
 function formatBytes(value) {
@@ -200,6 +228,42 @@ function extractApiMessage(err) {
   return String(data.message || data.detail || '').trim()
 }
 
+async function fetchLogLines() {
+  if (!logViewer.value.source) {
+    logView.value = null
+    return
+  }
+
+  const response = await getLogLines({
+    source: logViewer.value.source,
+    search: logViewer.value.search || undefined,
+    limit: logViewer.value.limit,
+    offset: logViewer.value.offset,
+    reverse: logViewer.value.reverse,
+  })
+
+  logView.value = response
+}
+
+async function setLogViewerScrollPosition(position = 'top') {
+  await nextTick()
+
+  const element = logViewerElement.value
+  if (!element) return
+
+  const maxScrollTop = Math.max(element.scrollHeight - element.clientHeight, 0)
+  let nextScrollTop = 0
+
+  if (position === 'bottom') {
+    nextScrollTop = Math.max(maxScrollTop - LOG_SCROLL_THRESHOLD, 0)
+  } else if (maxScrollTop > 0) {
+    nextScrollTop = Math.min(LOG_SCROLL_THRESHOLD, maxScrollTop)
+  }
+
+  suppressedLogViewerScrollTop.value = nextScrollTop
+  element.scrollTop = nextScrollTop
+}
+
 async function loadTabData() {
   loading.value = true
   error.value = ''
@@ -216,22 +280,39 @@ async function loadTabData() {
       const response = await getSystemMounts()
       mounts.value = response.mounts || []
     } else if (activeTab.value === 'logs') {
-      const [filesResult, linesResult] = await Promise.allSettled([
-        getLogFiles(),
-        getLogLines({
-          source: logViewer.value.source,
-          search: logViewer.value.search || undefined,
-          limit: logViewer.value.limit,
-          offset: logViewer.value.offset,
-          reverse: logViewer.value.reverse,
-        }),
-      ])
+      let filesError = null
+      let linesError = null
 
-      const filesError = filesResult.status === 'rejected' ? filesResult.reason : null
-      const linesError = linesResult.status === 'rejected' ? linesResult.reason : null
+      try {
+        const filesResponse = await getLogFiles()
+        logs.value = filesResponse.log_files || []
+      } catch (err) {
+        logs.value = []
+        filesError = err
+      }
 
-      logs.value = filesResult.status === 'fulfilled' ? (filesResult.value.log_files || []) : []
-      logView.value = linesResult.status === 'fulfilled' ? linesResult.value : null
+      const availableSourceNames = (logs.value || [])
+        .map((row) => String(row?.name || '').trim())
+        .filter(Boolean)
+
+      if (!availableSourceNames.includes(logViewer.value.source)) {
+        logViewer.value.source = availableSourceNames[0] || ''
+        logViewer.value.offset = 0
+      }
+
+      if (logViewer.value.source) {
+        try {
+          await fetchLogLines()
+          if (logViewer.value.offset === 0) {
+            await setLogViewerScrollPosition('top')
+          }
+        } catch (err) {
+          logView.value = null
+          linesError = err
+        }
+      } else {
+        logView.value = null
+      }
 
       const err = linesError || filesError
       if (err) {
@@ -310,8 +391,8 @@ function onJobPickerChange(event) {
   }
 }
 
-async function downloadLog(row) {
-  const name = String(row?.name || '')
+async function downloadLog() {
+  const name = selectedLogDownloadName.value
   if (!name) return
 
   downloadingLogName.value = name
@@ -337,7 +418,85 @@ async function downloadLog(row) {
 
 async function refreshLogViewer() {
   if (activeTab.value !== 'logs') return
+  logViewer.value.offset = 0
   await loadTabData()
+}
+
+async function loadOlderLogLines() {
+  if (!canLoadOlderLogLines.value) return
+
+  loadingLogPage.value = true
+  error.value = ''
+  try {
+    logViewer.value.offset += Number(logView.value?.returned || logViewer.value.limit)
+    await fetchLogLines()
+    await setLogViewerScrollPosition('top')
+  } catch (err) {
+    const status = err?.response?.status
+    if (status === 403) {
+      error.value = t('auth.insufficientPermissions')
+    } else if (status === 404) {
+      error.value = t('system.logsNotConfigured')
+    } else if (status === 503) {
+      error.value = t('system.logsUnavailable')
+    } else {
+      error.value = extractApiMessage(err) || t('common.errors.requestConflict')
+    }
+  } finally {
+    loadingLogPage.value = false
+  }
+}
+
+async function loadNewerLogLines() {
+  if (!canLoadNewerLogLines.value) return
+
+  loadingLogPage.value = true
+  error.value = ''
+  try {
+    logViewer.value.offset = Math.max(logViewer.value.offset - logViewer.value.limit, 0)
+    await fetchLogLines()
+    await setLogViewerScrollPosition('bottom')
+  } catch (err) {
+    const status = err?.response?.status
+    if (status === 403) {
+      error.value = t('auth.insufficientPermissions')
+    } else if (status === 404) {
+      error.value = t('system.logsNotConfigured')
+    } else if (status === 503) {
+      error.value = t('system.logsUnavailable')
+    } else {
+      error.value = extractApiMessage(err) || t('common.errors.requestConflict')
+    }
+  } finally {
+    loadingLogPage.value = false
+  }
+}
+
+async function onLogViewerScroll(event) {
+  const element = event?.target
+  if (!element || loading.value || loadingLogPage.value) return
+
+  if (suppressedLogViewerScrollTop.value != null) {
+    const expectedScrollTop = suppressedLogViewerScrollTop.value
+    suppressedLogViewerScrollTop.value = null
+    if (Math.abs(element.scrollTop - expectedScrollTop) <= 1) {
+      return
+    }
+  }
+
+  if (element.scrollHeight <= element.clientHeight + LOG_SCROLL_THRESHOLD) return
+
+  const nearTop = element.scrollTop <= LOG_SCROLL_THRESHOLD
+  const nearBottom = element.scrollTop + element.clientHeight >= element.scrollHeight - LOG_SCROLL_THRESHOLD
+
+  if (nearTop && canLoadNewerLogLines.value) {
+    await loadNewerLogLines()
+    return
+  }
+
+  if (nearBottom && canLoadOlderLogLines.value) {
+    await loadOlderLogLines()
+  }
 }
 
 watch(activeTab, async () => {
@@ -433,8 +592,8 @@ onMounted(loadTabData)
     <article v-else-if="activeTab === 'logs'" class="panel">
       <div class="log-controls">
         <label for="log-source">{{ t('system.logSource') }}</label>
-        <select id="log-source" v-model="logViewer.source" class="job-picker">
-          <option value="app">app.log</option>
+        <select id="log-source" v-model="logViewer.source" class="job-picker" @change="refreshLogViewer">
+          <option v-for="option in logSourceOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
         </select>
         <label for="log-search">{{ t('system.logSearch') }}</label>
         <input
@@ -445,6 +604,9 @@ onMounted(loadTabData)
           @keyup.enter="refreshLogViewer"
         />
         <button class="btn" @click="refreshLogViewer">{{ t('common.actions.refresh') }}</button>
+        <button class="btn" :disabled="!selectedLogDownloadName || downloadingLogName === selectedLogDownloadName" @click="downloadLog">
+          {{ t('system.download') }}
+        </button>
       </div>
 
       <div class="log-meta">
@@ -453,18 +615,7 @@ onMounted(loadTabData)
         <span>{{ t('system.logFileModifiedAt') }}: <strong>{{ asLocalDate(logView?.file_modified_at) }}</strong></span>
       </div>
 
-      <pre class="log-viewer">{{ logViewerText || t('system.logViewerEmpty') }}</pre>
-
-      <DataTable :columns="tabColumns" :rows="pagedRows" :empty-text="t('system.empty')">
-        <template #cell-size="{ row }">{{ formatBytes(row.size) }}</template>
-        <template #cell-modified="{ row }">{{ asLocalDate(row.modified) }}</template>
-        <template #cell-download="{ row }">
-          <button class="btn" :disabled="downloadingLogName === row.name" @click="downloadLog(row)">
-            {{ t('system.download') }}
-          </button>
-        </template>
-      </DataTable>
-      <Pagination v-model:page="page" :page-size="pageSize" :total="tabRows.length" />
+      <pre ref="logViewerElement" class="log-viewer" @scroll="onLogViewerScroll">{{ logViewerText || t('system.logViewerEmpty') }}</pre>
     </article>
 
     <article v-else class="panel">
