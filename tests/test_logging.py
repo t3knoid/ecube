@@ -21,6 +21,7 @@ Covers:
 
 import json
 import logging
+import logging
 import os
 import tempfile
 from unittest.mock import patch
@@ -824,6 +825,45 @@ class TestAdminLogsEndpoints:
             assert data["source"]["path"] == "app.log.1"
             assert [row["content"] for row in data["lines"]] == ["ERROR rotated failure"]
             assert [row["source_path"] for row in data["lines"]] == ["app.log.1"]
+
+    def test_view_logs_logs_rollover_source_resolution_failures(self, admin_client, caplog):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("INFO current healthy\n")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                with caplog.at_level(logging.DEBUG, logger="app.routers.admin"):
+                    resp = admin_client.get(
+                        "/admin/logs/view",
+                        params={"source": "app.log.1", "limit": 10},
+                    )
+
+            assert resp.status_code == 404
+            info_records = [
+                record
+                for record in caplog.records
+                if record.name == "app.routers.admin" and record.levelname == "INFO" and record.msg == "LOG_LINES_VIEW_FAILED"
+            ]
+            debug_records = [
+                record
+                for record in caplog.records
+                if record.name == "app.routers.admin" and record.levelname == "DEBUG" and record.msg == "Log lines view failure"
+            ]
+
+            assert any(
+                getattr(record, "context", {}).get("source") == "app.log.1"
+                and getattr(record, "context", {}).get("status_code") == 404
+                and getattr(record, "context", {}).get("reason") == "unknown_log_source"
+                for record in info_records
+            )
+            assert any(
+                getattr(record, "context", {}).get("source") == "app.log.1"
+                and getattr(record, "context", {}).get("status_code") == 404
+                and getattr(record, "context", {}).get("reason") == "unknown_log_source"
+                for record in debug_records
+            )
 
     def test_view_logs_uses_streaming_directory_iteration_for_log_family(self, admin_client):
         with tempfile.TemporaryDirectory() as tmpdir:

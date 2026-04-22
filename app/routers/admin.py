@@ -442,6 +442,28 @@ def _redact_log_line(line: str) -> str:
     return redacted
 
 
+def _log_log_view_failure(
+    source: str,
+    *,
+    status_code: int,
+    reason: str,
+    detail: str,
+    debug_context: Optional[Dict[str, object]] = None,
+) -> None:
+    info_context: Dict[str, object] = {
+        "source": source,
+        "status_code": status_code,
+        "reason": reason,
+        "detail": detail,
+    }
+    logger.info("LOG_LINES_VIEW_FAILED", extra={"context": info_context})
+
+    debug_details = dict(info_context)
+    if debug_context:
+        debug_details.update(debug_context)
+    logger.debug("Log lines view failure", extra={"context": debug_details})
+
+
 @router.get("/logs", response_model=LogFilesResponse, responses={**R_401, **R_403, **R_404, **R_503})
 def list_log_files(
     request: Request,
@@ -566,10 +588,30 @@ def view_log_lines(
     try:
         source_info = _resolve_log_source(source)
     except HTTPException as exc:
-        if exc.status_code == 404:
-            detail_text = str(exc.detail).lower()
+        detail_text = str(exc.detail)
+        lowered_detail = detail_text.lower()
+        reason = "log_source_error"
+        if exc.status_code == 400:
+            reason = "invalid_log_source"
+        elif exc.status_code == 404:
             reason = "unknown_log_source"
-            if "not configured" in detail_text or "unavailable" in detail_text:
+            if "not configured" in lowered_detail:
+                reason = "log_source_not_configured"
+            elif "unavailable" in lowered_detail:
+                reason = "log_source_unavailable"
+        elif exc.status_code == 503:
+            reason = "log_source_unavailable"
+
+        _log_log_view_failure(
+            source,
+            status_code=exc.status_code,
+            reason=reason,
+            detail=detail_text,
+        )
+
+        if exc.status_code == 404:
+            reason = "unknown_log_source"
+            if "not configured" in lowered_detail or "unavailable" in lowered_detail:
                 reason = "log_source_unavailable"
 
             best_effort_audit(
@@ -581,8 +623,26 @@ def view_log_lines(
             )
         raise
 
-    family_files = _resolve_log_family(source_info)
+    try:
+        family_files = _resolve_log_family(source_info)
+    except HTTPException as exc:
+        _log_log_view_failure(
+            source_info.source,
+            status_code=exc.status_code,
+            reason="log_source_unavailable",
+            detail=str(exc.detail),
+            debug_context={"log_file": os.path.basename(source_info.absolute_path)},
+        )
+        raise
+
     if not family_files:
+        _log_log_view_failure(
+            source_info.source,
+            status_code=503,
+            reason="log_source_unavailable",
+            detail="Log source is unavailable",
+            debug_context={"log_file": os.path.basename(source_info.absolute_path)},
+        )
         raise HTTPException(status_code=503, detail="Log source is unavailable")
 
     max_matching_lines = limit + offset
@@ -600,11 +660,41 @@ def view_log_lines(
 
         lines_newest_first = lines_newest_first[:limit]
         lines = lines_newest_first if reverse else list(reversed(lines_newest_first))
-    except FileNotFoundError:
+    except FileNotFoundError as exc:
+        _log_log_view_failure(
+            source_info.source,
+            status_code=503,
+            reason="log_source_unavailable",
+            detail="Log source is unavailable",
+            debug_context={
+                "log_file": os.path.basename(source_info.absolute_path),
+                "raw_error": str(exc),
+            },
+        )
         raise HTTPException(status_code=503, detail="Log source is unavailable")
-    except PermissionError:
+    except PermissionError as exc:
+        _log_log_view_failure(
+            source_info.source,
+            status_code=503,
+            reason="log_source_permission_denied",
+            detail="Log source is unavailable due to file permissions",
+            debug_context={
+                "log_file": os.path.basename(source_info.absolute_path),
+                "raw_error": str(exc),
+            },
+        )
         raise HTTPException(status_code=503, detail="Log source is unavailable due to file permissions")
-    except OSError:
+    except OSError as exc:
+        _log_log_view_failure(
+            source_info.source,
+            status_code=503,
+            reason="log_source_unavailable",
+            detail="Log source is unavailable",
+            debug_context={
+                "log_file": os.path.basename(source_info.absolute_path),
+                "raw_error": str(exc),
+            },
+        )
         raise HTTPException(status_code=503, detail="Log source is unavailable")
 
     file_modified_at = _latest_log_family_mtime(family_files)
