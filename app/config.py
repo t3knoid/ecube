@@ -60,6 +60,13 @@ class Settings(BaseSettings):
     #: (when ``SESSION_BACKEND=cookie``).  Rotating this key invalidates
     #: all outstanding JWTs and active cookie sessions.
     secret_key: str = "change-me-in-production-please-rotate-32b"
+
+    #: Optional dedicated key material for encrypting stored mount credentials.
+    #: When omitted, ECUBE derives a stable encryption key from ``secret_key``
+    #: so fresh installs can persist mount credentials securely without an
+    #: additional required setting.
+    mount_credentials_encryption_key: str = ""
+
     algorithm: str = "HS256"
 
     # ---------------------------------------------------------------------------

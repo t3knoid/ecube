@@ -111,6 +111,9 @@ def upgrade() -> None:
         sa.Column("remote_path", sa.String, nullable=False),
         sa.Column("project_id", sa.String(), nullable=False, server_default="UNASSIGNED"),
         sa.Column("local_mount_point", sa.String, nullable=False, unique=True),
+        sa.Column("encrypted_username", sa.String(), nullable=True),
+        sa.Column("encrypted_password", sa.String(), nullable=True),
+        sa.Column("encrypted_credentials_file", sa.String(), nullable=True),
         sa.Column(
             "status",
             sa.Enum("MOUNTED", "UNMOUNTED", "ERROR", name="mountstatus", native_enum=False),

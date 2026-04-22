@@ -16,9 +16,10 @@ from sqlalchemy.orm import Session
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.mount_repository import MountRepository
-from app.schemas.network import MountCreate
+from app.schemas.network import MountCreate, MountUpdate
 from app.config import settings
 from app.exceptions import ConflictError, EncodingError
+from app.services.mount_credentials_service import decrypt_mount_secret, encrypt_mount_secret
 from app.services.mount_check_utils import check_mounted_with_configured_timeout
 
 from app.utils.sanitize import is_encoding_error, normalize_project_id, sanitize_error_message
@@ -33,6 +34,13 @@ def _default_provider() -> "MountProvider":
     return get_mount_provider()
 
 logger = logging.getLogger(__name__)
+
+_CREDENTIAL_FIELD_NAMES = ("username", "password", "credentials_file")
+_ENCRYPTED_CREDENTIAL_ATTRS = {
+    "username": "encrypted_username",
+    "password": "encrypted_password",
+    "credentials_file": "encrypted_credentials_file",
+}
 
 
 def _log_mount_debug_failure(
@@ -536,10 +544,14 @@ def _validate_remote_path_conflicts(
     remote_path: str,
     project_id: str,
     existing_mounts: list[NetworkMount],
+    *,
+    ignore_mount_id: int | None = None,
 ) -> None:
     candidate_type, candidate_host, candidate_path = _normalize_remote_reference(mount_type, remote_path)
 
     for existing in existing_mounts:
+        if ignore_mount_id is not None and existing.id == ignore_mount_id:
+            continue
         existing_mount_type = existing.type if isinstance(existing.type, MountType) else MountType(str(existing.type))
         existing_remote_path = str(existing.remote_path)
         existing_type, existing_host, existing_path = _normalize_remote_reference(existing_mount_type, existing_remote_path)
@@ -559,6 +571,120 @@ def _validate_remote_path_conflicts(
                     status_code=409,
                     detail="Remote source paths overlap with another project's configured mount.",
                 )
+
+
+def _credentials_supplied(mount_data: MountCreate | MountUpdate) -> bool:
+    return bool(mount_data.username or mount_data.password or mount_data.credentials_file)
+
+
+def _credential_fields_provided(mount_data: MountCreate | MountUpdate) -> bool:
+    return any(field_name in mount_data.model_fields_set for field_name in _CREDENTIAL_FIELD_NAMES)
+
+
+def _stored_credentials_present(mount: NetworkMount) -> bool:
+    return bool(
+        mount.encrypted_username
+        or mount.encrypted_password
+        or mount.encrypted_credentials_file
+    )
+
+
+def _apply_encrypted_mount_credentials(
+    mount: NetworkMount,
+    mount_data: MountCreate | MountUpdate,
+    *,
+    preserve_existing: bool,
+) -> None:
+    for field_name, encrypted_attr in _ENCRYPTED_CREDENTIAL_ATTRS.items():
+        if preserve_existing and field_name not in mount_data.model_fields_set:
+            continue
+        setattr(mount, encrypted_attr, encrypt_mount_secret(getattr(mount_data, field_name)))
+
+
+def _load_stored_mount_credentials(mount: NetworkMount) -> dict[str, str | None]:
+    try:
+        return {
+            "username": decrypt_mount_secret(mount.encrypted_username),
+            "password": decrypt_mount_secret(mount.encrypted_password),
+            "credentials_file": decrypt_mount_secret(mount.encrypted_credentials_file),
+        }
+    except RuntimeError as exc:
+        logger.info(
+            "Stored mount credentials unavailable: mount_id=%s mount_label=%s reason=%s",
+            mount.id,
+            _redacted_mount_label(str(mount.local_mount_point)),
+            "decryption_failed",
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Stored mount credentials could not be decrypted",
+        ) from exc
+
+
+def _changed_mount_fields(
+    mount: NetworkMount,
+    mount_data: MountUpdate,
+    *,
+    normalized_project_id: str,
+) -> list[str]:
+    changed_fields: list[str] = []
+
+    current_type = mount.type if isinstance(mount.type, MountType) else MountType(str(mount.type))
+    if current_type != mount_data.type:
+        changed_fields.append("type")
+    if str(mount.remote_path) != mount_data.remote_path:
+        changed_fields.append("remote_path")
+    if normalize_project_id(mount.project_id) != normalized_project_id:
+        changed_fields.append("project_id")
+    if _credential_fields_provided(mount_data):
+        changed_fields.append("credentials")
+
+    return changed_fields
+
+
+def _prepare_mount_for_update(
+    mount: NetworkMount,
+    *,
+    provider: "MountProvider",
+) -> None:
+    local_mount_point = str(mount.local_mount_point)
+    if mount.status != MountStatus.MOUNTED or not local_mount_point:
+        return
+
+    try:
+        unmount_ok, unmount_error = provider.os_unmount(local_mount_point)
+    except Exception as exc:
+        unmount_ok, unmount_error = False, str(exc)
+
+    if unmount_ok:
+        mount.status = MountStatus.UNMOUNTED
+        return
+
+    error_text = unmount_error or "umount failed"
+    lowered_error = error_text.lower()
+    if any(phrase in lowered_error for phrase in ("not mounted", "no mount point")):
+        logger.info(
+            "Treating already-unmounted mount update as unmounted: mount_id=%s mount_label=%s reason=%s",
+            mount.id,
+            _redacted_mount_label(local_mount_point),
+            sanitize_error_message(error_text, "Target was already unmounted"),
+        )
+        mount.status = MountStatus.UNMOUNTED
+        return
+
+    logger.warning(
+        "Mount update aborted because unmount failed: mount_id=%s mount_label=%s reason=%s",
+        mount.id,
+        _redacted_mount_label(local_mount_point),
+        sanitize_error_message(error_text, "Unmount failed"),
+    )
+    raise HTTPException(
+        status_code=409,
+        detail=(
+            f"Failed to unmount {_redacted_mount_label(local_mount_point)}: "
+            f"{sanitize_error_message(error_text, 'Unmount failed')}"
+        ),
+    )
 
 
 def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
@@ -628,6 +754,8 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
             status_code=500,
             detail="Database error while creating mount record",
         )
+
+    _apply_encrypted_mount_credentials(mount, mount_data, preserve_existing=False)
 
     _mount_error = None
     logger.info(
@@ -752,6 +880,170 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
     return mount
 
 
+def update_mount(mount_id: int, mount_data: MountUpdate, db: Session, actor: Optional[str] = None,
+                 provider: Optional["MountProvider"] = None,
+                 client_ip: Optional[str] = None) -> NetworkMount:
+    normalized_project_id = normalize_project_id(mount_data.project_id)
+    if not isinstance(normalized_project_id, str) or not normalized_project_id:
+        raise HTTPException(status_code=422, detail="project_id must not be empty")
+
+    mount_repo = MountRepository(db)
+    audit_repo = AuditRepository(db)
+    provider = provider or _default_provider()
+
+    mount = mount_repo.get(mount_id)
+    if not mount:
+        raise HTTPException(status_code=404, detail="Mount not found")
+
+    mount_label = _redacted_mount_label(str(mount.local_mount_point))
+    changed_fields = _changed_mount_fields(
+        mount,
+        mount_data,
+        normalized_project_id=normalized_project_id,
+    )
+
+    try:
+        mount_repo.acquire_create_lock()
+        _validate_remote_path_conflicts(
+            mount_data.type,
+            mount_data.remote_path,
+            normalized_project_id,
+            mount_repo.list_all(),
+            ignore_mount_id=mount_id,
+        )
+    except (HTTPException, ConflictError):
+        raise
+
+    mount.type = mount_data.type
+    mount.remote_path = mount_data.remote_path
+    mount.project_id = normalized_project_id
+    mount.last_checked_at = datetime.now(timezone.utc)
+    _apply_encrypted_mount_credentials(mount, mount_data, preserve_existing=True)
+
+    _mount_error = None
+    logger.info(
+        "Mount update started: mount_id=%s type=%s mount_label=%s actor=%s",
+        mount.id,
+        mount_data.type.value,
+        mount_label,
+        actor or "system",
+    )
+    try:
+        _prepare_mount_for_update(mount, provider=provider)
+
+        create_dir_error = _ensure_mount_directory(mount.local_mount_point)
+        if create_dir_error:
+            logger.warning(
+                "Mountpoint preparation failed during update: mount_id=%s type=%s mount_label=%s actor=%s reason=%s",
+                mount.id,
+                mount_data.type.value,
+                mount_label,
+                actor or "system",
+                sanitize_error_message(create_dir_error, "Mountpoint preparation failed"),
+            )
+            _log_mount_debug_failure(
+                "Mountpoint preparation raw error",
+                mount_type=mount_data.type,
+                remote_path=mount_data.remote_path,
+                local_mount_point=str(mount.local_mount_point),
+                raw_error=create_dir_error,
+            )
+            success, error = False, create_dir_error
+        else:
+            owner_error = _validate_mount_directory_owner(mount.local_mount_point)
+            if owner_error:
+                _log_mount_debug_failure(
+                    "Mountpoint ownership raw error",
+                    mount_type=mount_data.type,
+                    remote_path=mount_data.remote_path,
+                    local_mount_point=str(mount.local_mount_point),
+                    raw_error=owner_error,
+                )
+                success, error = False, owner_error
+            else:
+                success, error = provider.os_mount(
+                    mount_data.type,
+                    mount_data.remote_path,
+                    mount.local_mount_point,
+                    credentials_file=mount_data.credentials_file,
+                    username=mount_data.username,
+                    password=mount_data.password,
+                )
+
+        if success:
+            mount.status = MountStatus.MOUNTED
+            logger.info(
+                "Mount update succeeded: mount_id=%s type=%s mount_label=%s actor=%s",
+                mount.id,
+                mount_data.type.value,
+                mount_label,
+                actor or "system",
+            )
+        else:
+            mount.status = MountStatus.ERROR
+            _mount_error = error
+            logger.warning(
+                "Mount update failed: mount_id=%s type=%s mount_label=%s actor=%s reason=%s",
+                mount.id,
+                mount_data.type.value,
+                mount_label,
+                actor or "system",
+                sanitize_error_message(_mount_error, "Mount update failed"),
+            )
+
+        try:
+            mount_repo.save(mount)
+        except Exception:
+            logger.exception(
+                "DB commit failed while updating mount record %s after mount update",
+                mount.id,
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="Database error while updating mount record after mount attempt; mount may be active at OS level.",
+            )
+    except Exception as exc:
+        if isinstance(exc, HTTPException):
+            raise
+        mount.status = MountStatus.ERROR
+        try:
+            mount_repo.save(mount)
+        except Exception:
+            logger.exception(
+                "DB commit failed while recording mount update error for mount %s",
+                mount.id,
+            )
+        _mount_error = str(exc)
+        logger.exception(
+            "Mount update raised exception: mount_id=%s type=%s mount_label=%s actor=%s",
+            mount.id,
+            mount_data.type.value,
+            mount_label,
+            actor or "system",
+        )
+
+    try:
+        audit_repo.add(
+            action="MOUNT_UPDATED",
+            user=actor,
+            project_id=mount.project_id,
+            details={
+                "mount_id": mount.id,
+                "mount_label": mount_label,
+                "status": mount.status.value,
+                "changed_fields": changed_fields,
+                "error_code": "MOUNT_FAILED" if _mount_error else None,
+                "message": "Provider mount operation failed" if _mount_error else None,
+                "details": sanitize_error_message(_mount_error, "Mount provider reported failure") if _mount_error else None,
+            },
+            client_ip=client_ip,
+        )
+    except Exception:
+        logger.exception("Failed to write audit log for MOUNT_UPDATED")
+
+    return mount
+
+
 def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None,
                  provider: Optional["MountProvider"] = None,
                  client_ip: Optional[str] = None) -> None:
@@ -851,10 +1143,42 @@ def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None,
     result = check_mounted_with_configured_timeout(provider, mount.local_mount_point)
     if result is True:
         mount.status = MountStatus.MOUNTED
-    elif result is False:
-        mount.status = MountStatus.UNMOUNTED
     else:
-        mount.status = MountStatus.ERROR
+        if not _stored_credentials_present(mount):
+            mount.status = MountStatus.UNMOUNTED if result is False else MountStatus.ERROR
+        else:
+            create_dir_error = _ensure_mount_directory(mount.local_mount_point)
+            if create_dir_error:
+                logger.warning(
+                    "Mountpoint preparation failed during validation: mount_id=%s type=%s mount_label=%s reason=%s",
+                    mount.id,
+                    mount.type.value,
+                    _redacted_mount_label(str(mount.local_mount_point)),
+                    sanitize_error_message(create_dir_error, "Mountpoint preparation failed"),
+                )
+                mount.status = MountStatus.ERROR
+            else:
+                owner_error = _validate_mount_directory_owner(mount.local_mount_point)
+                if owner_error:
+                    logger.warning(
+                        "Mountpoint ownership failed during validation: mount_id=%s type=%s mount_label=%s reason=%s",
+                        mount.id,
+                        mount.type.value,
+                        _redacted_mount_label(str(mount.local_mount_point)),
+                        sanitize_error_message(owner_error, "Mountpoint ownership failed"),
+                    )
+                    mount.status = MountStatus.ERROR
+                else:
+                    stored_credentials = _load_stored_mount_credentials(mount)
+                    success, _mount_error = provider.os_mount(
+                        mount.type,
+                        mount.remote_path,
+                        mount.local_mount_point,
+                        credentials_file=stored_credentials["credentials_file"],
+                        username=stored_credentials["username"],
+                        password=stored_credentials["password"],
+                    )
+                    mount.status = MountStatus.MOUNTED if success else MountStatus.ERROR
 
     mount.last_checked_at = datetime.now(timezone.utc)
     try:
