@@ -162,4 +162,46 @@ describe('DrivesView rescan and filter loading', () => {
     const labels = wrapper.findAll('button').map((node) => node.text())
     expect(labels).toContain(i18n.global.t('drives.browse'))
   })
+
+  it('sorts by project in ascending and descending order and keeps that sort after refresh', async () => {
+    mocks.getDrives
+      .mockResolvedValueOnce([
+        buildDrive({ id: 1, current_project_id: 'proj-200', port_system_path: '2-1' }),
+        buildDrive({ id: 2, current_project_id: 'PROJ-050', port_system_path: '2-2' }),
+        buildDrive({ id: 3, current_project_id: 'PROJ-100', port_system_path: '2-3' }),
+      ])
+      .mockResolvedValueOnce([
+        buildDrive({ id: 4, current_project_id: 'proj-300', port_system_path: '2-4' }),
+        buildDrive({ id: 5, current_project_id: 'PROJ-150', port_system_path: '2-5' }),
+        buildDrive({ id: 6, current_project_id: 'PROJ-250', port_system_path: '2-6' }),
+      ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const selects = wrapper.findAll('select')
+    await selects[1].setValue('current_project_id')
+    await flushPromises()
+
+    let rows = wrapper.findAll('.row-stub')
+    expect(rows.map((row) => row.find('.row-device').text())).toEqual(['2-2', '2-3', '2-1'])
+    expect(rows.map((row) => row.text())).toEqual(
+      expect.arrayContaining(['2-2SN-001PROJ-050Details', '2-3SN-001PROJ-100Details', '2-1SN-001PROJ-200Details']),
+    )
+
+    const sortButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.sortAsc'))
+    await sortButton.trigger('click')
+    await flushPromises()
+
+    rows = wrapper.findAll('.row-stub')
+    expect(rows.map((row) => row.find('.row-device').text())).toEqual(['2-1', '2-3', '2-2'])
+
+    const refreshButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.refresh'))
+    await refreshButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findAll('select')[1].element.value).toBe('current_project_id')
+    rows = wrapper.findAll('.row-stub')
+    expect(rows.map((row) => row.find('.row-device').text())).toEqual(['2-4', '2-6', '2-5'])
+  })
 })
