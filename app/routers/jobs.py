@@ -155,7 +155,7 @@ def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
     schema.files_succeeded, schema.files_failed = file_repo.count_done_and_errors(job.id)
 
     # Error summary (fetches at most 5 rows, truncated to stay brief)
-    if schema.files_failed:
+    if schema.files_failed and not schema.failure_reason:
         error_rows = file_repo.list_error_messages(job.id, limit=5)
         schema.error_summary = _build_error_summary(schema.files_failed, error_rows)
 
@@ -209,7 +209,7 @@ def _enrich_jobs_bulk(
         schema.files_succeeded = done
         schema.files_failed = failed
 
-        if failed:
+        if failed and not schema.failure_reason:
             error_rows = errors_map.get(job.id, [])
             schema.error_summary = _build_error_summary(failed, error_rows)
 

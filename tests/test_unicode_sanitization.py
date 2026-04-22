@@ -10,7 +10,7 @@ import json
 import pytest
 
 from app.models.hardware import DriveState, UsbDrive
-from app.utils.sanitize import SafeStr, StrictSafeStr, is_encoding_error, sanitize_error_message, sanitize_string, strict_sanitize_string
+from app.utils.sanitize import SafeStr, StrictSafeStr, describe_relative_paths, is_encoding_error, sanitize_error_message, sanitize_string, strict_sanitize_string
 
 
 # ---------------------------------------------------------------------------
@@ -85,6 +85,34 @@ class TestSanitizeErrorMessage:
     def test_returns_default_when_only_path_is_present(self):
         msg = sanitize_error_message("/mnt/ecube/1", "Unmount failed")
         assert msg == "Unmount failed"
+
+    def test_returns_default_for_unknown_provider_error_text(self):
+        msg = sanitize_error_message(
+            "provider exploded while copying /nfs/project-001/evidence/bad.txt to /mnt/ecube/1/bad.txt",
+            "Copy failed",
+        )
+        assert msg == "Copy failed"
+
+
+class TestDescribeRelativePaths:
+
+    def test_maps_job_paths_to_source_and_destination_relative_refs(self):
+        refs = describe_relative_paths(
+            "copy failed from /nfs/project-001/evidence/reports/a.txt to /mnt/ecube/1/reports/a.txt",
+            source_path="/nfs/project-001/evidence",
+            target_mount_path="/mnt/ecube/1",
+        )
+
+        assert refs == ["source: reports/a.txt", "destination: reports/a.txt"]
+
+    def test_ignores_paths_outside_job_context(self):
+        refs = describe_relative_paths(
+            "copy failed at /var/log/messages",
+            source_path="/nfs/project-001/evidence",
+            target_mount_path="/mnt/ecube/1",
+        )
+
+        assert refs == []
 
 
 class TestIsEncodingError:
