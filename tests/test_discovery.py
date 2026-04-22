@@ -62,6 +62,9 @@ def _simple_topology(
         port_system_path=port_path,
         filesystem_path="/dev/sdb",
         capacity_bytes=64_000_000_000,
+        manufacturer="SanDisk",
+        product_name="Ultra",
+        speed="5000",
     )
     return DiscoveredTopology(hubs=[hub], ports=[port], drives=[drive])
 
@@ -120,14 +123,36 @@ def test_initial_sync_emits_audit_log(db):
     assert logs[0].details["drives_inserted"] == 0
 
 
+def test_initial_sync_audit_includes_safe_drive_metadata_shape(db):
+    run_discovery_sync(db, actor="admin-user", topology_source=_simple_topology, filesystem_detector=_NULL_DETECTOR)
+
+    log = db.query(AuditLog).filter(AuditLog.action == "USB_DISCOVERY_SYNC").order_by(AuditLog.id.desc()).first()
+    assert log is not None
+    observed = log.details["observed_drives"]
+    assert len(observed) == 1
+    assert observed[0]["device_label"] == "SanDisk Ultra - Port 1"
+    assert observed[0]["manufacturer"] == "SanDisk"
+    assert observed[0]["product_name"] == "Ultra"
+    assert observed[0]["port_number"] == 1
+    assert observed[0]["speed"] == "5000"
+    assert observed[0]["serial_number_present"] is True
+    assert observed[0]["serial_number_masked"].endswith("C123")
+    assert "filesystem_path" not in observed[0]
+
+
 def test_initial_sync_emits_app_log_lines(db, caplog):
     caplog.set_level("INFO")
 
     run_discovery_sync(db, actor="admin-user", topology_source=_empty_topology, filesystem_detector=_NULL_DETECTOR)
 
     messages = [record.getMessage() for record in caplog.records]
-    assert any("USB_DISCOVERY_SYNC_STARTED actor=admin-user" in message for message in messages)
-    assert any("USB_DISCOVERY_SYNC_COMPLETED actor=admin-user" in message for message in messages)
+    assert any("USB discovery sync started" in message for message in messages)
+    assert any("USB discovery sync completed" in message for message in messages)
+
+    start_record = next(record for record in caplog.records if record.getMessage() == "USB discovery sync started")
+    completed_record = next(record for record in caplog.records if record.getMessage() == "USB discovery sync completed")
+    assert start_record.actor == "admin-user"
+    assert completed_record.actor == "admin-user"
 
 
 # ---------------------------------------------------------------------------

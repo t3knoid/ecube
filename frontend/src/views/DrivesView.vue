@@ -8,6 +8,7 @@ import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
+import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const { t } = useI18n()
@@ -37,7 +38,7 @@ const activeBrowsedDrive = computed(() =>
 
 const columns = computed(() => [
   { key: 'id', label: t('common.labels.id'), align: 'right' },
-  { key: 'port_system_path', label: t('drives.device') },
+  { key: 'display_device_label', label: t('drives.device') },
   { key: 'serial_number', label: t('drives.serialNumber') },
   { key: 'filesystem_type', label: t('drives.filesystem') },
   { key: 'capacity_bytes', label: t('common.labels.size'), align: 'right' },
@@ -85,6 +86,9 @@ const filtered = computed(() => {
     const state = String(drive.current_state || '').toUpperCase()
     const stateMatch = stateFilter.value === 'ALL' || state === stateFilter.value
     const text = [
+      drive.display_device_label,
+      drive.manufacturer,
+      drive.product_name,
       drive.port_system_path,
       drive.serial_number,
       drive.filesystem_type,
@@ -219,7 +223,7 @@ onMounted(loadDrives)
       </select>
       <select v-model="sortKey" :aria-label="t('drives.sortBy')">
         <option value="id">{{ t('common.labels.id') }}</option>
-        <option value="port_system_path">{{ t('drives.device') }}</option>
+        <option value="display_device_label">{{ t('drives.device') }}</option>
         <option value="serial_number">{{ t('drives.serialNumber') }}</option>
         <option value="filesystem_type">{{ t('drives.filesystem') }}</option>
         <option value="current_state">{{ t('common.labels.status') }}</option>
@@ -231,8 +235,8 @@ onMounted(loadDrives)
     </div>
 
     <DataTable :columns="columns" :rows="paged" :empty-text="t('drives.empty')">
-      <template #cell-port_system_path="{ row }">
-        {{ row.port_system_path || '-' }}
+      <template #cell-display_device_label="{ row }">
+        {{ formatDriveIdentity(row) }}
       </template>
       <template #cell-serial_number="{ row }">
         {{ row.serial_number || '-' }}
