@@ -18,7 +18,7 @@ Environment-controlled behaviour (via ``.env`` or environment variables):
 
     LOG_LEVEL            DEBUG | INFO | WARNING | ERROR   (default: INFO)
     LOG_FORMAT           text  | json                     (default: text)
-    LOG_FILE             /var/log/ecube/app.log            (default: None)
+    LOG_FILE             /var/log/ecube/app.log            (default: /var/log/ecube/app.log)
     LOG_FILE_MAX_BYTES   10485760                          (default: 10 MB)
     LOG_FILE_BACKUP_COUNT  5                               (default: 5)
 
@@ -207,9 +207,11 @@ def configure_logging(
             root.addHandler(file_handler)
         except OSError as exc:
             logging.getLogger("app.logging_config").warning(
-                "File logging disabled; could not initialize log file %s: %s",
-                effective_file,
-                exc,
+                "File logging disabled; could not initialize configured application log file",
+                extra={
+                    "log_file_name": os.path.basename(effective_file),
+                    "error_type": type(exc).__name__,
+                },
             )
 
     # Normalize existing application loggers so runtime reconfiguration works
@@ -239,10 +241,8 @@ def configure_logging(
     # Emit a brief configuration summary at startup.
     startup_logger = logging.getLogger("app.logging_config")
     startup_logger.info(
-        "Logging configured: level=%s format=%s file=%s",
-        effective_level,
-        effective_format,
-        effective_file or "(console only)",
+        f"Logging configured: level={effective_level} format={effective_format} "
+        f"file_logging={'enabled' if effective_file else 'disabled'}"
     )
 
     # Flush all handlers to ensure startup message is written before returning.

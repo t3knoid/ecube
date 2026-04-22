@@ -27,6 +27,7 @@ from unittest.mock import patch
 
 import pytest
 
+from app.config import Settings
 from app.logging_config import JsonFormatter, TextFormatter, configure_logging
 
 
@@ -144,6 +145,9 @@ class TestTextFormatter:
 # ---------------------------------------------------------------------------
 
 class TestConfigureLogging:
+    def test_settings_default_log_file_uses_standard_ecube_path(self):
+        assert Settings.model_fields["log_file"].default == "/var/log/ecube/app.log"
+
     def test_sets_root_level(self):
         configure_logging(level="DEBUG", log_format="text")
         assert logging.getLogger().level == logging.DEBUG
@@ -205,6 +209,17 @@ class TestConfigureLogging:
         ]
         assert len(file_handlers) == 0
         assert len(console_handlers) >= 1
+
+    def test_file_handler_failure_logs_sanitized_warning(self):
+        warning_logger = logging.getLogger("app.logging_config")
+        with patch.object(warning_logger, "warning") as mock_warning:
+            with patch("logging.handlers.RotatingFileHandler", side_effect=OSError("permission denied")):
+                configure_logging(level="INFO", log_format="text", log_file="/var/log/ecube/app.log")
+
+        mock_warning.assert_called_once_with(
+            "File logging disabled; could not initialize configured application log file",
+            extra={"log_file_name": "app.log", "error_type": "OSError"},
+        )
 
     def test_log_level_filtering(self):
         """Verify that records below the configured level are filtered out."""
@@ -278,6 +293,12 @@ class TestAdminLogsEndpoints:
             mock_settings.log_file = None
             resp = admin_client.get("/admin/logs")
             assert resp.status_code == 404
+
+    def test_list_logs_returns_503_when_log_directory_is_unavailable(self, admin_client):
+        with patch("app.routers.admin.settings") as mock_settings:
+            mock_settings.log_file = "/var/log/ecube/app.log"
+            resp = admin_client.get("/admin/logs")
+            assert resp.status_code == 503
 
     def test_download_log_returns_404_when_file_logging_not_configured(self, admin_client):
         with patch("app.routers.admin.settings") as mock_settings:
@@ -667,6 +688,18 @@ class TestAdminLogsEndpoints:
             assert len(entries) >= 1
             assert entries[0].details.get("source") == "app"
             assert entries[0].details.get("reason") == "log_source_unavailable"
+
+    def test_view_logs_returns_503_when_configured_log_source_is_unavailable(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = admin_client.get("/admin/logs/view", params={"source": "app"})
+
+            assert resp.status_code == 503
+            data = resp.json()
+            assert data["message"] == "Log source is unavailable"
 
     def test_view_logs_returns_tail_with_offset_and_has_more(self, admin_client):
         with tempfile.TemporaryDirectory() as tmpdir:
