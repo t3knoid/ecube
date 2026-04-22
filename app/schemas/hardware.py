@@ -32,10 +32,15 @@ class UsbPortSchema(BaseModel):
 class UsbDriveSchema(BaseModel):
     id: int = Field(..., description="Unique identifier for the drive")
     port_id: Optional[int] = Field(default=None, description="ID of the port the drive is connected to")
+    port_number: Optional[int] = Field(default=None, description="Port number on the parent USB hub when available")
+    speed: Optional[str] = Field(default=None, description="Port speed in Mbps when available")
     port_system_path: Optional[str] = Field(
         default=None,
         description="Port-based USB identifier for the parent port (for example '2-1')",
     )
+    manufacturer: Optional[str] = Field(default=None, description="USB manufacturer string when available")
+    product_name: Optional[str] = Field(default=None, description="USB product string when available")
+    display_device_label: str = Field(..., description="Operator-friendly drive label built from safe USB metadata")
     device_identifier: str = Field(
         ...,
         description=(

@@ -67,6 +67,12 @@ class DiscoveredDrive:
     mount_path: Optional[str] = None
     """Active mount point from ``/proc/mounts``, e.g. ``"/mnt/ecube/7"``.
     ``None`` when the device is not currently mounted."""
+    manufacturer: Optional[str] = None
+    """USB manufacturer string when available."""
+    product_name: Optional[str] = None
+    """USB product string when available."""
+    speed: Optional[str] = None
+    """Port speed in Mbps when available."""
 
 
 @dataclass
@@ -253,6 +259,8 @@ def discover_usb_topology() -> DiscoveredTopology:
                 # Check for a mass-storage drive at this port
                 interface_class = _read_sysfs_attr(dev_path, "bDeviceClass") or ""
                 serial = _read_sysfs_attr(dev_path, "serial")
+                manufacturer = _read_sysfs_attr(dev_path, "manufacturer")
+                product_name = _read_sysfs_attr(dev_path, "product")
                 device_id = serial if serial else dev
                 block_node = _block_device_for_sysfs_path(dev_path)
                 if block_node or interface_class == "00":
@@ -271,6 +279,9 @@ def discover_usb_topology() -> DiscoveredTopology:
                             filesystem_path=block_node,
                             capacity_bytes=capacity,
                             mount_path=_find_mount_point(block_node, mount_map) if block_node else None,
+                            manufacturer=manufacturer,
+                            product_name=product_name,
+                            speed=port_speed,
                         )
                     )
 

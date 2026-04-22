@@ -48,8 +48,55 @@ from app.models.hardware import DriveState, UsbDrive, UsbPort
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
 from app.repositories.hardware_repository import HubRepository, PortRepository
+from app.utils.drive_identity import build_readable_device_label, mask_serial_number
 
 logger = logging.getLogger(__name__)
+
+
+def _serial_number_from_identifier(device_identifier: Optional[str], port_system_path: Optional[str]) -> Optional[str]:
+    identifier = str(device_identifier or "").strip()
+    if not identifier:
+        return None
+    if port_system_path and identifier == port_system_path:
+        return None
+    return identifier
+
+
+def _build_discovered_drive_metadata(discovered_drive, discovered_port=None, *, drive_id: Optional[int] = None) -> dict:
+    port_number = discovered_port.port_number if discovered_port else None
+    speed = discovered_drive.speed or (discovered_port.speed if discovered_port else None)
+    serial_number = _serial_number_from_identifier(
+        discovered_drive.device_identifier,
+        discovered_drive.port_system_path,
+    )
+    return {
+        "drive_id": drive_id,
+        "device_label": build_readable_device_label(
+            discovered_drive.manufacturer,
+            discovered_drive.product_name,
+            port_number,
+            fallback_label=discovered_drive.port_system_path or "USB Drive",
+        ),
+        "manufacturer": discovered_drive.manufacturer,
+        "product_name": discovered_drive.product_name,
+        "port_number": port_number,
+        "speed": speed,
+        "serial_number_present": bool(serial_number),
+        "serial_number_masked": mask_serial_number(serial_number),
+    }
+
+
+def _build_persisted_drive_metadata(drive: UsbDrive) -> dict:
+    return {
+        "drive_id": drive.id,
+        "device_label": drive.display_device_label,
+        "manufacturer": drive.manufacturer,
+        "product_name": drive.product_name,
+        "port_number": drive.port_number,
+        "speed": drive.speed,
+        "serial_number_present": bool(drive.serial_number),
+        "serial_number_masked": mask_serial_number(drive.serial_number),
+    }
 
 
 def discover_usb_topology() -> DiscoveredTopology:
@@ -101,7 +148,7 @@ def run_discovery_sync(
     dict
         Summary with counts of hubs, ports, drives inserted/updated/removed.
     """
-    logger.info("USB_DISCOVERY_SYNC_STARTED actor=%s", actor or "system")
+    logger.info("USB discovery sync started", extra={"actor": actor or "system"})
     topology = topology_source()
 
     hub_repo = HubRepository(db)
@@ -127,6 +174,7 @@ def run_discovery_sync(
     # ----------------------------------------------------------------- ports
     ports_upserted: List[str] = []
     port_id_by_system_path: dict[str, int] = {}
+    discovered_port_by_system_path: dict[str, object] = {}
 
     for discovered_port in topology.ports:
         hub_id = hub_id_by_system_id.get(discovered_port.hub_system_identifier)
@@ -148,6 +196,7 @@ def run_discovery_sync(
             speed=discovered_port.speed,
         )
         port_id_by_system_path[discovered_port.system_path] = port.id
+        discovered_port_by_system_path[discovered_port.system_path] = discovered_port
         ports_upserted.append(discovered_port.system_path)
 
     # ---------------------------------------------------------------- drives
@@ -155,6 +204,8 @@ def run_discovery_sync(
     drives_inserted: List[str] = []
     drives_updated: List[str] = []
     drives_removed: List[str] = []
+    observed_drive_metadata: List[dict] = []
+    removed_drive_metadata: List[dict] = []
 
     # Build set of enabled port IDs for port-enablement filtering.
     enabled_port_ids: set[int] = {
@@ -167,6 +218,7 @@ def run_discovery_sync(
 
     # Upsert each discovered drive.
     for discovered_drive in topology.drives:
+        discovered_port = discovered_port_by_system_path.get(discovered_drive.port_system_path)
         existing: Optional[UsbDrive] = (
             db.query(UsbDrive)
             .filter(UsbDrive.device_identifier == discovered_drive.device_identifier)
@@ -188,6 +240,8 @@ def run_discovery_sync(
                 initial_state = DriveState.DISCONNECTED
             drive = UsbDrive(
                 device_identifier=discovered_drive.device_identifier,
+                manufacturer=discovered_drive.manufacturer,
+                product_name=discovered_drive.product_name,
                 port_id=port_id,
                 filesystem_path=discovered_drive.filesystem_path,
                 capacity_bytes=discovered_drive.capacity_bytes,
@@ -218,6 +272,9 @@ def run_discovery_sync(
                 continue
             db.refresh(drive)
             drives_inserted.append(discovered_drive.device_identifier)
+            metadata = _build_discovered_drive_metadata(discovered_drive, discovered_port, drive_id=drive.id)
+            observed_drive_metadata.append({"action": "inserted", **metadata})
+            logger.info("USB discovery inserted drive", extra=metadata)
 
         else:
             # Existing drive — update mutable fields.
@@ -230,6 +287,12 @@ def run_discovery_sync(
                 changed = True
             if discovered_drive.capacity_bytes is not None and existing.capacity_bytes != discovered_drive.capacity_bytes:
                 existing.capacity_bytes = discovered_drive.capacity_bytes
+                changed = True
+            if discovered_drive.manufacturer is not None and existing.manufacturer != discovered_drive.manufacturer:
+                existing.manufacturer = discovered_drive.manufacturer
+                changed = True
+            if discovered_drive.product_name is not None and existing.product_name != discovered_drive.product_name:
+                existing.product_name = discovered_drive.product_name
                 changed = True
             if existing.mount_path != discovered_drive.mount_path:
                 existing.mount_path = discovered_drive.mount_path
@@ -281,6 +344,14 @@ def run_discovery_sync(
                     continue
                 db.refresh(existing)
                 drives_updated.append(discovered_drive.device_identifier)
+                metadata = _build_persisted_drive_metadata(existing)
+                observed_drive_metadata.append({"action": "updated", **metadata})
+                logger.info("USB discovery updated drive", extra=metadata)
+            else:
+                observed_drive_metadata.append({
+                    "action": "observed",
+                    **_build_discovered_drive_metadata(discovered_drive, discovered_port, drive_id=existing.id),
+                })
 
     # Mark drives absent from hardware as DISCONNECTED (unless IN_USE — project
     # isolation must not be broken). Also clear stale device-path evidence and
@@ -313,6 +384,9 @@ def run_discovery_sync(
                 db.refresh(drive)
                 if was_available:
                     drives_removed.append(drive.device_identifier)
+                    removed_metadata = _build_persisted_drive_metadata(drive)
+                    removed_drive_metadata.append(removed_metadata)
+                    logger.info("USB discovery removed drive", extra=removed_metadata)
                     try:
                         audit_repo.add(
                             action="DRIVE_REMOVED",
@@ -335,6 +409,8 @@ def run_discovery_sync(
         "drives_inserted": len(drives_inserted),
         "drives_updated": len(drives_updated),
         "drives_removed": len(drives_removed),
+        "observed_drives": observed_drive_metadata,
+        "removed_drives": removed_drive_metadata,
     }
 
     try:
@@ -348,13 +424,15 @@ def run_discovery_sync(
         logger.exception("Failed to write audit log for USB_DISCOVERY_SYNC")
 
     logger.info(
-        "USB_DISCOVERY_SYNC_COMPLETED actor=%s hubs_upserted=%d ports_upserted=%d drives_inserted=%d drives_updated=%d drives_removed=%d",
-        actor or "system",
-        summary["hubs_upserted"],
-        summary["ports_upserted"],
-        summary["drives_inserted"],
-        summary["drives_updated"],
-        summary["drives_removed"],
+        "USB discovery sync completed",
+        extra={
+            "actor": actor or "system",
+            "hubs_upserted": summary["hubs_upserted"],
+            "ports_upserted": summary["ports_upserted"],
+            "drives_inserted": summary["drives_inserted"],
+            "drives_updated": summary["drives_updated"],
+            "drives_removed": summary["drives_removed"],
+        },
     )
 
     return summary

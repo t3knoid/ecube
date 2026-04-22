@@ -258,6 +258,18 @@ Forbidden:
 - JSON fields use SQLAlchemy JSON in models; PostgreSQL JSONB in migrations.
 - Index tables by project, status, and timestamps.
 - Background copy tasks must not starve the system.
+
+# Alembic release workflow (issue 280)
+- While ECUBE is pre-release, the current unreleased application version may
+  intentionally accumulate schema changes inside the baseline or current
+  release-scoped Alembic migration instead of creating a new forward migration
+  for every schema edit.
+- PR review must not flag this pattern by itself as a migration-history defect
+  when it is clearly part of the accepted release-scoped migration workflow
+  tracked by issue 280.
+- Reviewers must still verify that fresh databases migrate to the expected
+  schema and that the chosen workflow is documented in the change or linked
+  issue when a migration file is edited in place.
 - Drive lifecycle transitions must be atomic.
 
 ###############################################################################
