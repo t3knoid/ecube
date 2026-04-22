@@ -149,6 +149,11 @@ def test_initial_sync_emits_app_log_lines(db, caplog):
     assert any("USB discovery sync started" in message for message in messages)
     assert any("USB discovery sync completed" in message for message in messages)
 
+    start_record = next(record for record in caplog.records if record.getMessage() == "USB discovery sync started")
+    completed_record = next(record for record in caplog.records if record.getMessage() == "USB discovery sync completed")
+    assert start_record.actor == "admin-user"
+    assert completed_record.actor == "admin-user"
+
 
 # ---------------------------------------------------------------------------
 # Idempotency — running sync twice should not produce duplicate rows
