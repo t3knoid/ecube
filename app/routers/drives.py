@@ -168,5 +168,6 @@ def format_drive(
     formatter = get_drive_formatter()
     return drive_service.format_drive(
         drive_id, body.filesystem_type, db, formatter=formatter, actor=current_user.username,
+        filesystem_detector=get_filesystem_detector(),
         client_ip=get_client_ip(request),
     )
