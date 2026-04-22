@@ -802,6 +802,153 @@ class TestAdminLogsEndpoints:
             assert data["lines"][0]["content"] == "ERROR rotated failure"
             assert data["lines"][0]["source_path"] == "app.log.1"
 
+    def test_view_logs_can_select_specific_rollover_file(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            rotated_path = os.path.join(tmpdir, "app.log.1")
+            with open(rotated_path, "w") as f:
+                f.write("ERROR rotated failure\n")
+            with open(log_path, "w") as f:
+                f.write("INFO current healthy\n")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = admin_client.get(
+                    "/admin/logs/view",
+                    params={"source": "app.log.1", "limit": 10},
+                )
+
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["source"]["source"] == "app.log.1"
+            assert data["source"]["path"] == "app.log.1"
+            assert [row["content"] for row in data["lines"]] == ["ERROR rotated failure"]
+            assert [row["source_path"] for row in data["lines"]] == ["app.log.1"]
+
+    def test_view_logs_logs_rollover_source_resolution_failures(self, admin_client, caplog):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("INFO current healthy\n")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                with caplog.at_level(logging.DEBUG, logger="app.routers.admin"):
+                    resp = admin_client.get(
+                        "/admin/logs/view",
+                        params={"source": "app.log.1", "limit": 10},
+                    )
+
+            assert resp.status_code == 404
+            data = resp.json()
+            assert data["code"] == "NOT_FOUND"
+            assert data["message"] == "Unknown log source"
+            assert data["trace_id"]
+            info_records = [
+                record
+                for record in caplog.records
+                if record.name == "app.routers.admin" and record.levelname == "INFO" and record.msg == "LOG_LINES_VIEW_FAILED"
+            ]
+            debug_records = [
+                record
+                for record in caplog.records
+                if record.name == "app.routers.admin" and record.levelname == "DEBUG" and record.msg == "Log lines view failure"
+            ]
+
+            assert any(
+                getattr(record, "context", {}).get("source") == "app.log.1"
+                and getattr(record, "context", {}).get("status_code") == 404
+                and getattr(record, "context", {}).get("reason") == "unknown_log_source"
+                for record in info_records
+            )
+            assert any(
+                getattr(record, "context", {}).get("source") == "app.log.1"
+                and getattr(record, "context", {}).get("status_code") == 404
+                and getattr(record, "context", {}).get("reason") == "unknown_log_source"
+                for record in debug_records
+            )
+
+    def test_view_logs_rejects_path_traversal_for_specific_rollover_source(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("INFO current healthy\n")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = admin_client.get(
+                    "/admin/logs/view",
+                    params={"source": "../app.log", "limit": 10},
+                )
+
+            assert resp.status_code == 400
+            data = resp.json()
+            assert data["code"] == "HTTP_400"
+            assert data["message"] == "Invalid filename: path traversal is not allowed"
+            assert data["trace_id"]
+
+    def test_view_logs_rejects_allowlisted_rollover_symlink_source(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            symlink_path = os.path.join(tmpdir, "app.log.1")
+            target_path = os.path.join(tmpdir, "sensitive.txt")
+
+            with open(log_path, "w") as f:
+                f.write("INFO current healthy\n")
+            with open(target_path, "w") as f:
+                f.write("should not be readable through log source selection\n")
+
+            if not hasattr(os, "symlink"):
+                pytest.skip("symlink is not available on this platform")
+
+            try:
+                os.symlink(target_path, symlink_path)
+            except (OSError, NotImplementedError):
+                pytest.skip("symlink creation is not permitted in this environment")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = admin_client.get(
+                    "/admin/logs/view",
+                    params={"source": "app.log.1", "limit": 10},
+                )
+
+            assert resp.status_code == 404
+            data = resp.json()
+            assert data["code"] == "NOT_FOUND"
+            assert data["message"] == "Unknown log source"
+            assert data["trace_id"]
+
+    def test_view_logs_returns_503_on_rollover_source_permission_error(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            rotated_path = os.path.join(tmpdir, "app.log.1")
+            with open(log_path, "w") as f:
+                f.write("INFO current healthy\n")
+            with open(rotated_path, "w") as f:
+                f.write("ERROR rotated failure\n")
+
+            original_lstat = os.lstat
+
+            def lstat_side_effect(path):
+                if path == rotated_path:
+                    raise PermissionError("permission denied")
+                return original_lstat(path)
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                with patch("app.routers.admin.os.lstat", side_effect=lstat_side_effect):
+                    resp = admin_client.get(
+                        "/admin/logs/view",
+                        params={"source": "app.log.1", "limit": 10},
+                    )
+
+            assert resp.status_code == 503
+            data = resp.json()
+            assert data["code"] == "HTTP_503"
+            assert data["message"] == "Log source is unavailable due to file permissions"
+            assert data["trace_id"]
+
     def test_view_logs_uses_streaming_directory_iteration_for_log_family(self, admin_client):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = os.path.join(tmpdir, "app.log")
