@@ -35,7 +35,6 @@ const filesLoading = ref(false)
 const acting = ref(false)
 const error = ref('')
 const infoMessage = ref('')
-const lastFileSnapshotKey = ref('')
 
 const selectedFileId = ref(null)
 const fileHashes = ref(null)
@@ -459,18 +458,6 @@ const jobPoller = usePolling(
   async () => {
     const next = await getJob(jobId.value)
     job.value = normalizeProjectRecord(next, ['project_id'])
-
-    const snapshotKey = [
-      job.value?.id ?? '',
-      String(job.value?.status || '').toUpperCase(),
-      job.value?.files_failed ?? 0,
-      job.value?.files_succeeded ?? 0,
-    ].join(':')
-
-    if (snapshotKey !== lastFileSnapshotKey.value) {
-      lastFileSnapshotKey.value = snapshotKey
-      void loadDebug()
-    }
 
     return next
   },
