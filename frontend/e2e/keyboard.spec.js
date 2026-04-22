@@ -137,3 +137,59 @@ test('keyboard navigation: sidebar navigation links are Tab-reachable', async ({
   await page.keyboard.press('Tab')
   await expect(navLinks.first()).not.toBeFocused()
 })
+
+test('keyboard navigation: system log paging controls are focusable and activatable', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['admin'])
+
+  await routeJson(page, '**/api/admin/logs', {
+    log_files: [
+      { name: 'app.log', size: 64, modified: '2026-04-08T11:59:00Z' },
+      { name: 'app.log.1', size: 32, modified: '2026-04-08T11:00:00Z' },
+    ],
+    total_size: 96,
+  })
+
+  await routeJson(page, '**/api/admin/logs/view', (request) => {
+    const url = new URL(request.url())
+    const offset = Number(url.searchParams.get('offset') || '0')
+
+    if (offset === 1) {
+      return {
+        source: { source: 'app.log', path: 'app.log' },
+        fetched_at: '2026-04-08T12:00:01Z',
+        file_modified_at: '2026-04-08T11:59:00Z',
+        lines: [{ content: 'line 199', source_path: 'app.log' }],
+        returned: 1,
+        has_more: false,
+        limit: 200,
+        offset: 1,
+      }
+    }
+
+    return {
+      source: { source: 'app.log', path: 'app.log' },
+      fetched_at: '2026-04-08T12:00:00Z',
+      file_modified_at: '2026-04-08T11:59:00Z',
+      lines: [{ content: 'line 200', source_path: 'app.log' }],
+      returned: 1,
+      has_more: true,
+      limit: 200,
+      offset: 0,
+    }
+  })
+
+  await page.goto('/system')
+  await page.getByRole('button', { name: 'Logs' }).click()
+
+  const olderButton = page.getByRole('button', { name: 'Load older lines' })
+  await olderButton.focus()
+  await expect(olderButton).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(page.locator('.log-viewer')).toContainText('line 199')
+
+  const newerButton = page.getByRole('button', { name: 'Load newer lines' })
+  await newerButton.focus()
+  await expect(newerButton).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(page.locator('.log-viewer')).toContainText('line 200')
+})
