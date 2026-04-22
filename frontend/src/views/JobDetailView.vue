@@ -1007,11 +1007,16 @@ select {
 .failure-summary {
   display: grid;
   gap: var(--space-xs);
-  color: var(--color-alert-danger-text);
-  background: var(--color-alert-danger-bg);
-  border: 1px solid var(--color-alert-danger-border);
+  color: var(--color-text-primary, #1f2937);
+  background: var(--color-alert-danger-bg, #fef2f2);
+  border: 1px solid var(--color-alert-danger-border, #fca5a5);
   border-radius: var(--border-radius);
   padding: var(--space-sm);
+}
+
+.failure-summary .muted {
+  color: var(--color-text-primary, #1f2937);
+  opacity: 0.85;
 }
 
 .error-text {
@@ -1028,7 +1033,9 @@ select {
   white-space: pre-wrap;
   word-break: break-word;
   font-family: ui-monospace, Menlo, Monaco, Consolas, monospace;
-  background: rgba(0, 0, 0, 0.08);
+  color: inherit;
+  background: color-mix(in srgb, var(--color-alert-danger-border, #fca5a5) 24%, white);
+  border: 1px solid color-mix(in srgb, var(--color-alert-danger-border, #fca5a5) 55%, transparent);
   border-radius: var(--border-radius);
   padding: var(--space-sm);
 }

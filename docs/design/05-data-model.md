@@ -57,6 +57,7 @@
 ### Job Domain
 
 - `export_jobs` stores job-level lifecycle and throughput counters.
+  - `failure_reason` (nullable `Text`) — persisted sanitized job-level failure summary for terminal failures. This field is cleared when a failed job is started again and may include safe source/destination-relative file hints without exposing raw internal paths.
   - `callback_url` (nullable `String`) — optional HTTPS URL that receives a POST callback when the job reaches a terminal state (`COMPLETED` or `FAILED`). Added in migration `0011`. Only `https://` URLs are accepted; HTTP is rejected at schema validation (422).
 - Jobs in `RUNNING` or `VERIFYING` state cannot survive a service restart (worker processes are ephemeral). Startup reconciliation (§ 4.11) transitions these to `FAILED` with `completed_at` set. Note: webhook callbacks are **not** issued for reconciliation-driven failures — only the `JOB_RECONCILED` audit event is emitted.
 - `export_files` stores per-file status/checksum for retries and verification.
@@ -208,6 +209,7 @@ This section documents the concrete table layout represented by the SQLAlchemy m
 - `created_by` (String, nullable)
 - `started_by` (String, nullable)
 - `client_ip` (String(45), nullable)
+- `failure_reason` (Text, nullable)
 - `callback_url` (String, nullable)
 - `created_at` (DateTime with timezone, default `now()`)
 
