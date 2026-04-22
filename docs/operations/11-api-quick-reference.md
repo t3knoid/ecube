@@ -125,7 +125,7 @@ Compatibility note: To support project-to-source-path policy, use project source
 | POST | `/jobs` | processor+ | Create new export job (omit `drive_id` for auto-assignment) |
 | PUT | `/jobs/{job_id}` | processor+ | Update a pending, paused, or failed job from the Job Detail page |
 | DELETE | `/jobs/{job_id}` | processor+ | Delete a pending job and release its current drive assignment |
-| GET | `/jobs/{job_id}` | admin/manager/processor/auditor | Get job detail, including progress and cumulative active duration |
+| GET | `/jobs/{job_id}` | admin/manager/processor/auditor | Get job detail, including progress, cumulative active duration, and sanitized failure summaries |
 | GET | `/jobs/{job_id}/files` | admin/manager/processor/auditor | List operator-safe file status rows for the job |
 | POST | `/jobs/{job_id}/start` | processor+ | Start a new job or resume a paused job |
 | POST | `/jobs/{job_id}/pause` | processor+ | Request a safe pause for a running job; returns `PAUSING` until in-flight work drains |
