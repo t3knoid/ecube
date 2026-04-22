@@ -31,6 +31,13 @@ class TestConfigurationEndpoints:
         assert "log_level" in keys
         assert "db_pool_recycle_seconds" in keys
 
+    def test_get_configuration_returns_default_enabled_log_file(self, admin_client):
+        resp = admin_client.get("/admin/configuration")
+        assert resp.status_code == 200
+
+        settings_map = {item["key"]: item["value"] for item in resp.json()["settings"]}
+        assert settings_map["log_file"] == "/var/log/ecube/app.log"
+
     def test_get_configuration_non_admin_forbidden(self, client):
         resp = client.get("/admin/configuration")
         assert resp.status_code == 403
@@ -110,13 +117,13 @@ class TestConfigurationEndpoints:
         mock_write_env,
         admin_client,
     ):
-        resp = admin_client.put("/admin/configuration", json={"log_file": "/var/log/ecube/app.log"})
+        resp = admin_client.put("/admin/configuration", json={"log_file": "/var/log/ecube/custom.log"})
         assert resp.status_code == 200, resp.json()
         payload = resp.json()
         assert "log_file" in payload["changed_settings"]
 
         written = mock_write_env.call_args.args[0]
-        assert written.get("LOG_FILE") == "/var/log/ecube/app.log"
+        assert written.get("LOG_FILE") == "/var/log/ecube/custom.log"
         mock_configure_logging.assert_called_once()
 
     @patch("app.services.configuration_service.database_service._write_env_settings")
@@ -217,7 +224,7 @@ class TestConfigurationEndpoints:
 
             assert log_path.exists()
             content = log_path.read_text(encoding="utf-8")
-            assert "Logging configured: level=INFO format=text file=" in content
+            assert "Logging configured: level=INFO format=text file_logging=enabled" in content
             assert "CONFIGURATION_UPDATED" in content
             assert "405 HTTP_405" in content
         finally:

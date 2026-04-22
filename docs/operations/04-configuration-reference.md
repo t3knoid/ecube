@@ -210,11 +210,11 @@ Required only when `SESSION_BACKEND=redis`. If Redis is unavailable, ECUBE autom
 | ----------------------- | ---------- | --------------------------------------------------------------- |
 | `LOG_LEVEL`             | `INFO`     | Root log level: `DEBUG`, `INFO`, `WARNING`, `ERROR`.            |
 | `LOG_FORMAT`            | `text`     | Output format: `text` (human-readable) or `json` (structured).  |
-| `LOG_FILE`              | *(empty)*  | Optional path to a log file. Leave empty for stdout only.       |
+| `LOG_FILE`              | `/var/log/ecube/app.log` | Standard ECUBE application log path. Set to an empty value to disable file logging and keep stdout only. |
 | `LOG_FILE_MAX_BYTES`    | `10485760` | Maximum log file size in bytes before rotation (default 10 MB). |
 | `LOG_FILE_BACKUP_COUNT` | `5`        | Number of rotated backup log files to keep.                     |
 
-To enable writing logs to disk, set `LOG_FILE` to an absolute path in your `.env` file (or export it as an environment variable). When `LOG_FILE` is set, ECUBE writes logs to both stdout and the file, rotating the file when it reaches `LOG_FILE_MAX_BYTES`.
+By default, ECUBE writes logs to both stdout and `/var/log/ecube/app.log`, rotating the file when it reaches `LOG_FILE_MAX_BYTES`. Override `LOG_FILE` in `.env` (or the environment) to use a different path, or set it to an empty value to disable file logging and keep console-only output.
 
 Example:
 
@@ -228,6 +228,7 @@ Operational notes:
 
 - Ensure the ECUBE service account can create/write the target directory and files (for example `/var/log/ecube`).
 - Keep `LOG_FORMAT` consistent with your ingestion pipeline (`text` for local troubleshooting, `json` for SIEM/centralized parsing).
+- If the configured log path cannot be opened, ECUBE keeps running with console logging and emits a warning instead of failing startup. Fix directory ownership or permissions and then restart the service to restore file logging.
 - Leave `LOG_FILE` empty to disable file logging and keep console-only output.
 
 ---
