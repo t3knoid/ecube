@@ -228,7 +228,7 @@ def sanitize_error_message(err: object, default_message: str = "Operation failed
     """Return a bounded, filesystem-safe summary for provider and OS errors.
 
     Keep the useful operator-facing meaning while redacting path-like substrings
-    and collapsing raw provider text into a small safe set of summaries.
+    and mapping common provider text into a small safe set of summaries.
     """
     if err is None:
         return default_message
@@ -253,7 +253,7 @@ def sanitize_error_message(err: object, default_message: str = "Operation failed
     if "no such file" in lowered or "not found" in lowered:
         return "Target device or path was not found"
 
-    return default_message
+    return redacted
 
 
 _AUDIT_REDACTED = "[redacted]"
