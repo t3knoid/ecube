@@ -453,7 +453,7 @@ def mount_drive(
     if not success:
         logger.warning(
             "Drive mount failed",
-            {
+            extra={
                 **_safe_drive_log_context(drive, reason=sanitize_error_message(error, "Mount provider reported failure")),
                 "filesystem_type": drive.filesystem_type,
             },
@@ -607,7 +607,7 @@ def mount_drive(
 
     logger.info(
         "Drive mounted",
-        {
+        extra={
             **_safe_drive_log_context(drive),
             "filesystem_type": drive.filesystem_type,
             "project_id": drive.current_project_id,

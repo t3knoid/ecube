@@ -148,7 +148,7 @@ def run_discovery_sync(
     dict
         Summary with counts of hubs, ports, drives inserted/updated/removed.
     """
-    logger.info("USB discovery sync started", {"actor": actor or "system"})
+    logger.info("USB discovery sync started", extra={"actor": actor or "system"})
     topology = topology_source()
 
     hub_repo = HubRepository(db)
@@ -274,7 +274,7 @@ def run_discovery_sync(
             drives_inserted.append(discovered_drive.device_identifier)
             metadata = _build_discovered_drive_metadata(discovered_drive, discovered_port, drive_id=drive.id)
             observed_drive_metadata.append({"action": "inserted", **metadata})
-            logger.info("USB discovery inserted drive", metadata)
+            logger.info("USB discovery inserted drive", extra=metadata)
 
         else:
             # Existing drive — update mutable fields.
@@ -346,7 +346,7 @@ def run_discovery_sync(
                 drives_updated.append(discovered_drive.device_identifier)
                 metadata = _build_persisted_drive_metadata(existing)
                 observed_drive_metadata.append({"action": "updated", **metadata})
-                logger.info("USB discovery updated drive", metadata)
+                logger.info("USB discovery updated drive", extra=metadata)
             else:
                 observed_drive_metadata.append({
                     "action": "observed",
@@ -386,7 +386,7 @@ def run_discovery_sync(
                     drives_removed.append(drive.device_identifier)
                     removed_metadata = _build_persisted_drive_metadata(drive)
                     removed_drive_metadata.append(removed_metadata)
-                    logger.info("USB discovery removed drive", removed_metadata)
+                    logger.info("USB discovery removed drive", extra=removed_metadata)
                     try:
                         audit_repo.add(
                             action="DRIVE_REMOVED",
@@ -425,7 +425,7 @@ def run_discovery_sync(
 
     logger.info(
         "USB discovery sync completed",
-        {
+        extra={
             "actor": actor or "system",
             "hubs_upserted": summary["hubs_upserted"],
             "ports_upserted": summary["ports_upserted"],
