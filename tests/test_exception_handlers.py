@@ -184,6 +184,30 @@ def test_500_unhandled_exception_sanitized(exception_routes):
     assert "RuntimeError" not in data["message"]
 
 
+def test_500_unhandled_exception_preserves_traceback_logging(exception_routes, caplog):
+    """Unhandled exceptions should still emit an error log with traceback context."""
+    caplog.set_level(logging.ERROR, logger="app.main")
+
+    with TestClient(app, raise_server_exceptions=False) as safe_client:
+        response = safe_client.get("/test-exceptions/500-unhandled")
+
+    assert response.status_code == 500
+    data = response.json()
+    _assert_error_schema(data, expected_code="INTERNAL_ERROR")
+
+    error_record = next(
+        record
+        for record in caplog.records
+        if record.levelname == "ERROR"
+        and "Unhandled exception trace_id=" in record.getMessage()
+    )
+
+    assert error_record.trace_id == data["trace_id"]
+    assert error_record.exc_info is not None
+    assert error_record.exc_info[0] is RuntimeError
+    assert str(error_record.exc_info[1]) == "Completely unexpected failure"
+
+
 def test_500_unhandled_schema_drift_emits_safe_classified_logs(exception_routes, caplog):
     """Schema drift errors should emit safe info/debug classifications with remediation."""
     caplog.set_level(logging.DEBUG, logger="app.main")

@@ -958,6 +958,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     logger.error(
         f"Unhandled exception trace_id={trace_id} path={request.url.path}",
         extra=safe_context,
+        exc_info=exc,
     )
     return _error_response(500, "INTERNAL_ERROR", "An unexpected error occurred.", trace_id)
 
