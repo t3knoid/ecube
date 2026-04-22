@@ -174,7 +174,7 @@ def _resolve_log_source(source: str) -> _ResolvedLogSource:
     if not allowed:
         raise HTTPException(
             status_code=404,
-            detail="File-based logging is not configured or log source is unavailable",
+            detail="File-based logging is not configured",
         )
 
     if normalized not in allowed:
@@ -273,7 +273,7 @@ def _redact_log_line(line: str) -> str:
     return redacted
 
 
-@router.get("/logs", response_model=LogFilesResponse, responses={**R_401, **R_403, **R_404})
+@router.get("/logs", response_model=LogFilesResponse, responses={**R_401, **R_403, **R_404, **R_503})
 def list_log_files(
     request: Request,
     db: Session = Depends(get_db),
@@ -283,8 +283,8 @@ def list_log_files(
 
     Requires the ``admin`` role.
 
-    Returns ``200`` with file list, or ``404`` if file-based logging is not
-    configured.
+    Returns ``200`` with file list, ``404`` when file-based logging is not
+    configured, or ``503`` when the configured log directory is unavailable.
     """
     if "admin" not in current_user.roles:
         best_effort_audit(
@@ -297,16 +297,29 @@ def list_log_files(
         raise HTTPException(status_code=403, detail="This action requires the admin role")
 
     log_dir = _log_directory()
-    if not log_dir or not os.path.isdir(log_dir):
+    if not log_dir:
         raise HTTPException(
             status_code=404,
-            detail="File-based logging is not configured or log directory does not exist",
+            detail="File-based logging is not configured",
+        )
+
+    if not os.path.isdir(log_dir):
+        raise HTTPException(
+            status_code=503,
+            detail="Log directory is unavailable",
         )
 
     files: List[LogFileInfo] = []
     base_name = os.path.basename(settings.log_file)  # type: ignore[arg-type]
     allowed_log_pattern = _log_file_pattern(base_name)
-    for entry in sorted(os.listdir(log_dir)):
+    try:
+        directory_entries = sorted(os.listdir(log_dir))
+    except PermissionError:
+        raise HTTPException(status_code=503, detail="Log directory is unavailable")
+    except OSError:
+        raise HTTPException(status_code=503, detail="Log directory is unavailable")
+
+    for entry in directory_entries:
         # Only expose log files that belong to the configured log family
         # (e.g. "app.log", "app.log.1").  Uses the same allowlist regex as
         # the download endpoint so the listed set is always downloadable.
@@ -414,7 +427,7 @@ def view_log_lines(
         if reverse:
             lines = list(reversed(lines))
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Log source file not found")
+        raise HTTPException(status_code=503, detail="Log source is unavailable")
     except PermissionError:
         raise HTTPException(status_code=503, detail="Log source is unavailable due to file permissions")
     except OSError:
@@ -494,10 +507,16 @@ def download_log_file(
         raise HTTPException(status_code=403, detail="This action requires the admin role")
 
     log_dir = _log_directory()
-    if not log_dir or not os.path.isdir(log_dir):
+    if not log_dir:
         raise HTTPException(
             status_code=404,
-            detail="File-based logging is not configured or log directory does not exist",
+            detail="File-based logging is not configured",
+        )
+
+    if not os.path.isdir(log_dir):
+        raise HTTPException(
+            status_code=503,
+            detail="Log directory is unavailable",
         )
 
     safe = _safe_filename(filename)

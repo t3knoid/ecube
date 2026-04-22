@@ -741,6 +741,8 @@ If your role does not include access to this page, the navigation item will not 
 
 Use the `Configuration` page to update selected runtime settings from the UI without logging into the host terminal.
 
+In a standard deployment, the Logging section loads with file logging already enabled and the log path prefilled as `/var/log/ecube/app.log`. Unchecking the file logging toggle clears `LOG_FILE` and returns ECUBE to console-only logging.
+
 What this page is for:
 
 - Adjusting logging behavior (level, format, and file logging options)
