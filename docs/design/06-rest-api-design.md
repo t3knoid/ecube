@@ -1348,7 +1348,7 @@ Read-only endpoints for viewing application log files. These endpoints support r
 
 ### `GET /admin/logs/view`
 
-List recent lines from an application log file with optional filtering and pagination.
+List recent lines from the configured application log family or from a specific rotated file with optional filtering and pagination.
 
 **Roles:** `admin`
 
@@ -1356,7 +1356,7 @@ List recent lines from an application log file with optional filtering and pagin
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `source` | string | `app` | Allowlisted log source identifier; currently only `"app"` (application log) is supported |
+| `source` | string | `app` | Allowlisted log source identifier; `"app"` selects the configured application log family and explicit filenames such as `"app.log.1"` select one rotated file from that family |
 | `offset` | integer | `0` | Number of matches to skip when paginating through results |
 | `limit` | integer | `200` | Maximum number of matching lines to return per request |
 | `search` | string | (empty) | Optional text filter; lines containing this substring (case-insensitive) are included; pagination applies to filtered results |
@@ -1402,8 +1402,9 @@ List recent lines from an application log file with optional filtering and pagin
 
 **Behavior:**
 
-- Log file access is restricted to an allowlist of safe source identifiers. Only `"app"` (mapped to the configured log file) is currently supported.
+- Log file access is restricted to an allowlist of safe source identifiers. `"app"` maps to the configured application log family. Explicit filenames such as `"app.log.1"` are accepted only when they stay within the configured log family, match the allowlist pattern, and resolve to a regular file in the log directory.
 - The endpoint reads from the end of the file backward (tail semantics) to avoid loading large files into memory.
+- When `source=app`, the endpoint reads across the active log and numbered rollover siblings in newest-first family order. When `source` is an explicit filename such as `app.log.1`, only that file is read.
 - **Pagination:** The endpoint reads the last `(limit + offset)` matching lines and returns the slice `[offset : offset + limit]`. This enables page iteration: `offset=0, limit=200` returns the newest 200 results; `offset=200, limit=200` returns results 200-399 (next page). The `has_more` field indicates when additional pages exist.
 - **Ordering:** By default (`reverse=false`), lines are returned oldest→newest within the selected result window. When `reverse=true`, the same selected window is returned in newest→oldest order.
 - If `search` is provided, lines are filtered to include only those containing the substring (case-insensitive).
@@ -1413,14 +1414,16 @@ List recent lines from an application log file with optional filtering and pagin
   - Sensitive JSON field values (e.g., `{"secret": "***"}`)
   - Other credential-like patterns
 - Redaction is applied to log line content; `source.path` is returned as a basename-only display value to avoid exposing host filesystem layout.
-- If the file does not exist or cannot be read, returns `404`.
-- If the source identifier is not in the allowlist, returns `404`.
+- Invalid source filenames with traversal semantics return `400 Bad Request`.
+- Unknown or rejected sources return `404 Not Found`.
+- Permission failures and log I/O failures return `503 Service Unavailable`.
 
 **Error responses:**
 
 - `401 Unauthorized` — Missing/invalid token
 - `403 Forbidden` — Insufficient role (non-admin) or project isolation violation
-- `404 Not Found` — Log source not in allowlist, or log file does not exist
+- `400 Bad Request` — Invalid filename or traversal attempt in `source`
+- `404 Not Found` — Log source not in allowlist, rejected symlink/non-regular file, or log file does not exist
 - `422 Unprocessable Entity` — Invalid query parameter (e.g., negative offset/limit, non-integer values)
 - `503 Service Unavailable` — Log file I/O error (permission denied, disk error, etc.)
 
