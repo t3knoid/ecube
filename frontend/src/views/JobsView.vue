@@ -121,10 +121,6 @@ async function runJobAction(job, action) {
   }
 }
 
-function progressPercent(job) {
-  return calculateJobProgress(job).percent
-}
-
 function progressLabel(job) {
   const metrics = calculateJobProgress(job)
   if (metrics.initializing) {
