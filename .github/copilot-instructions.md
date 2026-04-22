@@ -63,6 +63,13 @@ Use `require_roles(*roles)` for every endpoint.
 - Logging wrappers must forward all arguments.
 - Logging must not drop context or silently lose information.
 - Do not pass multiple positional arguments unless supported.
+- All new code must add appropriate logging for failure paths, degraded behavior, retry exhaustion, unexpected states, and logic inconsistencies that could otherwise fail silently.
+- Do not rely only on unhandled-exception logging. Handled failures and suspicious outcomes must be logged at the point they are detected.
+- Unexpected failures that can surface to operators or UI users must emit layered logs:
+  - `logger.info` should record a safe failure classification, request or operation surface, and correlation identifier without exposing internal paths, raw SQL, credentials, or other unsafe host details.
+  - `logger.debug` should record additional actionable diagnostic detail for troubleshooting, so an operator or end user working from debug logs can understand the likely remediation path without reading application code.
+- For new failure handling, `logger.info` should make it easy to audit that an unexpected failure, silent bug, or logic error occurred even when the exception is caught or the operation only partially fails.
+- Prefer classifying common operational failure categories when they can be derived safely, such as configuration errors, permission failures, unavailable dependencies, or schema drift.
 
 ### Debug logging (allowed to contain sensitive details)
 Debug logs **may include**:
