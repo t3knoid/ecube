@@ -134,3 +134,67 @@ test('admin can page older and newer log lines by scrolling the log viewer', asy
   await expect(viewer).toContainText('line 200')
   await expect(viewer).not.toContainText('line 199')
 })
+
+test('admin can page newer from a partial older page without skipping lines', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['admin'])
+  await stubSystemLogApis(page)
+
+  const requestedOffsets = []
+  const currentLines = Array.from({ length: 200 }, (_, index) => ({ content: `line ${200 - index}`, source_path: 'app.log' }))
+
+  await routeJson(page, '**/api/admin/logs/view', (request) => {
+    const url = new URL(request.url())
+    const offset = Number(url.searchParams.get('offset') || '0')
+    requestedOffsets.push(offset)
+
+    if (offset === 200) {
+      return {
+        source: { source: 'app.log', path: 'app.log' },
+        fetched_at: '2026-04-08T12:00:01Z',
+        file_modified_at: '2026-04-08T11:59:00Z',
+        lines: [
+          { content: 'line 150', source_path: 'app.log' },
+          { content: 'line 151', source_path: 'app.log' },
+        ],
+        returned: 2,
+        has_more: true,
+        limit: 200,
+        offset: 200,
+      }
+    }
+
+    if (offset === 198) {
+      return {
+        source: { source: 'app.log', path: 'app.log' },
+        fetched_at: '2026-04-08T12:00:02Z',
+        file_modified_at: '2026-04-08T11:59:00Z',
+        lines: [{ content: 'line 152', source_path: 'app.log' }],
+        returned: 1,
+        has_more: true,
+        limit: 200,
+        offset: 198,
+      }
+    }
+
+    return {
+      source: { source: 'app.log', path: 'app.log' },
+      fetched_at: '2026-04-08T12:00:00Z',
+      file_modified_at: '2026-04-08T11:59:00Z',
+      lines: currentLines,
+      returned: currentLines.length,
+      has_more: true,
+      limit: 200,
+      offset: 0,
+    }
+  })
+
+  await page.goto('/system')
+  await page.getByRole('button', { name: 'Logs' }).click()
+
+  await page.getByRole('button', { name: 'Load older lines' }).click()
+  await expect(page.locator('.log-viewer')).toContainText('line 150')
+
+  await page.getByRole('button', { name: 'Load newer lines' }).click()
+  await expect(page.locator('.log-viewer')).toContainText('line 152')
+  expect(requestedOffsets).toContain(198)
+})
