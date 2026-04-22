@@ -311,7 +311,11 @@ sudo cp deploy/ecube-pam /etc/pam.d/ecube
 Run from the repository root (with your virtual environment activated):
 
 ```bash
-sudo .venv/bin/uvicorn app.main:app --reload
+Fallback failed-job diagnostics to audit events
+
+Use the latest sanitized JOB_FAILED or JOB_TIMEOUT audit entry
+when file-based log correlation is unavailable, so Job Detail
+still shows a related failure event in console-only deployments.
 ```
 
 Without root, all login attempts return `401 Unauthorized` regardless of credentials. In production, the service runs as root via systemd — the same restriction applies.
