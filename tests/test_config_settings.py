@@ -366,6 +366,7 @@ class TestCopyJobTimeout:
         db.expire_all()
         db.refresh(job)
         assert job.status == JobStatus.FAILED
+        assert job.failure_reason == "Copy job timed out before all files completed"
 
         # Verify a JOB_TIMEOUT audit entry was created.
         timeout_entries = (
@@ -373,6 +374,7 @@ class TestCopyJobTimeout:
         )
         assert len(timeout_entries) == 1
         assert timeout_entries[0].details["timeout_seconds"] == 1
+        assert timeout_entries[0].details["failure_reason"] == "Copy job timed out before all files completed"
 
     def test_zero_timeout_disables_enforcement(self, db, tmp_path):
         """copy_job_timeout=0 disables timeout enforcement."""
