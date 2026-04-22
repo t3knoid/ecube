@@ -902,7 +902,7 @@ def test_run_copy_job_persists_sanitized_job_failure_reason_for_unexpected_excep
     db.refresh(job)
     assert job.status == JobStatus.FAILED
     assert job.failure_reason == (
-        "provider exploded while copying [redacted-path] to [redacted-path] "
+        "Unexpected copy failure "
         "(source: bad.txt, destination: bad.txt)"
     )
     assert str(source_file) not in job.failure_reason
