@@ -24,6 +24,7 @@ from app.schemas.audit import (
 logger = logging.getLogger(__name__)
 
 _COC_DRIVE_ACTIONS = {
+    "DRIVE_DISCOVERED",
     "DRIVE_INITIALIZED",
     "DRIVE_EJECT_PREPARED",
     "DRIVE_EJECT_FAILED",
@@ -40,6 +41,7 @@ _COC_JOB_ACTIONS = {
 }
 
 _ACTION_LABELS = {
+    "DRIVE_DISCOVERED": "Drive discovered",
     "DRIVE_INITIALIZED": "Drive initialized",
     "JOB_CREATED": "Job created",
     "JOB_STARTED": "Copy operation started",

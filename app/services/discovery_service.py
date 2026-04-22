@@ -37,6 +37,7 @@ Hub auto-creation:
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import logging
 from typing import Callable, List, Optional
 
@@ -96,6 +97,31 @@ def _build_persisted_drive_metadata(drive: UsbDrive) -> dict:
         "speed": drive.speed,
         "serial_number_present": bool(drive.serial_number),
         "serial_number_masked": mask_serial_number(drive.serial_number),
+    }
+
+
+def _build_drive_discovered_audit_details(drive: UsbDrive, *, actor: Optional[str] = None) -> dict:
+    port = drive.port
+    hub = port.hub if port else None
+    return {
+        "drive_id": drive.id,
+        "device_identifier": drive.device_identifier,
+        "device_label": drive.display_device_label,
+        "manufacturer": drive.manufacturer,
+        "product_name": drive.product_name,
+        "filesystem_path": drive.filesystem_path,
+        "filesystem_type": drive.filesystem_type,
+        "capacity_bytes": drive.capacity_bytes,
+        "port_id": port.id if port else None,
+        "port_number": port.port_number if port else None,
+        "port_system_path": port.system_path if port else None,
+        "hub_id": hub.id if hub else None,
+        "vendor_id": (port.vendor_id if port and port.vendor_id else (hub.vendor_id if hub else None)),
+        "product_id": (port.product_id if port and port.product_id else (hub.product_id if hub else None)),
+        "speed": drive.speed,
+        "serial_number_masked": mask_serial_number(drive.serial_number),
+        "discovery_actor": actor or "system",
+        "discovered_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -275,6 +301,16 @@ def run_discovery_sync(
             metadata = _build_discovered_drive_metadata(discovered_drive, discovered_port, drive_id=drive.id)
             observed_drive_metadata.append({"action": "inserted", **metadata})
             logger.info("USB discovery inserted drive", extra=metadata)
+            try:
+                audit_repo.add(
+                    action="DRIVE_DISCOVERED",
+                    user=actor,
+                    drive_id=drive.id,
+                    details=_build_drive_discovered_audit_details(drive, actor=actor),
+                    client_ip=client_ip,
+                )
+            except Exception:
+                logger.exception("Failed to write audit log for DRIVE_DISCOVERED")
 
         else:
             # Existing drive — update mutable fields.
