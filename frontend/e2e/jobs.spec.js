@@ -248,3 +248,49 @@ test('job detail polls and reflects status progression', async ({ page }) => {
   // Polling eventually advances to COMPLETED (polling interval is 3 s; allow up to 20 s)
   await expect(page.locator('.status-badge').filter({ hasText: 'COMPLETED' }).first()).toBeVisible({ timeout: 20000 })
 })
+
+test('job detail prefers persisted failure reasons over derived file summaries', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['admin'])
+
+  await routeJson(page, '**/api/jobs**', [])
+  await routeJson(page, '**/api/jobs/91', {
+    id: 91,
+    project_id: 'P-91',
+    evidence_number: 'EV-91',
+    status: 'FAILED',
+    copied_bytes: 10,
+    total_bytes: 100,
+    file_count: 2,
+    files_succeeded: 1,
+    files_failed: 1,
+    thread_count: 4,
+    source_path: '/nfs/project-091/evidence',
+    target_mount_path: '/mnt/ecube/9',
+    completed_at: '2026-04-18T10:22:33Z',
+    failure_reason: 'Unexpected copy failure (source: bad.txt, destination: bad.txt)',
+    error_summary: '1 file failed: Permission denied (/evidence/bad.txt)',
+    failure_log_entry: '2026-04-18T10:22:33+00:00 [ERROR] app.services.copy_engine: JOB_FAILED job_id=91 reason=Unexpected copy failure',
+  })
+  await routeJson(page, '**/api/jobs/91/files', {
+    total_files: 1,
+    returned_files: 1,
+    files: [{ id: 201, relative_path: 'bad.txt', status: 'ERROR', error_message: 'Permission denied' }],
+  })
+  await routeJson(page, '**/api/introspection/jobs/91/debug', {
+    total_files: 1,
+    returned_files: 1,
+    files: [{ id: 201, relative_path: 'bad.txt', status: 'ERROR', error_message: 'Permission denied' }],
+  })
+
+  await page.goto('/jobs/91')
+
+  const failureSummary = page.locator('.failure-summary')
+  await expect(failureSummary).toBeVisible()
+  await expect(failureSummary.getByText('Failure reason')).toBeVisible()
+  await expect(failureSummary.getByText('Unexpected copy failure (source: bad.txt, destination: bad.txt)')).toBeVisible()
+  await expect(failureSummary).not.toContainText('1 file failed: Permission denied (/evidence/bad.txt)')
+  await expect(failureSummary.getByText('Related log entry')).toBeVisible()
+  await expect(failureSummary.getByText('JOB_FAILED job_id=91')).toBeVisible()
+
+  await expectNoCriticalA11yViolations(page)
+})

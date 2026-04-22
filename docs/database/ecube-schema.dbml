@@ -66,6 +66,7 @@ Table export_jobs {
   started_by varchar
   client_ip varchar(45)
   callback_url varchar
+  failure_reason text
   created_at timestamptz
 
   indexes {

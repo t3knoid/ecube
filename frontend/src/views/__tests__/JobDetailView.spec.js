@@ -213,6 +213,31 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain('1 file failed: Permission denied (/evidence/report.pdf)')
   })
 
+  it('prefers the persisted job-level failure reason when present', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'FAILED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 10,
+      total_bytes: 100,
+      files_failed: 1,
+      completed_at: '2026-04-18T10:22:33Z',
+      failure_reason: 'Copy job timed out before all files completed',
+      error_summary: '1 file failed: Permission denied (/evidence/report.pdf)',
+      failure_log_entry: '2026-04-18T10:22:33+00:00 [ERROR] app.services.copy_engine: JOB_FAILED job_id=6 reason=Copy job timed out before all files completed',
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Copy job timed out before all files completed')
+    expect(wrapper.text()).not.toContain('1 file failed: Permission denied (/evidence/report.pdf)')
+  })
+
   it('passes a full-width active progress label while the job is running', async () => {
     mocks.getJob.mockResolvedValue({
       id: 6,
