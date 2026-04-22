@@ -461,7 +461,7 @@ async function loadNewerLogLines() {
   loadingLogPage.value = true
   error.value = ''
   try {
-    logViewer.value.offset = Math.max(logViewer.value.offset - logViewer.value.limit, 0)
+    logViewer.value.offset = Math.max(logViewer.value.offset - Number(logView.value?.returned || logViewer.value.limit), 0)
     await fetchLogLines()
     await setLogViewerScrollPosition('bottom')
   } catch (err) {
