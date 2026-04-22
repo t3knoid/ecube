@@ -140,12 +140,20 @@ const selectedLogDownloadName = computed(() => {
   return logSourceOptions.value.some((option) => option.value === source) ? source : ''
 })
 
+const canPageOlderLogLines = computed(() => {
+  return Boolean(logViewer.value.source && logView.value?.has_more && !loading.value)
+})
+
+const canPageNewerLogLines = computed(() => {
+  return Boolean(logViewer.value.source && logViewer.value.offset > 0 && !loading.value)
+})
+
 const canLoadOlderLogLines = computed(() => {
-  return Boolean(logViewer.value.source && logView.value?.has_more && !loading.value && !loadingLogPage.value)
+  return Boolean(canPageOlderLogLines.value && !loadingLogPage.value)
 })
 
 const canLoadNewerLogLines = computed(() => {
-  return Boolean(logViewer.value.source && logViewer.value.offset > 0 && !loading.value && !loadingLogPage.value)
+  return Boolean(canPageNewerLogLines.value && !loadingLogPage.value)
 })
 
 function formatBytes(value) {
@@ -616,10 +624,10 @@ onMounted(loadTabData)
       </div>
 
       <div class="log-viewer-actions">
-        <button class="btn" :disabled="!canLoadNewerLogLines" @click="loadNewerLogLines">
+        <button class="btn" :disabled="!canPageNewerLogLines" @click="loadNewerLogLines">
           {{ t('system.logLoadNewer') }}
         </button>
-        <button class="btn" :disabled="!canLoadOlderLogLines" @click="loadOlderLogLines">
+        <button class="btn" :disabled="!canPageOlderLogLines" @click="loadOlderLogLines">
           {{ t('system.logLoadOlder') }}
         </button>
       </div>
