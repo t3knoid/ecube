@@ -45,6 +45,7 @@ class ExportJob(Base):
     started_by = Column(String)
     client_ip = Column(String(45), nullable=True)
     callback_url = Column(String, nullable=True)
+    failure_reason = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     files = relationship("ExportFile", back_populates="job")
     manifests = relationship("Manifest", back_populates="job")
