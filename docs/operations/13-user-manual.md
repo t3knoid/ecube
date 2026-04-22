@@ -514,9 +514,9 @@ Use the jobs table to review:
 - Evidence number
 - Device
 - Current status
-- Progress percentage
+- Progress label or percentage
 
-For active jobs, the progress value stays synchronized with both copied bytes and completed file counts. A running, pausing, or verifying job does not show 100% until the finished-file totals also indicate completion.
+For active jobs, the progress value stays synchronized with both copied bytes and completed file counts. During startup analysis, a newly started job can show `Preparing...` in the Jobs list while ECUBE scans the source files and calculates totals. A running, pausing, or verifying job does not show 100% until the finished-file totals also indicate completion.
 
 Common statuses include:
 
@@ -597,6 +597,8 @@ Use them when appropriate:
 When a pause is requested, the Jobs list and Job Detail page can show a `Pause in progress` dialog while ECUBE waits for active copy threads to drain. The Start action remains unavailable during `PAUSING` and becomes available again once the job reaches `PAUSED`.
 
 Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed `manifest.json` file on the destination drive.
+
+During startup analysis, Job Detail can show `Preparing copy...` before any totals are known. While this state is visible, the page also explains that ECUBE is still scanning the source files and calculating totals, which can take time for large evidence sets.
 
 When a job is paused, completed, or fails, the detail view shows a summary with the job start time, copy thread count, files copied, total copied, elapsed time, copy rate, and any failure reason or related log hint. Failed jobs prefer a persisted sanitized job-level failure reason when one is available, so operators can see stable messages such as `Copy job timed out before all files completed` or `Unexpected copy failure` before any derived per-file fallback.
 
