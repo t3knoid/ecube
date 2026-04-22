@@ -241,6 +241,19 @@ describe('SystemView logs tab', () => {
     expect(wrapper.text()).toContain(i18n.global.t('system.logsNotConfigured'))
   })
 
+  it('shows a distinct message when log access is configured but unavailable', async () => {
+    mocks.getLogFiles.mockRejectedValue({ response: { status: 503 } })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const logsButton = wrapper.findAll('button').find((b) => b.text() === i18n.global.t('system.tabs.logs'))
+    await logsButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('system.logsUnavailable'))
+  })
+
   it('still shows downloadable log files when log line fetch fails', async () => {
     mocks.getLogFiles.mockResolvedValue({
       log_files: [{ name: 'app.log', size: 64, modified: '2026-04-08T11:59:00Z' }],
