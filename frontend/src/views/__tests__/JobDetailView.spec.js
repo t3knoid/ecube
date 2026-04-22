@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   routerPush: vi.fn(),
   pollerStart: vi.fn(),
   pollerStop: vi.fn(),
+  pollerTick: null,
 }))
 
 vi.mock('vue-router', () => ({
@@ -65,11 +66,14 @@ vi.mock('@/api/files.js', () => ({
 }))
 
 vi.mock('@/composables/usePolling.js', () => ({
-  usePolling: (tick) => ({
-    tick,
+  usePolling: (tick) => {
+    mocks.pollerTick = tick
+    return {
+      tick,
     start: (...args) => mocks.pollerStart(...args),
     stop: (...args) => mocks.pollerStop(...args),
-  }),
+    }
+  },
 }))
 
 function mountView() {
@@ -127,6 +131,7 @@ describe('JobDetailView start action', () => {
     mocks.routerPush.mockReset()
     mocks.pollerStart.mockReset()
     mocks.pollerStop.mockReset()
+    mocks.pollerTick = null
 
     mocks.hasAnyRole.mockReturnValue(true)
     mocks.getJob.mockResolvedValue({
@@ -411,6 +416,42 @@ describe('JobDetailView start action', () => {
 
     expect(mocks.compareFiles).toHaveBeenCalledWith({ file_id_a: 9, file_id_b: 9 })
     expect(wrapper.text()).toContain('doc.txt')
+  })
+
+  it('does not reload files during background polling but still reloads them on manual refresh', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'RUNNING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 50,
+      total_bytes: 100,
+      file_count: 2,
+      files_succeeded: 1,
+      files_failed: 0,
+    })
+    mocks.getJobFiles.mockResolvedValue({ files: [{ id: 9, relative_path: 'doc.txt', status: 'DONE', checksum: 'abc' }] })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(mocks.getJobFiles).toHaveBeenCalledTimes(1)
+    expect(typeof mocks.pollerTick).toBe('function')
+
+    await mocks.pollerTick()
+    await flushPromises()
+
+    expect(mocks.getJobFiles).toHaveBeenCalledTimes(1)
+
+    const refreshButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.refresh'))
+    expect(refreshButton).toBeTruthy()
+    await refreshButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.getJobFiles).toHaveBeenCalledTimes(2)
   })
 
   it('shows a pause-in-progress dialog after pausing a running job', async () => {
