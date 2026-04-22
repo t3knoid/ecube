@@ -294,6 +294,12 @@ class TestAdminLogsEndpoints:
             resp = admin_client.get("/admin/logs")
             assert resp.status_code == 404
 
+    def test_list_logs_returns_503_when_log_directory_is_unavailable(self, admin_client):
+        with patch("app.routers.admin.settings") as mock_settings:
+            mock_settings.log_file = "/var/log/ecube/app.log"
+            resp = admin_client.get("/admin/logs")
+            assert resp.status_code == 503
+
     def test_download_log_returns_404_when_file_logging_not_configured(self, admin_client):
         with patch("app.routers.admin.settings") as mock_settings:
             mock_settings.log_file = None
@@ -682,6 +688,18 @@ class TestAdminLogsEndpoints:
             assert len(entries) >= 1
             assert entries[0].details.get("source") == "app"
             assert entries[0].details.get("reason") == "log_source_unavailable"
+
+    def test_view_logs_returns_503_when_configured_log_source_is_unavailable(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = admin_client.get("/admin/logs/view", params={"source": "app"})
+
+            assert resp.status_code == 503
+            data = resp.json()
+            assert data["message"] == "Log source is unavailable"
 
     def test_view_logs_returns_tail_with_offset_and_has_more(self, admin_client):
         with tempfile.TemporaryDirectory() as tmpdir:
