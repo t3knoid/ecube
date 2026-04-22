@@ -324,6 +324,42 @@ describe('SystemView logs tab', () => {
     expect(wrapper.text()).not.toContain(i18n.global.t('system.logsNotConfigured'))
   })
 
+  it('clears stale log lines when paging to an older page fails', async () => {
+    mocks.getLogLines
+      .mockResolvedValueOnce({
+        source: { source: 'app.log', path: 'app.log' },
+        fetched_at: '2026-04-08T12:00:00Z',
+        file_modified_at: '2026-04-08T11:59:00Z',
+        lines: [{ content: 'line 200', source_path: 'app.log' }],
+        returned: 1,
+        has_more: true,
+        limit: 200,
+        offset: 0,
+      })
+      .mockRejectedValueOnce({ response: { status: 404, data: { message: 'Unknown log source' } } })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const logsButton = wrapper.findAll('button').find((b) => b.text() === i18n.global.t('system.tabs.logs'))
+    await logsButton.trigger('click')
+    await flushPromises()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('line 200')
+
+    const olderButton = wrapper.findAll('button').find((button) => button.text() === i18n.global.t('system.logLoadOlder'))
+    expect(olderButton.element.disabled).toBe(false)
+    await olderButton.trigger('click')
+    await flushPromises()
+    await flushPromises()
+
+    expect(mocks.getLogLines).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('Unknown log source')
+    expect(wrapper.text()).not.toContain('line 200')
+    expect(wrapper.text()).toContain(i18n.global.t('system.logViewerEmpty'))
+  })
+
   it('renders basename only when API returns an absolute source path', async () => {
     mocks.getLogLines.mockResolvedValue({
       source: { source: 'app', path: '/var/log/ecube/app.log' },
