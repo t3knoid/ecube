@@ -2,10 +2,10 @@ import { test, expect } from '@playwright/test'
 import { setupAuthenticatedPage } from './helpers/app.js'
 import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
 
-test('mounts add/test/remove flow', async ({ page }) => {
+test('mounts add/edit/test/remove flow', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
-  const mounts = [{ id: 10, type: 'NFS', remote_path: '10.0.0.4:/exports', local_mount_point: '/mnt/evidence', status: 'CONNECTED' }]
+  const mounts = [{ id: 10, type: 'NFS', remote_path: '10.0.0.4:/exports', local_mount_point: '/nfs/exports', project_id: 'CASE-2026-000', status: 'MOUNTED' }]
 
   await page.route('**/api/mounts', async (route) => {
     if (route.request().method() === 'GET') {
@@ -14,7 +14,13 @@ test('mounts add/test/remove flow', async ({ page }) => {
     }
     if (route.request().method() === 'POST') {
       const body = route.request().postDataJSON()
-      mounts.push({ id: 11, status: 'CONNECTED', ...body })
+      mounts.push({
+        id: 11,
+        status: 'MOUNTED',
+        local_mount_point: '/nfs/case-2026-001',
+        last_checked_at: null,
+        ...body,
+      })
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mounts[mounts.length - 1]) })
       return
     }
@@ -30,6 +36,14 @@ test('mounts add/test/remove flow', async ({ page }) => {
   })
 
   await page.route('**/api/mounts/*', async (route) => {
+    if (route.request().method() === 'PATCH') {
+      const mountId = Number(route.request().url().split('/').pop())
+      const body = route.request().postDataJSON()
+      const index = mounts.findIndex((mount) => mount.id === mountId)
+      mounts[index] = { ...mounts[index], ...body, status: 'MOUNTED' }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mounts[index]) })
+      return
+    }
     if (route.request().method() === 'DELETE') {
       mounts.splice(0, 1)
       await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
@@ -42,11 +56,20 @@ test('mounts add/test/remove flow', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Mounts' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Add Mount' }).click()
+  await expect(page.getByRole('heading', { name: 'Add Share' })).toBeVisible()
   await page.getByLabel('Remote Path').fill('10.0.0.8:/cases')
+  await page.getByLabel('Project').fill('case-2026-001')
   await page.getByRole('button', { name: 'Create' }).click()
-  await expect(page.getByText('10.0.0.8:/cases')).toBeVisible()
+  await expect(page.getByText('CASE-2026-001')).toBeVisible()
 
-  await page.getByRole('button', { name: 'Test' }).first().click()
+  await page.getByRole('button', { name: 'Edit' }).nth(1).click()
+  await expect(page.getByRole('heading', { name: 'Edit Share' })).toBeVisible()
+  await expect(page.getByLabel('Local Mount Point')).toHaveValue('/nfs/case-2026-001')
+  await page.getByLabel('Remote Path').fill('//server/case-2026-001')
+  await page.getByRole('button', { name: 'Save' }).click()
+
+  await page.getByRole('button', { name: 'Test' }).nth(1).click()
+
   await page.getByRole('button', { name: 'Remove' }).first().click()
   await page.getByRole('button', { name: 'Remove' }).last().click()
 
