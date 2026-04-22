@@ -615,7 +615,16 @@ onMounted(loadTabData)
         <span>{{ t('system.logFileModifiedAt') }}: <strong>{{ asLocalDate(logView?.file_modified_at) }}</strong></span>
       </div>
 
-      <pre ref="logViewerElement" class="log-viewer" @scroll="onLogViewerScroll">{{ logViewerText || t('system.logViewerEmpty') }}</pre>
+      <div class="log-viewer-actions">
+        <button class="btn" :disabled="!canLoadNewerLogLines" @click="loadNewerLogLines">
+          {{ t('system.logLoadNewer') }}
+        </button>
+        <button class="btn" :disabled="!canLoadOlderLogLines" @click="loadOlderLogLines">
+          {{ t('system.logLoadOlder') }}
+        </button>
+      </div>
+
+      <pre ref="logViewerElement" class="log-viewer" tabindex="0" @scroll="onLogViewerScroll">{{ logViewerText || t('system.logViewerEmpty') }}</pre>
     </article>
 
     <article v-else class="panel">
@@ -667,6 +676,12 @@ onMounted(loadTabData)
   display: grid;
   gap: var(--space-xs);
   color: var(--color-text-secondary);
+}
+
+.log-viewer-actions {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
 }
 
 .log-viewer {
