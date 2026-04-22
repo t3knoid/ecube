@@ -124,6 +124,15 @@ class _ResolvedLogSource:
     absolute_path: str
 
 
+@dataclass(frozen=True)
+class _ResolvedLogFile:
+    """A single allowlisted log file in a source family."""
+
+    name: str
+    absolute_path: str
+    modified_at: datetime
+
+
 def _log_directory() -> Optional[str]:
     """Return the configured log directory, or ``None`` if logging to file is
     not enabled."""
@@ -181,6 +190,54 @@ def _resolve_log_source(source: str) -> _ResolvedLogSource:
         raise HTTPException(status_code=404, detail="Unknown log source")
 
     return _ResolvedLogSource(source=normalized, absolute_path=allowed[normalized])
+
+
+def _log_family_sort_key(name: str, base_name: str) -> int:
+    """Return family order where active log is newest, then numbered rollovers."""
+    if name == base_name:
+        return 0
+    suffix = name[len(base_name) + 1:]
+    return int(suffix)
+
+
+def _resolve_log_family(source_info: _ResolvedLogSource) -> List[_ResolvedLogFile]:
+    """Resolve the allowlisted log family for a source in newest-first order."""
+    log_dir = _log_directory()
+    if not log_dir:
+        raise HTTPException(status_code=503, detail="Log source is unavailable")
+
+    base_name = os.path.basename(source_info.absolute_path)
+    allowed_log_pattern = _log_file_pattern(base_name)
+
+    files: List[_ResolvedLogFile] = []
+    try:
+        with os.scandir(log_dir) as directory_entries:
+            for entry in directory_entries:
+                if not allowed_log_pattern.fullmatch(entry.name):
+                    continue
+
+                try:
+                    entry_stat = entry.stat(follow_symlinks=False)
+                except (FileNotFoundError, PermissionError, OSError):
+                    continue
+
+                if stat.S_ISLNK(entry_stat.st_mode) or not stat.S_ISREG(entry_stat.st_mode):
+                    continue
+
+                files.append(
+                    _ResolvedLogFile(
+                        name=entry.name,
+                        absolute_path=entry.path,
+                        modified_at=datetime.fromtimestamp(entry_stat.st_mtime, tz=timezone.utc),
+                    )
+                )
+    except PermissionError:
+        raise HTTPException(status_code=503, detail="Log source is unavailable due to file permissions")
+    except OSError:
+        raise HTTPException(status_code=503, detail="Log source is unavailable")
+
+    files.sort(key=lambda entry: _log_family_sort_key(entry.name, base_name))
+    return files
 
 
 def _tail_lines(path: str, max_lines: int) -> Tuple[List[str], bool]:
@@ -263,6 +320,65 @@ def _tail_filtered_lines(path: str, needle: str, max_lines: int) -> Tuple[List[s
 
     # Return oldest->newest for compatibility with caller behavior.
     return list(reversed(matches_newest_first)), has_more
+
+
+def _tail_log_family_lines(
+    files: List[_ResolvedLogFile],
+    *,
+    needle: Optional[str],
+    max_lines: int,
+) -> Tuple[List[Tuple[str, str]], bool]:
+    """Read newest matching lines across a log family without full-file loads."""
+    if max_lines <= 0:
+        return [], False
+
+    target = max_lines + 1
+    lines_newest_first: List[Tuple[str, str]] = []
+    has_more = False
+
+    for entry in files:
+        remaining = target - len(lines_newest_first)
+        if remaining <= 0:
+            has_more = True
+            break
+
+        if needle and needle.strip():
+            lines, file_has_more = _tail_filtered_lines(entry.absolute_path, needle.strip(), remaining)
+        else:
+            lines, file_has_more = _tail_lines(entry.absolute_path, remaining)
+
+        lines_newest_first.extend((entry.name, line) for line in reversed(lines))
+
+        if len(lines_newest_first) >= target:
+            has_more = True
+            lines_newest_first = lines_newest_first[:target]
+            break
+
+        if file_has_more:
+            has_more = True
+
+    if len(lines_newest_first) > max_lines:
+        has_more = True
+        lines_newest_first = lines_newest_first[:max_lines]
+
+    return lines_newest_first, has_more
+
+
+def _latest_log_family_mtime(files: List[_ResolvedLogFile]) -> Optional[datetime]:
+    """Return the newest available post-read mtime for a log family."""
+    latest: Optional[datetime] = None
+
+    for entry in files:
+        try:
+            entry_stat = os.stat(entry.absolute_path)
+        except (FileNotFoundError, PermissionError, OSError):
+            continue
+
+        modified_at = datetime.fromtimestamp(entry_stat.st_mtime, tz=timezone.utc)
+        if latest is None or modified_at > latest:
+            latest = modified_at
+
+    return latest
 
 
 def _redact_log_line(line: str) -> str:
@@ -412,20 +528,25 @@ def view_log_lines(
             )
         raise
 
+    family_files = _resolve_log_family(source_info)
+    if not family_files:
+        raise HTTPException(status_code=503, detail="Log source is unavailable")
+
     max_matching_lines = limit + offset
     file_modified_at: Optional[datetime] = None
 
     try:
-        if search and search.strip():
-            lines, has_more = _tail_filtered_lines(source_info.absolute_path, search.strip(), max_matching_lines)
-        else:
-            lines, has_more = _tail_lines(source_info.absolute_path, max_matching_lines)
+        lines_newest_first, has_more = _tail_log_family_lines(
+            family_files,
+            needle=search,
+            max_lines=max_matching_lines,
+        )
 
         if offset > 0:
-            lines = lines[:-offset] if offset < len(lines) else []
+            lines_newest_first = lines_newest_first[offset:] if offset < len(lines_newest_first) else []
 
-        if reverse:
-            lines = list(reversed(lines))
+        lines_newest_first = lines_newest_first[:limit]
+        lines = lines_newest_first if reverse else list(reversed(lines_newest_first))
     except FileNotFoundError:
         raise HTTPException(status_code=503, detail="Log source is unavailable")
     except PermissionError:
@@ -433,18 +554,19 @@ def view_log_lines(
     except OSError:
         raise HTTPException(status_code=503, detail="Log source is unavailable")
 
-    # If the file is rotated/removed after reads succeed, keep returning lines
-    # and omit file_modified_at instead of failing the whole request.
-    try:
-        stat = os.stat(source_info.absolute_path)
-        file_modified_at = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
-    except (FileNotFoundError, PermissionError, OSError):
-        file_modified_at = None
+    file_modified_at = _latest_log_family_mtime(family_files)
 
-    redacted_lines = [LogViewLine(content=_redact_log_line(line)) for line in lines]
+    source_display_path = os.path.basename(source_info.absolute_path)
+    if any(entry.name != source_display_path for entry in family_files):
+        source_display_path = f"{source_display_path}*"
+
+    redacted_lines = [
+        LogViewLine(content=_redact_log_line(line), source_path=source_name)
+        for source_name, line in lines
+    ]
     source_response = LogSourceInfo(
         source=source_info.source,
-        path=os.path.basename(source_info.absolute_path),
+        path=source_display_path,
     )
 
     best_effort_audit(
@@ -454,6 +576,7 @@ def view_log_lines(
         details={
             "source": source_info.source,
             "log_file": os.path.basename(source_info.absolute_path),
+            "family_count": len(family_files),
             "limit": limit,
             "offset": offset,
             "search": search or "",
