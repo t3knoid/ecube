@@ -433,6 +433,7 @@ You can typically:
 - Validate all mounts
 - Validate an individual mount
 - Add a new mount definition
+- Edit an existing mount definition
 - Remove an existing mount definition
 
 ### 8.1 Adding a Mount
@@ -455,6 +456,16 @@ For security, the standard mount list and browse labels intentionally redact raw
 ECUBE now creates the local mount point automatically based on the remote path and mount type (for example, NFS mounts are created under `/nfs/*` and SMB mounts under `/smb/*`).
 
 The exact credential fields required depend on the mount type and your environment.
+
+### 8.1.1 Editing a Mount
+
+Use `Edit` on an existing mount row to reopen the same dialog in edit mode.
+
+- The dialog pre-fills the current type, remote path, and project ID.
+- The local mount point is shown as read-only informational context and is not directly editable.
+- Stored credentials are not returned to the UI. If you need to change credentials, enter replacement values during the edit.
+
+When you save, ECUBE updates the existing mount record instead of creating a new one, then refreshes the row status in the list. If the backend rejects the change, the dialog stays open and shows the returned error message.
 
 ### 8.2 Testing Mount Connectivity
 
