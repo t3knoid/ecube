@@ -86,6 +86,9 @@ const jobFailureReason = computed(() => {
   const status = String(job.value.status || '').toUpperCase()
   if (status !== 'FAILED') return ''
 
+  const persistedReason = String(job.value.failure_reason || '').trim()
+  if (persistedReason) return persistedReason
+
   const summary = String(job.value.error_summary || '').trim()
   if (summary) return summary
 
