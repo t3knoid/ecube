@@ -217,6 +217,53 @@ test('jobs list supports safe pause and resume flow', async ({ page }) => {
   await expectNoCriticalA11yViolations(page)
 })
 
+test('jobs surfaces preparing labels during startup analysis', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['admin'])
+
+  await routeJson(page, '**/api/drives', [])
+  await routeJson(page, '**/api/mounts', [])
+  await routeJson(page, '**/api/jobs**', [{
+    id: 92,
+    project_id: 'P-92',
+    evidence_number: 'EV-92',
+    status: 'RUNNING',
+    copied_bytes: 0,
+    total_bytes: 0,
+    file_count: 0,
+    files_succeeded: 0,
+    files_failed: 0,
+    thread_count: 4,
+    drive: { id: 9, port_system_path: '2-9', device_identifier: 'USB-009' },
+  }])
+  await routeJson(page, '**/api/jobs/92', {
+    id: 92,
+    project_id: 'P-92',
+    evidence_number: 'EV-92',
+    status: 'RUNNING',
+    copied_bytes: 0,
+    total_bytes: 0,
+    file_count: 0,
+    files_succeeded: 0,
+    files_failed: 0,
+    thread_count: 4,
+    source_path: '/nfs/project-092/evidence',
+    target_mount_path: '/mnt/ecube/9',
+    drive: { id: 9, port_system_path: '2-9', device_identifier: 'USB-009' },
+  })
+  await routeJson(page, '**/api/jobs/92/files', { files: [] })
+  await routeJson(page, '**/api/introspection/jobs/92/debug', { files: [] })
+
+  await page.goto('/jobs')
+  await expect(page.getByText('Preparing...', { exact: true }).first()).toBeVisible()
+
+  await page.getByRole('button', { name: 'Details' }).click()
+  await expect(page).toHaveURL(/\/jobs\/92$/)
+  await expect(page.getByText('Preparing copy...', { exact: true })).toBeVisible()
+  await expect(page.getByText('Scanning source files and calculating totals before copy work begins. This can take time for large evidence sets.')).toBeVisible()
+
+  await expectNoCriticalA11yViolations(page)
+})
+
 test('job detail polls and reflects status progression', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
