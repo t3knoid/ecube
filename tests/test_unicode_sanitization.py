@@ -86,12 +86,12 @@ class TestSanitizeErrorMessage:
         msg = sanitize_error_message("/mnt/ecube/1", "Unmount failed")
         assert msg == "Unmount failed"
 
-    def test_preserves_redacted_unknown_provider_error_text(self):
+    def test_returns_default_for_unknown_provider_error_text(self):
         msg = sanitize_error_message(
             "provider exploded while copying /nfs/project-001/evidence/bad.txt to /mnt/ecube/1/bad.txt",
             "Copy failed",
         )
-        assert msg == "provider exploded while copying [redacted-path] to [redacted-path]"
+        assert msg == "Copy failed"
 
 
 class TestDescribeRelativePaths:

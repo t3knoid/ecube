@@ -253,7 +253,7 @@ def sanitize_error_message(err: object, default_message: str = "Operation failed
     if "no such file" in lowered or "not found" in lowered:
         return "Target device or path was not found"
 
-    return redacted
+    return default_message
 
 
 _AUDIT_REDACTED = "[redacted]"
