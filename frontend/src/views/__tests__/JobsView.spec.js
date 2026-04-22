@@ -521,6 +521,29 @@ describe('JobsView grouped create dialog', () => {
     expect(wrapper.find('.row-progress-stub').text()).not.toContain('100%')
   })
 
+  it('shows a preparing indicator while a running job is still calculating totals', async () => {
+    mocks.listJobs.mockResolvedValue([
+      {
+        id: 17,
+        project_id: 'PROJ-001',
+        evidence_number: 'EV-017',
+        status: 'RUNNING',
+        source_path: '/nfs/project-001',
+        total_bytes: 0,
+        copied_bytes: 0,
+        file_count: 0,
+        files_succeeded: 0,
+        files_failed: 0,
+      },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('.row-progress-stub').text()).toContain(i18n.global.t('jobs.progressPreparingShort'))
+    expect(wrapper.find('.row-progress-stub').text()).not.toContain('100%')
+  })
+
   it('uses Details as the row action label', async () => {
     mocks.listJobs.mockResolvedValue([
       {

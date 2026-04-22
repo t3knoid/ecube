@@ -336,6 +336,31 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain('136 MB / 27 GB')
   })
 
+  it('shows a preparing indicator while an active job is still calculating totals', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'RUNNING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 0,
+      total_bytes: 0,
+      file_count: 0,
+      files_succeeded: 0,
+      files_failed: 0,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const progress = wrapper.find('.progressbar-stub').text()
+    expect(progress).toContain(`0|100|${i18n.global.t('jobs.progressPreparing')}`)
+    expect(progress).toContain('true|true')
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.progressPreparingDetail'))
+  })
+
   it('keeps verify and manifest disabled until the job reaches 100%', async () => {
     mocks.getJob.mockResolvedValue({
       id: 6,
