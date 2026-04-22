@@ -341,6 +341,7 @@
     "empty": "No data available",
     "error": "Error",
     "logsNotConfigured": "System logs are unavailable because file-based logging is not configured on the backend.",
+    "logsUnavailable": "System logs are currently unavailable because the configured backend log path cannot be read.",
     "logSource": "Source",
     "logSearch": "Search",
     "logSearchPlaceholder": "Filter visible log lines",
