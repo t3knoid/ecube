@@ -22,6 +22,10 @@ function buildDrive(overrides = {}) {
   return {
     id: 1,
     device_identifier: 'USB-001',
+    display_device_label: 'SanDisk Ultra - Port 1',
+    manufacturer: 'SanDisk',
+    product_name: 'Ultra',
+    port_number: 1,
     port_system_path: '2-1',
     serial_number: 'SN-001',
     filesystem_type: 'ext4',
@@ -44,7 +48,7 @@ function mountView() {
             <div>
               <div class="column-labels">{{ (columns || []).map((column) => column.label).join(' ') }}</div>
               <div v-for="row in rows" :key="row.id" class="row-stub">
-                <span class="row-device">{{ row.port_system_path || '-' }}</span>
+                <span class="row-device">{{ row.display_device_label || row.port_system_path || '-' }}</span>
                 <span class="row-serial">{{ row.serial_number || '-' }}</span>
                 <slot name="cell-current_project_id" :row="row" />
                 <slot name="cell-actions" :row="row" />
@@ -135,10 +139,14 @@ describe('DrivesView rescan and filter loading', () => {
     expect(wrapper.text()).not.toContain('proj-123')
   })
 
-  it('shows port-based device and serial number in separate columns', async () => {
+  it('shows the readable device label and serial number in separate columns', async () => {
     mocks.getDrives.mockResolvedValue([
       buildDrive({
         device_identifier: 'SER-ONLY',
+        display_device_label: 'Kingston DataTraveler - Port 4',
+        manufacturer: 'Kingston',
+        product_name: 'DataTraveler',
+        port_number: 4,
         port_system_path: '2-4',
         serial_number: 'SER-ONLY',
       }),
@@ -149,7 +157,7 @@ describe('DrivesView rescan and filter loading', () => {
 
     expect(wrapper.text()).toContain(i18n.global.t('drives.device'))
     expect(wrapper.text()).toContain(i18n.global.t('drives.serialNumber'))
-    expect(wrapper.text()).toContain('2-4')
+    expect(wrapper.text()).toContain('Kingston DataTraveler - Port 4')
     expect(wrapper.text()).toContain('SER-ONLY')
   })
 
@@ -166,14 +174,14 @@ describe('DrivesView rescan and filter loading', () => {
   it('sorts by project in ascending and descending order and keeps that sort after refresh', async () => {
     mocks.getDrives
       .mockResolvedValueOnce([
-        buildDrive({ id: 1, current_project_id: 'proj-200', port_system_path: '2-1' }),
-        buildDrive({ id: 2, current_project_id: 'PROJ-050', port_system_path: '2-2' }),
-        buildDrive({ id: 3, current_project_id: 'PROJ-100', port_system_path: '2-3' }),
+        buildDrive({ id: 1, current_project_id: 'proj-200', display_device_label: 'Drive C - Port 1', port_system_path: '2-1' }),
+        buildDrive({ id: 2, current_project_id: 'PROJ-050', display_device_label: 'Drive A - Port 2', port_system_path: '2-2' }),
+        buildDrive({ id: 3, current_project_id: 'PROJ-100', display_device_label: 'Drive B - Port 3', port_system_path: '2-3' }),
       ])
       .mockResolvedValueOnce([
-        buildDrive({ id: 4, current_project_id: 'proj-300', port_system_path: '2-4' }),
-        buildDrive({ id: 5, current_project_id: 'PROJ-150', port_system_path: '2-5' }),
-        buildDrive({ id: 6, current_project_id: 'PROJ-250', port_system_path: '2-6' }),
+        buildDrive({ id: 4, current_project_id: 'proj-300', display_device_label: 'Drive C - Port 4', port_system_path: '2-4' }),
+        buildDrive({ id: 5, current_project_id: 'PROJ-150', display_device_label: 'Drive A - Port 5', port_system_path: '2-5' }),
+        buildDrive({ id: 6, current_project_id: 'PROJ-250', display_device_label: 'Drive B - Port 6', port_system_path: '2-6' }),
       ])
 
     const wrapper = mountView()
@@ -184,17 +192,14 @@ describe('DrivesView rescan and filter loading', () => {
     await flushPromises()
 
     let rows = wrapper.findAll('.row-stub')
-    expect(rows.map((row) => row.find('.row-device').text())).toEqual(['2-2', '2-3', '2-1'])
-    expect(rows.map((row) => row.text())).toEqual(
-      expect.arrayContaining(['2-2SN-001PROJ-050Details', '2-3SN-001PROJ-100Details', '2-1SN-001PROJ-200Details']),
-    )
+    expect(rows.map((row) => row.find('.row-device').text())).toEqual(['Drive A - Port 2', 'Drive B - Port 3', 'Drive C - Port 1'])
 
     const sortButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.sortAsc'))
     await sortButton.trigger('click')
     await flushPromises()
 
     rows = wrapper.findAll('.row-stub')
-    expect(rows.map((row) => row.find('.row-device').text())).toEqual(['2-1', '2-3', '2-2'])
+    expect(rows.map((row) => row.find('.row-device').text())).toEqual(['Drive C - Port 1', 'Drive B - Port 3', 'Drive A - Port 2'])
 
     const refreshButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.refresh'))
     await refreshButton.trigger('click')
@@ -202,6 +207,24 @@ describe('DrivesView rescan and filter loading', () => {
 
     expect(wrapper.findAll('select')[1].element.value).toBe('current_project_id')
     rows = wrapper.findAll('.row-stub')
-    expect(rows.map((row) => row.find('.row-device').text())).toEqual(['2-4', '2-6', '2-5'])
+    expect(rows.map((row) => row.find('.row-device').text())).toEqual(['Drive C - Port 4', 'Drive B - Port 6', 'Drive A - Port 5'])
+  })
+
+  it('renders the readable device label instead of the raw port path when available', async () => {
+    mocks.getDrives.mockResolvedValue([
+      buildDrive({
+        display_device_label: 'Kingston DataTraveler - Port 7',
+        manufacturer: 'Kingston',
+        product_name: 'DataTraveler',
+        port_number: 7,
+        port_system_path: '2-7',
+      }),
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('.row-device').text()).toBe('Kingston DataTraveler - Port 7')
+    expect(wrapper.text()).not.toContain('2-7')
   })
 })
