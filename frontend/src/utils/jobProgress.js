@@ -17,6 +17,7 @@ export function calculateJobProgress(job) {
       bytePercent: null,
       filePercent: null,
       active: false,
+      initializing: false,
     }
   }
 
@@ -40,6 +41,7 @@ export function calculateJobProgress(job) {
   const percent = active
     ? (knownPercents.length ? Math.min(...knownPercents) : 0)
     : (bytePercent ?? filePercent ?? 0)
+  const initializing = active && totalBytes === 0 && totalFiles === 0 && copiedBytes === 0 && finishedFiles === 0
 
   const displayCopiedBytes = active && totalBytes > 0 && bytePercent != null && bytePercent > percent
     ? Math.min(copiedBytes, Math.floor((percent / 100) * totalBytes))
@@ -54,6 +56,7 @@ export function calculateJobProgress(job) {
     bytePercent,
     filePercent,
     active,
+    initializing,
   }
 }
 

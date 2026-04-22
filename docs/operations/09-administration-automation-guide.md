@@ -1027,7 +1027,7 @@ Every export job passes through a defined set of states:
 Key behaviors:
 
 - **Create** registers the job with source path, project ID, and evidence number. The job starts in `PENDING`.
-- **Start** launches the background copy process (`PENDING → RUNNING`). Progress is tracked via `copied_bytes` and per-file status.
+- **Start** launches the background copy process (`PENDING → RUNNING`). Progress is tracked via `copied_bytes` and per-file status. Immediately after start, ECUBE can legitimately return `RUNNING` with `total_bytes=0`, `copied_bytes=0`, and `file_count=0` while startup analysis is still scanning the source and calculating totals.
 - **Verify** (optional) compares checksums of copied files against source (`RUNNING/completed → VERIFYING → COMPLETED` or `FAILED`).
 - **Manifest** generates a JSON document on the USB drive listing all copied files with their checksums, sizes, and metadata.
 - Failed files are automatically retried up to `max_file_retries` times with a configurable delay.
@@ -1160,6 +1160,8 @@ Key fields in the response:
 | `copied_bytes` | Bytes copied so far (use for progress calculation) |
 | `file_count` | Total number of files in the job |
 
+Immediately after a job starts, polling clients can see `status: "RUNNING"` together with `total_bytes: 0`, `copied_bytes: 0`, and `file_count: 0`. Treat that as the normal startup-analysis phase rather than as a stalled or completed copy.
+
 Example response (job in progress):
 
 ```json
@@ -1197,6 +1199,8 @@ curl -k -X POST https://localhost:8443/jobs/1/start \
 ```
 
 Response: returns the job object with `status: "RUNNING"`.
+
+On the first response after start, totals can still be zero while the background task scans the source tree and calculates file and byte totals. Integrations should continue polling `GET /jobs/{job_id}` until totals become available or the job reaches a terminal state.
 
 > **Note:** The copy runs as a background task. Poll `GET /jobs/{job_id}` to
 > monitor progress. Per-file status (`PENDING`, `COPYING`, `DONE`, `ERROR`,
