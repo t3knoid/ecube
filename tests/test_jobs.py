@@ -780,6 +780,40 @@ def test_start_job(client, db):
     assert response.status_code == 200
 
 
+def test_start_job_returns_running_startup_state_before_copy_totals_are_known(client, db):
+    db.add(UsbDrive(
+        device_identifier="USB-START-INIT-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-INIT-001",
+        mount_path="/mnt/ecube/start-init-001",
+    ))
+    db.commit()
+
+    create_response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-INIT-001",
+            "evidence_number": "EV-INIT-001",
+            "source_path": "/tmp",
+        },
+    )
+    assert create_response.status_code == 200
+    job_id = create_response.json()["id"]
+
+    with patch("app.services.copy_engine.run_copy_job") as mock_copy:
+        mock_copy.return_value = None
+        response = client.post(f"/jobs/{job_id}/start", json={"thread_count": 2})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "RUNNING"
+    assert data["copied_bytes"] == 0
+    assert data["total_bytes"] == 0
+    assert data["file_count"] == 0
+    assert data["started_at"] is not None
+    mock_copy.assert_called_once_with(job_id)
+
+
 def test_start_already_running_job(client, db):
     job = ExportJob(
         project_id="PROJ-001",
