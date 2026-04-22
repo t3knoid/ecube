@@ -209,34 +209,32 @@ def _resolve_log_family(source_info: _ResolvedLogSource) -> List[_ResolvedLogFil
     base_name = os.path.basename(source_info.absolute_path)
     allowed_log_pattern = _log_file_pattern(base_name)
 
+    files: List[_ResolvedLogFile] = []
     try:
-        directory_entries = os.listdir(log_dir)
+        with os.scandir(log_dir) as directory_entries:
+            for entry in directory_entries:
+                if not allowed_log_pattern.fullmatch(entry.name):
+                    continue
+
+                try:
+                    entry_stat = entry.stat(follow_symlinks=False)
+                except (FileNotFoundError, PermissionError, OSError):
+                    continue
+
+                if stat.S_ISLNK(entry_stat.st_mode) or not stat.S_ISREG(entry_stat.st_mode):
+                    continue
+
+                files.append(
+                    _ResolvedLogFile(
+                        name=entry.name,
+                        absolute_path=entry.path,
+                        modified_at=datetime.fromtimestamp(entry_stat.st_mtime, tz=timezone.utc),
+                    )
+                )
     except PermissionError:
         raise HTTPException(status_code=503, detail="Log source is unavailable due to file permissions")
     except OSError:
         raise HTTPException(status_code=503, detail="Log source is unavailable")
-
-    files: List[_ResolvedLogFile] = []
-    for entry in directory_entries:
-        if not allowed_log_pattern.fullmatch(entry):
-            continue
-
-        full_path = os.path.join(log_dir, entry)
-        try:
-            entry_stat = os.lstat(full_path)
-        except (FileNotFoundError, PermissionError, OSError):
-            continue
-
-        if stat.S_ISLNK(entry_stat.st_mode) or not stat.S_ISREG(entry_stat.st_mode):
-            continue
-
-        files.append(
-            _ResolvedLogFile(
-                name=entry,
-                absolute_path=full_path,
-                modified_at=datetime.fromtimestamp(entry_stat.st_mtime, tz=timezone.utc),
-            )
-        )
 
     files.sort(key=lambda entry: _log_family_sort_key(entry.name, base_name))
     return files
