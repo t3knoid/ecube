@@ -83,6 +83,14 @@ from app.config import settings
 _BUILTIN_ATTRS = frozenset(logging.LogRecord("", 0, "", 0, "", (), None).__dict__.keys())
 
 
+def _record_extra_fields(record: logging.LogRecord) -> dict[str, object]:
+    return {
+        k: v
+        for k, v in record.__dict__.items()
+        if k not in _BUILTIN_ATTRS and k not in ("message", "trace_id", "user_id", "asctime")
+    }
+
+
 class JsonFormatter(logging.Formatter):
     """Emit each log record as a single-line JSON object.
 
@@ -99,11 +107,7 @@ class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         # Build the extra dict from anything the caller passed that is not a
         # standard LogRecord attribute.
-        extra = {
-            k: v
-            for k, v in record.__dict__.items()
-            if k not in _BUILTIN_ATTRS and k not in ("message", "trace_id", "user_id")
-        }
+        extra = _record_extra_fields(record)
 
         obj = {
             "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
@@ -135,6 +139,24 @@ class TextFormatter(logging.Formatter):
 
     def __init__(self) -> None:
         super().__init__(fmt=_TEXT_FORMAT, datefmt="%Y-%m-%dT%H:%M:%S%z")
+
+    def format(self, record: logging.LogRecord) -> str:
+        base = super().format(record)
+
+        context: dict[str, object] = {}
+        if getattr(record, "trace_id", None) is not None:
+            context["trace_id"] = record.trace_id  # type: ignore[attr-defined]
+        if getattr(record, "user_id", None) is not None:
+            context["user_id"] = record.user_id  # type: ignore[attr-defined]
+
+        extra = _record_extra_fields(record)
+        if extra:
+            context["extra"] = extra
+
+        if not context:
+            return base
+
+        return f"{base} {json.dumps(context, default=str, sort_keys=True)}"
 
 
 # ---------------------------------------------------------------------------
