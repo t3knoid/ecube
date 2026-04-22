@@ -223,6 +223,8 @@ async function loadTabData() {
           error.value = t('auth.insufficientPermissions')
         } else if (status === 404) {
           error.value = t('system.logsNotConfigured')
+        } else if (status === 503) {
+          error.value = t('system.logsUnavailable')
         } else {
           error.value = extractApiMessage(err) || t('common.errors.requestConflict')
         }
@@ -234,6 +236,8 @@ async function loadTabData() {
       error.value = t('auth.insufficientPermissions')
     } else if (activeTab.value === 'logs' && status === 404) {
       error.value = t('system.logsNotConfigured')
+    } else if (activeTab.value === 'logs' && status === 503) {
+      error.value = t('system.logsUnavailable')
     } else {
       error.value = extractApiMessage(err) || t('common.errors.requestConflict')
     }
