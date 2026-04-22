@@ -6,12 +6,14 @@ conftest.py.
 """
 from __future__ import annotations
 
+import logging
 from unittest.mock import patch
 
 import pytest
 
 from app.infrastructure.filesystem_detection import FilesystemDetector
 from app.infrastructure.drive_format import DriveFormatter, LinuxDriveFormatter
+from app.logging_config import TextFormatter
 from app.infrastructure.usb_discovery import (
     DiscoveredDrive,
     DiscoveredHub,
@@ -43,11 +45,21 @@ class FakeFilesystemDetector:
 class FakeFormatter:
     """Fake formatter that records calls and optionally raises."""
 
-    def __init__(self, *, fail: bool = False, mounted: bool = False):
+    def __init__(
+        self,
+        *,
+        fail: bool = False,
+        mounted: bool = False,
+        free_bytes_result: int | None = None,
+        free_bytes_error: Exception | None = None,
+    ):
         self._fail = fail
         self._mounted = mounted
+        self._free_bytes_result = free_bytes_result
+        self._free_bytes_error = free_bytes_error
         self.format_calls: list[tuple[str, str]] = []
         self.mounted_calls: list[str] = []
+        self.free_bytes_calls: list[tuple[str, str]] = []
 
     def format(self, device_path: str, filesystem_type: str) -> None:
         self.format_calls.append((device_path, filesystem_type))
@@ -57,6 +69,12 @@ class FakeFormatter:
     def is_mounted(self, device_path: str) -> bool:
         self.mounted_calls.append(device_path)
         return self._mounted
+
+    def probe_free_bytes(self, device_path: str, filesystem_type: str) -> int | None:
+        self.free_bytes_calls.append((device_path, filesystem_type))
+        if self._free_bytes_error is not None:
+            raise self._free_bytes_error
+        return self._free_bytes_result
 
 
 def test_linux_drive_formatter_uses_sudo_when_configured(monkeypatch):
@@ -356,8 +374,12 @@ class TestFormatDriveEndpoint:
 
     def test_format_success_ext4(self, admin_client, db):
         drive = _make_drive(db, filesystem_type="unformatted")
-        fake = FakeFormatter()
-        with patch("app.routers.drives.get_drive_formatter", return_value=fake):
+        fake = FakeFormatter(free_bytes_result=31_000_000_000)
+        detector = FakeFilesystemDetector("ext4")
+        with (
+            patch("app.routers.drives.get_drive_formatter", return_value=fake),
+            patch("app.routers.drives.get_filesystem_detector", return_value=detector),
+        ):
             resp = admin_client.post(
                 f"/drives/{drive.id}/format",
                 json={"filesystem_type": "ext4"},
@@ -373,17 +395,114 @@ class TestFormatDriveEndpoint:
         assert log.project_id is None
         assert log.details["drive_id"] == drive.id
         assert log.details["filesystem_type"] == "ext4"
+        assert log.details["detected_filesystem_type"] == "ext4"
+        assert log.details["free_bytes"] == 31_000_000_000
+        assert log.details["capacity_bytes"] is None
+        assert log.details["filesystem_path"] == "[redacted]"
+        assert fake.free_bytes_calls == [("/dev/sdb", "ext4")]
+        assert detector.calls == ["/dev/sdb"]
+
+    def test_format_success_emits_application_log_event(self, admin_client, db, caplog):
+        drive = _make_drive(db, filesystem_type="unformatted")
+        fake = FakeFormatter(free_bytes_result=31_000_000_000)
+        detector = FakeFilesystemDetector("ext4")
+        caplog.set_level("INFO", logger="app.services.audit_service")
+
+        with (
+            patch("app.routers.drives.get_drive_formatter", return_value=fake),
+            patch("app.routers.drives.get_filesystem_detector", return_value=detector),
+        ):
+            resp = admin_client.post(
+                f"/drives/{drive.id}/format",
+                json={"filesystem_type": "ext4"},
+            )
+
+        assert resp.status_code == 200
+        log_record = next(
+            record
+            for record in caplog.records
+            if record.name == "app.services.audit_service" and record.getMessage() == "DRIVE_FORMATTED"
+        )
+        assert log_record.drive_id == drive.id
+        assert log_record.filesystem_type == "ext4"
+
+    def test_format_success_text_formatter_includes_audit_context(self, admin_client, db):
+        import io
+
+        drive = _make_drive(db, filesystem_type="unformatted")
+        fake = FakeFormatter(free_bytes_result=31_000_000_000)
+        detector = FakeFilesystemDetector("ext4")
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.setFormatter(TextFormatter())
+        audit_logger = logging.getLogger("app.services.audit_service")
+        previous_handlers = audit_logger.handlers[:]
+        previous_propagate = audit_logger.propagate
+        previous_level = audit_logger.level
+        audit_logger.handlers = [handler]
+        audit_logger.propagate = False
+        audit_logger.setLevel(logging.INFO)
+
+        try:
+            with (
+                patch("app.routers.drives.get_drive_formatter", return_value=fake),
+                patch("app.routers.drives.get_filesystem_detector", return_value=detector),
+            ):
+                resp = admin_client.post(
+                    f"/drives/{drive.id}/format",
+                    json={"filesystem_type": "ext4"},
+                )
+        finally:
+            handler.flush()
+            audit_logger.handlers = previous_handlers
+            audit_logger.propagate = previous_propagate
+            audit_logger.setLevel(previous_level)
+
+        assert resp.status_code == 200
+        output = stream.getvalue()
+        assert "DRIVE_FORMATTED" in output
+        assert '"drive_id": ' in output
+        assert '"filesystem_type": "ext4"' in output
+        assert '"detected_filesystem_type": "ext4"' in output
 
     def test_format_success_exfat(self, manager_client, db):
         drive = _make_drive(db, filesystem_type="unformatted")
         fake = FakeFormatter()
-        with patch("app.routers.drives.get_drive_formatter", return_value=fake):
+        detector = FakeFilesystemDetector("exfat")
+        with (
+            patch("app.routers.drives.get_drive_formatter", return_value=fake),
+            patch("app.routers.drives.get_filesystem_detector", return_value=detector),
+        ):
             resp = manager_client.post(
                 f"/drives/{drive.id}/format",
                 json={"filesystem_type": "exfat"},
             )
         assert resp.status_code == 200
         assert resp.json()["filesystem_type"] == "exfat"
+
+    def test_format_audit_enrichment_is_null_safe_when_probes_fail(self, admin_client, db):
+        drive = _make_drive(db, filesystem_type="unformatted", capacity_bytes=64_000_000_000)
+        fake = FakeFormatter(free_bytes_result=None, free_bytes_error=RuntimeError("probe failed"))
+
+        class FailingDetector:
+            def detect(self, device_path: str) -> str:
+                raise RuntimeError("detect failed")
+
+        with (
+            patch("app.routers.drives.get_drive_formatter", return_value=fake),
+            patch("app.routers.drives.get_filesystem_detector", return_value=FailingDetector()),
+        ):
+            resp = admin_client.post(
+                f"/drives/{drive.id}/format",
+                json={"filesystem_type": "ext4"},
+            )
+
+        assert resp.status_code == 200
+        log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_FORMATTED").first()
+        assert log is not None
+        assert log.details["detected_filesystem_type"] is None
+        assert log.details["free_bytes"] is None
+        assert log.details["capacity_bytes"] == 64_000_000_000
 
     def test_format_unsupported_type_rejected(self, admin_client, db):
         drive = _make_drive(db)
