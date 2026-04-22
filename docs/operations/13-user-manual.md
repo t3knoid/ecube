@@ -805,15 +805,16 @@ In the `USB Topology` tab, ECUBE shows a sorted device table that includes `Devi
 
 **Access:** `admin` role only
 
-The **Logs** tab allows administrators to view recent application log lines in real time without requiring SSH or command-line access to the ECUBE host. This is useful for diagnosing system issues, checking for errors, and monitoring application behavior.
+The **Logs** tab allows administrators to inspect the active application log and eligible rotated log files in real time without requiring SSH or command-line access to the ECUBE host. This is useful for diagnosing system issues, checking for errors, and monitoring application behavior.
 
 #### Viewing Logs
 
 1. Open the `System` page.
 2. Click the **Logs** tab (visible to admins only).
-3. The tab displays recent log lines from the application log file.
-4. Log entries are displayed in reverse chronological order (newest first).
-5. File metadata shows:
+3. Use the **Source** selector to choose the active application log or an available rotated file such as `app.log.1`.
+4. The selected source loads automatically into the viewer.
+5. Log entries are displayed in reverse chronological order (newest first) within the current window.
+6. File metadata shows:
    - **Source:** Log source display path (basename only, for example `app.log`)
    - **Fetched at:** Viewer-local date/time (converted by the browser from the UTC timestamp returned by the API)
    - **File modified:** Last modification time of the log file
@@ -828,8 +829,9 @@ The **Logs** tab allows administrators to view recent application log lines in r
 #### Pagination
 
 1. The current Logs tab UI does not expose **Limit** or **Offset** controls.
-2. Log results are fetched using the UI's built-in defaults and refreshed with the **Refresh** action.
-3. A total-count indicator (for example, "X of Y lines") is not currently shown in the UI.
+2. Scroll within the log viewer to move to older or newer pages of the selected source.
+3. When you reach the end of the current buffer, ECUBE fetches the next page for that direction instead of loading the full file into memory.
+4. A total-count indicator (for example, "X of Y lines") is not currently shown in the UI.
 
 #### Automatic Redaction
 
@@ -844,16 +846,18 @@ This redaction occurs automatically; you cannot bypass it via search or filter o
 #### Refreshing Log Data
 
 1. Click the **Refresh** button to retrieve the latest log entries.
-2. The displayed lines update immediately with the most recent data from the log file.
-3. If the log file has been rotated or is unavailable, an appropriate error message appears.
+2. The displayed lines update immediately for the currently selected source and reset the viewer to the newest page for that selection.
+3. The **Download** button exports the currently selected log source.
+4. If the selected log file is unavailable, unreadable, or no longer present, an appropriate error message appears.
 
 #### Troubleshooting Log Viewing
 
 If the Logs tab shows an error or is unavailable:
 
 - Verify you have the `admin` role (non-admin users will not see this tab).
-- Check that the application log file exists on the ECUBE host.
-- Verify the ECUBE service account has read permissions on the log file.
+- Check that the selected log file still exists on the ECUBE host.
+- Verify the ECUBE service account has read permissions on the selected log file.
+- If you selected a rotated file, confirm the file has not been removed or replaced during log rotation.
 - Consult [15. Troubleshooting](#15-troubleshooting) for service-level issues.
 
 Governance note: denied log access attempts by non-admin users are recorded in the audit trail for accountability and compliance visibility.
@@ -1015,16 +1019,18 @@ Notes:
 
 1. Open the `System` page.
 2. Click the **Logs** tab (available to admins only).
-3. The tab displays the most recent log lines from the application log file.
+3. Choose the active log or a rotated file from the **Source** selector.
 4. Optionally, enter a search term to filter the displayed lines.
-5. Click **Refresh** to load the latest log data.
-6. Review the redacted log entries for errors, warnings, or relevant diagnostic messages.
-7. If you need to investigate further, take note of timestamps or error messages to share with support, or download the full log file using the file list below the viewer.
+5. Click **Refresh** to reload the newest page for the selected source.
+6. Scroll within the viewer to move to older or newer log pages for that source.
+7. Review the redacted log entries for errors, warnings, or relevant diagnostic messages.
+8. If you need to investigate further, take note of timestamps or error messages to share with support, or click **Download** to export the currently selected log file.
 
 Notes:
 
 - Sensitive values (passwords, tokens, API keys) are automatically redacted from displayed logs for security.
-- The log viewer shows recent entries only; if you need earlier entries or the full log file, use the file download option in the Logs tab.
+- The log viewer pages through the selected source as you scroll and does not load the entire file into memory.
+- Download always follows the currently selected source.
 - This feature is admin-only to prevent information leakage from diagnostic data.
 
 ---

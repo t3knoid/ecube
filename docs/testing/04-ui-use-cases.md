@@ -189,10 +189,11 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 | UC-8.4 | View block device metadata | Any authenticated user | any |
 | UC-8.5 | View mounted filesystems | Any authenticated user | any |
 | UC-8.6 | View job debug info | Admin, Auditor | admin, auditor |
-| UC-8.7 | List application log files | Admin | admin |
-| UC-8.8 | Download a specific log file | Admin | admin |
+| UC-8.7 | Select the active or rotated application log source from the Logs tab | Admin | admin |
+| UC-8.8 | Download the currently selected log source from the Logs toolbar | Admin | admin |
+| UC-8.9 | Scroll within the log viewer to page to older or newer content for the selected source | Admin | admin |
 
-**UI Implication:** Dashboard/status page showing health indicators, a USB topology table sorted by `Device`, separate `Serial Number` values when available, hidden empty USB rows, and system resource metrics. Log viewer for remote troubleshooting without SSH access.
+**UI Implication:** Dashboard/status page showing health indicators, a USB topology table sorted by `Device`, separate `Serial Number` values when available, hidden empty USB rows, and system resource metrics. The admin-only Logs tab provides a source selector for the active log and eligible rollover files, auto-loads the selected source, supports bounded scroll-driven paging within the viewer, and downloads the currently selected source from the toolbar for remote troubleshooting without SSH access.
 
 ---
 

@@ -625,6 +625,22 @@ For the current Jobs page UI, verify the grouped `Create Job` dialog behaves as 
 - The `Start` action remains disabled during `PAUSING` and becomes available again once the job reaches `PAUSED`.
 - After a pause and resume cycle, the final duration and copy-rate summary remain additive across the full run rather than resetting to only the most recent segment.
 
+For the current System page Logs tab UI, verify the admin-only log workflow behaves as follows:
+
+- The `Logs` tab is visible only to `admin` users.
+- The `Source` selector lists `app.log` and any eligible rotated files such as `app.log.1`.
+- Changing the selected source loads that file automatically without a second action.
+- Pressing `Download` exports the currently selected source file.
+- Scrolling to the bottom of the log viewer loads older lines for the selected source, and scrolling back to the top loads newer lines when available.
+- If a selected rotated file is missing, unreadable, or rejected, the UI shows a non-generic error state instead of stale content.
+
+For the `/admin/logs/view` API, verify the explicit rollover-source safeguards behave as follows:
+
+- `source=app.log.1` returns the selected rollover file when it exists and is a regular file in the configured family.
+- `source=../app.log` returns `400` with the traversal-protection message.
+- A symlinked `app.log.1` returns `404` instead of exposing the symlink target.
+- A permission failure on `app.log.1` returns `503` with the permission-specific message.
+
 ### 11.5 Audit Logs
 
 ```bash

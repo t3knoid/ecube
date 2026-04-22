@@ -212,7 +212,8 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 ### `GET /admin/logs/view` (quick params)
 
-- `source=app` — Allowlisted log source key (currently `app` only)
+- `source=app` — View the configured application log family as a merged newest-first source
+- `source=app.log.1` — View a specific rotated file from the same allowlisted log family
 - `limit=200` — Max matching lines to return (min 1, max 1000)
 - `offset=0` — Number of newest matching lines to skip
 - `search=` — Optional case-insensitive substring filter
@@ -221,7 +222,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 **Response highlights:**
 
 - Returns an object with `source`, `fetched_at`, `file_modified_at`, `offset`, `limit`, `returned`, `has_more`, `lines`
-- `source.path` is basename-only (for example `app.log`), not an absolute host path
+- `source.path` is basename-only (for example `app.log`, `app.log*`, or `app.log.1`), not an absolute host path
 - `lines[].content` is automatically redacted for sensitive values
 
 **Example:**
@@ -229,6 +230,11 @@ curl -H "Authorization: Bearer $TOKEN" \
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
   'https://localhost:8443/admin/logs/view?source=app&limit=100&offset=0&search=error&reverse=true'
+```
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  'https://localhost:8443/admin/logs/view?source=app.log.1&limit=100&offset=0&reverse=true'
 ```
 
 ### `GET /admin/logs` (response shape)
@@ -249,7 +255,7 @@ Returns an object envelope (not a bare array):
 }
 ```
 
-Common errors for admin log endpoints: `401` (missing/invalid token), `403` (non-admin), `404` (source/file not found or file logging unavailable), `422` (invalid query params on `/admin/logs/view`), `503` (log I/O/permission issues).
+Common errors for admin log endpoints: `400` (invalid filename or traversal attempt on `source`), `401` (missing/invalid token), `403` (non-admin), `404` (source/file not found or file logging unavailable), `422` (invalid query params on `/admin/logs/view`), `503` (log I/O/permission issues).
 
 ---
 
