@@ -122,6 +122,7 @@ class _ResolvedLogSource:
 
     source: str
     absolute_path: str
+    include_family: bool = True
 
 
 @dataclass(frozen=True)
@@ -186,10 +187,41 @@ def _resolve_log_source(source: str) -> _ResolvedLogSource:
             detail="File-based logging is not configured",
         )
 
-    if normalized not in allowed:
+    if normalized in allowed:
+        return _ResolvedLogSource(
+            source=normalized,
+            absolute_path=allowed[normalized],
+            include_family=True,
+        )
+
+    log_dir = _log_directory()
+    if not log_dir:
         raise HTTPException(status_code=404, detail="Unknown log source")
 
-    return _ResolvedLogSource(source=normalized, absolute_path=allowed[normalized])
+    base_path = next(iter(allowed.values()))
+    base_name = os.path.basename(base_path)
+    safe_name = _safe_filename(source)
+    if not _log_file_pattern(base_name).fullmatch(safe_name):
+        raise HTTPException(status_code=404, detail="Unknown log source")
+
+    candidate_path = os.path.join(log_dir, safe_name)
+    try:
+        candidate_stat = os.lstat(candidate_path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Unknown log source")
+    except PermissionError:
+        raise HTTPException(status_code=503, detail="Log source is unavailable due to file permissions")
+    except OSError:
+        raise HTTPException(status_code=503, detail="Log source is unavailable")
+
+    if stat.S_ISLNK(candidate_stat.st_mode) or not stat.S_ISREG(candidate_stat.st_mode):
+        raise HTTPException(status_code=404, detail="Unknown log source")
+
+    return _ResolvedLogSource(
+        source=safe_name,
+        absolute_path=candidate_path,
+        include_family=False,
+    )
 
 
 def _log_family_sort_key(name: str, base_name: str) -> int:
@@ -205,6 +237,27 @@ def _resolve_log_family(source_info: _ResolvedLogSource) -> List[_ResolvedLogFil
     log_dir = _log_directory()
     if not log_dir:
         raise HTTPException(status_code=503, detail="Log source is unavailable")
+
+    if not source_info.include_family:
+        try:
+            entry_stat = os.lstat(source_info.absolute_path)
+        except FileNotFoundError:
+            raise HTTPException(status_code=503, detail="Log source is unavailable")
+        except PermissionError:
+            raise HTTPException(status_code=503, detail="Log source is unavailable due to file permissions")
+        except OSError:
+            raise HTTPException(status_code=503, detail="Log source is unavailable")
+
+        if stat.S_ISLNK(entry_stat.st_mode) or not stat.S_ISREG(entry_stat.st_mode):
+            raise HTTPException(status_code=503, detail="Log source is unavailable")
+
+        return [
+            _ResolvedLogFile(
+                name=os.path.basename(source_info.absolute_path),
+                absolute_path=source_info.absolute_path,
+                modified_at=datetime.fromtimestamp(entry_stat.st_mtime, tz=timezone.utc),
+            )
+        ]
 
     base_name = os.path.basename(source_info.absolute_path)
     allowed_log_pattern = _log_file_pattern(base_name)

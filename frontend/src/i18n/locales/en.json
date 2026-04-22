@@ -348,6 +348,8 @@
     "logSourcePath": "Log path",
     "logFetchedAt": "Fetched",
     "logFileModifiedAt": "File modified",
+    "logLoadNewer": "Load newer lines",
+    "logLoadOlder": "Load older lines",
     "logViewerEmpty": "No log lines available for the selected filters.",
     "enterJobId": "Enter a job ID before loading debug details.",
     "jobNotFound": "No job was found for the provided job ID."
