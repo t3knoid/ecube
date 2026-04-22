@@ -11,6 +11,7 @@ import StatusBadge from '@/components/common/StatusBadge.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
+import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const route = useRoute()
@@ -440,7 +441,7 @@ onBeforeUnmount(() => {
     <article v-if="drive" class="detail-card">
       <div class="detail-grid">
         <div><strong>{{ t('common.labels.id') }}</strong><span>{{ drive.id }}</span></div>
-        <div><strong>{{ t('drives.device') }}</strong><span>{{ protectedValue(drive.device_identifier) }}</span></div>
+        <div><strong>{{ t('drives.device') }}</strong><span>{{ formatDriveIdentity(drive) }}</span></div>
         <div><strong>{{ t('drives.filesystemPath') }}</strong><span>{{ protectedValue(drive.filesystem_path) }}</span></div>
         <!-- Mount Point field removed -->
         <div><strong>{{ t('drives.filesystem') }}</strong><span>{{ drive.filesystem_type || '-' }}</span></div>
