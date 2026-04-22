@@ -449,6 +449,7 @@ async function loadOlderLogLines() {
     await fetchLogLines()
     await setLogViewerScrollPosition('top')
   } catch (err) {
+    logView.value = null
     error.value = resolveLogViewError(err, t('system.logsUnavailable'))
   } finally {
     loadingLogPage.value = false
@@ -465,6 +466,7 @@ async function loadNewerLogLines() {
     await fetchLogLines()
     await setLogViewerScrollPosition('bottom')
   } catch (err) {
+    logView.value = null
     error.value = resolveLogViewError(err, t('system.logsUnavailable'))
   } finally {
     loadingLogPage.value = false
