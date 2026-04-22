@@ -61,8 +61,9 @@ function setScrollMetrics(element, { scrollTop, scrollHeight = 400, clientHeight
   })
 }
 
-function mountView() {
+function mountView(options = {}) {
   return mount(SystemView, {
+    ...options,
     global: {
       plugins: [i18n],
       stubs: {
@@ -126,7 +127,7 @@ describe('SystemView USB topology tab', () => {
     ]
     mocks.getUsbTopology.mockResolvedValue({ devices: usbDevices })
 
-    const wrapper = mountView()
+    const wrapper = mountView({ attachTo: document.body })
     await flushPromises()
 
     const usbButton = wrapper.findAll('button').find((b) => b.text() === i18n.global.t('system.tabs.usb'))
@@ -216,7 +217,6 @@ describe('SystemView logs tab', () => {
 
     const logsButton = wrapper.findAll('button').find((b) => b.text() === i18n.global.t('system.tabs.logs'))
     expect(logsButton).toBeTruthy()
-
     await logsButton.trigger('click')
     await flushPromises()
 
