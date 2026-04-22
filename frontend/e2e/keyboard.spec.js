@@ -153,6 +153,19 @@ test('keyboard navigation: system log paging controls are focusable and activata
     const url = new URL(request.url())
     const offset = Number(url.searchParams.get('offset') || '0')
 
+    if (offset === 2) {
+      return {
+        source: { source: 'app.log', path: 'app.log' },
+        fetched_at: '2026-04-08T12:00:02Z',
+        file_modified_at: '2026-04-08T11:59:00Z',
+        lines: [{ content: 'line 198', source_path: 'app.log' }],
+        returned: 1,
+        has_more: false,
+        limit: 200,
+        offset: 2,
+      }
+    }
+
     if (offset === 1) {
       return {
         source: { source: 'app.log', path: 'app.log' },
@@ -160,7 +173,7 @@ test('keyboard navigation: system log paging controls are focusable and activata
         file_modified_at: '2026-04-08T11:59:00Z',
         lines: [{ content: 'line 199', source_path: 'app.log' }],
         returned: 1,
-        has_more: false,
+        has_more: true,
         limit: 200,
         offset: 1,
       }
@@ -186,6 +199,10 @@ test('keyboard navigation: system log paging controls are focusable and activata
   await expect(olderButton).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(page.locator('.log-viewer')).toContainText('line 199')
+  await expect(olderButton).toBeFocused()
+
+  await page.keyboard.press('Enter')
+  await expect(page.locator('.log-viewer')).toContainText('line 198')
 
   const newerButton = page.getByRole('button', { name: 'Load newer lines' })
   await newerButton.focus()
