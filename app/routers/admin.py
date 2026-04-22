@@ -273,7 +273,7 @@ def _redact_log_line(line: str) -> str:
     return redacted
 
 
-@router.get("/logs", response_model=LogFilesResponse, responses={**R_401, **R_403, **R_404})
+@router.get("/logs", response_model=LogFilesResponse, responses={**R_401, **R_403, **R_404, **R_503})
 def list_log_files(
     request: Request,
     db: Session = Depends(get_db),
@@ -283,8 +283,8 @@ def list_log_files(
 
     Requires the ``admin`` role.
 
-    Returns ``200`` with file list, or ``404`` if file-based logging is not
-    configured.
+    Returns ``200`` with file list, ``404`` when file-based logging is not
+    configured, or ``503`` when the configured log directory is unavailable.
     """
     if "admin" not in current_user.roles:
         best_effort_audit(
