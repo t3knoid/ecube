@@ -611,7 +611,17 @@ curl -sk -X POST https://localhost:8443/jobs \
   }' | jq
 ```
 
-#### 11.4a Jobs Page UI Workflow Checks
+#### 11.4a Startup Analysis Progress Checks
+
+Use a large enough source tree that ECUBE needs noticeable startup analysis time before copy totals are available.
+
+- Start a job and confirm the first `RUNNING` response can still report `total_bytes: 0`, `copied_bytes: 0`, and `file_count: 0`.
+- While the job is in that startup phase, verify the Jobs list shows `Preparing...` instead of a misleading percentage.
+- Open Job Detail and verify it shows `Preparing copy...` together with the explanation that ECUBE is scanning source files and calculating totals.
+- If the dashboard preparing-state change is present in the build under test, verify the Active Jobs panel also shows `Preparing...` for the same job.
+- Continue polling until totals become non-zero, then verify the UI switches from the preparing label to percentage-based progress.
+
+#### 11.4b Jobs Page UI Workflow Checks
 
 For the current Jobs page UI, verify the grouped `Create Job` dialog behaves as follows:
 
@@ -621,6 +631,8 @@ For the current Jobs page UI, verify the grouped `Create Job` dialog behaves as 
 - If `Run job immediately` is checked, the created job transitions directly into the start flow after successful creation.
 - If the selected drive or mount becomes unavailable, the operator sees a specific conflict or availability message instead of a generic validation error.
 - Authorized rows expose `Details`, `Start`, and `Pause` actions with state-aware enablement.
+- A newly started job can show `Preparing...` in the Jobs list before a numeric percentage is available.
+- Opening Job Detail during that startup phase shows `Preparing copy...` together with explanatory text that ECUBE is still scanning the source files and calculating totals.
 - Pressing `Pause` on a running job shows a `Pause in progress` dialog while the system waits for in-flight copy threads to finish.
 - The `Start` action remains disabled during `PAUSING` and becomes available again once the job reaches `PAUSED`.
 - After a pause and resume cycle, the final duration and copy-rate summary remain additive across the full run rather than resetting to only the most recent segment.

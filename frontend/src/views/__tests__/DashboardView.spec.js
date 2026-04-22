@@ -46,8 +46,8 @@ function mountView() {
           template: '<span>{{ status }}</span>',
         },
         ProgressBar: {
-          props: ['value', 'total'],
-          template: '<div class="progress-stub">{{ value }}/{{ total }}</div>',
+          props: ['value', 'total', 'label'],
+          template: '<div class="progress-stub">{{ value }}/{{ total }} {{ label }}</div>',
         },
       },
     },
@@ -81,7 +81,7 @@ describe('DashboardView active jobs', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.find('.progress-stub').text()).toBe('40/100')
+    expect(wrapper.find('.progress-stub').text()).toBe('40/100 40%')
   })
 
   it('does not show 100% when a running job is still below 1%', async () => {
@@ -101,6 +101,26 @@ describe('DashboardView active jobs', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.find('.progress-stub').text()).toBe('0/100')
+    expect(wrapper.find('.progress-stub').text()).toBe('0/100 0%')
+  })
+
+  it('shows a preparing indicator while a running job is still calculating totals', async () => {
+    mocks.listJobs.mockResolvedValue([
+      {
+        id: 17,
+        project_id: 'PROJ-001',
+        status: 'RUNNING',
+        copied_bytes: 0,
+        total_bytes: 0,
+        file_count: 0,
+        files_succeeded: 0,
+        files_failed: 0,
+      },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('.progress-stub').text()).toContain('Preparing...')
   })
 })

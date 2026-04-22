@@ -23,3 +23,28 @@ test('dashboard loads with summary cards and counts', async ({ page }) => {
 
   await expectNoCriticalA11yViolations(page)
 })
+
+test('dashboard shows preparing label for startup-phase active jobs', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['admin'])
+  await routeJson(page, '**/api/drives', [])
+  await routeJson(page, '**/api/jobs**', [
+    {
+      id: 21,
+      project_id: 'P-021',
+      status: 'RUNNING',
+      copied_bytes: 0,
+      total_bytes: 0,
+      file_count: 0,
+      files_succeeded: 0,
+      files_failed: 0,
+    },
+  ])
+
+  await page.goto('/')
+
+  await expect(page.getByRole('heading', { name: 'Active Jobs' })).toBeVisible()
+  await expect(page.getByText('P-021')).toBeVisible()
+  await expect(page.getByText('Preparing...', { exact: true })).toBeVisible()
+
+  await expectNoCriticalA11yViolations(page)
+})
