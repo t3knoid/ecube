@@ -756,7 +756,7 @@ def run_copy_job(job_id: int) -> None:
             db.rollback()
             safe_reason = _sanitize_job_failure_reason(
                 str(exc),
-                fallback="Source path became unavailable during copy",
+                fallback="Unexpected copy failure",
                 source_path=job.source_path if job else None,
                 target_mount_path=job.target_mount_path if job else None,
             )
