@@ -148,6 +148,23 @@ function displayLogSourcePath(value) {
   return parts.length ? parts[parts.length - 1] : normalized
 }
 
+const logViewerText = computed(() => {
+  const selectedPath = displayLogSourcePath(logView.value?.source?.path)
+  const lines = Array.isArray(logView.value?.lines) ? logView.value.lines : []
+
+  return lines
+    .map((line) => {
+      const content = String(line?.content || '')
+      const lineSource = displayLogSourcePath(line?.source_path)
+      if (!content) return ''
+      if (lineSource !== '-' && lineSource !== selectedPath) {
+        return `[${lineSource}] ${content}`
+      }
+      return content
+    })
+    .join('\n')
+})
+
 const cpuDisplay = computed(() => {
   const p = health.value?.cpu_percent
   return p != null ? `${p.toFixed(1)}%` : t('common.labels.notAvailable')
@@ -436,7 +453,7 @@ onMounted(loadTabData)
         <span>{{ t('system.logFileModifiedAt') }}: <strong>{{ asLocalDate(logView?.file_modified_at) }}</strong></span>
       </div>
 
-      <pre class="log-viewer">{{ (logView?.lines || []).map((line) => line.content).join('\n') || t('system.logViewerEmpty') }}</pre>
+      <pre class="log-viewer">{{ logViewerText || t('system.logViewerEmpty') }}</pre>
 
       <DataTable :columns="tabColumns" :rows="pagedRows" :empty-text="t('system.empty')">
         <template #cell-size="{ row }">{{ formatBytes(row.size) }}</template>
