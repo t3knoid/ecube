@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 from app.models.audit import AuditLog
@@ -653,6 +654,43 @@ def test_get_failed_job_uses_request_exception_log_fallback(client, db, tmp_path
     assert data["status"] == "FAILED"
     assert "Unhandled exception" in data["failure_log_entry"]
     assert "trace_id=abc123" in data["failure_log_entry"]
+
+
+def test_get_failed_job_uses_audit_fallback_when_log_file_disabled(client, db, monkeypatch):
+    from app.routers import jobs as jobs_router
+
+    job = ExportJob(
+        project_id="PROJ-FAILED-AUDIT-001",
+        evidence_number="EV-FAILED-AUDIT-001",
+        source_path="/data/failed-audit",
+        status=JobStatus.FAILED,
+    )
+    db.add(job)
+    db.flush()
+    db.add(
+        AuditLog(
+            action="JOB_FAILED",
+            job_id=job.id,
+            timestamp=datetime(2026, 4, 21, 14, 30, tzinfo=timezone.utc),
+            details={
+                "reason": "Unexpected copy failure (source: bad.txt, destination: bad.txt)",
+                "phase": "copy",
+            },
+        )
+    )
+    db.commit()
+
+    monkeypatch.setattr(jobs_router.settings, "log_file", None)
+
+    response = client.get(f"/jobs/{job.id}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "FAILED"
+    assert data["failure_log_entry"] == (
+        "2026-04-21T14:30:00 [AUDIT] JOB_FAILED job_id="
+        f"{job.id} reason=Unexpected copy failure (source: bad.txt, destination: bad.txt)"
+    )
 
 
 def test_get_job_files_processor_allowed(client, db):
