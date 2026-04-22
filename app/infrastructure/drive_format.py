@@ -7,8 +7,9 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
-from typing import Protocol
+from typing import Optional, Protocol
 
 from app.config import settings
 from app.infrastructure.device_path import validate_device_path
@@ -35,6 +36,10 @@ class DriveFormatter(Protocol):
 
     def is_mounted(self, device_path: str) -> bool:
         """Return ``True`` if the device (or any partition) is currently mounted."""
+        ...
+
+    def probe_free_bytes(self, device_path: str, filesystem_type: str) -> Optional[int]:
+        """Return best-effort free bytes available after formatting."""
         ...
 
 
@@ -87,6 +92,47 @@ class LinuxDriveFormatter:
         except OSError:
             logger.exception("Could not read %s for mount check", settings.procfs_mounts_path)
         return False
+
+    def probe_free_bytes(self, device_path: str, filesystem_type: str) -> Optional[int]:
+        if not validate_device_path(device_path):
+            return None
+        if filesystem_type != "ext4":
+            return None
+
+        try:
+            proc = subprocess.run(
+                _with_sudo([settings.dumpe2fs_path, "-h", device_path]),
+                check=True,
+                capture_output=True,
+                timeout=settings.subprocess_timeout_seconds,
+            )
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, OSError) as exc:
+            logger.debug(
+                "dumpe2fs free-space probe failed",
+                extra={"filesystem_path": device_path, "raw_error": str(exc)},
+            )
+            return None
+
+        output = proc.stdout.decode(errors="replace")
+        free_blocks = _extract_ext4_header_int(output, "Free blocks")
+        block_size = _extract_ext4_header_int(output, "Block size")
+        if free_blocks is None or block_size is None:
+            return None
+        return free_blocks * block_size
+
+
+_EXT4_HEADER_FIELD_RE = re.compile(r"^(?P<key>[^:]+):\s*(?P<value>[0-9,]+)\s*$", re.MULTILINE)
+
+
+def _extract_ext4_header_int(output: str, field_name: str) -> Optional[int]:
+    for match in _EXT4_HEADER_FIELD_RE.finditer(output):
+        if match.group("key").strip() != field_name:
+            continue
+        try:
+            return int(match.group("value").replace(",", ""))
+        except ValueError:
+            return None
+    return None
 
 
 def _with_sudo(cmd: list[str]) -> list[str]:
