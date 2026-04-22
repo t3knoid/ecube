@@ -686,6 +686,7 @@ All job endpoints that return a single job use the `ExportJobSchema` response, w
 | `started_at` | datetime or null | When the copy was started |
 | `completed_at` | datetime or null | When the job reached a terminal state. Reset to `null` if the job is restarted from `FAILED` |
 | `drive` | object or null | Nested `DriveInfoSchema` for the assigned drive (see below) |
+| `failure_reason` | string or null | Persisted sanitized job-level failure reason. Preferred over `error_summary` when available and may include safe source/destination-relative hints without exposing raw host or mount paths |
 | `error_summary` | string or null | Brief summary of file failures; `null` when no files failed. Returns count-only fallback (e.g. "2 files failed") when errors lack messages |
 | `callback_url` | string or null | HTTPS callback URL (null if none was provided) |
 | `client_ip` | string or null | Client IP (redacted for non-admin/auditor roles) |
@@ -738,6 +739,7 @@ All job endpoints that return a single job use the `ExportJobSchema` response, w
     "current_state": "IN_USE",
     "current_project_id": "PROJECT-42"
   },
+    "failure_reason": null,
   "error_summary": null,
   "callback_url": null,
   "client_ip": "192.168.1.50"
@@ -756,7 +758,7 @@ List the most recent export jobs, ordered by creation time descending.
 |-----------|------|---------|-------------|-------------|
 | `limit` | integer | `200` | `1 ≤ limit ≤ 1000` | Maximum number of jobs to return |
 
-**Response:** `200 OK` — JSON array of `ExportJobSchema` objects. Each job includes `files_succeeded`, `files_failed`, `error_summary`, and the nested `drive` object, populated via bulk queries (no N+1).
+**Response:** `200 OK` — JSON array of `ExportJobSchema` objects. Each job includes `files_succeeded`, `files_failed`, `failure_reason`, `error_summary`, and the nested `drive` object, populated via bulk queries (no N+1). `error_summary` is a derived fallback and may be omitted when a persisted sanitized `failure_reason` is available.
 
 **Error responses:**
 

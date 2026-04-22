@@ -598,7 +598,9 @@ When a pause is requested, the Jobs list and Job Detail page can show a `Pause i
 
 Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed `manifest.json` file on the destination drive.
 
-When a job is paused, completed, or fails, the detail view shows a summary with the job start time, copy thread count, files copied, total copied, elapsed time, copy rate, and any failure reason or related log hint. Elapsed time and copy rate remain cumulative across pause and resume cycles.
+When a job is paused, completed, or fails, the detail view shows a summary with the job start time, copy thread count, files copied, total copied, elapsed time, copy rate, and any failure reason or related log hint. Failed jobs prefer a persisted sanitized job-level failure reason when one is available, so operators can see stable messages such as `Copy job timed out before all files completed` or `Unexpected copy failure` before any derived per-file fallback.
+
+When ECUBE can safely correlate a failed copy to the selected source or destination for that job, the failure summary may add relative hints such as `source: reports/a.txt` or `destination: reports/a.txt`. Raw host or mount paths are not shown in the Job Detail summary.
 
 ### 10.2 File List
 
