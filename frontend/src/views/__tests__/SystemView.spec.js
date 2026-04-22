@@ -358,6 +358,79 @@ describe('SystemView logs tab', () => {
     expect(wrapper.text()).toContain('Unknown log source')
     expect(wrapper.text()).not.toContain('line 200')
     expect(wrapper.text()).toContain(i18n.global.t('system.logViewerEmpty'))
+
+    const newerButton = wrapper.findAll('button').find((button) => button.text() === i18n.global.t('system.logLoadNewer'))
+    expect(newerButton.element.disabled).toBe(true)
+  })
+
+  it('restores the newer-page offset when paging to a newer page fails', async () => {
+    mocks.getLogLines
+      .mockResolvedValueOnce({
+        source: { source: 'app.log', path: 'app.log' },
+        fetched_at: '2026-04-08T12:00:00Z',
+        file_modified_at: '2026-04-08T11:59:00Z',
+        lines: [{ content: 'line 200', source_path: 'app.log' }],
+        returned: 1,
+        has_more: true,
+        limit: 200,
+        offset: 0,
+      })
+      .mockResolvedValueOnce({
+        source: { source: 'app.log', path: 'app.log' },
+        fetched_at: '2026-04-08T12:00:01Z',
+        file_modified_at: '2026-04-08T11:59:00Z',
+        lines: [{ content: 'line 199', source_path: 'app.log' }],
+        returned: 1,
+        has_more: false,
+        limit: 200,
+        offset: 1,
+      })
+      .mockRejectedValueOnce({ response: { status: 503 } })
+      .mockResolvedValueOnce({
+        source: { source: 'app.log', path: 'app.log' },
+        fetched_at: '2026-04-08T12:00:02Z',
+        file_modified_at: '2026-04-08T11:59:00Z',
+        lines: [{ content: 'line 200', source_path: 'app.log' }],
+        returned: 1,
+        has_more: true,
+        limit: 200,
+        offset: 0,
+      })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const logsButton = wrapper.findAll('button').find((b) => b.text() === i18n.global.t('system.tabs.logs'))
+    await logsButton.trigger('click')
+    await flushPromises()
+    await flushPromises()
+
+    const olderButton = wrapper.findAll('button').find((button) => button.text() === i18n.global.t('system.logLoadOlder'))
+    await olderButton.trigger('click')
+    await flushPromises()
+    await flushPromises()
+
+    let newerButton = wrapper.findAll('button').find((button) => button.text() === i18n.global.t('system.logLoadNewer'))
+    expect(newerButton.element.disabled).toBe(false)
+
+    await newerButton.trigger('click')
+    await flushPromises()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('system.logsUnavailable'))
+    expect(wrapper.text()).toContain(i18n.global.t('system.logViewerEmpty'))
+
+    newerButton = wrapper.findAll('button').find((button) => button.text() === i18n.global.t('system.logLoadNewer'))
+    expect(newerButton.element.disabled).toBe(false)
+
+    await newerButton.trigger('click')
+    await flushPromises()
+    await flushPromises()
+
+    const lastCallArgs = mocks.getLogLines.mock.calls.at(-1)?.[0] || {}
+    expect(lastCallArgs.offset).toBe(0)
+    expect(wrapper.text()).toContain('line 200')
+    expect(wrapper.text()).not.toContain('line 199')
   })
 
   it('renders basename only when API returns an absolute source path', async () => {

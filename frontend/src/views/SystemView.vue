@@ -444,11 +444,13 @@ async function loadOlderLogLines() {
 
   loadingLogPage.value = true
   error.value = ''
+  const previousOffset = logViewer.value.offset
   try {
     logViewer.value.offset += Number(logView.value?.returned || logViewer.value.limit)
     await fetchLogLines()
     await setLogViewerScrollPosition('top')
   } catch (err) {
+    logViewer.value.offset = previousOffset
     logView.value = null
     error.value = resolveLogViewError(err, t('system.logsUnavailable'))
   } finally {
@@ -461,11 +463,13 @@ async function loadNewerLogLines() {
 
   loadingLogPage.value = true
   error.value = ''
+  const previousOffset = logViewer.value.offset
   try {
     logViewer.value.offset = Math.max(logViewer.value.offset - Number(logView.value?.returned || logViewer.value.limit), 0)
     await fetchLogLines()
     await setLogViewerScrollPosition('bottom')
   } catch (err) {
+    logViewer.value.offset = previousOffset
     logView.value = null
     error.value = resolveLogViewError(err, t('system.logsUnavailable'))
   } finally {
