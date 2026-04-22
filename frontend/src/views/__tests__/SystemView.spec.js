@@ -289,6 +289,41 @@ describe('SystemView logs tab', () => {
     expect(wrapper.find('#log-source').text()).toContain('app.log')
   })
 
+  it('shows a source-specific message when a selected rollover file is missing', async () => {
+    mocks.getLogFiles.mockResolvedValue({
+      log_files: [
+        { name: 'app.log', size: 64, modified: '2026-04-08T11:59:00Z' },
+        { name: 'app.log.1', size: 32, modified: '2026-04-08T11:00:00Z' },
+      ],
+    })
+    mocks.getLogLines
+      .mockResolvedValueOnce({
+        source: { source: 'app.log', path: 'app.log' },
+        fetched_at: '2026-04-08T12:00:00Z',
+        file_modified_at: '2026-04-08T11:59:00Z',
+        lines: [{ content: 'INFO current healthy', source_path: 'app.log' }],
+        returned: 1,
+        has_more: false,
+        limit: 200,
+        offset: 0,
+      })
+      .mockRejectedValueOnce({ response: { status: 404, data: { message: 'Unknown log source' } } })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const logsButton = wrapper.findAll('button').find((b) => b.text() === i18n.global.t('system.tabs.logs'))
+    await logsButton.trigger('click')
+    await flushPromises()
+
+    const sourceSelect = wrapper.find('#log-source')
+    await sourceSelect.setValue('app.log.1')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Unknown log source')
+    expect(wrapper.text()).not.toContain(i18n.global.t('system.logsNotConfigured'))
+  })
+
   it('renders basename only when API returns an absolute source path', async () => {
     mocks.getLogLines.mockResolvedValue({
       source: { source: 'app', path: '/var/log/ecube/app.log' },
