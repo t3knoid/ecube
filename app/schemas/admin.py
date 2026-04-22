@@ -64,6 +64,10 @@ class LogViewLine(BaseModel):
     """Single log line returned by the log viewer endpoint."""
 
     content: str = Field(..., description="Redacted log line content")
+    source_path: Optional[str] = Field(
+        default=None,
+        description="Basename of the source log file for this line when available",
+    )
 
 
 class LogViewResponse(BaseModel):
@@ -73,7 +77,7 @@ class LogViewResponse(BaseModel):
     fetched_at: datetime = Field(..., description="Timestamp when lines were fetched")
     file_modified_at: Optional[datetime] = Field(
         default=None,
-        description="Last-modified timestamp for the source file (UTC)",
+        description="Last-modified timestamp for the newest available file in the selected log family (UTC)",
     )
     offset: int = Field(..., description="Current tail offset (number of newest matching lines skipped)")
     limit: int = Field(..., description="Maximum number of matching lines requested")
