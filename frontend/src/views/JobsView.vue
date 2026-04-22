@@ -121,8 +121,12 @@ async function runJobAction(job, action) {
   }
 }
 
-function progressPercent(job) {
-  return calculateJobProgress(job).percent
+function progressLabel(job) {
+  const metrics = calculateJobProgress(job)
+  if (metrics.initializing) {
+    return t('jobs.progressPreparingShort')
+  }
+  return `${metrics.percent}%`
 }
 
 function formatProjectId(value) {
@@ -547,7 +551,7 @@ onBeforeUnmount(() => {
       <template #cell-status="{ row }">
         <StatusBadge :status="row.status" :label="jobStatusLabel(row.status)" />
       </template>
-      <template #cell-progress="{ row }">{{ progressPercent(row) }}%</template>
+      <template #cell-progress="{ row }">{{ progressLabel(row) }}</template>
       <template #cell-actions="{ row }">
         <div class="row-actions">
           <button class="btn" @click="router.push({ name: 'job-detail', params: { id: row.id } })">
