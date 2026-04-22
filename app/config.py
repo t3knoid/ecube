@@ -282,6 +282,9 @@ class Settings(BaseSettings):
     #: Path to the ``mkfs.exfat`` binary.
     mkfs_exfat_path: str = "/sbin/mkfs.exfat"
 
+    #: Path to the ``dumpe2fs`` binary used for best-effort ext4 free-space probing.
+    dumpe2fs_path: str = "/sbin/dumpe2fs"
+
     #: Base directory for USB drive mount points.  Each drive is mounted at
     #: ``<usb_mount_base_path>/<drive_db_id>``, e.g. ``/mnt/ecube/7``.
     usb_mount_base_path: str = "/mnt/ecube"
