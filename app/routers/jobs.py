@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.auth import CurrentUser, require_roles
 from app.config import settings
 from app.database import get_db
+from app.models.audit import AuditLog
 from app.models.jobs import JobStatus
 from app.repositories.job_repository import DriveAssignmentRepository, FileRepository
 from app.schemas.jobs import (
@@ -122,7 +123,32 @@ def _find_recent_log_match(needle: str | list[str]) -> str | None:
     return None
 
 
-def _build_failure_log_entry(schema: ExportJobSchema) -> str | None:
+def _build_failure_audit_fallback(schema: ExportJobSchema, db: Session) -> str | None:
+    """Return a sanitized synthetic failure event when file logs are unavailable."""
+    event = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.job_id == schema.id,
+            AuditLog.action.in_(("JOB_FAILED", "JOB_TIMEOUT")),
+        )
+        .order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
+        .first()
+    )
+    if event is None:
+        return None
+
+    details = event.details if isinstance(event.details, dict) else {}
+    reason = details.get("failure_reason") or details.get("reason")
+    reason_text = str(reason).strip() if isinstance(reason, str) else ""
+
+    timestamp = event.timestamp.isoformat() if event.timestamp is not None else "unknown-time"
+    line = f"{timestamp} [AUDIT] {event.action} job_id={schema.id}"
+    if reason_text:
+        line += f" reason={reason_text}"
+    return redact_pathlike_substrings(line)
+
+
+def _build_failure_log_entry(schema: ExportJobSchema, db: Session) -> str | None:
     """Return a real correlated application-log line for failed jobs."""
     status_value = getattr(schema.status, "value", schema.status)
     status = str(status_value or "").upper()
@@ -137,7 +163,10 @@ def _build_failure_log_entry(schema: ExportJobSchema) -> str | None:
         f"path=/jobs/{schema.id}/start",
         f"path=/jobs/{schema.id}/verify",
     ]
-    return _find_recent_log_match(search_terms)
+    log_match = _find_recent_log_match(search_terms)
+    if log_match:
+        return log_match
+    return _build_failure_audit_fallback(schema, db)
 
 
 def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
@@ -159,7 +188,7 @@ def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
         error_rows = file_repo.list_error_messages(job.id, limit=5)
         schema.error_summary = _build_error_summary(schema.files_failed, error_rows)
 
-    schema.failure_log_entry = _build_failure_log_entry(schema)
+    schema.failure_log_entry = _build_failure_log_entry(schema, db)
 
     # Nested drive info — select the most recent unreleased assignment
     assignment_repo = DriveAssignmentRepository(db)
