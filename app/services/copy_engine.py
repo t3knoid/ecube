@@ -15,7 +15,7 @@ from app.models.jobs import ExportFile, FileStatus, JobStatus
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.job_repository import FileRepository, JobRepository
 from app.services.callback_service import deliver_callback
-from app.utils.sanitize import sanitize_error_message, validate_source_path
+from app.utils.sanitize import describe_relative_paths, sanitize_error_message, validate_source_path
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +166,27 @@ def _calculate_copy_rate_mb_s(copied_bytes: int, elapsed_seconds: float) -> floa
     if copied_bytes <= 0 or elapsed_seconds <= 0:
         return 0.0
     return round((copied_bytes / (1024 * 1024)) / elapsed_seconds, 2)
+
+
+def _sanitize_job_failure_reason(
+    reason: str,
+    *,
+    fallback: str,
+    source_path: Optional[str] = None,
+    target_mount_path: Optional[str] = None,
+) -> str:
+    """Return a sanitized, bounded job-level failure reason."""
+    sanitized = sanitize_error_message(reason, fallback).strip()
+    relative_paths = describe_relative_paths(
+        reason,
+        source_path=source_path,
+        target_mount_path=target_mount_path,
+    )
+    if relative_paths:
+        sanitized = f"{sanitized} ({', '.join(relative_paths)})"
+    if len(sanitized) > 1024:
+        sanitized = sanitized[:1021] + "..."
+    return sanitized
 
 
 def _log_job_path_context(job_id: int, source_path: str, target_mount_path: Optional[str], phase: str) -> None:
@@ -413,6 +434,7 @@ def run_copy_job(job_id: int) -> None:
         run_started_at_key = _normalize_started_at(run_started_at)
         job.active_duration_seconds = int(job.active_duration_seconds or 0)
         job.completed_at = None
+        job.failure_reason = None
         try:
             job_repo.save(job)
         except Exception:
@@ -573,8 +595,10 @@ def run_copy_job(job_id: int) -> None:
                     except Exception:
                         logger.error("DB commit failed setting job %s to PAUSED", job_id)
                 elif timed_out:
+                    timeout_reason = "Copy job timed out before all files completed"
                     job.status = JobStatus.FAILED
                     job.completed_at = run_finished_at
+                    job.failure_reason = timeout_reason
                     try:
                         job_repo.save(job)
                     except Exception:
@@ -586,6 +610,7 @@ def run_copy_job(job_id: int) -> None:
                                 details={
                                     "intended_status": "FAILED",
                                     "reason": "timeout",
+                                    "failure_reason": timeout_reason,
                                     "timeout_seconds": timeout,
                                     "elapsed_seconds": round(total_active_seconds, 2),
                                 },
@@ -600,7 +625,7 @@ def run_copy_job(job_id: int) -> None:
                             f"JOB_FAILED job_id={job_id} project_id={job.project_id} "
                             f"status={job.status.value} failed_at={job.completed_at.isoformat() if job.completed_at else None} "
                             f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} "
-                            f"reason=timeout elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
+                                f"reason={timeout_reason} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
                             extra={
                                 "job_id": job_id,
                                 "project_id": job.project_id,
@@ -611,7 +636,7 @@ def run_copy_job(job_id: int) -> None:
                                 "file_count": job.file_count,
                                 "copied_bytes": job.copied_bytes or 0,
                                 "total_bytes": job.total_bytes or 0,
-                                "reason": "timeout",
+                                    "reason": timeout_reason,
                                 "elapsed_seconds": elapsed_seconds,
                                 "copy_rate_mb_s": copy_rate_mb_s,
                             },
@@ -628,6 +653,7 @@ def run_copy_job(job_id: int) -> None:
                                     "file_count": job.file_count,
                                     "copied_bytes": job.copied_bytes or 0,
                                     "total_bytes": job.total_bytes or 0,
+                                    "failure_reason": timeout_reason,
                                     "elapsed_seconds": elapsed_seconds,
                                     "copy_rate_mb_s": copy_rate_mb_s,
                                 },
@@ -728,7 +754,12 @@ def run_copy_job(job_id: int) -> None:
                             logger.error("Callback delivery failed for job %s (copy)", job_id)
         except Exception as exc:
             db.rollback()
-            safe_reason = sanitize_error_message(exc, "Source path became unavailable during copy")
+            safe_reason = _sanitize_job_failure_reason(
+                str(exc),
+                fallback="Source path became unavailable during copy",
+                source_path=job.source_path if job else None,
+                target_mount_path=job.target_mount_path if job else None,
+            )
             logger.debug(
                 "Copy job raw failure detail",
                 {"job_id": job_id, "phase": "copy", "raw_error": str(exc)},
@@ -739,6 +770,7 @@ def run_copy_job(job_id: int) -> None:
                 run_finished_at = datetime.now(timezone.utc)
                 job.status = JobStatus.FAILED
                 job.completed_at = run_finished_at
+                job.failure_reason = safe_reason
                 job.active_duration_seconds = int(round(
                     _calculate_total_active_seconds(job.active_duration_seconds, run_started_at, run_finished_at)
                 ))

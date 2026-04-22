@@ -878,6 +878,34 @@ def test_run_copy_job_logs_job_id_on_failure(db, tmp_path, caplog):
     assert any(f"job_id={job.id}" in message for message in messages)
 
 
+def test_run_copy_job_persists_sanitized_job_failure_reason_for_unexpected_exception(db, tmp_path):
+    """Unexpected copy exceptions persist a sanitized job-level failure reason."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "bad.txt").write_bytes(b"data")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    source_file = source_dir / "bad.txt"
+    target_file = target_dir / "bad.txt"
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch(
+            "app.services.copy_engine.scan_source_files",
+            side_effect=RuntimeError(f"provider exploded while copying {source_file} to {target_file}"),
+        ):
+            copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+    assert job.status == JobStatus.FAILED
+    assert job.failure_reason == "Source path became unavailable during copy (source: bad.txt, destination: bad.txt)"
+    assert str(source_file) not in job.failure_reason
+    assert str(target_file) not in job.failure_reason
+
+
 def test_run_copy_job_logs_job_completed_with_job_id(db, tmp_path, caplog):
     """A successful copy job writes a completion log entry with the job ID."""
     source_dir = tmp_path / "source"
