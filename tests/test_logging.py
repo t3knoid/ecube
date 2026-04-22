@@ -802,6 +802,29 @@ class TestAdminLogsEndpoints:
             assert data["lines"][0]["content"] == "ERROR rotated failure"
             assert data["lines"][0]["source_path"] == "app.log.1"
 
+    def test_view_logs_can_select_specific_rollover_file(self, admin_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            rotated_path = os.path.join(tmpdir, "app.log.1")
+            with open(rotated_path, "w") as f:
+                f.write("ERROR rotated failure\n")
+            with open(log_path, "w") as f:
+                f.write("INFO current healthy\n")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = admin_client.get(
+                    "/admin/logs/view",
+                    params={"source": "app.log.1", "limit": 10},
+                )
+
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["source"]["source"] == "app.log.1"
+            assert data["source"]["path"] == "app.log.1"
+            assert [row["content"] for row in data["lines"]] == ["ERROR rotated failure"]
+            assert [row["source_path"] for row in data["lines"]] == ["app.log.1"]
+
     def test_view_logs_uses_streaming_directory_iteration_for_log_family(self, admin_client):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = os.path.join(tmpdir, "app.log")
