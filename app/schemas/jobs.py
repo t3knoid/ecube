@@ -174,6 +174,7 @@ class ExportJobSchema(BaseModel):
     started_at: Optional[datetime] = Field(default=None, description="When the copy was started")
     completed_at: Optional[datetime] = Field(default=None, description="When the job reached a terminal state")
     drive: Optional[DriveInfoSchema] = Field(default=None, description="Assigned drive metadata (null if no drive assigned)")
+    failure_reason: Optional[str] = Field(default=None, description="Persisted sanitized job-level failure reason (null when not available)")
     error_summary: Optional[str] = Field(default=None, description="Brief summary of file failures (null on success)")
     failure_log_entry: Optional[str] = Field(default=None, description="Correlated application log line for failed jobs (null on success)")
     client_ip: Optional[str] = Field(default=None, description="IP address of the client that created the job (null for background tasks or when redacted; 'unknown' when the client address could not be resolved)")

@@ -183,6 +183,47 @@ def redact_pathlike_substrings(value: object, placeholder: str = "[redacted-path
     return _PATH_LIKE_RE.sub(placeholder, text)
 
 
+def describe_relative_paths(
+    value: object,
+    *,
+    source_path: Optional[str] = None,
+    target_mount_path: Optional[str] = None,
+) -> list[str]:
+    """Return safe source/destination-relative path references from raw text."""
+    if value is None:
+        return []
+
+    text = str(sanitize_string(str(value)))
+    path_candidates = _PATH_LIKE_RE.findall(text)
+    if not path_candidates:
+        return []
+
+    mappings: list[tuple[str, str]] = []
+    if isinstance(source_path, str) and source_path.strip():
+        mappings.append((os.path.normpath(source_path.strip()), "source"))
+    if isinstance(target_mount_path, str) and target_mount_path.strip():
+        mappings.append((os.path.normpath(target_mount_path.strip()), "destination"))
+
+    descriptions: list[str] = []
+    for candidate in path_candidates:
+        normalized_candidate = os.path.normpath(candidate)
+        for root, label in mappings:
+            try:
+                if os.path.commonpath([normalized_candidate, root]) != root:
+                    continue
+            except ValueError:
+                continue
+
+            relative_path = os.path.relpath(normalized_candidate, root)
+            relative_display = "." if relative_path == "." else relative_path.replace("\\", "/")
+            description = f"{label}: {relative_display}"
+            if description not in descriptions:
+                descriptions.append(description)
+            break
+
+    return descriptions
+
+
 def sanitize_error_message(err: object, default_message: str = "Operation failed") -> str:
     """Return a bounded, filesystem-safe summary for provider and OS errors.
 
