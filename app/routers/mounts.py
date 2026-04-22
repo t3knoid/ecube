@@ -5,7 +5,7 @@ from typing import List
 
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
-from app.schemas.network import MountCreate, NetworkMountSchema
+from app.schemas.network import MountCreate, MountUpdate, NetworkMountSchema
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500
 from app.services import mount_service
 from app.utils.client_ip import get_client_ip
@@ -35,6 +35,31 @@ def add_mount(
     **Roles:** ``admin``, ``manager``
     """
     return mount_service.add_mount(body, db, actor=current_user.username, client_ip=get_client_ip(request))
+
+
+@router.patch("/{mount_id}", response_model=NetworkMountSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
+def update_mount(
+    mount_id: int,
+    body: MountUpdate,
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER),
+    request: Request,
+):
+    """Update an existing network mount configuration.
+
+    Reuses the same mount validation flow as creation while preserving the
+    generated local mount point and never returning credential values.
+
+    **Roles:** ``admin``, ``manager``
+    """
+    return mount_service.update_mount(
+        mount_id,
+        body,
+        db,
+        actor=current_user.username,
+        client_ip=get_client_ip(request),
+    )
 
 
 @router.get("", response_model=List[NetworkMountSchema], responses={**R_401, **R_403})
