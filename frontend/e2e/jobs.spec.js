@@ -16,7 +16,7 @@ test('jobs create, start, compare, and manifest flow', async ({ page }) => {
     files_succeeded: 0,
     files_failed: 0,
     thread_count: 4,
-    source_path: '/mnt/share/folder',
+    source_path: '/mnt/share/existing-folder',
     target_mount_path: '/mnt/ecube/1',
     drive: { id: 1, port_system_path: '2-1', device_identifier: 'USB-001' },
   }
