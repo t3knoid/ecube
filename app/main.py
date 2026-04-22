@@ -24,7 +24,7 @@ from app.config import DEFAULT_READINESS_MOUNT_CHECK_TIMEOUT_SECONDS, settings
 from app import database as db_module
 from app.infrastructure import get_drive_discovery, get_mount_provider
 from app.exceptions import AuthenticationError, AuthorizationError, ConflictError, ECUBEException
-from app.utils.sanitize import is_encoding_error
+from app.utils.sanitize import is_encoding_error, sanitize_error_message
 from app.logging_config import configure_logging
 from app.models.network import NetworkMount
 from app.routers import admin, audit, auth, browse, configuration, database_setup, drives, files, introspection, jobs, mounts, setup, telemetry, users
@@ -52,6 +52,76 @@ def _is_missing_table_error(exc: Exception) -> bool:
         or "undefinedtable" in msg
         or "no such table" in msg
     )
+
+
+def _classify_unhandled_exception(exc: Exception) -> dict[str, str]:
+    """Return a safe failure classification and remediation hint."""
+    raw_message = str(getattr(exc, "orig", exc) or exc).strip()
+    lowered = raw_message.lower()
+
+    if isinstance(exc, (ProgrammingError, OperationalError)) and any(
+        token in lowered
+        for token in ("column", "relation", "table", "no such", "undefinedcolumn", "undefinedtable")
+    ):
+        return {
+            "category": "database_schema_drift",
+            "summary": "Database schema mismatch detected",
+            "recommended_action": "Run 'alembic upgrade head' to apply pending migrations.",
+            "detail": "Missing or outdated database schema objects detected.",
+        }
+
+    if isinstance(exc, OperationalError) and any(
+        token in lowered
+        for token in (
+            "connection refused",
+            "could not connect",
+            "server closed the connection",
+            "connection not open",
+            "unable to open database file",
+            "could not translate host",
+            "database is unavailable",
+        )
+    ):
+        return {
+            "category": "database_unavailable",
+            "summary": "Database dependency is unavailable",
+            "recommended_action": "Verify database connectivity, host configuration, and service availability.",
+            "detail": "Database connection attempt failed.",
+        }
+
+    if isinstance(exc, PermissionError) or any(
+        token in lowered for token in ("permission denied", "access denied", "not authorized")
+    ):
+        return {
+            "category": "permission_failure",
+            "summary": "Permission or authentication failure detected",
+            "recommended_action": "Verify service permissions and configured credentials for the failing dependency.",
+            "detail": sanitize_error_message(raw_message, "Permission or authentication failure"),
+        }
+
+    if any(
+        token in lowered
+        for token in (
+            "no database url configured",
+            "missing setting",
+            "invalid configuration",
+            "invalid value",
+            "environment variable",
+        )
+    ):
+        return {
+            "category": "invalid_configuration",
+            "summary": "Invalid application configuration detected",
+            "recommended_action": "Review ECUBE configuration values and required environment settings.",
+            "detail": "Application configuration validation failed.",
+        }
+
+    return {
+        "category": "unexpected_backend_error",
+        "summary": "Unhandled backend exception reached the global handler",
+        "recommended_action": "Use the trace ID to inspect debug logs and verify dependency health.",
+        "detail": sanitize_error_message(raw_message, "Unhandled backend exception"),
+    }
 
 
 def _probe_usb_sysfs_available() -> bool:
@@ -857,11 +927,38 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     if is_encoding_error(exc):
         logger.warning("422 ENCODING_ERROR trace_id=%s path=%s", trace_id, request.url.path, exc_info=exc)
         return _error_response(422, "ENCODING_ERROR", "Request contains invalid characters.", trace_id)
+    classification = _classify_unhandled_exception(exc)
+    safe_context = {
+        "trace_id": trace_id,
+        "request_path": request.url.path,
+        "error_category": classification["category"],
+        "error_type": type(exc).__name__,
+        "failure_summary": classification["summary"],
+    }
+    logger.info(
+        (
+            "Unhandled backend exception category="
+            f"{classification['category']} trace_id={trace_id} path={request.url.path} "
+            f"summary={classification['summary']}"
+        ),
+        extra=safe_context,
+    )
+    logger.debug(
+        (
+            "Unhandled backend exception remediation category="
+            f"{classification['category']} trace_id={trace_id} path={request.url.path} "
+            f"recommended_action={classification['recommended_action']}"
+        ),
+        extra={
+            **safe_context,
+            "recommended_action": classification["recommended_action"],
+            "detail": classification["detail"],
+        },
+    )
     logger.error(
-        "Unhandled exception trace_id=%s path=%s\n%s",
-        trace_id,
-        request.url.path,
-        traceback.format_exc(),
+        f"Unhandled exception trace_id={trace_id} path={request.url.path}",
+        extra=safe_context,
+        exc_info=exc,
     )
     return _error_response(500, "INTERNAL_ERROR", "An unexpected error occurred.", trace_id)
 
