@@ -47,6 +47,14 @@ function progressPercent(job) {
   return calculateJobProgress(job).percent
 }
 
+function progressLabel(job) {
+  const metrics = calculateJobProgress(job)
+  if (metrics.initializing) {
+    return t('jobs.progressPreparingShort')
+  }
+  return `${metrics.percent}%`
+}
+
 function progressActive(job) {
   return isJobProgressActive(job)
 }
@@ -142,7 +150,12 @@ onUnmounted(() => {
           <StatusBadge :status="row.status" />
         </template>
         <template #cell-progress="{ row }">
-          <ProgressBar :value="progressPercent(row)" :total="100" :active="progressActive(row)" />
+          <ProgressBar
+            :value="progressPercent(row)"
+            :total="100"
+            :label="progressLabel(row)"
+            :active="progressActive(row)"
+          />
         </template>
       </DataTable>
     </article>
