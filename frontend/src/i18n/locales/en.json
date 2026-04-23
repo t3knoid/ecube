@@ -75,6 +75,8 @@
     "formatConfirmBody": "Formatting destroys all data on this drive.",
     "ejectConfirmTitle": "Prepare drive eject?",
     "ejectConfirmBody": "Ensure no active copy operation is running before eject.",
+    "ejectBlockedActiveJob": "Cannot eject: copy job {jobId} is currently running on this drive.",
+    "ejectBlockedUnknownJob": "Cannot eject: an active copy operation is running on this drive.",
     "cocPrompt": "Drive is ready for safe removal. Generate a chain-of-custody report and confirm handoff details.",
     "openCocReport": "Open CoC Report",
     "browse": "Browse",
