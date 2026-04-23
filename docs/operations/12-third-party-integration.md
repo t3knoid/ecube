@@ -149,6 +149,25 @@ For SMB shares, include credentials:
 
 Returns the mount object with its `id` and `status` (`MOUNTED` or `ERROR`). Verify `status` is `MOUNTED` before proceeding.
 
+To update an existing share definition in place, use the mount `id` returned above:
+
+```
+PATCH /mounts/{mount_id}
+Content-Type: application/json
+
+{
+  "type": "NFS",
+  "remote_path": "fileserver:/exports/case-2026-001-updated",
+  "project_id": "CASE-2026-001"
+}
+```
+
+ECUBE preserves the existing mount record and local mount point, attempts to apply the updated configuration immediately, and returns the refreshed mount object. As with creation, credential values are write-only and are never returned in list responses.
+
+For credentialed SMB mounts, omitted `username`, `password`, and `credentials_file` fields preserve the currently stored values. Send those fields explicitly as `null` when you need to clear previously stored credentials.
+
+Clients should inspect the returned mount `status` after a successful `PATCH`. A `200 OK` response with `status: "ERROR"` means the record was updated but the remount attempt did not succeed, so automation should treat the update as requiring operator or retry handling.
+
 ### Step 3 — Initialize the Drive for the Project
 
 > **Note:** This step is only needed when you explicitly selected a drive in Step 1. Auto-assigned drives are automatically bound to the project.

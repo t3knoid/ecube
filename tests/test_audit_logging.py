@@ -198,6 +198,41 @@ class TestMountAuditLogging:
         assert "remote_path" not in entry.details
         assert entry.details["status"] in {"MOUNTED", "ERROR"}
 
+    def test_update_mount_logs_actor_and_changed_fields(self, manager_client, db):
+        mount = NetworkMount(
+            type=MountType.NFS,
+            remote_path="1.2.3.4:/original-data",
+            project_id="PROJ-AUDIT-MOUNT",
+            local_mount_point="/mnt/update",
+            status=MountStatus.UNMOUNTED,
+        )
+        db.add(mount)
+        db.commit()
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            response = manager_client.patch(
+                f"/mounts/{mount.id}",
+                json={
+                    "type": "SMB",
+                    "remote_path": "//server/updated-data",
+                    "project_id": "PROJ-AUDIT-UPDATED",
+                    "username": "new-user",
+                },
+            )
+        assert response.status_code == 200
+
+        entry = _audit_by_action(db, "MOUNT_UPDATED")
+        assert entry is not None
+        assert entry.user == "manager-user"
+        assert entry.project_id == "PROJ-AUDIT-UPDATED"
+        assert entry.details["mount_id"] == mount.id
+        assert entry.details["mount_label"] == "[redacted]"
+        assert entry.details["status"] in {"MOUNTED", "ERROR"}
+        assert set(entry.details["changed_fields"]) == {"type", "remote_path", "project_id", "credentials"}
+        assert "remote_path" not in entry.details
+        assert "local_mount_point" not in entry.details
+
     def test_remove_mount_logs_actor(self, manager_client, db):
         mount = NetworkMount(
             type=MountType.NFS,
