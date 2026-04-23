@@ -34,7 +34,7 @@ test('keyboard navigation: ConfirmDialog closes with Escape', async ({ page }) =
   await setupAuthenticatedPage(page, ['admin'])
 
   const mounts = [
-    { id: 10, type: 'NFS', remote_path: '10.0.0.4:/exports', local_mount_point: '/mnt/evidence', status: 'CONNECTED' },
+    { id: 10, type: 'NFS', remote_path: '10.0.0.4:/exports', local_mount_point: '/mnt/evidence', status: 'MOUNTED' },
   ]
 
   await page.route('**/api/mounts', async (route) => {
@@ -60,7 +60,7 @@ test('keyboard navigation: ConfirmDialog confirm button reachable by Tab', async
   await setupAuthenticatedPage(page, ['admin'])
 
   const mounts = [
-    { id: 10, type: 'NFS', remote_path: '10.0.0.4:/exports', local_mount_point: '/mnt/evidence', status: 'CONNECTED' },
+    { id: 10, type: 'NFS', remote_path: '10.0.0.4:/exports', local_mount_point: '/mnt/evidence', status: 'MOUNTED' },
   ]
 
   await page.route('**/api/mounts', async (route) => {
@@ -208,5 +208,5 @@ test('keyboard navigation: system log paging controls are focusable and activata
   await newerButton.focus()
   await expect(newerButton).toBeFocused()
   await page.keyboard.press('Enter')
-  await expect(page.locator('.log-viewer')).toContainText('line 200')
+  await expect(page.locator('.log-viewer')).toContainText('line 199')
 })
