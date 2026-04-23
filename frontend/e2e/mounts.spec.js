@@ -7,6 +7,7 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
 
   const mounts = [{ id: 10, type: 'NFS', remote_path: '10.0.0.4:/exports', local_mount_point: '/nfs/exports', project_id: 'CASE-2026-000', status: 'MOUNTED' }]
   const patchPayloads = []
+  const validatePayloads = []
 
   await page.route('**/api/mounts', async (route) => {
     if (route.request().method() === 'GET') {
@@ -33,7 +34,22 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
   })
 
   await page.route('**/api/mounts/*/validate', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mounts[0]) })
+    const mountId = Number(route.request().url().split('/').slice(-2, -1)[0])
+    const body = route.request().postDataJSON() ?? null
+    if (body) {
+      validatePayloads.push(body)
+    }
+    const mount = mounts.find((entry) => entry.id === mountId) ?? mounts[0]
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ...mount,
+        ...(body ?? {}),
+        status: 'MOUNTED',
+        last_checked_at: null,
+      }),
+    })
   })
 
   await page.route('**/api/mounts/*', async (route) => {
@@ -66,13 +82,25 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Edit' }).nth(1).click()
   await expect(page.getByRole('heading', { name: 'Edit Share' })).toBeVisible()
+  const editDialog = page.getByRole('dialog', { name: 'Edit Share' })
   await expect(page.getByLabel('Local Mount Point')).toHaveValue('/nfs/case-2026-001')
   await page.getByLabel('Remote Path').fill('//server/case-2026-001')
   await expect(page.getByRole('button', { name: 'Clear saved credentials' })).toBeVisible()
   await page.getByRole('button', { name: 'Clear saved credentials' }).click()
-  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(editDialog.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
 
-  expect(patchPayloads).toEqual([
+  await editDialog.getByRole('button', { name: 'Test', exact: true }).click()
+  await expect(editDialog.getByRole('button', { name: 'Save', exact: true })).toBeEnabled()
+
+  await page.getByLabel('Remote Path').fill('//server/case-2026-001-updated')
+  await expect(editDialog.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
+
+  await editDialog.getByRole('button', { name: 'Test', exact: true }).click()
+  await expect(editDialog.getByRole('button', { name: 'Save', exact: true })).toBeEnabled()
+
+  await editDialog.getByRole('button', { name: 'Save', exact: true }).click()
+
+  expect(validatePayloads).toEqual([
     {
       type: 'SMB',
       remote_path: '//server/case-2026-001',
@@ -81,9 +109,26 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
       password: null,
       credentials_file: null,
     },
+    {
+      type: 'SMB',
+      remote_path: '//server/case-2026-001-updated',
+      project_id: 'CASE-2026-001',
+      username: null,
+      password: null,
+      credentials_file: null,
+    },
   ])
 
-  await page.getByRole('button', { name: 'Test' }).nth(1).click()
+  expect(patchPayloads).toEqual([
+    {
+      type: 'SMB',
+      remote_path: '//server/case-2026-001-updated',
+      project_id: 'CASE-2026-001',
+      username: null,
+      password: null,
+      credentials_file: null,
+    },
+  ])
 
   await page.getByRole('button', { name: 'Remove' }).first().click()
   await page.getByRole('button', { name: 'Remove' }).last().click()
