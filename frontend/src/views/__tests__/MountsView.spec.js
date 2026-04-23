@@ -422,13 +422,17 @@ describe('MountsView removal flow', () => {
     expect(wrapper.text()).not.toContain(i18n.global.t('mounts.updateSuccess'))
   })
 
-  it('does not render the edit action for read-only roles', async () => {
+  it('does not render manager-only row actions for non-manager roles', async () => {
     authState.roles = ['auditor']
     mocks.getMounts.mockResolvedValue([buildMount()])
 
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.findAll('button').some((node) => node.text() === i18n.global.t('common.actions.edit'))).toBe(false)
+    const buttonTexts = wrapper.findAll('button').map((node) => node.text())
+
+    expect(buttonTexts).not.toContain(i18n.global.t('mounts.test'))
+    expect(buttonTexts).not.toContain(i18n.global.t('common.actions.edit'))
+    expect(buttonTexts).not.toContain(i18n.global.t('mounts.remove'))
   })
 })
