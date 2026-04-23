@@ -434,7 +434,7 @@ onBeforeUnmount(() => {
       <template #cell-last_checked_at="{ row }">{{ toIso(row.last_checked_at) }}</template>
       <template #cell-actions="{ row }">
         <div class="row-actions">
-          <button class="btn" @click="runValidateOne(row.id)">{{ t('mounts.test') }}</button>
+          <button v-if="canManageMounts" class="btn" @click="runValidateOne(row.id)">{{ t('mounts.test') }}</button>
           <button v-if="canManageMounts" class="btn" @click="openEditDialog(row, $event)">{{ t('common.actions.edit') }}</button>
           <button
             class="btn"
@@ -446,7 +446,7 @@ onBeforeUnmount(() => {
           >
             {{ t('mounts.browse') }}
           </button>
-          <button class="btn btn-danger" @click="requestRemove(row)">{{ t('mounts.remove') }}</button>
+          <button v-if="canManageMounts" class="btn btn-danger" @click="requestRemove(row)">{{ t('mounts.remove') }}</button>
         </div>
       </template>
     </DataTable>
