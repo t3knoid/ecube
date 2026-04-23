@@ -763,6 +763,131 @@ def _restore_mount_after_candidate_validation(
     return restore_error or "Failed to restore original mount state"
 
 
+def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
+                             provider: Optional["MountProvider"] = None,
+                             client_ip: Optional[str] = None) -> NetworkMount:
+    normalized_project_id = normalize_project_id(mount_data.project_id)
+    if not isinstance(normalized_project_id, str) or not normalized_project_id:
+        raise HTTPException(status_code=422, detail="project_id must not be empty")
+
+    mount_repo = MountRepository(db)
+    audit_repo = AuditRepository(db)
+    provider = provider or _default_provider()
+
+    mount_repo.acquire_create_lock()
+    existing_mounts = mount_repo.list_all()
+    _validate_remote_path_conflicts(
+        mount_data.type,
+        mount_data.remote_path,
+        normalized_project_id,
+        existing_mounts,
+    )
+
+    existing_mount_points = {str(m.local_mount_point) for m in existing_mounts}
+    local_mount_point = _generate_local_mount_point(
+        mount_data.type,
+        mount_data.remote_path,
+        existing_mount_points,
+    )
+    checked_at = datetime.now(timezone.utc)
+    mount = NetworkMount(
+        type=mount_data.type,
+        remote_path=mount_data.remote_path,
+        project_id=normalized_project_id,
+        local_mount_point=local_mount_point,
+        status=MountStatus.UNMOUNTED,
+    )
+
+    validation_error = None
+    candidate_status = MountStatus.ERROR
+    try:
+        create_dir_error = _ensure_mount_directory(mount.local_mount_point)
+        if create_dir_error:
+            validation_error = create_dir_error
+        else:
+            owner_error = _validate_mount_directory_owner(mount.local_mount_point)
+            if owner_error:
+                validation_error = owner_error
+            else:
+                resolved_credentials = _resolve_mount_operation_credentials(mount, mount_data)
+                success, validation_error = provider.os_mount(
+                    mount_data.type,
+                    mount_data.remote_path,
+                    mount.local_mount_point,
+                    credentials_file=resolved_credentials["credentials_file"],
+                    username=resolved_credentials["username"],
+                    password=resolved_credentials["password"],
+                )
+                candidate_status = MountStatus.MOUNTED if success else MountStatus.ERROR
+    finally:
+        restore_error = _restore_mount_after_candidate_validation(
+            mount,
+            provider=provider,
+            original_mount_type=mount_data.type,
+            original_remote_path=mount_data.remote_path,
+            original_was_mounted=False,
+        )
+
+    if restore_error:
+        logger.info(
+            "Mount candidate validation could not restore original state",
+            extra={
+                "context": {
+                    "mount_label": _redacted_mount_label(str(mount.local_mount_point)),
+                    "failure_category": "mount_validate_restore",
+                    "project_id": normalized_project_id,
+                }
+            },
+        )
+        logger.debug(
+            "Mount candidate validation restore raw error",
+            extra={
+                "context": {
+                    "mount_label": _redacted_mount_label(str(mount.local_mount_point)),
+                    "project_id": normalized_project_id,
+                    "raw_error": restore_error,
+                }
+            },
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Mount validation could not restore original mount state",
+        )
+
+    try:
+        audit_repo.add(
+            action="MOUNT_VALIDATE_CANDIDATE",
+            user=actor,
+            project_id=normalized_project_id,
+            details={
+                "project_id": normalized_project_id,
+                "mount_label": _redacted_mount_label(str(mount.local_mount_point)),
+                "status": candidate_status.value,
+            },
+            client_ip=client_ip,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to write audit log for MOUNT_VALIDATE_CANDIDATE",
+            extra={"context": {"project_id": normalized_project_id}},
+        )
+
+    if candidate_status != MountStatus.MOUNTED:
+        raise HTTPException(
+            status_code=409,
+            detail=sanitize_error_message(validation_error, "Mount validation failed"),
+        )
+
+    return NetworkMount(
+        type=mount_data.type,
+        remote_path=mount_data.remote_path,
+        project_id=normalized_project_id,
+        local_mount_point=local_mount_point,
+        status=candidate_status,
+        last_checked_at=checked_at,
+    )
+
+
 def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
               provider: Optional["MountProvider"] = None,
               client_ip: Optional[str] = None) -> NetworkMount:

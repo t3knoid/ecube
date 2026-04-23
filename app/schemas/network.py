@@ -30,3 +30,15 @@ class NetworkMountSchema(BaseModel):
     last_checked_at: Optional[datetime] = Field(default=None, description="Timestamp of last connectivity check")
 
     model_config = {"from_attributes": True}
+
+
+class CandidateNetworkMountSchema(BaseModel):
+    id: Optional[int] = Field(default=None, description="Identifier for a persisted mount configuration, when available")
+    type: MountType = Field(..., description="Mount protocol type (SMB, NFS, etc.)")
+    remote_path: str = Field(..., description="Remote path on the network share")
+    project_id: str = Field(..., description="Project assigned to the mount")
+    local_mount_point: str = Field(..., description="Local filesystem path that would be used for the mount")
+    status: MountStatus = Field(..., description="Current mount status (MOUNTED, UNMOUNTED, ERROR)")
+    last_checked_at: Optional[datetime] = Field(default=None, description="Timestamp of last connectivity check")
+
+    model_config = {"from_attributes": True}
