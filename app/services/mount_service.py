@@ -1361,7 +1361,16 @@ def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None,
                 client_ip=client_ip,
             )
         except Exception:
-            logger.exception("Failed to write audit log for MOUNT_VALIDATED")
+            logger.exception(
+                "Failed to write audit log for MOUNT_VALIDATED",
+                extra={"context": {"mount_id": mount_id}},
+            )
+
+        if candidate_status != MountStatus.MOUNTED:
+            raise HTTPException(
+                status_code=409,
+                detail=sanitize_error_message(validation_error, "Mount validation failed"),
+            )
 
         return NetworkMount(
             id=mount.id,
