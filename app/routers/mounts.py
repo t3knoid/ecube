@@ -122,9 +122,10 @@ def remove_mount(
     mount_service.remove_mount(mount_id, db, actor=current_user.username, client_ip=get_client_ip(request))
 
 
-@router.post("/{mount_id}/validate", response_model=NetworkMountSchema, responses={**R_401, **R_403, **R_404, **R_422, **R_500})
+@router.post("/{mount_id}/validate", response_model=NetworkMountSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
 def validate_mount(
     mount_id: int,
+    body: MountUpdate | None = None,
     *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
@@ -136,4 +137,10 @@ def validate_mount(
 
     **Roles:** ``admin``, ``manager``
     """
-    return mount_service.validate_mount(mount_id, db, actor=current_user.username, client_ip=get_client_ip(request))
+    return mount_service.validate_mount(
+        mount_id,
+        db,
+        mount_data=body,
+        actor=current_user.username,
+        client_ip=get_client_ip(request),
+    )

@@ -4,6 +4,7 @@ import pytest
 
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.config import settings
+from app.schemas.network import MountUpdate
 from app.services.mount_check_utils import check_mounted_with_configured_timeout
 from app.services.mount_service import (
     LinuxMountProvider,
@@ -922,6 +923,89 @@ def test_validate_mount_command_failure(manager_client, db):
     data = response.json()
     assert data["status"] == "ERROR"
     assert data["last_checked_at"] is not None
+
+
+def test_validate_mount_with_candidate_payload_uses_unsaved_values_without_persisting(db):
+    mount = NetworkMount(
+        type=MountType.SMB,
+        remote_path="//server/original-share",
+        project_id="PROJ-OLD",
+        local_mount_point="/smb/original-share",
+        status=MountStatus.UNMOUNTED,
+    )
+    db.add(mount)
+    db.commit()
+
+    class StatefulProvider:
+        def __init__(self):
+            self.mounted = False
+            self.mount_calls = []
+            self.unmount_calls = []
+
+        def check_mounted(self, local_mount_point: str, *, timeout_seconds=None):
+            return self.mounted
+
+        def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None):
+            self.mount_calls.append(
+                {
+                    "mount_type": mount_type,
+                    "remote_path": remote_path,
+                    "local_mount_point": local_mount_point,
+                    "credentials_file": credentials_file,
+                    "username": username,
+                    "password": password,
+                }
+            )
+            self.mounted = True
+            return True, None
+
+        def os_unmount(self, local_mount_point: str):
+            self.unmount_calls.append(local_mount_point)
+            self.mounted = False
+            return True, None
+
+    provider = StatefulProvider()
+
+    with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None):
+        result = validate_mount(
+            mount.id,
+            db,
+            provider=provider,
+            mount_data=MountUpdate(
+                type=MountType.SMB,
+                remote_path="//server/edited-share",
+                project_id="proj-new",
+                username="svc-reader",
+                password="top-secret",
+                credentials_file=None,
+            ),
+        )
+
+    db.expire_all()
+    persisted = db.query(NetworkMount).filter(NetworkMount.id == mount.id).one()
+
+    assert result.remote_path == "//server/edited-share"
+    assert result.project_id == "PROJ-NEW"
+    assert result.status == MountStatus.MOUNTED
+    assert result.last_checked_at is not None
+
+    assert persisted.remote_path == "//server/original-share"
+    assert persisted.project_id == "PROJ-OLD"
+    assert persisted.status == MountStatus.UNMOUNTED
+    assert persisted.last_checked_at is not None
+
+    assert provider.mount_calls == [
+        {
+            "mount_type": MountType.SMB,
+            "remote_path": "//server/edited-share",
+            "local_mount_point": "/smb/original-share",
+            "credentials_file": None,
+            "username": "svc-reader",
+            "password": "top-secret",
+        }
+    ]
+    assert provider.unmount_calls == ["/smb/original-share"]
 
 
 def test_validate_mount_not_found(manager_client, db):
