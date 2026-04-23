@@ -29,8 +29,12 @@ function normalizeJobId(jobId) {
   return normalized
 }
 
-export function listJobs(params = {}) {
-  return toData(apiClient.get(`${API_BASE}/jobs`, { params: buildQueryParams(params) }))
+export function listJobs(params = {}, { timeout } = {}) {
+  const config = { params: buildQueryParams(params) }
+  if (timeout != null) {
+    config.timeout = timeout
+  }
+  return toData(apiClient.get(`${API_BASE}/jobs`, config))
 }
 
 export function createJob(payload) {
