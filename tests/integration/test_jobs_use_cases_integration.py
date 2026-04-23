@@ -218,24 +218,16 @@ def test_verify_job_sets_verifying_and_audits(integration_client, integration_db
 @pytest.mark.integration
 def test_create_manifest_writes_record_file_and_audit(integration_client, integration_db, tmp_path):
     target_path = tmp_path / "manifest-target"
-    drive = UsbDrive(
-        device_identifier="IT-DRV-AUTO-008",
-        current_state=DriveState.AVAILABLE,
-        mount_path="/mnt/ecube/it-auto-008",
+    job = ExportJob(
+        project_id="PROJ-JOB-008",
+        evidence_number="EV-008",
+        source_path="/tmp/source",
+        target_mount_path=str(target_path),
+        status=JobStatus.PENDING,
     )
-    integration_db.add(drive)
+    integration_db.add(job)
     integration_db.commit()
-
-    create_response = integration_client.post(
-        "/jobs",
-        json={
-            "project_id": "PROJ-JOB-008",
-            "evidence_number": "EV-008",
-            "source_path": "/tmp/source",
-            "target_mount_path": str(target_path),
-        },
-    )
-    job_id = create_response.json()["id"]
+    job_id = job.id
 
     first_response = integration_client.post(f"/jobs/{job_id}/manifest")
     assert first_response.status_code == 200
@@ -251,7 +243,7 @@ def test_create_manifest_writes_record_file_and_audit(integration_client, integr
     assert list(target_path.glob('manifest*.json')) == [manifest_file]
 
     manifest_data = manifest_file.read_text(encoding='utf-8')
-    assert '"generated_by": "test-user"' in manifest_data
+    assert '"generated_by": "integration-user"' in manifest_data
     assert '"generated_at":' in manifest_data
 
     audit = (
@@ -260,5 +252,5 @@ def test_create_manifest_writes_record_file_and_audit(integration_client, integr
         .first()
     )
     assert audit is not None
-    assert audit.details["error"] is None
+    assert audit.details["generated_by"] == "integration-user"
 
