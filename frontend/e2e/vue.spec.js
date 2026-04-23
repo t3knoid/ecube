@@ -1,37 +1,10 @@
 import { test, expect } from '@playwright/test'
-import { STORAGE_TOKEN_KEY } from '../src/constants/storage.js'
-
-// Helper: create a fake JWT with the given payload (valid for e2e route testing)
-function makeToken(payload) {
-  const encode = (obj) => btoa(JSON.stringify(obj))
-  return `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode(payload)}.${encode('sig')}`
-}
-
-// Stub /api/setup/status to return the given initialized value
-function stubSetupStatus(page, initialized) {
-  return page.route('**/api/setup/status', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ initialized }),
-    }),
-  )
-}
-
-// Inject a valid auth token into sessionStorage before navigation
-function injectAuthToken(page, roles = []) {
-  const exp = Math.floor(Date.now() / 1000) + 3600
-  const jwt = makeToken({ sub: 'frank', roles, groups: [], exp })
-  return page.addInitScript(({ token, key }) => {
-    sessionStorage.setItem(key, token)
-  }, { token: jwt, key: STORAGE_TOKEN_KEY })
-}
+import { injectAuthToken, setupPublicPage } from './helpers/app.js'
 
 // See here how to get started:
 // https://playwright.dev/docs/intro
 test('visits the app root url', async ({ page }) => {
-  // Stub the setup-status API so the router treats the system as initialized
-  await stubSetupStatus(page, true)
+  await setupPublicPage(page, { initialized: true })
 
   await page.goto('/')
   // Unauthenticated users are redirected to the login page
@@ -39,7 +12,7 @@ test('visits the app root url', async ({ page }) => {
 })
 
 test('redirects to /setup when system is not initialized', async ({ page }) => {
-  await stubSetupStatus(page, false)
+  await setupPublicPage(page, { initialized: false })
 
   await page.goto('/')
   await page.waitForURL('**/setup')
@@ -47,14 +20,7 @@ test('redirects to /setup when system is not initialized', async ({ page }) => {
 })
 
 test('redirects away from /audit when user lacks required role', async ({ page }) => {
-  await stubSetupStatus(page, true)
-  // Stub system-health so AppFooter polling doesn't error
-  await page.route('**/api/introspection/system-health', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
-  )
-  await page.route('**/api/introspection/version', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: '{"version":"test"}' }),
-  )
+  await setupPublicPage(page, { initialized: true })
   // Processor role cannot access /audit (requires admin, manager, or auditor)
   await injectAuthToken(page, ['processor'])
 
@@ -65,13 +31,7 @@ test('redirects away from /audit when user lacks required role', async ({ page }
 })
 
 test('redirects away from /users when user is not admin', async ({ page }) => {
-  await stubSetupStatus(page, true)
-  await page.route('**/api/introspection/system-health', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
-  )
-  await page.route('**/api/introspection/version', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: '{"version":"test"}' }),
-  )
+  await setupPublicPage(page, { initialized: true })
   // Manager role cannot access /users (requires admin)
   await injectAuthToken(page, ['manager'])
 
@@ -81,15 +41,7 @@ test('redirects away from /users when user is not admin', async ({ page }) => {
 })
 
 test('admin users page exposes a single editable users table', async ({ page }) => {
-  await stubSetupStatus(page, true)
-
-  // Footer polling endpoints
-  await page.route('**/api/introspection/system-health', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
-  )
-  await page.route('**/api/introspection/version', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: '{"version":"test"}' }),
-  )
+  await setupPublicPage(page, { initialized: true })
 
   // Users screen data endpoints
   await page.route('**/api/users', (route) =>

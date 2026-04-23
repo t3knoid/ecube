@@ -227,7 +227,7 @@ test('prepare eject surfaces busy-drive detail without trapping the dialog', asy
 
   await page.goto('/drives/7')
   await page.getByRole('button', { name: 'Prepare Eject' }).first().click()
-  await page.getByRole('button', { name: 'Prepare Eject' }).last().click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Prepare Eject' }).click()
 
   await expect(page.locator('.error-banner').filter({ hasText: 'Drive is busy; close any shell, file browser, or process using the mounted drive and retry prepare-eject' })).toBeVisible()
   await expect(page.getByRole('dialog')).toHaveCount(0)
@@ -304,7 +304,7 @@ test('drives list and drive detail admin flows', async ({ page }) => {
   await expect(page.getByText('Drive initialized successfully.')).toBeVisible()
 
   await page.getByRole('button', { name: 'Prepare Eject' }).first().click()
-  await page.getByRole('button', { name: 'Prepare Eject' }).last().click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Prepare Eject' }).click()
   await expect(page.getByText('Drive prepared for ejection.')).toBeVisible()
 
   await expectNoCriticalA11yViolations(page)
