@@ -5,7 +5,7 @@ from typing import List
 
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
-from app.schemas.network import MountCreate, MountUpdate, NetworkMountSchema
+from app.schemas.network import CandidateNetworkMountSchema, MountCreate, MountUpdate, NetworkMountSchema
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500
 from app.services import mount_service
 from app.utils.client_ip import get_client_ip
@@ -90,6 +90,29 @@ def validate_all_mounts(
     **Roles:** ``admin``, ``manager``
     """
     return mount_service.validate_all_mounts(db, actor=current_user.username, client_ip=get_client_ip(request))
+
+
+@router.post("/test", response_model=CandidateNetworkMountSchema, responses={**R_401, **R_403, **R_409, **R_422, **R_500})
+def validate_mount_candidate(
+    body: MountCreate,
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER),
+    request: Request,
+):
+    """Test connectivity and credentials for a candidate mount before it is created.
+
+    Attempts to connect using the submitted share settings, then restores the host
+    to its pre-test state without persisting a new mount record.
+
+    **Roles:** ``admin``, ``manager``
+    """
+    return mount_service.validate_mount_candidate(
+        body,
+        db,
+        actor=current_user.username,
+        client_ip=get_client_ip(request),
+    )
 
 
 @router.delete("/validate", status_code=405, responses={**R_401, **R_403}, include_in_schema=False)

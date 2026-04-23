@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getMounts, createMount, updateMount, deleteMount, validateAllMounts, validateMount } from '@/api/mounts.js'
+import { getMounts, createMount, updateMount, deleteMount, validateAllMounts, validateMount, validateMountCandidate } from '@/api/mounts.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
@@ -20,8 +20,10 @@ const saving = ref(false)
 const dialogTesting = ref(false)
 const error = ref('')
 const successMessage = ref('')
+const dialogError = ref('')
+const dialogSuccessMessage = ref('')
 const editingMountId = ref(null)
-const editValidationPassed = ref(false)
+const dialogValidationPassed = ref(false)
 
 const showAddDialog = ref(false)
 const showRemoveDialog = ref(false)
@@ -116,8 +118,10 @@ async function loadMounts() {
 
 function resetForm() {
   editingMountId.value = null
-  editValidationPassed.value = false
+  dialogValidationPassed.value = false
   dialogTesting.value = false
+  dialogError.value = ''
+  dialogSuccessMessage.value = ''
   form.value = {
     type: 'SMB',
     remote_path: '',
@@ -133,17 +137,16 @@ function resetForm() {
   }
 }
 
-function invalidateEditValidation() {
-  if (!isEditMode.value) return
-  if (editValidationPassed.value && successMessage.value === t('mounts.testSuccess')) {
-    successMessage.value = ''
+function invalidateDialogValidation() {
+  if (dialogValidationPassed.value && dialogSuccessMessage.value === t('mounts.testSuccess')) {
+    dialogSuccessMessage.value = ''
   }
-  editValidationPassed.value = false
+  dialogValidationPassed.value = false
 }
 
 function markCredentialFieldChanged(fieldName) {
   credentialFieldState.value[fieldName] = true
-  invalidateEditValidation()
+  invalidateDialogValidation()
 }
 
 function clearStoredCredentials() {
@@ -155,7 +158,7 @@ function clearStoredCredentials() {
     password: true,
     credentials_file: true,
   }
-  invalidateEditValidation()
+  invalidateDialogValidation()
 }
 
 function trapFocusWithin(event, container) {
@@ -233,13 +236,14 @@ async function submitMountDialog() {
   if (!formValid()) return
   saving.value = true
   error.value = ''
+  dialogError.value = ''
   try {
     const payload = buildMountPayload()
     if (isEditMode.value && editingMountId.value !== null) {
       const updatedMount = await updateMount(editingMountId.value, payload)
       replaceMount(updatedMount)
       if (updatedMount?.status === 'ERROR') {
-        error.value = t('mounts.updateFailed')
+        dialogError.value = t('mounts.updateFailed')
         return
       }
       successMessage.value = t('mounts.updateSuccess')
@@ -251,28 +255,31 @@ async function submitMountDialog() {
     resetForm()
     await loadMounts()
   } catch (requestError) {
-    error.value = normalizeErrorMessage(requestError?.response?.data, t('common.errors.validationFailed'))
+    dialogError.value = normalizeErrorMessage(requestError?.response?.data, t('common.errors.validationFailed'))
   } finally {
     saving.value = false
   }
 }
 
 async function runDialogValidate() {
-  if (!isEditMode.value || editingMountId.value === null || !formValid()) return
+  if (!formValid()) return
   dialogTesting.value = true
-  editValidationPassed.value = false
-  error.value = ''
-  successMessage.value = ''
+  dialogValidationPassed.value = false
+  dialogError.value = ''
+  dialogSuccessMessage.value = ''
   try {
-    const result = await validateMount(editingMountId.value, buildMountPayload())
+    const payload = buildMountPayload()
+    const result = isEditMode.value && editingMountId.value !== null
+      ? await validateMount(editingMountId.value, payload)
+      : await validateMountCandidate(payload)
     if (result?.status === 'MOUNTED') {
-      editValidationPassed.value = true
-      successMessage.value = t('mounts.testSuccess')
+      dialogValidationPassed.value = true
+      dialogSuccessMessage.value = t('mounts.testSuccess')
       return
     }
-    error.value = t('mounts.testFailed')
+    dialogError.value = t('mounts.testFailed')
   } catch (requestError) {
-    error.value = normalizeErrorMessage(requestError?.response?.data, t('mounts.testFailed'))
+    dialogError.value = normalizeErrorMessage(requestError?.response?.data, t('mounts.testFailed'))
   } finally {
     dialogTesting.value = false
   }
@@ -308,7 +315,6 @@ function openAddDialog(event) {
   addDialogTriggerRef.value = event?.currentTarget instanceof HTMLElement ? event.currentTarget : document.activeElement
   editingMountId.value = null
   error.value = ''
-  successMessage.value = ''
   resetForm()
   showAddDialog.value = true
   void nextTick(() => {
@@ -324,9 +330,10 @@ function openEditDialog(mount, event) {
   addDialogTriggerRef.value = event?.currentTarget instanceof HTMLElement ? event.currentTarget : document.activeElement
   editingMountId.value = mount.id
   error.value = ''
-  successMessage.value = ''
-  editValidationPassed.value = false
+  dialogValidationPassed.value = false
   dialogTesting.value = false
+  dialogError.value = ''
+  dialogSuccessMessage.value = ''
   form.value = {
     type: mount.type || 'SMB',
     remote_path: mount.remote_path || '',
@@ -351,8 +358,8 @@ function openEditDialog(mount, event) {
 
 function closeAddDialog() {
   showAddDialog.value = false
-  error.value = ''
-  successMessage.value = ''
+  dialogError.value = ''
+  dialogSuccessMessage.value = ''
   resetForm()
 }
 
@@ -427,7 +434,7 @@ watch(
 watch(
   () => [form.value.type, form.value.remote_path, form.value.project_id],
   () => {
-    invalidateEditValidation()
+    invalidateDialogValidation()
   },
 )
 
@@ -518,6 +525,8 @@ onBeforeUnmount(() => {
       <div v-if="showAddDialog" class="dialog-overlay">
         <div ref="addDialogRef" class="dialog-panel" role="dialog" aria-modal="true" :aria-labelledby="addMountDialogTitleId">
           <h2 :id="addMountDialogTitleId">{{ dialogTitle }}</h2>
+          <p v-if="dialogError" class="error-banner" role="alert" aria-live="assertive">{{ dialogError }}</p>
+          <p v-if="dialogSuccessMessage" class="success-banner" role="status" aria-live="polite">{{ dialogSuccessMessage }}</p>
           <label for="mount-type" class="field-label">
             {{ t('common.labels.type') }}
             <span class="required-indicator" aria-hidden="true">*</span>
@@ -559,7 +568,6 @@ onBeforeUnmount(() => {
           <div class="dialog-actions">
             <button class="btn" @click="closeAddDialog">{{ t('common.actions.cancel') }}</button>
             <button
-              v-if="isEditMode"
               class="btn"
               :disabled="saving || dialogTesting || !formValid()"
               @click="runDialogValidate"
@@ -568,7 +576,7 @@ onBeforeUnmount(() => {
             </button>
             <button
               class="btn btn-primary"
-              :disabled="saving || dialogTesting || !formValid() || (isEditMode && !editValidationPassed)"
+              :disabled="saving || dialogTesting || !formValid() || !dialogValidationPassed"
               @click="submitMountDialog"
             >
               {{ saving ? t('common.labels.loading') : dialogSubmitLabel }}
