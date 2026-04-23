@@ -30,5 +30,8 @@ def decrypt_mount_secret(value: Optional[str]) -> Optional[str]:
     try:
         return _mount_credentials_fernet().decrypt(value.encode("utf-8")).decode("utf-8")
     except InvalidToken as exc:
-        logger.warning("Stored mount credential decryption failed")
+        logger.warning(
+            "Stored mount credential decryption failed",
+            extra={"context": {"failure_category": "mount_credentials_decryption", "reason": "invalid_token"}},
+        )
         raise RuntimeError("Stored mount credential decryption failed") from exc

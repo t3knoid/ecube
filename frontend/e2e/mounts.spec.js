@@ -6,6 +6,7 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
   const mounts = [{ id: 10, type: 'NFS', remote_path: '10.0.0.4:/exports', local_mount_point: '/nfs/exports', project_id: 'CASE-2026-000', status: 'MOUNTED' }]
+  const patchPayloads = []
 
   await page.route('**/api/mounts', async (route) => {
     if (route.request().method() === 'GET') {
@@ -39,6 +40,7 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
     if (route.request().method() === 'PATCH') {
       const mountId = Number(route.request().url().split('/').pop())
       const body = route.request().postDataJSON()
+      patchPayloads.push(body)
       const index = mounts.findIndex((mount) => mount.id === mountId)
       mounts[index] = { ...mounts[index], ...body, status: 'MOUNTED' }
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mounts[index]) })
@@ -46,7 +48,7 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
     }
     if (route.request().method() === 'DELETE') {
       mounts.splice(0, 1)
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
+      await route.fulfill({ status: 204, contentType: 'application/json', body: '' })
       return
     }
     await route.fallback()
@@ -66,7 +68,20 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Edit Share' })).toBeVisible()
   await expect(page.getByLabel('Local Mount Point')).toHaveValue('/nfs/case-2026-001')
   await page.getByLabel('Remote Path').fill('//server/case-2026-001')
-  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByRole('button', { name: 'Clear saved credentials' })).toBeVisible()
+  await page.getByRole('button', { name: 'Clear saved credentials' }).click()
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+
+  expect(patchPayloads).toEqual([
+    {
+      type: 'NFS',
+      remote_path: '//server/case-2026-001',
+      project_id: 'CASE-2026-001',
+      username: null,
+      password: null,
+      credentials_file: null,
+    },
+  ])
 
   await page.getByRole('button', { name: 'Test' }).nth(1).click()
 

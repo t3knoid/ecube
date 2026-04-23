@@ -610,15 +610,37 @@ def _load_stored_mount_credentials(mount: NetworkMount) -> dict[str, str | None]
         }
     except RuntimeError as exc:
         logger.info(
-            "Stored mount credentials unavailable: mount_id=%s mount_label=%s reason=%s",
-            mount.id,
-            _redacted_mount_label(str(mount.local_mount_point)),
-            "decryption_failed",
+            "Stored mount credentials unavailable",
+            extra={
+                "context": {
+                    "mount_id": mount.id,
+                    "mount_label": _redacted_mount_label(str(mount.local_mount_point)),
+                    "reason": "decryption_failed",
+                    "failure_category": "mount_credentials",
+                }
+            },
         )
         raise HTTPException(
             status_code=500,
             detail="Stored mount credentials could not be decrypted",
         ) from exc
+
+
+def _resolve_mount_operation_credentials(
+    mount: NetworkMount,
+    mount_data: MountCreate | MountUpdate,
+) -> dict[str, str | None]:
+    credentials = (
+        _load_stored_mount_credentials(mount)
+        if _stored_credentials_present(mount)
+        else {"username": None, "password": None, "credentials_file": None}
+    )
+
+    for field_name in _CREDENTIAL_FIELD_NAMES:
+        if field_name in mount_data.model_fields_set:
+            credentials[field_name] = getattr(mount_data, field_name)
+
+    return credentials
 
 
 def _changed_mount_fields(
@@ -664,19 +686,29 @@ def _prepare_mount_for_update(
     lowered_error = error_text.lower()
     if any(phrase in lowered_error for phrase in ("not mounted", "no mount point")):
         logger.info(
-            "Treating already-unmounted mount update as unmounted: mount_id=%s mount_label=%s reason=%s",
-            mount.id,
-            _redacted_mount_label(local_mount_point),
-            sanitize_error_message(error_text, "Target was already unmounted"),
+            "Treating already-unmounted mount update as unmounted",
+            extra={
+                "context": {
+                    "mount_id": mount.id,
+                    "mount_label": _redacted_mount_label(local_mount_point),
+                    "reason": sanitize_error_message(error_text, "Target was already unmounted"),
+                    "failure_category": "mount_unmount",
+                }
+            },
         )
         mount.status = MountStatus.UNMOUNTED
         return
 
     logger.warning(
-        "Mount update aborted because unmount failed: mount_id=%s mount_label=%s reason=%s",
-        mount.id,
-        _redacted_mount_label(local_mount_point),
-        sanitize_error_message(error_text, "Unmount failed"),
+        "Mount update aborted because unmount failed",
+        extra={
+            "context": {
+                "mount_id": mount.id,
+                "mount_label": _redacted_mount_label(local_mount_point),
+                "reason": sanitize_error_message(error_text, "Unmount failed"),
+                "failure_category": "mount_unmount",
+            }
+        },
     )
     raise HTTPException(
         status_code=409,
@@ -796,13 +828,14 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
                 )
                 success, error = False, owner_error
             else:
+                resolved_credentials = _resolve_mount_operation_credentials(mount, mount_data)
                 success, error = provider.os_mount(
                     mount_data.type,
                     mount_data.remote_path,
                     mount.local_mount_point,
-                    credentials_file=mount_data.credentials_file,
-                    username=mount_data.username,
-                    password=mount_data.password,
+                    credentials_file=resolved_credentials["credentials_file"],
+                    username=resolved_credentials["username"],
+                    password=resolved_credentials["password"],
                 )
         if success:
             mount.status = MountStatus.MOUNTED
@@ -922,11 +955,15 @@ def update_mount(mount_id: int, mount_data: MountUpdate, db: Session, actor: Opt
 
     _mount_error = None
     logger.info(
-        "Mount update started: mount_id=%s type=%s mount_label=%s actor=%s",
-        mount.id,
-        mount_data.type.value,
-        mount_label,
-        actor or "system",
+        "Mount update started",
+        extra={
+            "context": {
+                "mount_id": mount.id,
+                "type": mount_data.type.value,
+                "mount_label": mount_label,
+                "actor": actor or "system",
+            }
+        },
     )
     try:
         _prepare_mount_for_update(mount, provider=provider)
@@ -934,12 +971,17 @@ def update_mount(mount_id: int, mount_data: MountUpdate, db: Session, actor: Opt
         create_dir_error = _ensure_mount_directory(mount.local_mount_point)
         if create_dir_error:
             logger.warning(
-                "Mountpoint preparation failed during update: mount_id=%s type=%s mount_label=%s actor=%s reason=%s",
-                mount.id,
-                mount_data.type.value,
-                mount_label,
-                actor or "system",
-                sanitize_error_message(create_dir_error, "Mountpoint preparation failed"),
+                "Mountpoint preparation failed during update",
+                extra={
+                    "context": {
+                        "mount_id": mount.id,
+                        "type": mount_data.type.value,
+                        "mount_label": mount_label,
+                        "actor": actor or "system",
+                        "reason": sanitize_error_message(create_dir_error, "Mountpoint preparation failed"),
+                        "failure_category": "mount_directory_prepare",
+                    }
+                },
             )
             _log_mount_debug_failure(
                 "Mountpoint preparation raw error",
@@ -961,42 +1003,58 @@ def update_mount(mount_id: int, mount_data: MountUpdate, db: Session, actor: Opt
                 )
                 success, error = False, owner_error
             else:
+                resolved_credentials = _resolve_mount_operation_credentials(mount, mount_data)
                 success, error = provider.os_mount(
                     mount_data.type,
                     mount_data.remote_path,
                     mount.local_mount_point,
-                    credentials_file=mount_data.credentials_file,
-                    username=mount_data.username,
-                    password=mount_data.password,
+                    credentials_file=resolved_credentials["credentials_file"],
+                    username=resolved_credentials["username"],
+                    password=resolved_credentials["password"],
                 )
 
         if success:
             mount.status = MountStatus.MOUNTED
             logger.info(
-                "Mount update succeeded: mount_id=%s type=%s mount_label=%s actor=%s",
-                mount.id,
-                mount_data.type.value,
-                mount_label,
-                actor or "system",
+                "Mount update succeeded",
+                extra={
+                    "context": {
+                        "mount_id": mount.id,
+                        "type": mount_data.type.value,
+                        "mount_label": mount_label,
+                        "actor": actor or "system",
+                    }
+                },
             )
         else:
             mount.status = MountStatus.ERROR
             _mount_error = error
             logger.warning(
-                "Mount update failed: mount_id=%s type=%s mount_label=%s actor=%s reason=%s",
-                mount.id,
-                mount_data.type.value,
-                mount_label,
-                actor or "system",
-                sanitize_error_message(_mount_error, "Mount update failed"),
+                "Mount update failed",
+                extra={
+                    "context": {
+                        "mount_id": mount.id,
+                        "type": mount_data.type.value,
+                        "mount_label": mount_label,
+                        "actor": actor or "system",
+                        "reason": sanitize_error_message(_mount_error, "Mount update failed"),
+                        "failure_category": "mount_update",
+                    }
+                },
             )
 
         try:
             mount_repo.save(mount)
         except Exception:
             logger.exception(
-                "DB commit failed while updating mount record %s after mount update",
-                mount.id,
+                "DB commit failed while updating mount record after mount update",
+                extra={
+                    "context": {
+                        "mount_id": mount.id,
+                        "mount_label": mount_label,
+                        "failure_category": "mount_update_persist",
+                    }
+                },
             )
             raise HTTPException(
                 status_code=500,
@@ -1010,16 +1068,27 @@ def update_mount(mount_id: int, mount_data: MountUpdate, db: Session, actor: Opt
             mount_repo.save(mount)
         except Exception:
             logger.exception(
-                "DB commit failed while recording mount update error for mount %s",
-                mount.id,
+                "DB commit failed while recording mount update error",
+                extra={
+                    "context": {
+                        "mount_id": mount.id,
+                        "mount_label": mount_label,
+                        "failure_category": "mount_update_error_record",
+                    }
+                },
             )
         _mount_error = str(exc)
         logger.exception(
-            "Mount update raised exception: mount_id=%s type=%s mount_label=%s actor=%s",
-            mount.id,
-            mount_data.type.value,
-            mount_label,
-            actor or "system",
+            "Mount update raised exception",
+            extra={
+                "context": {
+                    "mount_id": mount.id,
+                    "type": mount_data.type.value,
+                    "mount_label": mount_label,
+                    "actor": actor or "system",
+                    "failure_category": "mount_update_exception",
+                }
+            },
         )
 
     try:
