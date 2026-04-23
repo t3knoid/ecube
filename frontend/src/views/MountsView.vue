@@ -299,18 +299,6 @@ async function runValidateAll() {
   }
 }
 
-async function runValidateOne(mountId) {
-  error.value = ''
-  successMessage.value = ''
-  try {
-    const next = normalizeProjectRecord(await validateMount(mountId), ['project_id'])
-    const index = mounts.value.findIndex((item) => item.id === mountId)
-    if (index >= 0) mounts.value[index] = next
-  } catch {
-    error.value = t('common.errors.requestConflict')
-  }
-}
-
 function openAddDialog(event) {
   addDialogTriggerRef.value = event?.currentTarget instanceof HTMLElement ? event.currentTarget : document.activeElement
   editingMountId.value = null
@@ -486,7 +474,6 @@ onBeforeUnmount(() => {
       <template #cell-last_checked_at="{ row }">{{ toIso(row.last_checked_at) }}</template>
       <template #cell-actions="{ row }">
         <div class="row-actions">
-          <button v-if="canManageMounts" class="btn" @click="runValidateOne(row.id)">{{ t('mounts.test') }}</button>
           <button v-if="canManageMounts" class="btn" @click="openEditDialog(row, $event)">{{ t('common.actions.edit') }}</button>
           <button
             class="btn"
