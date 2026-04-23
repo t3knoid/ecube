@@ -1,23 +1,25 @@
 import { test, expect } from '@playwright/test'
-import { routeJson } from './helpers/app.js'
+import { routeJson, setupPublicPage } from './helpers/app.js'
 import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
 
 test('setup wizard full step flow on uninitialized system', async ({ page }) => {
+  await setupPublicPage(page, {
+    initialized: false,
+    provisioned: false,
+    systemInfo: {
+      in_docker: false,
+      suggested_db_host: 'localhost',
+      suggested_admin_username: 'postgres',
+    },
+  })
+
   const setupMocks = [
-    ['**/api/setup/status', { initialized: false }],
-    ['**/setup/status', { initialized: false }],
-    ['**/api/setup/database/system-info', { in_docker: false, suggested_db_host: 'localhost', suggested_admin_username: 'postgres' }],
-    ['**/setup/database/system-info', { in_docker: false, suggested_db_host: 'localhost', suggested_admin_username: 'postgres' }],
-    ['**/api/setup/database/provision-status', { provisioned: false }],
-    ['**/setup/database/provision-status', { provisioned: false }],
     ['**/api/setup/database/test-connection', { ok: true }],
     ['**/setup/database/test-connection', { ok: true }],
     ['**/api/setup/database/provision', { ok: true }],
     ['**/setup/database/provision', { ok: true }],
     ['**/api/setup/initialize', { ok: true }],
     ['**/setup/initialize', { ok: true }],
-    ['**/api/telemetry/ui-navigation', { ok: true }],
-    ['**/telemetry/ui-navigation', { ok: true }],
   ]
   for (const [pattern, body] of setupMocks) {
     await routeJson(page, pattern, body)

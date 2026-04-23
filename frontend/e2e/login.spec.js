@@ -1,11 +1,10 @@
 import { test, expect } from '@playwright/test'
-import { makeToken, routeJson, stubSetupStatus, stubFooterApis } from './helpers/app.js'
+import { makeToken, routeJson, setupPublicPage } from './helpers/app.js'
 import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
 import { STORAGE_TOKEN_KEY } from '../src/constants/storage.js'
 
 test('login success, login failure, and session expiry banner', async ({ page }) => {
-  await stubSetupStatus(page, true)
-  await stubFooterApis(page)
+  await setupPublicPage(page, { initialized: true })
   await routeJson(page, '**/api/drives', [])
   await routeJson(page, '**/api/jobs**', [])
 
@@ -42,8 +41,7 @@ test('login success, login failure, and session expiry banner', async ({ page })
 })
 
 test('redirect to login when stored token is already expired', async ({ page }) => {
-  await stubSetupStatus(page, true)
-  await stubFooterApis(page)
+  await setupPublicPage(page, { initialized: true })
   await routeJson(page, '**/api/drives', [])
   await routeJson(page, '**/api/jobs**', [])
 

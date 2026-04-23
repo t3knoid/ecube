@@ -1,9 +1,8 @@
 import { test, expect } from '@playwright/test'
-import { setupAuthenticatedPage, routeJson, stubSetupStatus, stubFooterApis } from './helpers/app.js'
+import { setupAuthenticatedPage, routeJson, setupPublicPage } from './helpers/app.js'
 
 test('keyboard navigation: login form Tab order and Enter submit', async ({ page }) => {
-  await stubSetupStatus(page, true)
-  await stubFooterApis(page)
+  await setupPublicPage(page, { initialized: true })
 
   await page.route('**/api/auth/token', async (route) => {
     await route.fulfill({
@@ -195,6 +194,8 @@ test('keyboard navigation: system log paging controls are focusable and activata
   await page.getByRole('button', { name: 'Logs' }).click()
 
   const olderButton = page.getByRole('button', { name: 'Load older lines' })
+  await expect(olderButton).toBeVisible()
+  await expect(olderButton).toBeEnabled()
   await olderButton.focus()
   await expect(olderButton).toBeFocused()
   await page.keyboard.press('Enter')
@@ -205,6 +206,8 @@ test('keyboard navigation: system log paging controls are focusable and activata
   await expect(page.locator('.log-viewer')).toContainText('line 198')
 
   const newerButton = page.getByRole('button', { name: 'Load newer lines' })
+  await expect(newerButton).toBeVisible()
+  await expect(newerButton).toBeEnabled()
   await newerButton.focus()
   await expect(newerButton).toBeFocused()
   await page.keyboard.press('Enter')
