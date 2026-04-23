@@ -17,9 +17,11 @@ const authStore = useAuthStore()
 const mounts = ref([])
 const loading = ref(false)
 const saving = ref(false)
+const dialogTesting = ref(false)
 const error = ref('')
 const successMessage = ref('')
 const editingMountId = ref(null)
+const editValidationPassed = ref(false)
 
 const showAddDialog = ref(false)
 const showRemoveDialog = ref(false)
@@ -114,6 +116,8 @@ async function loadMounts() {
 
 function resetForm() {
   editingMountId.value = null
+  editValidationPassed.value = false
+  dialogTesting.value = false
   form.value = {
     type: 'SMB',
     remote_path: '',
@@ -129,8 +133,17 @@ function resetForm() {
   }
 }
 
+function invalidateEditValidation() {
+  if (!isEditMode.value) return
+  if (editValidationPassed.value && successMessage.value === t('mounts.testSuccess')) {
+    successMessage.value = ''
+  }
+  editValidationPassed.value = false
+}
+
 function markCredentialFieldChanged(fieldName) {
   credentialFieldState.value[fieldName] = true
+  invalidateEditValidation()
 }
 
 function clearStoredCredentials() {
@@ -142,6 +155,7 @@ function clearStoredCredentials() {
     password: true,
     credentials_file: true,
   }
+  invalidateEditValidation()
 }
 
 function trapFocusWithin(event, container) {
@@ -243,6 +257,27 @@ async function submitMountDialog() {
   }
 }
 
+async function runDialogValidate() {
+  if (!isEditMode.value || editingMountId.value === null || !formValid()) return
+  dialogTesting.value = true
+  editValidationPassed.value = false
+  error.value = ''
+  successMessage.value = ''
+  try {
+    const result = await validateMount(editingMountId.value, buildMountPayload())
+    if (result?.status === 'MOUNTED') {
+      editValidationPassed.value = true
+      successMessage.value = t('mounts.testSuccess')
+      return
+    }
+    error.value = t('mounts.testFailed')
+  } catch (requestError) {
+    error.value = normalizeErrorMessage(requestError?.response?.data, t('mounts.testFailed'))
+  } finally {
+    dialogTesting.value = false
+  }
+}
+
 async function runValidateAll() {
   loading.value = true
   error.value = ''
@@ -290,6 +325,8 @@ function openEditDialog(mount, event) {
   editingMountId.value = mount.id
   error.value = ''
   successMessage.value = ''
+  editValidationPassed.value = false
+  dialogTesting.value = false
   form.value = {
     type: mount.type || 'SMB',
     remote_path: mount.remote_path || '',
@@ -383,6 +420,13 @@ watch(
     if (value !== normalized) {
       form.value.project_id = normalized
     }
+  },
+)
+
+watch(
+  () => [form.value.type, form.value.remote_path, form.value.project_id],
+  () => {
+    invalidateEditValidation()
   },
 )
 
@@ -513,7 +557,19 @@ onBeforeUnmount(() => {
 
           <div class="dialog-actions">
             <button class="btn" @click="closeAddDialog">{{ t('common.actions.cancel') }}</button>
-            <button class="btn btn-primary" :disabled="saving || !formValid()" @click="submitMountDialog">
+            <button
+              v-if="isEditMode"
+              class="btn"
+              :disabled="saving || dialogTesting || !formValid()"
+              @click="runDialogValidate"
+            >
+              {{ dialogTesting ? t('common.labels.loading') : t('mounts.test') }}
+            </button>
+            <button
+              class="btn btn-primary"
+              :disabled="saving || dialogTesting || !formValid() || (isEditMode && !editValidationPassed)"
+              @click="submitMountDialog"
+            >
               {{ saving ? t('common.labels.loading') : dialogSubmitLabel }}
             </button>
           </div>
