@@ -31,6 +31,15 @@ export async function stubFooterApis(page) {
     active_jobs: 0,
   })
   await routeJson(page, '**/api/introspection/version', { version: 'test' })
+  await routeJson(page, '**/api/auth/public-config', {
+    auth_mode: 'local',
+    oidc_enabled: false,
+    oidc_login_label: null,
+    local_login_enabled: true,
+    session_backend: 'cookie',
+  })
+  await routeJson(page, '**/api/telemetry/ui-navigation', { ok: true })
+  await routeJson(page, '**/telemetry/ui-navigation', { ok: true })
 }
 
 export async function stubTelemetryApis(page) {
