@@ -431,6 +431,31 @@ describe('MountsView removal flow', () => {
     expect(saveButton().attributes('disabled')).toBeDefined()
   })
 
+  it('clears the test success banner when the edit dialog is cancelled', async () => {
+    mocks.getMounts.mockResolvedValue([buildMount({ id: 42, remote_path: '//server/original-share', project_id: 'PROJ-OLD' })])
+    mocks.validateMount.mockResolvedValue(buildMount({ id: 42, status: 'MOUNTED' }))
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
+    expect(editButton).toBeTruthy()
+
+    await editButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#mount-remote-path').setValue('//server/updated-share')
+    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('mounts.testSuccess'))
+
+    await findDialogButton(wrapper, i18n.global.t('common.actions.cancel')).trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain(i18n.global.t('mounts.testSuccess'))
+  })
+
   it('keeps the edit dialog open and shows feedback when the in-dialog test fails', async () => {
     mocks.getMounts.mockResolvedValue([buildMount({ id: 42, remote_path: '//server/original-share', project_id: 'PROJ-OLD' })])
     mocks.validateMount.mockRejectedValue({ response: { data: { detail: 'Authentication failed for edited share.' } } })

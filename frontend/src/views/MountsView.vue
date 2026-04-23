@@ -352,6 +352,7 @@ function openEditDialog(mount, event) {
 function closeAddDialog() {
   showAddDialog.value = false
   error.value = ''
+  successMessage.value = ''
   resetForm()
 }
 
