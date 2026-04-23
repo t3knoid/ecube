@@ -10,6 +10,7 @@ process and therefore cannot share a StaticPool in-memory connection.
 """
 import os
 import subprocess
+import sys
 import pytest
 from sqlalchemy import create_engine, inspect, text
 
@@ -25,9 +26,10 @@ def migrated_engine(sqlite_db_path):
     """Run 'alembic upgrade head' against a fresh SQLite file DB and yield an engine."""
     db_url = f"sqlite:///{sqlite_db_path}"
     env = {**os.environ, "DATABASE_URL": db_url}
+    alembic_cmd = [sys.executable, "-m", "alembic"]
 
     result = subprocess.run(
-        ["alembic", "upgrade", "head"],
+        [*alembic_cmd, "upgrade", "head"],
         capture_output=True,
         text=True,
         cwd=os.path.dirname(os.path.dirname(__file__)),
@@ -68,15 +70,16 @@ def test_downgrade_base_on_sqlite(sqlite_db_path):
     db_url = f"sqlite:///{sqlite_db_path}"
     env = {**os.environ, "DATABASE_URL": db_url}
     repo_root = os.path.dirname(os.path.dirname(__file__))
+    alembic_cmd = [sys.executable, "-m", "alembic"]
 
     up = subprocess.run(
-        ["alembic", "upgrade", "head"],
+        [*alembic_cmd, "upgrade", "head"],
         capture_output=True, text=True, cwd=repo_root, env=env,
     )
     assert up.returncode == 0, f"upgrade failed:\n{up.stdout}\n{up.stderr}"
 
     down = subprocess.run(
-        ["alembic", "downgrade", "base"],
+        [*alembic_cmd, "downgrade", "base"],
         capture_output=True, text=True, cwd=repo_root, env=env,
     )
     assert down.returncode == 0, f"downgrade failed:\n{down.stdout}\n{down.stderr}"
