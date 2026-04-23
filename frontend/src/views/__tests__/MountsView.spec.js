@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   updateMount: vi.fn(),
   deleteMount: vi.fn(),
   validateAllMounts: vi.fn(),
+  validateMountCandidate: vi.fn(),
   validateMount: vi.fn(),
 }))
 
@@ -22,6 +23,7 @@ vi.mock('@/api/mounts.js', () => ({
   updateMount: (...args) => mocks.updateMount(...args),
   deleteMount: (...args) => mocks.deleteMount(...args),
   validateAllMounts: (...args) => mocks.validateAllMounts(...args),
+  validateMountCandidate: (...args) => mocks.validateMountCandidate(...args),
   validateMount: (...args) => mocks.validateMount(...args),
 }))
 
@@ -94,6 +96,10 @@ function findDialogButton(wrapper, label) {
   return wrapper.find('.dialog-actions').findAll('button').find((node) => node.text() === label)
 }
 
+function findDialogSuccessBanner(wrapper) {
+  return wrapper.find('.dialog-panel .success-banner')
+}
+
 describe('MountsView removal flow', () => {
   beforeEach(() => {
     authState.roles = ['admin', 'manager']
@@ -102,12 +108,14 @@ describe('MountsView removal flow', () => {
     mocks.updateMount.mockReset()
     mocks.deleteMount.mockReset()
     mocks.validateAllMounts.mockReset()
+    mocks.validateMountCandidate.mockReset()
     mocks.validateMount.mockReset()
 
     mocks.createMount.mockResolvedValue({})
     mocks.updateMount.mockResolvedValue({})
     mocks.deleteMount.mockResolvedValue({})
     mocks.validateAllMounts.mockResolvedValue([])
+    mocks.validateMountCandidate.mockResolvedValue(buildMount({ id: 999, status: 'MOUNTED' }))
     mocks.validateMount.mockResolvedValue(buildMount())
   })
 
@@ -162,9 +170,20 @@ describe('MountsView removal flow', () => {
 
     expect(wrapper.find('#mount-project-id').element.value).toBe('PROJ-NEW')
 
-    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.create')).trigger('click')
+    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
     await flushPromises()
 
+    await findDialogButton(wrapper, i18n.global.t('common.actions.create')).trigger('click')
+    await flushPromises()
+
+    expect(mocks.validateMountCandidate).toHaveBeenCalledWith({
+      type: 'SMB',
+      remote_path: '//server/new-share',
+      project_id: 'PROJ-NEW',
+      username: null,
+      password: null,
+      credentials_file: null,
+    })
     expect(mocks.createMount).toHaveBeenCalledWith({
       type: 'SMB',
       remote_path: '//server/new-share',
@@ -365,6 +384,62 @@ describe('MountsView removal flow', () => {
     expect(mocks.createMount).not.toHaveBeenCalled()
   })
 
+  it('requires a passing in-dialog test before a new share can be created', async () => {
+    mocks.getMounts.mockResolvedValue([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    expect(addButton).toBeTruthy()
+
+    await addButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#mount-remote-path').setValue('//server/new-share')
+    await wrapper.find('#mount-project-id').setValue('proj-new')
+
+    const createButton = () => findDialogButton(wrapper, i18n.global.t('common.actions.create'))
+    const testButton = () => findDialogButton(wrapper, i18n.global.t('mounts.test'))
+
+    expect(createButton().attributes('disabled')).toBeDefined()
+
+    await testButton().trigger('click')
+    await flushPromises()
+
+    expect(createButton().attributes('disabled')).toBeUndefined()
+    expect(findDialogSuccessBanner(wrapper).text()).toContain(i18n.global.t('mounts.testSuccess'))
+
+    await wrapper.find('#mount-remote-path').setValue('//server/new-share-2')
+    await flushPromises()
+
+    expect(createButton().attributes('disabled')).toBeDefined()
+  })
+
+  it('keeps the add dialog open and shows feedback when the in-dialog test fails', async () => {
+    mocks.getMounts.mockResolvedValue([])
+    mocks.validateMountCandidate.mockRejectedValue({ response: { data: { detail: 'Authentication failed for new share.' } } })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    expect(addButton).toBeTruthy()
+
+    await addButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#mount-remote-path').setValue('//server/new-share')
+    await wrapper.find('#mount-project-id').setValue('proj-new')
+    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('#mount-type').exists()).toBe(true)
+    expect(wrapper.find('.error-banner').text()).toContain('Authentication failed for new share.')
+    expect(findDialogButton(wrapper, i18n.global.t('common.actions.create')).attributes('disabled')).toBeDefined()
+    expect(mocks.createMount).not.toHaveBeenCalled()
+  })
+
   it('lets the operator explicitly clear stored credentials during edit', async () => {
     mocks.getMounts.mockResolvedValue([buildMount({ id: 42, remote_path: '//server/original-share', project_id: 'PROJ-OLD' })])
     mocks.validateMount.mockResolvedValue(buildMount({ id: 42, status: 'MOUNTED' }))
@@ -423,7 +498,7 @@ describe('MountsView removal flow', () => {
     await flushPromises()
 
     expect(saveButton().attributes('disabled')).toBeUndefined()
-    expect(wrapper.text()).toContain(i18n.global.t('mounts.testSuccess'))
+    expect(findDialogSuccessBanner(wrapper).text()).toContain(i18n.global.t('mounts.testSuccess'))
 
     await wrapper.find('#mount-remote-path').setValue('//server/updated-share-2')
     await flushPromises()
@@ -448,7 +523,7 @@ describe('MountsView removal flow', () => {
     await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain(i18n.global.t('mounts.testSuccess'))
+    expect(findDialogSuccessBanner(wrapper).text()).toContain(i18n.global.t('mounts.testSuccess'))
 
     await findDialogButton(wrapper, i18n.global.t('common.actions.cancel')).trigger('click')
     await flushPromises()
@@ -540,5 +615,30 @@ describe('MountsView removal flow', () => {
     expect(buttonTexts).not.toContain(i18n.global.t('mounts.test'))
     expect(buttonTexts).not.toContain(i18n.global.t('common.actions.edit'))
     expect(buttonTexts).not.toContain(i18n.global.t('mounts.remove'))
+  })
+
+  it('clears the test success banner when the add dialog is cancelled', async () => {
+    mocks.getMounts.mockResolvedValue([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    expect(addButton).toBeTruthy()
+
+    await addButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#mount-remote-path').setValue('//server/new-share')
+    await wrapper.find('#mount-project-id').setValue('proj-new')
+    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
+    await flushPromises()
+
+    expect(findDialogSuccessBanner(wrapper).text()).toContain(i18n.global.t('mounts.testSuccess'))
+
+    await findDialogButton(wrapper, i18n.global.t('common.actions.cancel')).trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain(i18n.global.t('mounts.testSuccess'))
   })
 })
