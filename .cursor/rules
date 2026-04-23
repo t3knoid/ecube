@@ -279,6 +279,9 @@ Forbidden:
   intentionally accumulate schema changes inside the baseline or current
   release-scoped Alembic migration instead of creating a new forward migration
   for every schema edit.
+- This section overrides the default PR review heuristic that editing an
+  existing Alembic migration is, by itself, a migration-history defect during
+  the accepted pre-release release-scoped workflow.
 - PR review must not flag this pattern by itself as a migration-history defect
   when it is clearly part of the accepted release-scoped migration workflow
   tracked by issue 280.
