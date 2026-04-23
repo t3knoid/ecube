@@ -2,6 +2,7 @@ import pytest
 
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
+from app.models.network import MountStatus, MountType, NetworkMount
 
 
 @pytest.mark.integration
@@ -13,8 +14,20 @@ def test_list_drives_empty(integration_client):
 
 @pytest.mark.integration
 def test_initialize_drive_updates_state_and_writes_audit(integration_client, integration_db):
-    drive = UsbDrive(device_identifier="IT-DRV-001", current_state=DriveState.AVAILABLE, filesystem_type="ext4")
-    integration_db.add(drive)
+    drive = UsbDrive(
+        device_identifier="IT-DRV-001",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        mount_path="/mnt/ecube/it-drv-001",
+    )
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="10.0.0.10:/exports/proj-it-001",
+        project_id="PROJ-IT-001",
+        local_mount_point="/nfs/proj-it-001",
+        status=MountStatus.MOUNTED,
+    )
+    integration_db.add_all([drive, mount])
     integration_db.commit()
 
     response = integration_client.post(
