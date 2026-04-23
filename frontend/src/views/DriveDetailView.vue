@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { getDrives, formatDrive, initializeDrive, mountDrive, prepareEjectDrive, refreshDrives } from '@/api/drives.js'
+import { listJobs } from '@/api/jobs.js'
 import { getMounts } from '@/api/mounts.js'
 import { enablePort } from '@/api/admin.js'
 import { normalizeErrorMessage } from '@/api/client.js'
@@ -69,6 +70,9 @@ const showEjectDialog = ref(false)
 const showInitializeDialog = ref(false)
 const browseExpanded = ref(false)
 const showCocPrompt = ref(false)
+const showActiveJobWarning = ref(false)
+const activeJobId = ref(null)
+const activeJobWarningMessage = ref('')
 
 const filesystemType = ref('ext4')
 const projectId = ref('')
@@ -342,12 +346,62 @@ async function runMount() {
   }
 }
 
+async function openPrepareEjectDialog() {
+  if (!drive.value) return
+  saving.value = true
+  clearBanners()
+  showActiveJobWarning.value = false
+  activeJobId.value = null
+  activeJobWarningMessage.value = ''
+  try {
+    const jobs = await listJobs({
+      drive_id: drive.value.id,
+      statuses: ['RUNNING', 'VERIFYING'],
+      limit: 1,
+    })
+    const activeJob = Array.isArray(jobs) ? jobs[0] : null
+
+    if (activeJob) {
+      activeJobId.value = activeJob.id ?? null
+      activeJobWarningMessage.value = activeJobId.value != null
+        ? t('drives.ejectBlockedActiveJob', { jobId: activeJobId.value })
+        : t('drives.ejectBlockedUnknownJob')
+      showActiveJobWarning.value = true
+      showEjectDialog.value = false
+      return
+    }
+
+    showEjectDialog.value = true
+  } catch (err) {
+    const status = err?.response?.status
+    const detail = normalizeErrorMessage(err?.response?.data, null)
+    if (!status) {
+      error.value = t('common.errors.networkError')
+    } else if (status === 403) {
+      error.value = detail || t('common.errors.insufficientPermissions')
+    } else if (status === 404) {
+      error.value = detail || t('common.errors.notFound')
+    } else if (status === 422) {
+      error.value = detail || t('common.errors.validationFailed')
+    } else if (status >= 500) {
+      error.value = t('common.errors.serverError', { status })
+    } else {
+      error.value = detail || t('common.errors.serverErrorGeneric')
+    }
+  } finally {
+    saving.value = false
+  }
+}
+
 async function runPrepareEject() {
   if (!drive.value) return
   saving.value = true
   clearBanners()
   showEjectDialog.value = false
   showCocPrompt.value = false
+  showActiveJobWarning.value = false
+  activeJobId.value = null
+  activeJobWarningMessage.value = ''
   try {
     drive.value = normalizeProjectRecord(
       await prepareEjectDrive(drive.value.id),
@@ -456,7 +510,7 @@ onBeforeUnmount(() => {
         <button v-if="canBrowse" class="btn" @click="browseExpanded = !browseExpanded">{{ t('drives.browse') }}</button>
         <button class="btn" :disabled="!canFormat || saving" @click="showFormatDialog = true">{{ t('drives.format') }}</button>
         <button class="btn" :disabled="!canInitialize || saving" @click="openInitializeDialog">{{ t('drives.initialize') }}</button>
-        <button class="btn btn-danger" :disabled="!canEject || saving" @click="showEjectDialog = true">{{ t('drives.prepareEject') }}</button>
+        <button class="btn btn-danger" :disabled="!canEject || saving" @click="openPrepareEjectDialog">{{ t('drives.prepareEject') }}</button>
       </div>
 
       <p v-if="!canManage" class="muted">{{ t('auth.insufficientPermissions') }}</p>
@@ -488,6 +542,13 @@ onBeforeUnmount(() => {
       </header>
       <DirectoryBrowser :mount-path="drive.mount_path" />
     </section>
+
+    <div v-if="showActiveJobWarning" class="warn-banner active-job-warning" role="alert" aria-live="assertive">
+      <p>{{ activeJobWarningMessage }}</p>
+      <div class="actions">
+        <button class="btn" :disabled="saving" @click="showActiveJobWarning = false; activeJobWarningMessage = ''">{{ t('common.actions.cancel') }}</button>
+      </div>
+    </div>
 
     <ConfirmDialog
       v-model="showEjectDialog"
