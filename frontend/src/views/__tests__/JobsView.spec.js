@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import i18n from '@/i18n/index.js'
 import JobsView from '@/views/JobsView.vue'
 
@@ -381,6 +382,31 @@ describe('JobsView grouped create dialog', () => {
     await flushPromises()
 
     expect(wrapper.find('.dialog-error-banner').text()).toContain('A job is already copying from this exact source path to the selected drive (job #55).')
+  })
+
+  it('does not show a loading message during manual refresh', async () => {
+    let resolveRefresh
+    const refreshPromise = new Promise((resolve) => {
+      resolveRefresh = resolve
+    })
+
+    mocks.listJobs
+      .mockResolvedValueOnce([])
+      .mockImplementationOnce(() => refreshPromise)
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const refreshButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.refresh'))
+    expect(refreshButton).toBeTruthy()
+
+    await refreshButton.trigger('click')
+    await nextTick()
+
+    expect(wrapper.text()).not.toContain(i18n.global.t('common.labels.loading'))
+
+    resolveRefresh([])
+    await flushPromises()
   })
 
   it('checks additional overlap pages before allowing create submission', async () => {
