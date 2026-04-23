@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { setupAuthenticatedPage, routeJson } from './helpers/app.js'
+import { setupAuthenticatedPage, routeJson, setupPublicPage } from './helpers/app.js'
 import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
 
 async function disableMotion(page) {
@@ -31,15 +31,16 @@ async function persistThemeForNextNavigation(page, themeName) {
   }, themeName)
 }
 
-async function mockTelemetry(page) {
-  await routeJson(page, '**/api/telemetry/ui-navigation', { ok: true })
-  await routeJson(page, '**/telemetry/ui-navigation', { ok: true })
-}
-
 async function mockSetupApis(page) {
-  await routeJson(page, '**/api/setup/status', { initialized: false })
-  await routeJson(page, '**/api/setup/database/provision-status', { provisioned: false })
-  await routeJson(page, '**/api/setup/database/system-info', { in_docker: false, suggested_db_host: 'localhost' })
+  await setupPublicPage(page, {
+    initialized: false,
+    provisioned: false,
+    systemInfo: {
+      in_docker: false,
+      suggested_db_host: 'localhost',
+      suggested_admin_username: 'postgres',
+    },
+  })
 }
 
 async function mockCoreApis(page) {
@@ -103,7 +104,6 @@ async function openCreateJobDialog(page) {
 
 test('theme switch changes css variables', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
-  await mockTelemetry(page)
   await mockCoreApis(page)
 
   await page.goto('/')
@@ -128,7 +128,6 @@ test('theme switch changes css variables', async ({ page }) => {
 })
 
 test('visual regression snapshots for setup screen in default and dark themes', async ({ page }) => {
-  await mockTelemetry(page)
   await mockSetupApis(page)
 
   await page.goto('/setup')
@@ -157,7 +156,6 @@ test('visual regression snapshots for setup screen in default and dark themes', 
 
 test('visual regression snapshots for key screens in default and dark themes', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
-  await mockTelemetry(page)
   await mockCoreApis(page)
 
   const shots = [
