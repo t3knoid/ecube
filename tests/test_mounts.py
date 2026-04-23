@@ -40,6 +40,39 @@ def test_add_mount(manager_client, db):
     assert data["status"] == "MOUNTED"
 
 
+def test_add_mount_persists_credentials_encrypted(manager_client, db):
+    with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
+         patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        response = manager_client.post(
+            "/mounts",
+            json={
+                "type": "SMB",
+                "remote_path": "//server/secured-share",
+                "project_id": "PROJ-SECURE",
+                "username": "svc-reader",
+                "password": "super-secret",
+                "credentials_file": "/etc/ecube/mount.creds",
+            },
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "username" not in data
+    assert "password" not in data
+    assert "credentials_file" not in data
+
+    db.expire_all()
+    mount = db.query(NetworkMount).filter(NetworkMount.id == data["id"]).one()
+    assert mount.encrypted_username
+    assert mount.encrypted_password
+    assert mount.encrypted_credentials_file
+    assert mount.encrypted_username != "svc-reader"
+    assert mount.encrypted_password != "super-secret"
+    assert mount.encrypted_credentials_file != "/etc/ecube/mount.creds"
+
+
 def test_add_mount_requires_project_id(manager_client, db):
     response = manager_client.post(
         "/mounts",
@@ -50,6 +83,273 @@ def test_add_mount_requires_project_id(manager_client, db):
     )
 
     assert response.status_code == 422
+
+
+def test_update_mount_updates_existing_record_without_creating_new_one(manager_client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="192.168.1.10:/exports/original",
+        project_id="PROJ-OLD",
+        local_mount_point="/nfs/original",
+        status=MountStatus.UNMOUNTED,
+    )
+    db.add(mount)
+    db.commit()
+    mount_id = mount.id
+
+    with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
+         patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        response = manager_client.patch(
+            f"/mounts/{mount_id}",
+            json={
+                "type": "SMB",
+                "remote_path": "//server/updated-share",
+                "project_id": "proj-new",
+                "username": "updated-user",
+                "password": "updated-pass",
+            },
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == mount_id
+    assert data["type"] == "SMB"
+    assert data["remote_path"] == "//server/updated-share"
+    assert data["project_id"] == "PROJ-NEW"
+    assert data["local_mount_point"] == "/nfs/original"
+    assert data["status"] == "MOUNTED"
+
+    db.expire_all()
+    mounts = db.query(NetworkMount).order_by(NetworkMount.id).all()
+    assert len(mounts) == 1
+    assert mounts[0].id == mount_id
+    assert mounts[0].project_id == "PROJ-NEW"
+
+
+def test_update_mount_rejects_conflicting_remote_path(manager_client, db):
+    existing = NetworkMount(
+        type=MountType.NFS,
+        remote_path="192.168.1.20:/exports/existing",
+        project_id="PROJ-EXISTING",
+        local_mount_point="/nfs/existing",
+        status=MountStatus.UNMOUNTED,
+    )
+    target = NetworkMount(
+        type=MountType.NFS,
+        remote_path="192.168.1.21:/exports/target",
+        project_id="PROJ-TARGET",
+        local_mount_point="/nfs/target",
+        status=MountStatus.UNMOUNTED,
+    )
+    db.add_all([existing, target])
+    db.commit()
+
+    response = manager_client.patch(
+        f"/mounts/{target.id}",
+        json={
+            "type": "NFS",
+            "remote_path": "192.168.1.20:/exports/existing",
+            "project_id": "PROJ-TARGET",
+        },
+    )
+
+    assert response.status_code == 409
+    assert "already configured" in response.json()["message"].lower()
+
+
+def test_update_mount_not_found(manager_client, db):
+    response = manager_client.patch(
+        "/mounts/999",
+        json={
+            "type": "NFS",
+            "remote_path": "192.168.1.22:/exports/missing",
+            "project_id": "PROJ-MISSING",
+        },
+    )
+
+    assert response.status_code == 404
+
+
+def test_update_mount_preserves_existing_credentials_when_not_resubmitted(manager_client, db):
+    with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
+         patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        created = manager_client.post(
+            "/mounts",
+            json={
+                "type": "SMB",
+                "remote_path": "//server/original-share",
+                "project_id": "PROJ-ORIGINAL",
+                "username": "svc-reader",
+                "password": "super-secret",
+            },
+        )
+
+        assert created.status_code == 200
+        mount_id = created.json()["id"]
+
+        original = db.query(NetworkMount).filter(NetworkMount.id == mount_id).one()
+        original_encrypted_username = original.encrypted_username
+        original_encrypted_password = original.encrypted_password
+
+        updated = manager_client.patch(
+            f"/mounts/{mount_id}",
+            json={
+                "type": "SMB",
+                "remote_path": "//server/updated-share",
+                "project_id": "PROJ-UPDATED",
+            },
+        )
+
+    assert updated.status_code == 200
+
+    db.expire_all()
+    saved = db.query(NetworkMount).filter(NetworkMount.id == mount_id).one()
+    assert saved.encrypted_username == original_encrypted_username
+    assert saved.encrypted_password == original_encrypted_password
+
+
+def test_update_mount_uses_stored_credentials_when_not_resubmitted(db):
+    from app.schemas.network import MountUpdate
+    from app.services import mount_service
+
+    mount = NetworkMount(
+        type=MountType.SMB,
+        remote_path="//server/original-share",
+        project_id="PROJ-ORIGINAL",
+        local_mount_point="/smb/original-share",
+        status=MountStatus.UNMOUNTED,
+        encrypted_username="gAAAAABmocked-user",
+        encrypted_password="gAAAAABmocked-pass",
+    )
+    db.add(mount)
+    db.commit()
+    db.refresh(mount)
+
+    class FakeProvider:
+        def __init__(self):
+            self.calls = []
+
+        def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None):
+            self.calls.append(
+                {
+                    "mount_type": mount_type,
+                    "remote_path": remote_path,
+                    "local_mount_point": local_mount_point,
+                    "credentials_file": credentials_file,
+                    "username": username,
+                    "password": password,
+                }
+            )
+            return True, None
+
+    provider = FakeProvider()
+
+    with patch("app.services.mount_service.decrypt_mount_secret", side_effect=["svc-reader", "super-secret", None]), \
+         patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None):
+        result = mount_service.update_mount(
+            mount.id,
+            MountUpdate(
+                type=MountType.SMB,
+                remote_path="//server/updated-share",
+                project_id="PROJ-UPDATED",
+            ),
+            db,
+            provider=provider,
+        )
+
+    assert result.status == MountStatus.MOUNTED
+    assert provider.calls == [
+        {
+            "mount_type": MountType.SMB,
+            "remote_path": "//server/updated-share",
+            "local_mount_point": "/smb/original-share",
+            "credentials_file": None,
+            "username": "svc-reader",
+            "password": "super-secret",
+        }
+    ]
+
+
+def test_validate_mount_uses_stored_credentials_when_share_is_not_active(db):
+    from app.services import mount_service
+
+    mount = NetworkMount(
+        type=MountType.SMB,
+        remote_path="//server/validate-share",
+        project_id="PROJ-VALIDATE",
+        local_mount_point="/smb/validate-share",
+        status=MountStatus.UNMOUNTED,
+        encrypted_username="gAAAAABmocked-user",
+        encrypted_password="gAAAAABmocked-pass",
+    )
+    db.add(mount)
+    db.commit()
+    db.refresh(mount)
+
+    class FakeProvider:
+        def __init__(self):
+            self.calls = []
+
+        def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None):
+            self.calls.append(
+                {
+                    "mount_type": mount_type,
+                    "remote_path": remote_path,
+                    "local_mount_point": local_mount_point,
+                    "credentials_file": credentials_file,
+                    "username": username,
+                    "password": password,
+                }
+            )
+            return True, None
+
+    provider = FakeProvider()
+
+    with patch("app.services.mount_service.decrypt_mount_secret", side_effect=["svc-reader", "super-secret", None]), \
+         patch("app.services.mount_service.check_mounted_with_configured_timeout", return_value=False), \
+         patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None):
+        result = mount_service.validate_mount(mount.id, db, provider=provider)
+
+    assert result.status == MountStatus.MOUNTED
+    assert provider.calls == [
+        {
+            "mount_type": MountType.SMB,
+            "remote_path": "//server/validate-share",
+            "local_mount_point": "/smb/validate-share",
+            "credentials_file": None,
+            "username": "svc-reader",
+            "password": "super-secret",
+        }
+    ]
+
+
+def test_update_mount_requires_admin_or_manager(auditor_client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="192.168.1.23:/exports/protected",
+        project_id="PROJ-PROTECTED",
+        local_mount_point="/nfs/protected",
+        status=MountStatus.UNMOUNTED,
+    )
+    db.add(mount)
+    db.commit()
+
+    response = auditor_client.patch(
+        f"/mounts/{mount.id}",
+        json={
+            "type": "NFS",
+            "remote_path": "192.168.1.23:/exports/protected-updated",
+            "project_id": "PROJ-PROTECTED",
+        },
+    )
+
+    assert response.status_code == 403
 
 
 def test_add_mount_normalizes_project_id(manager_client, db):

@@ -1,20 +1,25 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getMounts, createMount, deleteMount, validateAllMounts, validateMount } from '@/api/mounts.js'
+import { getMounts, createMount, updateMount, deleteMount, validateAllMounts, validateMount } from '@/api/mounts.js'
+import { normalizeErrorMessage } from '@/api/client.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
+import { useAuthStore } from '@/stores/auth.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const { t } = useI18n()
+const authStore = useAuthStore()
 
 const mounts = ref([])
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
+const successMessage = ref('')
+const editingMountId = ref(null)
 
 const showAddDialog = ref(false)
 const showRemoveDialog = ref(false)
@@ -43,9 +48,26 @@ const form = ref({
   credentials_file: '',
 })
 
+const credentialFieldState = ref({
+  username: false,
+  password: false,
+  credentials_file: false,
+})
+
 const addDialogRef = ref(null)
 const addDialogTriggerRef = ref(null)
 const addMountDialogTitleId = 'add-mount-dialog-title'
+
+const canManageMounts = computed(() => authStore.hasAnyRole(['admin', 'manager']))
+const isEditMode = computed(() => editingMountId.value !== null)
+const activeEditMount = computed(() => (
+  editingMountId.value !== null
+    ? mounts.value.find((mount) => mount.id === editingMountId.value) || null
+    : null
+))
+const dialogTitle = computed(() => (isEditMode.value ? t('mounts.editDialogTitle') : t('mounts.addDialogTitle')))
+const dialogSubmitLabel = computed(() => (isEditMode.value ? t('common.actions.save') : t('common.actions.create')))
+const dialogLocalMountPoint = computed(() => activeEditMount.value?.local_mount_point || '')
 
 const columns = computed(() => [
   { key: 'id', label: t('common.labels.id'), align: 'right' },
@@ -83,14 +105,15 @@ async function loadMounts() {
   try {
     const response = await getMounts()
     mounts.value = (response || []).map((item) => normalizeProjectRecord(item, ['project_id']))
-  } catch {
-    error.value = t('common.errors.networkError')
+  } catch (requestError) {
+    error.value = normalizeErrorMessage(requestError?.response?.data, t('common.errors.networkError'))
   } finally {
     loading.value = false
   }
 }
 
 function resetForm() {
+  editingMountId.value = null
   form.value = {
     type: 'SMB',
     remote_path: '',
@@ -98,6 +121,26 @@ function resetForm() {
     username: '',
     password: '',
     credentials_file: '',
+  }
+  credentialFieldState.value = {
+    username: false,
+    password: false,
+    credentials_file: false,
+  }
+}
+
+function markCredentialFieldChanged(fieldName) {
+  credentialFieldState.value[fieldName] = true
+}
+
+function clearStoredCredentials() {
+  form.value.username = ''
+  form.value.password = ''
+  form.value.credentials_file = ''
+  credentialFieldState.value = {
+    username: true,
+    password: true,
+    credentials_file: true,
   }
 }
 
@@ -146,25 +189,55 @@ function formValid() {
   return !!form.value.type && !!form.value.remote_path.trim() && !!form.value.project_id.trim()
 }
 
-async function submitAddMount() {
+function buildMountPayload() {
+  const payload = {
+    type: form.value.type,
+    remote_path: form.value.remote_path.trim(),
+    project_id: normalizeProjectId(form.value.project_id),
+  }
+
+  const username = form.value.username.trim()
+  const credentialsFile = form.value.credentials_file.trim()
+
+  if (!isEditMode.value || credentialFieldState.value.username) payload.username = username || null
+  if (!isEditMode.value || credentialFieldState.value.password) payload.password = form.value.password || null
+  if (!isEditMode.value || credentialFieldState.value.credentials_file) payload.credentials_file = credentialsFile || null
+
+  return payload
+}
+
+function replaceMount(nextMount) {
+  if (!nextMount || nextMount.id == null) return
+  const normalizedMount = normalizeProjectRecord(nextMount, ['project_id'])
+  const index = mounts.value.findIndex((item) => item.id === normalizedMount.id)
+  if (index >= 0) {
+    mounts.value[index] = normalizedMount
+  }
+}
+
+async function submitMountDialog() {
   if (!formValid()) return
   saving.value = true
   error.value = ''
   try {
-    const payload = {
-      type: form.value.type,
-      remote_path: form.value.remote_path.trim(),
-      project_id: normalizeProjectId(form.value.project_id),
-      username: form.value.username.trim() || null,
-      password: form.value.password || null,
-      credentials_file: form.value.credentials_file.trim() || null,
+    const payload = buildMountPayload()
+    if (isEditMode.value && editingMountId.value !== null) {
+      const updatedMount = await updateMount(editingMountId.value, payload)
+      replaceMount(updatedMount)
+      if (updatedMount?.status === 'ERROR') {
+        error.value = t('mounts.updateFailed')
+        return
+      }
+      successMessage.value = t('mounts.updateSuccess')
+    } else {
+      await createMount(payload)
+      successMessage.value = t('mounts.createSuccess')
     }
-    await createMount(payload)
     showAddDialog.value = false
     resetForm()
     await loadMounts()
-  } catch {
-    error.value = t('common.errors.validationFailed')
+  } catch (requestError) {
+    error.value = normalizeErrorMessage(requestError?.response?.data, t('common.errors.validationFailed'))
   } finally {
     saving.value = false
   }
@@ -173,6 +246,7 @@ async function submitAddMount() {
 async function runValidateAll() {
   loading.value = true
   error.value = ''
+  successMessage.value = ''
   try {
     const response = await validateAllMounts()
     mounts.value = (response || []).map((item) => normalizeProjectRecord(item, ['project_id']))
@@ -185,6 +259,7 @@ async function runValidateAll() {
 
 async function runValidateOne(mountId) {
   error.value = ''
+  successMessage.value = ''
   try {
     const next = normalizeProjectRecord(await validateMount(mountId), ['project_id'])
     const index = mounts.value.findIndex((item) => item.id === mountId)
@@ -196,6 +271,38 @@ async function runValidateOne(mountId) {
 
 function openAddDialog(event) {
   addDialogTriggerRef.value = event?.currentTarget instanceof HTMLElement ? event.currentTarget : document.activeElement
+  editingMountId.value = null
+  error.value = ''
+  successMessage.value = ''
+  resetForm()
+  showAddDialog.value = true
+  void nextTick(() => {
+    const target = addDialogRef.value?.querySelector('#mount-type')
+    if (target instanceof HTMLElement) {
+      target.focus()
+    }
+  })
+}
+
+function openEditDialog(mount, event) {
+  if (!mount || !canManageMounts.value) return
+  addDialogTriggerRef.value = event?.currentTarget instanceof HTMLElement ? event.currentTarget : document.activeElement
+  editingMountId.value = mount.id
+  error.value = ''
+  successMessage.value = ''
+  form.value = {
+    type: mount.type || 'SMB',
+    remote_path: mount.remote_path || '',
+    project_id: normalizeProjectId(mount.project_id),
+    username: '',
+    password: '',
+    credentials_file: '',
+  }
+  credentialFieldState.value = {
+    username: false,
+    password: false,
+    credentials_file: false,
+  }
   showAddDialog.value = true
   void nextTick(() => {
     const target = addDialogRef.value?.querySelector('#mount-type')
@@ -228,6 +335,7 @@ async function runRemove(target = removeTarget.value) {
   removeTarget.value = target
   saving.value = true
   error.value = ''
+  successMessage.value = ''
   try {
     await deleteMount(target.id)
     if (browsingMountId.value === target.id) {
@@ -316,6 +424,7 @@ onBeforeUnmount(() => {
 
     <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
     <p v-if="error" class="error-banner" role="alert" aria-live="assertive">{{ error }}</p>
+    <p v-if="successMessage" class="success-banner" role="status" aria-live="polite">{{ successMessage }}</p>
 
     <input v-model="search" type="text" :placeholder="t('mounts.searchPlaceholder')" :aria-label="t('mounts.searchPlaceholder')" />
 
@@ -325,7 +434,8 @@ onBeforeUnmount(() => {
       <template #cell-last_checked_at="{ row }">{{ toIso(row.last_checked_at) }}</template>
       <template #cell-actions="{ row }">
         <div class="row-actions">
-          <button class="btn" @click="runValidateOne(row.id)">{{ t('mounts.test') }}</button>
+          <button v-if="canManageMounts" class="btn" @click="runValidateOne(row.id)">{{ t('mounts.test') }}</button>
+          <button v-if="canManageMounts" class="btn" @click="openEditDialog(row, $event)">{{ t('common.actions.edit') }}</button>
           <button
             class="btn"
             :disabled="row.status !== 'MOUNTED' || !row.local_mount_point"
@@ -336,7 +446,7 @@ onBeforeUnmount(() => {
           >
             {{ t('mounts.browse') }}
           </button>
-          <button class="btn btn-danger" @click="requestRemove(row)">{{ t('mounts.remove') }}</button>
+          <button v-if="canManageMounts" class="btn btn-danger" @click="requestRemove(row)">{{ t('mounts.remove') }}</button>
         </div>
       </template>
     </DataTable>
@@ -362,7 +472,7 @@ onBeforeUnmount(() => {
     <teleport to="body">
       <div v-if="showAddDialog" class="dialog-overlay">
         <div ref="addDialogRef" class="dialog-panel" role="dialog" aria-modal="true" :aria-labelledby="addMountDialogTitleId">
-          <h2 :id="addMountDialogTitleId">{{ t('mounts.add') }}</h2>
+          <h2 :id="addMountDialogTitleId">{{ dialogTitle }}</h2>
           <label for="mount-type" class="field-label">
             {{ t('common.labels.type') }}
             <span class="required-indicator" aria-hidden="true">*</span>
@@ -384,17 +494,27 @@ onBeforeUnmount(() => {
             <span class="sr-only">required</span>
           </label>
           <input id="mount-project-id" v-model="form.project_id" type="text" required aria-required="true" />
+          <template v-if="isEditMode && dialogLocalMountPoint">
+            <label for="mount-local-path">{{ t('mounts.localMountPointInfo') }}</label>
+            <input id="mount-local-path" :value="dialogLocalMountPoint" type="text" readonly />
+          </template>
+          <div v-if="isEditMode" class="credential-header-row">
+            <span class="field-label">{{ t('mounts.storedCredentials') }}</span>
+            <button class="btn btn-secondary btn-inline" type="button" @click="clearStoredCredentials">
+              {{ t('mounts.clearStoredCredentials') }}
+            </button>
+          </div>
           <label for="mount-username">{{ t('auth.username') }}</label>
-          <input id="mount-username" v-model="form.username" type="text" autocomplete="off" />
+          <input id="mount-username" v-model="form.username" type="text" autocomplete="off" @input="markCredentialFieldChanged('username')" />
           <label for="mount-password">{{ t('auth.password') }}</label>
-          <input id="mount-password" v-model="form.password" type="password" autocomplete="new-password" />
+          <input id="mount-password" v-model="form.password" type="password" autocomplete="new-password" @input="markCredentialFieldChanged('password')" />
           <label for="mount-creds-file">{{ t('mounts.credentialsFile') }}</label>
-          <input id="mount-creds-file" v-model="form.credentials_file" type="text" />
+          <input id="mount-creds-file" v-model="form.credentials_file" type="text" @input="markCredentialFieldChanged('credentials_file')" />
 
           <div class="dialog-actions">
             <button class="btn" @click="closeAddDialog">{{ t('common.actions.cancel') }}</button>
-            <button class="btn btn-primary" :disabled="saving || !formValid()" @click="submitAddMount">
-              {{ saving ? t('common.labels.loading') : t('common.actions.create') }}
+            <button class="btn btn-primary" :disabled="saving || !formValid()" @click="submitMountDialog">
+              {{ saving ? t('common.labels.loading') : dialogSubmitLabel }}
             </button>
           </div>
         </div>
@@ -422,7 +542,8 @@ onBeforeUnmount(() => {
 
 .header-row,
 .actions,
-.row-actions {
+.row-actions,
+.credential-header-row {
   display: flex;
   gap: var(--space-sm);
 }
@@ -430,6 +551,12 @@ onBeforeUnmount(() => {
 .header-row {
   justify-content: space-between;
   align-items: center;
+}
+
+.credential-header-row {
+  justify-content: space-between;
+  align-items: center;
+  margin-top: var(--space-xs);
 }
 
 input,
@@ -445,6 +572,14 @@ select {
   color: var(--color-alert-danger-text);
   background: var(--color-alert-danger-bg);
   border: 1px solid var(--color-alert-danger-border);
+  border-radius: var(--border-radius);
+  padding: var(--space-sm);
+}
+
+.success-banner {
+  color: var(--color-text-primary);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
   border-radius: var(--border-radius);
   padding: var(--space-sm);
 }

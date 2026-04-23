@@ -41,6 +41,7 @@ _COC_JOB_ACTIONS = {
 }
 
 _ACTION_LABELS = {
+    "MOUNT_UPDATED": "Mount updated",
     "DRIVE_DISCOVERED": "Drive discovered",
     "DRIVE_INITIALIZED": "Drive initialized",
     "JOB_CREATED": "Job created",

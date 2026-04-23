@@ -28,6 +28,9 @@ class NetworkMount(Base):
     remote_path = Column(String, nullable=False)
     project_id = Column(String, nullable=False, default="UNASSIGNED", index=True)
     local_mount_point = Column(String, nullable=False, unique=True)
+    encrypted_username = Column(String, nullable=True)
+    encrypted_password = Column(String, nullable=True)
+    encrypted_credentials_file = Column(String, nullable=True)
     status = Column(Enum(MountStatus, native_enum=False), default=MountStatus.UNMOUNTED, index=True)
     last_checked_at = Column(DateTime(timezone=True), server_default=func.now())
 
