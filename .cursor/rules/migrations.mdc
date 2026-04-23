@@ -1,0 +1,29 @@
+---
+description: "ECUBE migration and schema-history rules, including release-scoped Alembic workflow guidance."
+alwaysApply: false
+globs:
+  - "alembic/**/*.py"
+  - "app/models/**/*.py"
+  - "app/schemas/**/*.py"
+---
+
+# ECUBE — Migrations Addendum
+
+Apply when touching Alembic migrations, schema history, or model-to-migration compatibility.
+
+## Schema Rules
+
+- Enum columns use `native_enum=False`
+- JSON fields use SQLAlchemy `JSON` in models and PostgreSQL `JSONB` in migrations
+- Index tables by project, status, and timestamps
+
+## Pre-Release Migration Workflow
+
+Current ECUBE pre-release workflow allows release-scoped migration editing:
+- the current unreleased version may accumulate schema changes in the baseline or current release-scoped migration
+- editing an existing migration is not, by itself, a defect during this pre-release workflow
+- do not flag this pattern by itself as a migration-history problem when it clearly follows the accepted release-scoped workflow tracked by issue 280
+
+Still required:
+- verify fresh databases migrate to the expected schema
+- document the chosen workflow in the change or linked issue when editing a migration in place

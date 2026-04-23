@@ -1,0 +1,46 @@
+---
+description: "Frontend ECUBE rules for Vue UI work, accessibility, tree views, templates, and frontend validation."
+alwaysApply: false
+globs:
+  - "frontend/**/*"
+  - "app/spa.py"
+  - "app/spa/**/*.py"
+---
+
+# ECUBE — Frontend Addendum
+
+Apply when touching Vue, frontend components, templates, CSS, frontend tests, or browser interactions.
+
+## Trust Boundary
+
+- The frontend is untrusted
+- The frontend is a Vue 3 SPA served by FastAPI
+- The frontend communicates only through the HTTPS API
+- The frontend must never touch hardware or the database directly
+
+## Accessibility
+
+- All interactive elements must be keyboard operable
+- Prefer native elements such as `button`, `a`, and `input`
+- Focus order must be logical
+- ARIA must be correct
+- Inputs must have labels
+- Modals must trap focus
+- Icons must have accessible labels
+
+## Directory Browser and Tree View
+
+- Rows must be keyboard accessible
+- Do not rely on `<tr @click>` without keyboard handlers
+- Support arrow-key navigation
+- Screen readers must distinguish files from directories
+
+## CSS and Templates
+
+- Remove unused styles
+- Keep class names aligned with template usage
+
+## Frontend Validation
+
+- Test keyboard interaction and accessibility-sensitive behavior for changed components
+- Preserve API-only trust boundaries in UI flows
