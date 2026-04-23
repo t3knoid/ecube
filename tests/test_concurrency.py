@@ -360,7 +360,7 @@ def test_double_assign_prevented(manager_client, db):
         },
     )
     assert response2.status_code == 409
-    assert response2.json()["code"] == "CONFLICT"
+    assert response2.json()["code"] == "SOURCE_OVERLAP"
 
 
 def test_double_initialize_different_projects_prevented(manager_client, db):

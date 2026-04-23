@@ -297,6 +297,7 @@ class TestJobClientIpRedaction:
             device_identifier=device_id,
             current_state=DriveState.AVAILABLE,
             current_project_id="PROJ-IP",
+            mount_path=f"/mnt/ecube/{device_id.lower()}",
         )
         db.add(drive)
         db.commit()
