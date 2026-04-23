@@ -2,6 +2,8 @@ import { test, expect } from '@playwright/test'
 import { setupAuthenticatedPage, routeJson, setupPublicPage } from './helpers/app.js'
 import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
 
+test.use({ timezoneId: 'America/New_York' })
+
 async function disableMotion(page) {
   await page.addStyleTag({ content: '*, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; }' })
 }
