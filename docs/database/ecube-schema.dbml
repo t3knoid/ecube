@@ -80,6 +80,9 @@ Table network_mounts {
   remote_path varchar [not null]
   project_id varchar [not null, default: 'UNASSIGNED']
   local_mount_point varchar [not null, unique]
+  encrypted_username varchar
+  encrypted_password varchar
+  encrypted_credentials_file varchar
   status mount_status [default: 'UNMOUNTED']
   last_checked_at timestamptz
 
@@ -161,6 +164,8 @@ Table usb_drives {
   id int [pk, not null]
   port_id int
   device_identifier varchar [not null, unique]
+  manufacturer varchar
+  product_name varchar
   filesystem_path varchar
   capacity_bytes bigint
   encryption_status varchar
