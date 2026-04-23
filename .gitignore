@@ -206,9 +206,6 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# GitHub prompts
-.github/prompts/**
-
 # Schemathesis
 schemathesis-output.txt
 
