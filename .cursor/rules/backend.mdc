@@ -1,0 +1,55 @@
+---
+description: "Backend ECUBE rules for FastAPI, services, models, repositories, filesystem pagination, and backend tests."
+alwaysApply: false
+globs:
+  - "app/**/*.py"
+  - "tests/**/*.py"
+---
+
+# ECUBE — Backend Addendum
+
+Apply when touching Python backend code, API endpoints, services, models, repositories, or backend tests.
+
+## API Rules
+
+- Routers handle validation, role enforcement, and delegation only
+- Services own business logic
+- Endpoints must declare error responses
+- No long-running synchronous work in endpoints
+- No CPU-heavy work on the event loop
+- Background tasks must use bounded thread pools
+
+## Database and Model Rules
+
+- PostgreSQL in production
+- SQLite in-memory for tests
+- Enum columns use `native_enum=False`
+- JSON fields use SQLAlchemy `JSON` in models and PostgreSQL `JSONB` in migrations
+- Index tables by project, status, and timestamps
+
+## Domain Rules
+
+- Drive lifecycle transitions must be atomic
+- Drive FSM is `DISCONNECTED -> AVAILABLE -> IN_USE`
+- Background copy tasks must not starve the system
+
+## Filesystem and Pagination
+
+When touching browse, listing, or large-directory behavior:
+- Use streaming iteration such as `os.scandir`
+- Return `has_more` instead of computing full totals when possible
+- Avoid memory-heavy directory materialization
+- Do not materialize entire directories for paginated endpoints
+- Do not globally sort very large directories unless explicitly required
+- Do not introduce `O(n)` or `O(n log n)` work on each page request for large mount points
+
+## Backend Test Expectations
+
+When adding or changing endpoints, cover:
+- role checks
+- input validation
+- pagination where relevant
+- redaction
+- derived fields
+- error conditions
+- edge cases

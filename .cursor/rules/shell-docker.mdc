@@ -1,0 +1,61 @@
+---
+description: "Shell, subprocess, Docker, Compose, and environment handling rules for ECUBE infrastructure changes."
+alwaysApply: false
+globs:
+  - "**/*.sh"
+  - "Dockerfile"
+  - "**/Dockerfile"
+  - "docker-compose*.yml"
+  - "docker-compose*.yaml"
+  - "deploy/**/*"
+  - "scripts/**/*"
+---
+
+# ECUBE — Shell and Docker Addendum
+
+Apply when touching shell scripts, subprocess code, Dockerfiles, entrypoints, Compose, or environment-file handling.
+
+## Shell and Command Safety
+
+Never:
+- use `shell=True`
+- use backticks for command substitution
+- use unquoted variable expansion in destructive or path-sensitive commands
+- use GNU-only flags unless documented and acceptable for the target environment
+- perform silent destructive operations
+
+Always:
+- quote environment variable expansions
+- construct paths with `pathlib` or a safe equivalent in Python
+- use `$(cmd)` instead of backticks
+- use `set -euo pipefail` in Bash
+- use `|| exit 1` in POSIX `sh` where needed
+- avoid whitespace-collapsing parsing for `.env` files
+
+## Dockerfile Rules
+
+- Pin base images
+- Use multi-stage builds
+- Keep production images free of compilers
+- Prefer minimal base images
+- Avoid `COPY . .` unless justified
+- Exclude heavy or sensitive paths in `.dockerignore`
+- Use `pip --no-cache-dir`
+- Set an explicit `USER`
+- Do not embed secrets
+- Do not use `chmod -R 777`
+- Define healthchecks
+
+## Entrypoints and Compose
+
+Entrypoints:
+- Use exec form
+- Use `set -euo pipefail`
+- Quote variables
+
+Compose:
+- Do not use nested variable interpolation
+- Document env vars in `.env.example`
+- Define healthchecks and resource limits
+- Do not mount the Docker socket
+- Do not bind-mount sensitive host paths
