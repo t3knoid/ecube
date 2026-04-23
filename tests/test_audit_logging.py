@@ -21,6 +21,7 @@ from app.models.hardware import DriveState, UsbDrive
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.repositories.audit_repository import AuditRepository
+from app.utils.sanitize import sanitize_error_message
 
 from app.infrastructure.drive_eject import EjectResult
 
@@ -472,8 +473,11 @@ class TestJobAuditLogging:
         assert entry.details["project_id"] == "PROJ-AUDIT"
         assert entry.details["drive_id"] == entry.drive_id
 
-    def test_create_manifest_logs_actor(self, client, db):
-        self._add_drive(db, "PROJ-AUDIT", "USB-AUDIT-MANIFEST")
+    def test_create_manifest_logs_actor(self, client, db, tmp_path):
+        drive = self._add_drive(db, "PROJ-AUDIT", "USB-AUDIT-MANIFEST")
+        drive.mount_path = str(tmp_path)
+        db.add(drive)
+        db.commit()
         create_resp = client.post(
             "/jobs",
             json={
@@ -683,7 +687,7 @@ class TestFileCopyAuditLogging:
         assert failure.job_id == job_id
         assert failure.details["file_id"] == file_id
         assert failure.details["relative_path"] == relative_path
-        assert failure.details["error"] == "simulated I/O error"
+        assert failure.details["error"] == sanitize_error_message("simulated I/O error")
 
         assert _audit_by_action(db, "FILE_COPY_SUCCESS") is None
 
@@ -702,7 +706,7 @@ class TestFileCopyAuditLogging:
         failure = _audit_by_action(db, "FILE_COPY_FAILURE")
         assert failure is not None
         assert "error" in failure.details
-        assert failure.details["error"] == "Permission denied"
+        assert failure.details["error"] == sanitize_error_message("Permission denied")
 
     def test_file_copy_start_event_schema(self, db):
         from app.services.copy_engine import _process_file
