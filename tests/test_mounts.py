@@ -212,6 +212,69 @@ def test_update_mount_preserves_existing_credentials_when_not_resubmitted(manage
     assert saved.encrypted_password == original_encrypted_password
 
 
+def test_update_mount_uses_stored_credentials_when_not_resubmitted(db):
+    from app.schemas.network import MountUpdate
+    from app.services import mount_service
+
+    mount = NetworkMount(
+        type=MountType.SMB,
+        remote_path="//server/original-share",
+        project_id="PROJ-ORIGINAL",
+        local_mount_point="/smb/original-share",
+        status=MountStatus.UNMOUNTED,
+        encrypted_username="gAAAAABmocked-user",
+        encrypted_password="gAAAAABmocked-pass",
+    )
+    db.add(mount)
+    db.commit()
+    db.refresh(mount)
+
+    class FakeProvider:
+        def __init__(self):
+            self.calls = []
+
+        def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None):
+            self.calls.append(
+                {
+                    "mount_type": mount_type,
+                    "remote_path": remote_path,
+                    "local_mount_point": local_mount_point,
+                    "credentials_file": credentials_file,
+                    "username": username,
+                    "password": password,
+                }
+            )
+            return True, None
+
+    provider = FakeProvider()
+
+    with patch("app.services.mount_service.decrypt_mount_secret", side_effect=["svc-reader", "super-secret", None]), \
+         patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None):
+        result = mount_service.update_mount(
+            mount.id,
+            MountUpdate(
+                type=MountType.SMB,
+                remote_path="//server/updated-share",
+                project_id="PROJ-UPDATED",
+            ),
+            db,
+            provider=provider,
+        )
+
+    assert result.status == MountStatus.MOUNTED
+    assert provider.calls == [
+        {
+            "mount_type": MountType.SMB,
+            "remote_path": "//server/updated-share",
+            "local_mount_point": "/smb/original-share",
+            "credentials_file": None,
+            "username": "svc-reader",
+            "password": "super-secret",
+        }
+    ]
+
+
 def test_validate_mount_uses_stored_credentials_when_share_is_not_active(db):
     from app.services import mount_service
 
