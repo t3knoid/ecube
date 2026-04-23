@@ -15,7 +15,7 @@ from app.main import app
 
 INTEGRATION_DATABASE_URL = os.getenv(
     "INTEGRATION_DATABASE_URL",
-    os.getenv("DATABASE_URL", "postgresql://ecube_test:ecube_test@localhost:5433/ecube_integration"),
+    os.getenv("DATABASE_URL", "postgresql://ecube_test:ecube_test@localhost:5432/ecube_integration"),
 )
 
 engine = create_engine(INTEGRATION_DATABASE_URL, pool_pre_ping=True)

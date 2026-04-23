@@ -4,6 +4,7 @@ import pytest
 
 from app.models.audit import AuditLog
 from app.models.network import MountStatus, MountType, NetworkMount
+from app.utils.sanitize import sanitize_error_message
 
 
 @pytest.mark.integration
@@ -77,7 +78,11 @@ def test_add_mount_failure_sets_error_and_audits(integration_client, integration
     )
     assert audit is not None
     assert audit.details["status"] == "ERROR"
-    assert "permission denied" in audit.details["error"].lower()
+    assert audit.details["error_code"] == "MOUNT_FAILED"
+    assert audit.details["message"] == "Provider mount operation failed"
+    assert audit.details["details"] == sanitize_error_message(
+        "Permission denied", "Mount provider reported failure"
+    )
 
 
 @pytest.mark.integration
