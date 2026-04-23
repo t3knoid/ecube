@@ -10,8 +10,8 @@ export function validateAllMounts() {
   return toData(apiClient.post(`${API_BASE}/mounts/validate`))
 }
 
-export function validateMount(mountId) {
-  return toData(apiClient.post(`${API_BASE}/mounts/${mountId}/validate`))
+export function validateMount(mountId, payload) {
+  return toData(apiClient.post(`${API_BASE}/mounts/${mountId}/validate`, payload))
 }
 
 export function createMount(payload) {

@@ -207,6 +207,8 @@
     "storedCredentials": "Stored Credentials",
     "clearStoredCredentials": "Clear saved credentials",
     "createSuccess": "Share added successfully.",
+    "testFailed": "Share test failed. Review the remote path or credentials and try again.",
+    "testSuccess": "Share test passed. You can now save these changes.",
     "updateFailed": "Share update failed. Review the returned mount status before closing the dialog.",
     "updateSuccess": "Share updated successfully.",
     "removeConfirmTitle": "Remove mount?",
