@@ -93,8 +93,9 @@ Drive responses include both the stable `device_identifier` and the port-based `
 
 | Method | Endpoint | Role | Description |
 | ------ | -------- | ---- | ----------- |
-| GET | `/mounts` | manager+ | List network mounts |
-| POST | `/mounts` | manager | Add new mount with required project assignment |
+| GET | `/mounts` | admin/manager/processor/auditor | List network mounts |
+| POST | `/mounts` | admin/manager | Add new mount with required project assignment |
+| PATCH | `/mounts/{mount_id}` | admin/manager | Update an existing mount in place while preserving the generated local mount point |
 | POST | `/mounts/{mount_id}/validate` | admin/manager | Validate mount connectivity |
 | POST | `/mounts/validate` | admin/manager | Validate all mounts |
 | DELETE | `/mounts/{mount_id}` | admin/manager | Remove mount |

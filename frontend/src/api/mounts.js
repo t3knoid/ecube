@@ -18,6 +18,10 @@ export function createMount(payload) {
   return toData(apiClient.post(`${API_BASE}/mounts`, payload))
 }
 
+export function updateMount(mountId, payload) {
+  return toData(apiClient.patch(`${API_BASE}/mounts/${mountId}`, payload))
+}
+
 export function deleteMount(mountId) {
   return toData(apiClient.delete(`${API_BASE}/mounts/${mountId}`))
 }

@@ -433,6 +433,7 @@ You can typically:
 - Validate all mounts
 - Validate an individual mount
 - Add a new mount definition
+- Edit an existing mount definition
 - Remove an existing mount definition
 
 ### 8.1 Adding a Mount
@@ -456,6 +457,17 @@ ECUBE now creates the local mount point automatically based on the remote path a
 
 The exact credential fields required depend on the mount type and your environment.
 
+### 8.1.1 Editing a Mount
+
+Use `Edit` on an existing mount row to reopen the same dialog in edit mode.
+
+- The dialog pre-fills the current type, remote path, and project ID.
+- The local mount point is shown as read-only informational context and is not directly editable.
+- Stored credentials are not returned to the UI. Leaving the credential fields blank preserves the stored values.
+- Use `Clear saved credentials` if you need to remove previously stored SMB credentials without replacing them in the same edit.
+
+When you save, ECUBE updates the existing mount record instead of creating a new one, then refreshes the row status in the list. If the backend rejects the change, or if the returned mount status is `ERROR`, the dialog stays open so you can review the returned error state before closing it.
+
 ### 8.2 Testing Mount Connectivity
 
 Use `Test` or `Test All` to verify that configured source mounts are reachable and valid before creating jobs that depend on them.
@@ -475,7 +487,7 @@ The directory browser allows users to explore the contents of active mount point
 **Accessing the browser:**
 
 - **From Drive Detail:** Click the mount path link on any mounted drive to open the directory browser rooted at that drive's mount point.
-- **From Mounts:** Click the mount point path on any active network mount.
+- **From Mounts:** Click the `Browse` button on any mounted network share. The button is disabled for shares that are not currently mounted.
 
 **Navigating:**
 
