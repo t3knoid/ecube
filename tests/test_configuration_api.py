@@ -50,8 +50,9 @@ class TestConfigurationEndpoints:
         mock_write_env,
         admin_client,
     ):
+        target_level = "DEBUG" if settings.log_level != "DEBUG" else "INFO"
         payload = {
-            "log_level": "DEBUG",
+            "log_level": target_level,
             "db_pool_recycle_seconds": 120,
         }
         resp = admin_client.put("/admin/configuration", json=payload)
@@ -224,7 +225,11 @@ class TestConfigurationEndpoints:
 
             assert log_path.exists()
             content = log_path.read_text(encoding="utf-8")
-            assert "Logging configured: level=INFO format=text file_logging=enabled" in content
+            expected_logging_marker = (
+                f"Logging configured: level={original_values['log_level']} "
+                f"format={original_values['log_format']} file_logging=enabled"
+            )
+            assert expected_logging_marker in content
             assert "CONFIGURATION_UPDATED" in content
             assert "405 HTTP_405" in content
         finally:
