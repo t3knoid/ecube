@@ -483,7 +483,7 @@ def test_audit_repo_add_full(db):
     assert entry.action == "JOB_STARTED"
     assert entry.user == "investigator"
     assert entry.job_id == job.id
-    assert entry.details == {"source": "/data"}
+    assert entry.details == {"source": "[redacted-path]"}
 
 
 def test_audit_repo_add_multiple(db):
