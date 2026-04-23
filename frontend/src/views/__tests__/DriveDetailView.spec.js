@@ -335,6 +335,8 @@ describe('DriveDetailView mount workflow', () => {
       drive_id: 7,
       statuses: ['RUNNING', 'VERIFYING'],
       limit: 1,
+    }, {
+      timeout: 5000,
     })
     expect(wrapper.find('.confirm-dialog-stub').exists()).toBe(true)
 
