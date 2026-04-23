@@ -1,0 +1,152 @@
+---
+description: "Always-on ECUBE core rules covering security, trust boundaries, logging, audit safety, and testing expectations."
+alwaysApply: true
+globs:
+  - "**/*"
+---
+
+# ECUBE — Core Rules
+
+## Priority
+
+When rules conflict, follow this order:
+
+1. Security, project isolation, auditability, and hardware safety
+2. Trust boundaries and architecture constraints
+3. Task requirements and established repository patterns
+4. Tests and validation
+5. Style and tooling
+
+If a requested change conflicts with security, isolation, or trust boundaries, preserve safety and ask.
+
+## Working Mode
+
+Always:
+- Inspect nearby code before changing patterns
+- Prefer the smallest correct change
+- Preserve existing abstractions unless the task requires restructuring
+- Add or update focused tests for changed behavior
+- Validate the narrowest affected surface first
+
+Do not:
+- Refactor unrelated code
+- Change public behavior unless required
+- Introduce new dependencies without clear need
+- Expose internal host details in logs, API responses, or audit records
+
+## Core Invariants
+
+ECUBE is a secure evidence export platform. All changes must preserve:
+- strict project isolation
+- hardware safety
+- auditability
+- role-based access control
+- OS abstraction boundaries
+
+Trust boundaries:
+- The system layer is trusted
+- The system layer executes mounts, copies, verifications, and manifests
+- The system layer writes audit logs and enforces role checks
+- The UI layer is untrusted
+- The UI communicates only through the HTTPS API
+- The UI must never touch hardware or the database directly
+- Only the system layer may touch hardware or the database
+- The database is only reachable from the system-layer network segment
+
+Architecture:
+- All OS-level operations must go through interfaces in `app/infrastructure`
+- Routers validate input, enforce roles, and delegate to services
+- Business logic belongs in `services/`, not routers
+- Use `require_roles(*roles)` for every endpoint
+
+Roles:
+- `admin`: unrestricted
+- `manager`: drive lifecycle, mount management, and job visibility
+- `processor`: create and start jobs and view job or drive status
+- `auditor`: read-only access to audit logs, file hashes, and job metadata
+
+Project isolation:
+- Drives bind to `current_project_id` at initialization
+- All writes must enforce isolation before copy begins
+- Isolation violations must be rejected and logged
+
+## Security, Logging, and Audit Safety
+
+Always:
+- Log security-relevant events to `audit_logs`
+- Sanitize user input used in filesystem paths or shell commands
+- Normalize paths to prevent directory traversal
+- Guard unsafe file operations
+- Redact sensitive fields from introspection and API responses
+- Declare endpoint error responses using shared `R_*` schemas
+
+Never:
+- use `eval`, `exec`, or dynamic code execution
+- enable insecure defaults such as `debug=True` or wide-open CORS
+- leak credentials, internal paths, raw provider errors, raw exception strings, or unsafe OS details to API users
+
+Logging:
+- Use `logger.debug`, `logger.info`, `logger.warning`, and `logger.error`
+- Use message strings plus structured context objects
+- Logging wrappers must forward all supported arguments and must not drop context or silently lose information
+- Log handled failure paths, degraded behavior, retry exhaustion, unexpected states, and logic inconsistencies
+- Do not rely only on unhandled-exception logging
+- Prefer safe failure classification at info level and actionable diagnostic detail at debug level
+- Prefer safe operational classifications such as configuration errors, permission failures, unavailable dependencies, or schema drift when they can be derived safely
+- Keep raw provider errors, raw exception strings, absolute paths, and device identifiers out of info, warning, and error logs
+- Debug logs may include sensitive diagnostic detail when needed
+
+Audit logs:
+- Never store raw provider errors, raw exception strings, absolute filesystem paths, or unredacted mount paths
+- Use sanitized and structured error data
+- Use `sanitize_error_message(err)` or equivalent
+- Map provider failures to internal error codes or enums
+- Store redacted summaries only
+
+Exception:
+- Audit records may include stable drive or USB-topology metadata for chain-of-custody or hardware traceability, but not raw paths or raw provider text
+
+## Tests and Validation
+
+All new behavior must include tests.
+
+Use pytest conventions:
+- use `pytest`, not `unittest`
+- use fixtures instead of `setUp` or `tearDown`
+- use bare `assert`
+- use `pytest.raises`
+- use snake_case test names
+
+When changing behavior, cover affected roles, validation, error cases, redaction, and edge cases as relevant.
+
+## Tooling and CI
+
+Code must follow repository tooling and formatting:
+- Black
+- Ruff
+- ESLint
+- Prettier
+
+CI expectations:
+- Run the narrowest relevant checks first
+- All new behavior must be covered by CI
+- Backend, frontend, integration, and E2E checks must pass when relevant to the changed surface
+- Docker build and deployment checks must pass when relevant
+- Schemathesis and Newman smoke coverage must pass when relevant
+
+## Comments and Documentation
+
+Comments and documentation must match actual behavior.
+
+When behavior changes:
+- Update comments and nearby documentation in the same change
+- Do not leave stricter or looser comments behind
+- Fix mismatches immediately
+
+## Addenda Routing
+
+Additional scoped rules live beside this file:
+- `backend.mdc` for Python backend, API, services, models, repositories, and backend tests
+- `frontend.mdc` for Vue, templates, CSS, and frontend tests
+- `shell-docker.mdc` for shell scripts, subprocess code, Dockerfiles, entrypoints, and Compose
+- `migrations.mdc` for Alembic migrations and schema history
