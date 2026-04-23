@@ -216,6 +216,7 @@ test('prepare eject surfaces busy-drive detail without trapping the dialog', asy
   }
 
   await routeJson(page, '**/api/drives', () => [drive])
+  await routeJson(page, '**/api/jobs**', [])
   await page.route('**/api/drives/7/prepare-eject', async (route) => {
     await route.fulfill({
       status: 409,
@@ -253,6 +254,7 @@ test('drives list and drive detail admin flows', async ({ page }) => {
   }
 
   await routeJson(page, '**/api/drives', () => [drive])
+  await routeJson(page, '**/api/jobs**', [])
   await routeJson(page, '**/api/drives/refresh', { ok: true })
   await routeJson(page, '**/api/mounts', [{
     id: 4,
