@@ -27,6 +27,7 @@ from app.services.callback_service import (
     build_payload,
     deliver_callback,
 )
+from app.utils.sanitize import sanitize_audit_details
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +146,7 @@ class TestCallbackUrlSchemaValidation:
             device_identifier="USB-CB-002",
             current_state=DriveState.AVAILABLE,
             current_project_id="PROJ-CB2",
+            mount_path="/mnt/ecube/callback-002",
         ))
         db.commit()
         resp = client.post("/jobs", json={
@@ -535,7 +537,8 @@ class TestDeliverCallback:
         ).all()
         assert len(logs) == 1
         logged_url = logs[0].details["callback_url"]
-        assert logged_url == "https://example.com/hook"
+        expected_url = sanitize_audit_details({"callback_url": "https://example.com/hook"})["callback_url"]
+        assert logged_url == expected_url
         assert "token" not in logged_url
         assert "secret" not in logged_url
 
