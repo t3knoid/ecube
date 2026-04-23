@@ -291,7 +291,7 @@ Each module exports thin wrapper functions around Axios calls. Modules map 1:1 t
 | `auth.js` | `POST /auth/token` | LoginView, auth store |
 | `setup.js` | `GET /setup/status`, `POST /setup/initialize`, `POST /setup/database/test-connection`, `POST /setup/database/provision`, `GET /setup/database/provision-status`, `GET /setup/database/system-info`, `GET /setup/database/status`, `PUT /setup/database/settings` | SetupWizardView |
 | `drives.js` | `GET /drives`, `POST /drives/{drive_id}/initialize`, `POST /drives/{drive_id}/format`, `POST /drives/{drive_id}/prepare-eject` | DrivesView, DriveDetailView, DashboardView, AuditView |
-| `mounts.js` | `GET /mounts`, `POST /mounts`, `DELETE /mounts/{mount_id}` | MountsView |
+| `mounts.js` | `GET /mounts`, `POST /mounts`, `PATCH /mounts/{mount_id}`, `DELETE /mounts/{mount_id}` | MountsView |
 | `jobs.js` | `POST /jobs`, `PUT /jobs/{job_id}`, `DELETE /jobs/{job_id}`, `POST /jobs/{job_id}/start`, `POST /jobs/{job_id}/pause`, `POST /jobs/{job_id}/complete`, `GET /jobs/{job_id}`, `POST /jobs/{job_id}/verify`, `POST /jobs/{job_id}/manifest` | JobsView, JobDetailView, DashboardView |
 | `audit.js` | `GET /audit`, `GET /audit/chain-of-custody` | AuditView |
 | `files.js` | `GET /files/{file_id}/hashes`, `POST /files/compare` | JobDetailView (hash viewer, file compare) |
@@ -444,7 +444,7 @@ Vue I18n 9.x provides the localization infrastructure. All user-visible strings 
 | `DashboardView.vue` | Screen 3 | UC-8.1 – UC-8.2 | Summary cards: drive counts by state, active jobs, system health; polls introspection |
 | `DrivesView.vue` | Screen 4a | UC-4.1 – UC-4.3 | Drive list table with status badges; refresh/rescan button |
 | `DriveDetailView.vue` | Screen 4b | UC-4.4 – UC-4.7 | Drive properties; format, initialize, eject action panels; role-gated actions |
-| `MountsView.vue` | Screen 5 | UC-5.1 – UC-5.6 | Mount list with test/unmount/remove actions; add-mount dialog |
+| `MountsView.vue` | Screen 5 | UC-5.1 – UC-5.6 | Mount list with test, edit, browse, and remove actions; add/edit dialog with credential-preservation and clear-credentials flows |
 | `JobsView.vue` | Screen 6a | UC-6.1, UC-6.3 | Job list with status/progress; create-job button |
 | `JobDetailView.vue` | Screen 6b–d | UC-6.2 – UC-6.8 | Progress bar with polling; edit/pause/complete/delete lifecycle actions; gated verify/manifest controls; hash viewer; source/destination compare; manifest success feedback |
 | `AuditView.vue` | Screen 7 | UC-7.1 – UC-7.7 | Filterable audit log table; date range, user, action filters; CSV export; CoC report retrieval by drive/project (drive default) with print/save controls. Drive selector populated server-side via `GET /drives?state=IN_USE&state=AVAILABLE` to exclude DISCONNECTED and ARCHIVED drives. |

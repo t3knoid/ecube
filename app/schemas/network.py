@@ -16,6 +16,10 @@ class MountCreate(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class MountUpdate(MountCreate):
+    pass
+
+
 class NetworkMountSchema(BaseModel):
     id: int = Field(..., description="Unique identifier for the mount configuration")
     type: MountType = Field(..., description="Mount protocol type (SMB, NFS, etc.)")

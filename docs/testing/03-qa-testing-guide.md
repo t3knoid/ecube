@@ -1098,6 +1098,9 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 10 | Allow nested path for same project | Create a parent source for project A, then add a child path for the same project | 200, second mount is accepted |
 | 11 | Normalize SMB path variants before duplicate check | Create an SMB mount with slash-separated path, then submit the same source with backslash separators | 409, `CONFLICT`, duplicate source rejected |
 | 12 | Reject concurrent duplicate submit | Submit two near-simultaneous add-mount requests for the same remote source from separate sessions | Only one mount is created; the competing request returns a safe conflict instead of producing duplicates |
+| 13 | Preserve stored credentials on edit when fields are left blank | Edit an existing SMB mount in the UI, change only remote path or project ID, and save without entering credential values | Update succeeds and the existing stored credentials remain in effect |
+| 14 | Explicitly clear stored credentials during edit | Edit an existing SMB mount in the UI, click `Clear saved credentials`, and save | Update request clears stored username/password/credentials file and no replacement credential values are required |
+| 15 | Returned mount error keeps edit dialog open | Edit a mount so the backend returns an updated mount object with `status: ERROR` | The dialog remains open and shows the returned failure state instead of showing a success-only close path |
 
 ### 12.5 USB Hardware Validation
 
