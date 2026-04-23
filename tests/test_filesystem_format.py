@@ -22,7 +22,9 @@ from app.infrastructure.usb_discovery import (
 )
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
+from app.models.network import MountStatus, MountType, NetworkMount
 from app.services import discovery_service, drive_service
+from app.utils.sanitize import sanitize_error_message
 
 
 # ---------------------------------------------------------------------------
@@ -124,6 +126,20 @@ def _make_drive(db, **kwargs) -> UsbDrive:
     db.commit()
     db.refresh(drive)
     return drive
+
+
+def _make_project_mount(db, project_id: str, local_mount_point: str) -> NetworkMount:
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path=f"10.0.0.1:/exports/{project_id.lower()}",
+        project_id=project_id,
+        local_mount_point=local_mount_point,
+        status=MountStatus.MOUNTED,
+    )
+    db.add(mount)
+    db.commit()
+    db.refresh(mount)
+    return mount
 
 
 # ===========================================================================
@@ -597,7 +613,7 @@ class TestFormatDriveEndpoint:
         assert log.drive_id == drive.id
         assert log.project_id is None
         assert log.details["drive_id"] == drive.id
-        assert "simulated error" in log.details["error"]
+        assert log.details["error"] == sanitize_error_message("mkfs failed: simulated error")
 
         # Filesystem type should NOT be updated on failure
         db.refresh(drive)
@@ -696,7 +712,8 @@ class TestInitializeFilesystemGuard:
         assert log.details["filesystem_type"] == "unknown"
 
     def test_initialize_accepts_ext4(self, manager_client, db):
-        drive = _make_drive(db, filesystem_type="ext4")
+        _make_project_mount(db, "PROJ-001", "/nfs/proj-001-init-ext4")
+        drive = _make_drive(db, filesystem_type="ext4", mount_path="/mnt/ecube/init-ext4")
         resp = manager_client.post(
             f"/drives/{drive.id}/initialize",
             json={"project_id": "PROJ-001"},
@@ -705,7 +722,8 @@ class TestInitializeFilesystemGuard:
         assert resp.json()["current_state"] == "IN_USE"
 
     def test_initialize_accepts_exfat(self, manager_client, db):
-        drive = _make_drive(db, filesystem_type="exfat")
+        _make_project_mount(db, "PROJ-001", "/nfs/proj-001-init-exfat")
+        drive = _make_drive(db, filesystem_type="exfat", mount_path="/mnt/ecube/init-exfat")
         resp = manager_client.post(
             f"/drives/{drive.id}/initialize",
             json={"project_id": "PROJ-001"},
@@ -741,11 +759,13 @@ class TestFormatClearsProjectBinding:
 
     def test_format_then_initialize_for_new_project(self, admin_client, db):
         """After format, a drive previously used by PROJ-OLD can be initialized for PROJ-NEW."""
+        _make_project_mount(db, "PROJ-NEW", "/nfs/proj-new-after-format")
         drive = _make_drive(
             db,
             current_state=DriveState.AVAILABLE,
             current_project_id="PROJ-OLD",
             filesystem_type="exfat",
+            mount_path="/mnt/ecube/formatted-reassign",
         )
         fake = FakeFormatter()
         with patch("app.routers.drives.get_drive_formatter", return_value=fake):

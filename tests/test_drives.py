@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 from app.exceptions import ConflictError
 from app.infrastructure.drive_eject import EjectResult
 from app.models.hardware import UsbDrive, DriveState, UsbHub, UsbPort
+from app.models.network import MountStatus, MountType, NetworkMount
 from app.services import drive_service
 
 
@@ -19,6 +20,20 @@ def _fake_eject(flush_ok=True, unmount_ok=True,
             flush_error=flush_error, unmount_error=unmount_error,
         )
     return provider
+
+
+def _make_project_mount(db, project_id: str, local_mount_point: str) -> NetworkMount:
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path=f"10.0.0.1:/exports/{project_id.lower()}",
+        project_id=project_id,
+        local_mount_point=local_mount_point,
+        status=MountStatus.MOUNTED,
+    )
+    db.add(mount)
+    db.commit()
+    db.refresh(mount)
+    return mount
 
 
 def test_list_drives(client, db):
@@ -712,6 +727,7 @@ def test_reinitialize_same_project(manager_client, db):
         current_state=DriveState.IN_USE,
         current_project_id="PROJ-001",
         filesystem_type="ext4",
+        mount_path="/mnt/ecube/usb004",
     )
     mount = NetworkMount(
         type=MountType.NFS,
@@ -748,27 +764,25 @@ def test_prepare_eject(manager_client, db):
 
 def test_reinitialize_same_project_after_eject(manager_client, db):
     """A drive can be re-initialized for the same project after eject (adds more data)."""
-    from app.models.network import MountStatus, MountType, NetworkMount
-
     drive = UsbDrive(
         device_identifier="USB005D",
         current_state=DriveState.IN_USE,
         current_project_id="PROJ-001",
         filesystem_type="exfat",
+        mount_path="/mnt/ecube/usb005d",
     )
-    mount = NetworkMount(
-        type=MountType.NFS,
-        remote_path="10.0.0.1:/exports/proj-001",
-        project_id="PROJ-001",
-        local_mount_point="/nfs/proj-001-after-eject",
-        status=MountStatus.MOUNTED,
-    )
-    db.add_all([drive, mount])
+    mount = _make_project_mount(db, "PROJ-001", "/nfs/proj-001-after-eject")
+    db.add(drive)
     db.commit()
 
     with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject()):
         eject_resp = manager_client.post(f"/drives/{drive.id}/prepare-eject")
     assert eject_resp.status_code == 200
+
+    db.refresh(drive)
+    drive.mount_path = "/mnt/ecube/usb005d"
+    db.add_all([drive, mount])
+    db.commit()
 
     # Re-initialize for the same project must succeed — user is adding more data.
     init_resp = manager_client.post(
