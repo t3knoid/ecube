@@ -91,6 +91,8 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
 
   await page.goto('/mounts')
   await expect(page.getByRole('heading', { name: 'Mounts' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Test All' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Test', exact: true })).toHaveCount(0)
 
   await page.getByRole('button', { name: 'Add Mount' }).click()
   await expect(page.getByRole('heading', { name: 'Add Share' })).toBeVisible()
