@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getMounts, createMount, updateMount, deleteMount, validateAllMounts, validateMount, validateMountCandidate } from '@/api/mounts.js'
+import { getMounts, createMount, updateMount, deleteMount, validateMount, validateMountCandidate } from '@/api/mounts.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
@@ -285,20 +285,6 @@ async function runDialogValidate() {
   }
 }
 
-async function runValidateAll() {
-  loading.value = true
-  error.value = ''
-  successMessage.value = ''
-  try {
-    const response = await validateAllMounts()
-    mounts.value = (response || []).map((item) => normalizeProjectRecord(item, ['project_id']))
-  } catch {
-    error.value = t('common.errors.requestConflict')
-  } finally {
-    loading.value = false
-  }
-}
-
 function openAddDialog(event) {
   addDialogTriggerRef.value = event?.currentTarget instanceof HTMLElement ? event.currentTarget : document.activeElement
   editingMountId.value = null
@@ -457,7 +443,6 @@ onBeforeUnmount(() => {
       <h1>{{ t('mounts.title') }}</h1>
       <div class="actions">
         <button class="btn" @click="loadMounts">{{ t('common.actions.refresh') }}</button>
-        <button class="btn" @click="runValidateAll">{{ t('mounts.testAll') }}</button>
         <button class="btn btn-primary" @click="openAddDialog">{{ t('mounts.add') }}</button>
       </div>
     </header>
