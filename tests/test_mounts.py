@@ -12,6 +12,7 @@ from app.services.mount_service import (
     _cleanup_generated_mount_directory,
     _ensure_mount_directory,
     sanitize_error_message,
+    validate_mount_candidate,
     validate_mount,
 )
 
@@ -925,6 +926,73 @@ def test_validate_mount_command_failure(manager_client, db):
     data = response.json()
     assert data["status"] == "ERROR"
     assert data["last_checked_at"] is not None
+
+
+def test_validate_mount_candidate_returns_candidate_without_persisting(manager_client, db):
+    class StatefulProvider:
+        def __init__(self):
+            self.mounted = False
+            self.mount_calls = []
+            self.unmount_calls = []
+
+        def check_mounted(self, local_mount_point: str, *, timeout_seconds=None):
+            return self.mounted
+
+        def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None):
+            self.mount_calls.append(
+                {
+                    "mount_type": mount_type,
+                    "remote_path": remote_path,
+                    "local_mount_point": local_mount_point,
+                    "credentials_file": credentials_file,
+                    "username": username,
+                    "password": password,
+                }
+            )
+            self.mounted = True
+            return True, None
+
+        def os_unmount(self, local_mount_point: str):
+            self.unmount_calls.append(local_mount_point)
+            self.mounted = False
+            return True, None
+
+    provider = StatefulProvider()
+
+    with patch("app.services.mount_service._default_provider", return_value=provider), \
+         patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None):
+        response = manager_client.post(
+            "/mounts/test",
+            json={
+                "type": "NFS",
+                "remote_path": "192.168.1.1:/exports/evidence",
+                "project_id": "proj-new",
+                "username": "svc-reader",
+                "password": "top-secret",
+            },
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["type"] == "NFS"
+    assert data["remote_path"] == "192.168.1.1:/exports/evidence"
+    assert data["project_id"] == "PROJ-NEW"
+    assert data["local_mount_point"] == "/nfs/evidence"
+    assert data["status"] == "MOUNTED"
+    assert data["last_checked_at"] is not None
+    assert db.query(NetworkMount).count() == 0
+    assert provider.mount_calls == [
+        {
+            "mount_type": MountType.NFS,
+            "remote_path": "192.168.1.1:/exports/evidence",
+            "local_mount_point": "/nfs/evidence",
+            "credentials_file": None,
+            "username": "svc-reader",
+            "password": "top-secret",
+        }
+    ]
+    assert provider.unmount_calls == ["/nfs/evidence"]
 
 
 def test_validate_mount_with_candidate_payload_uses_unsaved_values_without_persisting(db):
