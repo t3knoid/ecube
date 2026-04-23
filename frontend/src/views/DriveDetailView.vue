@@ -85,6 +85,7 @@ const initializeTriggerRef = ref(null)
 const initializeDialogTitleId = 'drive-initialize-dialog-title'
 const initializeDialogHelpId = 'drive-initialize-dialog-help'
 const initializeDialogStatusId = 'drive-initialize-dialog-status'
+const EJECT_PREFLIGHT_TIMEOUT_MS = 5000
 
 const { driveStateLabel } = useStatusLabels()
 
@@ -358,7 +359,7 @@ async function openPrepareEjectDialog() {
       drive_id: drive.value.id,
       statuses: ['RUNNING', 'VERIFYING'],
       limit: 1,
-    })
+    }, { timeout: EJECT_PREFLIGHT_TIMEOUT_MS })
     const activeJob = Array.isArray(jobs) ? jobs[0] : null
 
     if (activeJob) {
