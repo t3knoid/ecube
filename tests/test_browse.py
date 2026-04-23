@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from app.models.hardware import UsbDrive
 from app.models.network import NetworkMount, MountStatus, MountType
+from app.utils.sanitize import sanitize_audit_details
 
 
 # ---------------------------------------------------------------------------
@@ -177,9 +178,16 @@ class TestBrowseHappyPath:
         assert response.status_code == 200
         entry = db.query(AuditLog).filter(AuditLog.action == "BROWSE_DIRECTORY").first()
         assert entry is not None
-        assert entry.details["path"] == mount_point
-        assert entry.details["resolved_path"] == os.path.realpath(mount_point)
-        assert entry.details["real_root"] == os.path.realpath(mount_point)
+        expected_details = sanitize_audit_details(
+            {
+                "path": mount_point,
+                "resolved_path": os.path.realpath(mount_point),
+                "real_root": os.path.realpath(mount_point),
+            }
+        )
+        assert entry.details["path"] == expected_details["path"]
+        assert entry.details["resolved_path"] == expected_details["resolved_path"]
+        assert entry.details["real_root"] == expected_details["real_root"]
 
 
 # ---------------------------------------------------------------------------
