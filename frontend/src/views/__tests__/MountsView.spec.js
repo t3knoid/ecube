@@ -352,6 +352,35 @@ describe('MountsView removal flow', () => {
     expect(mocks.createMount).not.toHaveBeenCalled()
   })
 
+  it('lets the operator explicitly clear stored credentials during edit', async () => {
+    mocks.getMounts.mockResolvedValue([buildMount({ id: 42, remote_path: '//server/original-share', project_id: 'PROJ-OLD' })])
+    mocks.updateMount.mockResolvedValue(buildMount({ id: 42, remote_path: '//server/original-share', project_id: 'PROJ-OLD', status: 'MOUNTED' }))
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
+    expect(editButton).toBeTruthy()
+
+    await editButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.clearStoredCredentials')).trigger('click')
+    await flushPromises()
+
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.save')).trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateMount).toHaveBeenCalledWith(42, {
+      type: 'SMB',
+      remote_path: '//server/original-share',
+      project_id: 'PROJ-OLD',
+      username: null,
+      password: null,
+      credentials_file: null,
+    })
+  })
+
   it('keeps the dialog open and shows actionable backend text when edit fails', async () => {
     mocks.getMounts.mockResolvedValue([buildMount({ id: 42, remote_path: '//server/original-share', project_id: 'PROJ-OLD' })])
     mocks.updateMount.mockRejectedValue({ response: { data: { detail: 'A mount for this remote source is already configured.' } } })
@@ -370,6 +399,27 @@ describe('MountsView removal flow', () => {
 
     expect(wrapper.find('#mount-type').exists()).toBe(true)
     expect(wrapper.find('.error-banner').text()).toContain('already configured')
+  })
+
+  it('keeps the dialog open when the update returns an error-status mount record', async () => {
+    mocks.getMounts.mockResolvedValue([buildMount({ id: 42, remote_path: '//server/original-share', project_id: 'PROJ-OLD' })])
+    mocks.updateMount.mockResolvedValue(buildMount({ id: 42, remote_path: '//server/original-share', project_id: 'PROJ-OLD', status: 'ERROR' }))
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
+    expect(editButton).toBeTruthy()
+
+    await editButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.save')).trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('#mount-type').exists()).toBe(true)
+    expect(wrapper.find('.error-banner').text()).toContain(i18n.global.t('mounts.updateFailed'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('mounts.updateSuccess'))
   })
 
   it('does not render the edit action for read-only roles', async () => {

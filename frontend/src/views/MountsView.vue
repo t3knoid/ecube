@@ -48,6 +48,12 @@ const form = ref({
   credentials_file: '',
 })
 
+const credentialFieldState = ref({
+  username: false,
+  password: false,
+  credentials_file: false,
+})
+
 const addDialogRef = ref(null)
 const addDialogTriggerRef = ref(null)
 const addMountDialogTitleId = 'add-mount-dialog-title'
@@ -116,6 +122,26 @@ function resetForm() {
     password: '',
     credentials_file: '',
   }
+  credentialFieldState.value = {
+    username: false,
+    password: false,
+    credentials_file: false,
+  }
+}
+
+function markCredentialFieldChanged(fieldName) {
+  credentialFieldState.value[fieldName] = true
+}
+
+function clearStoredCredentials() {
+  form.value.username = ''
+  form.value.password = ''
+  form.value.credentials_file = ''
+  credentialFieldState.value = {
+    username: true,
+    password: true,
+    credentials_file: true,
+  }
 }
 
 function trapFocusWithin(event, container) {
@@ -173,11 +199,20 @@ function buildMountPayload() {
   const username = form.value.username.trim()
   const credentialsFile = form.value.credentials_file.trim()
 
-  if (!isEditMode.value || username) payload.username = username || null
-  if (!isEditMode.value || form.value.password) payload.password = form.value.password || null
-  if (!isEditMode.value || credentialsFile) payload.credentials_file = credentialsFile || null
+  if (!isEditMode.value || credentialFieldState.value.username) payload.username = username || null
+  if (!isEditMode.value || credentialFieldState.value.password) payload.password = form.value.password || null
+  if (!isEditMode.value || credentialFieldState.value.credentials_file) payload.credentials_file = credentialsFile || null
 
   return payload
+}
+
+function replaceMount(nextMount) {
+  if (!nextMount || nextMount.id == null) return
+  const normalizedMount = normalizeProjectRecord(nextMount, ['project_id'])
+  const index = mounts.value.findIndex((item) => item.id === normalizedMount.id)
+  if (index >= 0) {
+    mounts.value[index] = normalizedMount
+  }
 }
 
 async function submitMountDialog() {
@@ -187,7 +222,12 @@ async function submitMountDialog() {
   try {
     const payload = buildMountPayload()
     if (isEditMode.value && editingMountId.value !== null) {
-      await updateMount(editingMountId.value, payload)
+      const updatedMount = await updateMount(editingMountId.value, payload)
+      replaceMount(updatedMount)
+      if (updatedMount?.status === 'ERROR') {
+        error.value = t('mounts.updateFailed')
+        return
+      }
       successMessage.value = t('mounts.updateSuccess')
     } else {
       await createMount(payload)
@@ -257,6 +297,11 @@ function openEditDialog(mount, event) {
     username: '',
     password: '',
     credentials_file: '',
+  }
+  credentialFieldState.value = {
+    username: false,
+    password: false,
+    credentials_file: false,
   }
   showAddDialog.value = true
   void nextTick(() => {
@@ -453,12 +498,18 @@ onBeforeUnmount(() => {
             <label for="mount-local-path">{{ t('mounts.localMountPointInfo') }}</label>
             <input id="mount-local-path" :value="dialogLocalMountPoint" type="text" readonly />
           </template>
+          <div v-if="isEditMode" class="credential-header-row">
+            <span class="field-label">{{ t('mounts.storedCredentials') }}</span>
+            <button class="btn btn-secondary btn-inline" type="button" @click="clearStoredCredentials">
+              {{ t('mounts.clearStoredCredentials') }}
+            </button>
+          </div>
           <label for="mount-username">{{ t('auth.username') }}</label>
-          <input id="mount-username" v-model="form.username" type="text" autocomplete="off" />
+          <input id="mount-username" v-model="form.username" type="text" autocomplete="off" @input="markCredentialFieldChanged('username')" />
           <label for="mount-password">{{ t('auth.password') }}</label>
-          <input id="mount-password" v-model="form.password" type="password" autocomplete="new-password" />
+          <input id="mount-password" v-model="form.password" type="password" autocomplete="new-password" @input="markCredentialFieldChanged('password')" />
           <label for="mount-creds-file">{{ t('mounts.credentialsFile') }}</label>
-          <input id="mount-creds-file" v-model="form.credentials_file" type="text" />
+          <input id="mount-creds-file" v-model="form.credentials_file" type="text" @input="markCredentialFieldChanged('credentials_file')" />
 
           <div class="dialog-actions">
             <button class="btn" @click="closeAddDialog">{{ t('common.actions.cancel') }}</button>
@@ -491,7 +542,8 @@ onBeforeUnmount(() => {
 
 .header-row,
 .actions,
-.row-actions {
+.row-actions,
+.credential-header-row {
   display: flex;
   gap: var(--space-sm);
 }
@@ -499,6 +551,12 @@ onBeforeUnmount(() => {
 .header-row {
   justify-content: space-between;
   align-items: center;
+}
+
+.credential-header-row {
+  justify-content: space-between;
+  align-items: center;
+  margin-top: var(--space-xs);
 }
 
 input,
