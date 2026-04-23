@@ -15,6 +15,9 @@ from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
 
 
+_STARTUP_RECONCILIATION_ACTIONS = {"USB_DISCOVERY_SYNC", "DRIVE_DISCOVERED"}
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -41,9 +44,11 @@ class TestAuditListBasic:
         response = admin_client.get("/audit")
         assert response.status_code == 200
         data = response.json()
-        # Startup reconciliation may emit a USB_DISCOVERY_SYNC entry;
-        # filter it out to verify no user-created entries exist.
-        user_entries = [e for e in data if e["action"] != "USB_DISCOVERY_SYNC"]
+        # Startup reconciliation may emit discovery-side audit entries;
+        # filter them out to verify no user-created entries exist.
+        user_entries = [
+            e for e in data if e["action"] not in _STARTUP_RECONCILIATION_ACTIONS
+        ]
         assert user_entries == []
 
     def test_returns_seeded_entries(self, admin_client, db):
@@ -58,7 +63,7 @@ class TestAuditListBasic:
         assert response.status_code == 200
         data = response.json()
         # Filter out startup reconciliation entries.
-        data = [e for e in data if e["action"] != "USB_DISCOVERY_SYNC"]
+        data = [e for e in data if e["action"] not in _STARTUP_RECONCILIATION_ACTIONS]
         assert len(data) == 2
         actions = {d["action"] for d in data}
         assert actions == {"JOB_CREATED", "DRIVE_INITIALIZED"}
