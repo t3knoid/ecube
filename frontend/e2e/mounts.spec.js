@@ -74,7 +74,7 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
 
   expect(patchPayloads).toEqual([
     {
-      type: 'NFS',
+      type: 'SMB',
       remote_path: '//server/case-2026-001',
       project_id: 'CASE-2026-001',
       username: null,
