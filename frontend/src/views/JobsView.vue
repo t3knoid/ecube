@@ -528,7 +528,6 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
-    <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
     <p v-if="pageError" class="error-banner" role="alert" aria-live="assertive">{{ pageError }}</p>
     <p v-if="compatibilityNote" class="muted">{{ compatibilityNote }}</p>
 
