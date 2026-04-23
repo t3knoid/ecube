@@ -66,4 +66,13 @@ describe('jobs api helpers', () => {
     )
     expect(toData).toHaveBeenCalled()
   })
+
+  it('forwards an optional timeout override for list requests', async () => {
+    const { listJobs } = await import('@/api/jobs.js')
+
+    await listJobs({ drive_id: 7, statuses: ['RUNNING'] }, { timeout: 5000 })
+
+    expect(get).toHaveBeenCalledTimes(1)
+    expect(get).toHaveBeenCalledWith('/api/jobs', expect.objectContaining({ timeout: 5000 }))
+  })
 })

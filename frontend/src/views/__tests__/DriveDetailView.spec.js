@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   hasAnyRole: vi.fn(),
   push: vi.fn(),
   getDrives: vi.fn(),
+  listJobs: vi.fn(),
   getMounts: vi.fn(),
   formatDrive: vi.fn(),
   initializeDrive: vi.fn(),
@@ -34,6 +35,10 @@ vi.mock('@/api/drives.js', () => ({
   mountDrive: (...args) => mocks.mountDrive(...args),
   prepareEjectDrive: (...args) => mocks.prepareEjectDrive(...args),
   refreshDrives: (...args) => mocks.refreshDrives(...args),
+}))
+
+vi.mock('@/api/jobs.js', () => ({
+  listJobs: (...args) => mocks.listJobs(...args),
 }))
 
 vi.mock('@/api/mounts.js', () => ({
@@ -94,6 +99,7 @@ describe('DriveDetailView mount workflow', () => {
     mocks.hasAnyRole.mockReset()
     mocks.push.mockReset()
     mocks.getDrives.mockReset()
+    mocks.listJobs.mockReset()
     mocks.getMounts.mockReset()
     mocks.formatDrive.mockReset()
     mocks.initializeDrive.mockReset()
@@ -104,6 +110,7 @@ describe('DriveDetailView mount workflow', () => {
 
     mocks.hasAnyRole.mockReturnValue(true)
     mocks.getDrives.mockResolvedValue([buildDrive()])
+    mocks.listJobs.mockResolvedValue([])
     mocks.getMounts.mockResolvedValue([
       { id: 1, status: 'MOUNTED', project_id: 'PROJ-007' },
       { id: 2, status: 'MOUNTED', project_id: 'PROJ-999' },
@@ -324,6 +331,13 @@ describe('DriveDetailView mount workflow', () => {
 
     await ejectButton.trigger('click')
     await flushPromises()
+    expect(mocks.listJobs).toHaveBeenCalledWith({
+      drive_id: 7,
+      statuses: ['RUNNING', 'VERIFYING'],
+      limit: 1,
+    }, {
+      timeout: 5000,
+    })
     expect(wrapper.find('.confirm-dialog-stub').exists()).toBe(true)
 
     await wrapper.find('.confirm-dialog-confirm').trigger('click')
@@ -332,5 +346,68 @@ describe('DriveDetailView mount workflow', () => {
     expect(mocks.prepareEjectDrive).toHaveBeenCalledWith(7)
     expect(wrapper.find('.confirm-dialog-stub').exists()).toBe(false)
     expect(wrapper.text()).toContain('Drive is busy; close any shell, file browser, or process using the mounted drive and retry prepare-eject')
+  })
+
+  it('blocks prepare eject when the drive has an active running job', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'IN_USE' })])
+    mocks.listJobs.mockResolvedValue([{ id: 44, status: 'RUNNING' }])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const ejectButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.prepareEject'))
+    expect(ejectButton).toBeTruthy()
+
+    await ejectButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.prepareEjectDrive).not.toHaveBeenCalled()
+    expect(wrapper.find('.confirm-dialog-stub').exists()).toBe(false)
+    expect(wrapper.text()).toContain(i18n.global.t('drives.ejectBlockedActiveJob', { jobId: 44 }))
+
+    const cancelButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.cancel'))
+    expect(cancelButton).toBeTruthy()
+
+    await cancelButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.confirm-dialog-stub').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain(i18n.global.t('drives.ejectBlockedActiveJob', { jobId: 44 }))
+  })
+
+  it('blocks prepare eject when the drive has an active verifying job', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'IN_USE' })])
+    mocks.listJobs.mockResolvedValue([{ id: 45, status: 'VERIFYING' }])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const ejectButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.prepareEject'))
+    expect(ejectButton).toBeTruthy()
+
+    await ejectButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.prepareEjectDrive).not.toHaveBeenCalled()
+    expect(wrapper.find('.confirm-dialog-stub').exists()).toBe(false)
+    expect(wrapper.text()).toContain(i18n.global.t('drives.ejectBlockedActiveJob', { jobId: 45 }))
+  })
+
+  it('surfaces a preflight error and does not open the eject dialog when the jobs request fails', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'IN_USE' })])
+    mocks.listJobs.mockRejectedValue({})
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const ejectButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.prepareEject'))
+    expect(ejectButton).toBeTruthy()
+
+    await ejectButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.confirm-dialog-stub').exists()).toBe(false)
+    expect(mocks.prepareEjectDrive).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain(i18n.global.t('common.errors.networkError'))
   })
 })
