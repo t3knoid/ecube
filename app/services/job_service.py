@@ -758,7 +758,10 @@ def clear_job_startup_analysis_cache(
         try:
             job_repo.save(job)
         except Exception:
-            logger.exception("DB commit failed while clearing startup analysis cache for job %s", job_id)
+            logger.exception(
+                "DB commit failed while clearing startup analysis cache",
+                {"job_id": job_id},
+            )
             raise HTTPException(
                 status_code=500,
                 detail="Database error while clearing cached startup analysis",
