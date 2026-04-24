@@ -852,7 +852,7 @@ def test_start_job_returns_running_startup_state_before_copy_totals_are_known(cl
     mock_copy.assert_called_once_with(job_id)
 
 
-def test_analyze_job_schedules_startup_analysis_without_starting_copy(client, db):
+def test_analyze_job_schedules_startup_analysis_without_starting_copy(client, db, caplog):
     job = ExportJob(
         project_id="PROJ-ANALYZE-001",
         evidence_number="EV-ANALYZE-001",
@@ -863,7 +863,8 @@ def test_analyze_job_schedules_startup_analysis_without_starting_copy(client, db
     db.commit()
 
     with patch("app.services.copy_engine.run_startup_analysis") as mock_analyze:
-        response = client.post(f"/jobs/{job.id}/analyze", json={})
+        with caplog.at_level(logging.INFO):
+            response = client.post(f"/jobs/{job.id}/analyze", json={})
 
     assert response.status_code == 200
     assert response.json()["status"] == "PENDING"
@@ -872,6 +873,16 @@ def test_analyze_job_schedules_startup_analysis_without_starting_copy(client, db
     assert job.status == JobStatus.PENDING
     assert job.startup_analysis_status == StartupAnalysisStatus.ANALYZING
     mock_analyze.assert_called_once_with(job.id, actor="test-user", client_ip="unknown")
+
+    messages = [record.getMessage() for record in caplog.records]
+    started_messages = [message for message in messages if f"JOB_STARTUP_ANALYSIS_STARTED job_id={job.id}" in message]
+
+    assert started_messages
+    assert any("project_id=PROJ-ANALYZE-001" in message for message in started_messages)
+    assert any("status=ANALYZING" in message for message in started_messages)
+    assert all("source_path=" not in message for message in started_messages)
+    assert all("target_mount_path=" not in message for message in started_messages)
+    assert all("drive_id=" not in message for message in started_messages)
 
 
 def test_analyze_job_processor_allowed(client, db):
@@ -1700,6 +1711,10 @@ def test_completed_job_with_all_fields(client, db):
         file_count=3,
         created_by="creator",
         started_by="starter",
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_file_count=3,
+        startup_analysis_total_bytes=1000,
+        startup_analysis_estimated_duration_seconds=2,
     )
     db.add(job)
     db.flush()
@@ -1727,6 +1742,12 @@ def test_completed_job_with_all_fields(client, db):
 
     # Error summary should be null on success
     assert data["error_summary"] is None
+
+    # Startup analysis summary fields should remain visible to Job Detail.
+    assert data["startup_analysis_status"] == "READY"
+    assert data["startup_analysis_file_count"] == 3
+    assert data["startup_analysis_total_bytes"] == 1000
+    assert data["startup_analysis_estimated_duration_seconds"] == 2
 
     # Drive info
     assert data["drive"] is not None

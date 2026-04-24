@@ -80,6 +80,9 @@ Table export_jobs {
   startup_analysis_failure_reason text
   startup_analysis_file_count int
   startup_analysis_total_bytes bigint
+  startup_analysis_share_read_mbps float
+  startup_analysis_drive_write_mbps float
+  startup_analysis_estimated_duration_seconds int
   startup_analysis_entries json
   created_at timestamptz
 
