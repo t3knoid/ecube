@@ -131,12 +131,13 @@ Compatibility note: To support project-to-source-path policy, use project source
 | POST | `/jobs/{job_id}/start` | processor+ | Start a new job or resume a paused job |
 | POST | `/jobs/{job_id}/pause` | processor+ | Request a safe pause for a running job; returns `PAUSING` until in-flight work drains |
 | POST | `/jobs/{job_id}/complete` | processor+ | Manually mark a pending, paused, or failed job as completed |
+| POST | `/jobs/{job_id}/startup-analysis/clear` | admin/manager | Clear the persisted startup-analysis cache after explicit `{ "confirm": true }` confirmation |
 | POST | `/jobs/{job_id}/verify` | processor+ | Verify copied data after the job is fully complete |
 | POST | `/jobs/{job_id}/manifest` | processor+ | Write or refresh `manifest.json` on the destination drive |
 
 **Pause and Resume Semantics:** `POST /jobs/{job_id}/pause` moves a running job into `PAUSING` immediately and into `PAUSED` once the active copy threads finish their current work. `POST /jobs/{job_id}/start` can then resume the job from `PAUSED`; attempts to start while a job is still `PAUSING` return **409 Conflict**.
 
-**Job Detail Lifecycle Controls:** Edit and Complete are limited to `PENDING`, `PAUSED`, and `FAILED` jobs. Delete is limited to `PENDING` jobs only, and the project binding on an existing job cannot be changed during edit.
+**Job Detail Lifecycle Controls:** Edit and Complete are limited to `PENDING`, `PAUSED`, and `FAILED` jobs. Delete is limited to `PENDING` jobs only, and the project binding on an existing job cannot be changed during edit. Startup-analysis cache cleanup is limited to `admin` and `manager`, requires explicit confirmation, and removes only the persisted startup-analysis snapshot rather than file-level copy history.
 
 **Manifest and Compare Semantics:** Verify and Manifest remain disabled in the UI until the job is truly complete at 100%. Manifest generation overwrites the same `manifest.json` file on the destination drive and shows its location in the UI. When the same exported record is selected for file comparison, ECUBE compares the original source file against the copied destination version and returns a sanitized **409 Conflict** if either side is unavailable.
 
@@ -149,6 +150,8 @@ Compatibility note: To support project-to-source-path policy, use project source
 **Mounted Source Resolution:** Current job creation also includes the selected mounted share identifier. The API resolves the final source path on the trusted backend, treats / as the selected share root, rejects traversal outside that share with **422**, and returns **404** or **409** if the selected mount is missing, unmounted, or assigned to a different project.
 
 **Progress Semantics:** Job list, dashboard, and detail views all use `copied_bytes` together with completed-file counters so active jobs do not appear 100% complete before file completion has caught up.
+
+**Startup Analysis Cache Semantics:** Job responses can include `startup_analysis_cached`, which indicates whether a persisted startup-analysis snapshot is available for restart reuse. ECUBE may reuse that snapshot on a later start when the source tree is still current, refresh it if the source changed, clear it automatically after successful completion, and clear it on explicit `POST /jobs/{job_id}/startup-analysis/clear` or manual completion paths.
 
 **Webhook Callbacks:** Include `callback_url` (HTTPS only) when creating a job to receive a POST notification when the job reaches `COMPLETED` or `FAILED`. Makes up to 4 attempts on server errors with exponential backoff. Private/reserved IPs are blocked by default (SSRF protection). See the [Third-Party Integration Guide](09-third-party-integration.md) for payload details.
 
