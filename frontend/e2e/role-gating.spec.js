@@ -44,3 +44,24 @@ test('auditor cannot run write actions', async ({ page }) => {
 
   await expectNoCriticalA11yViolations(page)
 })
+
+test('processor does not see startup-analysis cleanup control', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['processor'])
+  await commonRoutes(page)
+  await routeJson(page, '**/api/jobs/1', {
+    id: 1,
+    project_id: 'P',
+    evidence_number: 'E',
+    status: 'FAILED',
+    copied_bytes: 0,
+    total_bytes: 100,
+    startup_analysis_cached: true,
+  })
+  await routeJson(page, '**/api/jobs/1/files', { files: [] })
+  await routeJson(page, '**/api/introspection/jobs/1/debug', { files: [] })
+
+  await page.goto('/jobs/1')
+  await expect(page.getByRole('button', { name: 'Clear startup analysis cache' })).toHaveCount(0)
+
+  await expectNoCriticalA11yViolations(page)
+})
