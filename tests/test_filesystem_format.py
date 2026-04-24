@@ -765,14 +765,24 @@ class TestFormatClearsProjectBinding:
             current_state=DriveState.AVAILABLE,
             current_project_id="PROJ-OLD",
             filesystem_type="exfat",
-            mount_path="/mnt/ecube/formatted-reassign",
         )
         fake = FakeFormatter()
-        with patch("app.routers.drives.get_drive_formatter", return_value=fake):
-            admin_client.post(
+        detector = FakeFilesystemDetector("ext4")
+        with (
+            patch("app.routers.drives.get_drive_formatter", return_value=fake),
+            patch("app.routers.drives.get_filesystem_detector", return_value=detector),
+        ):
+            format_resp = admin_client.post(
                 f"/drives/{drive.id}/format",
                 json={"filesystem_type": "ext4"},
             )
+        assert format_resp.status_code == 200
+        db.refresh(drive)
+        assert drive.current_project_id is None
+        assert drive.filesystem_type == "ext4"
+
+        drive.mount_path = f"/mnt/ecube/{drive.id}"
+        db.commit()
 
         resp = admin_client.post(
             f"/drives/{drive.id}/initialize",
