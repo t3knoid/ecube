@@ -545,6 +545,29 @@ def test_run_copy_job_marks_job_failed_when_source_scan_disappears(db, tmp_path)
     assert job.completed_at is not None
 
 
+def test_run_copy_job_marks_job_failed_when_source_scan_permission_denied(db, tmp_path):
+    """run_copy_job fails when the source path cannot be read during scan."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), max_file_retries=0)
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch(
+            "app.services.copy_engine.scan_source_files",
+            side_effect=PermissionError(f"[Errno 13] Permission denied: '{source_dir}'"),
+        ):
+            copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+
+    assert job.status == JobStatus.FAILED
+    assert job.completed_at is not None
+    assert job.failure_reason is not None
+    assert job.failure_reason == "Permission or authentication failure (source: .)"
+
+
 def test_run_copy_job_copied_bytes_excludes_previously_done_on_resume(db, tmp_path):
     """copied_bytes is correctly seeded from pre-existing DONE files on resume."""
     source_dir = tmp_path / "source"
