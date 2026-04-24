@@ -225,6 +225,7 @@ def _reconcile_usb_mounts(
 
     for drive in drives:
         checked += 1
+        corrected_this_drive = False
         expected_target = os.path.normpath(os.path.join(settings.usb_mount_base_path, str(drive.id)))
         actual_target = find_device_mount_point(str(drive.filesystem_path)) if drive.filesystem_path else None
 
@@ -252,6 +253,7 @@ def _reconcile_usb_mounts(
             if _is_direct_child_of(actual_target, managed_root):
                 _cleanup_managed_mount_directory(actual_target, managed_root)
             corrected += 1
+            corrected_this_drive = True
 
         if not drive.filesystem_path:
             audit_entries.append({
@@ -264,7 +266,8 @@ def _reconcile_usb_mounts(
 
         success, error = drive_mount_provider.mount_drive(str(drive.filesystem_path), expected_target)
         if success:
-            corrected += 1
+            if not corrected_this_drive:
+                corrected += 1
             audit_entries.append({
                 "action": "DRIVE_MOUNT_RECONCILED",
                 "user": "system",
@@ -353,6 +356,7 @@ def reconcile_mounts(
     for mount in mounts:
         target = os.path.normpath(str(mount.local_mount_point))
         live_source = live_mounts.get(target)
+        corrected_this_mount = False
         mount.last_checked_at = datetime.now(timezone.utc)
 
         if mount.status == MountStatus.MOUNTED:
@@ -389,7 +393,7 @@ def reconcile_mounts(
                         extra={"mount_id": mount.id, "mount_point": target, "raw_error": unmount_error},
                     )
                     continue
-                corrected += 1
+                corrected_this_mount = True
                 _cleanup_generated_network_mount_directory(str(mount.local_mount_point))
 
             previous_status = mount.status
@@ -401,7 +405,8 @@ def reconcile_mounts(
                     extra={"mount_id": mount.id},
                 )
                 mount.status = MountStatus.ERROR
-                corrected += 1
+                if not corrected_this_mount:
+                    corrected += 1
                 audit_entries.append({
                     "mount_id": mount.id,
                     "old_status": previous_status.value,
@@ -410,7 +415,7 @@ def reconcile_mounts(
                 })
                 continue
             db.refresh(mount)
-            if mount.status != previous_status or (live_source is not None and live_source != str(mount.remote_path)):
+            if corrected_this_mount or mount.status != previous_status:
                 corrected += 1
                 audit_entries.append({
                     "mount_id": mount.id,
