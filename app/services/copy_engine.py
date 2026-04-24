@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
-from app.models.jobs import ExportFile, FileStatus, JobStatus
+from app.models.jobs import ExportFile, FileStatus, JobStatus, StartupAnalysisStatus
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.job_repository import FileRepository, JobRepository
 from app.services.callback_service import deliver_callback
@@ -233,6 +233,9 @@ def _relative_path(f: Path, source: Path) -> Path:
 
 
 def _clear_startup_analysis_cache(job: Any) -> None:
+    job.startup_analysis_status = StartupAnalysisStatus.NOT_ANALYZED
+    job.startup_analysis_last_analyzed_at = None
+    job.startup_analysis_failure_reason = None
     job.startup_analysis_file_count = None
     job.startup_analysis_total_bytes = None
     job.startup_analysis_entries = None
@@ -243,6 +246,17 @@ def _startup_analysis_cache_details(job: Any) -> dict[str, int]:
         "cached_file_count": int(job.startup_analysis_file_count or 0),
         "cached_total_bytes": int(job.startup_analysis_total_bytes or 0),
     }
+
+
+def _set_startup_analysis_failed(job: Any, reason: str) -> None:
+    job.startup_analysis_status = StartupAnalysisStatus.FAILED
+    job.startup_analysis_failure_reason = reason
+
+
+def _set_startup_analysis_ready(job: Any, *, analyzed_at: Optional[datetime] = None) -> None:
+    job.startup_analysis_status = StartupAnalysisStatus.READY
+    job.startup_analysis_last_analyzed_at = analyzed_at or datetime.now(timezone.utc)
+    job.startup_analysis_failure_reason = None
 
 
 def _relative_directory_markers(source: Path, relative_paths: list[str]) -> dict[str, int]:
@@ -395,6 +409,157 @@ def _cached_startup_analysis_is_current(
             return False
 
     return True
+
+
+def prepare_job_startup_analysis(
+    job_id: int,
+    *,
+    actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
+    manual: bool = False,
+) -> dict[str, object]:
+    db: Session = SessionLocal()
+    try:
+        job_repo = JobRepository(db)
+        file_repo = FileRepository(db)
+        audit_repo = AuditRepository(db)
+
+        job = job_repo.get(job_id)
+        if not job:
+            raise FileNotFoundError(f"Job {job_id} not found")
+
+        source = Path(job.source_path)
+        cached_startup_analysis = _load_startup_analysis_cache(job, source)
+        reused_cached_analysis = False
+
+        if cached_startup_analysis is None:
+            files = scan_source_files(job.source_path)
+            src_by_rel, size_by_rel, cached_file_count, cached_total_bytes = _persist_startup_analysis_cache(job, source, files)
+        elif _cached_startup_analysis_is_current(cached_startup_analysis, source):
+            reused_cached_analysis = True
+            src_by_rel, size_by_rel, cached_file_count, cached_total_bytes, _directory_mtime_by_rel = cached_startup_analysis
+        else:
+            job.startup_analysis_status = StartupAnalysisStatus.STALE
+            try:
+                job_repo.save(job)
+            except Exception:
+                logger.exception("DB commit failed while marking startup analysis stale", extra={"job_id": job_id})
+            files = scan_source_files(job.source_path)
+            logger.info(
+                "Refreshing stale startup analysis cache",
+                extra={
+                    "job_id": job_id,
+                    "cached_file_count": cached_startup_analysis[2],
+                    "current_file_count": len(files),
+                },
+            )
+            src_by_rel, size_by_rel, cached_file_count, cached_total_bytes = _persist_startup_analysis_cache(job, source, files)
+
+        existing_files = file_repo.list_by_job(job_id)
+        existing_by_rel = {ef.relative_path: ef for ef in existing_files}
+
+        for ef in existing_files:
+            if ef.status != FileStatus.DONE:
+                ef.status = FileStatus.PENDING
+                ef.retry_attempts = 0
+                ef.error_message = None
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+
+        new_files = [
+            ExportFile(
+                job_id=job_id,
+                relative_path=rel,
+                size_bytes=size_by_rel[rel],
+                status=FileStatus.PENDING,
+                retry_attempts=0,
+            )
+            for rel in src_by_rel
+            if rel not in existing_by_rel
+        ]
+        if new_files:
+            file_repo.add_bulk(new_files)
+
+        job.file_count = cached_file_count
+        job.total_bytes = cached_total_bytes
+        committed_files = file_repo.list_by_job(job_id)
+        job.copied_bytes = sum(
+            ef.size_bytes or 0
+            for ef in committed_files
+            if ef.status == FileStatus.DONE
+        )
+        _set_startup_analysis_ready(job)
+        job_repo.save(job)
+
+        details = {
+            "cached_file_count": cached_file_count,
+            "cached_total_bytes": cached_total_bytes,
+            "reused_cached_analysis": reused_cached_analysis,
+            "ready_to_start": True,
+        }
+        if manual:
+            try:
+                audit_repo.add(
+                    action="JOB_STARTUP_ANALYSIS_COMPLETED",
+                    user=actor,
+                    project_id=job.project_id,
+                    job_id=job_id,
+                    details=details,
+                    client_ip=client_ip,
+                )
+            except Exception:
+                logger.exception("Failed to write audit log for JOB_STARTUP_ANALYSIS_COMPLETED")
+        return {
+            "src_by_rel": src_by_rel,
+            "size_by_rel": size_by_rel,
+            "file_count": cached_file_count,
+            "total_bytes": cached_total_bytes,
+            "reused_cached_analysis": reused_cached_analysis,
+        }
+    except Exception as exc:
+        db.rollback()
+        job = JobRepository(db).get(job_id)
+        safe_reason = _sanitize_job_failure_reason(
+            str(exc),
+            fallback="Startup analysis failed",
+            source_path=job.source_path if job else None,
+        )
+        if job is not None:
+            _set_startup_analysis_failed(job, safe_reason)
+            try:
+                JobRepository(db).save(job)
+            except Exception:
+                logger.exception("DB commit failed while saving startup analysis failure", extra={"job_id": job_id})
+            if manual:
+                try:
+                    AuditRepository(db).add(
+                        action="JOB_STARTUP_ANALYSIS_FAILED",
+                        user=actor,
+                        project_id=job.project_id,
+                        job_id=job_id,
+                        details={"reason": safe_reason},
+                        client_ip=client_ip,
+                    )
+                except Exception:
+                    logger.exception("Failed to write audit log for JOB_STARTUP_ANALYSIS_FAILED")
+        raise
+    finally:
+        db.close()
+
+
+def run_startup_analysis(
+    job_id: int,
+    *,
+    actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
+) -> None:
+    try:
+        prepare_job_startup_analysis(job_id, actor=actor, client_ip=client_ip, manual=True)
+    except Exception:
+        logger.exception("Unexpected startup analysis failure", extra={"job_id": job_id})
 
 
 def _process_file(
@@ -616,76 +781,24 @@ def run_copy_job(job_id: int) -> None:
             source = Path(job.source_path)
             target = Path(job.target_mount_path) if job.target_mount_path else None
 
-            cached_startup_analysis = _load_startup_analysis_cache(job, source)
-            if cached_startup_analysis is None:
-                files = scan_source_files(job.source_path)
-                src_by_rel, size_by_rel, cached_file_count, cached_total_bytes = _persist_startup_analysis_cache(job, source, files)
-                job_repo.save(job)
-            elif _cached_startup_analysis_is_current(cached_startup_analysis, source):
-                src_by_rel, size_by_rel, cached_file_count, cached_total_bytes, _directory_mtime_by_rel = cached_startup_analysis
-            else:
-                files = scan_source_files(job.source_path)
-                logger.info(
-                    "Refreshing stale startup analysis cache",
-                    extra={
-                        "job_id": job_id,
-                        "cached_file_count": cached_startup_analysis[2],
-                        "current_file_count": len(files),
-                    },
-                )
-                src_by_rel, size_by_rel, cached_file_count, cached_total_bytes = _persist_startup_analysis_cache(job, source, files)
-                job_repo.save(job)
+            preparation = prepare_job_startup_analysis(job_id)
+            src_by_rel = preparation["src_by_rel"]
 
-            # ------------------------------------------------------------------
-            # Resume-aware file setup:
-            # • Keep DONE records as-is (already copied successfully).
-            # • Reset non-DONE records to PENDING so they will be retried.
-            # • Add fresh PENDING records for source files not yet tracked.
-            # ------------------------------------------------------------------
-            existing_files = file_repo.list_by_job(job_id)
-            existing_by_rel = {ef.relative_path: ef for ef in existing_files}
+            job = job_repo.get(job_id)
+            if preparation["reused_cached_analysis"]:
+                try:
+                    AuditRepository(db).add(
+                        action="JOB_STARTUP_ANALYSIS_REUSED",
+                        job_id=job_id,
+                        details={
+                            "cached_file_count": int(preparation["file_count"]),
+                            "cached_total_bytes": int(preparation["total_bytes"]),
+                        },
+                    )
+                except Exception:
+                    logger.error("Failed to write audit log for JOB_STARTUP_ANALYSIS_REUSED")
 
-            # Reset any non-DONE existing records.
-            for ef in existing_files:
-                if ef.status != FileStatus.DONE:
-                    ef.status = FileStatus.PENDING
-                    ef.retry_attempts = 0
-                    ef.error_message = None
-            try:
-                db.commit()
-            except Exception:
-                db.rollback()
-                logger.error("DB commit failed resetting file statuses for job %s", job_id)
-                return
-
-            # Add records for source files not yet tracked.
-            new_files = [
-                ExportFile(
-                    job_id=job_id,
-                    relative_path=rel,
-                    size_bytes=size_by_rel[rel],
-                    status=FileStatus.PENDING,
-                    retry_attempts=0,
-                )
-                for rel in src_by_rel
-                if rel not in existing_by_rel
-            ]
-            if new_files:
-                file_repo.add_bulk(new_files)
-
-            # Update job totals.
-            job.file_count = cached_file_count
-            job.total_bytes = cached_total_bytes
-
-            # Set copied_bytes to the sum of already-DONE files so incremental
-            # progress accounting is correct on both fresh runs and resumes.
             committed_files = file_repo.list_by_job(job_id)
-            job.copied_bytes = sum(
-                ef.size_bytes or 0
-                for ef in committed_files
-                if ef.status == FileStatus.DONE
-            )
-            job_repo.save(job)
 
             # Re-query to get stable IDs; only submit PENDING (non-DONE) files.
             pending_files = [ef for ef in committed_files if ef.status == FileStatus.PENDING]
