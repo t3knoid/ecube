@@ -46,6 +46,13 @@ def _redacted_device_name(path: Optional[str]) -> Optional[str]:
     return os.path.basename(path.rstrip("/")) or None
 
 
+def _is_already_mounted_error(error: Optional[str]) -> bool:
+    if not error:
+        return False
+    normalized_error = error.lower()
+    return "already mounted" in normalized_error
+
+
 def _default_eject_provider() -> DriveEjectProvider:
     """Lazy import to avoid circular dependency at module level."""
     from app.infrastructure import get_drive_eject
@@ -452,6 +459,18 @@ def mount_drive(
 
     success, error = provider.mount_drive(initial_filesystem_path, mount_point)
     if not success:
+        if _is_already_mounted_error(error):
+            logger.info(
+                "Drive mount rejected because the device is already mounted",
+                extra={
+                    **_safe_drive_log_context(drive, reason="already_mounted"),
+                    "filesystem_type": drive.filesystem_type,
+                },
+            )
+            raise HTTPException(
+                status_code=409,
+                detail="Drive is already mounted; refresh drive status and retry",
+            )
         logger.warning(
             "Drive mount failed",
             extra={
@@ -817,6 +836,12 @@ def format_drive(
         raise HTTPException(
             status_code=400,
             detail=f"Invalid device path: {drive.filesystem_path!r}",
+        )
+
+    if drive.mount_path:
+        raise HTTPException(
+            status_code=409,
+            detail="Drive is currently mounted; unmount before formatting",
         )
 
     if formatter.is_mounted(drive.filesystem_path):
