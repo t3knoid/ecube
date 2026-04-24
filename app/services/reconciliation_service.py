@@ -231,7 +231,7 @@ def _reconcile_usb_mounts(
         if actual_target == expected_target:
             continue
 
-        if actual_target and _is_direct_child_of(actual_target, managed_root) and actual_target != expected_target:
+        if actual_target and actual_target != expected_target:
             unmount_ok, unmount_error = drive_mount_provider.unmount_drive(actual_target)
             if not unmount_ok:
                 logger.info(
@@ -249,7 +249,8 @@ def _reconcile_usb_mounts(
                     "details": {"drive_id": drive.id, "status": "ERROR", "reason": "cleanup_failed"},
                 })
                 continue
-            _cleanup_managed_mount_directory(actual_target, managed_root)
+            if _is_direct_child_of(actual_target, managed_root):
+                _cleanup_managed_mount_directory(actual_target, managed_root)
             corrected += 1
 
         if not drive.filesystem_path:
