@@ -22,7 +22,7 @@ from app.auth import get_current_user
 from app import API_VERSION, __version__
 from app.config import DEFAULT_READINESS_MOUNT_CHECK_TIMEOUT_SECONDS, settings
 from app import database as db_module
-from app.infrastructure import get_drive_discovery, get_mount_provider
+from app.infrastructure import get_drive_discovery, get_drive_mount, get_mount_provider
 from app.exceptions import AuthenticationError, AuthorizationError, ConflictError, ECUBEException
 from app.utils.sanitize import is_encoding_error, sanitize_error_message
 from app.logging_config import configure_logging
@@ -322,6 +322,7 @@ async def lifespan(application: FastAPI):
                 run_startup_reconciliation(
                     db,
                     get_mount_provider(),
+                    drive_mount_provider=get_drive_mount(),
                     os_user_provider=get_os_user_provider() if settings.role_resolver == "local" else None,
                     topology_source=get_drive_discovery().discover_topology,
                     filesystem_detector=get_filesystem_detector(),
