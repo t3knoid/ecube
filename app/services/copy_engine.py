@@ -246,7 +246,7 @@ def _startup_analysis_cache_details(job: Any) -> dict[str, int]:
     }
 
 
-def _persist_startup_analysis_cache(job: Any, source: Path, files: list[Path]) -> tuple[dict[str, Path], dict[str, int], int, int]:
+def _analyze_source_files(source: Path, files: list[Path]) -> tuple[dict[str, Path], dict[str, int], int, int]:
     src_by_rel: dict[str, Path] = {}
     size_by_rel: dict[str, int] = {}
 
@@ -256,14 +256,36 @@ def _persist_startup_analysis_cache(job: Any, source: Path, files: list[Path]) -
         src_by_rel[rel] = file_path
         size_by_rel[rel] = size_bytes
 
-    job.startup_analysis_file_count = len(src_by_rel)
-    job.startup_analysis_total_bytes = sum(size_by_rel.values())
+    file_count = len(src_by_rel)
+    total_bytes = sum(size_by_rel.values())
+    return src_by_rel, size_by_rel, file_count, total_bytes
+
+
+def _persist_startup_analysis_cache(job: Any, source: Path, files: list[Path]) -> tuple[dict[str, Path], dict[str, int], int, int]:
+    src_by_rel, size_by_rel, file_count, total_bytes = _analyze_source_files(source, files)
+
+    job.startup_analysis_file_count = file_count
+    job.startup_analysis_total_bytes = total_bytes
     job.startup_analysis_entries = [
         {"relative_path": rel, "size_bytes": size_bytes}
         for rel, size_bytes in size_by_rel.items()
     ]
 
     return src_by_rel, size_by_rel, int(job.startup_analysis_file_count or 0), int(job.startup_analysis_total_bytes or 0)
+
+
+def _startup_analysis_matches_source(
+    cached: tuple[dict[str, Path], dict[str, int], int, int],
+    current: tuple[dict[str, Path], dict[str, int], int, int],
+) -> bool:
+    cached_src_by_rel, cached_size_by_rel, cached_file_count, cached_total_bytes = cached
+    current_src_by_rel, current_size_by_rel, current_file_count, current_total_bytes = current
+    return (
+        cached_file_count == current_file_count
+        and cached_total_bytes == current_total_bytes
+        and cached_src_by_rel.keys() == current_src_by_rel.keys()
+        and cached_size_by_rel == current_size_by_rel
+    )
 
 
 def _load_startup_analysis_cache(job: Any, source: Path) -> Optional[tuple[dict[str, Path], dict[str, int], int, int]]:
@@ -523,13 +545,25 @@ def run_copy_job(job_id: int) -> None:
             source = Path(job.source_path)
             target = Path(job.target_mount_path) if job.target_mount_path else None
 
+            current_files = scan_source_files(job.source_path)
+            current_startup_analysis = _analyze_source_files(source, current_files)
             cached_startup_analysis = _load_startup_analysis_cache(job, source)
             if cached_startup_analysis is None:
-                files = scan_source_files(job.source_path)
-                src_by_rel, size_by_rel, cached_file_count, cached_total_bytes = _persist_startup_analysis_cache(job, source, files)
+                src_by_rel, size_by_rel, cached_file_count, cached_total_bytes = _persist_startup_analysis_cache(job, source, current_files)
                 job_repo.save(job)
-            else:
+            elif _startup_analysis_matches_source(cached_startup_analysis, current_startup_analysis):
                 src_by_rel, size_by_rel, cached_file_count, cached_total_bytes = cached_startup_analysis
+            else:
+                logger.info(
+                    "Refreshing stale startup analysis cache",
+                    extra={
+                        "job_id": job_id,
+                        "cached_file_count": cached_startup_analysis[2],
+                        "current_file_count": current_startup_analysis[2],
+                    },
+                )
+                src_by_rel, size_by_rel, cached_file_count, cached_total_bytes = _persist_startup_analysis_cache(job, source, current_files)
+                job_repo.save(job)
 
             # ------------------------------------------------------------------
             # Resume-aware file setup:
