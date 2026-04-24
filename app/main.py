@@ -7,7 +7,7 @@ import traceback
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Generator
+from typing import Any, Generator
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -32,6 +32,7 @@ from app.schemas.errors import ErrorResponse
 from app.schemas.introspection import HealthLiveResponse, HealthNotReadyResponse, HealthReadyResponse, HealthResponse, VersionResponse
 from app.session import close_session_backend, init_session_backend, mount_session_middleware
 from app.utils.client_ip import get_client_ip
+from app.repositories.audit_repository import best_effort_audit
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
@@ -198,6 +199,81 @@ def _not_ready_response(
     )
 
 
+def _startup_reconciliation_has_error(payload: Any) -> bool:
+    if isinstance(payload, dict):
+        if "error" in payload:
+            return True
+        return any(_startup_reconciliation_has_error(value) for value in payload.values())
+    return False
+
+
+def _startup_reconciliation_counts(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+
+    counts: dict[str, Any] = {}
+    for key, value in payload.items():
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, int):
+            counts[key] = value
+            continue
+        nested = _startup_reconciliation_counts(value)
+        if nested:
+            counts[key] = nested
+    return counts
+
+
+def _summarize_startup_reconciliation(results: dict[str, Any]) -> dict[str, Any]:
+    if results.get("skipped"):
+        return {
+            "status": "skipped",
+            "reason": "lock_held",
+        }
+
+    error_domains = [
+        domain for domain, payload in results.items()
+        if _startup_reconciliation_has_error(payload)
+    ]
+    return {
+        "status": "partial_failure" if error_domains else "completed",
+        "domains": sorted(results.keys()),
+        "error_domains": error_domains,
+        "counts": _startup_reconciliation_counts(results),
+    }
+
+
+def _record_startup_reconciliation_outcome(db: Session, results: dict[str, Any]) -> None:
+    summary = _summarize_startup_reconciliation(results)
+    if summary["status"] == "skipped":
+        logger.info(
+            "Startup reconciliation skipped",
+            extra={"status": "skipped", "reason": summary["reason"]},
+        )
+        best_effort_audit(
+            db,
+            "STARTUP_RECONCILIATION_SKIPPED",
+            user="system",
+            details=summary,
+        )
+        return
+
+    logger.info(
+        "Startup reconciliation finished",
+        extra={
+            "status": summary["status"],
+            "domains": summary["domains"],
+            "error_domains": summary["error_domains"],
+        },
+    )
+    best_effort_audit(
+        db,
+        "STARTUP_RECONCILIATION_COMPLETED",
+        user="system",
+        details=summary,
+    )
+
+
 def _resolve_readiness_mount_timeout(remaining_budget: float | None) -> float:
     """Return a positive per-mount timeout for readiness mount checks.
 
@@ -319,14 +395,47 @@ async def lifespan(application: FastAPI):
 
             db = SessionLocal()
             try:
-                run_startup_reconciliation(
+                logger.info("Startup reconciliation starting")
+                best_effort_audit(
                     db,
-                    get_mount_provider(),
-                    drive_mount_provider=get_drive_mount(),
-                    os_user_provider=get_os_user_provider() if settings.role_resolver == "local" else None,
-                    topology_source=get_drive_discovery().discover_topology,
-                    filesystem_detector=get_filesystem_detector(),
+                    "STARTUP_RECONCILIATION_STARTED",
+                    user="system",
+                    details={"status": "started"},
                 )
+                try:
+                    results = run_startup_reconciliation(
+                        db,
+                        get_mount_provider(),
+                        drive_mount_provider=get_drive_mount(),
+                        os_user_provider=get_os_user_provider() if settings.role_resolver == "local" else None,
+                        topology_source=get_drive_discovery().discover_topology,
+                        filesystem_detector=get_filesystem_detector(),
+                    )
+                except Exception as exc:
+                    db.rollback()
+                    failure = _classify_unhandled_exception(exc)
+                    logger.info(
+                        "Startup reconciliation failed",
+                        extra={
+                            "category": failure["category"],
+                            "recommended_action": failure["recommended_action"],
+                        },
+                    )
+                    logger.debug(
+                        "Startup reconciliation raw failure",
+                        extra={"category": failure["category"], "raw_error": str(exc)},
+                    )
+                    best_effort_audit(
+                        db,
+                        "STARTUP_RECONCILIATION_FAILED",
+                        user="system",
+                        details={
+                            "status": "failed",
+                            "category": failure["category"],
+                        },
+                    )
+                else:
+                    _record_startup_reconciliation_outcome(db, results)
             finally:
                 db.close()
         except Exception:
