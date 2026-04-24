@@ -103,8 +103,10 @@ def scan_source_files(source_path: str) -> List[Path]:
         _record_scan_error(exc)
         source_still_exists = False
 
-    if scan_errors and not source_still_exists:
-        raise FileNotFoundError(source_path) from scan_errors[0]
+    if scan_errors:
+        if not source_still_exists:
+            raise FileNotFoundError(source_path) from scan_errors[0]
+        raise scan_errors[0]
 
     return files
 
