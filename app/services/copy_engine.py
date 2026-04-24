@@ -1,11 +1,12 @@
 import hashlib
+import json
 import logging
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, List, Optional, Protocol, Tuple
+from typing import Any, Callable, List, Optional, Protocol, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -232,6 +233,77 @@ def _relative_path(f: Path, source: Path) -> Path:
     return f.relative_to(source) if source.is_dir() else Path(f.name)
 
 
+def _clear_startup_analysis_cache(job: Any) -> None:
+    job.startup_analysis_file_count = None
+    job.startup_analysis_total_bytes = None
+    job.startup_analysis_entries = None
+
+
+def _startup_analysis_cache_details(job: Any) -> dict[str, int]:
+    return {
+        "cached_file_count": int(job.startup_analysis_file_count or 0),
+        "cached_total_bytes": int(job.startup_analysis_total_bytes or 0),
+    }
+
+
+def _persist_startup_analysis_cache(job: Any, source: Path, files: list[Path]) -> tuple[dict[str, Path], dict[str, int], int, int]:
+    src_by_rel: dict[str, Path] = {}
+    size_by_rel: dict[str, int] = {}
+
+    for file_path in files:
+        rel = str(_relative_path(file_path, source))
+        size_bytes = file_path.stat().st_size if file_path.exists() else 0
+        src_by_rel[rel] = file_path
+        size_by_rel[rel] = size_bytes
+
+    job.startup_analysis_file_count = len(src_by_rel)
+    job.startup_analysis_total_bytes = sum(size_by_rel.values())
+    job.startup_analysis_entries = [
+        {"relative_path": rel, "size_bytes": size_bytes}
+        for rel, size_bytes in size_by_rel.items()
+    ]
+
+    return src_by_rel, size_by_rel, int(job.startup_analysis_file_count or 0), int(job.startup_analysis_total_bytes or 0)
+
+
+def _load_startup_analysis_cache(job: Any, source: Path) -> Optional[tuple[dict[str, Path], dict[str, int], int, int]]:
+    entries = job.startup_analysis_entries
+    file_count = job.startup_analysis_file_count
+    total_bytes = job.startup_analysis_total_bytes
+
+    if entries is None or file_count is None or total_bytes is None:
+        return None
+    if not isinstance(entries, list):
+        return None
+
+    src_by_rel: dict[str, Path] = {}
+    size_by_rel: dict[str, int] = {}
+    computed_total_bytes = 0
+
+    for entry in entries:
+        if not isinstance(entry, dict):
+            return None
+        rel = entry.get("relative_path")
+        size_bytes = entry.get("size_bytes")
+        if not isinstance(rel, str) or not rel:
+            return None
+        rel_path = Path(rel)
+        if rel_path.is_absolute() or ".." in rel_path.parts:
+            return None
+        if not isinstance(size_bytes, int) or size_bytes < 0:
+            return None
+        src_by_rel[rel] = source / rel_path
+        size_by_rel[rel] = size_bytes
+        computed_total_bytes += size_bytes
+
+    if len(src_by_rel) != int(file_count):
+        return None
+    if computed_total_bytes != int(total_bytes):
+        return None
+
+    return src_by_rel, size_by_rel, int(file_count), int(total_bytes)
+
+
 def _process_file(
     export_file_id: int,
     src_file: Path,
@@ -451,8 +523,13 @@ def run_copy_job(job_id: int) -> None:
             source = Path(job.source_path)
             target = Path(job.target_mount_path) if job.target_mount_path else None
 
-            files = scan_source_files(job.source_path)
-            src_by_rel = {str(_relative_path(f, source)): f for f in files}
+            cached_startup_analysis = _load_startup_analysis_cache(job, source)
+            if cached_startup_analysis is None:
+                files = scan_source_files(job.source_path)
+                src_by_rel, size_by_rel, cached_file_count, cached_total_bytes = _persist_startup_analysis_cache(job, source, files)
+                job_repo.save(job)
+            else:
+                src_by_rel, size_by_rel, cached_file_count, cached_total_bytes = cached_startup_analysis
 
             # ------------------------------------------------------------------
             # Resume-aware file setup:
@@ -481,19 +558,19 @@ def run_copy_job(job_id: int) -> None:
                 ExportFile(
                     job_id=job_id,
                     relative_path=rel,
-                    size_bytes=f.stat().st_size if f.exists() else 0,
+                    size_bytes=size_by_rel[rel],
                     status=FileStatus.PENDING,
                     retry_attempts=0,
                 )
-                for rel, f in src_by_rel.items()
+                for rel in src_by_rel
                 if rel not in existing_by_rel
             ]
             if new_files:
                 file_repo.add_bulk(new_files)
 
             # Update job totals.
-            job.file_count = len(files)
-            job.total_bytes = sum(f.stat().st_size for f in files if f.exists())
+            job.file_count = cached_file_count
+            job.total_bytes = cached_total_bytes
 
             # Set copied_bytes to the sum of already-DONE files so incremental
             # progress accounting is correct on both fresh runs and resumes.
@@ -669,6 +746,12 @@ def run_copy_job(job_id: int) -> None:
                 else:
                     job.status = JobStatus.FAILED if error_count > 0 else JobStatus.COMPLETED
                     job.completed_at = datetime.now(timezone.utc)
+                    cache_cleared = False
+                    cache_clear_details: dict[str, int] = {}
+                    if job.status == JobStatus.COMPLETED and job.startup_analysis_cached:
+                        cache_clear_details = _startup_analysis_cache_details(job)
+                        _clear_startup_analysis_cache(job)
+                        cache_cleared = True
                     try:
                         job_repo.save(job)
                     except Exception:
@@ -750,6 +833,18 @@ def run_copy_job(job_id: int) -> None:
                             )
                         except Exception:
                             logger.error("Failed to write audit log for %s", audit_action)
+                        if cache_cleared:
+                            try:
+                                AuditRepository(db).add(
+                                    action="JOB_STARTUP_ANALYSIS_CACHE_CLEARED",
+                                    job_id=job_id,
+                                    details={
+                                        "reason": "job_completed",
+                                        **cache_clear_details,
+                                    },
+                                )
+                            except Exception:
+                                logger.error("Failed to write audit log for JOB_STARTUP_ANALYSIS_CACHE_CLEARED")
                         try:
                             deliver_callback(job)
                         except Exception:

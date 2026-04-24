@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   updateJob: vi.fn(),
   completeJob: vi.fn(),
   deleteJob: vi.fn(),
+  clearJobStartupAnalysisCache: vi.fn(),
   getJobDebug: vi.fn(),
   getDrives: vi.fn(),
   getMounts: vi.fn(),
@@ -46,6 +47,7 @@ vi.mock('@/api/jobs.js', () => ({
   updateJob: (...args) => mocks.updateJob(...args),
   completeJob: (...args) => mocks.completeJob(...args),
   deleteJob: (...args) => mocks.deleteJob(...args),
+  clearJobStartupAnalysisCache: (...args) => mocks.clearJobStartupAnalysisCache(...args),
 }))
 
 vi.mock('@/api/introspection.js', () => ({
@@ -122,6 +124,7 @@ describe('JobDetailView start action', () => {
     mocks.updateJob.mockReset()
     mocks.completeJob.mockReset()
     mocks.deleteJob.mockReset()
+    mocks.clearJobStartupAnalysisCache.mockReset()
     mocks.getJobDebug.mockReset()
     mocks.getDrives.mockReset()
     mocks.getMounts.mockReset()
@@ -157,6 +160,7 @@ describe('JobDetailView start action', () => {
     mocks.pauseJob.mockResolvedValue({ id: 6, status: 'PAUSING', project_id: 'PROJ-001', evidence_number: 'EV-006', thread_count: 4, copied_bytes: 0, total_bytes: 0, source_path: '/nfs/project-001/evidence', target_mount_path: '/mnt/ecube/1' })
     mocks.completeJob.mockResolvedValue({ id: 6, status: 'COMPLETED', project_id: 'PROJ-001', evidence_number: 'EV-006', thread_count: 4, copied_bytes: 0, total_bytes: 0 })
     mocks.deleteJob.mockResolvedValue({ status: 'deleted' })
+    mocks.clearJobStartupAnalysisCache.mockResolvedValue({ id: 6, status: 'FAILED', project_id: 'PROJ-001', evidence_number: 'EV-006', thread_count: 4, copied_bytes: 0, total_bytes: 0, startup_analysis_cached: false })
   })
 
   it('shows the validation detail instead of a generic conflict message', async () => {
@@ -710,5 +714,70 @@ describe('JobDetailView start action', () => {
 
     expect(mocks.deleteJob).toHaveBeenCalledWith(6)
     expect(mocks.routerPush).toHaveBeenCalled()
+  })
+
+  it('shows the startup-analysis cleanup control for manager roles and confirms cleanup', async () => {
+    mocks.hasAnyRole.mockImplementation((roles) => roles.includes('manager') || roles.includes('auditor'))
+    mocks.getJob
+      .mockResolvedValueOnce({
+        id: 6,
+        status: 'FAILED',
+        project_id: 'PROJ-001',
+        evidence_number: 'EV-006',
+        source_path: '/nfs/project-001/evidence',
+        target_mount_path: '/mnt/ecube/1',
+        thread_count: 4,
+        copied_bytes: 0,
+        total_bytes: 0,
+        startup_analysis_cached: true,
+      })
+      .mockResolvedValue({
+        id: 6,
+        status: 'FAILED',
+        project_id: 'PROJ-001',
+        evidence_number: 'EV-006',
+        source_path: '/nfs/project-001/evidence',
+        target_mount_path: '/mnt/ecube/1',
+        thread_count: 4,
+        copied_bytes: 0,
+        total_bytes: 0,
+        startup_analysis_cached: false,
+      })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const cleanupButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.clearStartupAnalysis'))
+    expect(cleanupButton).toBeTruthy()
+    await cleanupButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.confirm-dialog-stub').exists()).toBe(true)
+    await wrapper.find('.confirm-dialog-confirm').trigger('click')
+    await flushPromises()
+
+    expect(mocks.clearJobStartupAnalysisCache).toHaveBeenCalledWith(6, { confirm: true })
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.startupAnalysisCacheCleared'))
+  })
+
+  it('hides the startup-analysis cleanup control from processor-only roles', async () => {
+    mocks.hasAnyRole.mockImplementation((roles) => roles.includes('processor'))
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'FAILED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 0,
+      total_bytes: 0,
+      startup_analysis_cached: true,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain(i18n.global.t('jobs.clearStartupAnalysis'))
   })
 })

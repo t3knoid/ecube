@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
-import { getJob, getJobFiles, startJob, pauseJob, verifyJob, generateManifest, updateJob, completeJob, deleteJob } from '@/api/jobs.js'
+import { getJob, getJobFiles, startJob, pauseJob, verifyJob, generateManifest, updateJob, completeJob, deleteJob, clearJobStartupAnalysisCache } from '@/api/jobs.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import { getFileHashes, compareFiles } from '@/api/files.js'
 import { getDrives } from '@/api/drives.js'
@@ -45,6 +45,7 @@ const supportingDrives = ref([])
 const supportingMounts = ref([])
 const showEditDialog = ref(false)
 const showDeleteDialog = ref(false)
+const showStartupAnalysisCleanupDialog = ref(false)
 const showPausePendingDialog = ref(false)
 const editDialogRef = ref(null)
 const pauseDialogRef = ref(null)
@@ -60,11 +61,13 @@ const editForm = ref({
 })
 
 const canOperate = computed(() => authStore.hasAnyRole(['admin', 'manager', 'processor']))
+const canManageStartupAnalysis = computed(() => authStore.hasAnyRole(['admin', 'manager']))
 const canInspectHashes = computed(() => authStore.hasAnyRole(['admin', 'auditor']))
 const currentStatus = computed(() => String(job.value?.status || '').toUpperCase())
 const canEdit = computed(() => canOperate.value && ['PENDING', 'PAUSED', 'FAILED'].includes(currentStatus.value))
 const canComplete = computed(() => canOperate.value && ['PENDING', 'PAUSED', 'FAILED'].includes(currentStatus.value))
 const canDelete = computed(() => canOperate.value && currentStatus.value === 'PENDING')
+const canClearStartupAnalysisCache = computed(() => canManageStartupAnalysis.value && !!job.value?.startup_analysis_cached)
 
 const fileColumns = computed(() => {
   const columns = [
@@ -441,6 +444,23 @@ async function confirmDelete() {
   }
 }
 
+async function confirmStartupAnalysisCleanup() {
+  if (!job.value || !canClearStartupAnalysisCache.value) return
+  acting.value = true
+  error.value = ''
+  infoMessage.value = ''
+  try {
+    job.value = normalizeProjectRecord(await clearJobStartupAnalysisCache(job.value.id, { confirm: true }), ['project_id'])
+    showStartupAnalysisCleanupDialog.value = false
+    infoMessage.value = t('jobs.startupAnalysisCacheCleared')
+    await refreshAll()
+  } catch (err) {
+    error.value = buildJobError(err)
+  } finally {
+    acting.value = false
+  }
+}
+
 async function loadDebug(force = false) {
   if (!jobId.value) return
   if (filesLoading.value && !force) return
@@ -724,6 +744,7 @@ onUnmounted(() => {
         <button class="btn" :disabled="!canComplete || acting" @click="runComplete">{{ t('jobs.complete') }}</button>
         <button class="btn" :disabled="!canVerify || acting" @click="runAction('verify')">{{ t('jobs.verify') }}</button>
         <button class="btn" :disabled="!canGenerateManifest || acting" @click="runAction('manifest')">{{ t('jobs.manifest') }}</button>
+        <button v-if="canClearStartupAnalysisCache" class="btn" :disabled="acting" @click="showStartupAnalysisCleanupDialog = true">{{ t('jobs.clearStartupAnalysis') }}</button>
         <button v-if="canDelete" class="btn btn-danger" :disabled="acting" @click="showDeleteDialog = true">{{ t('common.actions.delete') }}</button>
       </div>
     </article>
@@ -865,6 +886,16 @@ onUnmounted(() => {
         </div>
       </div>
     </teleport>
+
+    <ConfirmDialog
+      v-model="showStartupAnalysisCleanupDialog"
+      :title="t('jobs.clearStartupAnalysisConfirmTitle')"
+      :message="t('jobs.clearStartupAnalysisConfirmBody')"
+      :confirm-label="t('jobs.clearStartupAnalysis')"
+      :cancel-label="t('common.actions.cancel')"
+      :busy="acting"
+      @confirm="confirmStartupAnalysisCleanup"
+    />
 
     <ConfirmDialog
       v-model="showDeleteDialog"

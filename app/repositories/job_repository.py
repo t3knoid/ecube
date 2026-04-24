@@ -1,7 +1,7 @@
 from collections import defaultdict
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from sqlalchemy import case, func, update
+from sqlalchemy import and_, case, func, update
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, joinedload
 
@@ -104,16 +104,20 @@ class JobRepository:
         query = self.db.query(ExportJob)
 
         if drive_id is not None:
-            query = query.join(DriveAssignment, DriveAssignment.job_id == ExportJob.id).filter(
-                DriveAssignment.drive_id == drive_id,
-                DriveAssignment.released_at.is_(None),
+            query = query.filter(
+                ExportJob.assignments.any(
+                    and_(
+                        DriveAssignment.drive_id == drive_id,
+                        DriveAssignment.released_at.is_(None),
+                    )
+                )
             )
 
         if statuses:
             query = query.filter(ExportJob.status.in_(tuple(statuses)))
 
         return (
-            query.distinct()
+            query
             .order_by(ExportJob.created_at.desc(), ExportJob.id.desc())
             .offset(offset)
             .limit(limit)
@@ -424,13 +428,15 @@ class DriveAssignmentRepository:
         """Return active jobs assigned to *drive_id* with unreleased assignments."""
         return (
             self.db.query(ExportJob)
-            .join(DriveAssignment, DriveAssignment.job_id == ExportJob.id)
             .filter(
-                DriveAssignment.drive_id == drive_id,
-                DriveAssignment.released_at.is_(None),
+                ExportJob.assignments.any(
+                    and_(
+                        DriveAssignment.drive_id == drive_id,
+                        DriveAssignment.released_at.is_(None),
+                    )
+                ),
                 ExportJob.status.in_(statuses),
             )
-            .distinct()
             .order_by(ExportJob.created_at.desc(), ExportJob.id.desc())
             .all()
         )
