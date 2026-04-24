@@ -94,6 +94,12 @@ class JobStart(StrictIntMixin, BaseModel):
     thread_count: Optional[StrictInt] = Field(default=None, ge=1, le=8, description="Override thread count for this job start (1-8, optional)")
 
 
+class JobStartupAnalysisClearRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    confirm: bool = Field(..., description="Must be true to confirm startup analysis cache cleanup")
+
+
 class JobUpdate(JobCreate):
     """Full job update payload for editable non-active jobs."""
 
@@ -182,6 +188,7 @@ class ExportJobSchema(BaseModel):
     failure_reason: Optional[str] = Field(default=None, description="Persisted sanitized job-level failure reason (null when not available)")
     error_summary: Optional[str] = Field(default=None, description="Brief summary of file failures (null on success)")
     failure_log_entry: Optional[str] = Field(default=None, description="Correlated application log line for failed jobs (null on success)")
+    startup_analysis_cached: bool = Field(default=False, description="Whether a persisted startup-analysis cache is available for restart reuse")
     client_ip: Optional[str] = Field(default=None, description="IP address of the client that created the job (null for background tasks or when redacted; 'unknown' when the client address could not be resolved)")
 
     model_config = {"from_attributes": True}
