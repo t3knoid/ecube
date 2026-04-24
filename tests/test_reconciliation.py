@@ -297,6 +297,20 @@ class TestReconcileMounts:
         assert result["usb_mounts_corrected"] == 1
         assert drive_provider.mount_calls == [(drive.filesystem_path, f"{settings.usb_mount_base_path}/{drive.id}")]
 
+    def test_persisted_usb_mount_outside_managed_root_is_unmounted_before_remount(self, db: Session):
+        drive = _make_drive(db, "USB-STARTUP-EXTERNAL", DriveState.IN_USE)
+        drive.filesystem_type = "ext4"
+        drive.mount_path = "/mnt/ecube/stale"
+        db.commit()
+        drive_provider = FakeDriveMountProvider()
+
+        with patch("app.services.reconciliation_service.find_device_mount_point", return_value="/media/operator/usb-startup"):
+            result = reconcile_mounts(db, FakeMountProvider(), drive_provider)
+
+        assert result["usb_mounts_checked"] == 1
+        assert drive_provider.unmount_calls == ["/media/operator/usb-startup"]
+        assert drive_provider.mount_calls == [(drive.filesystem_path, f"{settings.usb_mount_base_path}/{drive.id}")]
+
     def test_orphan_managed_usb_mount_is_removed(self, db: Session):
         drive_provider = FakeDriveMountProvider({"/mnt/ecube/999": "/dev/sdz1"})
 
