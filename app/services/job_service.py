@@ -500,6 +500,7 @@ def _clear_job_startup_analysis_cache(job_row: Any) -> dict[str, int]:
 
 def _mark_job_startup_analysis_stale(job_row: Any) -> None:
     job_row.startup_analysis_status = StartupAnalysisStatus.STALE
+    job_row.startup_analysis_last_analyzed_at = None
     job_row.startup_analysis_failure_reason = None
     job_row.startup_analysis_file_count = None
     job_row.startup_analysis_total_bytes = None
@@ -507,6 +508,23 @@ def _mark_job_startup_analysis_stale(job_row: Any) -> None:
     job_row.startup_analysis_drive_write_mbps = None
     job_row.startup_analysis_estimated_duration_seconds = None
     job_row.startup_analysis_entries = None
+
+
+def _has_persisted_startup_analysis_state(job_row: Any) -> bool:
+    return any(
+        value is not None
+        for value in (
+            None if cast(Optional[StartupAnalysisStatus], job_row.startup_analysis_status) == StartupAnalysisStatus.NOT_ANALYZED else job_row.startup_analysis_status,
+            cast(Optional[datetime], job_row.startup_analysis_last_analyzed_at),
+            cast(Optional[str], job_row.startup_analysis_failure_reason),
+            cast(Optional[int], job_row.startup_analysis_file_count),
+            cast(Optional[int], job_row.startup_analysis_total_bytes),
+            cast(Optional[float], job_row.startup_analysis_share_read_mbps),
+            cast(Optional[float], job_row.startup_analysis_drive_write_mbps),
+            cast(Optional[int], job_row.startup_analysis_estimated_duration_seconds),
+            cast(Optional[object], job_row.startup_analysis_entries),
+        )
+    )
 
 
 def _require_editable_job(job: ExportJob) -> None:
@@ -652,7 +670,7 @@ def update_job(
         job_row.file_count = 0
         job_row.total_bytes = 0
         job_row.copied_bytes = 0
-        if cast(Optional[object], job_row.startup_analysis_entries) is not None:
+        if _has_persisted_startup_analysis_state(job_row):
             _mark_job_startup_analysis_stale(job_row)
 
     try:
