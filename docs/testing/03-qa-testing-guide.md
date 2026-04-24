@@ -652,11 +652,24 @@ For the current Jobs page UI, verify the grouped `Create Job` dialog behaves as 
 - Authorized rows expose `Details`, `Start`, and `Pause` actions with state-aware enablement.
 - A newly started job can show `Preparing...` in the Jobs list before a numeric percentage is available.
 - Opening Job Detail during that startup phase shows `Preparing copy...` together with explanatory text that ECUBE is still scanning the source files and calculating totals.
+- If a manual analyze run finishes while the Jobs page stays open, verify the page shows a completion banner identifying the job and final startup-analysis state.
 - Pressing `Pause` on a running job shows a `Pause in progress` dialog while the system waits for in-flight copy threads to finish.
 - The `Start` action remains disabled during `PAUSING` and becomes available again once the job reaches `PAUSED`.
 - After a pause and resume cycle, the final duration and copy-rate summary remain additive across the full run rather than resetting to only the most recent segment.
 - For a failed or paused job with cached startup analysis, `admin` and `manager` see `Clear startup analysis cache`, processor-only users do not, and the confirmation dialog explains that the next restart will rescan the source.
 - After confirming cleanup, the success message appears, the cleanup action disappears, and later restart behavior performs a fresh startup analysis.
+
+#### 11.4c Manual Startup Analysis Checks
+
+Use a pending job with a mounted source and eligible destination drive.
+
+- Run `Analyze` from Job Detail and verify the job remains `PENDING` while startup-analysis state changes to `ANALYZING`.
+- Verify Job Detail shows `Startup analysis started.` and later replaces it with `Startup analysis completed.` when the persisted summary is ready.
+- Confirm the startup-analysis summary includes the final lifecycle state plus discovered file count and estimated total bytes, and that failed runs show only a sanitized failure reason.
+- While the job is `ANALYZING`, verify `Analyze`, `Edit`, `Start`, `Complete`, `Delete`, and `Clear startup analysis cache` are unavailable in the UI according to role and state.
+- During the same window, verify direct API attempts to edit, start, complete, delete, re-analyze, or clear startup-analysis cache return `409 Conflict`.
+- After analysis reaches `READY` or `STALE`, verify the blocked actions become available again according to the normal role and job-state rules.
+- Start and complete the job after a successful analyze run, then verify the startup-analysis summary remains visible in Job Detail even though the reusable startup-analysis entry snapshot has been cleared.
 
 For the current System page Logs tab UI, verify the admin-only log workflow behaves as follows:
 
