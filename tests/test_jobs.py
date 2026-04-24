@@ -1531,6 +1531,79 @@ def test_update_job_source_change_invalidates_startup_analysis_and_file_rows(cli
     assert db.query(ExportFile).filter(ExportFile.job_id == job.id).count() == 0
 
 
+def test_update_job_source_change_invalidates_summary_only_startup_analysis_state(client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="server:/exports/project-001",
+        project_id="PROJ-001",
+        local_mount_point="/nfs/project-001",
+        status=MountStatus.MOUNTED,
+    )
+    drive = UsbDrive(
+        device_identifier="USB-UPDATE-SUMMARY-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        mount_path="/mnt/ecube/update-summary-001",
+    )
+    db.add_all([mount, drive])
+    db.flush()
+
+    analyzed_at = datetime.now(timezone.utc)
+    job = ExportJob(
+        project_id="PROJ-001",
+        evidence_number="EV-UPDATE-SUMMARY-001",
+        source_path="/nfs/project-001/evidence-old",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.FAILED,
+        thread_count=4,
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_last_analyzed_at=analyzed_at,
+        startup_analysis_file_count=2,
+        startup_analysis_total_bytes=12,
+        startup_analysis_estimated_duration_seconds=3,
+        startup_analysis_entries=None,
+        file_count=2,
+        total_bytes=12,
+        copied_bytes=5,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.add(ExportFile(job_id=job.id, relative_path="a.txt", size_bytes=5, status=FileStatus.DONE, retry_attempts=0))
+    db.commit()
+
+    response = client.put(
+        f"/jobs/{job.id}",
+        json={
+            "project_id": "PROJ-001",
+            "evidence_number": "EV-UPDATE-SUMMARY-001",
+            "source_path": "/evidence-new",
+            "mount_id": mount.id,
+            "drive_id": drive.id,
+            "thread_count": 4,
+            "max_file_retries": 3,
+            "retry_delay_seconds": 1,
+            "callback_url": None,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["startup_analysis_status"] == "STALE"
+    assert response.json()["startup_analysis_last_analyzed_at"] is None
+    assert response.json()["startup_analysis_cached"] is False
+    db.refresh(job)
+    assert job.startup_analysis_status == StartupAnalysisStatus.STALE
+    assert job.startup_analysis_last_analyzed_at is None
+    assert job.startup_analysis_file_count is None
+    assert job.startup_analysis_total_bytes is None
+    assert job.startup_analysis_estimated_duration_seconds is None
+    assert job.startup_analysis_cached is False
+    assert job.file_count == 0
+    assert job.total_bytes == 0
+    assert job.copied_bytes == 0
+    assert db.query(ExportFile).filter(ExportFile.job_id == job.id).count() == 0
+
+
 def test_update_job_conflict_while_startup_analysis_running(client, db):
     mount = NetworkMount(
         type=MountType.NFS,
