@@ -64,11 +64,36 @@ const canOperate = computed(() => authStore.hasAnyRole(['admin', 'manager', 'pro
 const canManageStartupAnalysis = computed(() => authStore.hasAnyRole(['admin', 'manager']))
 const canInspectHashes = computed(() => authStore.hasAnyRole(['admin', 'auditor']))
 const currentStatus = computed(() => String(job.value?.status || '').toUpperCase())
-const canEdit = computed(() => canOperate.value && ['PENDING', 'PAUSED', 'FAILED'].includes(currentStatus.value))
-const canComplete = computed(() => canOperate.value && ['PENDING', 'PAUSED', 'FAILED'].includes(currentStatus.value))
-const canDelete = computed(() => canOperate.value && currentStatus.value === 'PENDING')
-const canAnalyze = computed(() => canOperate.value && ['PENDING', 'PAUSED', 'FAILED'].includes(currentStatus.value))
-const canClearStartupAnalysisCache = computed(() => canManageStartupAnalysis.value && !!job.value?.startup_analysis_cached)
+const currentStartupAnalysisStatus = computed(() => String(job.value?.startup_analysis_status || 'NOT_ANALYZED').toUpperCase())
+const canEdit = computed(() => {
+  return canOperate.value
+    && ['PENDING', 'PAUSED', 'FAILED'].includes(currentStatus.value)
+    && currentStartupAnalysisStatus.value !== 'ANALYZING'
+})
+const canComplete = computed(() => {
+  return canOperate.value
+    && ['PENDING', 'PAUSED', 'FAILED'].includes(currentStatus.value)
+    && currentStartupAnalysisStatus.value !== 'ANALYZING'
+})
+const showDelete = computed(() => canOperate.value && currentStatus.value === 'PENDING')
+const canDelete = computed(() => {
+  return canOperate.value
+    && currentStatus.value === 'PENDING'
+    && currentStartupAnalysisStatus.value !== 'ANALYZING'
+})
+const canAnalyze = computed(() => {
+  return canOperate.value
+    && ['PENDING', 'PAUSED', 'FAILED'].includes(currentStatus.value)
+    && currentStartupAnalysisStatus.value !== 'ANALYZING'
+})
+const showClearStartupAnalysisCache = computed(() => {
+  return canManageStartupAnalysis.value && !!job.value?.startup_analysis_cached
+})
+const canClearStartupAnalysisCache = computed(() => {
+  return canManageStartupAnalysis.value
+    && !!job.value?.startup_analysis_cached
+    && currentStartupAnalysisStatus.value !== 'ANALYZING'
+})
 
 const startupAnalysisSummary = computed(() => {
   if (!job.value) return null
@@ -81,7 +106,7 @@ const startupAnalysisSummary = computed(() => {
     discoveredFiles: Number(job.value.startup_analysis_file_count || 0),
     estimatedBytes: formatBytes(Number(job.value.startup_analysis_total_bytes || 0)),
     readyToStart: !!job.value.startup_analysis_ready,
-    failureReason: String(job.value.startup_analysis_failure_reason || '').trim(),
+    failureReason: normalizeStartupAnalysisFailureReason(job.value.startup_analysis_failure_reason),
   }
 })
 
@@ -157,7 +182,9 @@ const progressActive = computed(() => {
 
 const canStart = computed(() => {
   const status = String(job.value?.status || '').toUpperCase()
-  return canOperate.value && ['PENDING', 'FAILED', 'PAUSED'].includes(status)
+  return canOperate.value
+    && ['PENDING', 'FAILED', 'PAUSED'].includes(status)
+    && currentStartupAnalysisStatus.value !== 'ANALYZING'
 })
 
 const canPause = computed(() => canOperate.value && currentStatus.value === 'RUNNING')
@@ -255,8 +282,21 @@ function formatTimestamp(value) {
   return parsed.toLocaleString()
 }
 
+function normalizeStartupAnalysisFailureReason(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+
+  const labelPrefix = `${t('jobs.analysisFailureReason')}:`
+  let normalized = raw
+  while (normalized.startsWith(labelPrefix)) {
+    normalized = normalized.slice(labelPrefix.length).trim()
+  }
+  return normalized
+}
+
 function formatDuration(totalSeconds) {
   if (typeof totalSeconds !== 'number' || totalSeconds < 0) return '-'
+  if (totalSeconds === 0) return '0s'
 
   const hours = Math.floor(totalSeconds / 3600)
   const minutes = Math.floor((totalSeconds % 3600) / 60)
@@ -265,6 +305,11 @@ function formatDuration(totalSeconds) {
   if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`
   if (minutes > 0) return `${minutes}m ${seconds}s`
   return `${seconds}s`
+}
+
+function formatTransferRate(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return '-'
+  return `${value.toFixed(1)} MB/s`
 }
 
 function formatCopyRate(bytesValue, totalSeconds) {
@@ -653,6 +698,23 @@ watch(currentStatus, (status) => {
   }
 })
 
+watch(currentStartupAnalysisStatus, (nextStatus, previousStatus) => {
+  if (previousStatus !== 'ANALYZING' || nextStatus === 'ANALYZING') {
+    return
+  }
+
+  if (infoMessage.value !== t('jobs.startupAnalysisStarted')) {
+    return
+  }
+
+  if (nextStatus === 'READY' || nextStatus === 'STALE') {
+    infoMessage.value = t('jobs.startupAnalysisCompleted')
+    return
+  }
+
+  infoMessage.value = ''
+})
+
 watch(showEditDialog, async (open) => {
   if (open) {
     document.addEventListener('keydown', handleDialogKeydown)
@@ -790,8 +852,8 @@ onUnmounted(() => {
         <button class="btn" :disabled="!canComplete || acting" @click="runComplete">{{ t('jobs.complete') }}</button>
         <button class="btn" :disabled="!canVerify || acting" @click="runAction('verify')">{{ t('jobs.verify') }}</button>
         <button class="btn" :disabled="!canGenerateManifest || acting" @click="runAction('manifest')">{{ t('jobs.manifest') }}</button>
-        <button v-if="canClearStartupAnalysisCache" class="btn" :disabled="acting" @click="showStartupAnalysisCleanupDialog = true">{{ t('jobs.clearStartupAnalysis') }}</button>
-        <button v-if="canDelete" class="btn btn-danger" :disabled="acting" @click="showDeleteDialog = true">{{ t('common.actions.delete') }}</button>
+        <button v-if="showClearStartupAnalysisCache" class="btn" :disabled="!canClearStartupAnalysisCache || acting" @click="showStartupAnalysisCleanupDialog = true">{{ t('jobs.clearStartupAnalysis') }}</button>
+        <button v-if="showDelete" class="btn btn-danger" :disabled="!canDelete || acting" @click="showDeleteDialog = true">{{ t('common.actions.delete') }}</button>
       </div>
     </article>
 

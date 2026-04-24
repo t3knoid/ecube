@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime, Text, JSON
+from sqlalchemy import Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime, Text, JSON, Float
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.sql import func
@@ -60,6 +60,9 @@ class ExportJob(Base):
     startup_analysis_failure_reason = Column(Text, nullable=True)
     startup_analysis_file_count = Column(Integer, nullable=True)
     startup_analysis_total_bytes = Column(BigInteger, nullable=True)
+    startup_analysis_share_read_mbps = Column(Float, nullable=True)
+    startup_analysis_drive_write_mbps = Column(Float, nullable=True)
+    startup_analysis_estimated_duration_seconds = Column(Integer, nullable=True)
     startup_analysis_entries = Column(JSON().with_variant(JSONB(), "postgresql"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     files = relationship("ExportFile", back_populates="job")

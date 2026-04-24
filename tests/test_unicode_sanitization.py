@@ -114,6 +114,15 @@ class TestDescribeRelativePaths:
 
         assert refs == []
 
+    def test_omits_root_relative_source_marker(self):
+        refs = describe_relative_paths(
+            "permission denied: /nfs/project-001/evidence",
+            source_path="/nfs/project-001/evidence",
+            target_mount_path="/mnt/ecube/1",
+        )
+
+        assert refs == []
+
 
 class TestIsEncodingError:
 

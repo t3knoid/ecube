@@ -215,7 +215,9 @@ def describe_relative_paths(
                 continue
 
             relative_path = os.path.relpath(normalized_candidate, root)
-            relative_display = "." if relative_path == "." else relative_path.replace("\\", "/")
+            if relative_path == ".":
+                break
+            relative_display = relative_path.replace("\\", "/")
             description = f"{label}: {relative_display}"
             if description not in descriptions:
                 descriptions.append(description)
