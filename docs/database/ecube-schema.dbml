@@ -13,6 +13,14 @@ Enum job_status {
   VERIFYING
 }
 
+Enum startup_analysis_status {
+  NOT_ANALYZED
+  ANALYZING
+  READY
+  STALE
+  FAILED
+}
+
 Enum mount_type {
   NFS
   SMB
@@ -67,6 +75,9 @@ Table export_jobs {
   client_ip varchar(45)
   callback_url varchar
   failure_reason text
+  startup_analysis_status startup_analysis_status [not null, default: 'NOT_ANALYZED']
+  startup_analysis_last_analyzed_at timestamptz
+  startup_analysis_failure_reason text
   startup_analysis_file_count int
   startup_analysis_total_bytes bigint
   startup_analysis_entries json

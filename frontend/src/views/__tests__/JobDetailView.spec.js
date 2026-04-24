@@ -4,6 +4,7 @@ import i18n from '@/i18n/index.js'
 import JobDetailView from '@/views/JobDetailView.vue'
 
 const mocks = vi.hoisted(() => ({
+  analyzeJob: vi.fn(),
   getJob: vi.fn(),
   getJobFiles: vi.fn(),
   startJob: vi.fn(),
@@ -38,6 +39,7 @@ vi.mock('@/stores/auth.js', () => ({
 }))
 
 vi.mock('@/api/jobs.js', () => ({
+  analyzeJob: (...args) => mocks.analyzeJob(...args),
   getJob: (...args) => mocks.getJob(...args),
   getJobFiles: (...args) => mocks.getJobFiles(...args),
   startJob: (...args) => mocks.startJob(...args),
@@ -116,6 +118,7 @@ function mountView() {
 describe('JobDetailView start action', () => {
   beforeEach(() => {
     mocks.getJob.mockReset()
+    mocks.analyzeJob.mockReset()
     mocks.getJobFiles.mockReset()
     mocks.startJob.mockReset()
     mocks.verifyJob.mockReset()
@@ -145,6 +148,22 @@ describe('JobDetailView start action', () => {
       thread_count: 4,
       copied_bytes: 0,
       total_bytes: 0,
+      startup_analysis_status: 'NOT_ANALYZED',
+      startup_analysis_ready: false,
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      drive: { id: 1 },
+    })
+    mocks.analyzeJob.mockResolvedValue({
+      id: 6,
+      status: 'PENDING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      thread_count: 4,
+      copied_bytes: 0,
+      total_bytes: 0,
+      startup_analysis_status: 'ANALYZING',
+      startup_analysis_ready: false,
       source_path: '/nfs/project-001/evidence',
       target_mount_path: '/mnt/ecube/1',
       drive: { id: 1 },
@@ -183,6 +202,94 @@ describe('JobDetailView start action', () => {
     expect(mocks.startJob).toHaveBeenCalledWith(6, { thread_count: 4 })
     expect(wrapper.text()).toContain('body: Field required')
     expect(wrapper.text()).not.toContain(i18n.global.t('common.errors.requestConflict'))
+  })
+
+  it('shows startup-analysis status details and starts analysis for eligible jobs', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'PENDING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 0,
+      total_bytes: 0,
+      startup_analysis_status: 'READY',
+      startup_analysis_last_analyzed_at: '2026-04-24T15:00:00Z',
+      startup_analysis_file_count: 3,
+      startup_analysis_total_bytes: 24,
+      startup_analysis_ready: true,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Analysis status')
+    expect(wrapper.text()).toContain('Ready')
+    expect(wrapper.text()).toContain('Discovered files')
+    expect(wrapper.text()).toContain('3')
+    expect(wrapper.text()).toContain('Estimated total bytes')
+    expect(wrapper.text()).toContain('24 B')
+    expect(wrapper.text()).toContain('Ready to start')
+    expect(wrapper.text()).toContain('Yes')
+
+    const analyzeButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.analyze'))
+    expect(analyzeButton).toBeTruthy()
+    await analyzeButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.analyzeJob).toHaveBeenCalledWith(6, {})
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.startupAnalysisStarted'))
+  })
+
+  it('shows analyze failure details and allows start when analysis is already ready', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'FAILED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 0,
+      total_bytes: 128,
+      startup_analysis_status: 'FAILED',
+      startup_analysis_failure_reason: 'Startup analysis failed',
+      startup_analysis_ready: false,
+    })
+    mocks.startJob.mockResolvedValue({
+      id: 6,
+      status: 'RUNNING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 0,
+      total_bytes: 128,
+      file_count: 2,
+      files_succeeded: 0,
+      files_failed: 0,
+      startup_analysis_status: 'READY',
+      startup_analysis_last_analyzed_at: '2026-04-24T15:00:00Z',
+      startup_analysis_file_count: 2,
+      startup_analysis_total_bytes: 128,
+      startup_analysis_ready: true,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Failed')
+    expect(wrapper.text()).toContain('Analysis failure reason: Startup analysis failed')
+
+    const startButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.start'))
+    expect(startButton).toBeTruthy()
+    await startButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.startJob).toHaveBeenCalledWith(6, { thread_count: 4 })
   })
 
   it('shows the failure summary when the job has failed', async () => {
@@ -778,6 +885,29 @@ describe('JobDetailView start action', () => {
     const wrapper = mountView()
     await flushPromises()
 
+    expect(wrapper.text()).not.toContain(i18n.global.t('jobs.clearStartupAnalysis'))
+  })
+
+  it('shows the analyze control for processor roles', async () => {
+    mocks.hasAnyRole.mockImplementation((roles) => roles.includes('processor'))
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'PENDING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 0,
+      total_bytes: 0,
+      startup_analysis_status: 'NOT_ANALYZED',
+      startup_analysis_ready: false,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.analyze'))
     expect(wrapper.text()).not.toContain(i18n.global.t('jobs.clearStartupAnalysis'))
   })
 })

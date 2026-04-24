@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
-import { getJob, getJobFiles, startJob, pauseJob, verifyJob, generateManifest, updateJob, completeJob, deleteJob, clearJobStartupAnalysisCache } from '@/api/jobs.js'
+import { analyzeJob, getJob, getJobFiles, startJob, pauseJob, verifyJob, generateManifest, updateJob, completeJob, deleteJob, clearJobStartupAnalysisCache } from '@/api/jobs.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import { getFileHashes, compareFiles } from '@/api/files.js'
 import { getDrives } from '@/api/drives.js'
@@ -67,7 +67,23 @@ const currentStatus = computed(() => String(job.value?.status || '').toUpperCase
 const canEdit = computed(() => canOperate.value && ['PENDING', 'PAUSED', 'FAILED'].includes(currentStatus.value))
 const canComplete = computed(() => canOperate.value && ['PENDING', 'PAUSED', 'FAILED'].includes(currentStatus.value))
 const canDelete = computed(() => canOperate.value && currentStatus.value === 'PENDING')
+const canAnalyze = computed(() => canOperate.value && ['PENDING', 'PAUSED', 'FAILED'].includes(currentStatus.value))
 const canClearStartupAnalysisCache = computed(() => canManageStartupAnalysis.value && !!job.value?.startup_analysis_cached)
+
+const startupAnalysisSummary = computed(() => {
+  if (!job.value) return null
+  const rawStatus = String(job.value.startup_analysis_status || 'NOT_ANALYZED').toUpperCase()
+  const lastAnalyzedAt = formatTimestamp(job.value.startup_analysis_last_analyzed_at)
+  return {
+    status: rawStatus,
+    statusLabel: t(`jobs.analysisStates.${rawStatus}`),
+    lastAnalyzedAt,
+    discoveredFiles: Number(job.value.startup_analysis_file_count || 0),
+    estimatedBytes: formatBytes(Number(job.value.startup_analysis_total_bytes || 0)),
+    readyToStart: !!job.value.startup_analysis_ready,
+    failureReason: String(job.value.startup_analysis_failure_reason || '').trim(),
+  }
+})
 
 const fileColumns = computed(() => {
   const columns = [
@@ -428,6 +444,23 @@ async function runComplete() {
   }
 }
 
+async function runAnalyze() {
+  if (!job.value || !canAnalyze.value) return
+  acting.value = true
+  error.value = ''
+  infoMessage.value = ''
+  try {
+    job.value = normalizeProjectRecord(await analyzeJob(job.value.id, {}), ['project_id'])
+    infoMessage.value = t('jobs.startupAnalysisStarted')
+    await refreshAll()
+    jobPoller.start()
+  } catch (err) {
+    error.value = buildJobError(err)
+  } finally {
+    acting.value = false
+  }
+}
+
 async function confirmDelete() {
   if (!job.value || !canDelete.value) return
   acting.value = true
@@ -710,6 +743,18 @@ onUnmounted(() => {
       <p v-if="progressMetrics.initializing" class="muted">{{ t('jobs.progressPreparingDetail') }}</p>
       <p class="muted">{{ formatBytes(progressMetrics.copiedBytes) }} / {{ formatBytes(progressMetrics.totalBytes) }}</p>
 
+      <div v-if="startupAnalysisSummary" class="analysis-summary" aria-live="polite">
+        <strong>{{ t('jobs.analysisSummary') }}</strong>
+        <div class="hash-grid">
+          <span>{{ t('jobs.analysisStatus') }}</span><strong>{{ startupAnalysisSummary.statusLabel }}</strong>
+          <span>{{ t('jobs.analysisLastAnalyzedAt') }}</span><strong>{{ startupAnalysisSummary.lastAnalyzedAt }}</strong>
+          <span>{{ t('jobs.analysisDiscoveredFiles') }}</span><strong>{{ startupAnalysisSummary.discoveredFiles }}</strong>
+          <span>{{ t('jobs.analysisEstimatedBytes') }}</span><strong>{{ startupAnalysisSummary.estimatedBytes }}</strong>
+          <span>{{ t('jobs.analysisReadyToStart') }}</span><strong>{{ startupAnalysisSummary.readyToStart ? t('jobs.analysisReadyYes') : t('jobs.analysisReadyNo') }}</strong>
+        </div>
+        <p v-if="startupAnalysisSummary.failureReason" class="error-text">{{ t('jobs.analysisFailureReason') }}: {{ startupAnalysisSummary.failureReason }}</p>
+      </div>
+
       <div v-if="completionSummary" class="completion-summary" aria-live="polite">
         <strong>{{ t('jobs.completionSummary') }}</strong>
         <div class="hash-grid">
@@ -739,6 +784,7 @@ onUnmounted(() => {
 
       <div class="actions">
         <button class="btn" :disabled="!canEdit || acting" @click="openEditDialog">{{ t('common.actions.edit') }}</button>
+        <button class="btn" :disabled="!canAnalyze || acting" @click="runAnalyze">{{ t('jobs.analyze') }}</button>
         <button class="btn" :disabled="!canStart || acting" @click="runAction('start')">{{ t('jobs.start') }}</button>
         <button class="btn" :disabled="!canPause || acting" @click="runAction('pause')">{{ t('jobs.pause') }}</button>
         <button class="btn" :disabled="!canComplete || acting" @click="runComplete">{{ t('jobs.complete') }}</button>
@@ -921,6 +967,11 @@ onUnmounted(() => {
 .actions,
 .split-grid {
   display: flex;
+  gap: var(--space-sm);
+}
+
+.analysis-summary {
+  display: grid;
   gap: var(--space-sm);
 }
 
