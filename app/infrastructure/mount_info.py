@@ -40,12 +40,8 @@ def unescape_mountpoint(escaped_path: str) -> str:
         return escaped_path
 
 
-def read_mount_points() -> dict[str, str]:
-    """Return a mapping of *device path → mount point* from ``/proc/mounts``.
-
-    Each key is a block-device path (e.g. ``"/dev/sdb1"``) and each value is
-    the corresponding mount point (e.g. ``"/mnt/ecube/7"``).  Only entries
-    whose device field starts with ``/dev/`` are included.
+def read_mount_table() -> dict[str, str]:
+    """Return a mapping of *mount point → source* from ``/proc/mounts``.
 
     Returns an empty dict when the file cannot be read (non-Linux, container,
     permission error, etc.).
@@ -56,11 +52,28 @@ def read_mount_points() -> dict[str, str]:
         with open(mounts_path, encoding="utf-8", errors="replace") as fh:
             for line in fh:
                 parts = line.split()
-                if len(parts) >= 2 and parts[0].startswith("/dev/"):
-                    result[parts[0]] = unescape_mountpoint(parts[1])
+                if len(parts) >= 2:
+                    source = unescape_mountpoint(parts[0])
+                    mount_point = unescape_mountpoint(parts[1])
+                    result[mount_point] = source
     except OSError:
         logger.debug("Unable to read %s", mounts_path)
     return result
+
+
+def read_mount_points() -> dict[str, str]:
+    """Return a mapping of *device path → mount point* from ``/proc/mounts``.
+
+    Each key is a block-device path (e.g. ``"/dev/sdb1"``) and each value is
+    the corresponding mount point (e.g. ``"/mnt/ecube/7"``). Only entries
+    whose source field starts with ``/dev/`` are included.
+    """
+    mount_table = read_mount_table()
+    return {
+        source: mount_point
+        for mount_point, source in mount_table.items()
+        if source.startswith("/dev/")
+    }
 
 
 def find_device_mount_point(device_path: str) -> Optional[str]:
