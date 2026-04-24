@@ -585,6 +585,46 @@ def test_existing_tests_still_pass_with_enabled_port(db):
     assert drive.current_state == DriveState.AVAILABLE
 
 
+def test_disabled_port_drive_reconciles_to_in_use_when_reenabled_and_already_mounted(db):
+    topology = DiscoveredTopology(
+        hubs=[DiscoveredHub(system_identifier="usb1", name="Test Hub", vendor_id="1d6b", product_id="0002")],
+        ports=[DiscoveredPort(
+            hub_system_identifier="usb1",
+            port_number=1,
+            system_path="1-1",
+            vendor_id="0781",
+            product_id="5583",
+            speed="5000",
+        )],
+        drives=[DiscoveredDrive(
+            device_identifier="SN-MOUNTED-REENABLE",
+            port_system_path="1-1",
+            filesystem_path="/dev/sdb",
+            mount_path="/media/ecube/usb-mounted",
+            capacity_bytes=64_000_000_000,
+            manufacturer="SanDisk",
+            product_name="Ultra",
+            speed="5000",
+        )],
+    )
+
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+
+    drive = db.query(UsbDrive).filter(UsbDrive.device_identifier == "SN-MOUNTED-REENABLE").one()
+    assert drive.current_state == DriveState.DISCONNECTED
+
+    port = db.query(UsbPort).one()
+    port.enabled = True
+    db.commit()
+
+    summary = run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+
+    db.refresh(drive)
+    assert summary["drives_updated"] == 1
+    assert drive.current_state == DriveState.IN_USE
+    assert drive.mount_path == "/media/ecube/usb-mounted"
+
+
 def test_available_drive_demoted_when_port_disabled(db):
     """An AVAILABLE drive on a port that is later disabled should become EMPTY."""
     topology = _simple_topology()
