@@ -153,6 +153,37 @@ describe('DriveDetailView mount workflow', () => {
     expect(labels).not.toContain(i18n.global.t('drives.mount'))
   })
 
+  it('keeps recovery actions consistent when enable reloads a mounted in-use drive', async () => {
+    mocks.getDrives
+      .mockResolvedValueOnce([buildDrive({ current_state: 'DISCONNECTED', filesystem_path: '/dev/sdb1', port_id: 1 })])
+      .mockResolvedValueOnce([buildDrive({ current_state: 'IN_USE', mount_path: '/mnt/ecube/7', filesystem_path: '/dev/sdb1', current_project_id: null })])
+    mocks.enablePort.mockResolvedValue({ id: 1, enabled: true })
+    mocks.refreshDrives.mockResolvedValue({ ok: true })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const enableButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.enable'))
+    expect(enableButton).toBeTruthy()
+
+    await enableButton.trigger('click')
+    await flushPromises()
+
+    const labels = wrapper.findAll('button').map((node) => node.text())
+    expect(wrapper.text()).toContain(i18n.global.t('drives.enableInUse'))
+    expect(labels).not.toContain(i18n.global.t('drives.mount'))
+    expect(labels).toContain(i18n.global.t('drives.browse'))
+    expect(labels).toContain(i18n.global.t('drives.prepareEject'))
+
+    const formatButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.format'))
+    const initializeButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.initialize'))
+    const ejectButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.prepareEject'))
+
+    expect(formatButton.attributes('disabled')).toBeDefined()
+    expect(initializeButton.attributes('disabled')).toBeDefined()
+    expect(ejectButton.attributes('disabled')).toBeUndefined()
+  })
+
   it('disables the Format action when the drive is mounted', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'AVAILABLE', mount_path: '/mnt/ecube/7' })])
 

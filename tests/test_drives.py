@@ -507,6 +507,53 @@ def test_mount_drive_failure_redacts_provider_paths_from_client(manager_client, 
     assert "/mnt/ecube/42" not in response.json()["message"]
 
 
+def test_mount_drive_stale_already_mounted_returns_conflict(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-004BA",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        filesystem_path="/dev/sdz2",
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = MagicMock()
+    provider.mount_drive.return_value = (False, "/dev/sdz2 is already mounted at /media/ecube/usb-mounted, not at requested /mnt/ecube/42")
+
+    with patch("app.routers.drives.get_drive_mount", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 409
+    assert response.json()["message"] == "Drive is already mounted; refresh drive status and retry"
+    assert "/dev/sdz2" not in response.json()["message"]
+    assert "/media/ecube/usb-mounted" not in response.json()["message"]
+
+
+def test_format_drive_rejects_persisted_mounted_state_before_formatter(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-FORMAT-STALE-001",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        filesystem_path="/dev/sde1",
+        mount_path="/mnt/ecube/15",
+    )
+    db.add(drive)
+    db.commit()
+
+    formatter = MagicMock()
+
+    with patch("app.routers.drives.get_drive_formatter", return_value=formatter):
+        response = manager_client.post(
+            f"/drives/{drive.id}/format",
+            json={"filesystem_type": "ext4"},
+        )
+
+    assert response.status_code == 409
+    assert response.json()["message"] == "Drive is currently mounted; unmount before formatting"
+    formatter.is_mounted.assert_not_called()
+    formatter.format.assert_not_called()
+
+
 def test_mount_drive_db_save_failure_attempts_cleanup(manager_client, db):
     drive = UsbDrive(
         device_identifier="USB-MOUNT-004C",
