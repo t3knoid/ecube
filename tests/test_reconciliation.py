@@ -9,6 +9,7 @@ Covers:
 """
 
 import os
+import pytest
 from typing import Optional, Tuple
 from unittest.mock import patch
 from datetime import datetime, timezone, timedelta
@@ -105,19 +106,51 @@ def _make_hub_and_port(db: Session, enabled: bool = True) -> Tuple[UsbHub, UsbPo
 class FakeMountProvider:
     """Configurable mount provider for testing."""
 
-    def __init__(self, mounted_paths: Optional[set] = None):
+    def __init__(self, mounted_paths: Optional[set] = None, mounted_sources: Optional[dict[str, str]] = None):
         self._mounted = mounted_paths or set()
+        self._mounted_sources = mounted_sources or {path: "server:/export" for path in self._mounted}
+        self.mount_calls = []
+        self.unmount_calls = []
 
     def check_mounted(self, local_mount_point: str) -> Optional[bool]:
-        if local_mount_point in self._mounted:
+        if local_mount_point in self._mounted or local_mount_point in self._mounted_sources:
             return True
         return False
 
-    def os_mount(self, *args, **kwargs) -> Tuple[bool, Optional[str]]:
-        return False, "not implemented in test"
-
-    def os_unmount(self, *args, **kwargs) -> Tuple[bool, Optional[str]]:
+    def os_mount(self, mount_type, remote_path, local_mount_point, **kwargs) -> Tuple[bool, Optional[str]]:
+        self.mount_calls.append((mount_type, remote_path, local_mount_point))
+        self._mounted.add(local_mount_point)
+        self._mounted_sources[local_mount_point] = remote_path
         return True, None
+
+    def os_unmount(self, local_mount_point, *args, **kwargs) -> Tuple[bool, Optional[str]]:
+        self.unmount_calls.append(local_mount_point)
+        self._mounted.discard(local_mount_point)
+        self._mounted_sources.pop(local_mount_point, None)
+        return True, None
+
+
+class FakeDriveMountProvider:
+    def __init__(self, mounted_paths: Optional[dict[str, str]] = None):
+        self.mounted_paths = mounted_paths or {}
+        self.mount_calls = []
+        self.unmount_calls = []
+
+    def mount_drive(self, device_path: str, mount_point: str) -> Tuple[bool, Optional[str]]:
+        self.mount_calls.append((device_path, mount_point))
+        self.mounted_paths[mount_point] = device_path
+        return True, None
+
+    def unmount_drive(self, mount_point: str) -> Tuple[bool, Optional[str]]:
+        self.unmount_calls.append(mount_point)
+        self.mounted_paths.pop(mount_point, None)
+        return True, None
+
+
+@pytest.fixture(autouse=True)
+def _isolate_live_mount_table():
+    with patch("app.services.reconciliation_service.read_mount_table", return_value={}):
+        yield
 
 
 class FakeFilesystemDetector:
@@ -227,6 +260,98 @@ class TestReconcileMounts:
         db.refresh(mount)
         assert mount.status == MountStatus.UNMOUNTED
         assert result["mounts_corrected"] == 1
+        assert provider.mount_calls == []
+
+    def test_unexpected_live_unmounted_mount_is_removed(self, db: Session):
+        mount = _make_mount(db, MountStatus.UNMOUNTED, "/nfs/unexpected")
+        provider = FakeMountProvider(mounted_sources={"/nfs/unexpected": "server:/export"})
+
+        with patch("app.services.reconciliation_service.read_mount_table", return_value={"/nfs/unexpected": "server:/export"}):
+            result = reconcile_mounts(db, provider)
+
+        db.refresh(mount)
+        assert mount.status == MountStatus.UNMOUNTED
+        assert result["mounts_corrected"] == 1
+        assert provider.unmount_calls == ["/nfs/unexpected"]
+
+    def test_orphan_generated_network_mount_is_removed(self, db: Session):
+        provider = FakeMountProvider(mounted_sources={"/nfs/orphan": "server:/orphan"})
+
+        with patch("app.services.reconciliation_service.read_mount_table", return_value={"/nfs/orphan": "server:/orphan"}):
+            result = reconcile_mounts(db, provider)
+
+        assert result["mounts_corrected"] == 1
+        assert provider.unmount_calls == ["/nfs/orphan"]
+
+    def test_orphan_generated_network_mount_emits_audit_record(self, db: Session):
+        provider = FakeMountProvider(mounted_sources={"/nfs/orphan": "server:/orphan"})
+
+        with patch("app.services.reconciliation_service.read_mount_table", return_value={"/nfs/orphan": "server:/orphan"}):
+            reconcile_mounts(db, provider)
+
+        audit = (
+            db.query(AuditLog)
+            .filter(AuditLog.action == "MOUNT_RECONCILED")
+            .filter(AuditLog.details["reason"].as_string() == "orphan_managed_mount_removed")
+            .first()
+        )
+        assert audit is not None
+        assert audit.details["old_status"] == "MOUNTED"
+        assert audit.details["new_status"] == "UNMOUNTED"
+        assert audit.details["managed_area"] == "nfs"
+
+    def test_persisted_usb_mount_is_remounted_to_expected_slot(self, db: Session):
+        drive = _make_drive(db, "USB-STARTUP", DriveState.IN_USE)
+        drive.filesystem_type = "ext4"
+        drive.mount_path = "/mnt/ecube/stale"
+        db.commit()
+        drive_provider = FakeDriveMountProvider()
+
+        with patch("app.services.reconciliation_service.find_device_mount_point", return_value=None):
+            result = reconcile_mounts(db, FakeMountProvider(), drive_provider)
+
+        assert result["usb_mounts_checked"] == 1
+        assert result["usb_mounts_corrected"] == 1
+        assert drive_provider.mount_calls == [(drive.filesystem_path, f"{settings.usb_mount_base_path}/{drive.id}")]
+
+    def test_persisted_usb_mount_outside_managed_root_is_unmounted_before_remount(self, db: Session):
+        drive = _make_drive(db, "USB-STARTUP-EXTERNAL", DriveState.IN_USE)
+        drive.filesystem_type = "ext4"
+        drive.mount_path = "/mnt/ecube/stale"
+        db.commit()
+        drive_provider = FakeDriveMountProvider()
+
+        with patch("app.services.reconciliation_service.find_device_mount_point", return_value="/media/operator/usb-startup"):
+            result = reconcile_mounts(db, FakeMountProvider(), drive_provider)
+
+        assert result["usb_mounts_checked"] == 1
+        assert result["usb_mounts_corrected"] == 1
+        assert drive_provider.unmount_calls == ["/media/operator/usb-startup"]
+        assert drive_provider.mount_calls == [(drive.filesystem_path, f"{settings.usb_mount_base_path}/{drive.id}")]
+
+    def test_persisted_usb_mount_cleanup_and_remount_counts_once(self, db: Session):
+        drive = _make_drive(db, "USB-STARTUP-MANAGED", DriveState.IN_USE)
+        drive.filesystem_type = "ext4"
+        drive.mount_path = "/mnt/ecube/stale"
+        db.commit()
+        drive_provider = FakeDriveMountProvider()
+
+        with patch("app.services.reconciliation_service.find_device_mount_point", return_value="/mnt/ecube/999"):
+            result = reconcile_mounts(db, FakeMountProvider(), drive_provider)
+
+        assert result["usb_mounts_checked"] == 1
+        assert result["usb_mounts_corrected"] == 1
+        assert drive_provider.unmount_calls == ["/mnt/ecube/999"]
+        assert drive_provider.mount_calls == [(drive.filesystem_path, f"{settings.usb_mount_base_path}/{drive.id}")]
+
+    def test_orphan_managed_usb_mount_is_removed(self, db: Session):
+        drive_provider = FakeDriveMountProvider({"/mnt/ecube/999": "/dev/sdz1"})
+
+        with patch("app.services.reconciliation_service.read_mount_table", return_value={"/mnt/ecube/999": "/dev/sdz1"}):
+            result = reconcile_mounts(db, FakeMountProvider(), drive_provider)
+
+        assert result["usb_mounts_corrected"] == 1
+        assert drive_provider.unmount_calls == ["/mnt/ecube/999"]
 
     def test_stale_mount_emits_audit_record(self, db: Session):
         mount = _make_mount(db, MountStatus.MOUNTED, "/mnt/audit-test")
@@ -311,6 +436,20 @@ class TestReconcileMounts:
         assert m3.status == MountStatus.UNMOUNTED
         assert result["mounts_checked"] == 3
         assert result["mounts_corrected"] == 2
+
+    def test_mismatched_live_network_mount_cleanup_and_remount_counts_once(self, db: Session):
+        mount = _make_mount(db, MountStatus.MOUNTED, "/nfs/project-a")
+        provider = FakeMountProvider(mounted_sources={"/nfs/project-a": "server:/wrong-export"})
+
+        with patch("app.services.reconciliation_service.read_mount_table", return_value={"/nfs/project-a": "server:/wrong-export"}):
+            result = reconcile_mounts(db, provider)
+
+        db.refresh(mount)
+        assert mount.status == MountStatus.UNMOUNTED
+        assert result["mounts_checked"] == 1
+        assert result["mounts_corrected"] == 1
+        assert provider.unmount_calls == ["/nfs/project-a"]
+        assert provider.mount_calls == []
 
     def test_reconcile_mounts_passes_configured_timeout(self, db: Session):
         mount = _make_mount(db, MountStatus.MOUNTED, "/mnt/timeout-aware")
@@ -632,10 +771,12 @@ class TestRunStartupReconciliation:
         _make_job(db, JobStatus.RUNNING)
 
         provider = FakeMountProvider(mounted_paths=set())
+        drive_provider = FakeDriveMountProvider()
         os_user_provider = FakeOsUserProvider(created_groups=["ecube-processors"])
 
         result = run_startup_reconciliation(
             db, provider,
+            drive_mount_provider=drive_provider,
             os_user_provider=os_user_provider,
             topology_source=_empty_topology,
             filesystem_detector=FakeFilesystemDetector(),
@@ -658,6 +799,7 @@ class TestRunStartupReconciliation:
         result = run_startup_reconciliation(
             db,
             FakeMountProvider(mounted_paths=set()),
+            drive_mount_provider=FakeDriveMountProvider(),
             os_user_provider=FakeOsUserProvider(should_fail_groups=True),
             topology_source=_empty_topology,
             filesystem_detector=FakeFilesystemDetector(),
@@ -682,6 +824,7 @@ class TestRunStartupReconciliation:
 
         result = run_startup_reconciliation(
             db, BrokenMountProvider(),
+            drive_mount_provider=FakeDriveMountProvider(),
             topology_source=_empty_topology,
             filesystem_detector=FakeFilesystemDetector(),
         )

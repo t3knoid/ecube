@@ -29,10 +29,14 @@ from typing import Any, Callable, Dict, Optional
 from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
 
+from app.config import settings
+from app.infrastructure.drive_mount import DriveMountProvider
+from app.infrastructure.mount_info import find_device_mount_point, read_mount_table
 from app.infrastructure.mount_protocol import MountProvider
 from app.infrastructure.os_user_protocol import OsUserProvider
 from app.infrastructure.usb_discovery import DiscoveredTopology
 from app.infrastructure import FilesystemDetector
+from app.models.hardware import DriveState, UsbDrive
 from app.models.jobs import ExportJob, JobStatus
 from app.models.network import MountStatus, NetworkMount
 from app.models.system import ReconciliationLock
@@ -164,55 +168,311 @@ def reconcile_identity_users(
 # Mount reconciliation
 # -----------------------------------------------------------------------
 
+def _cleanup_managed_mount_directory(path: str, managed_root: str) -> None:
+    try:
+        real_root = os.path.realpath(managed_root)
+        real_path = os.path.realpath(path)
+    except (OSError, ValueError):
+        return
+
+    if os.path.dirname(real_path) != real_root:
+        return
+
+    try:
+        os.rmdir(real_path)
+    except FileNotFoundError:
+        return
+    except OSError:
+        return
+
+
+def _is_direct_child_of(path: str, managed_root: str) -> bool:
+    try:
+        return os.path.dirname(os.path.realpath(path)) == os.path.realpath(managed_root)
+    except (OSError, ValueError):
+        return False
+
+
+def _cleanup_generated_network_mount_directory(path: str) -> None:
+    if _is_direct_child_of(path, "/nfs"):
+        _cleanup_managed_mount_directory(path, "/nfs")
+    elif _is_direct_child_of(path, "/smb"):
+        _cleanup_managed_mount_directory(path, "/smb")
+
+
+def _reconcile_usb_mounts(
+    db: Session,
+    drive_mount_provider: DriveMountProvider,
+    *,
+    audit_repo: AuditRepository,
+) -> Dict[str, int]:
+    checked = 0
+    corrected = 0
+    audit_entries = []
+    managed_root = settings.usb_mount_base_path
+
+    drives = (
+        db.query(UsbDrive)
+        .filter(UsbDrive.mount_path.isnot(None))
+        .filter(UsbDrive.current_state.in_((DriveState.AVAILABLE, DriveState.IN_USE)))
+        .all()
+    )
+
+    expected_targets = {
+        os.path.normpath(os.path.join(settings.usb_mount_base_path, str(drive.id))): drive.id
+        for drive in drives
+    }
+
+    for drive in drives:
+        checked += 1
+        corrected_this_drive = False
+        expected_target = os.path.normpath(os.path.join(settings.usb_mount_base_path, str(drive.id)))
+        actual_target = find_device_mount_point(str(drive.filesystem_path)) if drive.filesystem_path else None
+
+        if actual_target == expected_target:
+            continue
+
+        if actual_target and actual_target != expected_target:
+            unmount_ok, unmount_error = drive_mount_provider.unmount_drive(actual_target)
+            if not unmount_ok:
+                logger.info(
+                    "Startup USB mount cleanup failed",
+                    extra={"drive_id": drive.id, "reason": "cleanup_failed"},
+                )
+                logger.debug(
+                    "Startup USB mount cleanup raw error",
+                    extra={"drive_id": drive.id, "mount_point": actual_target, "raw_error": unmount_error},
+                )
+                audit_entries.append({
+                    "action": "DRIVE_MOUNT_RECONCILED",
+                    "user": "system",
+                    "drive_id": drive.id,
+                    "details": {"drive_id": drive.id, "status": "ERROR", "reason": "cleanup_failed"},
+                })
+                continue
+            if _is_direct_child_of(actual_target, managed_root):
+                _cleanup_managed_mount_directory(actual_target, managed_root)
+            corrected += 1
+            corrected_this_drive = True
+
+        if not drive.filesystem_path:
+            audit_entries.append({
+                "action": "DRIVE_MOUNT_RECONCILED",
+                "user": "system",
+                "drive_id": drive.id,
+                "details": {"drive_id": drive.id, "status": "SKIPPED", "reason": "missing_filesystem_path"},
+            })
+            continue
+
+        success, error = drive_mount_provider.mount_drive(str(drive.filesystem_path), expected_target)
+        if success:
+            if not corrected_this_drive:
+                corrected += 1
+            audit_entries.append({
+                "action": "DRIVE_MOUNT_RECONCILED",
+                "user": "system",
+                "drive_id": drive.id,
+                "details": {"drive_id": drive.id, "status": "MOUNTED", "reason": "startup_remount"},
+            })
+        else:
+            logger.info(
+                "Startup USB remount failed",
+                extra={"drive_id": drive.id, "reason": "remount_failed"},
+            )
+            logger.debug(
+                "Startup USB remount raw error",
+                extra={"drive_id": drive.id, "mount_point": expected_target, "raw_error": error},
+            )
+            audit_entries.append({
+                "action": "DRIVE_MOUNT_RECONCILED",
+                "user": "system",
+                "drive_id": drive.id,
+                "details": {"drive_id": drive.id, "status": "ERROR", "reason": "remount_failed"},
+            })
+
+    live_mounts = read_mount_table()
+    for target in list(live_mounts.keys()):
+        normalized_target = os.path.normpath(target)
+        if not _is_direct_child_of(normalized_target, managed_root):
+            continue
+        if normalized_target in expected_targets:
+            continue
+
+        checked += 1
+        unmount_ok, unmount_error = drive_mount_provider.unmount_drive(normalized_target)
+        if not unmount_ok:
+            logger.info(
+                "Startup orphan USB mount cleanup failed",
+                extra={"reason": "cleanup_failed"},
+            )
+            logger.debug(
+                "Startup orphan USB mount cleanup raw error",
+                extra={"mount_point": normalized_target, "raw_error": unmount_error},
+            )
+            continue
+
+        corrected += 1
+        _cleanup_managed_mount_directory(normalized_target, managed_root)
+        audit_entries.append({
+            "action": "DRIVE_MOUNT_RECONCILED",
+            "user": "system",
+            "details": {"status": "UNMOUNTED", "reason": "orphan_managed_mount_removed"},
+        })
+
+    if audit_entries:
+        try:
+            audit_repo.add_many(audit_entries)
+        except Exception:
+            db.rollback()
+            db.expire_all()
+            logger.exception("Failed to write audit logs for DRIVE_MOUNT_RECONCILED")
+
+    return {"usb_mounts_checked": checked, "usb_mounts_corrected": corrected}
+
 def reconcile_mounts(
     db: Session,
     mount_provider: MountProvider,
+    drive_mount_provider: DriveMountProvider | None = None,
 ) -> Dict[str, int]:
-    """Check all ``MOUNTED`` mounts against the OS and correct stale state.
+    """Converge managed network and USB mounts toward ECUBE's expected state.
 
-    Every checked mount receives a ``last_checked_at`` timestamp update
-    regardless of whether its status changed.  This is an observability
-    side-effect (not a domain state mutation) and is expected on every run.
+    For persisted network mounts, startup reconciliation restores expected
+    ``MOUNTED`` entries, removes unexpected managed mounts for unmounted/error
+    records, and cleans up orphan managed paths under ECUBE-controlled roots.
 
-    Returns a summary dict with counts of mounts checked and corrected.
+    For USB drives, persisted mounted drives are re-mounted to their managed
+    ECUBE mount slots when possible, and orphan managed USB mounts are removed.
     """
-    mounts = (
-        db.query(NetworkMount)
-        .filter(NetworkMount.status == MountStatus.MOUNTED)
-        .all()
-    )
+    from app.services.mount_service import validate_mount
+
+    mounts = db.query(NetworkMount).all()
+    live_mounts = read_mount_table()
+    persisted_targets = {os.path.normpath(str(m.local_mount_point)) for m in mounts}
 
     checked = 0
     corrected = 0
     audit_entries = []
 
     for mount in mounts:
-        checked += 1
-        try:
-            result = check_mounted_with_configured_timeout(mount_provider, mount.local_mount_point)
-        except Exception:
-            logger.exception(
-                "OS check failed for mount %s (%s) — treating as ERROR",
-                mount.id,
-                mount.local_mount_point,
-            )
-            result = None
+        target = os.path.normpath(str(mount.local_mount_point))
+        live_source = live_mounts.get(target)
+        corrected_this_mount = False
         mount.last_checked_at = datetime.now(timezone.utc)
 
-        if result is True:
-            # Still mounted — no status change needed.
+        if mount.status == MountStatus.MOUNTED:
+            checked += 1
+            if live_source == str(mount.remote_path):
+                continue
+
+            if live_source is None:
+                try:
+                    result = check_mounted_with_configured_timeout(mount_provider, mount.local_mount_point)
+                except Exception:
+                    logger.exception(
+                        "OS check failed for mount %s during startup reconciliation",
+                        mount.id,
+                    )
+                    result = None
+
+                if result is True:
+                    continue
+
+            if live_source is not None and live_source != str(mount.remote_path):
+                unmount_ok, unmount_error = mount_provider.os_unmount(str(mount.local_mount_point))
+                if not unmount_ok:
+                    mount.status = MountStatus.ERROR
+                    corrected += 1
+                    audit_entries.append({
+                        "mount_id": mount.id,
+                        "old_status": MountStatus.MOUNTED.value,
+                        "new_status": mount.status.value,
+                        "reason": "startup cleanup failed",
+                    })
+                    logger.debug(
+                        "Startup mount cleanup raw error",
+                        extra={"mount_id": mount.id, "mount_point": target, "raw_error": unmount_error},
+                    )
+                    continue
+                corrected_this_mount = True
+                _cleanup_generated_network_mount_directory(str(mount.local_mount_point))
+
+            previous_status = mount.status
+            try:
+                validate_mount(mount.id, db, actor="system", provider=mount_provider)
+            except Exception:
+                logger.exception(
+                    "Startup network remount failed unexpectedly",
+                    extra={"mount_id": mount.id},
+                )
+                mount.status = MountStatus.ERROR
+                if not corrected_this_mount:
+                    corrected += 1
+                audit_entries.append({
+                    "mount_id": mount.id,
+                    "old_status": previous_status.value,
+                    "new_status": mount.status.value,
+                    "reason": "startup reconciliation",
+                })
+                continue
+            db.refresh(mount)
+            if corrected_this_mount or mount.status != previous_status:
+                corrected += 1
+                audit_entries.append({
+                    "mount_id": mount.id,
+                    "old_status": previous_status.value,
+                    "new_status": mount.status.value,
+                    "reason": "startup reconciliation",
+                })
             continue
 
+        if live_source is None:
+            continue
+
+        checked += 1
         old_status = mount.status
-        mount.status = MountStatus.UNMOUNTED if result is False else MountStatus.ERROR
-        corrected += 1
+        unmount_ok, unmount_error = mount_provider.os_unmount(str(mount.local_mount_point))
+        if unmount_ok:
+            corrected += 1
+            mount.status = MountStatus.UNMOUNTED
+            _cleanup_generated_network_mount_directory(str(mount.local_mount_point))
+        else:
+            mount.status = MountStatus.ERROR
+            corrected += 1
+            logger.debug(
+                "Startup unexpected mount cleanup raw error",
+                extra={"mount_id": mount.id, "mount_point": target, "raw_error": unmount_error},
+            )
 
         audit_entries.append({
             "mount_id": mount.id,
-            "local_mount_point": mount.local_mount_point,
             "old_status": old_status.value,
             "new_status": mount.status.value,
             "reason": "startup reconciliation",
+        })
+
+    for target, source in live_mounts.items():
+        normalized_target = os.path.normpath(target)
+        if normalized_target in persisted_targets:
+            continue
+        managed_root = "/nfs" if _is_direct_child_of(normalized_target, "/nfs") else "/smb" if _is_direct_child_of(normalized_target, "/smb") else None
+        if managed_root is None:
+            continue
+
+        checked += 1
+        unmount_ok, unmount_error = mount_provider.os_unmount(normalized_target)
+        if not unmount_ok:
+            logger.debug(
+                "Startup orphan network mount cleanup raw error",
+                extra={"mount_point": normalized_target, "raw_error": unmount_error},
+            )
+            continue
+        corrected += 1
+        _cleanup_managed_mount_directory(normalized_target, managed_root)
+        audit_entries.append({
+            "old_status": MountStatus.MOUNTED.value,
+            "new_status": MountStatus.UNMOUNTED.value,
+            "reason": "orphan_managed_mount_removed",
+            "managed_area": managed_root.lstrip("/"),
         })
 
     if checked:
@@ -239,7 +499,10 @@ def reconcile_mounts(
                 "Failed to write audit logs for MOUNT_RECONCILED",
             )
 
-    return {"mounts_checked": checked, "mounts_corrected": corrected}
+    summary = {"mounts_checked": checked, "mounts_corrected": corrected}
+    if drive_mount_provider is not None:
+        summary.update(_reconcile_usb_mounts(db, drive_mount_provider, audit_repo=AuditRepository(db)))
+    return summary
 
 
 # -----------------------------------------------------------------------
@@ -502,6 +765,7 @@ def run_startup_reconciliation(
     db: Session,
     mount_provider: MountProvider,
     *,
+    drive_mount_provider: DriveMountProvider | None = None,
     os_user_provider: OsUserProvider | None = None,
     topology_source: Callable[[], DiscoveredTopology],
     filesystem_detector: FilesystemDetector,
@@ -554,7 +818,7 @@ def run_startup_reconciliation(
 
         logger.info("Startup reconciliation: checking mounts")
         try:
-            results["mounts"] = reconcile_mounts(db, mount_provider)
+            results["mounts"] = reconcile_mounts(db, mount_provider, drive_mount_provider)
         except Exception as exc:
             db.rollback()
             db.expire_all()
