@@ -501,8 +501,8 @@ def test_mount_drive_failure_redacts_provider_paths_from_client(manager_client, 
     with patch("app.routers.drives.get_drive_mount", return_value=provider):
         response = manager_client.post(f"/drives/{drive.id}/mount")
 
-    assert response.status_code == 500
-    assert response.json()["message"] == "Drive mount failed"
+    assert response.status_code == 409
+    assert response.json()["message"] == "Drive is already mounted; refresh drive status and retry"
     assert "/dev/sdz1" not in response.json()["message"]
     assert "/mnt/ecube/42" not in response.json()["message"]
 
