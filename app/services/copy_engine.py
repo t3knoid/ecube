@@ -1,5 +1,4 @@
 import hashlib
-import json
 import logging
 import os
 import time
@@ -246,7 +245,34 @@ def _startup_analysis_cache_details(job: Any) -> dict[str, int]:
     }
 
 
-def _analyze_source_files(source: Path, files: list[Path]) -> tuple[dict[str, Path], dict[str, int], int, int]:
+def _relative_directory_markers(source: Path, relative_paths: list[str]) -> dict[str, int]:
+    directories: set[str] = set()
+
+    if source.is_dir():
+        directories.add("")
+
+    for rel in relative_paths:
+        rel_parent = Path(rel).parent
+        if str(rel_parent) == ".":
+            if source.is_dir():
+                directories.add("")
+            continue
+
+        current = rel_parent
+        while str(current) not in ("", "."):
+            directories.add(str(current))
+            current = current.parent
+        if source.is_dir():
+            directories.add("")
+
+    markers: dict[str, int] = {}
+    for rel_dir in directories:
+        directory_path = source if rel_dir == "" else source / rel_dir
+        markers[rel_dir] = directory_path.stat().st_mtime_ns
+    return markers
+
+
+def _analyze_source_files(source: Path, files: list[Path]) -> tuple[dict[str, Path], dict[str, int], int, int, dict[str, int]]:
     src_by_rel: dict[str, Path] = {}
     size_by_rel: dict[str, int] = {}
 
@@ -258,37 +284,33 @@ def _analyze_source_files(source: Path, files: list[Path]) -> tuple[dict[str, Pa
 
     file_count = len(src_by_rel)
     total_bytes = sum(size_by_rel.values())
-    return src_by_rel, size_by_rel, file_count, total_bytes
+    directory_mtime_by_rel = _relative_directory_markers(source, list(src_by_rel.keys()))
+    return src_by_rel, size_by_rel, file_count, total_bytes, directory_mtime_by_rel
 
 
 def _persist_startup_analysis_cache(job: Any, source: Path, files: list[Path]) -> tuple[dict[str, Path], dict[str, int], int, int]:
-    src_by_rel, size_by_rel, file_count, total_bytes = _analyze_source_files(source, files)
+    src_by_rel, size_by_rel, file_count, total_bytes, directory_mtime_by_rel = _analyze_source_files(source, files)
 
     job.startup_analysis_file_count = file_count
     job.startup_analysis_total_bytes = total_bytes
-    job.startup_analysis_entries = [
+    file_entries = [
         {"relative_path": rel, "size_bytes": size_bytes}
         for rel, size_bytes in size_by_rel.items()
     ]
+    directory_entries = [
+        {
+            "entry_type": "directory",
+            "relative_path": rel_dir,
+            "mtime_ns": mtime_ns,
+        }
+        for rel_dir, mtime_ns in sorted(directory_mtime_by_rel.items())
+    ]
+    job.startup_analysis_entries = file_entries + directory_entries
 
     return src_by_rel, size_by_rel, int(job.startup_analysis_file_count or 0), int(job.startup_analysis_total_bytes or 0)
 
 
-def _startup_analysis_matches_source(
-    cached: tuple[dict[str, Path], dict[str, int], int, int],
-    current: tuple[dict[str, Path], dict[str, int], int, int],
-) -> bool:
-    cached_src_by_rel, cached_size_by_rel, cached_file_count, cached_total_bytes = cached
-    current_src_by_rel, current_size_by_rel, current_file_count, current_total_bytes = current
-    return (
-        cached_file_count == current_file_count
-        and cached_total_bytes == current_total_bytes
-        and cached_src_by_rel.keys() == current_src_by_rel.keys()
-        and cached_size_by_rel == current_size_by_rel
-    )
-
-
-def _load_startup_analysis_cache(job: Any, source: Path) -> Optional[tuple[dict[str, Path], dict[str, int], int, int]]:
+def _load_startup_analysis_cache(job: Any, source: Path) -> Optional[tuple[dict[str, Path], dict[str, int], int, int, dict[str, int]]]:
     entries = job.startup_analysis_entries
     file_count = job.startup_analysis_file_count
     total_bytes = job.startup_analysis_total_bytes
@@ -300,18 +322,30 @@ def _load_startup_analysis_cache(job: Any, source: Path) -> Optional[tuple[dict[
 
     src_by_rel: dict[str, Path] = {}
     size_by_rel: dict[str, int] = {}
+    directory_mtime_by_rel: dict[str, int] = {}
     computed_total_bytes = 0
 
     for entry in entries:
         if not isinstance(entry, dict):
             return None
+        entry_type = entry.get("entry_type", "file")
         rel = entry.get("relative_path")
-        size_bytes = entry.get("size_bytes")
         if not isinstance(rel, str) or not rel:
-            return None
+            if entry_type == "directory" and rel == "":
+                pass
+            else:
+                return None
         rel_path = Path(rel)
         if rel_path.is_absolute() or ".." in rel_path.parts:
             return None
+        if entry_type == "directory":
+            mtime_ns = entry.get("mtime_ns")
+            if not isinstance(mtime_ns, int) or mtime_ns < 0:
+                return None
+            directory_mtime_by_rel[rel] = mtime_ns
+            continue
+
+        size_bytes = entry.get("size_bytes")
         if not isinstance(size_bytes, int) or size_bytes < 0:
             return None
         src_by_rel[rel] = source / rel_path
@@ -323,7 +357,44 @@ def _load_startup_analysis_cache(job: Any, source: Path) -> Optional[tuple[dict[
     if computed_total_bytes != int(total_bytes):
         return None
 
-    return src_by_rel, size_by_rel, int(file_count), int(total_bytes)
+    return src_by_rel, size_by_rel, int(file_count), int(total_bytes), directory_mtime_by_rel
+
+
+def _cached_startup_analysis_is_current(
+    cached: tuple[dict[str, Path], dict[str, int], int, int, dict[str, int]],
+    source: Path,
+) -> bool:
+    src_by_rel, size_by_rel, file_count, total_bytes, directory_mtime_by_rel = cached
+
+    if source.is_dir() and "" not in directory_mtime_by_rel:
+        return False
+
+    if len(src_by_rel) != file_count:
+        return False
+    if sum(size_by_rel.values()) != total_bytes:
+        return False
+
+    for rel, expected_size in size_by_rel.items():
+        file_path = src_by_rel[rel]
+        try:
+            if not file_path.is_file():
+                return False
+            if file_path.stat().st_size != expected_size:
+                return False
+        except OSError:
+            return False
+
+    for rel_dir, expected_mtime_ns in directory_mtime_by_rel.items():
+        directory_path = source if rel_dir == "" else source / rel_dir
+        try:
+            if not directory_path.is_dir():
+                return False
+            if directory_path.stat().st_mtime_ns != expected_mtime_ns:
+                return False
+        except OSError:
+            return False
+
+    return True
 
 
 def _process_file(
@@ -545,24 +616,24 @@ def run_copy_job(job_id: int) -> None:
             source = Path(job.source_path)
             target = Path(job.target_mount_path) if job.target_mount_path else None
 
-            current_files = scan_source_files(job.source_path)
-            current_startup_analysis = _analyze_source_files(source, current_files)
             cached_startup_analysis = _load_startup_analysis_cache(job, source)
             if cached_startup_analysis is None:
-                src_by_rel, size_by_rel, cached_file_count, cached_total_bytes = _persist_startup_analysis_cache(job, source, current_files)
+                files = scan_source_files(job.source_path)
+                src_by_rel, size_by_rel, cached_file_count, cached_total_bytes = _persist_startup_analysis_cache(job, source, files)
                 job_repo.save(job)
-            elif _startup_analysis_matches_source(cached_startup_analysis, current_startup_analysis):
-                src_by_rel, size_by_rel, cached_file_count, cached_total_bytes = cached_startup_analysis
+            elif _cached_startup_analysis_is_current(cached_startup_analysis, source):
+                src_by_rel, size_by_rel, cached_file_count, cached_total_bytes, _directory_mtime_by_rel = cached_startup_analysis
             else:
+                files = scan_source_files(job.source_path)
                 logger.info(
                     "Refreshing stale startup analysis cache",
                     extra={
                         "job_id": job_id,
                         "cached_file_count": cached_startup_analysis[2],
-                        "current_file_count": current_startup_analysis[2],
+                        "current_file_count": len(files),
                     },
                 )
-                src_by_rel, size_by_rel, cached_file_count, cached_total_bytes = _persist_startup_analysis_cache(job, source, current_files)
+                src_by_rel, size_by_rel, cached_file_count, cached_total_bytes = _persist_startup_analysis_cache(job, source, files)
                 job_repo.save(job)
 
             # ------------------------------------------------------------------
