@@ -143,6 +143,8 @@
     "clearStartupAnalysisConfirmBody": "This removes the cached startup scan for this job. The next restart will rescan the source before copy work begins.",
     "startupAnalysisCacheCleared": "Startup analysis cache cleared.",
     "startupAnalysisStarted": "Startup analysis started.",
+    "startupAnalysisCompleted": "Startup analysis completed.",
+    "startupAnalysisCompletedFromList": "Startup analysis finished for job #{jobId} with status {status}.",
     "analysisSummary": "Analysis status",
     "analysisStatus": "Status",
     "analysisLastAnalyzedAt": "Last analyzed at",
