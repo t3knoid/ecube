@@ -554,6 +554,44 @@ def test_get_job_not_found(client, db):
 
 
 def test_start_job_writes_application_log_line(client, db, caplog):
+
+
+def test_create_job_overlap_check_allows_startup_analysis_json_cache(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-OVERLAP-CACHE-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-OVERLAP-CACHE",
+        mount_path="/mnt/ecube/overlap-cache-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    existing = _create_assigned_job(
+        db,
+        drive=drive,
+        project_id="PROJ-OVERLAP-CACHE",
+        evidence_number="EV-EXISTING-CACHE-001",
+        source_path="//server/proj-A/Evidence1",
+        status=JobStatus.PAUSED,
+    )
+    existing.startup_analysis_file_count = 1
+    existing.startup_analysis_total_bytes = 4
+    existing.startup_analysis_entries = [{"relative_path": "a.txt", "size_bytes": 4}]
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-OVERLAP-CACHE",
+            "evidence_number": "EV-NEW-CACHE-001",
+            "source_path": "//server/proj-A/Evidence1",
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "SOURCE_OVERLAP"
+    assert f"job #{existing.id}" in response.json()["message"]
     drive = UsbDrive(
         device_identifier="USB-START-LOG-001",
         current_state=DriveState.AVAILABLE,
@@ -1018,6 +1056,34 @@ def test_complete_job_from_paused_state_writes_audit_log(client, db):
     assert audit is not None
 
 
+def test_complete_job_clears_startup_analysis_cache(client, db):
+    job = ExportJob(
+        project_id="PROJ-COMPLETE-CACHE-001",
+        evidence_number="EV-COMPLETE-CACHE-001",
+        source_path="/data/evidence",
+        status=JobStatus.FAILED,
+        startup_analysis_file_count=2,
+        startup_analysis_total_bytes=12,
+        startup_analysis_entries=[
+            {"relative_path": "a.txt", "size_bytes": 5},
+            {"relative_path": "b.txt", "size_bytes": 7},
+        ],
+    )
+    db.add(job)
+    db.commit()
+
+    response = client.post(f"/jobs/{job.id}/complete")
+
+    assert response.status_code == 200
+    assert response.json()["startup_analysis_cached"] is False
+    db.refresh(job)
+    assert job.startup_analysis_cached is False
+
+    audit = db.query(AuditLog).filter(AuditLog.action == "JOB_STARTUP_ANALYSIS_CACHE_CLEARED", AuditLog.job_id == job.id).first()
+    assert audit is not None
+    assert audit.details["reason"] == "job_completed_manually"
+
+
 def test_update_pending_job_reassigns_drive_and_updates_fields(client, db):
     mount = NetworkMount(
         type=MountType.NFS,
@@ -1242,6 +1308,74 @@ def test_delete_pending_job_removes_job_and_releases_drive(client, db):
     audit = db.query(AuditLog).filter(AuditLog.action == "JOB_DELETED", AuditLog.job_id == job.id).first()
     assert audit is not None
     assert audit.details["job_id"] == job.id
+
+
+def test_clear_job_startup_analysis_cache_requires_confirmation(admin_client, db):
+    job = ExportJob(
+        project_id="PROJ-CACHE-CLEAR-001",
+        evidence_number="EV-CACHE-CLEAR-001",
+        source_path="/data/evidence",
+        status=JobStatus.FAILED,
+        startup_analysis_file_count=1,
+        startup_analysis_total_bytes=4,
+        startup_analysis_entries=[{"relative_path": "file.txt", "size_bytes": 4}],
+    )
+    db.add(job)
+    db.commit()
+
+    response = admin_client.post(f"/jobs/{job.id}/startup-analysis/clear", json={"confirm": False})
+
+    assert response.status_code == 400
+    db.refresh(job)
+    assert job.startup_analysis_cached is True
+
+
+def test_clear_job_startup_analysis_cache_manager_allowed_and_audited(manager_client, db):
+    job = ExportJob(
+        project_id="PROJ-CACHE-CLEAR-002",
+        evidence_number="EV-CACHE-CLEAR-002",
+        source_path="/data/evidence",
+        status=JobStatus.FAILED,
+        startup_analysis_file_count=2,
+        startup_analysis_total_bytes=12,
+        startup_analysis_entries=[
+            {"relative_path": "a.txt", "size_bytes": 5},
+            {"relative_path": "b.txt", "size_bytes": 7},
+        ],
+    )
+    db.add(job)
+    db.commit()
+
+    response = manager_client.post(f"/jobs/{job.id}/startup-analysis/clear", json={"confirm": True})
+
+    assert response.status_code == 200
+    assert response.json()["startup_analysis_cached"] is False
+    db.refresh(job)
+    assert job.startup_analysis_cached is False
+
+    audit = db.query(AuditLog).filter(AuditLog.action == "JOB_STARTUP_ANALYSIS_CACHE_CLEARED", AuditLog.job_id == job.id).first()
+    assert audit is not None
+    assert audit.details["reason"] == "manual_cleanup"
+
+
+def test_clear_job_startup_analysis_cache_processor_forbidden(client, db):
+    job = ExportJob(
+        project_id="PROJ-CACHE-CLEAR-003",
+        evidence_number="EV-CACHE-CLEAR-003",
+        source_path="/data/evidence",
+        status=JobStatus.FAILED,
+        startup_analysis_file_count=1,
+        startup_analysis_total_bytes=4,
+        startup_analysis_entries=[{"relative_path": "file.txt", "size_bytes": 4}],
+    )
+    db.add(job)
+    db.commit()
+
+    response = client.post(f"/jobs/{job.id}/startup-analysis/clear", json={"confirm": True})
+
+    assert response.status_code == 403
+    db.refresh(job)
+    assert job.startup_analysis_cached is True
 
 
 def test_delete_running_job_conflict(client, db):
@@ -1973,6 +2107,65 @@ def test_list_jobs_filters_support_offset(client, db):
     assert len(data) == 1
     assert data[0]["id"] == second.id
     assert {first.id, second.id, third.id} >= {data[0]["id"]}
+
+
+def test_list_jobs_allows_startup_analysis_json_cache(client, db):
+    job = ExportJob(
+        project_id="PROJ-LIST-CACHE",
+        evidence_number="EV-LIST-CACHE",
+        source_path="/data",
+        status=JobStatus.FAILED,
+        startup_analysis_file_count=1,
+        startup_analysis_total_bytes=4,
+        startup_analysis_entries=[{"relative_path": "a.txt", "size_bytes": 4}],
+    )
+    db.add(job)
+    db.commit()
+
+    response = client.get("/jobs")
+
+    assert response.status_code == 200
+    data = response.json()
+    matched = [item for item in data if item["evidence_number"] == "EV-LIST-CACHE"]
+    assert len(matched) == 1
+    assert matched[0]["startup_analysis_cached"] is True
+
+
+def test_list_jobs_filter_by_drive_allows_startup_analysis_json_cache(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-LIST-CACHE-DRIVE-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-LIST-CACHE-DRIVE",
+        mount_path="/mnt/ecube/list-cache-drive-001",
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-LIST-CACHE-DRIVE",
+        evidence_number="EV-LIST-CACHE-DRIVE",
+        source_path="/data",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.PAUSED,
+        startup_analysis_file_count=1,
+        startup_analysis_total_bytes=4,
+        startup_analysis_entries=[{"relative_path": "b.txt", "size_bytes": 4}],
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    response = client.get(
+        "/jobs",
+        params=[("drive_id", drive.id), ("statuses", "PAUSED")],
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["evidence_number"] == "EV-LIST-CACHE-DRIVE"
+    assert data[0]["startup_analysis_cached"] is True
 
 
 def test_list_jobs_limit_below_minimum_returns_422(client, db):
