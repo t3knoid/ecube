@@ -651,6 +651,144 @@ def test_run_copy_job_with_retry_recovers_on_resume(db, tmp_path):
     assert files[0].status == FileStatus.DONE
 
 
+def test_run_copy_job_reuses_cached_startup_analysis_without_rescan(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "file.txt").write_bytes(b"content")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.startup_analysis_file_count = 1
+    job.startup_analysis_total_bytes = len(b"content")
+    job.startup_analysis_entries = [
+        {"relative_path": "file.txt", "size_bytes": len(b"content")},
+        {"entry_type": "directory", "relative_path": "", "mtime_ns": source_dir.stat().st_mtime_ns},
+    ]
+    db.commit()
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine.scan_source_files") as scan_source_files:
+            with patch("app.services.copy_engine._persist_startup_analysis_cache", wraps=copy_engine._persist_startup_analysis_cache) as persist_cache:
+                copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+
+    assert job.status == JobStatus.COMPLETED
+    assert scan_source_files.call_count == 0
+    assert persist_cache.call_count == 0
+
+
+def test_run_copy_job_refreshes_stale_startup_analysis_cache_on_failed_run(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "file.txt").write_bytes(b"content")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), max_file_retries=0, target_mount_path=str(target_dir))
+    job.startup_analysis_file_count = 1
+    job.startup_analysis_total_bytes = len(b"content")
+    initial_directory_mtime = source_dir.stat().st_mtime_ns
+    job.startup_analysis_entries = [
+        {"relative_path": "file.txt", "size_bytes": len(b"content")},
+        {"entry_type": "directory", "relative_path": "", "mtime_ns": initial_directory_mtime},
+    ]
+    db.commit()
+
+    (source_dir / "extra.txt").write_bytes(b"more")
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch(
+            "app.services.copy_engine.scan_source_files",
+            return_value=[source_dir / "file.txt", source_dir / "extra.txt"],
+        ):
+            with patch("app.services.copy_engine.copy_file", return_value=(False, None, "disk full")):
+                with patch("app.services.copy_engine._checksum_only", return_value=(False, None, "disk full")):
+                    copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+
+    assert job.status == JobStatus.FAILED
+    assert job.startup_analysis_cached is True
+    assert job.startup_analysis_file_count == 2
+    assert job.startup_analysis_total_bytes == len(b"content") + len(b"more")
+    file_entries = sorted(
+        [entry for entry in job.startup_analysis_entries if entry.get("entry_type", "file") == "file"],
+        key=lambda entry: entry["relative_path"],
+    )
+    directory_entries = [entry for entry in job.startup_analysis_entries if entry.get("entry_type") == "directory"]
+
+    assert file_entries == [
+        {"relative_path": "extra.txt", "size_bytes": len(b"more")},
+        {"relative_path": "file.txt", "size_bytes": len(b"content")},
+    ]
+    assert directory_entries == [
+        {"entry_type": "directory", "relative_path": "", "mtime_ns": source_dir.stat().st_mtime_ns},
+    ]
+
+
+def test_run_copy_job_persists_startup_analysis_cache_on_failed_run(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "file.txt").write_bytes(b"content")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), max_file_retries=0, target_mount_path=str(target_dir))
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine.copy_file", return_value=(False, None, "disk full")):
+            with patch("app.services.copy_engine._checksum_only", return_value=(False, None, "disk full")):
+                copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+
+    assert job.status == JobStatus.FAILED
+    assert job.startup_analysis_cached is True
+    assert job.startup_analysis_file_count == 1
+    assert job.startup_analysis_total_bytes == len(b"content")
+
+
+def test_run_copy_job_clears_startup_analysis_cache_after_success(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "file.txt").write_bytes(b"content")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.startup_analysis_file_count = 1
+    job.startup_analysis_total_bytes = len(b"content")
+    job.startup_analysis_entries = [{"relative_path": "file.txt", "size_bytes": len(b"content")}]
+    db.commit()
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+
+    audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_STARTUP_ANALYSIS_CACHE_CLEARED", AuditLog.job_id == job.id)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+
+    assert job.status == JobStatus.COMPLETED
+    assert job.startup_analysis_cached is False
+    assert audit is not None
+    assert audit.details["reason"] == "job_completed"
+
+
 def test_run_copy_job_accumulates_active_duration_on_resume(db, tmp_path):
     """Completed jobs retain previously accrued active duration after resume."""
     source_dir = tmp_path / "source"

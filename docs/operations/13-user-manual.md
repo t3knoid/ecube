@@ -582,7 +582,7 @@ Open a job to view details and perform follow-up actions.
 
 > **Access Summary**
 > **Page visibility:** `admin`, `manager`, `processor`, `auditor`
-> **Restricted actions:** `Edit`, `Start`, `Pause`, `Complete`, `Verify`, and `Manifest` are enabled for `admin`, `manager`, and `processor` when the current job state allows them. `Delete` is shown only for eligible pending jobs. Hash inspection and source/destination comparison remain available to `admin` and `auditor`.
+> **Restricted actions:** `Edit`, `Start`, `Pause`, `Complete`, `Verify`, and `Manifest` are enabled for `admin`, `manager`, and `processor` when the current job state allows them. `Clear startup analysis cache` is shown only to `admin` and `manager` when the job still has a persisted startup-analysis snapshot. `Delete` is shown only for eligible pending jobs. Hash inspection and source/destination comparison remain available to `admin` and `auditor`.
 
 The job detail page provides deeper inspection and follow-up controls.
 
@@ -592,6 +592,7 @@ Typical functions include:
 - Start a pending job or resume a paused one
 - Pause a running job and resume it later
 - Manually complete a safe non-active job when required by the workflow
+- Clear a persisted startup-analysis snapshot before the next restart when the cached scan should be discarded
 - Generate a manifest and confirm where it was written
 - Review copied files
 - Inspect hashes for individual files
@@ -607,6 +608,7 @@ Use them when appropriate:
 - `Start` to begin a new job or resume a paused one
 - `Pause` to request a safe stop after the current copy work finishes
 - `Complete` to manually mark a pending, paused, or failed job as complete when the operational workflow requires it
+- `Clear startup analysis cache` to remove a persisted startup scan after explicit confirmation; this is available only to `admin` and `manager` when cached startup-analysis data exists for the job
 - `Verify` to run verification checks once the job is fully complete
 - `Manifest` to generate the manifest output once the job is fully complete
 
@@ -615,6 +617,8 @@ When a pause is requested, the Jobs list and Job Detail page can show a `Pause i
 Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed `manifest.json` file on the destination drive.
 
 During startup analysis, Job Detail can show `Preparing copy...` before any totals are known. While this state is visible, the page also explains that ECUBE is still scanning the source files and calculating totals, which can take time for large evidence sets.
+
+If a job is restarted after a failed or paused run and its persisted startup-analysis snapshot is still current, ECUBE can reuse that cached scan instead of repeating the full startup analysis. When operators need to discard that snapshot, the `Clear startup analysis cache` action opens a confirmation dialog and removes only the cached startup-analysis data. It does not remove per-file history, copied-file state, or other audit-relevant job records.
 
 When a job is paused, completed, or fails, the detail view shows a summary with the job start time, copy thread count, files copied, total copied, elapsed time, copy rate, and any failure reason or related log hint. Failed jobs prefer a persisted sanitized job-level failure reason when one is available, so operators can see stable messages such as `Copy job timed out before all files completed` or `Unexpected copy failure` before any derived per-file fallback.
 

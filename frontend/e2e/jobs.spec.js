@@ -264,6 +264,70 @@ test('jobs surfaces preparing labels during startup analysis', async ({ page }) 
   await expectNoCriticalA11yViolations(page)
 })
 
+test('job detail lets manager clear cached startup analysis', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['manager'])
+
+  let cleanupCalls = 0
+  let jobState = {
+    id: 93,
+    project_id: 'P-93',
+    evidence_number: 'EV-93',
+    status: 'FAILED',
+    copied_bytes: 10,
+    total_bytes: 100,
+    file_count: 2,
+    files_succeeded: 1,
+    files_failed: 1,
+    thread_count: 4,
+    source_path: '/nfs/project-093/evidence',
+    target_mount_path: '/mnt/ecube/9',
+    startup_analysis_cached: true,
+    drive: { id: 9, port_system_path: '2-9', device_identifier: 'USB-009' },
+  }
+
+  await routeJson(page, '**/api/drives', [])
+  await routeJson(page, '**/api/mounts', [])
+  await routeJson(page, '**/api/jobs**', [])
+  await page.route('**/api/jobs/93', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(jobState),
+    })
+  })
+  await routeJson(page, '**/api/jobs/93/files', { files: [] })
+  await routeJson(page, '**/api/introspection/jobs/93/debug', { files: [] })
+  await page.route('**/api/jobs/93/startup-analysis/clear', async (route) => {
+    cleanupCalls += 1
+    expect(route.request().postDataJSON()).toEqual({ confirm: true })
+    jobState = {
+      ...jobState,
+      startup_analysis_cached: false,
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(jobState),
+    })
+  })
+
+  await page.goto('/jobs/93')
+
+  await expect(page.getByRole('button', { name: 'Clear startup analysis cache' })).toBeVisible()
+  await page.getByRole('button', { name: 'Clear startup analysis cache' }).click()
+
+  const dialog = page.getByRole('dialog', { name: 'Clear startup analysis cache?' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByText('This removes the cached startup scan for this job. The next restart will rescan the source before copy work begins.')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Clear startup analysis cache' }).click()
+
+  await expect(page.getByText('Startup analysis cache cleared.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Clear startup analysis cache' })).toHaveCount(0)
+  expect(cleanupCalls).toBe(1)
+
+  await expectNoCriticalA11yViolations(page)
+})
+
 test('job detail polls and reflects status progression', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 

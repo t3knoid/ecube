@@ -374,6 +374,8 @@ For local PostgreSQL installs, run a single command block:
 ```bash
 sudo -u postgres psql -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'ecube' AND pid <> pg_backend_pid();"
 sudo -u postgres psql -c "DROP DATABASE IF EXISTS ecube;"
+sudo -u postgres psql -c "DROP OWNED BY ecube; DROP ROLE IF EXISTS ecube;"
+sudo -u postgres psql -c "CREATE ROLE ecube WITH SUPERUSER LOGIN PASSWORD 'ecube';"
 sudo -u postgres psql -c "CREATE DATABASE ecube OWNER ecube;"
 ```
 
@@ -383,11 +385,11 @@ After recreating the database, apply migrations again:
 alembic upgrade head
 ```
 
-### Remove ecubeadmin role
+### Remove ecube role
 
-Run this only when cleaning up the setup/admin PostgreSQL role after a local database reset or recreation.
+Run this only after the `ecube` database has already been dropped or reassigned.
 ```bash
-sudo -u postgres psql -c "DROP OWNED BY ecubeadmin; DROP ROLE IF EXISTS ecubeadmin;"
+sudo -u postgres psql -c "DROP OWNED BY ecube; DROP ROLE IF EXISTS ecube;"
 ```
 
 ### Migration Naming
