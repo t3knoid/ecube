@@ -1039,10 +1039,10 @@ select {
   white-space: pre-wrap;
   word-break: break-word;
   font-family: ui-monospace, Menlo, Monaco, Consolas, monospace;
-  color: var(--color-alert-danger-text, #7f1d1d);
-  background: var(--color-alert-danger-bg, #fef2f2);
+  color: var(--color-text-primary, #1f2937);
+  background: var(--color-bg-input, #ffffff);
   border: 1px solid var(--color-alert-danger-border, #fca5a5);
-  box-shadow: inset 0.25rem 0 0 var(--color-alert-danger-border, #fca5a5);
+  box-shadow: inset 0.25rem 0 0 var(--color-alert-danger-text, #dc2626);
   border-radius: var(--border-radius);
   padding: var(--space-sm);
 }
