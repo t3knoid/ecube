@@ -468,6 +468,12 @@ def reconcile_mounts(
             continue
         corrected += 1
         _cleanup_managed_mount_directory(normalized_target, managed_root)
+        audit_entries.append({
+            "old_status": MountStatus.MOUNTED.value,
+            "new_status": MountStatus.UNMOUNTED.value,
+            "reason": "orphan_managed_mount_removed",
+            "managed_area": managed_root.lstrip("/"),
+        })
 
     if checked:
         try:
