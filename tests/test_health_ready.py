@@ -1,7 +1,10 @@
+import logging
+
 import app.infrastructure as infra_module
 import app.main as main_module
 import app.services.database_service as database_service
 from fastapi.testclient import TestClient
+from app.models.audit import AuditLog
 from app.models.network import MountType, NetworkMount
 from sqlalchemy.exc import ProgrammingError
 
@@ -103,6 +106,103 @@ def test_lifespan_passes_drive_mount_provider_to_startup_reconciliation(monkeypa
     assert observed["filesystem_detector"] is filesystem_detector
     assert observed["os_user_provider"] is None
     assert callable(observed["topology_source"])
+
+
+def test_lifespan_audits_and_logs_startup_reconciliation_skip(db, monkeypatch, caplog):
+    caplog.set_level(logging.INFO, logger="app.main")
+
+    class _DiscoveryProvider:
+        def discover_topology(self):
+            return {"hubs": [], "ports": [], "drives": []}
+
+    monkeypatch.setattr(main_module.settings, "database_url", "sqlite://")
+    monkeypatch.setattr(main_module.settings, "audit_log_retention_days", 0)
+    monkeypatch.setattr(main_module.settings, "usb_discovery_interval", 0)
+    monkeypatch.setattr(main_module.settings, "role_resolver", "oidc")
+    monkeypatch.setattr(main_module, "init_session_backend", _noop_session_backend)
+    monkeypatch.setattr(main_module, "close_session_backend", _noop_session_backend)
+    monkeypatch.setattr(database_service, "is_database_provisioned", lambda: True)
+    monkeypatch.setattr(infra_module, "get_mount_provider", lambda: object())
+    monkeypatch.setattr(main_module, "get_drive_mount", lambda: object())
+    monkeypatch.setattr(infra_module, "get_filesystem_detector", lambda: object())
+    monkeypatch.setattr(infra_module, "get_drive_discovery", lambda: _DiscoveryProvider())
+    monkeypatch.setattr(
+        "app.services.reconciliation_service.run_startup_reconciliation",
+        lambda *_args, **_kwargs: {"skipped": True},
+    )
+    monkeypatch.setattr("app.routers.introspection.prime_cpu_sampler", lambda: None)
+
+    with TestClient(main_module.app):
+        pass
+
+    entries = (
+        db.query(AuditLog)
+        .filter(AuditLog.action.in_([
+            "STARTUP_RECONCILIATION_STARTED",
+            "STARTUP_RECONCILIATION_SKIPPED",
+        ]))
+        .order_by(AuditLog.id.asc())
+        .all()
+    )
+
+    assert [entry.action for entry in entries] == [
+        "STARTUP_RECONCILIATION_STARTED",
+        "STARTUP_RECONCILIATION_SKIPPED",
+    ]
+    assert entries[0].details == {"status": "started"}
+    assert entries[1].details == {"status": "skipped", "reason": "lock_held"}
+    assert any(record.getMessage() == "Startup reconciliation starting" for record in caplog.records)
+    assert any(record.getMessage() == "Startup reconciliation skipped" for record in caplog.records)
+
+
+def test_lifespan_audits_and_logs_startup_reconciliation_failure(db, monkeypatch, caplog):
+    caplog.set_level(logging.DEBUG, logger="app.main")
+
+    class _DiscoveryProvider:
+        def discover_topology(self):
+            return {"hubs": [], "ports": [], "drives": []}
+
+    def _raise_failure(*_args, **_kwargs):
+        raise RuntimeError("database offline")
+
+    monkeypatch.setattr(main_module.settings, "database_url", "sqlite://")
+    monkeypatch.setattr(main_module.settings, "audit_log_retention_days", 0)
+    monkeypatch.setattr(main_module.settings, "usb_discovery_interval", 0)
+    monkeypatch.setattr(main_module.settings, "role_resolver", "oidc")
+    monkeypatch.setattr(main_module, "init_session_backend", _noop_session_backend)
+    monkeypatch.setattr(main_module, "close_session_backend", _noop_session_backend)
+    monkeypatch.setattr(database_service, "is_database_provisioned", lambda: True)
+    monkeypatch.setattr(infra_module, "get_mount_provider", lambda: object())
+    monkeypatch.setattr(main_module, "get_drive_mount", lambda: object())
+    monkeypatch.setattr(infra_module, "get_filesystem_detector", lambda: object())
+    monkeypatch.setattr(infra_module, "get_drive_discovery", lambda: _DiscoveryProvider())
+    monkeypatch.setattr("app.services.reconciliation_service.run_startup_reconciliation", _raise_failure)
+    monkeypatch.setattr("app.routers.introspection.prime_cpu_sampler", lambda: None)
+
+    with TestClient(main_module.app):
+        pass
+
+    entries = (
+        db.query(AuditLog)
+        .filter(AuditLog.action.in_([
+            "STARTUP_RECONCILIATION_STARTED",
+            "STARTUP_RECONCILIATION_FAILED",
+        ]))
+        .order_by(AuditLog.id.asc())
+        .all()
+    )
+
+    assert [entry.action for entry in entries] == [
+        "STARTUP_RECONCILIATION_STARTED",
+        "STARTUP_RECONCILIATION_FAILED",
+    ]
+    assert entries[1].details == {
+        "status": "failed",
+        "category": "unexpected_backend_error",
+    }
+    assert any(record.getMessage() == "Startup reconciliation starting" for record in caplog.records)
+    assert any(record.getMessage() == "Startup reconciliation failed" for record in caplog.records)
+    assert any(record.getMessage() == "Startup reconciliation raw failure" for record in caplog.records)
 
 
 def test_health_ready_returns_200_when_no_mounts_configured(unauthenticated_client, db, monkeypatch):
