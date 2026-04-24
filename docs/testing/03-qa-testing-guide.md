@@ -607,6 +607,12 @@ curl -sk -X POST https://localhost:8443/jobs/{job_id}/verify \
 curl -sk -X POST https://localhost:8443/jobs/{job_id}/manifest \
   -H "Authorization: Bearer $TOKEN" | jq
 
+# Clear persisted startup-analysis cache after explicit confirmation
+curl -sk -X POST https://localhost:8443/jobs/{job_id}/startup-analysis/clear \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"confirm": true}' | jq
+
 # Create a job with an HTTPS callback sink
 curl -sk -X POST https://localhost:8443/jobs \
   -H "Authorization: Bearer $TOKEN" \
@@ -630,6 +636,9 @@ Use a large enough source tree that ECUBE needs noticeable startup analysis time
 - Open Job Detail and verify it shows `Preparing copy...` together with the explanation that ECUBE is scanning source files and calculating totals.
 - If the dashboard preparing-state change is present in the build under test, verify the Active Jobs panel also shows `Preparing...` for the same job.
 - Continue polling until totals become non-zero, then verify the UI switches from the preparing label to percentage-based progress.
+- If the job is paused or fails after startup analysis completed, verify `GET /jobs/{job_id}` can report `startup_analysis_cached: true` before the next restart.
+- Restart the same job without changing the source tree and verify ECUBE resumes without forcing a fresh long preparing phase.
+- Add or remove a source file, restart the job, and verify ECUBE refreshes the startup-analysis snapshot before continuing copy work.
 
 #### 11.4b Jobs Page UI Workflow Checks
 
@@ -646,6 +655,8 @@ For the current Jobs page UI, verify the grouped `Create Job` dialog behaves as 
 - Pressing `Pause` on a running job shows a `Pause in progress` dialog while the system waits for in-flight copy threads to finish.
 - The `Start` action remains disabled during `PAUSING` and becomes available again once the job reaches `PAUSED`.
 - After a pause and resume cycle, the final duration and copy-rate summary remain additive across the full run rather than resetting to only the most recent segment.
+- For a failed or paused job with cached startup analysis, `admin` and `manager` see `Clear startup analysis cache`, processor-only users do not, and the confirmation dialog explains that the next restart will rescan the source.
+- After confirming cleanup, the success message appears, the cleanup action disappears, and later restart behavior performs a fresh startup analysis.
 
 For the current System page Logs tab UI, verify the admin-only log workflow behaves as follows:
 
@@ -1139,6 +1150,9 @@ These tests exercise real hardware paths that must be validated during manual QA
 | 4 | Path traversal outside selected mount is blocked | In Create Job, choose a mounted share and enter a traversal path such as ../../etc | The UI/API rejects the request, no job is created, and the operator sees a validation-style error rather than a host path leak |
 | 5 | Destination selector uses device label | Open Create Job or edit an eligible job after selecting a project | The destination control is labeled `Select device`, each option uses the port-based `Device` value, and the Jobs list shows the same value in its `Device` column |
 | 6 | Failed job timeout summary is visible | Configure or simulate a timed-out copy job, then open Job Detail after the job reaches `FAILED` | The detail screen shows `Copy job timed out before all files completed` as the failure summary instead of a generic file-row fallback |
+| 7 | Startup-analysis cache persists across a failed run | Start a job, let startup analysis finish, then force the job into `FAILED` | `GET /jobs/{job_id}` reports `startup_analysis_cached: true` until the cache is cleared or the job later completes successfully |
+| 8 | Restart can reuse a current startup-analysis snapshot | Resume a failed or paused job without changing the source tree | The job proceeds without a repeated long startup-analysis phase and still reaches correct totals |
+| 9 | Restart refreshes stale startup-analysis data | Add or remove a file in the source tree after a failed run, then resume | ECUBE refreshes the startup-analysis snapshot before continuing and the new totals reflect the changed source tree |
 
 #### 12.6.2 Job Detail Lifecycle Controls
 
@@ -1153,6 +1167,10 @@ These tests exercise real hardware paths that must be validated during manual QA
 | 7 | Manifest success feedback shows a stable path | Generate the manifest twice for the same completed job | The UI shows a success banner with the destination path and the same `manifest.json` file is refreshed rather than multiplied |
 | 8 | Persisted failure reason outranks file summary | Open a failed job that has both a persisted job-level failure reason and file error rows | Job Detail shows the persisted failure reason first and does not replace it with the derived `error_summary` |
 | 9 | Unexpected copy failures redact absolute paths | Trigger a failed copy tied to a known file, then open Job Detail | The failure summary uses `Unexpected copy failure` with optional `source:` and `destination:` relative hints, and no absolute `/mnt/...` or `/nfs/...` path appears in the UI |
+| 10 | Startup-analysis cleanup control is role-gated | Open the same failed cached job as `manager` and as processor-only | `manager` sees `Clear startup analysis cache`; processor-only does not |
+| 11 | Startup-analysis cleanup requires confirmation | Open a failed cached job, click `Clear startup analysis cache`, then cancel and repeat with confirmation | Cancel leaves the cache in place; confirm clears it and removes the action from Job Detail |
+| 12 | Manual completion clears cached startup analysis | Open a `FAILED` or `PAUSED` job that still has cached startup analysis, then click `Complete` | The job moves to `COMPLETED` and a follow-up `GET /jobs/{job_id}` reports `startup_analysis_cached: false` |
+| 13 | Cache cleanup audit trail is recorded | Run manual cleanup, manual completion, and a successful rerun, then query `GET /audit?action=JOB_STARTUP_ANALYSIS_CACHE_CLEARED` | Audit records exist for `manual_cleanup`, `job_completed_manually`, and `job_completed` without leaking raw paths |
 
 Walk through the complete data export lifecycle:
 

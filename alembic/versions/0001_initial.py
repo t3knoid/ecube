@@ -160,6 +160,9 @@ def upgrade() -> None:
         sa.Column("client_ip", sa.String(45), nullable=True),
         sa.Column("callback_url", sa.String(), nullable=True),
         sa.Column("failure_reason", sa.Text(), nullable=True),
+        sa.Column("startup_analysis_file_count", sa.Integer(), nullable=True),
+        sa.Column("startup_analysis_total_bytes", sa.BigInteger(), nullable=True),
+        sa.Column("startup_analysis_entries", JSONB(), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

@@ -19,6 +19,7 @@ from app.schemas.jobs import (
     JobDeleteResponse,
     JobFilesResponse,
     JobStart,
+    JobStartupAnalysisClearRequest,
     JobUpdate,
 )
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500
@@ -31,6 +32,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 _ALL_ROLES = require_roles("admin", "manager", "processor", "auditor")
+_ADMIN_MANAGER = require_roles("admin", "manager")
 _ADMIN_MANAGER_PROCESSOR = require_roles("admin", "manager", "processor")
 
 _IP_VISIBLE_ROLES = {"admin", "auditor"}
@@ -432,6 +434,32 @@ def pause_job(
     **Roles:** ``admin``, ``manager``, ``processor``
     """
     job = job_service.pause_job(job_id, db, actor=current_user.username, client_ip=get_client_ip(request))
+    return _redact_ip(job, current_user, db)
+
+
+@router.post("/{job_id}/startup-analysis/clear", response_model=ExportJobSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_500})
+def clear_startup_analysis_cache(
+    job_id: int,
+    body: JobStartupAnalysisClearRequest,
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER),
+    request: Request,
+):
+    """Clear the persisted startup-analysis cache for a job after explicit confirmation.
+
+    This removes only the cached startup-analysis snapshot and preserves the
+    per-file copy history used for audit and resume state.
+
+    **Roles:** ``admin``, ``manager``
+    """
+    job = job_service.clear_job_startup_analysis_cache(
+        job_id,
+        confirm=body.confirm,
+        db=db,
+        actor=current_user.username,
+        client_ip=get_client_ip(request),
+    )
     return _redact_ip(job, current_user, db)
 
 

@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime, Text
+from sqlalchemy import Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime, Text, JSON
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.sql import func
 from app.database import Base
@@ -46,6 +47,9 @@ class ExportJob(Base):
     client_ip = Column(String(45), nullable=True)
     callback_url = Column(String, nullable=True)
     failure_reason = Column(Text, nullable=True)
+    startup_analysis_file_count = Column(Integer, nullable=True)
+    startup_analysis_total_bytes = Column(BigInteger, nullable=True)
+    startup_analysis_entries = Column(JSON().with_variant(JSONB(), "postgresql"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     files = relationship("ExportFile", back_populates="job")
     manifests = relationship("Manifest", back_populates="job")
@@ -55,6 +59,10 @@ class ExportJob(Base):
     def _normalize_project_id(self, _key, value):
         normalized = normalize_project_id(value)
         return normalized if isinstance(normalized, str) else value
+
+    @property
+    def startup_analysis_cached(self) -> bool:
+        return self.startup_analysis_entries is not None
 
 
 class ExportFile(Base):
