@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from app.models.audit import AuditLog
-from app.models.jobs import ExportFile, ExportJob, FileStatus, JobStatus
+from app.models.jobs import ExportFile, ExportJob, FileStatus, JobStatus, StartupAnalysisStatus
 from app.services import copy_engine
 
 
@@ -679,6 +679,53 @@ def test_run_copy_job_reuses_cached_startup_analysis_without_rescan(db, tmp_path
     assert job.status == JobStatus.COMPLETED
     assert scan_source_files.call_count == 0
     assert persist_cache.call_count == 0
+
+    reuse_audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_STARTUP_ANALYSIS_REUSED", AuditLog.job_id == job.id)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    assert reuse_audit is not None
+
+
+def test_prepare_job_startup_analysis_persists_ready_state_and_file_rows(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "a.txt").write_bytes(b"alpha")
+    (source_dir / "b.txt").write_bytes(b"bravo")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.status = JobStatus.PAUSED
+    db.commit()
+
+    copy_engine.prepare_job_startup_analysis(job.id, actor="analyst", manual=True)
+
+    db.expire_all()
+    db.refresh(job)
+    file_rows = db.query(ExportFile).filter(ExportFile.job_id == job.id).order_by(ExportFile.relative_path).all()
+    audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_STARTUP_ANALYSIS_COMPLETED", AuditLog.job_id == job.id)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+
+    assert job.status == JobStatus.PAUSED
+    assert job.startup_analysis_status == StartupAnalysisStatus.READY
+    assert job.startup_analysis_last_analyzed_at is not None
+    assert job.startup_analysis_failure_reason is None
+    assert job.startup_analysis_cached is True
+    assert job.file_count == 2
+    assert job.total_bytes == len(b"alpha") + len(b"bravo")
+    assert job.copied_bytes == 0
+    assert [row.relative_path for row in file_rows] == ["a.txt", "b.txt"]
+    assert all(row.status == FileStatus.PENDING for row in file_rows)
+    assert audit is not None
+    assert audit.details["ready_to_start"] is True
 
 
 def test_run_copy_job_refreshes_stale_startup_analysis_cache_on_failed_run(db, tmp_path):

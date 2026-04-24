@@ -328,6 +328,100 @@ test('job detail lets manager clear cached startup analysis', async ({ page }) =
   await expectNoCriticalA11yViolations(page)
 })
 
+test('job detail lets processor analyze and then start from prepared analysis', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['processor'])
+
+  let analyzeCalls = 0
+  let startCalls = 0
+  let jobState = {
+    id: 94,
+    project_id: 'P-94',
+    evidence_number: 'EV-94',
+    status: 'PENDING',
+    copied_bytes: 0,
+    total_bytes: 0,
+    file_count: 0,
+    files_succeeded: 0,
+    files_failed: 0,
+    thread_count: 4,
+    source_path: '/nfs/project-094/evidence',
+    target_mount_path: '/mnt/ecube/9',
+    startup_analysis_status: 'NOT_ANALYZED',
+    startup_analysis_ready: false,
+    startup_analysis_cached: false,
+    drive: { id: 9, port_system_path: '2-9', device_identifier: 'USB-009' },
+  }
+
+  await routeJson(page, '**/api/drives', [])
+  await routeJson(page, '**/api/mounts', [])
+  await routeJson(page, '**/api/jobs**', [])
+  await page.route('**/api/jobs/94', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(jobState),
+    })
+  })
+  await routeJson(page, '**/api/jobs/94/files', { files: [] })
+  await routeJson(page, '**/api/introspection/jobs/94/debug', { files: [] })
+  await page.route('**/api/jobs/94/analyze', async (route) => {
+    analyzeCalls += 1
+    jobState = {
+      ...jobState,
+      startup_analysis_status: 'READY',
+      startup_analysis_last_analyzed_at: '2026-04-24T19:00:00Z',
+      startup_analysis_file_count: 3,
+      startup_analysis_total_bytes: 24,
+      startup_analysis_ready: true,
+      startup_analysis_cached: true,
+      total_bytes: 24,
+      file_count: 3,
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(jobState),
+    })
+  })
+  await page.route('**/api/jobs/94/start', async (route) => {
+    startCalls += 1
+    jobState = {
+      ...jobState,
+      status: 'RUNNING',
+      copied_bytes: 0,
+      total_bytes: 24,
+      file_count: 3,
+      files_succeeded: 0,
+      files_failed: 0,
+    }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobState) })
+  })
+
+  await page.goto('/jobs/94')
+
+  const analysisSummary = page.locator('.analysis-summary')
+
+  await expect(analysisSummary.getByText('Analysis status')).toBeVisible()
+  await expect(analysisSummary.getByText('Not analyzed')).toBeVisible()
+  await page.getByRole('button', { name: 'Analyze' }).click()
+
+  await expect(page.getByText('Startup analysis started.')).toBeVisible()
+  await expect(analysisSummary.getByText('Ready', { exact: true })).toBeVisible()
+  await expect(analysisSummary.getByText('Discovered files')).toBeVisible()
+  await expect(analysisSummary.getByText('3', { exact: true })).toBeVisible()
+  await expect(analysisSummary.getByText('Estimated total bytes')).toBeVisible()
+  await expect(analysisSummary.getByText('24 B', { exact: true })).toBeVisible()
+  await expect(analysisSummary.getByText('Ready to start')).toBeVisible()
+  await expect(analysisSummary.getByText('Yes', { exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Start' }).click()
+  await expect(page.locator('.status-badge').filter({ hasText: 'RUNNING' }).first()).toBeVisible()
+  expect(analyzeCalls).toBe(1)
+  expect(startCalls).toBe(1)
+
+  await expectNoCriticalA11yViolations(page)
+})
+
 test('job detail polls and reflects status progression', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
