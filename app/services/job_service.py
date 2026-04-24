@@ -518,6 +518,15 @@ def _require_editable_job(job: ExportJob) -> None:
         )
 
 
+def _reject_when_startup_analysis_running(job: ExportJob, *, action: str) -> None:
+    job_row = _row(job)
+    if cast(Optional[StartupAnalysisStatus], job_row.startup_analysis_status) == StartupAnalysisStatus.ANALYZING:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot {action} while startup analysis is in progress",
+        )
+
+
 def _other_active_assignments_for_drive(db: Session, drive_id: int, *, exclude_job_id: Optional[int] = None) -> int:
     query = db.query(DriveAssignment).filter(
         DriveAssignment.drive_id == drive_id,
@@ -546,6 +555,7 @@ def update_job(
 
     job_row = _row(job)
     _require_editable_job(job)
+    _reject_when_startup_analysis_running(job, action="edit this job")
 
     if body.project_id != cast(Optional[str], job_row.project_id):
         raise HTTPException(
@@ -689,6 +699,7 @@ def complete_job(
         raise HTTPException(status_code=404, detail="Job not found")
 
     job_row = _row(job)
+    _reject_when_startup_analysis_running(job, action="complete this job")
     current_status = cast(JobStatus, job_row.status)
     if current_status not in (JobStatus.PENDING, JobStatus.PAUSED, JobStatus.FAILED):
         raise HTTPException(
@@ -772,6 +783,7 @@ def clear_job_startup_analysis_cache(
         raise HTTPException(status_code=404, detail="Job not found")
 
     job_row = _row(job)
+    _reject_when_startup_analysis_running(job, action="clear cached startup analysis")
     cache_clear_details: Optional[dict[str, int]] = None
     active_drive_id: Optional[int] = None
 
@@ -828,6 +840,7 @@ def analyze_job(
         raise HTTPException(status_code=404, detail="Job not found")
 
     job_row = _row(job)
+    _reject_when_startup_analysis_running(job, action="analyze this job")
     current_status = cast(JobStatus, job_row.status)
     if current_status not in (JobStatus.PENDING, JobStatus.FAILED, JobStatus.PAUSED):
         raise HTTPException(
@@ -907,6 +920,7 @@ def delete_job(
         raise HTTPException(status_code=404, detail="Job not found")
 
     job_row = _row(job)
+    _reject_when_startup_analysis_running(job, action="delete this job")
     if cast(JobStatus, job_row.status) != JobStatus.PENDING:
         raise HTTPException(
             status_code=409,
@@ -975,6 +989,7 @@ def start_job(
         raise HTTPException(status_code=404, detail="Job not found")
 
     job_row = _row(job)
+    _reject_when_startup_analysis_running(job, action="start this job")
     current_status = cast(JobStatus, job_row.status)
     if current_status not in (JobStatus.PENDING, JobStatus.FAILED, JobStatus.PAUSED):
         raise HTTPException(
