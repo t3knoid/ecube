@@ -516,7 +516,17 @@ curl -sk -X POST https://localhost:8443/drives/refresh \
   -H "Authorization: Bearer $TOKEN" | jq
 ```
 
-### 11.3b Hub & Port Identification Enrichment
+### 11.3b Startup Mount Reconciliation
+
+Use this scenario to verify restart-time recovery of managed mounts and startup audit logging.
+
+1. Create and mount a network share through ECUBE so it has a persisted `MOUNTED` row.
+2. Initialize and mount a USB drive through ECUBE so it has a managed mount assignment under `/mnt/ecube/<drive_id>`.
+3. Create one stale ECUBE-managed mount artifact that should not survive restart, such as an orphan `/nfs/*` or `/smb/*` mount point with no matching DB row.
+4. Restart the ECUBE service.
+5. Verify the expected USB drive is again mounted at its managed ECUBE slot, verify the stale managed network mount is gone, and verify `GET /audit` shows `MOUNT_RECONCILED` and/or `DRIVE_MOUNT_RECONCILED` entries with sanitized details rather than raw host paths.
+
+### 11.3c Hub & Port Identification Enrichment
 
 USB hubs and ports are enriched with hardware metadata (`vendor_id`,
 `product_id`, `speed`) during discovery. Admins and managers can also assign

@@ -94,8 +94,10 @@ The application must expose an HTTP `GET /health/ready` endpoint that returns `2
 
 During initial deployment, the readiness probe may fail for up to **5 minutes** while the service:
 - Runs database migrations (`alembic upgrade head`).
+- Reconciles managed network mounts and previously mounted USB drives back toward ECUBE's expected startup state.
+- Removes orphaned or mismatched ECUBE-managed mount points under the managed network and USB mount roots.
 - Discovers USB topology and reconciles drive state.
-- Mounts network shares and validates accessibility.
+- Validates network share accessibility and writes audit entries for any startup mount corrections.
 
 Orchestrators must be configured with a **startupPeriod** or **initialDelaySeconds** of at least **5 minutes** to avoid premature restarts during initialization.
 
