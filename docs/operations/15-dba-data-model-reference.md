@@ -68,7 +68,7 @@ Key relationships:
 
 ### Job Domain
 
-- `export_jobs`: top-level export lifecycle, throughput metadata, and the persisted sanitized `failure_reason` used for failed-job triage.
+- `export_jobs`: top-level export lifecycle, throughput metadata, the persisted sanitized `failure_reason` used for failed-job triage, and persisted startup-analysis cache metadata used to accelerate restart and resume flows.
 - `export_files`: per-file copy/verify tracking rows.
 - `manifests`: manifest artifacts generated per job.
 - `drive_assignments`: assignment history linking drives to jobs.
@@ -112,6 +112,8 @@ This section captures the primary physical schema details used by DBAs.
 - `user_roles`
 - `system_initialization`
 - `reconciliation_lock`
+
+`export_jobs` now also stores `startup_analysis_file_count`, `startup_analysis_total_bytes`, and `startup_analysis_entries`. In PostgreSQL, `startup_analysis_entries` is stored as `JSONB` and is cleared when the startup-analysis snapshot is invalidated, explicitly removed, or automatically discarded after successful completion.
 
 ### Core Enumerations
 
