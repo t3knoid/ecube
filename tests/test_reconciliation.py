@@ -308,7 +308,23 @@ class TestReconcileMounts:
             result = reconcile_mounts(db, FakeMountProvider(), drive_provider)
 
         assert result["usb_mounts_checked"] == 1
+        assert result["usb_mounts_corrected"] == 1
         assert drive_provider.unmount_calls == ["/media/operator/usb-startup"]
+        assert drive_provider.mount_calls == [(drive.filesystem_path, f"{settings.usb_mount_base_path}/{drive.id}")]
+
+    def test_persisted_usb_mount_cleanup_and_remount_counts_once(self, db: Session):
+        drive = _make_drive(db, "USB-STARTUP-MANAGED", DriveState.IN_USE)
+        drive.filesystem_type = "ext4"
+        drive.mount_path = "/mnt/ecube/stale"
+        db.commit()
+        drive_provider = FakeDriveMountProvider()
+
+        with patch("app.services.reconciliation_service.find_device_mount_point", return_value="/mnt/ecube/999"):
+            result = reconcile_mounts(db, FakeMountProvider(), drive_provider)
+
+        assert result["usb_mounts_checked"] == 1
+        assert result["usb_mounts_corrected"] == 1
+        assert drive_provider.unmount_calls == ["/mnt/ecube/999"]
         assert drive_provider.mount_calls == [(drive.filesystem_path, f"{settings.usb_mount_base_path}/{drive.id}")]
 
     def test_orphan_managed_usb_mount_is_removed(self, db: Session):
@@ -403,6 +419,20 @@ class TestReconcileMounts:
         assert m3.status == MountStatus.UNMOUNTED
         assert result["mounts_checked"] == 3
         assert result["mounts_corrected"] == 2
+
+    def test_mismatched_live_network_mount_cleanup_and_remount_counts_once(self, db: Session):
+        mount = _make_mount(db, MountStatus.MOUNTED, "/nfs/project-a")
+        provider = FakeMountProvider(mounted_sources={"/nfs/project-a": "server:/wrong-export"})
+
+        with patch("app.services.reconciliation_service.read_mount_table", return_value={"/nfs/project-a": "server:/wrong-export"}):
+            result = reconcile_mounts(db, provider)
+
+        db.refresh(mount)
+        assert mount.status == MountStatus.UNMOUNTED
+        assert result["mounts_checked"] == 1
+        assert result["mounts_corrected"] == 1
+        assert provider.unmount_calls == ["/nfs/project-a"]
+        assert provider.mount_calls == []
 
     def test_reconcile_mounts_passes_configured_timeout(self, db: Session):
         mount = _make_mount(db, MountStatus.MOUNTED, "/mnt/timeout-aware")
