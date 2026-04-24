@@ -481,6 +481,17 @@ def get_job(job_id: int, db: Session) -> ExportJob:
     return job
 
 
+def _clear_job_startup_analysis_cache(job_row: Any) -> dict[str, int]:
+    details = {
+        "cached_file_count": int(cast(Optional[int], job_row.startup_analysis_file_count) or 0),
+        "cached_total_bytes": int(cast(Optional[int], job_row.startup_analysis_total_bytes) or 0),
+    }
+    job_row.startup_analysis_file_count = None
+    job_row.startup_analysis_total_bytes = None
+    job_row.startup_analysis_entries = None
+    return details
+
+
 def _require_editable_job(job: ExportJob) -> None:
     job_row = _row(job)
     if cast(JobStatus, job_row.status) not in (JobStatus.PENDING, JobStatus.PAUSED, JobStatus.FAILED):
@@ -600,6 +611,8 @@ def update_job(
         db.add(DriveAssignment(drive_id=int(requested_drive_id), job_id=job_id))
 
     drive_row.current_state = DriveState.IN_USE
+    source_path_changed = cast(Optional[str], job_row.source_path) != validated_source_path
+
     job_row.evidence_number = body.evidence_number
     job_row.source_path = validated_source_path
     job_row.target_mount_path = drive_mount_path
@@ -607,6 +620,8 @@ def update_job(
     job_row.max_file_retries = int(body.max_file_retries)
     job_row.retry_delay_seconds = int(body.retry_delay_seconds)
     job_row.callback_url = body.callback_url
+    if source_path_changed:
+        _clear_job_startup_analysis_cache(job_row)
 
     try:
         job_repo.save(job)
@@ -660,6 +675,9 @@ def complete_job(
         )
 
     previous_status = current_status.value
+    cache_clear_details: Optional[dict[str, int]] = None
+    if cast(Optional[object], job_row.startup_analysis_entries) is not None:
+        cache_clear_details = _clear_job_startup_analysis_cache(job_row)
     job_row.status = JobStatus.COMPLETED
     if cast(Optional[datetime], job_row.completed_at) is None:
         job_row.completed_at = datetime.now(timezone.utc)
@@ -691,6 +709,80 @@ def complete_job(
         )
     except Exception:
         logger.exception("Failed to write audit log for JOB_COMPLETED_MANUALLY")
+
+    if cache_clear_details is not None:
+        try:
+            audit_repo.add(
+                action="JOB_STARTUP_ANALYSIS_CACHE_CLEARED",
+                user=actor,
+                project_id=cast(Optional[str], job_row.project_id),
+                drive_id=active_drive_id,
+                job_id=job_id,
+                details={
+                    "reason": "job_completed_manually",
+                    **cache_clear_details,
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for JOB_STARTUP_ANALYSIS_CACHE_CLEARED")
+
+    db.refresh(job)
+    return job
+
+
+def clear_job_startup_analysis_cache(
+    job_id: int,
+    *,
+    confirm: bool,
+    db: Session,
+    actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
+) -> ExportJob:
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Confirmation is required to clear cached startup analysis")
+
+    job_repo = JobRepository(db)
+    audit_repo = AuditRepository(db)
+
+    job = job_repo.get_for_update(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    job_row = _row(job)
+    cache_clear_details: Optional[dict[str, int]] = None
+    active_drive_id: Optional[int] = None
+
+    if cast(Optional[object], job_row.startup_analysis_entries) is not None:
+        cache_clear_details = _clear_job_startup_analysis_cache(job_row)
+        try:
+            job_repo.save(job)
+        except Exception:
+            logger.exception("DB commit failed while clearing startup analysis cache for job %s", job_id)
+            raise HTTPException(
+                status_code=500,
+                detail="Database error while clearing cached startup analysis",
+            )
+
+        assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
+        assignment_row = _row(assignment) if assignment is not None else None
+        active_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
+
+        try:
+            audit_repo.add(
+                action="JOB_STARTUP_ANALYSIS_CACHE_CLEARED",
+                user=actor,
+                project_id=cast(Optional[str], job_row.project_id),
+                drive_id=active_drive_id,
+                job_id=job_id,
+                details={
+                    "reason": "manual_cleanup",
+                    **cache_clear_details,
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for JOB_STARTUP_ANALYSIS_CACHE_CLEARED")
 
     db.refresh(job)
     return job
