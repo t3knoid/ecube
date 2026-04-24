@@ -242,13 +242,19 @@ class TestConfigureLogging:
 
     def test_file_handler_failure_logs_sanitized_warning(self):
         warning_logger = logging.getLogger("app.logging_config")
-        with patch.object(warning_logger, "warning") as mock_warning:
-            with patch("logging.handlers.RotatingFileHandler", side_effect=OSError("permission denied")):
-                configure_logging(level="INFO", log_format="text", log_file="/var/log/ecube/app.log")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+
+            with patch.object(warning_logger, "warning") as mock_warning:
+                with patch(
+                    "logging.handlers.RotatingFileHandler",
+                    side_effect=PermissionError("permission denied"),
+                ):
+                    configure_logging(level="INFO", log_format="text", log_file=log_path)
 
         mock_warning.assert_called_once_with(
             "File logging disabled; could not initialize configured application log file",
-            extra={"log_file_name": "app.log", "error_type": "OSError"},
+            extra={"log_file_name": "app.log", "error_type": "PermissionError"},
         )
 
     def test_log_level_filtering(self):
