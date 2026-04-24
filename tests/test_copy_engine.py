@@ -666,14 +666,53 @@ def test_run_copy_job_reuses_cached_startup_analysis_without_rescan(db, tmp_path
     db.commit()
 
     with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
-        with patch("app.services.copy_engine.scan_source_files") as scan_source_files:
-            copy_engine.run_copy_job(job.id)
+        with patch("app.services.copy_engine.scan_source_files", return_value=[source_dir / "file.txt"]) as scan_source_files:
+            with patch("app.services.copy_engine._persist_startup_analysis_cache", wraps=copy_engine._persist_startup_analysis_cache) as persist_cache:
+                copy_engine.run_copy_job(job.id)
 
     db.expire_all()
     db.refresh(job)
 
     assert job.status == JobStatus.COMPLETED
-    assert scan_source_files.call_count == 0
+    assert scan_source_files.call_count == 1
+    assert persist_cache.call_count == 0
+
+
+def test_run_copy_job_refreshes_stale_startup_analysis_cache_on_failed_run(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "file.txt").write_bytes(b"content")
+    (source_dir / "extra.txt").write_bytes(b"more")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), max_file_retries=0, target_mount_path=str(target_dir))
+    job.startup_analysis_file_count = 1
+    job.startup_analysis_total_bytes = len(b"content")
+    job.startup_analysis_entries = [{"relative_path": "file.txt", "size_bytes": len(b"content")}]
+    db.commit()
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch(
+            "app.services.copy_engine.scan_source_files",
+            return_value=[source_dir / "file.txt", source_dir / "extra.txt"],
+        ):
+            with patch("app.services.copy_engine.copy_file", return_value=(False, None, "disk full")):
+                with patch("app.services.copy_engine._checksum_only", return_value=(False, None, "disk full")):
+                    copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+
+    assert job.status == JobStatus.FAILED
+    assert job.startup_analysis_cached is True
+    assert job.startup_analysis_file_count == 2
+    assert job.startup_analysis_total_bytes == len(b"content") + len(b"more")
+    assert job.startup_analysis_entries == [
+        {"relative_path": "file.txt", "size_bytes": len(b"content")},
+        {"relative_path": "extra.txt", "size_bytes": len(b"more")},
+    ]
 
 
 def test_run_copy_job_persists_startup_analysis_cache_on_failed_run(db, tmp_path):
