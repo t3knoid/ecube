@@ -1,4 +1,7 @@
+import app.infrastructure as infra_module
 import app.main as main_module
+import app.services.database_service as database_service
+from fastapi.testclient import TestClient
 from app.models.network import MountType, NetworkMount
 from sqlalchemy.exc import ProgrammingError
 
@@ -41,6 +44,10 @@ class _FailingDiscoveryProvider:
         raise RuntimeError("usb init pending")
 
 
+async def _noop_session_backend(_application):
+    return None
+
+
 def test_health_ready_returns_200_when_all_checks_pass(unauthenticated_client, db, monkeypatch):
     monkeypatch.setattr(main_module, "get_mount_provider", lambda: _HealthyMountProvider())
     monkeypatch.setattr(main_module, "get_drive_discovery", lambda: _HealthyDiscoveryProvider())
@@ -56,6 +63,46 @@ def test_health_ready_returns_200_when_all_checks_pass(unauthenticated_client, d
         "file_system": "mounted",
         "usb_discovery": "initialized",
     }
+
+
+def test_lifespan_passes_drive_mount_provider_to_startup_reconciliation(monkeypatch):
+    observed = {}
+    mount_provider = object()
+    drive_mount_provider = object()
+    filesystem_detector = object()
+
+    class _DiscoveryProvider:
+        def discover_topology(self):
+            return {"hubs": [], "ports": [], "drives": []}
+
+    def fake_run_startup_reconciliation(db, provider, **kwargs):
+        observed["db"] = db
+        observed["provider"] = provider
+        observed.update(kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(main_module.settings, "database_url", "sqlite://")
+    monkeypatch.setattr(main_module.settings, "audit_log_retention_days", 0)
+    monkeypatch.setattr(main_module.settings, "usb_discovery_interval", 0)
+    monkeypatch.setattr(main_module.settings, "role_resolver", "oidc")
+    monkeypatch.setattr(main_module, "init_session_backend", _noop_session_backend)
+    monkeypatch.setattr(main_module, "close_session_backend", _noop_session_backend)
+    monkeypatch.setattr(database_service, "is_database_provisioned", lambda: True)
+    monkeypatch.setattr(infra_module, "get_mount_provider", lambda: mount_provider)
+    monkeypatch.setattr(main_module, "get_drive_mount", lambda: drive_mount_provider)
+    monkeypatch.setattr(infra_module, "get_filesystem_detector", lambda: filesystem_detector)
+    monkeypatch.setattr(infra_module, "get_drive_discovery", lambda: _DiscoveryProvider())
+    monkeypatch.setattr("app.services.reconciliation_service.run_startup_reconciliation", fake_run_startup_reconciliation)
+    monkeypatch.setattr("app.routers.introspection.prime_cpu_sampler", lambda: None)
+
+    with TestClient(main_module.app):
+        pass
+
+    assert observed["provider"] is mount_provider
+    assert observed["drive_mount_provider"] is drive_mount_provider
+    assert observed["filesystem_detector"] is filesystem_detector
+    assert observed["os_user_provider"] is None
+    assert callable(observed["topology_source"])
 
 
 def test_health_ready_returns_200_when_no_mounts_configured(unauthenticated_client, db, monkeypatch):
