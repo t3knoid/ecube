@@ -887,6 +887,29 @@ def test_prepare_job_startup_analysis_uses_specific_failure_fallback_for_unknown
     assert job.startup_analysis_failure_reason == "Unable to prepare startup analysis"
 
 
+def test_run_startup_analysis_logs_sanitized_failure_at_info_level(db, tmp_path, caplog):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine.scan_source_files", side_effect=RuntimeError("boom /secret/path")):
+            with caplog.at_level(logging.INFO):
+                copy_engine.run_startup_analysis(job.id, actor="analyst")
+
+    info_records = [record for record in caplog.records if record.levelno == logging.INFO]
+    debug_records = [record for record in caplog.records if record.levelno == logging.DEBUG]
+
+    assert any(record.getMessage() == "Unexpected startup analysis failure" for record in info_records)
+    assert any(getattr(record, "reason", None) == "Startup analysis failed" for record in info_records)
+    assert all("boom /secret/path" not in record.getMessage() for record in info_records)
+    assert all("/secret/path" not in record.getMessage() for record in info_records)
+    assert debug_records == []
+
+
 def test_run_copy_job_refreshes_stale_startup_analysis_cache_on_failed_run(db, tmp_path):
     source_dir = tmp_path / "source"
     source_dir.mkdir()

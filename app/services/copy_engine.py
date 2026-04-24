@@ -280,6 +280,18 @@ def _set_startup_analysis_ready(job: Any, *, analyzed_at: Optional[datetime] = N
     job.startup_analysis_failure_reason = None
 
 
+def _log_startup_analysis_failure(
+    message: str,
+    *,
+    job_id: int,
+    reason: str,
+    exc: Optional[BaseException] = None,
+) -> None:
+    logger.info(message, extra={"job_id": job_id, "reason": reason})
+    if exc is not None:
+        logger.debug(message, extra={"job_id": job_id, "reason": reason, "raw_error": str(exc)}, exc_info=True)
+
+
 def _calculate_transfer_rate_mbps(transferred_bytes: int, elapsed_seconds: float) -> Optional[float]:
     if transferred_bytes <= 0 or elapsed_seconds <= 0:
         return None
@@ -822,8 +834,13 @@ def prepare_job_startup_analysis(
             _set_startup_analysis_failed(job, safe_reason)
             try:
                 JobRepository(db).save(job)
-            except Exception:
-                logger.exception("DB commit failed while saving startup analysis failure", extra={"job_id": job_id})
+            except Exception as save_exc:
+                _log_startup_analysis_failure(
+                    "DB commit failed while saving startup analysis failure",
+                    job_id=job_id,
+                    reason="Database error while persisting startup analysis failure",
+                    exc=save_exc,
+                )
             if manual:
                 try:
                     AuditRepository(db).add(
@@ -834,8 +851,13 @@ def prepare_job_startup_analysis(
                         details={"reason": safe_reason},
                         client_ip=client_ip,
                     )
-                except Exception:
-                    logger.exception("Failed to write audit log for JOB_STARTUP_ANALYSIS_FAILED")
+                except Exception as audit_exc:
+                    _log_startup_analysis_failure(
+                        "Failed to write audit log for JOB_STARTUP_ANALYSIS_FAILED",
+                        job_id=job_id,
+                        reason="Audit log write failed after startup analysis failure",
+                        exc=audit_exc,
+                    )
         raise
     finally:
         db.close()
@@ -849,8 +871,14 @@ def run_startup_analysis(
 ) -> None:
     try:
         prepare_job_startup_analysis(job_id, actor=actor, client_ip=client_ip, manual=True)
-    except Exception:
-        logger.exception("Unexpected startup analysis failure", extra={"job_id": job_id})
+    except Exception as exc:
+        safe_reason = sanitize_error_message(exc, "Startup analysis failed")
+        _log_startup_analysis_failure(
+            "Unexpected startup analysis failure",
+            job_id=job_id,
+            reason=safe_reason,
+            exc=exc,
+        )
 
 
 def _process_file(
