@@ -902,6 +902,25 @@ def test_analyze_job_processor_allowed(client, db):
     assert response.json()["startup_analysis_status"] == "ANALYZING"
 
 
+def test_analyze_job_conflict_while_startup_analysis_running(client, db):
+    job = ExportJob(
+        project_id="PROJ-ANALYZE-004",
+        evidence_number="EV-ANALYZE-004",
+        source_path="/data/evidence",
+        status=JobStatus.PENDING,
+        startup_analysis_status=StartupAnalysisStatus.ANALYZING,
+    )
+    db.add(job)
+    db.commit()
+
+    with patch("app.services.copy_engine.run_startup_analysis") as mock_analyze:
+        response = client.post(f"/jobs/{job.id}/analyze", json={})
+
+    assert response.status_code == 409
+    assert "startup analysis is in progress" in response.json()["message"].lower()
+    mock_analyze.assert_not_called()
+
+
 def test_analyze_job_auditor_forbidden(auditor_client, db):
     job = ExportJob(
         project_id="PROJ-ANALYZE-003",
@@ -929,6 +948,37 @@ def test_start_already_running_job(client, db):
 
     response = client.post(f"/jobs/{job.id}/start", json={})
     assert response.status_code == 409
+
+
+def test_start_job_conflict_while_startup_analysis_running(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-START-ANALYZING-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-START-ANALYZING-001",
+        mount_path="/mnt/ecube/start-analyzing-001",
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-START-ANALYZING-001",
+        evidence_number="EV-START-ANALYZING-001",
+        source_path="/data/start-analyzing",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.PENDING,
+        startup_analysis_status=StartupAnalysisStatus.ANALYZING,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    with patch("app.services.copy_engine.run_copy_job") as mock_copy:
+        response = client.post(f"/jobs/{job.id}/start", json={})
+
+    assert response.status_code == 409
+    assert "startup analysis is in progress" in response.json()["message"].lower()
+    mock_copy.assert_not_called()
 
 
 def test_pause_job_running_state(client, db):
@@ -1147,6 +1197,23 @@ def test_complete_job_clears_startup_analysis_cache(client, db):
     audit = db.query(AuditLog).filter(AuditLog.action == "JOB_STARTUP_ANALYSIS_CACHE_CLEARED", AuditLog.job_id == job.id).first()
     assert audit is not None
     assert audit.details["reason"] == "job_completed_manually"
+
+
+def test_complete_job_conflict_while_startup_analysis_running(client, db):
+    job = ExportJob(
+        project_id="PROJ-COMPLETE-ANALYZING-001",
+        evidence_number="EV-COMPLETE-ANALYZING-001",
+        source_path="/data/evidence",
+        status=JobStatus.PAUSED,
+        startup_analysis_status=StartupAnalysisStatus.ANALYZING,
+    )
+    db.add(job)
+    db.commit()
+
+    response = client.post(f"/jobs/{job.id}/complete")
+
+    assert response.status_code == 409
+    assert "startup analysis is in progress" in response.json()["message"].lower()
 
 
 def test_update_pending_job_reassigns_drive_and_updates_fields(client, db):
@@ -1464,6 +1531,56 @@ def test_update_job_source_change_invalidates_startup_analysis_and_file_rows(cli
     assert db.query(ExportFile).filter(ExportFile.job_id == job.id).count() == 0
 
 
+def test_update_job_conflict_while_startup_analysis_running(client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="server:/exports/project-001",
+        project_id="PROJ-UPDATE-ANALYZING-001",
+        local_mount_point="/nfs/project-analyzing-001",
+        status=MountStatus.MOUNTED,
+    )
+    drive = UsbDrive(
+        device_identifier="USB-UPDATE-ANALYZING-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-UPDATE-ANALYZING-001",
+        mount_path="/mnt/ecube/update-analyzing-001",
+    )
+    db.add_all([mount, drive])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-UPDATE-ANALYZING-001",
+        evidence_number="EV-UPDATE-ANALYZING-001",
+        source_path="/nfs/project-analyzing-001/evidence-old",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.FAILED,
+        thread_count=4,
+        startup_analysis_status=StartupAnalysisStatus.ANALYZING,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    response = client.put(
+        f"/jobs/{job.id}",
+        json={
+            "project_id": "PROJ-UPDATE-ANALYZING-001",
+            "evidence_number": "EV-UPDATE-ANALYZING-001",
+            "source_path": "/evidence-new",
+            "mount_id": mount.id,
+            "drive_id": drive.id,
+            "thread_count": 4,
+            "max_file_retries": 3,
+            "retry_delay_seconds": 1,
+            "callback_url": None,
+        },
+    )
+
+    assert response.status_code == 409
+    assert "startup analysis is in progress" in response.json()["message"].lower()
+
+
 def test_clear_job_startup_analysis_cache_manager_allowed_and_audited(manager_client, db):
     job = ExportJob(
         project_id="PROJ-CACHE-CLEAR-002",
@@ -1490,6 +1607,26 @@ def test_clear_job_startup_analysis_cache_manager_allowed_and_audited(manager_cl
     audit = db.query(AuditLog).filter(AuditLog.action == "JOB_STARTUP_ANALYSIS_CACHE_CLEARED", AuditLog.job_id == job.id).first()
     assert audit is not None
     assert audit.details["reason"] == "manual_cleanup"
+
+
+def test_clear_job_startup_analysis_cache_conflict_while_running(manager_client, db):
+    job = ExportJob(
+        project_id="PROJ-CACHE-CLEAR-004",
+        evidence_number="EV-CACHE-CLEAR-004",
+        source_path="/data/evidence",
+        status=JobStatus.FAILED,
+        startup_analysis_status=StartupAnalysisStatus.ANALYZING,
+        startup_analysis_file_count=1,
+        startup_analysis_total_bytes=4,
+        startup_analysis_entries=[{"relative_path": "file.txt", "size_bytes": 4}],
+    )
+    db.add(job)
+    db.commit()
+
+    response = manager_client.post(f"/jobs/{job.id}/startup-analysis/clear", json={"confirm": True})
+
+    assert response.status_code == 409
+    assert "startup analysis is in progress" in response.json()["message"].lower()
 
 
 def test_clear_job_startup_analysis_cache_processor_forbidden(client, db):
@@ -1524,6 +1661,35 @@ def test_delete_running_job_conflict(client, db):
 
     response = client.delete(f"/jobs/{job.id}")
     assert response.status_code == 409
+
+
+def test_delete_job_conflict_while_startup_analysis_running(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-DELETE-ANALYZING-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-DELETE-ANALYZING-001",
+        mount_path="/mnt/ecube/delete-analyzing-001",
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-DELETE-ANALYZING-001",
+        evidence_number="EV-DELETE-ANALYZING-001",
+        source_path="/data/delete-analyzing",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.PENDING,
+        startup_analysis_status=StartupAnalysisStatus.ANALYZING,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    response = client.delete(f"/jobs/{job.id}")
+
+    assert response.status_code == 409
+    assert "startup analysis is in progress" in response.json()["message"].lower()
 
 
 def test_create_job_conflict_when_drive_has_different_project(client, db):
