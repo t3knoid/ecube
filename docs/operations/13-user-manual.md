@@ -343,6 +343,8 @@ DISCONNECTED → AVAILABLE → IN_USE → AVAILABLE → ARCHIVED
 
 A drive assigned to one project cannot be re-assigned to a different project without first being formatted. Formatting wipes the drive and clears the project binding.
 
+After a service restart, ECUBE may automatically restore a previously mounted managed USB drive to its expected ECUBE mount slot. If a drive or mount appears to have changed state during startup, review the `Audit Logs` page for reconciliation events recorded by the system.
+
 ### 7.2 Viewing Drives
 
 Use the page controls to:
@@ -454,6 +456,8 @@ ECUBE rejects exact duplicate remote paths and blocks overlapping parent or chil
 For security, the standard mount list and browse labels intentionally redact raw remote paths and local mount points in operator-facing views.
 
 ECUBE now creates the local mount point automatically based on the remote path and mount type (for example, NFS mounts are created under `/nfs/*` and SMB mounts under `/smb/*`).
+
+After a service restart, ECUBE may automatically restore an expected managed share mount or remove a stale ECUBE-managed mount point that no longer matches persisted system state. These startup corrections are intentional and are recorded in the audit log with sanitized details.
 
 The exact credential fields required depend on the mount type and your environment.
 
