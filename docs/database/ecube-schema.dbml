@@ -67,6 +67,9 @@ Table export_jobs {
   client_ip varchar(45)
   callback_url varchar
   failure_reason text
+  startup_analysis_file_count int
+  startup_analysis_total_bytes bigint
+  startup_analysis_entries json
   created_at timestamptz
 
   indexes {
