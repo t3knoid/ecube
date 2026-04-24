@@ -329,20 +329,20 @@ In multi-worker deployments, only one worker must run reconciliation. A cross-pr
 
 Reconciliation runs during application startup, before the service begins normal steady-state discovery behavior. Once the cross-process lock is acquired, the three passes execute in fixed order:
 
-1. **Mounts** — verify OS mount state
+1. **Mounts** — converge managed network and USB mount state
 2. **Jobs** — fail interrupted jobs
 3. **Drives** — re-run USB discovery
 
 ### 4.11.1 Mount Reconciliation
 
-- Query all `network_mounts` rows with `status = MOUNTED`.
-- For each, query the mount provider for actual OS mount state:
-  - Returns `True` → mount is still active; no status change.  `last_checked_at` is updated.
-  - Returns `False` → mount is no longer active; transition to `UNMOUNTED`.
-  - Returns `None` (OS error) → transition to `ERROR`.
-- Every checked mount receives a `last_checked_at` timestamp update regardless of whether its status changed.  This is an observability side-effect, not a domain state mutation.
-- Each correction emits a `MOUNT_RECONCILED` audit event with `mount_id`, `local_mount_point`, `old_status`, `new_status`, and `reason: "startup reconciliation"`.
-- Mounts already in `UNMOUNTED` or `ERROR` state are not checked.
+- Query all persisted `network_mounts` rows and compare them with live OS mount-table state.
+- For persisted `MOUNTED` rows, restore the expected managed mount when possible, or downgrade the row to `UNMOUNTED` or `ERROR` if the mount cannot be recovered.
+- For persisted `UNMOUNTED` or `ERROR` rows, remove any unexpected live ECUBE-managed mount still present under `/nfs/*` or `/smb/*`.
+- Remove orphaned ECUBE-managed network mount points that no longer have a matching DB row.
+- For persisted USB drives that still have a managed mount assignment, restore the expected ECUBE mount slot under the configured USB mount base when possible, unmounting an unexpected live location first if necessary.
+- Remove orphaned ECUBE-managed USB mount points that no longer belong to a persisted drive assignment.
+- Every checked network mount still receives a `last_checked_at` timestamp update regardless of whether its status changed. This is an observability side-effect, not a domain state mutation.
+- Network corrections emit `MOUNT_RECONCILED` audit events, and USB corrections emit `DRIVE_MOUNT_RECONCILED` audit events, both with sanitized details rather than raw host paths.
 
 ### 4.11.2 Job Reconciliation
 
@@ -355,6 +355,7 @@ Reconciliation runs during application startup, before the service begins normal
 
 - Delegates to the normal discovery refresh path (see § 4.10) with `actor="system"`.
 - This re-reads the USB topology and applies the standard drive FSM transitions (DISCONNECTED ↔ AVAILABLE, IN_USE preserved).
+- Startup mount reconciliation runs before this discovery pass so previously mounted managed USB drives can be returned to their expected ECUBE mount slots before steady-state discovery refreshes drive state.
 - Drives that are no longer physically present and were `AVAILABLE` are transitioned to `DISCONNECTED`.
 
 ### Failure Isolation
