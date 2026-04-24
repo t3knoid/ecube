@@ -491,6 +491,9 @@ def _clear_job_startup_analysis_cache(job_row: Any) -> dict[str, int]:
     job_row.startup_analysis_failure_reason = None
     job_row.startup_analysis_file_count = None
     job_row.startup_analysis_total_bytes = None
+    job_row.startup_analysis_share_read_mbps = None
+    job_row.startup_analysis_drive_write_mbps = None
+    job_row.startup_analysis_estimated_duration_seconds = None
     job_row.startup_analysis_entries = None
     return details
 
@@ -500,6 +503,9 @@ def _mark_job_startup_analysis_stale(job_row: Any) -> None:
     job_row.startup_analysis_failure_reason = None
     job_row.startup_analysis_file_count = None
     job_row.startup_analysis_total_bytes = None
+    job_row.startup_analysis_share_read_mbps = None
+    job_row.startup_analysis_drive_write_mbps = None
+    job_row.startup_analysis_estimated_duration_seconds = None
     job_row.startup_analysis_entries = None
 
 
@@ -852,16 +858,28 @@ def analyze_job(
     assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
     assignment_row = _row(assignment) if assignment is not None else None
     active_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
+    job_project_id = cast(Optional[str], job_row.project_id)
+
+    logger.info(
+        f"JOB_STARTUP_ANALYSIS_STARTED job_id={job_id} project_id={job_project_id} "
+        f"status={job_row.startup_analysis_status.value} actor={actor or 'system'}",
+        extra={
+            "job_id": job_id,
+            "project_id": job_project_id,
+            "status": job_row.startup_analysis_status.value,
+            "actor": actor or "system",
+        },
+    )
 
     try:
         audit_repo.add(
             action="JOB_STARTUP_ANALYSIS_REQUESTED",
             user=actor,
-            project_id=cast(Optional[str], job_row.project_id),
+            project_id=job_project_id,
             drive_id=active_drive_id,
             job_id=job_id,
             details={
-                "project_id": cast(Optional[str], job_row.project_id),
+                "project_id": job_project_id,
                 "drive_id": active_drive_id,
             },
             client_ip=client_ip,

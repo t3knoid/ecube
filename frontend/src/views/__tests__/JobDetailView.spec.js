@@ -163,6 +163,7 @@ describe('JobDetailView start action', () => {
       copied_bytes: 0,
       total_bytes: 0,
       startup_analysis_status: 'ANALYZING',
+      startup_analysis_cached: true,
       startup_analysis_ready: false,
       source_path: '/nfs/project-001/evidence',
       target_mount_path: '/mnt/ecube/1',
@@ -218,7 +219,10 @@ describe('JobDetailView start action', () => {
       startup_analysis_status: 'READY',
       startup_analysis_last_analyzed_at: '2026-04-24T15:00:00Z',
       startup_analysis_file_count: 3,
-      startup_analysis_total_bytes: 24,
+      startup_analysis_total_bytes: 24 * 1024 * 1024,
+      startup_analysis_share_read_mbps: 120.4,
+      startup_analysis_drive_write_mbps: 98.2,
+      startup_analysis_estimated_duration_seconds: 2,
       startup_analysis_ready: true,
     })
 
@@ -230,7 +234,9 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain('Discovered files')
     expect(wrapper.text()).toContain('3')
     expect(wrapper.text()).toContain('Estimated total bytes')
-    expect(wrapper.text()).toContain('24 B')
+    expect(wrapper.text()).toContain('24 MB')
+    expect(wrapper.text()).not.toContain('Estimated copy rate')
+    expect(wrapper.text()).not.toContain('Estimated duration')
     expect(wrapper.text()).toContain('Ready to start')
     expect(wrapper.text()).toContain('Yes')
 
@@ -240,7 +246,96 @@ describe('JobDetailView start action', () => {
     await flushPromises()
 
     expect(mocks.analyzeJob).toHaveBeenCalledWith(6, {})
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.startupAnalysisCompleted'))
+  })
+
+  it('replaces the started banner when polling observes analysis completion', async () => {
+    mocks.getJob
+      .mockResolvedValueOnce({
+        id: 6,
+        status: 'PENDING',
+        project_id: 'PROJ-001',
+        evidence_number: 'EV-006',
+        thread_count: 4,
+        copied_bytes: 0,
+        total_bytes: 0,
+        startup_analysis_status: 'NOT_ANALYZED',
+        startup_analysis_cached: true,
+        startup_analysis_ready: false,
+        source_path: '/nfs/project-001/evidence',
+        target_mount_path: '/mnt/ecube/1',
+        drive: { id: 1 },
+      })
+      .mockResolvedValueOnce({
+        id: 6,
+        status: 'PENDING',
+        project_id: 'PROJ-001',
+        evidence_number: 'EV-006',
+        thread_count: 4,
+        copied_bytes: 0,
+        total_bytes: 0,
+        startup_analysis_status: 'ANALYZING',
+        startup_analysis_cached: true,
+        startup_analysis_ready: false,
+        source_path: '/nfs/project-001/evidence',
+        target_mount_path: '/mnt/ecube/1',
+        drive: { id: 1 },
+      })
+      .mockResolvedValueOnce({
+        id: 6,
+        status: 'PENDING',
+        project_id: 'PROJ-001',
+        evidence_number: 'EV-006',
+        thread_count: 4,
+        copied_bytes: 0,
+        total_bytes: 0,
+        startup_analysis_status: 'READY',
+        startup_analysis_cached: true,
+        startup_analysis_ready: true,
+        startup_analysis_last_analyzed_at: '2026-04-24T15:00:00Z',
+        source_path: '/nfs/project-001/evidence',
+        target_mount_path: '/mnt/ecube/1',
+        drive: { id: 1 },
+      })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const analyzeButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.analyze'))
+    expect(analyzeButton).toBeTruthy()
+    const editButton = wrapper.findAll('.actions button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
+    expect(editButton).toBeTruthy()
+    const startButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.start'))
+    expect(startButton).toBeTruthy()
+    const completeButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.complete'))
+    expect(completeButton).toBeTruthy()
+    const deleteButton = wrapper.findAll('.actions button').find((node) => node.text() === i18n.global.t('common.actions.delete'))
+    expect(deleteButton).toBeTruthy()
+    const cleanupButton = wrapper.findAll('.actions button').find((node) => node.text() === i18n.global.t('jobs.clearStartupAnalysis'))
+    expect(cleanupButton).toBeTruthy()
+
+    await analyzeButton.trigger('click')
+    await flushPromises()
+
     expect(wrapper.text()).toContain(i18n.global.t('jobs.startupAnalysisStarted'))
+    expect(editButton.attributes('disabled')).toBeDefined()
+    expect(analyzeButton.attributes('disabled')).toBeDefined()
+    expect(startButton.attributes('disabled')).toBeDefined()
+    expect(completeButton.attributes('disabled')).toBeDefined()
+    expect(deleteButton.attributes('disabled')).toBeDefined()
+    expect(cleanupButton.attributes('disabled')).toBeDefined()
+
+    await mocks.pollerTick()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.startupAnalysisCompleted'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('jobs.startupAnalysisStarted'))
+    expect(editButton.attributes('disabled')).toBeUndefined()
+    expect(analyzeButton.attributes('disabled')).toBeUndefined()
+    expect(startButton.attributes('disabled')).toBeUndefined()
+    expect(completeButton.attributes('disabled')).toBeUndefined()
+    expect(deleteButton.attributes('disabled')).toBeUndefined()
+    expect(cleanupButton.attributes('disabled')).toBeUndefined()
   })
 
   it('shows analyze failure details and allows start when analysis is already ready', async () => {
@@ -255,7 +350,7 @@ describe('JobDetailView start action', () => {
       copied_bytes: 0,
       total_bytes: 128,
       startup_analysis_status: 'FAILED',
-      startup_analysis_failure_reason: 'Startup analysis failed',
+      startup_analysis_failure_reason: 'Analysis failure reason: Startup analysis failed',
       startup_analysis_ready: false,
     })
     mocks.startJob.mockResolvedValue({
@@ -282,7 +377,8 @@ describe('JobDetailView start action', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Failed')
-    expect(wrapper.text()).toContain('Analysis failure reason: Startup analysis failed')
+  expect(wrapper.text()).toContain('Analysis failure reason: Startup analysis failed')
+  expect(wrapper.text()).not.toContain('Analysis failure reason: Analysis failure reason:')
 
     const startButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.start'))
     expect(startButton).toBeTruthy()

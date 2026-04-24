@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import math
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -170,6 +171,12 @@ def _calculate_copy_rate_mb_s(copied_bytes: int, elapsed_seconds: float) -> floa
     return round((copied_bytes / (1024 * 1024)) / elapsed_seconds, 2)
 
 
+def _progress_flush_threshold_bytes() -> int:
+    configured = int(getattr(settings, "copy_progress_flush_bytes", 0) or 0)
+    chunk_size = int(getattr(settings, "copy_chunk_size_bytes", 0) or 0)
+    return max(1, configured, chunk_size)
+
+
 def _sanitize_job_failure_reason(
     reason: str,
     *,
@@ -238,6 +245,13 @@ def _clear_startup_analysis_cache(job: Any) -> None:
     job.startup_analysis_failure_reason = None
     job.startup_analysis_file_count = None
     job.startup_analysis_total_bytes = None
+    job.startup_analysis_share_read_mbps = None
+    job.startup_analysis_drive_write_mbps = None
+    job.startup_analysis_estimated_duration_seconds = None
+    job.startup_analysis_entries = None
+
+
+def _clear_startup_analysis_entries(job: Any) -> None:
     job.startup_analysis_entries = None
 
 
@@ -248,15 +262,251 @@ def _startup_analysis_cache_details(job: Any) -> dict[str, int]:
     }
 
 
+def _clear_startup_analysis_benchmark(job: Any) -> None:
+    job.startup_analysis_share_read_mbps = None
+    job.startup_analysis_drive_write_mbps = None
+    job.startup_analysis_estimated_duration_seconds = None
+
+
 def _set_startup_analysis_failed(job: Any, reason: str) -> None:
     job.startup_analysis_status = StartupAnalysisStatus.FAILED
     job.startup_analysis_failure_reason = reason
+    _clear_startup_analysis_benchmark(job)
 
 
 def _set_startup_analysis_ready(job: Any, *, analyzed_at: Optional[datetime] = None) -> None:
     job.startup_analysis_status = StartupAnalysisStatus.READY
     job.startup_analysis_last_analyzed_at = analyzed_at or datetime.now(timezone.utc)
     job.startup_analysis_failure_reason = None
+
+
+def _calculate_transfer_rate_mbps(transferred_bytes: int, elapsed_seconds: float) -> Optional[float]:
+    if transferred_bytes <= 0 or elapsed_seconds <= 0:
+        return None
+    return round((transferred_bytes / (1024 * 1024)) / elapsed_seconds, 2)
+
+
+def _estimate_startup_analysis_duration_seconds(
+    total_bytes: int,
+    effective_copy_rate_mbps: Optional[float],
+    per_file_overhead_seconds: float,
+    file_count: int,
+) -> Optional[int]:
+    if total_bytes <= 0:
+        return 0
+    if effective_copy_rate_mbps is None:
+        return None
+    if effective_copy_rate_mbps <= 0:
+        return None
+    transfer_seconds = (total_bytes / (1024 * 1024)) / effective_copy_rate_mbps
+    fixed_overhead_seconds = max(0.0, per_file_overhead_seconds) * max(0, file_count)
+    return max(1, math.ceil(transfer_seconds + fixed_overhead_seconds))
+
+
+def _calculate_effective_copy_rate_mbps(
+    benchmark_bytes: int,
+    read_stream_seconds: float,
+    write_stream_seconds: float,
+) -> Optional[float]:
+    combined_stream_seconds = max(0.0, read_stream_seconds) + max(0.0, write_stream_seconds)
+    return _calculate_transfer_rate_mbps(benchmark_bytes, combined_stream_seconds)
+
+
+def _calculate_per_file_overhead_seconds(
+    sample_file_count: int,
+    read_total_seconds: float,
+    read_stream_seconds: float,
+    write_total_seconds: float,
+    write_stream_seconds: float,
+) -> float:
+    if sample_file_count <= 0:
+        return 0.0
+    overhead_seconds = max(0.0, (read_total_seconds - read_stream_seconds) + (write_total_seconds - write_stream_seconds))
+    return overhead_seconds / sample_file_count
+
+
+def _build_startup_analysis_sample_plan(files: list[Path], sample_bytes: int) -> list[tuple[Path, int]]:
+    if sample_bytes <= 0:
+        return []
+
+    file_infos: list[tuple[Path, int]] = []
+    for file_path in files:
+        try:
+            size_bytes = max(0, file_path.stat().st_size)
+        except OSError:
+            continue
+        if size_bytes <= 0:
+            continue
+        file_infos.append((file_path, size_bytes))
+
+    if not file_infos:
+        return []
+
+    sorted_infos = sorted(file_infos, key=lambda item: item[1])
+    bucket_count = min(3, len(sorted_infos))
+    buckets: list[list[tuple[Path, int]]] = []
+    for bucket_index in range(bucket_count):
+        start = (bucket_index * len(sorted_infos)) // bucket_count
+        end = ((bucket_index + 1) * len(sorted_infos)) // bucket_count
+        bucket = sorted_infos[start:end]
+        if bucket:
+            buckets.append(bucket)
+
+    ordered_buckets: list[list[tuple[Path, int]]] = []
+    for bucket in buckets:
+        preferred_indexes = [len(bucket) // 2, 0, len(bucket) - 1]
+        ordered_bucket: list[tuple[Path, int]] = []
+        seen_indexes: set[int] = set()
+        for index in preferred_indexes:
+            if index in seen_indexes:
+                continue
+            ordered_bucket.append(bucket[index])
+            seen_indexes.add(index)
+        for index, item in enumerate(bucket):
+            if index in seen_indexes:
+                continue
+            ordered_bucket.append(item)
+        ordered_buckets.append(ordered_bucket)
+
+    remaining = sample_bytes
+    selected: list[tuple[Path, int]] = []
+    bucket_positions = [0 for _ in ordered_buckets]
+
+    while remaining > 0:
+        progressed = False
+        for bucket_index, bucket in enumerate(ordered_buckets):
+            position = bucket_positions[bucket_index]
+            if position >= len(bucket):
+                continue
+            file_path, size_bytes = bucket[position]
+            bucket_positions[bucket_index] += 1
+            progressed = True
+
+            selected_bytes = min(size_bytes, remaining)
+            selected.append((file_path, selected_bytes))
+            remaining -= selected_bytes
+
+            if remaining <= 0:
+                break
+        if not progressed:
+            break
+
+    return selected
+
+
+def _measure_share_read_mbps(sample_plan: list[tuple[Path, int]]) -> tuple[Optional[float], int, float, float]:
+    if not sample_plan:
+        return None, 0, 0.0, 0.0
+
+    bytes_read = 0
+    checksum = hashlib.sha256()
+    total_started_at = time.perf_counter()
+    stream_elapsed_seconds = 0.0
+
+    for file_path, planned_bytes in sample_plan:
+        remaining = planned_bytes
+        with open(file_path, "rb") as handle:
+            while remaining > 0:
+                chunk_started_at = time.perf_counter()
+                chunk = handle.read(min(settings.copy_chunk_size_bytes, remaining))
+                if not chunk:
+                    stream_elapsed_seconds += time.perf_counter() - chunk_started_at
+                    break
+                chunk_len = len(chunk)
+                checksum.update(chunk)
+                bytes_read += chunk_len
+                remaining -= chunk_len
+                stream_elapsed_seconds += time.perf_counter() - chunk_started_at
+
+    elapsed_seconds = time.perf_counter() - total_started_at
+    checksum.digest()
+    return _calculate_transfer_rate_mbps(bytes_read, elapsed_seconds), bytes_read, elapsed_seconds, stream_elapsed_seconds
+
+
+def _measure_drive_write_mbps(target_mount_path: Optional[str], sample_plan: list[tuple[Path, int]], *, job_id: int) -> tuple[Optional[float], float, float]:
+    if not sample_plan:
+        return None, 0.0, 0.0
+    target_root = Path(str(target_mount_path or "").strip())
+    if not str(target_mount_path or "").strip() or not target_root.exists() or not target_root.is_dir():
+        raise RuntimeError("Assigned target drive is unavailable for startup analysis benchmark")
+
+    bytes_written = 0
+    total_started_at = time.perf_counter()
+    stream_elapsed_seconds = 0.0
+
+    try:
+        for sample_index, (_source_file, planned_bytes) in enumerate(sample_plan):
+            chunk_size = max(1, min(settings.copy_chunk_size_bytes, planned_bytes))
+            chunk = b"\0" * chunk_size
+            benchmark_path = target_root / f".startup-analysis-benchmark-{job_id}-{sample_index}-{time.time_ns()}.tmp"
+
+            try:
+                with open(benchmark_path, "wb") as handle:
+                    remaining = planned_bytes
+                    while remaining > 0:
+                        chunk_started_at = time.perf_counter()
+                        write_size = min(chunk_size, remaining)
+                        handle.write(chunk[:write_size])
+                        bytes_written += write_size
+                        remaining -= write_size
+                        stream_elapsed_seconds += time.perf_counter() - chunk_started_at
+                    handle.flush()
+                    os.fsync(handle.fileno())
+            finally:
+                try:
+                    if benchmark_path.exists():
+                        benchmark_path.unlink()
+                except OSError:
+                    logger.debug("Could not remove startup analysis benchmark file", extra={"job_id": job_id})
+    finally:
+        pass
+
+    elapsed_seconds = time.perf_counter() - total_started_at
+    return _calculate_transfer_rate_mbps(bytes_written, elapsed_seconds), elapsed_seconds, stream_elapsed_seconds
+
+
+def _measure_startup_analysis_transfer_rates(
+    job: Any,
+    source_files: list[Path],
+    total_bytes: int,
+) -> dict[str, Optional[float] | Optional[int] | int]:
+    if total_bytes <= 0:
+        return {
+            "share_read_mbps": None,
+            "drive_write_mbps": None,
+            "estimated_duration_seconds": 0,
+            "benchmark_bytes": 0,
+        }
+
+    sample_bytes = min(int(settings.startup_analysis_benchmark_bytes), total_bytes)
+    sample_plan = _build_startup_analysis_sample_plan(source_files, sample_bytes)
+    share_read_mbps, actual_read_bytes, read_total_seconds, read_stream_seconds = _measure_share_read_mbps(sample_plan)
+    benchmark_bytes = actual_read_bytes or sum(sample_size for _file_path, sample_size in sample_plan) or sample_bytes
+    drive_write_mbps, write_total_seconds, write_stream_seconds = _measure_drive_write_mbps(job.target_mount_path, sample_plan, job_id=int(job.id))
+    effective_copy_rate_mbps = _calculate_effective_copy_rate_mbps(
+        benchmark_bytes,
+        read_stream_seconds,
+        write_stream_seconds,
+    )
+    per_file_overhead_seconds = _calculate_per_file_overhead_seconds(
+        len(sample_plan),
+        read_total_seconds,
+        read_stream_seconds,
+        write_total_seconds,
+        write_stream_seconds,
+    )
+    estimated_duration_seconds = _estimate_startup_analysis_duration_seconds(
+        total_bytes,
+        effective_copy_rate_mbps,
+        per_file_overhead_seconds,
+        len(source_files),
+    )
+    return {
+        "share_read_mbps": share_read_mbps,
+        "drive_write_mbps": drive_write_mbps,
+        "estimated_duration_seconds": estimated_duration_seconds,
+        "benchmark_bytes": benchmark_bytes,
+    }
 
 
 def _relative_directory_markers(source: Path, relative_paths: list[str]) -> dict[str, int]:
@@ -455,6 +705,24 @@ def prepare_job_startup_analysis(
             )
             src_by_rel, size_by_rel, cached_file_count, cached_total_bytes = _persist_startup_analysis_cache(job, source, files)
 
+        benchmark_details: dict[str, Optional[float] | Optional[int] | int] = {
+            "share_read_mbps": None,
+            "drive_write_mbps": None,
+            "estimated_duration_seconds": None,
+            "benchmark_bytes": 0,
+        }
+        if manual:
+            benchmark_details = _measure_startup_analysis_transfer_rates(
+                job,
+                [src_by_rel[rel] for rel in sorted(src_by_rel.keys())],
+                cached_total_bytes,
+            )
+            job.startup_analysis_share_read_mbps = benchmark_details["share_read_mbps"]
+            job.startup_analysis_drive_write_mbps = benchmark_details["drive_write_mbps"]
+            job.startup_analysis_estimated_duration_seconds = benchmark_details["estimated_duration_seconds"]
+        elif not reused_cached_analysis:
+            _clear_startup_analysis_benchmark(job)
+
         existing_files = file_repo.list_by_job(job_id)
         existing_by_rel = {ef.relative_path: ef for ef in existing_files}
 
@@ -499,8 +767,31 @@ def prepare_job_startup_analysis(
             "cached_total_bytes": cached_total_bytes,
             "reused_cached_analysis": reused_cached_analysis,
             "ready_to_start": True,
+            "benchmark_bytes": int(benchmark_details["benchmark_bytes"] or 0),
+            "share_read_mbps": benchmark_details["share_read_mbps"],
+            "drive_write_mbps": benchmark_details["drive_write_mbps"],
+            "estimated_duration_seconds": benchmark_details["estimated_duration_seconds"],
         }
         if manual:
+            logger.info(
+                f"JOB_STARTUP_ANALYSIS_COMPLETED job_id={job_id} project_id={job.project_id} "
+                f"status={job.startup_analysis_status.value} file_count={cached_file_count} "
+                f"total_bytes={cached_total_bytes} share_read_mbps={job.startup_analysis_share_read_mbps} "
+                f"drive_write_mbps={job.startup_analysis_drive_write_mbps} "
+                f"estimated_duration_seconds={job.startup_analysis_estimated_duration_seconds} "
+                f"actor={actor or 'system'}",
+                extra={
+                    "job_id": job_id,
+                    "project_id": job.project_id,
+                    "status": job.startup_analysis_status.value,
+                    "file_count": cached_file_count,
+                    "total_bytes": cached_total_bytes,
+                    "share_read_mbps": job.startup_analysis_share_read_mbps,
+                    "drive_write_mbps": job.startup_analysis_drive_write_mbps,
+                    "estimated_duration_seconds": job.startup_analysis_estimated_duration_seconds,
+                    "actor": actor or "system",
+                },
+            )
             try:
                 audit_repo.add(
                     action="JOB_STARTUP_ANALYSIS_COMPLETED",
@@ -524,7 +815,7 @@ def prepare_job_startup_analysis(
         job = JobRepository(db).get(job_id)
         safe_reason = _sanitize_job_failure_reason(
             str(exc),
-            fallback="Startup analysis failed",
+            fallback="Unable to prepare startup analysis",
             source_path=job.source_path if job else None,
         )
         if job is not None:
@@ -616,20 +907,34 @@ def _process_file(
         success = False
         checksum: Optional[str] = None
         bytes_reported = 0
+        progress_flush_threshold = _progress_flush_threshold_bytes()
 
         for attempt in range(max_retries + 1):
             attempt_bytes_reported = 0
+            pending_progress_bytes = 0
 
-            def _report_progress(delta: int) -> None:
-                nonlocal attempt_bytes_reported, bytes_reported
-                if delta <= 0:
+            def _flush_progress(*, force: bool = False) -> None:
+                nonlocal attempt_bytes_reported, bytes_reported, pending_progress_bytes
+                if pending_progress_bytes <= 0:
                     return
+                if not force and pending_progress_bytes < progress_flush_threshold:
+                    return
+                flushed_bytes = pending_progress_bytes
                 try:
-                    file_repo.increment_job_bytes(ef.job_id, delta)
-                    attempt_bytes_reported += delta
-                    bytes_reported += delta
+                    file_repo.increment_job_bytes(ef.job_id, flushed_bytes)
+                    attempt_bytes_reported += flushed_bytes
+                    bytes_reported += flushed_bytes
+                    pending_progress_bytes = 0
                 except Exception:
                     logger.exception("DB commit failed incrementing copied_bytes for file %s", export_file_id)
+
+            def _report_progress(delta: int) -> None:
+                nonlocal pending_progress_bytes
+                if delta <= 0:
+                    return
+                pending_progress_bytes += delta
+                _flush_progress()
+
             if attempt > 0:
                 # Exponential backoff: retry_delay * 2^(attempt-1)
                 delay = retry_delay * (2 ** (attempt - 1))
@@ -671,6 +976,8 @@ def _process_file(
                     src_file,
                     progress_callback=_report_progress,
                 )
+
+            _flush_progress(force=True)
 
             if success:
                 break
@@ -968,7 +1275,7 @@ def run_copy_job(job_id: int) -> None:
                     cache_clear_details: dict[str, int] = {}
                     if job.status == JobStatus.COMPLETED and job.startup_analysis_cached:
                         cache_clear_details = _startup_analysis_cache_details(job)
-                        _clear_startup_analysis_cache(job)
+                        _clear_startup_analysis_entries(job)
                         cache_cleared = True
                     try:
                         job_repo.save(job)

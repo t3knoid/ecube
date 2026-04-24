@@ -174,6 +174,9 @@ def upgrade() -> None:
         sa.Column("startup_analysis_failure_reason", sa.Text(), nullable=True),
         sa.Column("startup_analysis_file_count", sa.Integer(), nullable=True),
         sa.Column("startup_analysis_total_bytes", sa.BigInteger(), nullable=True),
+        sa.Column("startup_analysis_share_read_mbps", sa.Float(), nullable=True),
+        sa.Column("startup_analysis_drive_write_mbps", sa.Float(), nullable=True),
+        sa.Column("startup_analysis_estimated_duration_seconds", sa.Integer(), nullable=True),
         sa.Column("startup_analysis_entries", JSONB(), nullable=True),
         sa.Column(
             "created_at",
