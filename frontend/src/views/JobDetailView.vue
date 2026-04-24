@@ -1039,9 +1039,10 @@ select {
   white-space: pre-wrap;
   word-break: break-word;
   font-family: ui-monospace, Menlo, Monaco, Consolas, monospace;
-  color: inherit;
-  background: color-mix(in srgb, var(--color-alert-danger-border, #fca5a5) 24%, white);
-  border: 1px solid color-mix(in srgb, var(--color-alert-danger-border, #fca5a5) 55%, transparent);
+  color: var(--color-alert-danger-text, #7f1d1d);
+  background: var(--color-alert-danger-bg, #fef2f2);
+  border: 1px solid var(--color-alert-danger-border, #fca5a5);
+  box-shadow: inset 0.25rem 0 0 var(--color-alert-danger-border, #fca5a5);
   border-radius: var(--border-radius);
   padding: var(--space-sm);
 }
