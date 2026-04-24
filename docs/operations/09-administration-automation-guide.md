@@ -1161,7 +1161,7 @@ Key fields in the response:
 | `file_count` | Total number of files in the job |
 | `startup_analysis_status` | Startup-analysis lifecycle (`NOT_ANALYZED`, `ANALYZING`, `READY`, `STALE`, `FAILED`) |
 | `startup_analysis_ready` | Whether a persisted startup-analysis result is currently ready for Start to reuse |
-| `startup_analysis_last_analyzed_at` | Most recent successful or failed startup-analysis completion time |
+| `startup_analysis_last_analyzed_at` | Most recent successful startup-analysis completion time |
 | `startup_analysis_failure_reason` | Sanitized job-level startup-analysis failure summary, when present |
 | `startup_analysis_file_count` | Discovered file count from the persisted startup-analysis summary |
 | `startup_analysis_total_bytes` | Estimated total bytes from the persisted startup-analysis summary |
