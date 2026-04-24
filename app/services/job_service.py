@@ -760,7 +760,7 @@ def clear_job_startup_analysis_cache(
         except Exception:
             logger.exception(
                 "DB commit failed while clearing startup analysis cache",
-                {"job_id": job_id},
+                extra={"job_id": job_id},
             )
             raise HTTPException(
                 status_code=500,
