@@ -283,6 +283,23 @@ class TestReconcileMounts:
         assert result["mounts_corrected"] == 1
         assert provider.unmount_calls == ["/nfs/orphan"]
 
+    def test_orphan_generated_network_mount_emits_audit_record(self, db: Session):
+        provider = FakeMountProvider(mounted_sources={"/nfs/orphan": "server:/orphan"})
+
+        with patch("app.services.reconciliation_service.read_mount_table", return_value={"/nfs/orphan": "server:/orphan"}):
+            reconcile_mounts(db, provider)
+
+        audit = (
+            db.query(AuditLog)
+            .filter(AuditLog.action == "MOUNT_RECONCILED")
+            .filter(AuditLog.details["reason"].as_string() == "orphan_managed_mount_removed")
+            .first()
+        )
+        assert audit is not None
+        assert audit.details["old_status"] == "MOUNTED"
+        assert audit.details["new_status"] == "UNMOUNTED"
+        assert audit.details["managed_area"] == "nfs"
+
     def test_persisted_usb_mount_is_remounted_to_expected_slot(self, db: Session):
         drive = _make_drive(db, "USB-STARTUP", DriveState.IN_USE)
         drive.filesystem_type = "ext4"
