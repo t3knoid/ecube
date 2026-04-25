@@ -441,13 +441,18 @@ Performs the following steps:
 
 Prepare drive for safe eject: flush filesystem writes, unmount all partitions and encrypted volumes, and transition to AVAILABLE.
 
+Optional query parameter: `confirm_incomplete` (boolean, default `false`).
+
 **Precondition:** Drive must be in `IN_USE` state (required for this operation to proceed).
 
 Performs the following steps in sequence:
 
 1. **Fast-fail validation:** Checks that drive is in `IN_USE` state before performing expensive OS operations
-2. Issues `sync(1)` to flush all pending filesystem writes to block devices
-3. Identifies and unmounts all partitions, volumes, and encrypted devices:
+2. Checks active drive assignments for incomplete files (`TIMEOUT` or `ERROR`)
+    - If incomplete files exist and `confirm_incomplete=false`, returns `409 Conflict` with confirmation-required detail and does not eject
+    - If incomplete files exist and `confirm_incomplete=true`, logs an elevated warning/audit event and continues
+3. Issues `sync(1)` to flush all pending filesystem writes to block devices
+4. Identifies and unmounts all partitions, volumes, and encrypted devices:
    - Discovers mount points via `/proc/mounts` parsing
    - Supports traditional partition naming: `sdb`, `sdb1`, `sdb2` (etc.)
    - Supports NVMe naming: `nvme0n1`, `nvme0n1p1`, `nvme0n1p2` (etc.)
@@ -459,14 +464,15 @@ Performs the following steps in sequence:
    - **Safe unmount ordering:** Unmounts nested mount points in reverse depth order (deepest first) to prevent "umount: target is busy" errors when multiple levels of mounts exist
    - **Path normalization:** Resolves device path symlinks (e.g., `/dev/disk/by-id/*` references)
    - **Escape sequence handling:** Decodes POSIX escape sequences in mount points (e.g., `\040` for space, `\011` for tab) so actual paths are passed to `umount`
-4. Re-validates that drive state and device path have not changed (see race condition protection below)
-5. On success: transitions drive from `IN_USE` → `AVAILABLE`, logs `DRIVE_EJECT_PREPARED`
-6. On failure: drive remains `IN_USE`, logs `DRIVE_EJECT_FAILED` with error details
+5. Re-validates that drive state and device path have not changed (see race condition protection below)
+6. On success: transitions drive from `IN_USE` → `AVAILABLE`, logs `DRIVE_EJECT_PREPARED`
+7. On failure: drive remains `IN_USE`, logs `DRIVE_EJECT_FAILED` with error details
 
 **Behavior:**
 
 - Returns `200` with updated drive state on success
 - Returns `409` Conflict if drive is not in `IN_USE` state (precondition violation); error message includes current state value (e.g., `current state: AVAILABLE`)
+- Returns `409` Conflict when incomplete files exist in active assignments and explicit confirmation is not provided (`confirm_incomplete=false`)
 - Returns `409` Conflict if drive state changed during operation (detected race condition; operation aborted); error message includes initial and final state values
 - Returns `409` Conflict if device path changed during operation (e.g., via concurrent discovery refresh; operation aborted to avoid stale OS operations)
 - Returns `500` if sync or unmount operations fail (drive state unchanged, stays `IN_USE`)
@@ -480,6 +486,8 @@ The endpoint captures the drive state and device path at the start, performs pot
 
 - `DRIVE_EJECT_PREPARED`: Drive successfully prepared for eject; includes `drive_id`, `filesystem_path`, `flush_ok`, `unmount_ok`
 - `DRIVE_EJECT_FAILED`: Sync or unmount failed; includes `drive_id`, `filesystem_path`, `flush_ok`, `flush_error`, `unmount_ok`, `unmount_error`
+- `DRIVE_EJECT_CONFIRM_REQUIRED`: Eject request blocked because active assignments contain incomplete files and confirmation was not supplied
+- `DRIVE_EJECT_WITH_INCOMPLETE_FILES`: Eject explicitly confirmed and proceeded despite incomplete active-assignment files
 
 **Roles:** `admin`, `manager`
 
@@ -487,7 +495,7 @@ The endpoint captures the drive state and device path at the start, performs pot
 
 - `401 Unauthorized` — Missing/invalid token
 - `403 Forbidden` — Insufficient role
-- `409 Conflict` — Drive not in `IN_USE` state, or state/device path changed during operation
+- `409 Conflict` — Drive not in `IN_USE` state, incomplete-file confirmation required, or state/device path changed during operation
 - `500 Internal Server Error` — Sync or unmount operations failed
 
 ---
