@@ -320,9 +320,9 @@ The wizard will:
 >
 > Current ECUBE builds auto-recover this mismatch: if an admin role exists in the DB but the OS account is missing, setup remains available and recreates the OS admin account on the next `/setup/initialize` run.
 
-> **Idempotent re-run behavior:** If setup is already initialized, `POST /setup/initialize` returns `200` with `status="already_initialized"` and still persists setup runtime flags such as `TRUST_PROXY_HEADERS`.
+> **Idempotent re-run behavior:** If setup is already initialized, `POST /setup/initialize` returns `200` with `status="already_initialized"` and does not perform setup side-effects.
 
-> **Note:** `DATABASE_URL` and `TRUST_PROXY_HEADERS` in `<install-dir>/.env` are configured by the setup wizard (not by `install.sh`). If you need to change them later, use setup/admin workflows or edit `.env` and restart `ecube.service`.
+> **Note:** `DATABASE_URL` and `TRUST_PROXY_HEADERS` in `<install-dir>/.env` are configured by the setup wizard during first-run setup (not by `install.sh`). After initialization, change runtime settings through authenticated admin workflows (or by editing `.env` and restarting `ecube.service`).
 
 ---
 

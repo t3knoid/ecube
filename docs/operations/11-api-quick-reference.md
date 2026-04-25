@@ -77,7 +77,7 @@ Setup initialize behavior:
 
 - `POST /setup/initialize` accepts `trust_proxy_headers` (boolean, default `false`) in addition to admin username/password.
 - If setup is already initialized, `POST /setup/initialize` returns `200` with `status="already_initialized"` and an informational message instead of returning `409`.
-- The call still persists setup runtime flags such as `TRUST_PROXY_HEADERS` in the runtime environment file.
+- Once setup is already initialized, the call returns informational success but does not persist runtime setting changes; post-setup configuration updates require authenticated admin workflows.
 
 ---
 
