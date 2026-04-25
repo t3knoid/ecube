@@ -22,6 +22,9 @@ export function mountDrive(driveId) {
   return toData(apiClient.post(`${API_BASE}/drives/${driveId}/mount`))
 }
 
-export function prepareEjectDrive(driveId) {
-  return toData(apiClient.post(`${API_BASE}/drives/${driveId}/prepare-eject`))
+export function prepareEjectDrive(driveId, options = {}) {
+  const { confirm_incomplete = false } = options
+  return toData(apiClient.post(`${API_BASE}/drives/${driveId}/prepare-eject`, null, {
+    params: { confirm_incomplete },
+  }))
 }

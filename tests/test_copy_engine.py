@@ -135,12 +135,24 @@ def test_process_file_succeeds_after_transient_failure(db, tmp_path):
     attempt_count = 0
     original_copy_file = copy_engine.copy_file
 
-    def _flaky_copy(src, dst, checksum_algorithm="sha256", progress_callback=None):
+    def _flaky_copy(
+        src,
+        dst,
+        checksum_algorithm="sha256",
+        progress_callback=None,
+        timeout_seconds=0,
+    ):
         nonlocal attempt_count
         attempt_count += 1
         if attempt_count < 3:
             return False, None, "transient I/O error"
-        return original_copy_file(src, dst, checksum_algorithm, progress_callback=progress_callback)
+        return original_copy_file(
+            src,
+            dst,
+            checksum_algorithm,
+            progress_callback=progress_callback,
+            timeout_seconds=timeout_seconds,
+        )
 
     target_dir = tmp_path / "target"
     target_dir.mkdir()
@@ -324,12 +336,24 @@ def test_process_file_retry_audit_entries_created(db, tmp_path):
     original_copy_file = copy_engine.copy_file
     call_count = 0
 
-    def _fail_twice(src, dst, checksum_algorithm="sha256", progress_callback=None):
+    def _fail_twice(
+        src,
+        dst,
+        checksum_algorithm="sha256",
+        progress_callback=None,
+        timeout_seconds=0,
+    ):
         nonlocal call_count
         call_count += 1
         if call_count <= 2:
             return False, None, "fail"
-        return original_copy_file(src, dst, checksum_algorithm, progress_callback=progress_callback)
+        return original_copy_file(
+            src,
+            dst,
+            checksum_algorithm,
+            progress_callback=progress_callback,
+            timeout_seconds=timeout_seconds,
+        )
 
     target_dir = tmp_path / "target"
     target_dir.mkdir()
@@ -421,9 +445,21 @@ def test_run_copy_job_resume_skips_done_files(db, tmp_path):
     copy_call_paths: list[str] = []
     original_copy_file = copy_engine.copy_file
 
-    def _tracking_copy(src, dst, checksum_algorithm="sha256", progress_callback=None):
+    def _tracking_copy(
+        src,
+        dst,
+        checksum_algorithm="sha256",
+        progress_callback=None,
+        timeout_seconds=0,
+    ):
         copy_call_paths.append(str(src))
-        return original_copy_file(src, dst, checksum_algorithm, progress_callback=progress_callback)
+        return original_copy_file(
+            src,
+            dst,
+            checksum_algorithm,
+            progress_callback=progress_callback,
+            timeout_seconds=timeout_seconds,
+        )
 
     with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
         with patch("app.services.copy_engine.copy_file", side_effect=_tracking_copy):
