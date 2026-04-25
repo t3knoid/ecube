@@ -45,6 +45,7 @@ Enum file_status {
   DONE
   ERROR
   RETRYING
+  TIMEOUT
 }
 
 Enum drive_state {

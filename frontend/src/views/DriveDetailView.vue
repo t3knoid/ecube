@@ -67,12 +67,14 @@ function trapFocusWithin(event, container) {
 
 const showFormatDialog = ref(false)
 const showEjectDialog = ref(false)
+const showIncompleteEjectDialog = ref(false)
 const showInitializeDialog = ref(false)
 const browseExpanded = ref(false)
 const showCocPrompt = ref(false)
 const showActiveJobWarning = ref(false)
 const activeJobId = ref(null)
 const activeJobWarningMessage = ref('')
+const incompleteEjectMessage = ref('')
 
 const filesystemType = ref('ext4')
 const projectId = ref('')
@@ -394,18 +396,19 @@ async function openPrepareEjectDialog() {
   }
 }
 
-async function runPrepareEject() {
+async function runPrepareEject(confirmIncomplete = false) {
   if (!drive.value) return
   saving.value = true
   clearBanners()
   showEjectDialog.value = false
+  showIncompleteEjectDialog.value = false
   showCocPrompt.value = false
   showActiveJobWarning.value = false
   activeJobId.value = null
   activeJobWarningMessage.value = ''
   try {
     drive.value = normalizeProjectRecord(
-      await prepareEjectDrive(drive.value.id),
+      await prepareEjectDrive(drive.value.id, { confirm_incomplete: confirmIncomplete }),
       ['current_project_id'],
     )
     infoMessage.value = t('drives.ejectSuccess')
@@ -413,6 +416,12 @@ async function runPrepareEject() {
   } catch (err) {
     const status = err?.response?.status
     const detail = normalizeErrorMessage(err?.response?.data, null)
+    const confirmPrefix = 'EJECT_CONFIRM_REQUIRED:'
+    if (status === 409 && typeof detail === 'string' && detail.startsWith(confirmPrefix)) {
+      incompleteEjectMessage.value = detail.slice(confirmPrefix.length).trim()
+      showIncompleteEjectDialog.value = true
+      return
+    }
     if (!status) {
       error.value = t('common.errors.networkError')
     } else if (status === 403) {
@@ -560,6 +569,17 @@ onBeforeUnmount(() => {
       :busy="saving"
       dangerous
       @confirm="runPrepareEject"
+    />
+
+    <ConfirmDialog
+      v-model="showIncompleteEjectDialog"
+      :title="t('drives.ejectIncompleteConfirmTitle')"
+      :message="incompleteEjectMessage || t('drives.ejectIncompleteConfirmBody')"
+      :confirm-label="t('drives.ejectIncompleteConfirmAction')"
+      :cancel-label="t('common.actions.cancel')"
+      :busy="saving"
+      dangerous
+      @confirm="runPrepareEject(true)"
     />
 
     <teleport to="body">

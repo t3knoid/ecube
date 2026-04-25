@@ -418,6 +418,8 @@ After a successful prepare-eject:
 
 If ECUBE reports that the drive is still busy, the confirmation dialog closes cleanly and the page shows a specific retry message. Close any open shell, file browser, or process still using the mounted drive, then retry `Prepare Eject`.
 
+If ECUBE detects timed-out or failed files in active drive assignments, the first `Prepare Eject` attempt is blocked with an explicit confirmation-required warning. Review the warning details, then confirm a second prompt to continue with ejection.
+
 > To permanently retire a drive after removal, use the Chain of Custody handoff workflow on the `Audit` page. Confirming a handoff transitions the drive to `ARCHIVED`.
 
 ---
@@ -631,7 +633,7 @@ If the Jobs page remains open while a manual analyze run finishes, ECUBE can sho
 
 If a job is restarted after a failed or paused run and its persisted startup-analysis snapshot is still current, ECUBE can reuse that cached scan instead of repeating the full startup analysis. When operators need to discard that snapshot, the `Clear startup analysis cache` action opens a confirmation dialog and removes only the cached startup-analysis data. It does not remove per-file history, copied-file state, or other audit-relevant job records.
 
-When a job is paused, completed, or fails, the detail view shows a summary with the job start time, copy thread count, files copied, total copied, elapsed time, copy rate, and any failure reason or related log hint. The elapsed time remains cumulative across earlier run segments, so a paused and later resumed job keeps the same additive runtime history that was shown while it was active. Failed jobs prefer a persisted sanitized job-level failure reason when one is available, so operators can see stable messages such as `Copy job timed out before all files completed`, `Unexpected copy failure`, or `Job interrupted by service restart before completion` before any derived per-file fallback.
+When a job is paused, completed, or fails, the detail view shows a summary with the job start time, copy thread count, files copied, files failed, files timed out, total copied, elapsed time, copy rate, and any failure reason or related log hint. The elapsed time remains cumulative across earlier run segments, so a paused and later resumed job keeps the same additive runtime history that was shown while it was active. Failed jobs prefer a persisted sanitized job-level failure reason when one is available, so operators can see stable messages such as `Unexpected copy failure` or `Job interrupted by service restart before completion` before any derived per-file fallback. When `COPY_JOB_TIMEOUT` is exceeded for an individual file attempt, that timeout is recorded as a per-file error (for example `File copy timed out after 3600s`) rather than a whole-job timeout reason.
 
 When ECUBE can safely correlate a failed copy to the selected source or destination for that job, the failure summary may add relative hints such as `source: reports/a.txt` or `destination: reports/a.txt`. Raw host or mount paths are not shown in the Job Detail summary.
 

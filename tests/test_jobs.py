@@ -2043,6 +2043,7 @@ def test_completed_job_with_all_fields(client, db):
     # File counts
     assert data["files_succeeded"] == 3
     assert data["files_failed"] == 0
+    assert data["files_timed_out"] == 0
 
     # Error summary should be null on success
     assert data["error_summary"] is None
@@ -2096,6 +2097,7 @@ def test_failed_job_with_error_summary(client, db):
 
     assert data["files_succeeded"] == 2
     assert data["files_failed"] == 2
+    assert data["files_timed_out"] == 0
     assert data["error_summary"] is not None
     assert "2 files failed" in data["error_summary"]
     assert "disk full" in data["error_summary"]
@@ -2123,6 +2125,7 @@ def test_job_with_no_drive_assigned(client, db):
     assert data["drive"] is None
     assert data["files_succeeded"] == 0
     assert data["files_failed"] == 0
+    assert data["files_timed_out"] == 0
     assert data["error_summary"] is None
 
 
@@ -2649,6 +2652,31 @@ def test_list_jobs_includes_files_succeeded_and_failed(client, db):
     assert len(data) == 1
     assert data[0]["files_succeeded"] == 2
     assert data[0]["files_failed"] == 1
+    assert data[0]["files_timed_out"] == 0
+
+
+def test_get_job_details_includes_timed_out_count(client, db):
+    job = ExportJob(
+        project_id="PROJ-TIMEOUT-COUNT",
+        evidence_number="EV-TIMEOUT-COUNT",
+        source_path="/data",
+        status=JobStatus.COMPLETED,
+        file_count=3,
+    )
+    db.add(job)
+    db.flush()
+
+    db.add(ExportFile(job_id=job.id, relative_path="ok.txt", status=FileStatus.DONE, size_bytes=1))
+    db.add(ExportFile(job_id=job.id, relative_path="bad.txt", status=FileStatus.ERROR, error_message="io"))
+    db.add(ExportFile(job_id=job.id, relative_path="slow.txt", status=FileStatus.TIMEOUT, error_message="File copy timed out after 1s"))
+    db.commit()
+
+    response = client.get(f"/jobs/{job.id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["files_succeeded"] == 1
+    assert data["files_failed"] == 1
+    assert data["files_timed_out"] == 1
 
 
 def test_list_jobs_includes_error_summary_for_failed_jobs(client, db):
