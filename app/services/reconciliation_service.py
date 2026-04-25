@@ -36,6 +36,7 @@ from app.infrastructure.mount_protocol import MountProvider
 from app.infrastructure.os_user_protocol import OsUserProvider
 from app.infrastructure.usb_discovery import DiscoveredTopology
 from app.infrastructure import FilesystemDetector
+from app.exceptions import ConflictError
 from app.models.hardware import DriveState, UsbDrive
 from app.models.jobs import ExportJob, JobStatus
 from app.models.network import MountStatus, NetworkMount
@@ -46,6 +47,13 @@ from app.services.mount_check_utils import check_mounted_with_configured_timeout
 from app.constants import ECUBE_GROUP_ROLE_MAP
 
 logger = logging.getLogger(__name__)
+
+
+class ManualReconciliationInProgressError(ConflictError):
+    """Raised when a manual managed-mount reconciliation run is already in progress."""
+
+    default_code = "MANUAL_RECONCILIATION_IN_PROGRESS"
+    default_message = "A manual mount reconciliation run is already in progress."
 
 
 def _schema_mismatch_hint(exc: Exception) -> Optional[str]:
@@ -208,6 +216,7 @@ def _reconcile_usb_mounts(
 ) -> Dict[str, int]:
     checked = 0
     corrected = 0
+    failures = 0
     audit_entries = []
     managed_root = settings.usb_mount_base_path
 
@@ -235,6 +244,7 @@ def _reconcile_usb_mounts(
         if actual_target and actual_target != expected_target:
             unmount_ok, unmount_error = drive_mount_provider.unmount_drive(actual_target)
             if not unmount_ok:
+                failures += 1
                 logger.info(
                     "Startup USB mount cleanup failed",
                     extra={"drive_id": drive.id, "reason": "cleanup_failed"},
@@ -275,6 +285,7 @@ def _reconcile_usb_mounts(
                 "details": {"drive_id": drive.id, "status": "MOUNTED", "reason": "startup_remount"},
             })
         else:
+            failures += 1
             logger.info(
                 "Startup USB remount failed",
                 extra={"drive_id": drive.id, "reason": "remount_failed"},
@@ -301,6 +312,7 @@ def _reconcile_usb_mounts(
         checked += 1
         unmount_ok, unmount_error = drive_mount_provider.unmount_drive(normalized_target)
         if not unmount_ok:
+            failures += 1
             logger.info(
                 "Startup orphan USB mount cleanup failed",
                 extra={"reason": "cleanup_failed"},
@@ -327,7 +339,11 @@ def _reconcile_usb_mounts(
             db.expire_all()
             logger.exception("Failed to write audit logs for DRIVE_MOUNT_RECONCILED")
 
-    return {"usb_mounts_checked": checked, "usb_mounts_corrected": corrected}
+    return {
+        "usb_mounts_checked": checked,
+        "usb_mounts_corrected": corrected,
+        "usb_mount_failures": failures,
+    }
 
 def reconcile_mounts(
     db: Session,
@@ -351,6 +367,7 @@ def reconcile_mounts(
 
     checked = 0
     corrected = 0
+    failures = 0
     audit_entries = []
 
     for mount in mounts:
@@ -380,6 +397,7 @@ def reconcile_mounts(
             if live_source is not None and live_source != str(mount.remote_path):
                 unmount_ok, unmount_error = mount_provider.os_unmount(str(mount.local_mount_point))
                 if not unmount_ok:
+                    failures += 1
                     mount.status = MountStatus.ERROR
                     corrected += 1
                     audit_entries.append({
@@ -400,6 +418,7 @@ def reconcile_mounts(
             try:
                 validate_mount(mount.id, db, actor="system", provider=mount_provider)
             except Exception:
+                failures += 1
                 logger.exception(
                     "Startup network remount failed unexpectedly",
                     extra={"mount_id": mount.id},
@@ -436,6 +455,7 @@ def reconcile_mounts(
             mount.status = MountStatus.UNMOUNTED
             _cleanup_generated_network_mount_directory(str(mount.local_mount_point))
         else:
+            failures += 1
             mount.status = MountStatus.ERROR
             corrected += 1
             logger.debug(
@@ -461,6 +481,7 @@ def reconcile_mounts(
         checked += 1
         unmount_ok, unmount_error = mount_provider.os_unmount(normalized_target)
         if not unmount_ok:
+            failures += 1
             logger.debug(
                 "Startup orphan network mount cleanup raw error",
                 extra={"mount_point": normalized_target, "raw_error": unmount_error},
@@ -499,10 +520,95 @@ def reconcile_mounts(
                 "Failed to write audit logs for MOUNT_RECONCILED",
             )
 
-    summary = {"mounts_checked": checked, "mounts_corrected": corrected}
+    summary = {
+        "mounts_checked": checked,
+        "mounts_corrected": corrected,
+        "mount_failures": failures,
+    }
     if drive_mount_provider is not None:
         summary.update(_reconcile_usb_mounts(db, drive_mount_provider, audit_repo=AuditRepository(db)))
     return summary
+
+
+def run_manual_managed_mount_reconciliation(
+    db: Session,
+    mount_provider: MountProvider,
+    *,
+    drive_mount_provider: DriveMountProvider,
+    actor: str,
+) -> Dict[str, Any]:
+    """Run a live-safe, mount-only reconciliation pass for manual invocation.
+
+    This path intentionally excludes identity, job, and drive discovery/state
+    reconciliation. It only converges managed network mounts and managed USB
+    mount slots.
+    """
+    if not _acquire_reconciliation_lock(db):
+        raise ManualReconciliationInProgressError()
+
+    logger.info(
+        "Manual managed-mount reconciliation requested",
+        extra={"actor": actor, "scope": "managed_mounts_only"},
+    )
+
+    try:
+        summary = reconcile_mounts(db, mount_provider, drive_mount_provider)
+        network_checked = int(summary.get("mounts_checked", 0))
+        network_corrected = int(summary.get("mounts_corrected", 0))
+        usb_checked = int(summary.get("usb_mounts_checked", 0))
+        usb_corrected = int(summary.get("usb_mounts_corrected", 0))
+        failures = int(summary.get("mount_failures", 0)) + int(summary.get("usb_mount_failures", 0))
+
+        status = "partial" if failures > 0 else "ok"
+        details = {
+            "status": status,
+            "scope": "managed_mounts_only",
+            "network_mounts_checked": network_checked,
+            "network_mounts_corrected": network_corrected,
+            "usb_mounts_checked": usb_checked,
+            "usb_mounts_corrected": usb_corrected,
+            "failure_count": failures,
+        }
+        AuditRepository(db).add(
+            action="MANUAL_MOUNT_RECONCILIATION",
+            user=actor,
+            details=details,
+        )
+
+        logger.info(
+            "Manual managed-mount reconciliation finished",
+            extra=details,
+        )
+        return details
+    except Exception as exc:
+        logger.info(
+            "Manual managed-mount reconciliation failed",
+            extra={
+                "actor": actor,
+                "scope": "managed_mounts_only",
+                "status": "failed",
+                "reason": "manual_reconciliation_failed",
+            },
+        )
+        logger.debug(
+            "Manual managed-mount reconciliation raw failure",
+            extra={"actor": actor, "raw_error": str(exc)},
+        )
+        try:
+            AuditRepository(db).add(
+                action="MANUAL_MOUNT_RECONCILIATION",
+                user=actor,
+                details={
+                    "status": "failed",
+                    "scope": "managed_mounts_only",
+                    "reason": "manual_reconciliation_failed",
+                },
+            )
+        except Exception:
+            logger.debug("Manual reconciliation failure audit write failed", exc_info=True)
+        raise
+    finally:
+        _release_reconciliation_lock(db)
 
 
 # -----------------------------------------------------------------------
