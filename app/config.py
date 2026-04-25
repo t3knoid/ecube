@@ -128,6 +128,11 @@ class Settings(BaseSettings):
     #: ``0`` disables periodic discovery.
     usb_discovery_interval: int = 30
 
+    #: Maximum number of bytes sampled during manual startup-analysis transfer
+    #: benchmarking. The benchmark reads up to this many bytes from the source
+    #: share and writes the same amount to the assigned target drive.
+    startup_analysis_benchmark_bytes: int = 8_388_608
+
     #: Timeout in seconds for each mountpoint check during ``GET /health/ready``.
     #: Keep this low so readiness fails fast even when a mount check hangs.
     readiness_mount_check_timeout_seconds: float = DEFAULT_READINESS_MOUNT_CHECK_TIMEOUT_SECONDS
@@ -246,6 +251,10 @@ class Settings(BaseSettings):
 
     #: Chunk size in bytes for file copy and checksum computation.
     copy_chunk_size_bytes: int = 1_048_576
+
+    #: Minimum buffered byte count before the copy engine flushes
+    #: ``copied_bytes`` progress to the database.
+    copy_progress_flush_bytes: int = 8_388_608
 
     #: Default thread pool size when ``ExportJob.thread_count`` is ``None``.
     copy_default_thread_count: int = 4

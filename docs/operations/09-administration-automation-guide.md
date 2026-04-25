@@ -1159,8 +1159,16 @@ Key fields in the response:
 | `total_bytes` | Total bytes to copy |
 | `copied_bytes` | Bytes copied so far (use for progress calculation) |
 | `file_count` | Total number of files in the job |
+| `startup_analysis_status` | Startup-analysis lifecycle (`NOT_ANALYZED`, `ANALYZING`, `READY`, `STALE`, `FAILED`) |
+| `startup_analysis_ready` | Whether a persisted startup-analysis result is currently ready for Start to reuse |
+| `startup_analysis_last_analyzed_at` | Most recent successful startup-analysis completion time |
+| `startup_analysis_failure_reason` | Sanitized job-level startup-analysis failure summary, when present |
+| `startup_analysis_file_count` | Discovered file count from the persisted startup-analysis summary |
+| `startup_analysis_total_bytes` | Estimated total bytes from the persisted startup-analysis summary |
 
 Immediately after a job starts, polling clients can see `status: "RUNNING"` together with `total_bytes: 0`, `copied_bytes: 0`, and `file_count: 0`. Treat that as the normal startup-analysis phase rather than as a stalled or completed copy.
+
+Manual `POST /jobs/{job_id}/analyze` keeps the job in `PENDING` while `startup_analysis_status` moves through `ANALYZING` and then into `READY`, `STALE`, or `FAILED`. While startup analysis is actively running, lifecycle mutations such as edit, start, complete, delete, re-analyze, and startup-analysis cache clear can return HTTP 409 and should be retried only after the analyze run has finished.
 
 Example response (job in progress):
 
@@ -1302,12 +1310,13 @@ A complete evidence export follows this sequence:
 1. **Mount source** — add a network mount pointing to the evidence share
 2. **Enable ports** — enable the USB ports you want to use (`PATCH /admin/ports/{port_id}`)
 3. **Prepare drive** — discover, format, and initialize a USB drive for the project
-3. **Create job** — `POST /jobs` with project ID, evidence number, source path, and drive ID
-4. **Start copy** — `POST /jobs/{job_id}/start`
-5. **Monitor progress** — poll `GET /jobs/{job_id}` until `status` is `COMPLETED` or `FAILED`
-6. **Verify** — `POST /jobs/{job_id}/verify` to confirm data integrity
-7. **Generate manifest** — `POST /jobs/{job_id}/manifest` for chain-of-custody records
-8. **Eject drive** — `POST /drives/{drive_id}/prepare-eject` for safe removal
+4. **Create job** — `POST /jobs` with project ID, evidence number, source path, and drive ID
+5. **Optional manual analyze** — `POST /jobs/{job_id}/analyze` to scan the source and persist startup-analysis results before copy starts
+6. **Start copy** — `POST /jobs/{job_id}/start`
+7. **Monitor progress** — poll `GET /jobs/{job_id}` until `status` is `COMPLETED` or `FAILED`
+8. **Verify** — `POST /jobs/{job_id}/verify` to confirm data integrity
+9. **Generate manifest** — `POST /jobs/{job_id}/manifest` for chain-of-custody records
+10. **Eject drive** — `POST /drives/{drive_id}/prepare-eject` for safe removal
 
 ---
 
