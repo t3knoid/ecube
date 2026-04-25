@@ -428,7 +428,7 @@
     "loadDrivesError": "Failed to load drive data."
   },
   "setup": {
-    "stepCounter": "Step {step} of 4",
+    "stepCounter": "Step {step} of 5",
     "connectDatabase": "Connect to Database",
     "dbHost": "Database Host",
     "dbPort": "Database Port",
@@ -441,7 +441,10 @@
     "appDbPass": "Application DB Password",
     "provisionOk": "Database provisioned successfully.",
     "provisionAlready": "Database is already provisioned. Continuing with existing schema.",
+    "proxyHeadersStepTitle": "Reverse Proxy Settings",
     "createAdmin": "Create Admin User",
+    "trustProxyHeadersLabel": "Trust reverse-proxy client IP headers",
+    "trustProxyHeadersHelp": "Enable only when ECUBE is behind a trusted reverse proxy that sets X-Forwarded-For or X-Real-IP. Leave disabled for direct/native deployments.",
     "adminCreated": "Admin user created successfully. Continue to the next step.",
     "adminReconciled": "Existing OS admin user reconciled successfully. Continue to the next step.",
     "completeTitle": "Setup Complete",

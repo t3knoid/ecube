@@ -36,6 +36,7 @@ const db = ref({
 const admin = ref({
   username: 'admin',
   password: '',
+  trust_proxy_headers: false,
 })
 
 const connectionOk = ref(false)
@@ -150,6 +151,7 @@ async function runInitializeSetup() {
     const response = await initializeSetup({
       username: admin.value.username,
       password: admin.value.password,
+      trust_proxy_headers: admin.value.trust_proxy_headers,
     })
     if (typeof response?.message === 'string' && response.message.trim()) {
       setupSuccessMessage.value = response.message
@@ -172,7 +174,7 @@ async function runInitializeSetup() {
 }
 
 function goNext() {
-  if (step.value < 4) step.value += 1
+  if (step.value < 5) step.value += 1
 }
 
 function goBack() {
@@ -262,6 +264,15 @@ onMounted(async () => {
       </div>
 
       <div v-else-if="step === 3" class="step-grid">
+        <h2>{{ t('setup.proxyHeadersStepTitle') }}</h2>
+        <label class="checkbox-row" for="setup-trust-proxy-headers">
+          <input id="setup-trust-proxy-headers" v-model="admin.trust_proxy_headers" type="checkbox" />
+          <span>{{ t('setup.trustProxyHeadersLabel') }}</span>
+        </label>
+        <p class="muted">{{ t('setup.trustProxyHeadersHelp') }}</p>
+      </div>
+
+      <div v-else-if="step === 4" class="step-grid">
         <h2>{{ t('setup.createAdmin') }}</h2>
         <label for="admin-username">{{ t('auth.username') }}</label>
         <input id="admin-username" v-model="admin.username" type="text" />
@@ -282,9 +293,9 @@ onMounted(async () => {
       <div class="actions">
         <button class="btn" :disabled="busy || step === 1" @click="goBack">{{ t('common.actions.back') }}</button>
         <button
-          v-if="step < 4"
+          v-if="step < 5"
           class="btn btn-primary"
-          :disabled="busy || (step === 1 && !connectionOk) || (step === 2 && !provisionOk) || (step === 3 && !complete)"
+          :disabled="busy || (step === 1 && !connectionOk) || (step === 2 && !provisionOk) || (step === 4 && !complete)"
           @click="goNext"
         >
           {{ t('common.actions.next') }}
@@ -315,6 +326,12 @@ onMounted(async () => {
 
 .step-grid {
   display: grid;
+  gap: var(--space-xs);
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
   gap: var(--space-xs);
 }
 
