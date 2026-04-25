@@ -30,6 +30,7 @@ const form = ref({
   db_pool_size: 5,
   db_pool_max_overflow: 10,
   db_pool_recycle_seconds: -1,
+  copy_job_timeout: 3600,
 })
 const originalForm = ref({ ...form.value })
 
@@ -42,6 +43,7 @@ const fieldOrder = [
   'db_pool_size',
   'db_pool_max_overflow',
   'db_pool_recycle_seconds',
+  'copy_job_timeout',
 ]
 
 const levelOptions = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
@@ -262,6 +264,14 @@ onMounted(loadConfiguration)
       <input id="cfg-db-pool-recycle" v-model.number="form.db_pool_recycle_seconds" type="number" min="-1" />
       <p class="field-help">{{ t('configuration.fields.db_pool_recycle_seconds.help') }}</p>
       <p class="restart-chip">{{ t('configuration.restartRequiredField') }}</p>
+    </article>
+
+    <article class="panel">
+      <h2>{{ t('configuration.sections.copyJobs') }}</h2>
+
+      <label for="cfg-copy-job-timeout">{{ t('configuration.fields.copy_job_timeout.label') }}</label>
+      <input id="cfg-copy-job-timeout" v-model.number="form.copy_job_timeout" type="number" min="0" />
+      <p class="field-help">{{ t('configuration.fields.copy_job_timeout.help') }}</p>
     </article>
 
     <article v-if="restartPending" class="panel warning-panel">

@@ -41,6 +41,7 @@ class ConfigurationUpdateRequest(StrictIntMixin, BaseModel):
     db_pool_size: Optional[StrictInt] = Field(default=None, ge=1, le=100)
     db_pool_max_overflow: Optional[StrictInt] = Field(default=None, ge=0, le=200)
     db_pool_recycle_seconds: Optional[StrictInt] = Field(default=None, ge=-1)
+    copy_job_timeout: Optional[StrictInt] = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def check_at_least_one_field(self) -> "ConfigurationUpdateRequest":
