@@ -1437,6 +1437,11 @@ class TestOSEndpointsNonLocalMode:
 class TestSetupEndpoints:
     """First-run setup wizard endpoints."""
 
+    @pytest.fixture(autouse=True)
+    def _mock_trust_proxy_persistence(self):
+        with patch("app.services.database_service.set_trust_proxy_headers") as mock_set:
+            yield mock_set
+
     def test_status_not_initialized(self, unauthenticated_client):
         resp = unauthenticated_client.get("/setup/status")
         assert resp.status_code == 200
@@ -1656,10 +1661,89 @@ class TestSetupEndpoints:
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
-    def test_initialize_conflict_when_already_set_up(
-        self, mock_pwd, mock_grp, mock_subprocess, unauthenticated_client, db
+    def test_initialize_persists_trust_proxy_headers_default_false(
+        self,
+        mock_pwd,
+        mock_grp,
+        mock_subprocess,
+        unauthenticated_client,
+        _mock_trust_proxy_persistence,
     ):
-        """After initialization, a second call returns 409."""
+        mock_grp.getgrnam.side_effect = [
+            KeyError("no such group"),
+            KeyError("no such group"),
+            KeyError("no such group"),
+            KeyError("no such group"),
+            _make_grp(name="ecube-admins"),
+        ]
+        mock_grp.getgrall.return_value = []
+        mock_grp.getgrgid.return_value = _make_grp(name="admin1", gid=1000)
+
+        pw = _make_pw(name="admin1")
+        mock_pwd.getpwnam.side_effect = [
+            KeyError("no such user"),
+            pw,
+            pw,
+        ]
+        mock_subprocess.return_value = _ok_result()
+
+        resp = unauthenticated_client.post("/setup/initialize", json={
+            "username": "admin1",
+            "password": "s3cret",
+        })
+        assert resp.status_code == 200
+        _mock_trust_proxy_persistence.assert_called_once_with(False)
+
+    @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_initialize_persists_trust_proxy_headers_true_when_requested(
+        self,
+        mock_pwd,
+        mock_grp,
+        mock_subprocess,
+        unauthenticated_client,
+        _mock_trust_proxy_persistence,
+    ):
+        mock_grp.getgrnam.side_effect = [
+            KeyError("no such group"),
+            KeyError("no such group"),
+            KeyError("no such group"),
+            KeyError("no such group"),
+            _make_grp(name="ecube-admins"),
+        ]
+        mock_grp.getgrall.return_value = []
+        mock_grp.getgrgid.return_value = _make_grp(name="admin1", gid=1000)
+
+        pw = _make_pw(name="admin1")
+        mock_pwd.getpwnam.side_effect = [
+            KeyError("no such user"),
+            pw,
+            pw,
+        ]
+        mock_subprocess.return_value = _ok_result()
+
+        resp = unauthenticated_client.post("/setup/initialize", json={
+            "username": "admin1",
+            "password": "s3cret",
+            "trust_proxy_headers": True,
+        })
+        assert resp.status_code == 200
+        _mock_trust_proxy_persistence.assert_called_once_with(True)
+
+    @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_initialize_conflict_when_already_set_up(
+        self,
+        mock_pwd,
+        mock_grp,
+        mock_subprocess,
+        unauthenticated_client,
+        db,
+        _mock_trust_proxy_persistence,
+    ):
+        """After initialization, a second call returns informational success."""
         # Make first init succeed.
         mock_grp.getgrnam.side_effect = [
             KeyError("no such group"),  # ensure: ecube-admins
@@ -1684,12 +1768,22 @@ class TestSetupEndpoints:
         })
         assert resp1.status_code == 200
 
-        # Second call should fail.
+        # Second call should return idempotent informational success.
         resp2 = unauthenticated_client.post("/setup/initialize", json={
             "username": "admin2",
             "password": "s3cret",
+            "trust_proxy_headers": True,
         })
-        assert resp2.status_code == 409
+        assert resp2.status_code == 200
+        data = resp2.json()
+        assert data["status"] == "already_initialized"
+        assert data["message"] == (
+            "System is already initialized. "
+            "Configuration updates require an authenticated admin session."
+        )
+        # Re-initialize must not mutate runtime settings from an unauthenticated endpoint.
+        assert _mock_trust_proxy_persistence.call_count == 1
+        assert _mock_trust_proxy_persistence.call_args_list[0].args == (False,)
 
     def test_initialize_invalid_username(self, unauthenticated_client):
         resp = unauthenticated_client.post("/setup/initialize", json={
