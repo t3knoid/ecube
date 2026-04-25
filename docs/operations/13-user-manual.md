@@ -4,7 +4,7 @@
 |---|---|
 | Title | ECUBE User Manual |
 | Purpose | Guides end users, processors, managers, and auditors through day-to-day ECUBE workflows and operational tasks. |
-| Updated on | 04/17/26 |
+| Updated on | 04/25/26 |
 | Audience | Processors, managers, auditors, administrators, end users. |
 
 ## Table of Contents
@@ -30,6 +30,7 @@
 14. [Users](#12-users)
 15. [System](#13-system)
    - [Application Logs Tab](#131-application-logs-tab)
+   - [Manual Mount Reconciliation](#132-manual-mount-reconciliation)
 16. [Common Tasks](#14-common-tasks)
 17. [Troubleshooting](#15-troubleshooting)
 
@@ -831,6 +832,8 @@ End users who only perform evidence exports may rarely need this page. Administr
 
 In the `USB Topology` tab, ECUBE shows a sorted device table that includes `Device` and `Serial Number` columns. Rows with no meaningful USB metadata are hidden so the list stays focused on useful hardware entries.
 
+For users with `admin` or `manager` roles, the System tab bar includes a `Reconcile managed mounts` action button positioned between `Mounts` and `Logs`. This action triggers a manual managed-mount reconciliation pass and opens a dedicated results page.
+
 ![System page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/system-default-chromium-linux.png)
 
 ### 13.1 Application Logs Tab
@@ -893,6 +896,40 @@ If the Logs tab shows an error or is unavailable:
 - Consult [15. Troubleshooting](#15-troubleshooting) for service-level issues.
 
 Governance note: denied log access attempts by non-admin users are recorded in the audit trail for accountability and compliance visibility.
+
+### 13.2 Manual Mount Reconciliation
+
+**Access:** `admin`, `manager` roles
+
+Use this action when mounted-share state appears stale or inconsistent and you need to reconcile managed network and USB mount state without restarting the service.
+
+#### Run Reconciliation from the System Page
+
+1. Open the `System` page.
+2. In the tab bar, locate `Reconcile managed mounts` between the `Mounts` and `Logs` buttons.
+3. Click `Reconcile managed mounts`.
+4. While the request is running, the button label changes to `Loading`.
+5. On success, ECUBE navigates to the `Reconciliation Results` page.
+
+#### Interpret Reconciliation Results
+
+The results page shows:
+
+- A summary panel with `Status`, checked/corrected counts for network mounts and USB mounts, and `Corrective operations failed`.
+- A `Reconciled USB Mounts` table with drive fields similar to the Drives page.
+- A `Reconciled Shared Mounts` table with mount fields similar to the Mounts page.
+
+Status meanings:
+
+- `completed` means no corrective-operation failures were recorded.
+- `completed with warnings` means one or more corrective operations failed (`failure_count > 0`).
+
+#### Result Page States
+
+- If no result context is available (for example direct navigation or browser refresh), ECUBE shows `Reconciliation results are not available. Please run reconciliation from the System page.`
+- If reconciliation returns no mount or drive rows, ECUBE shows `No reconciliation data available. Run reconciliation to see results.`
+
+Use the `Back` button on the results page to return to the System page.
 
 ---
 
