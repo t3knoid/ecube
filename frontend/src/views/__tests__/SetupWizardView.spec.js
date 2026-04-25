@@ -98,6 +98,9 @@ describe('SetupWizardView existing admin reconciliation', () => {
     await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.next')).trigger('click')
     await flushPromises()
 
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.next')).trigger('click')
+    await flushPromises()
+
     await wrapper.find('#admin-password').setValue('Admin#123')
     await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('setup.createAdmin')).trigger('click')
     await flushPromises()
@@ -105,8 +108,50 @@ describe('SetupWizardView existing admin reconciliation', () => {
     expect(mocks.initializeSetup).toHaveBeenCalledWith({
       username: 'admin',
       password: 'Admin#123',
+      trust_proxy_headers: false,
     })
     expect(wrapper.text()).toContain('Existing OS admin user was reconciled')
     expect(wrapper.text()).not.toContain(i18n.global.t('setup.adminCreated'))
+  })
+
+  it('submits trust_proxy_headers when enabled by the operator', async () => {
+    mocks.initializeSetup.mockResolvedValue({
+      status: 'created_admin_user',
+      message: 'Setup complete',
+      username: 'admin',
+      groups_created: [],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.find('#db-admin-user').setValue('postgres')
+    await wrapper.find('#db-admin-pass').setValue('DbAdmin#123')
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('setup.connectDatabase')).trigger('click')
+    await flushPromises()
+
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.next')).trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#app-db-pass').setValue('AppDb#123')
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('setup.provisionDb')).trigger('click')
+    await flushPromises()
+
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.next')).trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#setup-trust-proxy-headers').setValue(true)
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.next')).trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#admin-password').setValue('Admin#123')
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('setup.createAdmin')).trigger('click')
+    await flushPromises()
+
+    expect(mocks.initializeSetup).toHaveBeenCalledWith({
+      username: 'admin',
+      password: 'Admin#123',
+      trust_proxy_headers: true,
+    })
   })
 })

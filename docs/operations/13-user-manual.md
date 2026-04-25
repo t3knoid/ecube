@@ -177,8 +177,11 @@ The setup wizard walks through:
 
 1. Testing database connectivity
 2. Provisioning the application database
-3. Creating the first administrative account
-4. Completing setup and returning to login
+3. Choosing reverse-proxy client IP behavior (`TRUST_PROXY_HEADERS`)
+4. Creating the first administrative account
+5. Completing setup and returning to login
+
+For direct/native deployments, leave reverse-proxy header trust disabled. Enable it only when ECUBE is behind a trusted reverse proxy that sets `X-Forwarded-For` or `X-Real-IP`.
 
 Important first-run behavior:
 

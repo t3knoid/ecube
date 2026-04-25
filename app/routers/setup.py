@@ -37,6 +37,7 @@ from app.models.users import UserRole
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.user_role_repository import UserRoleRepository
 from app.services import database_service
+from app.config import settings
 from app.schemas.admin import (
     SetupInitializeRequest,
     SetupInitializeResponse,
@@ -255,8 +256,8 @@ def initialize_system(
     Creates OS groups, creates the admin OS user, sets the password, adds
     the user to ``ecube-admins``, and seeds the database with the admin role.
 
-    **First-run guard:** Returns ``409 Conflict`` if an admin user already
-    exists in the database.
+    **Idempotent guard:** If an admin user already exists in the database,
+    returns an informational success response without performing setup side-effects.
 
     This endpoint is **unauthenticated** — it can only succeed once, before
     any admin exists.
@@ -265,9 +266,12 @@ def initialize_system(
     already_initialized = _is_setup_initialized_with_auto_migrate(repo, db)
 
     if already_initialized:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="System is already initialized. An admin user exists.",
+        _persist_setup_runtime_settings(body)
+        return SetupInitializeResponse(
+            status="already_initialized",
+            message="System is already initialized. An admin user exists.",
+            username=body.username,
+            groups_created=[],
         )
 
     if not _init_lock.acquire(blocking=False):
@@ -280,9 +284,12 @@ def initialize_system(
         already_initialized = _is_setup_initialized_with_auto_migrate(repo, db)
 
         if already_initialized:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="System is already initialized. An admin user exists.",
+            _persist_setup_runtime_settings(body)
+            return SetupInitializeResponse(
+                status="already_initialized",
+                message="System is already initialized. An admin user exists.",
+                username=body.username,
+                groups_created=[],
             )
 
         # Recovery path: DB admin role rows can remain after a previous failed
@@ -320,6 +327,9 @@ def _do_initialize(
                 "removed manually: DELETE FROM system_initialization WHERE id = 1;"
             ),
         )
+
+    # Persist setup runtime settings before OS side-effects so failures are retryable.
+    _persist_setup_runtime_settings(body)
 
     # From here on, this worker owns initialization.  If OS operations fail,
     # we must remove the lock row so that setup can be retried.
@@ -388,6 +398,7 @@ def _do_initialize(
                 "groups_created": groups_created,
                 "admin_user": body.username,
                 "setup_status": setup_status,
+                "trust_proxy_headers": body.trust_proxy_headers,
             },
             client_ip=client_ip,
         )
@@ -407,6 +418,32 @@ def _do_initialize(
         username=body.username,
         groups_created=groups_created,
     )
+
+
+def _persist_setup_runtime_settings(body: SetupInitializeRequest) -> None:
+    """Persist setup wizard runtime flags to ``.env`` and active settings."""
+    try:
+        database_service.set_trust_proxy_headers(body.trust_proxy_headers)
+        settings.trust_proxy_headers = body.trust_proxy_headers
+    except Exception as exc:
+        logger.info(
+            "Setup runtime setting persistence failed",
+            extra={
+                "setting": "TRUST_PROXY_HEADERS",
+                "failure_class": "setup_runtime_setting_persistence_failed",
+            },
+        )
+        logger.debug(
+            "Setup runtime setting persistence error detail",
+            extra={
+                "setting": "TRUST_PROXY_HEADERS",
+                "raw_error": str(exc),
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to persist setup runtime configuration. Retry setup initialization.",
+        )
 
 
 _LOCK_STUCK_SUFFIX = (

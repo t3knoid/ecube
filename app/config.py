@@ -670,4 +670,5 @@ class Settings(BaseSettings):
         return self
 
 
-settings = Settings(_env_file=".env")  # type: ignore[call-arg]
+_ENV_FILE = os.getenv("ECUBE_ENV_FILE", ".env")
+settings = Settings(_env_file=_ENV_FILE)  # type: ignore[call-arg]
