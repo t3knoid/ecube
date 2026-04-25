@@ -1704,6 +1704,8 @@ A stale lock (> 5 minutes, indicating a crashed worker) is reclaimed
 automatically by the next startup. No manual recovery steps are required
 after a service restart.
 
+The jobs pass emits a deterministic startup log line immediately after `Startup reconciliation: checking jobs`: `Startup reconciliation: jobs result`. On success, the structured fields include `status: ok`, `jobs_checked`, and `jobs_corrected`; on failure, the fields include `status: failed` and `reason: job_reconciliation_failed`. This log signature is operator-safe and can be used for startup observability alerts.
+
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `AUDIT_LOG_RETENTION_DAYS` | `365` | Days to retain audit entries (0 = no auto-purge) |
