@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   getSystemHealth,
@@ -7,6 +8,7 @@ import {
   getBlockDevices,
   getSystemMounts,
   getJobDebug,
+  reconcileManagedMounts,
 } from '@/api/introspection.js'
 import { downloadLogFile, getLogFiles, getLogLines } from '@/api/admin.js'
 import { listJobs } from '@/api/jobs.js'
@@ -17,9 +19,11 @@ import { useAuthStore } from '@/stores/auth.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const { t } = useI18n()
+const router = useRouter()
 const authStore = useAuthStore()
 
 const canViewLogs = computed(() => authStore.hasRole('admin'))
+const canRunManagedMountReconciliation = computed(() => authStore.hasRole('admin') || authStore.hasRole('manager'))
 const tabs = computed(() => {
   const items = ['health', 'usb', 'block', 'mounts']
   if (canViewLogs.value) {
@@ -31,6 +35,7 @@ const tabs = computed(() => {
 const activeTab = ref('health')
 const loading = ref(false)
 const error = ref('')
+const reconcilingManagedMounts = ref(false)
 
 const health = ref(null)
 const usbDevices = ref([])
@@ -286,6 +291,27 @@ async function setLogViewerScrollPosition(position = 'top') {
   element.scrollTop = nextScrollTop
 }
 
+async function runManagedMountReconciliation() {
+  if (!canRunManagedMountReconciliation.value || reconcilingManagedMounts.value) {
+    return
+  }
+
+  reconcilingManagedMounts.value = true
+  error.value = ''
+  try {
+    const result = await reconcileManagedMounts()
+    // Navigate to results page with the reconciliation result
+    router.push({
+      name: 'reconciliation-results',
+      state: { reconciliationResult: result },
+    })
+  } catch (err) {
+    error.value = extractApiMessage(err) || t('common.errors.requestConflict')
+  } finally {
+    reconcilingManagedMounts.value = false
+  }
+}
+
 async function loadTabData() {
   loading.value = true
   error.value = ''
@@ -533,15 +559,32 @@ onMounted(loadTabData)
     </header>
 
     <div class="tabs">
-      <button
-        v-for="tab in tabs"
-        :key="tab"
-        class="btn"
-        :class="{ active: activeTab === tab }"
-        @click="activeTab = tab"
-      >
-        {{ t(`system.tabs.${tab}`) }}
-      </button>
+      <template v-for="tab in tabs" :key="tab">
+        <button
+          v-if="tab !== 'logs'"
+          class="btn"
+          :class="{ active: activeTab === tab }"
+          @click="activeTab = tab"
+        >
+          {{ t(`system.tabs.${tab}`) }}
+        </button>
+        <button
+          v-if="tab === 'mounts' && canRunManagedMountReconciliation"
+          class="btn"
+          :disabled="loading || reconcilingManagedMounts"
+          @click="runManagedMountReconciliation"
+        >
+          {{ reconcilingManagedMounts ? t('common.labels.loading') : t('system.reconcileManagedMounts') }}
+        </button>
+        <button
+          v-if="tab === 'logs'"
+          class="btn"
+          :class="{ active: activeTab === tab }"
+          @click="activeTab = tab"
+        >
+          {{ t(`system.tabs.${tab}`) }}
+        </button>
+      </template>
     </div>
 
     <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
@@ -657,7 +700,8 @@ onMounted(loadTabData)
 
 .header-row,
 .tabs,
-.job-debug-form {
+.job-debug-form,
+.header-actions {
   display: flex;
   gap: var(--space-sm);
 }
@@ -775,4 +819,5 @@ input,
   border-radius: var(--border-radius);
   padding: var(--space-sm);
 }
+
 </style>

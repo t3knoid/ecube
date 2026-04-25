@@ -41,6 +41,7 @@ from app.services.reconciliation_service import (
     reconcile_drives,
     reconcile_jobs,
     reconcile_mounts,
+    run_manual_managed_mount_reconciliation,
     run_startup_reconciliation,
 )
 
@@ -759,6 +760,98 @@ class TestReconcileIdentityUsers:
 
         assert result["users_with_errors"] == 1
         assert result["errors"][0]["username"] == "frank"
+
+
+# =======================================================================
+# Manual managed-mount reconciliation tests
+# =======================================================================
+
+class TestRunManualManagedMountReconciliation:
+    """Manual path runs only managed-mount convergence and records a safe summary."""
+
+    def test_runs_mount_pass_only(self, db: Session):
+        provider = FakeMountProvider(mounted_paths=set())
+        drive_provider = FakeDriveMountProvider()
+
+        with (
+            patch("app.services.reconciliation_service.reconcile_mounts", return_value={
+                "mounts_checked": 2,
+                "mounts_corrected": 1,
+                "mount_failures": 0,
+                "usb_mounts_checked": 1,
+                "usb_mounts_corrected": 0,
+                "usb_mount_failures": 0,
+            }) as reconcile_mounts_mock,
+            patch("app.services.reconciliation_service.reconcile_jobs") as reconcile_jobs_mock,
+            patch("app.services.reconciliation_service.reconcile_drives") as reconcile_drives_mock,
+            patch("app.services.reconciliation_service.reconcile_identity_groups") as reconcile_groups_mock,
+            patch("app.services.reconciliation_service.reconcile_identity_users") as reconcile_users_mock,
+        ):
+            result = run_manual_managed_mount_reconciliation(
+                db,
+                provider,
+                drive_mount_provider=drive_provider,
+                actor="manager-user",
+            )
+
+        reconcile_mounts_mock.assert_called_once_with(db, provider, drive_provider)
+        reconcile_jobs_mock.assert_not_called()
+        reconcile_drives_mock.assert_not_called()
+        reconcile_groups_mock.assert_not_called()
+        reconcile_users_mock.assert_not_called()
+
+        assert result["status"] == "ok"
+        assert result["scope"] == "managed_mounts_only"
+        assert result["network_mounts_checked"] == 2
+        assert result["network_mounts_corrected"] == 1
+        assert result["usb_mounts_checked"] == 1
+        assert result["usb_mounts_corrected"] == 0
+        assert result["failure_count"] == 0
+
+        audit = db.query(AuditLog).filter(AuditLog.action == "MANUAL_MOUNT_RECONCILIATION").first()
+        assert audit is not None
+        assert audit.details["status"] == "ok"
+        assert audit.details["failure_count"] == 0
+
+    def test_reports_partial_when_corrective_operations_fail(self, db: Session):
+        provider = FakeMountProvider(mounted_paths=set())
+        drive_provider = FakeDriveMountProvider()
+
+        with patch("app.services.reconciliation_service.reconcile_mounts", return_value={
+            "mounts_checked": 2,
+            "mounts_corrected": 0,
+            "mount_failures": 1,
+            "usb_mounts_checked": 1,
+            "usb_mounts_corrected": 0,
+            "usb_mount_failures": 1,
+        }):
+            result = run_manual_managed_mount_reconciliation(
+                db,
+                provider,
+                drive_mount_provider=drive_provider,
+                actor="manager-user",
+            )
+
+        assert result["status"] == "partial"
+        assert result["failure_count"] == 2
+
+    def test_rejects_when_lock_already_held(self, db: Session):
+        assert _acquire_reconciliation_lock(db) is True
+
+        provider = FakeMountProvider(mounted_paths=set())
+        drive_provider = FakeDriveMountProvider()
+
+        with pytest.raises(Exception) as exc_info:
+            run_manual_managed_mount_reconciliation(
+                db,
+                provider,
+                drive_mount_provider=drive_provider,
+                actor="manager-user",
+            )
+
+        assert getattr(exc_info.value, "status_code", None) == 409
+        assert getattr(exc_info.value, "code", None) == "MANUAL_RECONCILIATION_IN_PROGRESS"
+        _release_reconciliation_lock(db)
 
 
 # =======================================================================
