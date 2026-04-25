@@ -184,7 +184,11 @@ def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
 
     # Derived file counts via a single aggregate query
     file_repo = FileRepository(db)
-    schema.files_succeeded, schema.files_failed = file_repo.count_done_and_errors(job.id)
+    (
+        schema.files_succeeded,
+        schema.files_failed,
+        schema.files_timed_out,
+    ) = file_repo.count_done_errors_and_timeouts(job.id)
 
     # Error summary (fetches at most 5 rows, truncated to stay brief)
     if schema.files_failed and not schema.failure_reason:
@@ -218,10 +222,10 @@ def _enrich_jobs_bulk(
 
     # 1. Bulk file counts — single GROUP BY query
     file_repo = FileRepository(db)
-    counts_map: Dict[int, Tuple[int, int]] = file_repo.bulk_count_done_and_errors(job_ids)
+    counts_map: Dict[int, Tuple[int, int, int]] = file_repo.bulk_count_done_errors_and_timeouts(job_ids)
 
     # 2. Bulk error messages — single window-function query for jobs with failures
-    failed_job_ids = [jid for jid, (_, errs) in counts_map.items() if errs > 0]
+    failed_job_ids = [jid for jid, (_done, errs, _timeouts) in counts_map.items() if errs > 0]
     errors_map: Dict[int, List[Tuple[str, str]]] = (
         file_repo.bulk_list_error_messages(failed_job_ids) if failed_job_ids else {}
     )
@@ -237,9 +241,10 @@ def _enrich_jobs_bulk(
         if redact_ip:
             schema.client_ip = None
 
-        done, failed = counts_map.get(job.id, (0, 0))
+        done, failed, timed_out = counts_map.get(job.id, (0, 0, 0))
         schema.files_succeeded = done
         schema.files_failed = failed
+        schema.files_timed_out = timed_out
 
         if failed and not schema.failure_reason:
             error_rows = errors_map.get(job.id, [])

@@ -196,7 +196,7 @@ def upgrade() -> None:
         sa.Column("checksum", sa.String, nullable=True),
         sa.Column(
             "status",
-            sa.Enum("PENDING", "COPYING", "DONE", "ERROR", name="filestatus", native_enum=False),
+            sa.Enum("PENDING", "COPYING", "DONE", "ERROR", "RETRYING", "TIMEOUT", name="filestatus", native_enum=False),
             nullable=True,
         ),
         sa.Column("error_message", sa.Text, nullable=True),

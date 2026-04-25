@@ -23,6 +23,7 @@ class FileStatus(str, enum.Enum):
     DONE = "DONE"
     ERROR = "ERROR"
     RETRYING = "RETRYING"
+    TIMEOUT = "TIMEOUT"
 
 
 class StartupAnalysisStatus(str, enum.Enum):
