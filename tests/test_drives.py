@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 from app.exceptions import ConflictError
 from app.infrastructure.drive_eject import EjectResult
 from app.models.hardware import UsbDrive, DriveState, UsbHub, UsbPort
+from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.services import drive_service
 
@@ -898,6 +899,82 @@ def test_prepare_eject_with_filesystem_path(manager_client, db):
     assert log.details["flush_ok"] is True
     assert log.details["unmount_ok"] is True
     assert "filesystem_path" not in log.details
+
+
+def test_prepare_eject_audits_incomplete_files_warning(manager_client, db):
+    from app.models.audit import AuditLog
+
+    drive = UsbDrive(
+        device_identifier="USB006-WARN",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        filesystem_path="/dev/sdb",
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-001",
+        evidence_number="EV-INCOMPLETE",
+        source_path="/data",
+        status=JobStatus.RUNNING,
+        file_count=2,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.add(ExportFile(job_id=job.id, relative_path="ok.txt", status=FileStatus.DONE, size_bytes=1))
+    db.add(ExportFile(job_id=job.id, relative_path="slow.txt", status=FileStatus.TIMEOUT, error_message="File copy timed out after 1s"))
+    db.commit()
+
+    provider = _fake_eject()
+    with patch("app.routers.drives.get_drive_eject", return_value=provider):
+        blocked = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+    assert blocked.status_code == 409
+    assert "EJECT_CONFIRM_REQUIRED:" in blocked.json()["message"]
+
+    confirm_required_log = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "DRIVE_EJECT_CONFIRM_REQUIRED")
+        .first()
+    )
+    assert confirm_required_log is not None
+    assert confirm_required_log.drive_id == drive.id
+    assert confirm_required_log.details["incomplete_file_count"] == 1
+
+    with patch("app.routers.drives.get_drive_eject", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/prepare-eject", params={"confirm_incomplete": True})
+
+    assert response.status_code == 200
+
+    warning_log = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "DRIVE_EJECT_WITH_INCOMPLETE_FILES")
+        .first()
+    )
+    assert warning_log is not None
+    assert warning_log.drive_id == drive.id
+    assert warning_log.details["incomplete_file_count"] == 1
+
+
+def test_prepare_eject_blocks_when_incomplete_precheck_fails(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB006-PRECHECK-FAIL",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        filesystem_path="/dev/sdb",
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = _fake_eject()
+    with patch("app.services.drive_service.DriveAssignment", new=object()):
+        with patch("app.routers.drives.get_drive_eject", return_value=provider):
+            response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+
+    assert response.status_code == 500
+    assert response.json()["message"] == "Unable to verify incomplete-file state; retry prepare-eject"
+    provider.prepare_eject.assert_not_called()
 
 
 def test_prepare_eject_not_found(manager_client, db):
