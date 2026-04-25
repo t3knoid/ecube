@@ -910,6 +910,37 @@ def test_run_startup_analysis_logs_sanitized_failure_at_info_level(db, tmp_path,
     assert debug_records == []
 
 
+def test_prepare_job_startup_analysis_completion_audit_failure_logs_sanitized_reason(db, tmp_path, caplog):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "a.txt").write_bytes(b"alpha")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    benchmark_result = {
+        "share_read_mbps": 120.5,
+        "drive_write_mbps": 96.25,
+        "estimated_duration_seconds": 1,
+        "benchmark_bytes": 5,
+    }
+
+    with patch("app.services.copy_engine._measure_startup_analysis_transfer_rates", return_value=benchmark_result):
+        with patch("app.services.copy_engine.AuditRepository.add", side_effect=RuntimeError("boom /secret/path")):
+            with caplog.at_level(logging.INFO):
+                copy_engine.prepare_job_startup_analysis(job.id, actor="analyst", manual=True)
+
+    info_records = [record for record in caplog.records if record.levelno == logging.INFO]
+    debug_records = [record for record in caplog.records if record.levelno == logging.DEBUG]
+
+    assert any(record.getMessage() == "Failed to write audit log for JOB_STARTUP_ANALYSIS_COMPLETED" for record in info_records)
+    assert any(getattr(record, "reason", None) == "Audit log write failed after startup analysis completion" for record in info_records)
+    assert all("boom /secret/path" not in record.getMessage() for record in info_records)
+    assert all("/secret/path" not in record.getMessage() for record in info_records)
+    assert debug_records == []
+
+
 def test_run_copy_job_refreshes_stale_startup_analysis_cache_on_failed_run(db, tmp_path):
     source_dir = tmp_path / "source"
     source_dir.mkdir()
