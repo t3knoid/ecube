@@ -683,10 +683,34 @@ _cleanup_pg_superuser_role() {
 
   local escaped_su_name
   escaped_su_name="${su_name//\"/\"\"}"
-  local drop_out
-  if ! drop_out="$(sudo -u postgres psql -v ON_ERROR_STOP=1 -c "DROP OWNED BY \"${escaped_su_name}\"; DROP ROLE IF EXISTS \"${escaped_su_name}\";" 2>&1)"; then
-    warn "Failed to drop PostgreSQL role '${su_name}': ${drop_out}"
+  local db_list db_name
+  local cleanup_failed=false
+
+  # Role ownership/dependency records are per-database. Clean each DB first,
+  # then drop the role cluster-wide.
+  if ! db_list="$(sudo -u postgres psql -tA -d postgres -c "SELECT datname FROM pg_database WHERE datallowconn AND NOT datistemplate;" 2>&1)"; then
+    warn "Failed to enumerate PostgreSQL databases for role cleanup: ${db_list}"
     return
+  fi
+
+  while IFS= read -r db_name; do
+    [[ -z "${db_name}" ]] && continue
+    local cleanup_out
+    if ! cleanup_out="$(sudo -u postgres psql -v ON_ERROR_STOP=1 -d "${db_name}" -c "REASSIGN OWNED BY \"${escaped_su_name}\" TO postgres; DROP OWNED BY \"${escaped_su_name}\";" 2>&1)"; then
+      warn "Role cleanup in database '${db_name}' failed for '${su_name}': ${cleanup_out}"
+      cleanup_failed=true
+    fi
+  done <<< "${db_list}"
+
+  local drop_out
+  if ! drop_out="$(sudo -u postgres psql -v ON_ERROR_STOP=1 -d postgres -c "DROP ROLE IF EXISTS \"${escaped_su_name}\";" 2>&1)"; then
+    warn "Failed to drop PostgreSQL role '${su_name}': ${drop_out}"
+    warn "If the role still owns objects, run cleanup across all databases and retry DROP ROLE."
+    return
+  fi
+
+  if [[ "${cleanup_failed}" == true ]]; then
+    warn "PostgreSQL role '${su_name}' was dropped, but one or more per-database cleanup steps reported warnings."
   fi
 
   ok "PostgreSQL role '${su_name}' removed"
@@ -700,13 +724,14 @@ _cleanup_application_database() {
   db_url="$(_extract_database_url_from_env "${env_file}" || true)"
 
   if [[ -z "${db_url}" ]]; then
-    warn "Database cleanup skipped: no usable DATABASE_URL found in ${env_file}."
-    return 0
+    error "Database cleanup failed: no usable DATABASE_URL found in ${env_file}."
+    error "Refusing to continue --uninstall --drop-database because the target database cannot be determined safely."
+    return 1
   fi
 
   if ! command -v psql &>/dev/null; then
-    warn "Database cleanup skipped: psql not found."
-    return 0
+    error "Database cleanup failed: psql not found."
+    return 1
   fi
 
   local py_bin
@@ -715,8 +740,8 @@ _cleanup_application_database() {
   elif command -v python3 &>/dev/null; then
     py_bin="python3"
   else
-    warn "Database cleanup skipped: python3 is required to parse DATABASE_URL safely."
-    return 0
+    error "Database cleanup failed: python3 is required to parse DATABASE_URL safely."
+    return 1
   fi
 
   # Extract only the database name from DATABASE_URL; connection is via peer auth.
@@ -729,21 +754,22 @@ if not db_name:
     raise SystemExit(1)
 print(db_name)
 " "${db_url}" 2>/dev/null)" || {
-    warn "Database cleanup skipped: failed to parse DATABASE_URL."
-    return 0
+    error "Database cleanup failed: failed to parse DATABASE_URL."
+    return 1
   }
 
   if [[ -z "${target_db}" ]]; then
-    warn "Database cleanup skipped: could not determine database name from DATABASE_URL."
-    return 0
+    error "Database cleanup failed: could not determine database name from DATABASE_URL."
+    return 1
   fi
 
   # Never drop PostgreSQL maintenance/system databases by default. During the
   # new setup flow, DATABASE_URL may temporarily point at /postgres before
   # the application database is provisioned.
   if [[ "${target_db}" == "postgres" || "${target_db}" == "template0" || "${target_db}" == "template1" ]]; then
-    warn "Database cleanup skipped: DATABASE_URL points to maintenance database '${target_db}'."
-    return 0
+    error "Database cleanup failed: DATABASE_URL points to maintenance database '${target_db}'."
+    error "Refusing to run --drop-database against a maintenance database."
+    return 1
   fi
 
   if [[ "${DRY_RUN}" == true ]]; then
@@ -768,12 +794,12 @@ print(db_name)
     if printf '%s' "${_drop_out}" | grep -qi "being accessed by other users"; then
       if ! _drop_out="$(sudo -u postgres psql -v ON_ERROR_STOP=1 \
           -c "DROP DATABASE IF EXISTS \"${target_db//\"/\"\"}\" WITH (FORCE);" 2>&1)"; then
-        warn "Database cleanup failed for '${target_db}': ${_drop_out}"
-        return 0
+        error "Database cleanup failed for '${target_db}': ${_drop_out}"
+        return 1
       fi
     else
-      warn "Database cleanup failed for '${target_db}': ${_drop_out}"
-      return 0
+      error "Database cleanup failed for '${target_db}': ${_drop_out}"
+      return 1
     fi
   fi
 
@@ -1877,27 +1903,10 @@ _write_env_file() {
 
     # --- Standalone-topology safety: normalise proxy-era settings ----------
     #
-    # Previous installations behind nginx may have TRUST_PROXY_HEADERS=true
-    # and/or API_ROOT_PATH=/api.  In the new standalone topology the service
-    # is exposed directly, so:
-    #   • TRUST_PROXY_HEADERS=true  → enables client-IP spoofing via
-    #     X-Forwarded-For / X-Real-IP.
-    #   • A stale API_ROOT_PATH     → breaks OpenAPI/Swagger URLs.
-    #
-    # Reset both to safe defaults and warn loudly so the operator can opt back
-    # in if they deliberately run behind a reverse proxy.
-
-    if grep -Eq '^[[:space:]]*TRUST_PROXY_HEADERS=[[:space:]]*true' "${env_file}"; then
-      warn "TRUST_PROXY_HEADERS is set to 'true' in .env."
-      warn "The standalone topology exposes uvicorn directly — trusting proxy"
-      warn "headers allows client-IP spoofing.  Resetting to 'false'."
-      warn "If you run behind a reverse proxy, set TRUST_PROXY_HEADERS=true"
-      warn "in ${env_file} after installation."
-      if [[ "${DRY_RUN}" != true ]]; then
-        sed -i 's/^[[:space:]]*TRUST_PROXY_HEADERS=.*/TRUST_PROXY_HEADERS=false/' "${env_file}"
-      fi
-      ok "TRUST_PROXY_HEADERS reset to false"
-    fi
+    # Keep TRUST_PROXY_HEADERS operator-controlled. Do not rewrite a value
+    # selected via setup/configuration workflows during install/upgrade.
+    # A stale API_ROOT_PATH can still break OpenAPI/Swagger URLs in standalone
+    # mode, so that key is normalized below.
 
     local _old_root_path
     if _old_root_path="$(_extract_env_value "${env_file}" "API_ROOT_PATH")"; then
@@ -1970,6 +1979,7 @@ Group=ecube
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=-${INSTALL_DIR}/.env
 Environment=PYTHONPATH=${INSTALL_DIR}
+Environment=ECUBE_ENV_FILE=${INSTALL_DIR}/.env
 ExecStart=${INSTALL_DIR}/venv/bin/python -m uvicorn \
   --host 0.0.0.0 \
   --port ${API_PORT} \
@@ -1999,6 +2009,7 @@ Group=ecube
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=-${INSTALL_DIR}/.env
 Environment=PYTHONPATH=${INSTALL_DIR}
+Environment=ECUBE_ENV_FILE=${INSTALL_DIR}/.env
 ExecStart=${INSTALL_DIR}/venv/bin/python -m uvicorn \
   --host 0.0.0.0 \
   --port ${API_PORT} \

@@ -48,12 +48,13 @@ _engine_lock = threading.Lock()
 def _get_env_file_path() -> str:
     """Return the resolved .env path used by Settings.
 
-    Pydantic-settings resolves ``env_file=".env"`` relative to CWD, so we
-    must write to the same location the app reads from.
+    Prefer ``ECUBE_ENV_FILE`` so write paths are stable even when process
+    working directories differ. Falls back to ``Settings`` model config and
+    then ``.env``.
     """
     from app.config import Settings
 
-    env_file = Settings.model_config.get("env_file", ".env")
+    env_file = os.getenv("ECUBE_ENV_FILE") or Settings.model_config.get("env_file") or ".env"
     return os.path.abspath(str(env_file))
 
 
@@ -526,6 +527,11 @@ def update_database_settings(
         "database": new_database,
         "connected": True,
     }
+
+
+def set_trust_proxy_headers(enabled: bool) -> None:
+    """Persist ``TRUST_PROXY_HEADERS`` to the runtime ``.env`` file."""
+    _write_env_setting("TRUST_PROXY_HEADERS", "true" if enabled else "false")
 
 
 def _build_database_url(
