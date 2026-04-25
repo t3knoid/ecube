@@ -109,6 +109,10 @@ def mount_drive(
 def prepare_eject(
     drive_id: int,
     *,
+    confirm_incomplete: bool = Query(
+        default=False,
+        description="Set true to confirm eject even when active assigned jobs have timed-out or failed files.",
+    ),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
     request: Request,
@@ -116,7 +120,8 @@ def prepare_eject(
     """Prepare a drive for safe ejection and return it to available state.
 
     Completes the copy/verify process and transitions the drive back to ``AVAILABLE``.
-    After ejection, the drive can be safely removed and reassigned to a different project.
+    After ejection, the drive can be safely removed. Project binding is retained;
+    cross-project reassignment still requires the standard format/reinitialize flow.
 
     **Roles:** ``admin``, ``manager``
     """
@@ -124,6 +129,7 @@ def prepare_eject(
         drive_id, db, actor=current_user.username,
         eject_provider=get_drive_eject(),
         client_ip=get_client_ip(request),
+        confirm_incomplete=confirm_incomplete,
     )
 
 

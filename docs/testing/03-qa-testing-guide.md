@@ -1033,14 +1033,17 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 7 | Mount an `AVAILABLE` or `IN_USE` drive with a recognized filesystem | 200, `mount_path` is populated |
 | 8 | Mount a drive with `filesystem_type=unknown`, `unformatted`, or `NULL` | 409, `CONFLICT` — must have recognized filesystem |
 | 9 | Prepare-eject an `IN_USE` drive | 200, state → `AVAILABLE`, `mount_path` cleared |
-| 10 | Prepare-eject an `AVAILABLE` drive | 409, `CONFLICT` |
-| 11 | Format-then-mount-initialize workflow: discover unformatted → format ext4 → mount → initialize | Each step succeeds; `mount_path` is populated before initialization and the drive transitions to `IN_USE` |
-| 12 | Attempt to format an `IN_USE` drive | 409, `CONFLICT` — must be `AVAILABLE` |
-| 13 | Open the Initialize dialog when no eligible mounted project exists | UI shows a helper message, disables the project selector, and blocks submission |
-| 14 | Open Initialize for an AVAILABLE, mounted drive that already has a project binding, then click Cancel | The dialog shows the mounted destination context and any valid prior project selection; after cancel, the drive state, project binding, and Initialize availability remain unchanged |
-| 15 | View drive detail after initialization | Sensitive device and path fields are shown as `Protected` instead of raw internal identifiers |
-| 16 | View the mounts list and browse controls | Raw remote and local mount paths are redacted in the table; browse remains enabled only for mounted shares |
-| 17 | Operate the Initialize and Add Mount dialogs with keyboard only | Focus enters the dialog, Tab stays trapped within it, Escape closes it, and focus returns to the triggering control |
+| 10 | Prepare-eject with incomplete active-assignment files (first attempt) | 409, `CONFLICT` with confirmation-required detail; drive remains `IN_USE` |
+| 11 | Confirmed prepare-eject with incomplete active-assignment files | Retry with `confirm_incomplete=true`; 200, state → `AVAILABLE`, `mount_path` cleared |
+| 12 | Audit events for incomplete-file prepare-eject flow | Execute rows 10 and 11, then query audit log | Audit includes `DRIVE_EJECT_CONFIRM_REQUIRED` for blocked first attempt and `DRIVE_EJECT_WITH_INCOMPLETE_FILES` for confirmed proceed attempt |
+| 13 | Prepare-eject an `AVAILABLE` drive | 409, `CONFLICT` |
+| 14 | Format-then-mount-initialize workflow: discover unformatted → format ext4 → mount → initialize | Each step succeeds; `mount_path` is populated before initialization and the drive transitions to `IN_USE` |
+| 15 | Attempt to format an `IN_USE` drive | 409, `CONFLICT` — must be `AVAILABLE` |
+| 16 | Open the Initialize dialog when no eligible mounted project exists | UI shows a helper message, disables the project selector, and blocks submission |
+| 17 | Open Initialize for an AVAILABLE, mounted drive that already has a project binding, then click Cancel | The dialog shows the mounted destination context and any valid prior project selection; after cancel, the drive state, project binding, and Initialize availability remain unchanged |
+| 18 | View drive detail after initialization | Sensitive device and path fields are shown as `Protected` instead of raw internal identifiers |
+| 19 | View the mounts list and browse controls | Raw remote and local mount paths are redacted in the table; browse remains enabled only for mounted shares |
+| 20 | Operate the Initialize and Add Mount dialogs with keyboard only | Focus enters the dialog, Tab stays trapped within it, Escape closes it, and focus returns to the triggering control |
 
 ### 12.4.1 Filesystem Detection
 
@@ -1158,11 +1161,11 @@ These tests exercise real hardware paths that must be validated during manual QA
 | # | Test | Steps | Expected |
 |---|------|-------|----------|
 | 1 | Active job progress stays conservative | Start a multi-file job and observe the Dashboard, Jobs list, and Job Detail view while bytes advance faster than completed file rows | All three views stay below 100% until the finished-file counts indicate completion; no view reports 100% while status remains RUNNING or VERIFYING |
-| 2 | Completion summary is visible | Let a job finish and open its detail page | The detail screen shows start time, copy threads, files copied, total copied, elapsed time, and copy rate |
+| 2 | Completion summary is visible | Let a job finish and open its detail page | The detail screen shows start time, copy threads, files copied, files failed, files timed out, total copied, elapsed time, and copy rate |
 | 3 | Mount-root source selection works | In Create Job, choose a mounted share and enter / as the source path | The job is created successfully and the selected mount root is used as the source |
 | 4 | Path traversal outside selected mount is blocked | In Create Job, choose a mounted share and enter a traversal path such as ../../etc | The UI/API rejects the request, no job is created, and the operator sees a validation-style error rather than a host path leak |
 | 5 | Destination selector uses device label | Open Create Job or edit an eligible job after selecting a project | The destination control is labeled `Select device`, each option uses the port-based `Device` value, and the Jobs list shows the same value in its `Device` column |
-| 6 | Failed job timeout summary is visible | Configure or simulate a timed-out copy job, then open Job Detail after the job reaches `FAILED` | The detail screen shows `Copy job timed out before all files completed` as the failure summary instead of a generic file-row fallback |
+| 6 | Per-file timeout failure is visible | Configure or simulate a timed-out file copy attempt, then open Job Detail after the job reaches `FAILED` | The failure context includes a per-file timeout message such as `File copy timed out after 3600s` instead of a whole-job timeout summary, and the summary `files timed out` counter increases |
 | 7 | Startup-analysis cache persists across a failed run | Start a job, let startup analysis finish, then force the job into `FAILED` | `GET /jobs/{job_id}` reports `startup_analysis_cached: true` until the cache is cleared or the job later completes successfully |
 | 8 | Restart can reuse a current startup-analysis snapshot | Resume a failed or paused job without changing the source tree | The job proceeds without a repeated long startup-analysis phase and still reaches correct totals |
 | 9 | Restart refreshes stale startup-analysis data | Add or remove a file in the source tree after a failed run, then resume | ECUBE refreshes the startup-analysis snapshot before continuing and the new totals reflect the changed source tree |

@@ -3,7 +3,7 @@
 Covers:
 - New Settings fields have correct defaults.
 - Audit log retention cleanup purges old records and respects retention_days=0.
-- Copy job timeout enforcement marks job FAILED on timeout.
+- Per-file copy timeout enforcement marks timed-out files as TIMEOUT, job continues.
 - LdapGroupRoleResolver stores LDAP connection parameters.
 - USB discovery interval setting is present and usable.
 - TLS settings are present with None defaults.
@@ -322,8 +322,8 @@ def _session_factory(db):
 
 
 class TestCopyJobTimeout:
-    def test_timeout_marks_job_failed(self, db, tmp_path):
-        """Job is marked FAILED when copy_job_timeout is exceeded."""
+    def test_timeout_marks_file_timeout_job_continues(self, db, tmp_path):
+        """A per-file timeout marks the file TIMEOUT and the job continues (COMPLETED, not FAILED)."""
         from app.services import copy_engine
 
         source_dir = tmp_path / "source"
@@ -336,20 +336,8 @@ class TestCopyJobTimeout:
 
         job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
 
-        # Simulate an already-elapsed monotonic clock by making time.monotonic
-        # return a large offset after the first call.
-        import time as _time
-
-        real_monotonic = _time.monotonic
-        call_count = 0
-
-        def _fast_monotonic():
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return 0.0
-            # After first call, return well past the timeout
-            return 99999.0
+        def _always_timeout(*_args, **_kwargs):
+            raise TimeoutError("File copy timed out after 1s")
 
         with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
             with patch("app.services.copy_engine.settings") as mock_settings:
@@ -358,23 +346,26 @@ class TestCopyJobTimeout:
                 mock_settings.copy_default_max_retries = 3
                 mock_settings.copy_default_retry_delay_seconds = 1.0
                 mock_settings.copy_default_thread_count = 4
-                with patch("app.services.copy_engine.time") as mock_time:
-                    mock_time.monotonic = _fast_monotonic
-                    mock_time.sleep = _time.sleep
+                with patch("app.services.copy_engine.copy_file", side_effect=_always_timeout):
                     copy_engine.run_copy_job(job.id)
 
         db.expire_all()
         db.refresh(job)
-        assert job.status == JobStatus.FAILED
-        assert job.failure_reason == "Copy job timed out before all files completed"
+        # Job should be COMPLETED (not FAILED) even though files timed out
+        assert job.status == JobStatus.COMPLETED
 
-        # Verify a JOB_TIMEOUT audit entry was created.
-        timeout_entries = (
-            db.query(AuditLog).filter(AuditLog.action == "JOB_TIMEOUT").all()
-        )
-        assert len(timeout_entries) == 1
-        assert timeout_entries[0].details["timeout_seconds"] == 1
-        assert timeout_entries[0].details["failure_reason"] == "Copy job timed out before all files completed"
+        files = db.query(ExportFile).filter(ExportFile.job_id == job.id).all()
+        assert files
+        assert any(f.status == FileStatus.TIMEOUT for f in files), "At least one file should be marked TIMEOUT"
+        assert any("timed out after 1s" in (f.error_message or "") for f in files)
+
+        # Timeout should emit FILE_COPY_TIMEOUT audit record, not JOB_TIMEOUT
+        timeout_entries = db.query(AuditLog).filter(AuditLog.action == "FILE_COPY_TIMEOUT").all()
+        assert timeout_entries, "Should have FILE_COPY_TIMEOUT audit entries"
+        
+        # Per-file timeout should not emit the legacy whole-job timeout audit record.
+        job_timeout_entries = db.query(AuditLog).filter(AuditLog.action == "JOB_TIMEOUT").all()
+        assert job_timeout_entries == []
 
     def test_zero_timeout_disables_enforcement(self, db, tmp_path):
         """copy_job_timeout=0 disables timeout enforcement."""
