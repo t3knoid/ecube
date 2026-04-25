@@ -302,6 +302,13 @@ class SetupInitializeRequest(BaseModel):
         pattern=r"^[^\n\r:]+$",
         description="Admin password (newlines and colons are not permitted)",
     )
+    trust_proxy_headers: bool = Field(
+        default=False,
+        description=(
+            "Enable trusted reverse-proxy client IP headers (X-Forwarded-For/X-Real-IP). "
+            "Only enable when ECUBE is behind a trusted proxy."
+        ),
+    )
 
     @field_validator("password")
     @classmethod
@@ -312,7 +319,7 @@ class SetupInitializeRequest(BaseModel):
 class SetupInitializeResponse(BaseModel):
     """Response for ``POST /setup/initialize``."""
 
-    status: Literal["created_admin_user", "reconciled_existing_user"] = Field(
+    status: Literal["created_admin_user", "reconciled_existing_user", "already_initialized"] = Field(
         ...,
         description="Initialization outcome indicating whether the admin OS user was created or reconciled",
     )

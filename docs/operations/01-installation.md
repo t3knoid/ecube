@@ -180,7 +180,7 @@ When PostgreSQL is available locally, the installer also creates (or updates) a 
 | `--firewall-cidr CIDR` | *(skip)* | Source CIDR to allow through ufw for the API port (e.g. `192.168.1.0/24`). In `--yes` mode, if omitted the firewall rule is **skipped** (safe default). Use `any` to explicitly open to all sources. |
 | `--version TAG` | *(current package)* | Download and install a specific GitHub release tag. Must be exact format: v<major>.<minor>.<patch> (e.g. v0.2.0). Pre-releases, build metadata, and tags without a leading v are not supported. |
 | `--uninstall` | — | Remove ECUBE from this host |
-| `--drop-database` | — | With --uninstall, also drop the configured application database (best-effort; requires sufficient DB privileges) |
+| `--drop-database` | — | With --uninstall, also drop the configured application database. Uninstall now fails closed if the drop target cannot be determined safely or the drop fails. |
 | `--dry-run` | — | Print all actions without executing them |
 | `-h`, `--help` | — | Show this help message |
 
@@ -249,7 +249,7 @@ Database configuration is performed in the web setup wizard, not by `install.sh`
 During installation:
 
 1. `.env` is created (or preserved) with `DATABASE_URL` left untouched by the installer.
-2. `ecube.service` starts without installer-managed database credential prompts.
+2. `ecube.service` starts without installer-managed database credential prompts and exports `ECUBE_ENV_FILE=<install-dir>/.env` so runtime writes and reads target the same environment file.
 3. The setup wizard (`/setup`) is the required next step to configure database
   connection/provisioning and apply schema migrations.
 
@@ -258,7 +258,8 @@ Notes:
 1. On first install, open `https://<hostname>:<api-port>/setup` (or `http://` for `--no-tls`) and complete the database provisioning/configuration step.
 2. On upgrades/re-runs, the installer preserves existing `.env`; it does not
   rotate or overwrite `DATABASE_URL`.
-3. During normal install flow, only `--pg-superuser-name` and `--pg-superuser-pass` configure
+3. On upgrades/re-runs, installer-managed standalone normalization no longer rewrites an existing `TRUST_PROXY_HEADERS` value; operator or setup-selected values are preserved.
+4. During normal install flow, only `--pg-superuser-name` and `--pg-superuser-pass` configure
   database-related installer behavior.
 
 ---
@@ -306,7 +307,8 @@ The wizard will:
 
 1. Connect to PostgreSQL with admin credentials.
 2. Provision the ECUBE role/database and run migrations.
-3. Create the initial admin user.
+3. Optionally enable trusted reverse-proxy client IP headers (`TRUST_PROXY_HEADERS`) for deployments behind a trusted proxy.
+4. Create the initial admin user.
 
 > **Troubleshooting (admin step skipped):** If setup appears to skip admin creation or briefly flashes an error, verify OS account state and setup state:
 >
@@ -318,7 +320,9 @@ The wizard will:
 >
 > Current ECUBE builds auto-recover this mismatch: if an admin role exists in the DB but the OS account is missing, setup remains available and recreates the OS admin account on the next `/setup/initialize` run.
 
-> **Note:** `DATABASE_URL` in `<install-dir>/.env` is configured by the setup wizard (not by `install.sh`). If you need to point the service at a different database later, use setup/admin workflows or edit `.env` and restart `ecube.service`.
+> **Idempotent re-run behavior:** If setup is already initialized, `POST /setup/initialize` returns `200` with `status="already_initialized"` and still persists setup runtime flags such as `TRUST_PROXY_HEADERS`.
+
+> **Note:** `DATABASE_URL` and `TRUST_PROXY_HEADERS` in `<install-dir>/.env` are configured by the setup wizard (not by `install.sh`). If you need to change them later, use setup/admin workflows or edit `.env` and restart `ecube.service`.
 
 ---
 
@@ -352,6 +356,11 @@ Optional database cleanup during uninstall:
 ```bash
 sudo /opt/ecube/install.sh --uninstall --drop-database
 ```
+
+When `--drop-database` is used, uninstall is fail-closed:
+
+- If `DATABASE_URL` is missing/invalid, points to a maintenance DB, or the database drop fails, uninstall exits non-zero and reports an explicit error.
+- This prevents silent continuation that could leave stale persisted drive/project rows across reinstall.
 
 Note: when `--drop-database` targets a remote PostgreSQL instance, superuser-role cleanup may require credentials for `SETUP_DEFAULT_ADMIN_USERNAME` via `.pgpass` or `PGPASSWORD`.
 

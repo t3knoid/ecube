@@ -73,6 +73,12 @@ curl -H "Authorization: Bearer $JWT_TOKEN" https://localhost:8443/endpoint
 
 During initial setup, `POST /setup/database/test-connection`, `POST /setup/database/provision`, and `GET /setup/database/provision-status` also accept unauthenticated access. After setup is complete, these endpoints require an `admin` token.
 
+Setup initialize behavior:
+
+- `POST /setup/initialize` accepts `trust_proxy_headers` (boolean, default `false`) in addition to admin username/password.
+- If setup is already initialized, `POST /setup/initialize` returns `200` with `status="already_initialized"` and an informational message instead of returning `409`.
+- The call still persists setup runtime flags such as `TRUST_PROXY_HEADERS` in the runtime environment file.
+
 ---
 
 ## Drives (`/drives`)
