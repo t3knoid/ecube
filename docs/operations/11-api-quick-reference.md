@@ -4,7 +4,7 @@
 |---|---|
 | Title | API Quick Reference |
 | Purpose | Provides a quick-reference guide to ECUBE API endpoints, authentication, and common request examples for operators and developers. |
-| Updated on | 04/17/26 |
+| Updated on | 04/25/26 |
 | Audience | Developers, operators, IT staff. |
 
 ## Table of Contents
@@ -282,9 +282,12 @@ Common errors for admin log endpoints: `400` (invalid filename or traversal atte
 | GET | `/introspection/block-devices` | all | Kernel block device inventory |
 | GET | `/introspection/mounts` | all | Mount inventory and status |
 | GET | `/introspection/system-health` | all | Database and job engine health |
+| POST | `/introspection/reconcile-managed-mounts` | admin,manager | Run a manual live-safe reconciliation pass for managed network and USB mounts |
 | GET | `/introspection/jobs/{job_id}/debug` | admin,auditor | Debug info for specific job |
 
 `GET /introspection/drives` includes the port-based `port_system_path` and separate `serial_number` for each registered drive. `GET /introspection/usb/topology` includes a `serial` field when sysfs exposes one.
+
+`POST /introspection/reconcile-managed-mounts` returns a summary payload with `status` (`ok` or `partial`), `scope` (`managed_mounts_only`), `network_mounts_checked`, `network_mounts_corrected`, `usb_mounts_checked`, `usb_mounts_corrected`, and `failure_count`. The endpoint is lock-protected and returns `409 Conflict` (`MANUAL_RECONCILIATION_IN_PROGRESS`) if another manual run is already in progress.
 
 ---
 
