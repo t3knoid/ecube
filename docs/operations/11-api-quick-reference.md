@@ -126,7 +126,7 @@ Compatibility note: To support project-to-source-path policy, use project source
 | POST | `/jobs` | processor+ | Create new export job (omit `drive_id` for auto-assignment) |
 | PUT | `/jobs/{job_id}` | processor+ | Update a pending, paused, or failed job from the Job Detail page |
 | DELETE | `/jobs/{job_id}` | processor+ | Delete a pending job and release its current drive assignment |
-| GET | `/jobs/{job_id}` | admin/manager/processor/auditor | Get job detail, including progress, cumulative active duration, and sanitized failure summaries |
+| GET | `/jobs/{job_id}` | admin/manager/processor/auditor | Get job detail, including progress, cumulative active duration that excludes paused time, and sanitized failure summaries |
 | GET | `/jobs/{job_id}/files` | admin/manager/processor/auditor | List operator-safe file status rows for the job |
 | POST | `/jobs/{job_id}/analyze` | processor+ | Run manual startup analysis without starting copy so operators can review scan results first |
 | POST | `/jobs/{job_id}/start` | processor+ | Start a new job or resume a paused job |
@@ -137,6 +137,8 @@ Compatibility note: To support project-to-source-path policy, use project source
 | POST | `/jobs/{job_id}/manifest` | processor+ | Write or refresh `manifest.json` on the destination drive |
 
 **Pause and Resume Semantics:** `POST /jobs/{job_id}/pause` moves a running job into `PAUSING` immediately and into `PAUSED` once the active copy threads finish their current work. `POST /jobs/{job_id}/start` can then resume the job from `PAUSED`; attempts to start while a job is still `PAUSING` return **409 Conflict**.
+
+**Active Duration Semantics:** `GET /jobs/{job_id}` returns cumulative active runtime for the job. The value increases while the job is actively running, excludes time spent paused, and after a later resume continues from the previously stored active duration instead of resetting to zero.
 
 **Job Detail Lifecycle Controls:** Analyze is available for eligible pending or restartable jobs and runs startup analysis without moving the job into `RUNNING`. Edit and Complete are limited to `PENDING`, `PAUSED`, and `FAILED` jobs. Delete is limited to `PENDING` jobs only, and the project binding on an existing job cannot be changed during edit. Startup-analysis cache cleanup is limited to `admin` and `manager`, requires explicit confirmation, and removes only the persisted startup-analysis snapshot rather than file-level copy history.
 

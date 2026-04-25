@@ -864,7 +864,7 @@ Manually mark a safe non-active job as completed. This override is limited to `P
 
 ### `GET /jobs/{job_id}`
 
-Return job status, progress, file counts, timestamps, cumulative active duration, drive info, and error summary.
+Return job status, progress, file counts, timestamps, cumulative active duration, drive info, and error summary. Cumulative active duration represents active copy time only: it increases while the job is running, excludes paused intervals, and after pause/resume cycles continues from the previously stored active runtime rather than restarting from zero.
 
 **Roles:** `admin`, `manager`, `processor`, `auditor`
 
