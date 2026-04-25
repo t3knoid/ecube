@@ -172,6 +172,18 @@ class SystemHealthResponse(BaseModel):
     worker_queue_size: Optional[int] = Field(default=None, description="Number of pending (queued) export jobs; null when the database is unreachable or the count query fails")
 
 
+class ManualManagedMountReconciliationResponse(BaseModel):
+    """Response for ``POST /introspection/reconcile-managed-mounts``."""
+
+    status: str = Field(..., description="Run status ('ok' or 'partial')")
+    scope: str = Field(..., description="Reconciliation scope for this run")
+    network_mounts_checked: int = Field(default=0, description="Managed network mounts inspected")
+    network_mounts_corrected: int = Field(default=0, description="Managed network mounts corrected")
+    usb_mounts_checked: int = Field(default=0, description="Managed USB mount slots inspected")
+    usb_mounts_corrected: int = Field(default=0, description="Managed USB mount slots corrected")
+    failure_count: int = Field(default=0, description="Number of corrective operations that failed")
+
+
 # ---------------------------------------------------------------------------
 # /introspection/jobs/{job_id}/debug
 # ---------------------------------------------------------------------------

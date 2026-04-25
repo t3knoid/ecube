@@ -49,17 +49,20 @@ from sqlalchemy.orm import Session
 from app.auth import CurrentUser, require_roles
 from app.config import settings
 from app.database import get_db
+from app.infrastructure import get_drive_mount, get_mount_provider
 from app.models.hardware import UsbDrive
 from app.models.jobs import ExportJob, JobStatus
-from app.schemas.errors import R_401, R_403, R_404, R_422
+from app.schemas.errors import R_401, R_403, R_404, R_409, R_422, R_500
 from app.schemas.introspection import (
     BlockDevicesResponse,
     IntrospectionDrivesResponse,
     JobDebugResponse,
+    ManualManagedMountReconciliationResponse,
     SystemHealthResponse,
     SystemMountsResponse,
     UsbTopologyResponse,
 )
+from app.services import reconciliation_service
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +70,7 @@ router = APIRouter(prefix="/introspection", tags=["introspection"])
 
 _ALL_ROLES = require_roles("admin", "manager", "processor", "auditor")
 _ADMIN_AUDITOR = require_roles("admin", "auditor")
+_ADMIN_MANAGER = require_roles("admin", "manager")
 
 
 @router.get("/drives", response_model=IntrospectionDrivesResponse, responses={**R_401, **R_403})
@@ -280,6 +284,30 @@ def system_health(
         "disk_write_bytes": disk_write_bytes,
         "worker_queue_size": worker_queue_size,
     }
+
+
+@router.post(
+    "/reconcile-managed-mounts",
+    response_model=ManualManagedMountReconciliationResponse,
+    responses={**R_401, **R_403, **R_409, **R_500},
+)
+def reconcile_managed_mounts(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER),
+):
+    """Run a manual, live-safe managed-mount reconciliation pass.
+
+    This endpoint only reconciles managed network and managed USB mounts.
+    It does not perform startup-only identity, job, or drive discovery passes.
+
+    **Roles:** ``admin``, ``manager``
+    """
+    return reconciliation_service.run_manual_managed_mount_reconciliation(
+        db,
+        get_mount_provider(),
+        drive_mount_provider=get_drive_mount(),
+        actor=current_user.username,
+    )
 
 
 @router.get("/jobs/{job_id}/debug", response_model=JobDebugResponse, responses={**R_401, **R_403, **R_404, **R_422})

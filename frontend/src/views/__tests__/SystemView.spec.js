@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   getBlockDevices: vi.fn(),
   getSystemMounts: vi.fn(),
   getJobDebug: vi.fn(),
+  reconcileManagedMounts: vi.fn(),
   getLogFiles: vi.fn(),
   getLogLines: vi.fn(),
   downloadLogFile: vi.fn(),
@@ -28,6 +29,7 @@ vi.mock('@/api/introspection.js', () => ({
   getBlockDevices: mocks.getBlockDevices,
   getSystemMounts: mocks.getSystemMounts,
   getJobDebug: mocks.getJobDebug,
+  reconcileManagedMounts: mocks.reconcileManagedMounts,
 }))
 
 vi.mock('@/api/admin.js', () => ({
@@ -90,6 +92,7 @@ describe('SystemView USB topology tab', () => {
     mocks.getBlockDevices.mockReset()
     mocks.getSystemMounts.mockReset()
     mocks.getJobDebug.mockReset()
+    mocks.reconcileManagedMounts.mockReset()
     mocks.getLogFiles.mockReset()
     mocks.getLogLines.mockReset()
     mocks.downloadLogFile.mockReset()
@@ -100,6 +103,15 @@ describe('SystemView USB topology tab', () => {
     mocks.getBlockDevices.mockResolvedValue({ block_devices: [] })
     mocks.getSystemMounts.mockResolvedValue({ mounts: [] })
     mocks.getJobDebug.mockResolvedValue(null)
+    mocks.reconcileManagedMounts.mockResolvedValue({
+      status: 'ok',
+      scope: 'managed_mounts_only',
+      network_mounts_checked: 0,
+      network_mounts_corrected: 0,
+      usb_mounts_checked: 0,
+      usb_mounts_corrected: 0,
+      failure_count: 0,
+    })
     mocks.getLogFiles.mockResolvedValue({ log_files: [] })
     mocks.getLogLines.mockResolvedValue({
       source: { source: 'app', path: 'app.log' },
@@ -186,6 +198,7 @@ describe('SystemView logs tab', () => {
     mocks.getBlockDevices.mockReset()
     mocks.getSystemMounts.mockReset()
     mocks.getJobDebug.mockReset()
+    mocks.reconcileManagedMounts.mockReset()
     mocks.getLogFiles.mockReset()
     mocks.getLogLines.mockReset()
     mocks.downloadLogFile.mockReset()
@@ -197,6 +210,15 @@ describe('SystemView logs tab', () => {
     mocks.getBlockDevices.mockResolvedValue({ block_devices: [] })
     mocks.getSystemMounts.mockResolvedValue({ mounts: [] })
     mocks.getJobDebug.mockResolvedValue(null)
+    mocks.reconcileManagedMounts.mockResolvedValue({
+      status: 'ok',
+      scope: 'managed_mounts_only',
+      network_mounts_checked: 0,
+      network_mounts_corrected: 0,
+      usb_mounts_checked: 0,
+      usb_mounts_corrected: 0,
+      failure_count: 0,
+    })
     mocks.getLogFiles.mockResolvedValue({ log_files: [{ name: 'app.log', size: 64, modified: '2026-04-08T11:59:00Z' }] })
     mocks.getLogLines.mockResolvedValue({
       source: { source: 'app.log', path: 'app.log' },
@@ -772,5 +794,82 @@ describe('SystemView logs tab', () => {
 
     const labels = wrapper.findAll('button').map((b) => b.text())
     expect(labels).not.toContain(i18n.global.t('system.tabs.logs'))
+  })
+})
+
+describe('SystemView managed-mount reconciliation action', () => {
+  beforeEach(() => {
+    mocks.hasRole.mockReset()
+    mocks.getSystemHealth.mockReset()
+    mocks.getUsbTopology.mockReset()
+    mocks.getBlockDevices.mockReset()
+    mocks.getSystemMounts.mockReset()
+    mocks.getJobDebug.mockReset()
+    mocks.reconcileManagedMounts.mockReset()
+    mocks.getLogFiles.mockReset()
+    mocks.getLogLines.mockReset()
+    mocks.downloadLogFile.mockReset()
+    mocks.listJobs.mockReset()
+
+    mocks.getSystemHealth.mockResolvedValue({ status: 'ok', database: 'connected', active_jobs: 0 })
+    mocks.getUsbTopology.mockResolvedValue({ devices: [] })
+    mocks.getBlockDevices.mockResolvedValue({ block_devices: [] })
+    mocks.getSystemMounts.mockResolvedValue({ mounts: [] })
+    mocks.getJobDebug.mockResolvedValue(null)
+    mocks.reconcileManagedMounts.mockResolvedValue({
+      status: 'ok',
+      scope: 'managed_mounts_only',
+      network_mounts_checked: 2,
+      network_mounts_corrected: 1,
+      usb_mounts_checked: 1,
+      usb_mounts_corrected: 1,
+      failure_count: 0,
+    })
+    mocks.getLogFiles.mockResolvedValue({ log_files: [] })
+    mocks.getLogLines.mockResolvedValue({
+      source: { source: 'app', path: 'app.log' },
+      fetched_at: '2026-04-08T12:00:00Z',
+      file_modified_at: '2026-04-08T11:59:00Z',
+      lines: [{ content: 'INFO ok' }],
+      returned: 1,
+      has_more: false,
+      limit: 200,
+      offset: 0,
+    })
+    mocks.listJobs.mockResolvedValue([])
+  })
+
+  it('shows the reconcile action for admins and managers only', async () => {
+    mocks.hasRole.mockImplementation((role) => role === 'admin')
+    let wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.text()).toContain(i18n.global.t('system.reconcileManagedMounts'))
+
+    wrapper.unmount()
+    mocks.hasRole.mockImplementation((role) => role === 'manager')
+    wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.text()).toContain(i18n.global.t('system.reconcileManagedMounts'))
+
+    wrapper.unmount()
+    mocks.hasRole.mockImplementation((role) => role === 'auditor')
+    wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.text()).not.toContain(i18n.global.t('system.reconcileManagedMounts'))
+  })
+
+  it('runs manual reconciliation and navigates to results page', async () => {
+    mocks.hasRole.mockImplementation((role) => role === 'manager')
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const button = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('system.reconcileManagedMounts'))
+    expect(button).toBeTruthy()
+
+    await button.trigger('click')
+    await flushPromises()
+
+    expect(mocks.reconcileManagedMounts).toHaveBeenCalledTimes(1)
   })
 })
