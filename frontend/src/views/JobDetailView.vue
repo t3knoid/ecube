@@ -281,6 +281,8 @@ const completionSummary = computed(() => {
     startedAt: formatTimestamp(job.value.started_at),
     copyThreads: Number(job.value.thread_count || 0),
     filesCopied: Number(job.value.files_succeeded || 0),
+    filesFailed: Number(job.value.files_failed || 0),
+    filesTimedOut: Number(job.value.files_timed_out || 0),
     totalFiles: Number(job.value.file_count || 0),
     totalCopied: formatBytes(Number(job.value.copied_bytes || 0)),
     duration: formatDuration(durationSeconds),
@@ -868,6 +870,8 @@ onUnmounted(() => {
           <span>{{ t('jobs.startedAt') }}</span><strong>{{ completionSummary.startedAt }}</strong>
           <span>{{ t('jobs.copyThreads') }}</span><strong>{{ completionSummary.copyThreads }}</strong>
           <span>{{ t('jobs.filesCopied') }}</span><strong>{{ completionSummary.filesCopied }} of {{ completionSummary.totalFiles }}</strong>
+          <span>{{ t('jobs.filesFailed') }}</span><strong>{{ completionSummary.filesFailed }}</strong>
+          <span>{{ t('jobs.filesTimedOut') }}</span><strong>{{ completionSummary.filesTimedOut }}</strong>
           <span>{{ t('jobs.totalCopied') }}</span><strong>{{ completionSummary.totalCopied }}</strong>
           <span>{{ t('jobs.duration') }}</span><strong>{{ completionSummary.duration }}</strong>
           <span>{{ t('jobs.copyRate') }}</span><strong>{{ completionSummary.copyRate }}</strong>

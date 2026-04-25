@@ -120,8 +120,8 @@ class Settings(BaseSettings):
     #: purged on application startup.  ``0`` disables automatic cleanup.
     audit_log_retention_days: int = 365
 
-    #: Maximum elapsed seconds for a copy job before it is marked FAILED with
-    #: a timeout reason.  ``0`` disables timeout enforcement.
+    #: Maximum elapsed seconds for an individual file copy/checksum attempt.
+    #: ``0`` disables timeout enforcement.
     copy_job_timeout: int = 3600
 
     #: Interval in seconds between automatic USB discovery sweeps.
