@@ -1066,18 +1066,6 @@ def _process_file(
                     success = False
                     err = str(timeout_exc)
 
-            # Some copy/checksum implementations may return timeout text instead
-            # of raising TimeoutError. Normalize those into TIMEOUT handling.
-            if (
-                not success
-                and not timed_out
-                and isinstance(err, str)
-                and "timed out" in err.lower()
-            ):
-                timed_out = True
-                if file_timeout_seconds > 0:
-                    timeout_elapsed_seconds = float(file_timeout_seconds)
-
             _flush_progress(force=True)
 
             if success:
