@@ -1777,10 +1777,13 @@ class TestSetupEndpoints:
         assert resp2.status_code == 200
         data = resp2.json()
         assert data["status"] == "already_initialized"
-        assert data["message"] == "System is already initialized. An admin user exists."
-        assert _mock_trust_proxy_persistence.call_count == 2
+        assert data["message"] == (
+            "System is already initialized. "
+            "Configuration updates require an authenticated admin session."
+        )
+        # Re-initialize must not mutate runtime settings from an unauthenticated endpoint.
+        assert _mock_trust_proxy_persistence.call_count == 1
         assert _mock_trust_proxy_persistence.call_args_list[0].args == (False,)
-        assert _mock_trust_proxy_persistence.call_args_list[1].args == (True,)
 
     def test_initialize_invalid_username(self, unauthenticated_client):
         resp = unauthenticated_client.post("/setup/initialize", json={
