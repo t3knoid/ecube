@@ -1932,6 +1932,23 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 | 10 | Cross-process lock — only one worker reconciles | Start Uvicorn with `--workers 4`, have a RUNNING job and a MOUNTED (but stale) mount | Exactly one `JOB_RECONCILED` and one `MOUNT_RECONCILED` audit entry; remaining workers log "skipping reconciliation" at INFO level |
 | 11 | Stale lock reclaim | Insert a stale lock row (`locked_at` > 5 minutes ago) via SQL, restart the service | Service reclaims the stale lock, reconciliation runs normally |
 | 12 | Lock released after failure | Disconnect NFS, restart the service, reconnect NFS, restart again | Second restart acquires lock and runs reconciliation; lock table is empty after startup completes |
+| 13 | Jobs pass emits immediate startup result log | Create at least one `RUNNING` job, restart service, then inspect application logs around startup reconciliation | Logs include `Startup reconciliation: checking jobs` followed by an immediate `Startup reconciliation: jobs result` line with safe counts (`jobs_checked`, `jobs_corrected`) or safe failure classification |
+| 14 | Reconciled job persists restart-interruption failure reason | Create a `RUNNING` or `VERIFYING` job, restart service, then open Job Detail for that job | Job status is `FAILED` and Job Detail shows a stable restart interruption reason (not the generic `This job failed...` fallback) |
+| 15 | Reconciled failed job shows correlated failure entry from audit fallback | Restart with a `RUNNING` job, then inspect Job Detail when no matching file-log failure line is present | Job Detail still shows a related failure entry sourced from reconciliation evidence (`JOB_RECONCILED`) and the entry remains sanitized |
+
+#### 12.14.1 Manual Drill-Down for Reconciled Failure Diagnostics
+
+Use this focused checklist when validating the startup-reconciled failure diagnostics end to end.
+
+1. Create a job and start copy so the job is `RUNNING`.
+2. Restart ECUBE while that job is still active.
+3. Inspect startup logs and verify both lines appear in sequence for the jobs pass: `Startup reconciliation: checking jobs` and `Startup reconciliation: jobs result`.
+4. Query audit records and verify a `JOB_RECONCILED` entry exists for the affected job with `old_status`, `new_status`, and `reason: "interrupted by restart"`.
+5. Open Job Detail for the reconciled job and verify:
+- status is `FAILED`
+- failure reason is restart-interruption-specific rather than the generic fallback message
+- a related failure entry is present even if no file-log `JOB_FAILED` line is available
+6. Confirm operator-visible reason text and related entry do not expose raw host paths or other unsafe internals.
 
 ### 12.15 System Health
 
