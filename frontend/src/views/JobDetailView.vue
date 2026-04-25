@@ -36,6 +36,8 @@ const filesLoading = ref(false)
 const acting = ref(false)
 const error = ref('')
 const infoMessage = ref('')
+const currentTimeMs = ref(Date.now())
+let currentTimeIntervalId = null
 
 const selectedFileId = ref(null)
 const fileHashes = ref(null)
@@ -225,7 +227,7 @@ function calculateDurationSeconds(currentJob) {
   if (['RUNNING', 'PAUSING', 'VERIFYING'].includes(status) && currentJob.started_at) {
     const started = new Date(currentJob.started_at)
     if (!Number.isNaN(started.getTime())) {
-      const liveSeconds = Math.max(0, Math.round((Date.now() - started.getTime()) / 1000))
+      const liveSeconds = Math.max(0, Math.round((currentTimeMs.value - started.getTime()) / 1000))
       return storedSeconds + liveSeconds
     }
   }
@@ -242,6 +244,31 @@ function calculateDurationSeconds(currentJob) {
 
   return null
 }
+
+const liveTransferSummary = computed(() => {
+  if (!job.value) return null
+
+  const status = String(job.value.status || '').toUpperCase()
+  if (!['RUNNING', 'PAUSING'].includes(status)) return null
+
+  const durationSeconds = calculateDurationSeconds(job.value)
+  const copiedBytes = Number(job.value.copied_bytes || 0)
+  const totalBytes = Number(job.value.total_bytes || 0)
+  const remainingBytes = Math.max(0, totalBytes - copiedBytes)
+  const rateBytesPerSecond = durationSeconds && durationSeconds > 0 ? copiedBytes / durationSeconds : 0
+  const remainingSeconds = rateBytesPerSecond > 0 && remainingBytes > 0
+    ? Math.ceil(remainingBytes / rateBytesPerSecond)
+    : null
+
+  return {
+    duration: formatDuration(durationSeconds),
+    copyRate: formatCopyRate(copiedBytes, durationSeconds),
+    timeRemaining: formatDuration(remainingSeconds),
+    estimatedCompletion: remainingSeconds != null
+      ? formatTimestamp(new Date(currentTimeMs.value + (remainingSeconds * 1000)).toISOString())
+      : '-',
+  }
+})
 
 const completionSummary = computed(() => {
   if (!job.value) return null
@@ -760,6 +787,10 @@ watch(showPausePendingDialog, async (open) => {
 })
 
 onMounted(async () => {
+  currentTimeIntervalId = window.setInterval(() => {
+    currentTimeMs.value = Date.now()
+  }, 1000)
+  currentTimeMs.value = Date.now()
   await refreshAll()
   if (!isTerminalStatus(job.value?.status)) {
     jobPoller.start()
@@ -769,6 +800,10 @@ onMounted(async () => {
 onUnmounted(() => {
   document.removeEventListener('keydown', handleDialogKeydown)
   jobPoller.stop()
+  if (currentTimeIntervalId != null) {
+    window.clearInterval(currentTimeIntervalId)
+    currentTimeIntervalId = null
+  }
 })
 </script>
 
@@ -804,6 +839,16 @@ onUnmounted(() => {
       />
       <p v-if="progressMetrics.initializing" class="muted">{{ t('jobs.progressPreparingDetail') }}</p>
       <p class="muted">{{ formatBytes(progressMetrics.copiedBytes) }} / {{ formatBytes(progressMetrics.totalBytes) }}</p>
+
+      <div v-if="liveTransferSummary" class="completion-summary" aria-live="polite">
+        <strong>{{ t('jobs.liveCopySummary') }}</strong>
+        <div class="hash-grid">
+          <span>{{ t('jobs.duration') }}</span><strong>{{ liveTransferSummary.duration }}</strong>
+          <span>{{ t('jobs.copyRate') }}</span><strong>{{ liveTransferSummary.copyRate }}</strong>
+          <span>{{ t('jobs.timeRemaining') }}</span><strong>{{ liveTransferSummary.timeRemaining }}</strong>
+          <span>{{ t('jobs.estimatedCompletion') }}</span><strong>{{ liveTransferSummary.estimatedCompletion }}</strong>
+        </div>
+      </div>
 
       <div v-if="startupAnalysisSummary" class="analysis-summary" aria-live="polite">
         <strong>{{ t('jobs.analysisSummary') }}</strong>
