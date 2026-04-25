@@ -1,13 +1,15 @@
 """Tests for retry/resume semantics in the copy engine."""
 
+import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
 from app.models.audit import AuditLog
-from app.models.jobs import ExportFile, ExportJob, FileStatus, JobStatus
+from app.models.jobs import ExportFile, ExportJob, FileStatus, JobStatus, StartupAnalysisStatus
 from app.services import copy_engine
 
 
@@ -252,6 +254,51 @@ def test_process_file_updates_copied_bytes_for_completed_copy(db, tmp_path):
     db.expire_all()
     refreshed_job = db.get(ExportJob, job.id)
     assert refreshed_job.copied_bytes == len(payload)
+
+
+def test_process_file_batches_copied_bytes_updates(db, tmp_path):
+    """_process_file should batch copied_bytes updates instead of committing once per chunk."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    payload = b"abcdefghijkl"
+    test_file = source_dir / "batched-progress.txt"
+    test_file.write_bytes(payload)
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), max_file_retries=0, retry_delay_seconds=0, target_mount_path=str(target_dir))
+
+    ef = ExportFile(
+        job_id=job.id,
+        relative_path="batched-progress.txt",
+        size_bytes=len(payload),
+        status=FileStatus.PENDING,
+        retry_attempts=0,
+    )
+    db.add(ef)
+    db.commit()
+    db.refresh(ef)
+
+    progress_updates: list[int] = []
+    original_increment = copy_engine.FileRepository.increment_job_bytes
+
+    def _record_increment(self, job_id, size_bytes):
+        progress_updates.append(size_bytes)
+        return original_increment(self, job_id, size_bytes)
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch.object(copy_engine.settings, "copy_chunk_size_bytes", 4), patch.object(
+            copy_engine.settings,
+            "copy_progress_flush_bytes",
+            8,
+        ), patch.object(copy_engine.FileRepository, "increment_job_bytes", autospec=True, side_effect=_record_increment):
+            copy_engine._process_file(ef.id, test_file, target_dir, max_retries=0, retry_delay=0)
+
+    db.expire_all()
+    refreshed_job = db.get(ExportJob, job.id)
+    assert refreshed_job.copied_bytes == len(payload)
+    assert progress_updates == [8, 4]
 
 
 def test_process_file_retry_audit_entries_created(db, tmp_path):
@@ -565,7 +612,7 @@ def test_run_copy_job_marks_job_failed_when_source_scan_permission_denied(db, tm
     assert job.status == JobStatus.FAILED
     assert job.completed_at is not None
     assert job.failure_reason is not None
-    assert job.failure_reason == "Permission or authentication failure (source: .)"
+    assert job.failure_reason == "Permission or authentication failure"
 
 
 def test_run_copy_job_copied_bytes_excludes_previously_done_on_resume(db, tmp_path):
@@ -680,6 +727,219 @@ def test_run_copy_job_reuses_cached_startup_analysis_without_rescan(db, tmp_path
     assert scan_source_files.call_count == 0
     assert persist_cache.call_count == 0
 
+    reuse_audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_STARTUP_ANALYSIS_REUSED", AuditLog.job_id == job.id)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    assert reuse_audit is not None
+
+
+def test_build_startup_analysis_sample_plan_spans_file_sizes(tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+
+    small = source_dir / "small.bin"
+    medium = source_dir / "medium.bin"
+    large = source_dir / "large.bin"
+    extra_large = source_dir / "extra-large.bin"
+    small.write_bytes(b"a" * 128)
+    medium.write_bytes(b"b" * 512)
+    large.write_bytes(b"c" * 2048)
+    extra_large.write_bytes(b"d" * 4096)
+
+    sample_plan = copy_engine._build_startup_analysis_sample_plan(
+        [small, medium, large, extra_large],
+        2304,
+    )
+
+    sampled_names = [path.name for path, _sample_size in sample_plan]
+    assert "small.bin" in sampled_names
+    assert "large.bin" in sampled_names or "extra-large.bin" in sampled_names
+    assert sum(sample_size for _path, sample_size in sample_plan) == 2304
+
+
+def test_estimate_startup_analysis_duration_accounts_for_per_file_overhead():
+    estimated_seconds = copy_engine._estimate_startup_analysis_duration_seconds(
+        total_bytes=24 * 1024 * 1024,
+        effective_copy_rate_mbps=12.0,
+        per_file_overhead_seconds=0.5,
+        file_count=4,
+    )
+
+    assert estimated_seconds == 4
+
+
+def test_measure_startup_analysis_transfer_rates_reports_speeds_and_estimated_duration(tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    source_files = []
+    for name, size in (("small.bin", 128), ("medium.bin", 512), ("large.bin", 4096)):
+        file_path = source_dir / name
+        file_path.write_bytes(b"a" * size)
+        source_files.append(file_path)
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+    job = SimpleNamespace(id=9, target_mount_path=str(target_dir))
+
+    with patch.object(copy_engine.settings, "startup_analysis_benchmark_bytes", 1024):
+        with patch.object(copy_engine.settings, "copy_chunk_size_bytes", 256):
+            details = copy_engine._measure_startup_analysis_transfer_rates(job, source_files, 4736)
+
+    assert details["benchmark_bytes"] == 1024
+    assert details["share_read_mbps"] is not None
+    assert details["share_read_mbps"] > 0
+    assert details["drive_write_mbps"] is not None
+    assert details["drive_write_mbps"] > 0
+    assert details["estimated_duration_seconds"] is not None
+    assert details["estimated_duration_seconds"] >= 1
+    assert list(target_dir.glob(".startup-analysis-benchmark-*")) == []
+
+
+def test_prepare_job_startup_analysis_persists_ready_state_and_file_rows(db, tmp_path, caplog):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "a.txt").write_bytes(b"alpha")
+    (source_dir / "b.txt").write_bytes(b"bravo")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.status = JobStatus.PAUSED
+    db.commit()
+
+    benchmark_result = {
+        "share_read_mbps": 120.5,
+        "drive_write_mbps": 96.25,
+        "estimated_duration_seconds": 1,
+        "benchmark_bytes": 10,
+    }
+
+    with patch("app.services.copy_engine._measure_startup_analysis_transfer_rates", return_value=benchmark_result) as measure_benchmark:
+        with caplog.at_level(logging.INFO):
+            copy_engine.prepare_job_startup_analysis(job.id, actor="analyst", manual=True)
+
+    db.expire_all()
+    db.refresh(job)
+    file_rows = db.query(ExportFile).filter(ExportFile.job_id == job.id).order_by(ExportFile.relative_path).all()
+    audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_STARTUP_ANALYSIS_COMPLETED", AuditLog.job_id == job.id)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+
+    assert job.status == JobStatus.PAUSED
+    assert job.startup_analysis_status == StartupAnalysisStatus.READY
+    assert job.startup_analysis_last_analyzed_at is not None
+    assert job.startup_analysis_failure_reason is None
+    assert job.startup_analysis_cached is True
+    assert job.startup_analysis_share_read_mbps == benchmark_result["share_read_mbps"]
+    assert job.startup_analysis_drive_write_mbps == benchmark_result["drive_write_mbps"]
+    assert job.startup_analysis_estimated_duration_seconds == benchmark_result["estimated_duration_seconds"]
+    assert job.file_count == 2
+    assert job.total_bytes == len(b"alpha") + len(b"bravo")
+    assert job.copied_bytes == 0
+    assert [row.relative_path for row in file_rows] == ["a.txt", "b.txt"]
+    assert all(row.status == FileStatus.PENDING for row in file_rows)
+    assert audit is not None
+    assert audit.details["ready_to_start"] is True
+    assert audit.details["share_read_mbps"] == benchmark_result["share_read_mbps"]
+    assert audit.details["drive_write_mbps"] == benchmark_result["drive_write_mbps"]
+    assert audit.details["estimated_duration_seconds"] == benchmark_result["estimated_duration_seconds"]
+    assert audit.details["benchmark_bytes"] == benchmark_result["benchmark_bytes"]
+    measure_benchmark.assert_called_once()
+
+    messages = [record.getMessage() for record in caplog.records]
+    completed_messages = [message for message in messages if f"JOB_STARTUP_ANALYSIS_COMPLETED job_id={job.id}" in message]
+
+    assert completed_messages
+    assert any("project_id=PROJ-001" in message for message in completed_messages)
+    assert any("status=READY" in message for message in completed_messages)
+    assert any("file_count=2" in message for message in completed_messages)
+    assert any("share_read_mbps=120.5" in message for message in completed_messages)
+    assert any("drive_write_mbps=96.25" in message for message in completed_messages)
+    assert any("estimated_duration_seconds=1" in message for message in completed_messages)
+    assert all("source_path=" not in message for message in completed_messages)
+    assert all("target_mount_path=" not in message for message in completed_messages)
+
+
+def test_prepare_job_startup_analysis_uses_specific_failure_fallback_for_unknown_errors(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine.scan_source_files", side_effect=RuntimeError("boom")):
+            with pytest.raises(RuntimeError, match="boom"):
+                copy_engine.prepare_job_startup_analysis(job.id, actor="analyst", manual=True)
+
+    db.expire_all()
+    db.refresh(job)
+
+    assert job.startup_analysis_status == StartupAnalysisStatus.FAILED
+    assert job.startup_analysis_failure_reason == "Unable to prepare startup analysis"
+
+
+def test_run_startup_analysis_logs_sanitized_failure_at_info_level(db, tmp_path, caplog):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine.scan_source_files", side_effect=RuntimeError("boom /secret/path")):
+            with caplog.at_level(logging.INFO):
+                copy_engine.run_startup_analysis(job.id, actor="analyst")
+
+    info_records = [record for record in caplog.records if record.levelno == logging.INFO]
+    debug_records = [record for record in caplog.records if record.levelno == logging.DEBUG]
+
+    assert any(record.getMessage() == "Unexpected startup analysis failure" for record in info_records)
+    assert any(getattr(record, "reason", None) == "Startup analysis failed" for record in info_records)
+    assert all("boom /secret/path" not in record.getMessage() for record in info_records)
+    assert all("/secret/path" not in record.getMessage() for record in info_records)
+    assert debug_records == []
+
+
+def test_prepare_job_startup_analysis_completion_audit_failure_logs_sanitized_reason(db, tmp_path, caplog):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "a.txt").write_bytes(b"alpha")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    benchmark_result = {
+        "share_read_mbps": 120.5,
+        "drive_write_mbps": 96.25,
+        "estimated_duration_seconds": 1,
+        "benchmark_bytes": 5,
+    }
+
+    with patch("app.services.copy_engine._measure_startup_analysis_transfer_rates", return_value=benchmark_result):
+        with patch("app.services.copy_engine.AuditRepository.add", side_effect=RuntimeError("boom /secret/path")):
+            with caplog.at_level(logging.INFO):
+                copy_engine.prepare_job_startup_analysis(job.id, actor="analyst", manual=True)
+
+    info_records = [record for record in caplog.records if record.levelno == logging.INFO]
+    debug_records = [record for record in caplog.records if record.levelno == logging.DEBUG]
+
+    assert any(record.getMessage() == "Failed to write audit log for JOB_STARTUP_ANALYSIS_COMPLETED" for record in info_records)
+    assert any(getattr(record, "reason", None) == "Audit log write failed after startup analysis completion" for record in info_records)
+    assert all("boom /secret/path" not in record.getMessage() for record in info_records)
+    assert all("/secret/path" not in record.getMessage() for record in info_records)
+    assert debug_records == []
+
 
 def test_run_copy_job_refreshes_stale_startup_analysis_cache_on_failed_run(db, tmp_path):
     source_dir = tmp_path / "source"
@@ -765,9 +1025,18 @@ def test_run_copy_job_clears_startup_analysis_cache_after_success(db, tmp_path):
     target_dir.mkdir()
 
     job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    analyzed_at = datetime(2026, 4, 24, tzinfo=timezone.utc)
+    job.startup_analysis_status = StartupAnalysisStatus.READY
+    job.startup_analysis_last_analyzed_at = analyzed_at
     job.startup_analysis_file_count = 1
     job.startup_analysis_total_bytes = len(b"content")
-    job.startup_analysis_entries = [{"relative_path": "file.txt", "size_bytes": len(b"content")}]
+    job.startup_analysis_share_read_mbps = 120.5
+    job.startup_analysis_drive_write_mbps = 96.25
+    job.startup_analysis_estimated_duration_seconds = 1
+    job.startup_analysis_entries = [
+        {"relative_path": "file.txt", "size_bytes": len(b"content")},
+        {"entry_type": "directory", "relative_path": "", "mtime_ns": source_dir.stat().st_mtime_ns},
+    ]
     db.commit()
 
     with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
@@ -785,6 +1054,13 @@ def test_run_copy_job_clears_startup_analysis_cache_after_success(db, tmp_path):
 
     assert job.status == JobStatus.COMPLETED
     assert job.startup_analysis_cached is False
+    assert job.startup_analysis_status == StartupAnalysisStatus.READY
+    assert job.startup_analysis_last_analyzed_at is not None
+    assert job.startup_analysis_file_count == 1
+    assert job.startup_analysis_total_bytes == len(b"content")
+    assert job.startup_analysis_share_read_mbps == 120.5
+    assert job.startup_analysis_drive_write_mbps == 96.25
+    assert job.startup_analysis_estimated_duration_seconds == 1
     assert audit is not None
     assert audit.details["reason"] == "job_completed"
 

@@ -5,7 +5,7 @@ from typing import Optional
 from urllib.parse import urlparse
 
 from app.models.hardware import DriveState
-from app.models.jobs import JobStatus, FileStatus
+from app.models.jobs import FileStatus, JobStatus, StartupAnalysisStatus
 from app.schemas.types import StrictIntMixin
 from app.utils.sanitize import ProjectIdStr, SafeStr, StrictSafeStr
 
@@ -100,6 +100,10 @@ class JobStartupAnalysisClearRequest(BaseModel):
     confirm: bool = Field(..., description="Must be true to confirm startup analysis cache cleanup")
 
 
+class JobAnalyzeRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+
 class JobUpdate(JobCreate):
     """Full job update payload for editable non-active jobs."""
 
@@ -188,7 +192,16 @@ class ExportJobSchema(BaseModel):
     failure_reason: Optional[str] = Field(default=None, description="Persisted sanitized job-level failure reason (null when not available)")
     error_summary: Optional[str] = Field(default=None, description="Brief summary of file failures (null on success)")
     failure_log_entry: Optional[str] = Field(default=None, description="Correlated application log line for failed jobs (null on success)")
+    startup_analysis_status: StartupAnalysisStatus = Field(default=StartupAnalysisStatus.NOT_ANALYZED, description="Current persisted startup-analysis lifecycle state")
+    startup_analysis_last_analyzed_at: Optional[datetime] = Field(default=None, description="When startup analysis most recently completed successfully")
+    startup_analysis_failure_reason: Optional[str] = Field(default=None, description="Persisted sanitized startup-analysis failure reason when the latest analysis failed")
+    startup_analysis_file_count: Optional[int] = Field(default=None, description="Number of files discovered during the latest startup analysis")
+    startup_analysis_total_bytes: Optional[int] = Field(default=None, description="Total bytes discovered during the latest startup analysis")
+    startup_analysis_share_read_mbps: Optional[float] = Field(default=None, description="Measured startup-analysis source share read speed in MB/s when available")
+    startup_analysis_drive_write_mbps: Optional[float] = Field(default=None, description="Measured startup-analysis target drive write speed in MB/s when available")
+    startup_analysis_estimated_duration_seconds: Optional[int] = Field(default=None, description="Estimated copy duration in seconds based on startup-analysis throughput measurements")
     startup_analysis_cached: bool = Field(default=False, description="Whether a persisted startup-analysis cache is available for restart reuse")
+    startup_analysis_ready: bool = Field(default=False, description="Whether a persisted startup-analysis result is ready for Start to reuse")
     client_ip: Optional[str] = Field(default=None, description="IP address of the client that created the job (null for background tasks or when redacted; 'unknown' when the client address could not be resolved)")
 
     model_config = {"from_attributes": True}

@@ -128,6 +128,7 @@ Compatibility note: To support project-to-source-path policy, use project source
 | DELETE | `/jobs/{job_id}` | processor+ | Delete a pending job and release its current drive assignment |
 | GET | `/jobs/{job_id}` | admin/manager/processor/auditor | Get job detail, including progress, cumulative active duration, and sanitized failure summaries |
 | GET | `/jobs/{job_id}/files` | admin/manager/processor/auditor | List operator-safe file status rows for the job |
+| POST | `/jobs/{job_id}/analyze` | processor+ | Run manual startup analysis without starting copy so operators can review scan results first |
 | POST | `/jobs/{job_id}/start` | processor+ | Start a new job or resume a paused job |
 | POST | `/jobs/{job_id}/pause` | processor+ | Request a safe pause for a running job; returns `PAUSING` until in-flight work drains |
 | POST | `/jobs/{job_id}/complete` | processor+ | Manually mark a pending, paused, or failed job as completed |
@@ -137,7 +138,9 @@ Compatibility note: To support project-to-source-path policy, use project source
 
 **Pause and Resume Semantics:** `POST /jobs/{job_id}/pause` moves a running job into `PAUSING` immediately and into `PAUSED` once the active copy threads finish their current work. `POST /jobs/{job_id}/start` can then resume the job from `PAUSED`; attempts to start while a job is still `PAUSING` return **409 Conflict**.
 
-**Job Detail Lifecycle Controls:** Edit and Complete are limited to `PENDING`, `PAUSED`, and `FAILED` jobs. Delete is limited to `PENDING` jobs only, and the project binding on an existing job cannot be changed during edit. Startup-analysis cache cleanup is limited to `admin` and `manager`, requires explicit confirmation, and removes only the persisted startup-analysis snapshot rather than file-level copy history.
+**Job Detail Lifecycle Controls:** Analyze is available for eligible pending or restartable jobs and runs startup analysis without moving the job into `RUNNING`. Edit and Complete are limited to `PENDING`, `PAUSED`, and `FAILED` jobs. Delete is limited to `PENDING` jobs only, and the project binding on an existing job cannot be changed during edit. Startup-analysis cache cleanup is limited to `admin` and `manager`, requires explicit confirmation, and removes only the persisted startup-analysis snapshot rather than file-level copy history.
+
+**Startup Analysis Locking:** While `startup_analysis_status` is `ANALYZING`, the backend rejects Edit, Analyze, Start, Complete, Delete, and `POST /jobs/{job_id}/startup-analysis/clear` with **409 Conflict** so UI-disabled controls are enforced server-side.
 
 **Manifest and Compare Semantics:** Verify and Manifest remain disabled in the UI until the job is truly complete at 100%. Manifest generation overwrites the same `manifest.json` file on the destination drive and shows its location in the UI. When the same exported record is selected for file comparison, ECUBE compares the original source file against the copied destination version and returns a sanitized **409 Conflict** if either side is unavailable.
 
@@ -151,7 +154,9 @@ Compatibility note: To support project-to-source-path policy, use project source
 
 **Progress Semantics:** Job list, dashboard, and detail views all use `copied_bytes` together with completed-file counters so active jobs do not appear 100% complete before file completion has caught up.
 
-**Startup Analysis Cache Semantics:** Job responses can include `startup_analysis_cached`, which indicates whether a persisted startup-analysis snapshot is available for restart reuse. ECUBE may reuse that snapshot on a later start when the source tree is still current, refresh it if the source changed, clear it automatically after successful completion, and clear it on explicit `POST /jobs/{job_id}/startup-analysis/clear` or manual completion paths.
+**Startup Analysis Semantics:** Job responses can include `startup_analysis_status`, `startup_analysis_ready`, `startup_analysis_last_analyzed_at`, `startup_analysis_failure_reason`, `startup_analysis_file_count`, and `startup_analysis_total_bytes` in addition to `startup_analysis_cached`. Manual analyze requests move the startup-analysis lifecycle through `NOT_ANALYZED`, `ANALYZING`, `READY`, `STALE`, or `FAILED` while the job itself can remain `PENDING`.
+
+**Startup Analysis Cache Semantics:** `startup_analysis_cached` indicates whether a persisted startup-analysis snapshot is available for restart reuse. ECUBE may reuse that snapshot on a later start when the source tree is still current, refresh it if the source changed, clear it automatically after successful completion, and clear it on explicit `POST /jobs/{job_id}/startup-analysis/clear` or manual completion paths. Summary fields such as discovered files, estimated total bytes, last analyzed time, and the safe failure reason can remain available after the reusable per-file snapshot has been discarded.
 
 **Webhook Callbacks:** Include `callback_url` (HTTPS only) when creating a job to receive a POST notification when the job reaches `COMPLETED` or `FAILED`. Makes up to 4 attempts on server errors with exponential backoff. Private/reserved IPs are blocked by default (SSRF protection). See the [Third-Party Integration Guide](09-third-party-integration.md) for payload details.
 
