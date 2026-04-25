@@ -957,6 +957,26 @@ def test_prepare_eject_audits_incomplete_files_warning(manager_client, db):
     assert warning_log.details["incomplete_file_count"] == 1
 
 
+def test_prepare_eject_blocks_when_incomplete_precheck_fails(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB006-PRECHECK-FAIL",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        filesystem_path="/dev/sdb",
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = _fake_eject()
+    with patch("app.services.drive_service.DriveAssignment", new=object()):
+        with patch("app.routers.drives.get_drive_eject", return_value=provider):
+            response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+
+    assert response.status_code == 500
+    assert response.json()["message"] == "Unable to verify incomplete-file state; retry prepare-eject"
+    provider.prepare_eject.assert_not_called()
+
+
 def test_prepare_eject_not_found(manager_client, db):
     with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject()):
         response = manager_client.post("/drives/999/prepare-eject")

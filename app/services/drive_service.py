@@ -734,6 +734,10 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
         raise
     except Exception:
         logger.exception("Error checking for incomplete jobs during eject")
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to verify incomplete-file state; retry prepare-eject",
+        )
 
     # Perform potentially slow OS operations without holding a database lock.
     # prepare_eject handles sync + unmount internally and returns a structured result.
