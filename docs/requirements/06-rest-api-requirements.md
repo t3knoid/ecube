@@ -167,11 +167,13 @@ Acceptance criteria:
 - Job behavior shall preserve attribution for who created and who started work.
 - Failed jobs may be restarted only when lifecycle policy permits it.
 - Job detail visibility shall support operational monitoring without requiring privileged debug-only access.
+- Job detail visibility shall include cumulative active runtime for jobs, where the displayed duration excludes paused time and continues from previously recorded active runtime after a later resume.
 - Callback or notification behavior, when configured, shall comply with the security and retry constraints defined elsewhere in the requirements set.
 
 Acceptance criteria:
 
 - Authorized users can observe job progress and terminal outcomes.
+- Authorized users can observe cumulative active runtime in Job Detail without paused time being counted toward the displayed duration.
 - Invalid job state transitions are rejected.
 - Job detail views remain available to the intended read-only audiences.
 

@@ -770,6 +770,7 @@ Accessible from the Drive Management screen via a "Manage Hubs" button. Visible 
 │  │                                                                     │     │
 │  │  ████████████████████████████░░░░░░░░░░░░░░░  65%                   │     │
 │  │                                                                     │     │
+│  │  Duration: 18m 42s (active only)                                    │     │
 │  │  Copied:   3,489,660,928 / 5,368,709,120 bytes  (3.2 / 5.0 GB)     │     │
 │  │  Files:    223 / 342 files completed                                │     │
 │  │                                                                     │     │
@@ -799,6 +800,8 @@ Accessible from the Drive Management screen via a "Manage Hubs" button. Visible 
 │                                                            [ ← Back ]       │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
+
+The Job Detail monitoring view includes a duration field for cumulative active runtime. It updates while a job is running, excludes paused time, and continues from the stored active runtime after pause and resume cycles.
 
 **Action button states by job status:**
 
