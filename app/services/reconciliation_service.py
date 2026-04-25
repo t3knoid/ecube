@@ -534,6 +534,7 @@ def reconcile_jobs(db: Session) -> Dict[str, int]:
         old_status = job.status
         job.status = JobStatus.FAILED
         job.completed_at = datetime.now(timezone.utc)
+        job.failure_reason = "Job interrupted by service restart before completion"
         corrected += 1
 
         audit_entries.append({
@@ -843,6 +844,23 @@ def run_startup_reconciliation(
             else:
                 logger.exception("Job reconciliation failed")
             results["jobs"] = {"error": hint or "job reconciliation failed"}
+        if "error" in results["jobs"]:
+            logger.info(
+                "Startup reconciliation: jobs result",
+                extra={
+                    "status": "failed",
+                    "reason": "job_reconciliation_failed",
+                },
+            )
+        else:
+            logger.info(
+                "Startup reconciliation: jobs result",
+                extra={
+                    "status": "ok",
+                    "jobs_checked": results["jobs"].get("jobs_checked", 0),
+                    "jobs_corrected": results["jobs"].get("jobs_corrected", 0),
+                },
+            )
 
         _refresh_reconciliation_lock(db)
 
