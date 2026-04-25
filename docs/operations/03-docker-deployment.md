@@ -170,7 +170,7 @@ cp .env.example .env
 nano .env
 ```
 
-`cp .env.example .env` produces a working local/test configuration, including a default `POSTGRES_PASSWORD`. The `.env` file is bind-mounted into the container so the setup wizard can persist `DATABASE_URL` after provisioning. Adjust secrets and ports before using this in any non-lab environment.
+`cp .env.example .env` produces a working local/test configuration, including a default `POSTGRES_PASSWORD`. The `.env` file is bind-mounted into the container so the setup wizard can persist runtime configuration (including `DATABASE_URL` and `TRUST_PROXY_HEADERS`) after provisioning. Adjust secrets and ports before using this in any non-lab environment.
 
 ### Running Without TLS
 
@@ -200,7 +200,7 @@ The wizard auto-fills superuser credentials from these defaults. With the defaul
 The wizard also detects that it is running inside a container and pre-fills the **Database Host** field with the PostgreSQL service name (default: `postgres`).
 
 After successful provisioning:
-- `DATABASE_URL` is written to the mounted `.env` file.
+- `DATABASE_URL` and `TRUST_PROXY_HEADERS` are written to the mounted `.env` file.
 - `PG_SUPERUSER_NAME` and `PG_SUPERUSER_PASS` are cleared from `.env` for security.
 - On subsequent container restarts the entrypoint reads `DATABASE_URL` from `.env`, waits for the database, and runs any pending migrations automatically.
 
