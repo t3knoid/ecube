@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from app.models.audit import AuditLog
 from app.models.hardware import UsbDrive, DriveState, UsbHub, UsbPort
-from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, Manifest
+from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, Manifest, StartupAnalysisStatus
 from app.models.network import MountStatus, MountType, NetworkMount
 
 
@@ -554,6 +554,40 @@ def test_get_job_not_found(client, db):
 
 
 def test_start_job_writes_application_log_line(client, db, caplog):
+    drive = UsbDrive(
+        device_identifier="USB-START-LOG-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-START-LOG-001",
+        mount_path="/mnt/ecube/start-log-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    create_response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-START-LOG-001",
+            "evidence_number": "EV-START-LOG-001",
+            "source_path": "/data/evidence",
+            "drive_id": drive.id,
+        },
+    )
+    assert create_response.status_code == 200
+    job_id = create_response.json()["id"]
+
+    with patch("app.services.copy_engine.run_copy_job"):
+        with caplog.at_level(logging.INFO):
+            response = client.post(f"/jobs/{job_id}/start")
+
+    assert response.status_code == 200
+    messages = [record.getMessage() for record in caplog.records]
+    started_messages = [message for message in messages if f"JOB_STARTED job_id={job_id}" in message]
+
+    assert started_messages
+    assert any("project_id=PROJ-START-LOG-001" in message for message in started_messages)
+    assert all("source_path=" not in message for message in started_messages)
+    assert all("target_mount_path=" not in message for message in started_messages)
+    assert all("drive_id=" not in message for message in started_messages)
 
 
 def test_create_job_overlap_check_allows_startup_analysis_json_cache(client, db):
@@ -592,40 +626,6 @@ def test_create_job_overlap_check_allows_startup_analysis_json_cache(client, db)
     assert response.status_code == 409
     assert response.json()["code"] == "SOURCE_OVERLAP"
     assert f"job #{existing.id}" in response.json()["message"]
-    drive = UsbDrive(
-        device_identifier="USB-START-LOG-001",
-        current_state=DriveState.AVAILABLE,
-        current_project_id="PROJ-START-LOG-001",
-        mount_path="/mnt/ecube/start-log-001",
-    )
-    db.add(drive)
-    db.commit()
-
-    create_response = client.post(
-        "/jobs",
-        json={
-            "project_id": "PROJ-START-LOG-001",
-            "evidence_number": "EV-START-LOG-001",
-            "source_path": "/data/evidence",
-            "drive_id": drive.id,
-        },
-    )
-    assert create_response.status_code == 200
-    job_id = create_response.json()["id"]
-
-    with patch("app.services.copy_engine.run_copy_job"):
-        with caplog.at_level(logging.INFO):
-            response = client.post(f"/jobs/{job_id}/start")
-
-    assert response.status_code == 200
-    messages = [record.getMessage() for record in caplog.records]
-    started_messages = [message for message in messages if f"JOB_STARTED job_id={job_id}" in message]
-
-    assert started_messages
-    assert any("project_id=PROJ-START-LOG-001" in message for message in started_messages)
-    assert all("source_path=" not in message for message in started_messages)
-    assert all("target_mount_path=" not in message for message in started_messages)
-    assert all("drive_id=" not in message for message in started_messages)
 
 
 def test_get_failed_job_includes_log_entry(client, db, tmp_path, monkeypatch):
@@ -852,6 +852,115 @@ def test_start_job_returns_running_startup_state_before_copy_totals_are_known(cl
     mock_copy.assert_called_once_with(job_id)
 
 
+def test_analyze_job_schedules_startup_analysis_without_starting_copy(client, db, caplog):
+    job = ExportJob(
+        project_id="PROJ-ANALYZE-001",
+        evidence_number="EV-ANALYZE-001",
+        source_path="/data/evidence",
+        status=JobStatus.PENDING,
+    )
+    db.add(job)
+    db.commit()
+
+    with patch("app.services.copy_engine.run_startup_analysis") as mock_analyze:
+        with caplog.at_level(logging.INFO):
+            response = client.post(f"/jobs/{job.id}/analyze", json={})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "PENDING"
+    assert response.json()["startup_analysis_status"] == "ANALYZING"
+    db.refresh(job)
+    assert job.status == JobStatus.PENDING
+    assert job.startup_analysis_status == StartupAnalysisStatus.ANALYZING
+    mock_analyze.assert_called_once_with(job.id, actor="test-user", client_ip="unknown")
+
+    messages = [record.getMessage() for record in caplog.records]
+    started_messages = [message for message in messages if f"JOB_STARTUP_ANALYSIS_STARTED job_id={job.id}" in message]
+
+    assert started_messages
+    assert any("project_id=PROJ-ANALYZE-001" in message for message in started_messages)
+    assert any("status=ANALYZING" in message for message in started_messages)
+    assert all("source_path=" not in message for message in started_messages)
+    assert all("target_mount_path=" not in message for message in started_messages)
+    assert all("drive_id=" not in message for message in started_messages)
+
+
+def test_analyze_job_schedule_failure_logs_sanitized_reason(client, db, caplog):
+    job = ExportJob(
+        project_id="PROJ-ANALYZE-005",
+        evidence_number="EV-ANALYZE-005",
+        source_path="/data/evidence",
+        status=JobStatus.PENDING,
+    )
+    db.add(job)
+    db.commit()
+
+    with patch("app.services.job_service.JobRepository.save", side_effect=RuntimeError("boom /secret/path")):
+        with caplog.at_level(logging.INFO):
+            response = client.post(f"/jobs/{job.id}/analyze", json={})
+
+    assert response.status_code == 500
+    info_records = [record for record in caplog.records if record.levelno == logging.INFO]
+    debug_records = [record for record in caplog.records if record.levelno == logging.DEBUG]
+
+    assert any(record.getMessage() == "DB commit failed while scheduling startup analysis" for record in info_records)
+    assert any(getattr(record, "reason", None) == "Database error while scheduling startup analysis" for record in info_records)
+    assert all("boom /secret/path" not in record.getMessage() for record in info_records)
+    assert all("/secret/path" not in record.getMessage() for record in info_records)
+    assert debug_records == []
+
+
+def test_analyze_job_processor_allowed(client, db):
+    job = ExportJob(
+        project_id="PROJ-ANALYZE-002",
+        evidence_number="EV-ANALYZE-002",
+        source_path="/data/evidence",
+        status=JobStatus.FAILED,
+    )
+    db.add(job)
+    db.commit()
+
+    with patch("app.services.copy_engine.run_startup_analysis"):
+        response = client.post(f"/jobs/{job.id}/analyze", json={})
+
+    assert response.status_code == 200
+    assert response.json()["startup_analysis_status"] == "ANALYZING"
+
+
+def test_analyze_job_conflict_while_startup_analysis_running(client, db):
+    job = ExportJob(
+        project_id="PROJ-ANALYZE-004",
+        evidence_number="EV-ANALYZE-004",
+        source_path="/data/evidence",
+        status=JobStatus.PENDING,
+        startup_analysis_status=StartupAnalysisStatus.ANALYZING,
+    )
+    db.add(job)
+    db.commit()
+
+    with patch("app.services.copy_engine.run_startup_analysis") as mock_analyze:
+        response = client.post(f"/jobs/{job.id}/analyze", json={})
+
+    assert response.status_code == 409
+    assert "startup analysis is in progress" in response.json()["message"].lower()
+    mock_analyze.assert_not_called()
+
+
+def test_analyze_job_auditor_forbidden(auditor_client, db):
+    job = ExportJob(
+        project_id="PROJ-ANALYZE-003",
+        evidence_number="EV-ANALYZE-003",
+        source_path="/data/evidence",
+        status=JobStatus.PENDING,
+    )
+    db.add(job)
+    db.commit()
+
+    response = auditor_client.post(f"/jobs/{job.id}/analyze", json={})
+
+    assert response.status_code == 403
+
+
 def test_start_already_running_job(client, db):
     job = ExportJob(
         project_id="PROJ-001",
@@ -864,6 +973,37 @@ def test_start_already_running_job(client, db):
 
     response = client.post(f"/jobs/{job.id}/start", json={})
     assert response.status_code == 409
+
+
+def test_start_job_conflict_while_startup_analysis_running(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-START-ANALYZING-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-START-ANALYZING-001",
+        mount_path="/mnt/ecube/start-analyzing-001",
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-START-ANALYZING-001",
+        evidence_number="EV-START-ANALYZING-001",
+        source_path="/data/start-analyzing",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.PENDING,
+        startup_analysis_status=StartupAnalysisStatus.ANALYZING,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    with patch("app.services.copy_engine.run_copy_job") as mock_copy:
+        response = client.post(f"/jobs/{job.id}/start", json={})
+
+    assert response.status_code == 409
+    assert "startup analysis is in progress" in response.json()["message"].lower()
+    mock_copy.assert_not_called()
 
 
 def test_pause_job_running_state(client, db):
@@ -1082,6 +1222,23 @@ def test_complete_job_clears_startup_analysis_cache(client, db):
     audit = db.query(AuditLog).filter(AuditLog.action == "JOB_STARTUP_ANALYSIS_CACHE_CLEARED", AuditLog.job_id == job.id).first()
     assert audit is not None
     assert audit.details["reason"] == "job_completed_manually"
+
+
+def test_complete_job_conflict_while_startup_analysis_running(client, db):
+    job = ExportJob(
+        project_id="PROJ-COMPLETE-ANALYZING-001",
+        evidence_number="EV-COMPLETE-ANALYZING-001",
+        source_path="/data/evidence",
+        status=JobStatus.PAUSED,
+        startup_analysis_status=StartupAnalysisStatus.ANALYZING,
+    )
+    db.add(job)
+    db.commit()
+
+    response = client.post(f"/jobs/{job.id}/complete")
+
+    assert response.status_code == 409
+    assert "startup analysis is in progress" in response.json()["message"].lower()
 
 
 def test_update_pending_job_reassigns_drive_and_updates_fields(client, db):
@@ -1330,6 +1487,198 @@ def test_clear_job_startup_analysis_cache_requires_confirmation(admin_client, db
     assert job.startup_analysis_cached is True
 
 
+def test_update_job_source_change_invalidates_startup_analysis_and_file_rows(client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="server:/exports/project-001",
+        project_id="PROJ-001",
+        local_mount_point="/nfs/project-001",
+        status=MountStatus.MOUNTED,
+    )
+    drive = UsbDrive(
+        device_identifier="USB-UPDATE-STALE-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        mount_path="/mnt/ecube/update-stale-001",
+    )
+    db.add_all([mount, drive])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-001",
+        evidence_number="EV-UPDATE-STALE-001",
+        source_path="/nfs/project-001/evidence-old",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.FAILED,
+        thread_count=4,
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_last_analyzed_at=datetime.now(timezone.utc),
+        startup_analysis_file_count=2,
+        startup_analysis_total_bytes=12,
+        startup_analysis_entries=[
+            {"relative_path": "a.txt", "size_bytes": 5},
+            {"relative_path": "b.txt", "size_bytes": 7},
+        ],
+        file_count=2,
+        total_bytes=12,
+        copied_bytes=5,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.add(ExportFile(job_id=job.id, relative_path="a.txt", size_bytes=5, status=FileStatus.DONE, retry_attempts=0))
+    db.commit()
+
+    response = client.put(
+        f"/jobs/{job.id}",
+        json={
+            "project_id": "PROJ-001",
+            "evidence_number": "EV-UPDATE-STALE-001",
+            "source_path": "/evidence-new",
+            "mount_id": mount.id,
+            "drive_id": drive.id,
+            "thread_count": 4,
+            "max_file_retries": 3,
+            "retry_delay_seconds": 1,
+            "callback_url": None,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["startup_analysis_status"] == "STALE"
+    assert response.json()["startup_analysis_cached"] is False
+    db.refresh(job)
+    assert job.startup_analysis_status == StartupAnalysisStatus.STALE
+    assert job.startup_analysis_cached is False
+    assert job.file_count == 0
+    assert job.total_bytes == 0
+    assert job.copied_bytes == 0
+    assert db.query(ExportFile).filter(ExportFile.job_id == job.id).count() == 0
+
+
+def test_update_job_source_change_invalidates_summary_only_startup_analysis_state(client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="server:/exports/project-001",
+        project_id="PROJ-001",
+        local_mount_point="/nfs/project-001",
+        status=MountStatus.MOUNTED,
+    )
+    drive = UsbDrive(
+        device_identifier="USB-UPDATE-SUMMARY-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        mount_path="/mnt/ecube/update-summary-001",
+    )
+    db.add_all([mount, drive])
+    db.flush()
+
+    analyzed_at = datetime.now(timezone.utc)
+    job = ExportJob(
+        project_id="PROJ-001",
+        evidence_number="EV-UPDATE-SUMMARY-001",
+        source_path="/nfs/project-001/evidence-old",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.FAILED,
+        thread_count=4,
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_last_analyzed_at=analyzed_at,
+        startup_analysis_file_count=2,
+        startup_analysis_total_bytes=12,
+        startup_analysis_estimated_duration_seconds=3,
+        startup_analysis_entries=None,
+        file_count=2,
+        total_bytes=12,
+        copied_bytes=5,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.add(ExportFile(job_id=job.id, relative_path="a.txt", size_bytes=5, status=FileStatus.DONE, retry_attempts=0))
+    db.commit()
+
+    response = client.put(
+        f"/jobs/{job.id}",
+        json={
+            "project_id": "PROJ-001",
+            "evidence_number": "EV-UPDATE-SUMMARY-001",
+            "source_path": "/evidence-new",
+            "mount_id": mount.id,
+            "drive_id": drive.id,
+            "thread_count": 4,
+            "max_file_retries": 3,
+            "retry_delay_seconds": 1,
+            "callback_url": None,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["startup_analysis_status"] == "STALE"
+    assert response.json()["startup_analysis_last_analyzed_at"] is None
+    assert response.json()["startup_analysis_cached"] is False
+    db.refresh(job)
+    assert job.startup_analysis_status == StartupAnalysisStatus.STALE
+    assert job.startup_analysis_last_analyzed_at is None
+    assert job.startup_analysis_file_count is None
+    assert job.startup_analysis_total_bytes is None
+    assert job.startup_analysis_estimated_duration_seconds is None
+    assert job.startup_analysis_cached is False
+    assert job.file_count == 0
+    assert job.total_bytes == 0
+    assert job.copied_bytes == 0
+    assert db.query(ExportFile).filter(ExportFile.job_id == job.id).count() == 0
+
+
+def test_update_job_conflict_while_startup_analysis_running(client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="server:/exports/project-001",
+        project_id="PROJ-UPDATE-ANALYZING-001",
+        local_mount_point="/nfs/project-analyzing-001",
+        status=MountStatus.MOUNTED,
+    )
+    drive = UsbDrive(
+        device_identifier="USB-UPDATE-ANALYZING-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-UPDATE-ANALYZING-001",
+        mount_path="/mnt/ecube/update-analyzing-001",
+    )
+    db.add_all([mount, drive])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-UPDATE-ANALYZING-001",
+        evidence_number="EV-UPDATE-ANALYZING-001",
+        source_path="/nfs/project-analyzing-001/evidence-old",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.FAILED,
+        thread_count=4,
+        startup_analysis_status=StartupAnalysisStatus.ANALYZING,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    response = client.put(
+        f"/jobs/{job.id}",
+        json={
+            "project_id": "PROJ-UPDATE-ANALYZING-001",
+            "evidence_number": "EV-UPDATE-ANALYZING-001",
+            "source_path": "/evidence-new",
+            "mount_id": mount.id,
+            "drive_id": drive.id,
+            "thread_count": 4,
+            "max_file_retries": 3,
+            "retry_delay_seconds": 1,
+            "callback_url": None,
+        },
+    )
+
+    assert response.status_code == 409
+    assert "startup analysis is in progress" in response.json()["message"].lower()
+
+
 def test_clear_job_startup_analysis_cache_manager_allowed_and_audited(manager_client, db):
     job = ExportJob(
         project_id="PROJ-CACHE-CLEAR-002",
@@ -1356,6 +1705,26 @@ def test_clear_job_startup_analysis_cache_manager_allowed_and_audited(manager_cl
     audit = db.query(AuditLog).filter(AuditLog.action == "JOB_STARTUP_ANALYSIS_CACHE_CLEARED", AuditLog.job_id == job.id).first()
     assert audit is not None
     assert audit.details["reason"] == "manual_cleanup"
+
+
+def test_clear_job_startup_analysis_cache_conflict_while_running(manager_client, db):
+    job = ExportJob(
+        project_id="PROJ-CACHE-CLEAR-004",
+        evidence_number="EV-CACHE-CLEAR-004",
+        source_path="/data/evidence",
+        status=JobStatus.FAILED,
+        startup_analysis_status=StartupAnalysisStatus.ANALYZING,
+        startup_analysis_file_count=1,
+        startup_analysis_total_bytes=4,
+        startup_analysis_entries=[{"relative_path": "file.txt", "size_bytes": 4}],
+    )
+    db.add(job)
+    db.commit()
+
+    response = manager_client.post(f"/jobs/{job.id}/startup-analysis/clear", json={"confirm": True})
+
+    assert response.status_code == 409
+    assert "startup analysis is in progress" in response.json()["message"].lower()
 
 
 def test_clear_job_startup_analysis_cache_processor_forbidden(client, db):
@@ -1390,6 +1759,35 @@ def test_delete_running_job_conflict(client, db):
 
     response = client.delete(f"/jobs/{job.id}")
     assert response.status_code == 409
+
+
+def test_delete_job_conflict_while_startup_analysis_running(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-DELETE-ANALYZING-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-DELETE-ANALYZING-001",
+        mount_path="/mnt/ecube/delete-analyzing-001",
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-DELETE-ANALYZING-001",
+        evidence_number="EV-DELETE-ANALYZING-001",
+        source_path="/data/delete-analyzing",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.PENDING,
+        startup_analysis_status=StartupAnalysisStatus.ANALYZING,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    response = client.delete(f"/jobs/{job.id}")
+
+    assert response.status_code == 409
+    assert "startup analysis is in progress" in response.json()["message"].lower()
 
 
 def test_create_job_conflict_when_drive_has_different_project(client, db):
@@ -1577,6 +1975,10 @@ def test_completed_job_with_all_fields(client, db):
         file_count=3,
         created_by="creator",
         started_by="starter",
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_file_count=3,
+        startup_analysis_total_bytes=1000,
+        startup_analysis_estimated_duration_seconds=2,
     )
     db.add(job)
     db.flush()
@@ -1604,6 +2006,12 @@ def test_completed_job_with_all_fields(client, db):
 
     # Error summary should be null on success
     assert data["error_summary"] is None
+
+    # Startup analysis summary fields should remain visible to Job Detail.
+    assert data["startup_analysis_status"] == "READY"
+    assert data["startup_analysis_file_count"] == 3
+    assert data["startup_analysis_total_bytes"] == 1000
+    assert data["startup_analysis_estimated_duration_seconds"] == 2
 
     # Drive info
     assert data["drive"] is not None

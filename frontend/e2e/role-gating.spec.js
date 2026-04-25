@@ -38,6 +38,7 @@ test('auditor cannot run write actions', async ({ page }) => {
   await routeJson(page, '**/api/introspection/jobs/1/debug', { files: [] })
 
   await page.goto('/jobs/1')
+  await expect(page.getByRole('button', { name: 'Analyze' })).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Start' })).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Verify' })).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Generate Manifest' })).toBeDisabled()
