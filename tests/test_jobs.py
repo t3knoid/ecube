@@ -885,6 +885,31 @@ def test_analyze_job_schedules_startup_analysis_without_starting_copy(client, db
     assert all("drive_id=" not in message for message in started_messages)
 
 
+def test_analyze_job_schedule_failure_logs_sanitized_reason(client, db, caplog):
+    job = ExportJob(
+        project_id="PROJ-ANALYZE-005",
+        evidence_number="EV-ANALYZE-005",
+        source_path="/data/evidence",
+        status=JobStatus.PENDING,
+    )
+    db.add(job)
+    db.commit()
+
+    with patch("app.services.job_service.JobRepository.save", side_effect=RuntimeError("boom /secret/path")):
+        with caplog.at_level(logging.INFO):
+            response = client.post(f"/jobs/{job.id}/analyze", json={})
+
+    assert response.status_code == 500
+    info_records = [record for record in caplog.records if record.levelno == logging.INFO]
+    debug_records = [record for record in caplog.records if record.levelno == logging.DEBUG]
+
+    assert any(record.getMessage() == "DB commit failed while scheduling startup analysis" for record in info_records)
+    assert any(getattr(record, "reason", None) == "Database error while scheduling startup analysis" for record in info_records)
+    assert all("boom /secret/path" not in record.getMessage() for record in info_records)
+    assert all("/secret/path" not in record.getMessage() for record in info_records)
+    assert debug_records == []
+
+
 def test_analyze_job_processor_allowed(client, db):
     job = ExportJob(
         project_id="PROJ-ANALYZE-002",
