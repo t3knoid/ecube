@@ -555,6 +555,30 @@ describe('JobDetailView start action', () => {
     vi.useRealTimers()
   })
 
+  it('does not show live copy summary while the job is verifying', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'VERIFYING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 60 * 1024 * 1024,
+      total_bytes: 120 * 1024 * 1024,
+      file_count: 4,
+      files_succeeded: 2,
+      files_failed: 0,
+      started_at: '2026-04-24T15:00:00Z',
+      active_duration_seconds: 0,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('Live copy summary')
+  })
+
   it('does not show 100% while a running job is still below 1%', async () => {
     mocks.getJob.mockResolvedValue({
       id: 6,
