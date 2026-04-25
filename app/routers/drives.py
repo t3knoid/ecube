@@ -120,7 +120,8 @@ def prepare_eject(
     """Prepare a drive for safe ejection and return it to available state.
 
     Completes the copy/verify process and transitions the drive back to ``AVAILABLE``.
-    After ejection, the drive can be safely removed and reassigned to a different project.
+    After ejection, the drive can be safely removed. Project binding is retained;
+    cross-project reassignment still requires the standard format/reinitialize flow.
 
     **Roles:** ``admin``, ``manager``
     """
