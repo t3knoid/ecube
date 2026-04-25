@@ -156,6 +156,8 @@ Compatibility note: To support project-to-source-path policy, use project source
 
 **Progress Semantics:** Job list, dashboard, and detail views all use `copied_bytes` together with completed-file counters so active jobs do not appear 100% complete before file completion has caught up.
 
+**Failed Job Evidence Fallback:** When `GET /jobs/{job_id}` cannot correlate a failed-job application log line, ECUBE can synthesize a sanitized failure entry from recent audit evidence (`JOB_FAILED`, `JOB_TIMEOUT`, or `JOB_RECONCILED`) so operators still receive actionable context.
+
 **Startup Analysis Semantics:** Job responses can include `startup_analysis_status`, `startup_analysis_ready`, `startup_analysis_last_analyzed_at`, `startup_analysis_failure_reason`, `startup_analysis_file_count`, and `startup_analysis_total_bytes` in addition to `startup_analysis_cached`. Manual analyze requests move the startup-analysis lifecycle through `NOT_ANALYZED`, `ANALYZING`, `READY`, `STALE`, or `FAILED` while the job itself can remain `PENDING`.
 
 **Startup Analysis Cache Semantics:** `startup_analysis_cached` indicates whether a persisted startup-analysis snapshot is available for restart reuse. ECUBE may reuse that snapshot on a later start when the source tree is still current, refresh it if the source changed, clear it automatically after successful completion, and clear it on explicit `POST /jobs/{job_id}/startup-analysis/clear` or manual completion paths. Summary fields such as discovered files, estimated total bytes, last analyzed time, and the safe failure reason can remain available after the reusable per-file snapshot has been discarded.
