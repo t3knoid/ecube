@@ -813,6 +813,8 @@ The Job Detail monitoring view includes a duration field for cumulative active r
 | VERIFYING  | disabled | disabled | disabled |
 | FAILED     | disabled | enabled | enabled |
 
+For restart-reconciled failures, Job Detail should surface a stable operator message such as `Job interrupted by service restart before completion` instead of a generic fallback. If no matching application log line is available, the related failure hint can be derived from sanitized audit evidence (including `JOB_RECONCILED`) so the failed state still presents actionable context.
+
 ### 6c — Create Job Dialog (UC-6.1)
 
 ```
