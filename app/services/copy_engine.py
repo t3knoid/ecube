@@ -1160,12 +1160,12 @@ def _process_file(
             try:
                 file_repo.save(ef)
             except Exception:
-                logger.exception("DB commit failed saving TIMEOUT status for file %s", export_file_id)
+                logger.exception("DB commit failed saving TIMEOUT status for file", {"file_id": export_file_id})
                 if bytes_reported:
                     try:
                         file_repo.decrement_job_bytes(ef.job_id, bytes_reported)
                     except Exception:
-                        logger.exception("DB commit failed restoring copied_bytes for file %s", export_file_id)
+                        logger.exception("DB commit failed restoring copied_bytes for file", {"file_id": export_file_id})
         else:
             ef.status = FileStatus.ERROR
             ef.error_message = last_err
