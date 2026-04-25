@@ -12,6 +12,7 @@ from app.infrastructure.drive_format import DriveFormatter
 from app.infrastructure.drive_mount import DriveMountProvider
 from app.infrastructure import FilesystemDetector, validate_device_path
 from app.models.hardware import DriveState, UsbDrive
+from app.models.jobs import DriveAssignment, ExportFile, FileStatus
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
 from app.repositories.mount_repository import MountRepository
@@ -639,7 +640,8 @@ def mount_drive(
 
 def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                   eject_provider: Optional[DriveEjectProvider] = None,
-                  client_ip: Optional[str] = None) -> UsbDrive:
+                  client_ip: Optional[str] = None,
+                  confirm_incomplete: bool = False) -> UsbDrive:
     drive_repo = DriveRepository(db)
     audit_repo = AuditRepository(db)
     provider = eject_provider or _default_eject_provider()
@@ -665,6 +667,73 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
             status_code=409,
             detail=f"Drive is not in IN_USE state; cannot prepare eject (current state: {initial_state.value})",
         )
+
+    # Check if the drive has any jobs with incomplete files (timeouts or errors).
+    # Warn the operator before allowing eject.
+    try:
+        incomplete_assignments = db.query(DriveAssignment).filter(
+            DriveAssignment.drive_id == drive_id,
+            DriveAssignment.released_at.is_(None)  # Only active assignments
+        ).all()
+        
+        incomplete_file_count = 0
+        for assignment in incomplete_assignments:
+            # Count timeout and error files in each actively assigned job.
+            incomplete_files = db.query(ExportFile).filter(
+                ExportFile.job_id == assignment.job_id,
+                ExportFile.status.in_([FileStatus.TIMEOUT, FileStatus.ERROR])
+            ).count()
+            incomplete_file_count += incomplete_files
+        
+        if incomplete_file_count > 0:
+            if not confirm_incomplete:
+                confirm_message = (
+                    f"EJECT_CONFIRM_REQUIRED: This drive has {incomplete_file_count} incomplete file(s) "
+                    "(timed out or failed) in active assignments. Confirm eject to continue."
+                )
+                try:
+                    audit_repo.add(
+                        action="DRIVE_EJECT_CONFIRM_REQUIRED",
+                        user=actor,
+                        project_id=drive.current_project_id,
+                        drive_id=drive_id,
+                        details={
+                            "drive_id": drive_id,
+                            "incomplete_file_count": incomplete_file_count,
+                        },
+                        client_ip=client_ip,
+                    )
+                except Exception:
+                    logger.exception("Failed to write audit log for DRIVE_EJECT_CONFIRM_REQUIRED")
+                raise HTTPException(status_code=409, detail=confirm_message)
+
+            logger.warning(
+                "DRIVE_EJECT_WITH_INCOMPLETE_JOB",
+                extra={
+                    "drive_id": drive_id,
+                    "incomplete_file_count": incomplete_file_count,
+                    "actor": actor,
+                }
+            )
+            try:
+                audit_repo.add(
+                    action="DRIVE_EJECT_WITH_INCOMPLETE_FILES",
+                    user=actor,
+                    project_id=drive.current_project_id,
+                    drive_id=drive_id,
+                    details={
+                        "drive_id": drive_id,
+                        "incomplete_file_count": incomplete_file_count,
+                        "message": f"Drive ejected with {incomplete_file_count} incomplete file(s) from active job(s)",
+                    },
+                    client_ip=client_ip,
+                )
+            except Exception:
+                logger.exception("Failed to write audit log for DRIVE_EJECT_WITH_INCOMPLETE_FILES")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Error checking for incomplete jobs during eject")
 
     # Perform potentially slow OS operations without holding a database lock.
     # prepare_eject handles sync + unmount internally and returns a structured result.

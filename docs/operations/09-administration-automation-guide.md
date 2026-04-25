@@ -2036,7 +2036,7 @@ ls /mnt/evidence/case-001
 - Check network connectivity to source/destination
 - Verify mount point is still accessible: `mount | grep evidence`
 - Check available disk space: `df -h /dev/sdX` (target USB)
-- Increase timeout in `.env`: `COPY_JOB_TIMEOUT=7200`
+- Increase per-file timeout in `.env`: `COPY_JOB_TIMEOUT=7200`
 - Kill stuck job (if safe): Cancel via API, restart drive
 
 ### USB Drive Not Detected

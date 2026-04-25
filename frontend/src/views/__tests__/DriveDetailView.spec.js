@@ -374,9 +374,42 @@ describe('DriveDetailView mount workflow', () => {
     await wrapper.find('.confirm-dialog-confirm').trigger('click')
     await flushPromises()
 
-    expect(mocks.prepareEjectDrive).toHaveBeenCalledWith(7)
+    expect(mocks.prepareEjectDrive).toHaveBeenCalledWith(7, { confirm_incomplete: false })
     expect(wrapper.find('.confirm-dialog-stub').exists()).toBe(false)
     expect(wrapper.text()).toContain('Drive is busy; close any shell, file browser, or process using the mounted drive and retry prepare-eject')
+  })
+
+  it('requires explicit operator confirmation when backend reports incomplete files before eject', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'IN_USE' })])
+    mocks.prepareEjectDrive
+      .mockRejectedValueOnce({
+        response: {
+          status: 409,
+          data: { detail: 'EJECT_CONFIRM_REQUIRED: This drive has 2 incomplete file(s) (timed out or failed) in active assignments. Confirm eject to continue.' },
+        },
+      })
+      .mockResolvedValueOnce(buildDrive({ current_state: 'AVAILABLE', mount_path: null }))
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const ejectButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.prepareEject'))
+    expect(ejectButton).toBeTruthy()
+
+    await ejectButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('.confirm-dialog-confirm').trigger('click')
+    await flushPromises()
+
+    expect(mocks.prepareEjectDrive).toHaveBeenNthCalledWith(1, 7, { confirm_incomplete: false })
+    expect(wrapper.text()).toContain(i18n.global.t('drives.ejectIncompleteConfirmAction'))
+
+    await wrapper.find('.confirm-dialog-confirm').trigger('click')
+    await flushPromises()
+
+    expect(mocks.prepareEjectDrive).toHaveBeenNthCalledWith(2, 7, { confirm_incomplete: true })
+    expect(wrapper.text()).toContain(i18n.global.t('drives.ejectSuccess'))
   })
 
   it('blocks prepare eject when the drive has an active running job', async () => {

@@ -75,6 +75,9 @@
     "formatConfirmBody": "Formatting destroys all data on this drive.",
     "ejectConfirmTitle": "Prepare drive eject?",
     "ejectConfirmBody": "Ensure no active copy operation is running before eject.",
+    "ejectIncompleteConfirmTitle": "Eject with incomplete files?",
+    "ejectIncompleteConfirmBody": "This drive has timed-out or failed files in active assignments. Confirm to continue ejecting.",
+    "ejectIncompleteConfirmAction": "Confirm and Eject",
     "ejectBlockedActiveJob": "Cannot eject: copy job {jobId} is currently running on this drive.",
     "ejectBlockedUnknownJob": "Cannot eject: an active copy operation is running on this drive.",
     "cocPrompt": "Drive is ready for safe removal. Generate a chain-of-custody report and confirm handoff details.",
@@ -172,6 +175,8 @@
     "startedAt": "Started at",
     "copyThreads": "Copy threads",
     "filesCopied": "Files copied",
+    "filesFailed": "Files failed",
+    "filesTimedOut": "Files timed out",
     "totalCopied": "Total copied",
     "duration": "Duration",
     "copyRate": "Copy rate",
@@ -454,7 +459,8 @@
     "description": "Update selected runtime settings without shell access. Admin role required.",
     "sections": {
       "logging": "Logging",
-      "databasePool": "Database Connection Pool"
+      "databasePool": "Database Connection Pool",
+      "copyJobs": "Copy Jobs"
     },
     "fields": {
       "log_level": {
@@ -485,6 +491,10 @@
       "db_pool_recycle_seconds": {
         "label": "DB Pool Recycle Seconds",
         "help": "Changes to this value are applied after service restart."
+      },
+      "copy_job_timeout": {
+        "label": "Per-file Copy Timeout (seconds)",
+        "help": "Maximum time allowed for one file copy/checksum attempt. Set to 0 to disable timeout enforcement."
       }
     },
     "restartRequiredField": "Requires service restart",
