@@ -1935,6 +1935,8 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 | 13 | Jobs pass emits immediate startup result log | Create at least one `RUNNING` job, restart service, then inspect application logs around startup reconciliation | Logs include `Startup reconciliation: checking jobs` followed by an immediate `Startup reconciliation: jobs result` line with safe counts (`jobs_checked`, `jobs_corrected`) or safe failure classification |
 | 14 | Reconciled job persists restart-interruption failure reason | Create a `RUNNING` or `VERIFYING` job, restart service, then open Job Detail for that job | Job status is `FAILED` and Job Detail shows a stable restart interruption reason (not the generic `This job failed...` fallback) |
 | 15 | Reconciled failed job shows correlated failure entry from audit fallback | Restart with a `RUNNING` job, then inspect Job Detail when no matching file-log failure line is present | Job Detail still shows a related failure entry sourced from reconciliation evidence (`JOB_RECONCILED`) and the entry remains sanitized |
+| 16 | Failed job API uses reconciliation audit fallback when file-log correlation is unavailable | In a test environment, disable file-log correlation (`log_file` unset), then request `GET /jobs/{job_id}` for a restart-reconciled failed job | Response remains `200` and includes the stable restart failure reason plus a sanitized `failure_log_entry` derived from audit evidence (`JOB_RECONCILED`) |
+| 17 | Jobs pass failure path emits safe startup result classification | In a controlled test environment, force a jobs-pass reconciliation exception, then restart service and inspect startup logs | Logs still include `Startup reconciliation: jobs result` with `status=failed` and `reason=job_reconciliation_failed`, without raw provider errors or host paths |
 
 #### 12.14.1 Manual Drill-Down for Reconciled Failure Diagnostics
 
@@ -1949,6 +1951,8 @@ Use this focused checklist when validating the startup-reconciled failure diagno
 - failure reason is restart-interruption-specific rather than the generic fallback message
 - a related failure entry is present even if no file-log `JOB_FAILED` line is available
 6. Confirm operator-visible reason text and related entry do not expose raw host paths or other unsafe internals.
+
+Contributor note: when adding or renumbering QA test cases in this guide, run `python scripts/sync_qa_test_cases.py --sync` and commit the synchronized workbook at `docs/testing/ecube-qa-test-cases.xlsx`.
 
 ### 12.15 System Health
 
