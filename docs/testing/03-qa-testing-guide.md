@@ -1456,7 +1456,7 @@ Setup endpoints are unauthenticated during first-run.
 | 9 | SYSTEM_INITIALIZED audit log | `GET /audit?action=SYSTEM_INITIALIZED` | Audit entry with actor |
 | 10 | Initialize default proxy trust | `POST /setup/initialize` without `trust_proxy_headers` | 200, runtime `TRUST_PROXY_HEADERS=false` persisted |
 | 11 | Initialize explicit proxy trust | `POST /setup/initialize` with `"trust_proxy_headers": true` | 200, runtime `TRUST_PROXY_HEADERS=true` persisted |
-| 12 | Re-initialize persists runtime flags | Call `POST /setup/initialize` after setup with a different `trust_proxy_headers` value | 200, status=`already_initialized`, runtime flag updated |
+| 12 | Re-initialize does not mutate runtime flags | Call `POST /setup/initialize` after setup with a different `trust_proxy_headers` value | 200, status=`already_initialized`, runtime `TRUST_PROXY_HEADERS` remains unchanged |
 | 13 | Runtime env target consistency | Validate running service env file target and setup persistence target are the same (`ECUBE_ENV_FILE`) | Runtime env file is updated, not a workspace-relative `.env` |
 | 14 | Uninstall drop fails closed on invalid target | Run `install.sh --uninstall --drop-database` with missing/invalid/maintenance `DATABASE_URL` | Installer exits non-zero with explicit drop-target error; uninstall does not silently continue |
 
