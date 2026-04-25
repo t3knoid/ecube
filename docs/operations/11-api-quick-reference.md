@@ -83,7 +83,7 @@ During initial setup, `POST /setup/database/test-connection`, `POST /setup/datab
 | POST | `/drives/refresh` | admin/manager | Force rescan of attached drives |
 | POST | `/drives/{drive_id}/initialize` | admin/manager | Initialize drive for project (requires a recognized filesystem, a mounted destination drive, and a mounted share assigned to that project; returns `409` if the drive or source is not ready or is temporarily busy) |
 | POST | `/drives/{drive_id}/format` | admin/manager | Format drive with `ext4` or `exfat`; drive must be AVAILABLE and unmounted |
-| POST | `/drives/{drive_id}/prepare-eject` | admin/manager | Flush filesystem + unmount all partitions; transitions drive to AVAILABLE on success, stays IN_USE on failure |
+| POST | `/drives/{drive_id}/prepare-eject` | admin/manager | Flush filesystem + unmount all partitions; transitions drive to AVAILABLE on success, stays IN_USE on failure. When active assignments contain timed-out or failed files, the first call returns `409` confirmation-required; retry with `?confirm_incomplete=true` to proceed. |
 
 Drive responses include both the stable `device_identifier` and the port-based `port_system_path` used as the UI `Device` value. When available, `serial_number` is exposed separately so operator views can show the physical port-based label and the device serial at the same time.
 
@@ -155,6 +155,8 @@ Compatibility note: To support project-to-source-path policy, use project source
 **Mounted Source Resolution:** Current job creation also includes the selected mounted share identifier. The API resolves the final source path on the trusted backend, treats / as the selected share root, rejects traversal outside that share with **422**, and returns **404** or **409** if the selected mount is missing, unmounted, or assigned to a different project.
 
 **Progress Semantics:** Job list, dashboard, and detail views all use `copied_bytes` together with completed-file counters so active jobs do not appear 100% complete before file completion has caught up.
+
+**File Outcome Counters:** Job payloads include `files_succeeded`, `files_failed`, and `files_timed_out`. `files_timed_out` tracks per-file timeout outcomes (for example, `File copy timed out after 3600s`) and is reported separately from whole-job failure classification.
 
 **Failed Job Evidence Fallback:** When `GET /jobs/{job_id}` cannot correlate a failed-job application log line, ECUBE can synthesize a sanitized failure entry from recent audit evidence (`JOB_FAILED`, `JOB_TIMEOUT`, or `JOB_RECONCILED`) so operators still receive actionable context.
 
