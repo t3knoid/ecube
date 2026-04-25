@@ -733,7 +733,14 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
     except HTTPException:
         raise
     except Exception:
-        logger.exception("Error checking for incomplete jobs during eject")
+        logger.warning(
+            "Prepare-eject incomplete-file precheck failed",
+            extra={
+                "drive_id": drive_id,
+                "actor": actor,
+                "failure_class": "incomplete_precheck_failed",
+            },
+        )
         raise HTTPException(
             status_code=500,
             detail="Unable to verify incomplete-file state; retry prepare-eject",
