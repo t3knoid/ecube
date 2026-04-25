@@ -1,16 +1,16 @@
 """First-run setup wizard endpoints.
 
 These endpoints provide an API-based alternative to ``sudo python -m app.setup``
-for bootstrapping an ECUBE installation.  They are guarded by a **first-run
-check**: once at least one admin user exists in ``user_roles``, the
-``POST /setup/initialize`` endpoint returns ``409 Conflict``.
+for bootstrapping an ECUBE installation. They are guarded by a first-run
+check: once at least one admin user exists in ``user_roles``,
+``POST /setup/initialize`` does not perform setup side-effects.
 
 A cross-process guard (the ``system_initialization`` table with a single-row
 ``CHECK (id = 1)`` constraint) ensures that only one worker can win
-initialization across multiple uvicorn workers.  The guard is acquired
+initialization across multiple uvicorn workers. The guard is acquired
 **before** any OS side-effects: the row is inserted and committed first; if
 OS operations subsequently fail, the row is deleted so that setup can be
-retried.  A process-local thread lock provides an additional optimization to
+retried. A process-local thread lock provides an additional optimization to
 avoid redundant OS work within the same process.
 
 The ``GET /setup/status`` endpoint is **unauthenticated** so that a setup
@@ -266,10 +266,12 @@ def initialize_system(
     already_initialized = _is_setup_initialized_with_auto_migrate(repo, db)
 
     if already_initialized:
-        _persist_setup_runtime_settings(body)
         return SetupInitializeResponse(
             status="already_initialized",
-            message="System is already initialized. An admin user exists.",
+            message=(
+                "System is already initialized. "
+                "Configuration updates require an authenticated admin session."
+            ),
             username=body.username,
             groups_created=[],
         )
@@ -284,10 +286,12 @@ def initialize_system(
         already_initialized = _is_setup_initialized_with_auto_migrate(repo, db)
 
         if already_initialized:
-            _persist_setup_runtime_settings(body)
             return SetupInitializeResponse(
                 status="already_initialized",
-                message="System is already initialized. An admin user exists.",
+                message=(
+                    "System is already initialized. "
+                    "Configuration updates require an authenticated admin session."
+                ),
                 username=body.username,
                 groups_created=[],
             )
