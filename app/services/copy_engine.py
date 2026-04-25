@@ -1096,7 +1096,8 @@ def _process_file(
                             "relative_path": ef.relative_path,
                             "timeout_seconds": file_timeout_seconds,
                             "elapsed_seconds": round(timeout_elapsed_seconds, 2),
-                            "error": err,
+                            "error_code": "copy_timeout",
+                            "error_detail": f"timed_out_after_{file_timeout_seconds}s",
                         },
                     )
                 except Exception:
