@@ -15,6 +15,7 @@ from app.repositories.job_repository import DriveAssignmentRepository, FileRepos
 from app.schemas.jobs import (
     DriveInfoSchema,
     ExportJobSchema,
+    JobAnalyzeRequest,
     JobCreate,
     JobDeleteResponse,
     JobFilesResponse,
@@ -397,6 +398,25 @@ def start_job(
     **Roles:** ``admin``, ``manager``, ``processor``
     """
     job = job_service.start_job(job_id, body, background_tasks, db, actor=current_user.username, client_ip=get_client_ip(request))
+    return _redact_ip(job, current_user, db)
+
+
+@router.post("/{job_id}/analyze", response_model=ExportJobSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
+def analyze_job(
+    job_id: int,
+    background_tasks: BackgroundTasks,
+    body: JobAnalyzeRequest = Body(default_factory=JobAnalyzeRequest),
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
+    request: Request,
+):
+    """Run startup analysis and persist prepared job/file state without starting copy workers.
+
+    **Roles:** ``admin``, ``manager``, ``processor``
+    """
+    _ = body
+    job = job_service.analyze_job(job_id, background_tasks, db, actor=current_user.username, client_ip=get_client_ip(request))
     return _redact_ip(job, current_user, db)
 
 

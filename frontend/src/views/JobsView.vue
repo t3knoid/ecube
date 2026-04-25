@@ -29,6 +29,7 @@ const saving = ref(false)
 const actingJobId = ref(null)
 const jobsRefreshTimer = ref(null)
 const pageError = ref('')
+const pageInfo = ref('')
 const createDialogError = ref('')
 const compatibilityNote = ref('')
 
@@ -69,6 +70,10 @@ const columns = computed(() => [
 ])
 
 function normalizeJobStatus(status) {
+  return String(status || '').toUpperCase()
+}
+
+function normalizeStartupAnalysisStatus(status) {
   return String(status || '').toUpperCase()
 }
 
@@ -279,9 +284,32 @@ function stopJobsRefreshTimer() {
   }
 }
 
+function buildStartupAnalysisCompletionMessage(previousJobs, nextJobs) {
+  const previousById = new Map(previousJobs.map((job) => [Number(job.id), job]))
+
+  for (const job of nextJobs) {
+    const previous = previousById.get(Number(job.id))
+    if (!previous) continue
+
+    const previousStatus = normalizeStartupAnalysisStatus(previous.startup_analysis_status)
+    const nextStatus = normalizeStartupAnalysisStatus(job.startup_analysis_status)
+    if (previousStatus !== 'ANALYZING' || nextStatus === 'ANALYZING' || !nextStatus) continue
+
+    return t('jobs.startupAnalysisCompletedFromList', {
+      jobId: Number(job.id),
+      status: t(`jobs.analysisStates.${nextStatus}`),
+    })
+  }
+
+  return ''
+}
+
 function syncJobsRefreshTimer() {
   stopJobsRefreshTimer()
-  const hasActiveJobs = jobs.value.some((job) => ['RUNNING', 'PAUSING', 'VERIFYING'].includes(normalizeJobStatus(job?.status)))
+  const hasActiveJobs = jobs.value.some((job) => (
+    ['RUNNING', 'PAUSING', 'VERIFYING'].includes(normalizeJobStatus(job?.status))
+      || normalizeStartupAnalysisStatus(job?.startup_analysis_status) === 'ANALYZING'
+  ))
   if (!hasActiveJobs) return
   jobsRefreshTimer.value = window.setInterval(() => {
     void loadJobs()
@@ -293,8 +321,14 @@ async function loadJobs() {
   pageError.value = ''
   compatibilityNote.value = ''
   try {
+    const previousJobs = jobs.value
     const response = await listJobs({ limit: 200 })
-    jobs.value = (response || []).map((item) => normalizeProjectRecord(item, ['project_id']))
+    const nextJobs = (response || []).map((item) => normalizeProjectRecord(item, ['project_id']))
+    const analysisCompletionMessage = buildStartupAnalysisCompletionMessage(previousJobs, nextJobs)
+    jobs.value = nextJobs
+    if (analysisCompletionMessage) {
+      pageInfo.value = analysisCompletionMessage
+    }
   } catch {
     jobs.value = []
     compatibilityNote.value = t('jobs.listUnavailable')
@@ -529,6 +563,7 @@ onBeforeUnmount(() => {
     </header>
 
     <p v-if="pageError" class="error-banner" role="alert" aria-live="assertive">{{ pageError }}</p>
+    <p v-if="pageInfo" class="info-banner" role="status" aria-live="polite">{{ pageInfo }}</p>
     <p v-if="compatibilityNote" class="muted">{{ compatibilityNote }}</p>
 
     <div class="filters">
@@ -716,6 +751,14 @@ textarea {
   color: var(--color-alert-danger-text);
   background: var(--color-alert-danger-bg);
   border: 1px solid var(--color-alert-danger-border);
+  border-radius: var(--border-radius);
+  padding: var(--space-sm);
+}
+
+.info-banner {
+  color: var(--color-alert-success-text);
+  background: var(--color-alert-success-bg);
+  border: 1px solid var(--color-alert-success-border);
   border-radius: var(--border-radius);
   padding: var(--space-sm);
 }

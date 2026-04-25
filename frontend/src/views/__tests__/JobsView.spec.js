@@ -104,6 +104,7 @@ function mountView() {
 
 describe('JobsView grouped create dialog', () => {
   beforeEach(() => {
+    vi.useRealTimers()
     mocks.push.mockReset()
     mocks.listJobs.mockReset()
     mocks.createJob.mockReset()
@@ -130,6 +131,43 @@ describe('JobsView grouped create dialog', () => {
       buildMount({ id: 12, project_id: 'PROJ-002', status: 'MOUNTED' }),
       buildMount({ id: 13, project_id: 'PROJ-001', status: 'UNMOUNTED' }),
     ])
+  })
+
+  it('shows a page message when startup analysis finishes while the list is open', async () => {
+    vi.useFakeTimers()
+    mocks.listJobs
+      .mockResolvedValueOnce([
+        {
+          id: 61,
+          project_id: 'PROJ-001',
+          evidence_number: 'EV-061',
+          status: 'PENDING',
+          source_path: '/nfs/project-001',
+          startup_analysis_status: 'ANALYZING',
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 61,
+          project_id: 'PROJ-001',
+          evidence_number: 'EV-061',
+          status: 'PENDING',
+          source_path: '/nfs/project-001',
+          startup_analysis_status: 'READY',
+        },
+      ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+
+    expect(mocks.listJobs).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('Startup analysis finished for job #61 with status Ready.')
+
+    wrapper.unmount()
+    vi.useRealTimers()
   })
 
   it('opens a grouped dialog with only the project field active initially', async () => {

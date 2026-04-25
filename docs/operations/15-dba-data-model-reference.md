@@ -113,7 +113,7 @@ This section captures the primary physical schema details used by DBAs.
 - `system_initialization`
 - `reconciliation_lock`
 
-`export_jobs` now also stores `startup_analysis_file_count`, `startup_analysis_total_bytes`, and `startup_analysis_entries`. In PostgreSQL, `startup_analysis_entries` is stored as `JSONB` and is cleared when the startup-analysis snapshot is invalidated, explicitly removed, or automatically discarded after successful completion.
+`export_jobs` now also stores startup-analysis lifecycle and summary fields: `startup_analysis_status`, `startup_analysis_last_analyzed_at`, `startup_analysis_failure_reason`, `startup_analysis_file_count`, `startup_analysis_total_bytes`, `startup_analysis_share_read_mbps`, `startup_analysis_drive_write_mbps`, `startup_analysis_estimated_duration_seconds`, and `startup_analysis_entries`. In PostgreSQL, `startup_analysis_entries` is stored as `JSONB` and is cleared when the reusable startup-analysis snapshot is invalidated, explicitly removed, or automatically discarded after successful completion, while summary fields can remain available for operator review and API responses.
 
 ### Core Enumerations
 
@@ -121,6 +121,7 @@ This section captures the primary physical schema details used by DBAs.
 - `mount_type`: `NFS`, `SMB`
 - `mount_status`: `MOUNTED`, `UNMOUNTED`, `ERROR`
 - `job_status`: `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `VERIFYING`
+- `startup_analysis_status`: `NOT_ANALYZED`, `ANALYZING`, `READY`, `STALE`, `FAILED`
 - `file_status`: `PENDING`, `COPYING`, `DONE`, `ERROR`, `RETRYING`
 - `ecube_role`: `admin`, `manager`, `processor`, `auditor`
 
@@ -136,6 +137,8 @@ This section captures the primary physical schema details used by DBAs.
 
 - Foreign keys enforce hierarchy and lineage across hardware and job domains.
 - Enum-backed status columns constrain legal state values.
+- Manual startup analysis can persist summary values while a job remains `PENDING`, so consumers should not infer copy execution from startup-analysis fields alone.
+- `startup_analysis_entries` is the reusable per-file snapshot; summary columns such as file count, total bytes, last analyzed time, and sanitized failure reason can remain populated after those entries are cleared.
 - Single-row guard constraints serialize global operations (`initialize`, `reconciliation`).
 - Audit rows may exist without job linkage for non-job security or admin events.
 

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime, Text, JSON
+from sqlalchemy import Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime, Text, JSON, Float
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.sql import func
@@ -25,6 +25,14 @@ class FileStatus(str, enum.Enum):
     RETRYING = "RETRYING"
 
 
+class StartupAnalysisStatus(str, enum.Enum):
+    NOT_ANALYZED = "NOT_ANALYZED"
+    ANALYZING = "ANALYZING"
+    READY = "READY"
+    STALE = "STALE"
+    FAILED = "FAILED"
+
+
 class ExportJob(Base):
     __tablename__ = "export_jobs"
     id = Column(Integer, primary_key=True)
@@ -47,8 +55,14 @@ class ExportJob(Base):
     client_ip = Column(String(45), nullable=True)
     callback_url = Column(String, nullable=True)
     failure_reason = Column(Text, nullable=True)
+    startup_analysis_status = Column(Enum(StartupAnalysisStatus, native_enum=False), default=StartupAnalysisStatus.NOT_ANALYZED, nullable=False)
+    startup_analysis_last_analyzed_at = Column(DateTime(timezone=True), nullable=True)
+    startup_analysis_failure_reason = Column(Text, nullable=True)
     startup_analysis_file_count = Column(Integer, nullable=True)
     startup_analysis_total_bytes = Column(BigInteger, nullable=True)
+    startup_analysis_share_read_mbps = Column(Float, nullable=True)
+    startup_analysis_drive_write_mbps = Column(Float, nullable=True)
+    startup_analysis_estimated_duration_seconds = Column(Integer, nullable=True)
     startup_analysis_entries = Column(JSON().with_variant(JSONB(), "postgresql"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     files = relationship("ExportFile", back_populates="job")
@@ -63,6 +77,10 @@ class ExportJob(Base):
     @property
     def startup_analysis_cached(self) -> bool:
         return self.startup_analysis_entries is not None
+
+    @property
+    def startup_analysis_ready(self) -> bool:
+        return self.startup_analysis_cached and self.startup_analysis_status == StartupAnalysisStatus.READY
 
 
 class ExportFile(Base):
