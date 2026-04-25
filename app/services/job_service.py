@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.exceptions import ConflictError, ECUBEException, EncodingError
 from app.models.hardware import DriveState, UsbDrive
-from app.models.jobs import DriveAssignment, ExportFile, ExportJob, JobStatus, Manifest
+from app.models.jobs import DriveAssignment, ExportFile, ExportJob, JobStatus, Manifest, StartupAnalysisStatus
 from app.models.network import MountStatus
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
@@ -23,10 +23,22 @@ from app.repositories.job_repository import (
 from app.repositories.mount_repository import MountRepository
 from app.schemas.jobs import JobCreate, JobStart, JobUpdate
 from app.services import copy_engine
-from app.utils.sanitize import is_encoding_error, resolve_source_path, validate_source_path
+from app.utils.sanitize import is_encoding_error, resolve_source_path, sanitize_error_message, validate_source_path
 from app.utils.path_overlap import classify_source_path_overlap
 
 logger = logging.getLogger(__name__)
+
+
+def _log_startup_analysis_service_failure(
+    message: str,
+    *,
+    job_id: int,
+    reason: str,
+    exc: Optional[BaseException] = None,
+) -> None:
+    logger.info(message, extra={"job_id": job_id, "reason": reason})
+    if exc is not None:
+        logger.debug(message, extra={"job_id": job_id, "reason": reason, "raw_error": str(exc)}, exc_info=True)
 
 
 _ACTIVE_SOURCE_OVERLAP_STATUSES = (
@@ -486,10 +498,45 @@ def _clear_job_startup_analysis_cache(job_row: Any) -> dict[str, int]:
         "cached_file_count": int(cast(Optional[int], job_row.startup_analysis_file_count) or 0),
         "cached_total_bytes": int(cast(Optional[int], job_row.startup_analysis_total_bytes) or 0),
     }
+    job_row.startup_analysis_status = StartupAnalysisStatus.NOT_ANALYZED
+    job_row.startup_analysis_last_analyzed_at = None
+    job_row.startup_analysis_failure_reason = None
     job_row.startup_analysis_file_count = None
     job_row.startup_analysis_total_bytes = None
+    job_row.startup_analysis_share_read_mbps = None
+    job_row.startup_analysis_drive_write_mbps = None
+    job_row.startup_analysis_estimated_duration_seconds = None
     job_row.startup_analysis_entries = None
     return details
+
+
+def _mark_job_startup_analysis_stale(job_row: Any) -> None:
+    job_row.startup_analysis_status = StartupAnalysisStatus.STALE
+    job_row.startup_analysis_last_analyzed_at = None
+    job_row.startup_analysis_failure_reason = None
+    job_row.startup_analysis_file_count = None
+    job_row.startup_analysis_total_bytes = None
+    job_row.startup_analysis_share_read_mbps = None
+    job_row.startup_analysis_drive_write_mbps = None
+    job_row.startup_analysis_estimated_duration_seconds = None
+    job_row.startup_analysis_entries = None
+
+
+def _has_persisted_startup_analysis_state(job_row: Any) -> bool:
+    return any(
+        value is not None
+        for value in (
+            None if cast(Optional[StartupAnalysisStatus], job_row.startup_analysis_status) == StartupAnalysisStatus.NOT_ANALYZED else job_row.startup_analysis_status,
+            cast(Optional[datetime], job_row.startup_analysis_last_analyzed_at),
+            cast(Optional[str], job_row.startup_analysis_failure_reason),
+            cast(Optional[int], job_row.startup_analysis_file_count),
+            cast(Optional[int], job_row.startup_analysis_total_bytes),
+            cast(Optional[float], job_row.startup_analysis_share_read_mbps),
+            cast(Optional[float], job_row.startup_analysis_drive_write_mbps),
+            cast(Optional[int], job_row.startup_analysis_estimated_duration_seconds),
+            cast(Optional[object], job_row.startup_analysis_entries),
+        )
+    )
 
 
 def _require_editable_job(job: ExportJob) -> None:
@@ -498,6 +545,15 @@ def _require_editable_job(job: ExportJob) -> None:
         raise HTTPException(
             status_code=409,
             detail="Only pending, paused, or failed jobs can be edited from Job Detail",
+        )
+
+
+def _reject_when_startup_analysis_running(job: ExportJob, *, action: str) -> None:
+    job_row = _row(job)
+    if cast(Optional[StartupAnalysisStatus], job_row.startup_analysis_status) == StartupAnalysisStatus.ANALYZING:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot {action} while startup analysis is in progress",
         )
 
 
@@ -529,6 +585,7 @@ def update_job(
 
     job_row = _row(job)
     _require_editable_job(job)
+    _reject_when_startup_analysis_running(job, action="edit this job")
 
     if body.project_id != cast(Optional[str], job_row.project_id):
         raise HTTPException(
@@ -621,7 +678,12 @@ def update_job(
     job_row.retry_delay_seconds = int(body.retry_delay_seconds)
     job_row.callback_url = body.callback_url
     if source_path_changed:
-        _clear_job_startup_analysis_cache(job_row)
+        db.query(ExportFile).filter(ExportFile.job_id == job_id).delete(synchronize_session=False)
+        job_row.file_count = 0
+        job_row.total_bytes = 0
+        job_row.copied_bytes = 0
+        if _has_persisted_startup_analysis_state(job_row):
+            _mark_job_startup_analysis_stale(job_row)
 
     try:
         job_repo.save(job)
@@ -667,6 +729,7 @@ def complete_job(
         raise HTTPException(status_code=404, detail="Job not found")
 
     job_row = _row(job)
+    _reject_when_startup_analysis_running(job, action="complete this job")
     current_status = cast(JobStatus, job_row.status)
     if current_status not in (JobStatus.PENDING, JobStatus.PAUSED, JobStatus.FAILED):
         raise HTTPException(
@@ -724,8 +787,13 @@ def complete_job(
                 },
                 client_ip=client_ip,
             )
-        except Exception:
-            logger.exception("Failed to write audit log for JOB_STARTUP_ANALYSIS_CACHE_CLEARED")
+        except Exception as exc:
+            _log_startup_analysis_service_failure(
+                "Failed to write audit log for JOB_STARTUP_ANALYSIS_CACHE_CLEARED",
+                job_id=job_id,
+                reason="Audit log write failed after startup analysis cache clear",
+                exc=exc,
+            )
 
     db.refresh(job)
     return job
@@ -750,6 +818,7 @@ def clear_job_startup_analysis_cache(
         raise HTTPException(status_code=404, detail="Job not found")
 
     job_row = _row(job)
+    _reject_when_startup_analysis_running(job, action="clear cached startup analysis")
     cache_clear_details: Optional[dict[str, int]] = None
     active_drive_id: Optional[int] = None
 
@@ -757,10 +826,12 @@ def clear_job_startup_analysis_cache(
         cache_clear_details = _clear_job_startup_analysis_cache(job_row)
         try:
             job_repo.save(job)
-        except Exception:
-            logger.exception(
+        except Exception as exc:
+            _log_startup_analysis_service_failure(
                 "DB commit failed while clearing startup analysis cache",
-                extra={"job_id": job_id},
+                job_id=job_id,
+                reason="Database error while clearing cached startup analysis",
+                exc=exc,
             )
             raise HTTPException(
                 status_code=500,
@@ -784,9 +855,99 @@ def clear_job_startup_analysis_cache(
                 },
                 client_ip=client_ip,
             )
-        except Exception:
-            logger.exception("Failed to write audit log for JOB_STARTUP_ANALYSIS_CACHE_CLEARED")
+        except Exception as exc:
+            _log_startup_analysis_service_failure(
+                "Failed to write audit log for JOB_STARTUP_ANALYSIS_CACHE_CLEARED",
+                job_id=job_id,
+                reason="Audit log write failed after startup analysis cache clear",
+                exc=exc,
+            )
 
+    db.refresh(job)
+    return job
+
+
+def analyze_job(
+    job_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session,
+    actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
+) -> ExportJob:
+    job_repo = JobRepository(db)
+    audit_repo = AuditRepository(db)
+
+    job = job_repo.get_for_update(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    job_row = _row(job)
+    _reject_when_startup_analysis_running(job, action="analyze this job")
+    current_status = cast(JobStatus, job_row.status)
+    if current_status not in (JobStatus.PENDING, JobStatus.FAILED, JobStatus.PAUSED):
+        raise HTTPException(
+            status_code=409,
+            detail="Only pending, paused, or failed jobs can be analyzed",
+        )
+
+    try:
+        job_row.source_path = validate_source_path(
+            cast(str, job_row.source_path),
+            usb_mount_base_path=settings.usb_mount_base_path,
+            target_mount_path=cast(Optional[str], job_row.target_mount_path),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    job_row.startup_analysis_status = StartupAnalysisStatus.ANALYZING
+    job_row.startup_analysis_failure_reason = None
+    try:
+        job_repo.save(job)
+    except Exception as exc:
+        _log_startup_analysis_service_failure(
+            "DB commit failed while scheduling startup analysis",
+            job_id=job_id,
+            reason=sanitize_error_message(exc, "Database error while scheduling startup analysis"),
+            exc=exc,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Database error while scheduling startup analysis",
+        )
+
+    assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
+    assignment_row = _row(assignment) if assignment is not None else None
+    active_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
+    job_project_id = cast(Optional[str], job_row.project_id)
+
+    logger.info(
+        f"JOB_STARTUP_ANALYSIS_STARTED job_id={job_id} project_id={job_project_id} "
+        f"status={job_row.startup_analysis_status.value} actor={actor or 'system'}",
+        extra={
+            "job_id": job_id,
+            "project_id": job_project_id,
+            "status": job_row.startup_analysis_status.value,
+            "actor": actor or "system",
+        },
+    )
+
+    try:
+        audit_repo.add(
+            action="JOB_STARTUP_ANALYSIS_REQUESTED",
+            user=actor,
+            project_id=job_project_id,
+            drive_id=active_drive_id,
+            job_id=job_id,
+            details={
+                "project_id": job_project_id,
+                "drive_id": active_drive_id,
+            },
+            client_ip=client_ip,
+        )
+    except Exception:
+        logger.exception("Failed to write audit log for JOB_STARTUP_ANALYSIS_REQUESTED")
+
+    background_tasks.add_task(copy_engine.run_startup_analysis, job_id, actor=actor, client_ip=client_ip)
     db.refresh(job)
     return job
 
@@ -806,6 +967,7 @@ def delete_job(
         raise HTTPException(status_code=404, detail="Job not found")
 
     job_row = _row(job)
+    _reject_when_startup_analysis_running(job, action="delete this job")
     if cast(JobStatus, job_row.status) != JobStatus.PENDING:
         raise HTTPException(
             status_code=409,
@@ -874,6 +1036,7 @@ def start_job(
         raise HTTPException(status_code=404, detail="Job not found")
 
     job_row = _row(job)
+    _reject_when_startup_analysis_running(job, action="start this job")
     current_status = cast(JobStatus, job_row.status)
     if current_status not in (JobStatus.PENDING, JobStatus.FAILED, JobStatus.PAUSED):
         raise HTTPException(
