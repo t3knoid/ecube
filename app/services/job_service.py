@@ -23,10 +23,22 @@ from app.repositories.job_repository import (
 from app.repositories.mount_repository import MountRepository
 from app.schemas.jobs import JobCreate, JobStart, JobUpdate
 from app.services import copy_engine
-from app.utils.sanitize import is_encoding_error, resolve_source_path, validate_source_path
+from app.utils.sanitize import is_encoding_error, resolve_source_path, sanitize_error_message, validate_source_path
 from app.utils.path_overlap import classify_source_path_overlap
 
 logger = logging.getLogger(__name__)
+
+
+def _log_startup_analysis_service_failure(
+    message: str,
+    *,
+    job_id: int,
+    reason: str,
+    exc: Optional[BaseException] = None,
+) -> None:
+    logger.info(message, extra={"job_id": job_id, "reason": reason})
+    if exc is not None:
+        logger.debug(message, extra={"job_id": job_id, "reason": reason, "raw_error": str(exc)}, exc_info=True)
 
 
 _ACTIVE_SOURCE_OVERLAP_STATUSES = (
@@ -775,8 +787,13 @@ def complete_job(
                 },
                 client_ip=client_ip,
             )
-        except Exception:
-            logger.exception("Failed to write audit log for JOB_STARTUP_ANALYSIS_CACHE_CLEARED")
+        except Exception as exc:
+            _log_startup_analysis_service_failure(
+                "Failed to write audit log for JOB_STARTUP_ANALYSIS_CACHE_CLEARED",
+                job_id=job_id,
+                reason="Audit log write failed after startup analysis cache clear",
+                exc=exc,
+            )
 
     db.refresh(job)
     return job
@@ -809,10 +826,12 @@ def clear_job_startup_analysis_cache(
         cache_clear_details = _clear_job_startup_analysis_cache(job_row)
         try:
             job_repo.save(job)
-        except Exception:
-            logger.exception(
+        except Exception as exc:
+            _log_startup_analysis_service_failure(
                 "DB commit failed while clearing startup analysis cache",
-                extra={"job_id": job_id},
+                job_id=job_id,
+                reason="Database error while clearing cached startup analysis",
+                exc=exc,
             )
             raise HTTPException(
                 status_code=500,
@@ -836,8 +855,13 @@ def clear_job_startup_analysis_cache(
                 },
                 client_ip=client_ip,
             )
-        except Exception:
-            logger.exception("Failed to write audit log for JOB_STARTUP_ANALYSIS_CACHE_CLEARED")
+        except Exception as exc:
+            _log_startup_analysis_service_failure(
+                "Failed to write audit log for JOB_STARTUP_ANALYSIS_CACHE_CLEARED",
+                job_id=job_id,
+                reason="Audit log write failed after startup analysis cache clear",
+                exc=exc,
+            )
 
     db.refresh(job)
     return job
@@ -879,8 +903,13 @@ def analyze_job(
     job_row.startup_analysis_failure_reason = None
     try:
         job_repo.save(job)
-    except Exception:
-        logger.exception("DB commit failed while scheduling startup analysis", extra={"job_id": job_id})
+    except Exception as exc:
+        _log_startup_analysis_service_failure(
+            "DB commit failed while scheduling startup analysis",
+            job_id=job_id,
+            reason=sanitize_error_message(exc, "Database error while scheduling startup analysis"),
+            exc=exc,
+        )
         raise HTTPException(
             status_code=500,
             detail="Database error while scheduling startup analysis",
