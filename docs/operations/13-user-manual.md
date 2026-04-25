@@ -918,8 +918,10 @@ Use this action when mounted-share state appears stale or inconsistent and you n
 The results page shows:
 
 - A summary panel with `Status`, checked/corrected counts for network mounts and USB mounts, and `Corrective operations failed`.
-- A `Reconciled USB Mounts` table with drive fields similar to the Drives page.
-- A `Reconciled Shared Mounts` table with mount fields similar to the Mounts page.
+- A `Current USB Drives` table with drive fields similar to the Drives page.
+- A `Current Shared Mounts` table with mount fields similar to the Mounts page.
+
+These tables are post-run snapshots of current drive and mount state to help operators investigate reconciliation outcomes; they are not limited to only rows that were corrected during the run.
 
 Status meanings:
 
