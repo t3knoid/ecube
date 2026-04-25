@@ -708,7 +708,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                 raise HTTPException(status_code=409, detail=confirm_message)
 
             logger.warning(
-                "DRIVE_EJECT_WITH_INCOMPLETE_JOB",
+                "DRIVE_EJECT_WITH_INCOMPLETE_FILES",
                 extra={
                     "drive_id": drive_id,
                     "incomplete_file_count": incomplete_file_count,
