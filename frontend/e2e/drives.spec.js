@@ -217,7 +217,7 @@ test('prepare eject surfaces busy-drive detail without trapping the dialog', asy
 
   await routeJson(page, '**/api/drives', () => [drive])
   await routeJson(page, '**/api/jobs**', [])
-  await page.route('**/api/drives/7/prepare-eject', async (route) => {
+  await page.route('**/api/drives/7/prepare-eject**', async (route) => {
     await route.fulfill({
       status: 409,
       contentType: 'application/json',
@@ -277,7 +277,7 @@ test('drives list and drive detail admin flows', async ({ page }) => {
     drive.current_state = 'IN_USE'
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(drive) })
   })
-  await page.route('**/api/drives/1/prepare-eject', async (route) => {
+  await page.route('**/api/drives/1/prepare-eject**', async (route) => {
     drive.current_state = 'AVAILABLE'
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(drive) })
   })
