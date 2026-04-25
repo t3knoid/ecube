@@ -201,6 +201,7 @@ describe('SystemView USB topology tab', () => {
 describe('SystemView logs tab', () => {
   beforeEach(() => {
     mocks.hasRole.mockReset()
+    mocks.routerPush.mockReset()
     mocks.getSystemHealth.mockReset()
     mocks.getUsbTopology.mockReset()
     mocks.getBlockDevices.mockReset()
@@ -808,6 +809,7 @@ describe('SystemView logs tab', () => {
 describe('SystemView managed-mount reconciliation action', () => {
   beforeEach(() => {
     mocks.hasRole.mockReset()
+    mocks.routerPush.mockReset()
     mocks.getSystemHealth.mockReset()
     mocks.getUsbTopology.mockReset()
     mocks.getBlockDevices.mockReset()
