@@ -9,6 +9,7 @@ Covers:
 """
 
 import os
+import logging
 import pytest
 from typing import Optional, Tuple
 from unittest.mock import patch
@@ -501,6 +502,7 @@ class TestReconcileJobs:
         db.refresh(job)
         assert job.status == JobStatus.FAILED
         assert job.completed_at is not None
+        assert job.failure_reason == "Job interrupted by service restart before completion"
         assert result["jobs_checked"] == 1
         assert result["jobs_corrected"] == 1
 
@@ -791,6 +793,30 @@ class TestRunStartupReconciliation:
         assert result["identity"]["groups"]["groups_created"] == 1
         assert result["mounts"]["mounts_corrected"] == 1
         assert result["jobs"]["jobs_corrected"] == 1
+
+    def test_jobs_pass_emits_immediate_result_log(self, db: Session, caplog):
+        _make_job(db, JobStatus.RUNNING)
+
+        provider = FakeMountProvider(mounted_paths=set())
+        drive_provider = FakeDriveMountProvider()
+
+        with caplog.at_level(logging.INFO):
+            run_startup_reconciliation(
+                db,
+                provider,
+                drive_mount_provider=drive_provider,
+                topology_source=_empty_topology,
+                filesystem_detector=FakeFilesystemDetector(),
+            )
+
+        matches = [
+            record for record in caplog.records
+            if record.getMessage() == "Startup reconciliation: jobs result"
+        ]
+        assert len(matches) == 1
+        assert getattr(matches[0], "status", None) == "ok"
+        assert getattr(matches[0], "jobs_checked", None) == 1
+        assert getattr(matches[0], "jobs_corrected", None) == 1
 
     def test_identity_failure_does_not_block_other_passes(self, db: Session):
         _make_mount(db, MountStatus.MOUNTED, "/mnt/stale")

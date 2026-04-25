@@ -731,6 +731,46 @@ def test_get_failed_job_uses_audit_fallback_when_log_file_disabled(client, db, m
     )
 
 
+def test_get_failed_job_uses_reconciliation_audit_fallback_when_log_unavailable(client, db, monkeypatch):
+    from app.routers import jobs as jobs_router
+
+    job = ExportJob(
+        project_id="PROJ-FAILED-RECON-001",
+        evidence_number="EV-FAILED-RECON-001",
+        source_path="/data/failed-reconciled",
+        status=JobStatus.FAILED,
+        failure_reason="Job interrupted by service restart before completion",
+    )
+    db.add(job)
+    db.flush()
+    db.add(
+        AuditLog(
+            action="JOB_RECONCILED",
+            job_id=job.id,
+            timestamp=datetime(2026, 4, 21, 15, 45, tzinfo=timezone.utc),
+            details={
+                "reason": "interrupted by restart",
+                "old_status": "RUNNING",
+                "new_status": "FAILED",
+            },
+        )
+    )
+    db.commit()
+
+    monkeypatch.setattr(jobs_router.settings, "log_file", None)
+
+    response = client.get(f"/jobs/{job.id}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "FAILED"
+    assert data["failure_reason"] == "Job interrupted by service restart before completion"
+    assert data["failure_log_entry"] == (
+        "2026-04-21T15:45:00 [AUDIT] JOB_RECONCILED job_id="
+        f"{job.id} reason=interrupted by restart"
+    )
+
+
 def test_get_job_files_processor_allowed(client, db):
     job = ExportJob(
         project_id="PROJ-FILES-001",
