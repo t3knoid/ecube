@@ -11,6 +11,7 @@ Covers:
 
 from __future__ import annotations
 
+import os
 import stat
 from unittest.mock import MagicMock, patch
 
@@ -19,6 +20,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.models.users import UserRole
+from app.services import database_service
 from app.schemas.database import (
     DatabaseProvisionRequest,
     DatabaseSettingsUpdateRequest,
@@ -179,6 +181,18 @@ class TestDatabaseSchemaValidation:
     def test_settings_rejects_invalid_host(self):
         with pytest.raises(ValidationError, match="host"):
             DatabaseSettingsUpdateRequest(host="http://evil.com")
+
+
+class TestDatabaseServiceEnvFilePath:
+    """Validate runtime .env path resolution used by setup persistence."""
+
+    def test_get_env_file_path_prefers_explicit_env_var(self, monkeypatch):
+        monkeypatch.setenv("ECUBE_ENV_FILE", "/opt/ecube/.env")
+        assert database_service._get_env_file_path() == "/opt/ecube/.env"
+
+    def test_get_env_file_path_defaults_to_absolute_dotenv(self, monkeypatch):
+        monkeypatch.delenv("ECUBE_ENV_FILE", raising=False)
+        assert database_service._get_env_file_path() == os.path.abspath(".env")
 
 
 # ---------------------------------------------------------------------------

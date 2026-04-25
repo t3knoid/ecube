@@ -1441,19 +1441,24 @@ Run these checks when the tested build includes the in-app Help feature.
 
 ### 12.11 First-Run Setup
 
-Setup endpoints are unauthenticated and can only succeed once.
+Setup endpoints are unauthenticated during first-run.
 
 | # | Test | How | Expected |
 |---|------|-----|----------|
 | 1 | Status — not initialized | `GET /setup/status` on fresh database | 200, `{"initialized": false}` |
 | 2 | Initialize | `POST /setup/initialize` with valid username and password | 200, returns message, username, groups_created |
 | 3 | Status — initialized | `GET /setup/status` after initialization | 200, `{"initialized": true}` |
-| 4 | Re-initialize rejected | `POST /setup/initialize` again | 409, Conflict |
+| 4 | Re-initialize informational | `POST /setup/initialize` again | 200, status=`already_initialized` |
 | 5 | Invalid username | `POST /setup/initialize` with uppercase or special chars | 422 |
 | 6 | Empty password | `POST /setup/initialize` with `{"password": ""}` | 422 |
 | 7 | Unsafe password chars | `POST /setup/initialize` with password containing newline or colon | 422, unsafe characters |
 | 8 | Login as initialized admin | `POST /auth/token` with the admin credentials from step 2 | 200, JWT contains `admin` role |
 | 9 | SYSTEM_INITIALIZED audit log | `GET /audit?action=SYSTEM_INITIALIZED` | Audit entry with actor |
+| 10 | Initialize default proxy trust | `POST /setup/initialize` without `trust_proxy_headers` | 200, runtime `TRUST_PROXY_HEADERS=false` persisted |
+| 11 | Initialize explicit proxy trust | `POST /setup/initialize` with `"trust_proxy_headers": true` | 200, runtime `TRUST_PROXY_HEADERS=true` persisted |
+| 12 | Re-initialize persists runtime flags | Call `POST /setup/initialize` after setup with a different `trust_proxy_headers` value | 200, status=`already_initialized`, runtime flag updated |
+| 13 | Runtime env target consistency | Validate running service env file target and setup persistence target are the same (`ECUBE_ENV_FILE`) | Runtime env file is updated, not a workspace-relative `.env` |
+| 14 | Uninstall drop fails closed on invalid target | Run `install.sh --uninstall --drop-database` with missing/invalid/maintenance `DATABASE_URL` | Installer exits non-zero with explicit drop-target error; uninstall does not silently continue |
 
 ### 12.12 Chain-of-Custody Handoff
 
