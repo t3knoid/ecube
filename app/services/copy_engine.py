@@ -813,8 +813,13 @@ def prepare_job_startup_analysis(
                     details=details,
                     client_ip=client_ip,
                 )
-            except Exception:
-                logger.exception("Failed to write audit log for JOB_STARTUP_ANALYSIS_COMPLETED")
+            except Exception as audit_exc:
+                _log_startup_analysis_failure(
+                    "Failed to write audit log for JOB_STARTUP_ANALYSIS_COMPLETED",
+                    job_id=job_id,
+                    reason="Audit log write failed after startup analysis completion",
+                    exc=audit_exc,
+                )
         return {
             "src_by_rel": src_by_rel,
             "size_by_rel": size_by_rel,
