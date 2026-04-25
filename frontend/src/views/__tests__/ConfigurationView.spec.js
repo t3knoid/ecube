@@ -35,6 +35,7 @@ function buildResponse(overrides = {}) {
     db_pool_size: 5,
     db_pool_max_overflow: 10,
     db_pool_recycle_seconds: -1,
+    copy_job_timeout: 3600,
     ...overrides,
   }
 

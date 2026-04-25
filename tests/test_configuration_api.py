@@ -21,6 +21,10 @@ class TestConfigurationSchemaValidation:
         req = ConfigurationUpdateRequest(log_level="DEBUG")
         assert req.log_level == "DEBUG"
 
+    def test_update_accepts_copy_job_timeout(self):
+        req = ConfigurationUpdateRequest(copy_job_timeout=120)
+        assert req.copy_job_timeout == 120
+
 
 class TestConfigurationEndpoints:
     def test_get_configuration_admin_allowed(self, admin_client):
@@ -30,6 +34,7 @@ class TestConfigurationEndpoints:
         keys = {item["key"] for item in data["settings"]}
         assert "log_level" in keys
         assert "db_pool_recycle_seconds" in keys
+        assert "copy_job_timeout" in keys
 
     def test_get_configuration_returns_default_enabled_log_file(self, admin_client):
         resp = admin_client.get("/admin/configuration")
