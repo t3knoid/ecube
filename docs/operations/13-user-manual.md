@@ -616,6 +616,8 @@ Use them when appropriate:
 
 When a pause is requested, the Jobs list and Job Detail page can show a `Pause in progress` dialog while ECUBE waits for active copy threads to drain. The Start action remains unavailable during `PAUSING` and becomes available again once the job reaches `PAUSED`.
 
+While a job is actively copying, Job Detail shows a live `Duration` field that reflects cumulative active runtime only. The displayed value continues updating while the job is `RUNNING`, does not add paused time while the job is `PAUSED`, and resumes from the previously stored active runtime after a later restart instead of resetting to zero.
+
 Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed `manifest.json` file on the destination drive.
 
 During startup analysis, Job Detail can show `Preparing copy...` before any totals are known. While this state is visible, the page also explains that ECUBE is still scanning the source files and calculating totals, which can take time for large evidence sets.
@@ -628,7 +630,7 @@ If the Jobs page remains open while a manual analyze run finishes, ECUBE can sho
 
 If a job is restarted after a failed or paused run and its persisted startup-analysis snapshot is still current, ECUBE can reuse that cached scan instead of repeating the full startup analysis. When operators need to discard that snapshot, the `Clear startup analysis cache` action opens a confirmation dialog and removes only the cached startup-analysis data. It does not remove per-file history, copied-file state, or other audit-relevant job records.
 
-When a job is paused, completed, or fails, the detail view shows a summary with the job start time, copy thread count, files copied, total copied, elapsed time, copy rate, and any failure reason or related log hint. Failed jobs prefer a persisted sanitized job-level failure reason when one is available, so operators can see stable messages such as `Copy job timed out before all files completed` or `Unexpected copy failure` before any derived per-file fallback.
+When a job is paused, completed, or fails, the detail view shows a summary with the job start time, copy thread count, files copied, total copied, elapsed time, copy rate, and any failure reason or related log hint. The elapsed time remains cumulative across earlier run segments, so a paused and later resumed job keeps the same additive runtime history that was shown while it was active. Failed jobs prefer a persisted sanitized job-level failure reason when one is available, so operators can see stable messages such as `Copy job timed out before all files completed` or `Unexpected copy failure` before any derived per-file fallback.
 
 When ECUBE can safely correlate a failed copy to the selected source or destination for that job, the failure summary may add relative hints such as `source: reports/a.txt` or `destination: reports/a.txt`. Raw host or mount paths are not shown in the Job Detail summary.
 

@@ -1214,6 +1214,36 @@ On the first response after start, totals can still be zero while the background
 > monitor progress. Per-file status (`PENDING`, `COPYING`, `DONE`, `ERROR`,
 > `RETRYING`) is tracked in the `export_files` table.
 
+To monitor elapsed copy time, use `active_duration_seconds` as the persisted cumulative active runtime across earlier run and resume cycles. For a currently active job, combine that stored value with the current run segment since `started_at` to derive live duration. Paused time is excluded from the cumulative total.
+
+Copy rate is derived from the job detail response rather than returned as a dedicated field. A simple operator-facing calculation is `copied_bytes / effective_active_duration_seconds`, where `effective_active_duration_seconds` is the stored `active_duration_seconds` plus the current live segment for active jobs.
+
+```bash
+# Derive live duration and copy rate from GET /jobs/{job_id}
+curl -sk -H "Authorization: Bearer $JWT_TOKEN" \
+  "https://localhost:8443/jobs/$JOB_ID" \
+| jq '
+  . as $job
+  | ($job.active_duration_seconds // 0) as $stored
+  | (if ($job.status == "RUNNING" or $job.status == "PAUSING") and ($job.started_at != null)
+     then $stored + ((now - ($job.started_at | fromdateiso8601)) | floor)
+     else $stored
+     end) as $effective_seconds
+  | {
+      status: $job.status,
+      copied_bytes: ($job.copied_bytes // 0),
+      total_bytes: ($job.total_bytes // 0),
+      active_duration_seconds: $effective_seconds,
+      copy_rate_bytes_per_second:
+        (if $effective_seconds > 0
+         then (($job.copied_bytes // 0) / $effective_seconds)
+         else 0
+         end)
+    }'
+```
+
+For terminal jobs, `active_duration_seconds` is already the final cumulative active runtime and no additional live segment needs to be added.
+
 ### Verify Copied Data
 
 After the copy completes, verify file integrity by comparing checksums
@@ -1313,7 +1343,7 @@ A complete evidence export follows this sequence:
 4. **Create job** — `POST /jobs` with project ID, evidence number, source path, and drive ID
 5. **Optional manual analyze** — `POST /jobs/{job_id}/analyze` to scan the source and persist startup-analysis results before copy starts
 6. **Start copy** — `POST /jobs/{job_id}/start`
-7. **Monitor progress** — poll `GET /jobs/{job_id}` until `status` is `COMPLETED` or `FAILED`
+7. **Monitor progress** — poll `GET /jobs/{job_id}` until `status` is `COMPLETED` or `FAILED`, and derive cumulative active duration or copy rate from `active_duration_seconds`, `started_at`, and `copied_bytes` when needed
 8. **Verify** — `POST /jobs/{job_id}/verify` to confirm data integrity
 9. **Generate manifest** — `POST /jobs/{job_id}/manifest` for chain-of-custody records
 10. **Eject drive** — `POST /drives/{drive_id}/prepare-eject` for safe removal
