@@ -132,7 +132,7 @@ def _build_failure_audit_fallback(schema: ExportJobSchema, db: Session) -> str |
         db.query(AuditLog)
         .filter(
             AuditLog.job_id == schema.id,
-            AuditLog.action.in_(("JOB_FAILED", "JOB_TIMEOUT")),
+            AuditLog.action.in_(("JOB_FAILED", "JOB_TIMEOUT", "JOB_RECONCILED")),
         )
         .order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
         .first()
