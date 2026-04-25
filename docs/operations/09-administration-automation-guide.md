@@ -4,7 +4,7 @@
 |---|---|
 | Title | Administration Automation Guide |
 | Purpose | Provides step-by-step administrative workflows for ECUBE system setup, user management, and operational automation. |
-| Updated on | 04/08/26 |
+| Updated on | 04/25/26 |
 | Audience | Systems administrators, operators, IT staff. |
 
 ## Table of Contents
@@ -1472,6 +1472,36 @@ curl -k -X POST https://localhost:8443/mounts/validate \
 
 Response: returns an array of all mount objects with updated statuses.
 
+### Manual Managed-Mount Reconciliation
+
+Runs a live-safe reconciliation pass for managed mounts without restarting the service. This pass only reconciles managed network mounts and managed USB mount slots. It intentionally excludes startup-only identity, job, and drive-discovery reconciliation.
+
+```bash
+# Requires admin or manager role
+curl -k -X POST https://localhost:8443/introspection/reconcile-managed-mounts \
+  -H "Authorization: Bearer $JWT_TOKEN"
+```
+
+Example response:
+
+```json
+{
+  "status": "ok",
+  "scope": "managed_mounts_only",
+  "network_mounts_checked": 2,
+  "network_mounts_corrected": 1,
+  "usb_mounts_checked": 1,
+  "usb_mounts_corrected": 1,
+  "failure_count": 0
+}
+```
+
+Operational notes:
+
+- `status` is `ok` when no corrective-operation failures are recorded, and `partial` when one or more corrective operations fail.
+- If a manual run is already in progress, the endpoint returns `409 Conflict` with code `MANUAL_RECONCILIATION_IN_PROGRESS`.
+- The endpoint is intended for operators investigating mount drift and is safe to run during normal service operation.
+
 ---
 
 ## Auditing
@@ -1563,6 +1593,7 @@ Every audit entry contains:
 | `MOUNT_REMOVED` | Network mount deleted |
 | `MOUNT_VALIDATED` | Mount connectivity re-tested |
 | `MOUNT_RECONCILED` | Mount state corrected during startup reconciliation (MOUNTED → UNMOUNTED/ERROR) |
+| `MANUAL_MOUNT_RECONCILIATION` | Manual managed-mount reconciliation run executed via API |
 
 #### Webhook Callbacks
 
