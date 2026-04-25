@@ -178,6 +178,7 @@ class ExportJobSchema(BaseModel):
     file_count: int = Field(..., description="Total number of files to copy")
     files_succeeded: int = Field(default=0, description="Number of files successfully copied")
     files_failed: int = Field(default=0, description="Number of files that failed")
+    files_timed_out: int = Field(default=0, description="Number of files that timed out during copy (can be retried later)")
     thread_count: int = Field(..., ge=1, le=8, description="Number of parallel threads used (1-8)")
     max_file_retries: int = Field(default=3, ge=0, description="Maximum number of retries for failed files (0+)")
     retry_delay_seconds: int = Field(default=1, ge=0, description="Delay between retries in seconds (0+)")

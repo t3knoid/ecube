@@ -211,17 +211,23 @@ class FileRepository:
             self.db.rollback()
             raise
 
-    def count_done_and_errors(self, job_id: int) -> Tuple[int, int]:
-        """Return ``(done_count, error_count)`` for *job_id* in a single query."""
+    def count_done_errors_and_timeouts(self, job_id: int) -> Tuple[int, int, int]:
+        """Return ``(done_count, error_count, timeout_count)`` for *job_id* in one query."""
         row = (
             self.db.query(
                 func.count(case((ExportFile.status == FileStatus.DONE, 1))),
                 func.count(case((ExportFile.status == FileStatus.ERROR, 1))),
+                func.count(case((ExportFile.status == FileStatus.TIMEOUT, 1))),
             )
             .filter(ExportFile.job_id == job_id)
             .one()
         )
-        return row[0], row[1]
+        return row[0], row[1], row[2]
+
+    def count_done_and_errors(self, job_id: int) -> Tuple[int, int]:
+        """Return ``(done_count, error_count)`` for *job_id* in a single query."""
+        done, errors, _timeouts = self.count_done_errors_and_timeouts(job_id)
+        return done, errors
 
     def count_done(self, job_id: int) -> int:
         """Return the number of files in DONE state for *job_id*."""
@@ -262,10 +268,10 @@ class FileRepository:
         )
         return [(r.error_message, r.relative_path) for r in rows]
 
-    def bulk_count_done_and_errors(
+    def bulk_count_done_errors_and_timeouts(
         self, job_ids: List[int]
-    ) -> Dict[int, Tuple[int, int]]:
-        """Return ``{job_id: (done_count, error_count)}`` for all *job_ids* in one query."""
+    ) -> Dict[int, Tuple[int, int, int]]:
+        """Return ``{job_id: (done_count, error_count, timeout_count)}`` in one query."""
         if not job_ids:
             return {}
         rows = (
@@ -273,12 +279,20 @@ class FileRepository:
                 ExportFile.job_id,
                 func.count(case((ExportFile.status == FileStatus.DONE, 1))),
                 func.count(case((ExportFile.status == FileStatus.ERROR, 1))),
+                func.count(case((ExportFile.status == FileStatus.TIMEOUT, 1))),
             )
             .filter(ExportFile.job_id.in_(job_ids))
             .group_by(ExportFile.job_id)
             .all()
         )
-        return {r[0]: (r[1], r[2]) for r in rows}
+        return {r[0]: (r[1], r[2], r[3]) for r in rows}
+
+    def bulk_count_done_and_errors(
+        self, job_ids: List[int]
+    ) -> Dict[int, Tuple[int, int]]:
+        """Return ``{job_id: (done_count, error_count)}`` for all *job_ids* in one query."""
+        result = self.bulk_count_done_errors_and_timeouts(job_ids)
+        return {job_id: (done, errors) for job_id, (done, errors, _timeouts) in result.items()}
 
     def bulk_list_error_messages(
         self, job_ids: List[int], *, limit_per_job: int = 5

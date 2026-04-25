@@ -36,12 +36,14 @@ class CopyEngine(Protocol):
         dst: Path,
         checksum_algorithm: str = "sha256",
         progress_callback: Optional[Callable[[int], None]] = None,
+        timeout_seconds: int = 0,
     ) -> Tuple[bool, Optional[str], Optional[str]]: ...
 
     def checksum_only(
         self,
         src: Path,
         progress_callback: Optional[Callable[[int], None]] = None,
+        timeout_seconds: int = 0,
     ) -> Tuple[bool, Optional[str], Optional[str]]: ...
 
 
@@ -57,15 +59,23 @@ class NativeCopyEngine:
         dst: Path,
         checksum_algorithm: str = "sha256",
         progress_callback: Optional[Callable[[int], None]] = None,
+        timeout_seconds: int = 0,
     ) -> Tuple[bool, Optional[str], Optional[str]]:
-        return copy_file(src, dst, checksum_algorithm, progress_callback=progress_callback)
+        return copy_file(
+            src,
+            dst,
+            checksum_algorithm,
+            progress_callback=progress_callback,
+            timeout_seconds=timeout_seconds,
+        )
 
     def checksum_only(
         self,
         src: Path,
         progress_callback: Optional[Callable[[int], None]] = None,
+        timeout_seconds: int = 0,
     ) -> Tuple[bool, Optional[str], Optional[str]]:
-        return _checksum_only(src, progress_callback=progress_callback)
+        return _checksum_only(src, progress_callback=progress_callback, timeout_seconds=timeout_seconds)
 
 
 def scan_source_files(source_path: str) -> List[Path]:
@@ -117,6 +127,7 @@ def copy_file(
     dst: Path,
     checksum_algorithm: str = "sha256",
     progress_callback: Optional[Callable[[int], None]] = None,
+    timeout_seconds: int = 0,
 ) -> Tuple[bool, Optional[str], Optional[str]]:
     """Copy *src* to *dst* and compute a checksum.
 
@@ -127,8 +138,16 @@ def copy_file(
         dst.parent.mkdir(parents=True, exist_ok=True)
         h = hashlib.new(checksum_algorithm)
         chunk_size = settings.copy_chunk_size_bytes
+        start_time = time.monotonic()
         with open(src, "rb") as fsrc, open(dst, "wb") as fdst:
-            while chunk := fsrc.read(chunk_size):
+            while True:
+                if timeout_seconds > 0 and (time.monotonic() - start_time) > timeout_seconds:
+                    raise TimeoutError(f"File copy timed out after {timeout_seconds}s")
+                chunk = fsrc.read(chunk_size)
+                if not chunk:
+                    break
+                if timeout_seconds > 0 and (time.monotonic() - start_time) > timeout_seconds:
+                    raise TimeoutError(f"File copy timed out after {timeout_seconds}s")
                 h.update(chunk)
                 fdst.write(chunk)
                 if progress_callback is not None:
@@ -136,6 +155,8 @@ def copy_file(
             fdst.flush()
             os.fsync(fdst.fileno())
         return True, h.hexdigest(), None
+    except TimeoutError:
+        raise
     except Exception as exc:
         # Remove partial file so the target drive is not left with corrupt data.
         try:
@@ -149,17 +170,28 @@ def copy_file(
 def _checksum_only(
     src: Path,
     progress_callback: Optional[Callable[[int], None]] = None,
+    timeout_seconds: int = 0,
 ) -> Tuple[bool, Optional[str], Optional[str]]:
     """Compute a SHA-256 checksum without copying."""
     try:
         h = hashlib.sha256()
         chunk_size = settings.copy_chunk_size_bytes
+        start_time = time.monotonic()
         with open(src, "rb") as f:
-            while chunk := f.read(chunk_size):
+            while True:
+                if timeout_seconds > 0 and (time.monotonic() - start_time) > timeout_seconds:
+                    raise TimeoutError(f"File checksum timed out after {timeout_seconds}s")
+                chunk = f.read(chunk_size)
+                if not chunk:
+                    break
+                if timeout_seconds > 0 and (time.monotonic() - start_time) > timeout_seconds:
+                    raise TimeoutError(f"File checksum timed out after {timeout_seconds}s")
                 h.update(chunk)
                 if progress_callback is not None:
                     progress_callback(len(chunk))
         return True, h.hexdigest(), None
+    except TimeoutError:
+        raise
     except Exception as exc:
         return False, None, str(exc)
 
@@ -898,6 +930,10 @@ def _process_file(
     Each worker opens its own DB session to avoid cross-thread SQLAlchemy issues.
     Retries the copy up to *max_retries* additional times on failure, using
     exponential backoff seeded by *retry_delay* seconds.
+    
+    Files that timeout are marked TIMEOUT (not ERROR) and are skipped; the job
+    continues copying remaining files. Timeout events are audited with elapsed time
+    and file path.
     """
     db: Session = SessionLocal()
     try:
@@ -941,6 +977,8 @@ def _process_file(
         checksum: Optional[str] = None
         bytes_reported = 0
         progress_flush_threshold = _progress_flush_threshold_bytes()
+        timed_out = False
+        timeout_elapsed_seconds = 0.0
 
         for attempt in range(max_retries + 1):
             attempt_bytes_reported = 0
@@ -999,21 +1037,71 @@ def _process_file(
 
             if target is not None:
                 dst = target / ef.relative_path
-                success, checksum, err = copy_file(
-                    src_file,
-                    dst,
-                    progress_callback=_report_progress,
-                )
+                file_timeout_seconds = int(getattr(settings, "copy_job_timeout", 0) or 0)
+                timeout_start = time.monotonic()
+                try:
+                    success, checksum, err = copy_file(
+                        src_file,
+                        dst,
+                        progress_callback=_report_progress,
+                        timeout_seconds=file_timeout_seconds,
+                    )
+                except TimeoutError as timeout_exc:
+                    timeout_elapsed_seconds = time.monotonic() - timeout_start
+                    timed_out = True
+                    success = False
+                    err = str(timeout_exc)
             else:
-                success, checksum, err = _checksum_only(
-                    src_file,
-                    progress_callback=_report_progress,
-                )
+                file_timeout_seconds = int(getattr(settings, "copy_job_timeout", 0) or 0)
+                timeout_start = time.monotonic()
+                try:
+                    success, checksum, err = _checksum_only(
+                        src_file,
+                        progress_callback=_report_progress,
+                        timeout_seconds=file_timeout_seconds,
+                    )
+                except TimeoutError as timeout_exc:
+                    timeout_elapsed_seconds = time.monotonic() - timeout_start
+                    timed_out = True
+                    success = False
+                    err = str(timeout_exc)
+
+            # Some copy/checksum implementations may return timeout text instead
+            # of raising TimeoutError. Normalize those into TIMEOUT handling.
+            if (
+                not success
+                and not timed_out
+                and isinstance(err, str)
+                and "timed out" in err.lower()
+            ):
+                timed_out = True
+                if file_timeout_seconds > 0:
+                    timeout_elapsed_seconds = float(file_timeout_seconds)
 
             _flush_progress(force=True)
 
             if success:
                 break
+
+            if timed_out:
+                # Timeout: skip this file, do not retry, let job continue with other files.
+                # Audit the timeout with elapsed time and file path.
+                last_err = err
+                try:
+                    AuditRepository(db).add(
+                        action="FILE_COPY_TIMEOUT",
+                        job_id=ef.job_id,
+                        details={
+                            "file_id": ef.id,
+                            "relative_path": ef.relative_path,
+                            "timeout_seconds": file_timeout_seconds,
+                            "elapsed_seconds": round(timeout_elapsed_seconds, 2),
+                            "error": err,
+                        },
+                    )
+                except Exception:
+                    logger.exception("Failed to write audit log for FILE_COPY_TIMEOUT")
+                break  # Exit retry loop; file will be marked TIMEOUT below
 
             if attempt_bytes_reported:
                 try:
@@ -1065,6 +1153,19 @@ def _process_file(
                 )
             except Exception:
                 logger.exception("Failed to write audit log for FILE_COPY_SUCCESS")
+        elif timed_out:
+            # Mark file as TIMEOUT (not ERROR) so job continues; timeout can be retried later.
+            ef.status = FileStatus.TIMEOUT
+            ef.error_message = last_err
+            try:
+                file_repo.save(ef)
+            except Exception:
+                logger.exception("DB commit failed saving TIMEOUT status for file %s", export_file_id)
+                if bytes_reported:
+                    try:
+                        file_repo.decrement_job_bytes(ef.job_id, bytes_reported)
+                    except Exception:
+                        logger.exception("DB commit failed restoring copied_bytes for file %s", export_file_id)
         else:
             ef.status = FileStatus.ERROR
             ef.error_message = last_err
@@ -1113,7 +1214,6 @@ def run_copy_job(job_id: int) -> None:
             logger.error("DB commit failed setting job %s to RUNNING", job_id)
             return
 
-        job_start = time.monotonic()
         done_count = 0
         error_count = 0
 
@@ -1151,8 +1251,6 @@ def run_copy_job(job_id: int) -> None:
             max_retries = job.max_file_retries if job.max_file_retries is not None else settings.copy_default_max_retries
             retry_delay = float(job.retry_delay_seconds) if job.retry_delay_seconds is not None else settings.copy_default_retry_delay_seconds
 
-            timeout = settings.copy_job_timeout
-            timed_out = False
             pause_requested = False
 
             executor = ThreadPoolExecutor(max_workers=job.thread_count or settings.copy_default_thread_count)
@@ -1190,14 +1288,6 @@ def run_copy_job(job_id: int) -> None:
                                 pending.cancel()
                         break
 
-                    # Check timeout after each file completes.
-                    if timeout > 0 and (time.monotonic() - job_start) > timeout:
-                        timed_out = True
-                        # Cancel remaining pending futures so they are not started.
-                        for pending in futures:
-                            if not pending.done():
-                                pending.cancel()
-                        break
             finally:
                 # Always wait for running workers to finish so the DB session is
                 # idle before the main thread uses it.  cancel_futures=True
@@ -1207,6 +1297,10 @@ def run_copy_job(job_id: int) -> None:
             # Determine final job status.
             db.expire_all()
             done_count, error_count = file_repo.count_done_and_errors(job_id)
+            timeout_count = db.query(ExportFile).filter(
+                ExportFile.job_id == job_id,
+                ExportFile.status == FileStatus.TIMEOUT,
+            ).count()
 
             job = job_repo.get(job_id)
             if job:
@@ -1223,7 +1317,7 @@ def run_copy_job(job_id: int) -> None:
                     run_finished_at,
                 )
                 job.active_duration_seconds = int(round(total_active_seconds))
-                all_files_finished = (done_count + error_count) >= int(job.file_count or 0)
+                all_files_finished = (done_count + error_count + timeout_count) >= int(job.file_count or 0)
                 if (pause_requested or job.status in (JobStatus.PAUSING, JobStatus.PAUSED)) and not all_files_finished:
                     job.status = JobStatus.PAUSED
                     job.completed_at = None
@@ -1231,77 +1325,8 @@ def run_copy_job(job_id: int) -> None:
                         job_repo.save(job)
                     except Exception:
                         logger.error("DB commit failed setting job %s to PAUSED", job_id)
-                elif timed_out:
-                    timeout_reason = "Copy job timed out before all files completed"
-                    job.status = JobStatus.FAILED
-                    job.completed_at = run_finished_at
-                    job.failure_reason = timeout_reason
-                    try:
-                        job_repo.save(job)
-                    except Exception:
-                        logger.error("DB commit failed setting job %s to FAILED (timeout)", job_id)
-                        try:
-                            AuditRepository(db).add(
-                                action="JOB_STATUS_PERSIST_FAILED",
-                                job_id=job_id,
-                                details={
-                                    "intended_status": "FAILED",
-                                    "reason": "timeout",
-                                    "failure_reason": timeout_reason,
-                                    "timeout_seconds": timeout,
-                                    "elapsed_seconds": round(total_active_seconds, 2),
-                                },
-                            )
-                        except Exception:
-                            logger.error("Failed to write audit log for JOB_STATUS_PERSIST_FAILED")
-                    else:
-                        elapsed_seconds = round(total_active_seconds, 2)
-                        copy_rate_mb_s = _calculate_copy_rate_mb_s(job.copied_bytes or 0, elapsed_seconds)
-                        _log_job_path_context(job_id, job.source_path, job.target_mount_path, "timeout")
-                        logger.error(
-                            f"JOB_FAILED job_id={job_id} project_id={job.project_id} "
-                            f"status={job.status.value} failed_at={job.completed_at.isoformat() if job.completed_at else None} "
-                            f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} "
-                                f"reason={timeout_reason} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
-                            extra={
-                                "job_id": job_id,
-                                "project_id": job.project_id,
-                                "status": job.status.value,
-                                "started_at": job.started_at.isoformat() if job.started_at else None,
-                                "thread_count": job.thread_count,
-                                "files_copied": done_count,
-                                "file_count": job.file_count,
-                                "copied_bytes": job.copied_bytes or 0,
-                                "total_bytes": job.total_bytes or 0,
-                                    "reason": timeout_reason,
-                                "elapsed_seconds": elapsed_seconds,
-                                "copy_rate_mb_s": copy_rate_mb_s,
-                            },
-                        )
-                        try:
-                            AuditRepository(db).add(
-                                action="JOB_TIMEOUT",
-                                job_id=job_id,
-                                details={
-                                    "timeout_seconds": timeout,
-                                    "started_at": job.started_at.isoformat() if job.started_at else None,
-                                    "thread_count": job.thread_count,
-                                    "files_copied": done_count,
-                                    "file_count": job.file_count,
-                                    "copied_bytes": job.copied_bytes or 0,
-                                    "total_bytes": job.total_bytes or 0,
-                                    "failure_reason": timeout_reason,
-                                    "elapsed_seconds": elapsed_seconds,
-                                    "copy_rate_mb_s": copy_rate_mb_s,
-                                },
-                            )
-                        except Exception:
-                            logger.error("Failed to write audit log for JOB_TIMEOUT")
-                        try:
-                            deliver_callback(job)
-                        except Exception:
-                            logger.error("Callback delivery failed for job %s (timeout)", job_id)
                 else:
+                    # Only fail on actual errors; timeouts do not fail the job (they can be retried later).
                     job.status = JobStatus.FAILED if error_count > 0 else JobStatus.COMPLETED
                     job.completed_at = datetime.now(timezone.utc)
                     cache_cleared = False
@@ -1322,6 +1347,7 @@ def run_copy_job(job_id: int) -> None:
                                     "intended_status": job.status.value,
                                     "file_count": job.file_count,
                                     "error_count": error_count,
+                                    "timeout_count": timeout_count,
                                     "elapsed_seconds": round(total_active_seconds, 2),
                                 },
                             )
@@ -1336,7 +1362,7 @@ def run_copy_job(job_id: int) -> None:
                             logger.error(
                                 f"JOB_FAILED job_id={job_id} project_id={job.project_id} "
                                 f"status={job.status.value} started_at={job.started_at.isoformat() if job.started_at else None} failed_at={job.completed_at.isoformat() if job.completed_at else None} "
-                                f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} error_count={error_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
+                                f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} error_count={error_count} timeout_count={timeout_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
                                 extra={
                                     "job_id": job_id,
                                     "project_id": job.project_id,
@@ -1346,6 +1372,7 @@ def run_copy_job(job_id: int) -> None:
                                     "files_copied": done_count,
                                     "file_count": job.file_count,
                                     "error_count": error_count,
+                                    "timeout_count": timeout_count,
                                     "copied_bytes": job.copied_bytes or 0,
                                     "total_bytes": job.total_bytes or 0,
                                     "elapsed_seconds": elapsed_seconds,
@@ -1356,7 +1383,7 @@ def run_copy_job(job_id: int) -> None:
                             logger.info(
                                 f"JOB_COMPLETED job_id={job_id} project_id={job.project_id} "
                                 f"status={job.status.value} started_at={job.started_at.isoformat() if job.started_at else None} completed_at={job.completed_at.isoformat() if job.completed_at else None} "
-                                f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} error_count={error_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
+                                f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} error_count={error_count} timeout_count={timeout_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
                                 extra={
                                     "job_id": job_id,
                                     "project_id": job.project_id,
@@ -1366,6 +1393,7 @@ def run_copy_job(job_id: int) -> None:
                                     "files_copied": done_count,
                                     "file_count": job.file_count,
                                     "error_count": error_count,
+                                    "timeout_count": timeout_count,
                                     "copied_bytes": job.copied_bytes or 0,
                                     "total_bytes": job.total_bytes or 0,
                                     "elapsed_seconds": elapsed_seconds,
@@ -1383,6 +1411,7 @@ def run_copy_job(job_id: int) -> None:
                                     "files_copied": done_count,
                                     "file_count": job.file_count,
                                     "error_count": error_count,
+                                    "timeout_count": timeout_count,
                                     "copied_bytes": job.copied_bytes or 0,
                                     "total_bytes": job.total_bytes or 0,
                                     "elapsed_seconds": elapsed_seconds,
