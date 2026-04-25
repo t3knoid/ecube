@@ -5,6 +5,7 @@ import SystemView from '@/views/SystemView.vue'
 
 const mocks = vi.hoisted(() => ({
   hasRole: vi.fn(),
+  routerPush: vi.fn(),
   getSystemHealth: vi.fn(),
   getUsbTopology: vi.fn(),
   getBlockDevices: vi.fn(),
@@ -20,6 +21,12 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/stores/auth.js', () => ({
   useAuthStore: () => ({
     hasRole: mocks.hasRole,
+  }),
+}))
+
+vi.mock('vue-router', () => ({
+  useRouter: () => ({
+    push: mocks.routerPush,
   }),
 }))
 
@@ -87,6 +94,7 @@ function mountView(options = {}) {
 describe('SystemView USB topology tab', () => {
   beforeEach(() => {
     mocks.hasRole.mockReset()
+    mocks.routerPush.mockReset()
     mocks.getSystemHealth.mockReset()
     mocks.getUsbTopology.mockReset()
     mocks.getBlockDevices.mockReset()
@@ -871,5 +879,14 @@ describe('SystemView managed-mount reconciliation action', () => {
     await flushPromises()
 
     expect(mocks.reconcileManagedMounts).toHaveBeenCalledTimes(1)
+    expect(mocks.routerPush).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'reconciliation-results',
+      state: expect.objectContaining({
+        reconciliationResult: expect.objectContaining({
+          status: 'ok',
+          scope: 'managed_mounts_only',
+        }),
+      }),
+    }))
   })
 })
