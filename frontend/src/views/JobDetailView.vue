@@ -249,7 +249,7 @@ const liveTransferSummary = computed(() => {
   if (!job.value) return null
 
   const status = String(job.value.status || '').toUpperCase()
-  if (!['RUNNING', 'PAUSING', 'VERIFYING'].includes(status)) return null
+  if (!['RUNNING', 'PAUSING'].includes(status)) return null
 
   const durationSeconds = calculateDurationSeconds(job.value)
   const copiedBytes = Number(job.value.copied_bytes || 0)
