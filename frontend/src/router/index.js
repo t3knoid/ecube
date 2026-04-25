@@ -78,6 +78,11 @@ const routes = [
         name: 'system',
         component: () => import('@/views/SystemView.vue'),
       },
+      {
+        path: 'reconciliation-results',
+        name: 'reconciliation-results',
+        component: () => import('@/views/ReconciliationResultsView.vue'),
+      },
     ],
   },
   {

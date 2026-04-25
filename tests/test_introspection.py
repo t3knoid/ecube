@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock, mock_open, patch
 
+from app.exceptions import ConflictError
 from app.models.hardware import DriveState, UsbDrive, UsbHub, UsbPort
 
 
@@ -227,3 +228,51 @@ def test_job_debug(auditor_client, db):
     data = response.json()
     assert data["job_id"] == job.id
     assert data["project_id"] == "PROJ-001"
+
+
+def test_reconcile_managed_mounts_requires_authentication(unauthenticated_client, db):
+    response = unauthenticated_client.post("/introspection/reconcile-managed-mounts")
+    assert response.status_code == 401
+
+
+def test_reconcile_managed_mounts_forbidden_for_auditor(auditor_client, db):
+    response = auditor_client.post("/introspection/reconcile-managed-mounts")
+    assert response.status_code == 403
+
+
+def test_reconcile_managed_mounts_manager_success(manager_client, db):
+    with patch(
+        "app.routers.introspection.reconciliation_service.run_manual_managed_mount_reconciliation",
+        return_value={
+            "status": "ok",
+            "scope": "managed_mounts_only",
+            "network_mounts_checked": 2,
+            "network_mounts_corrected": 1,
+            "usb_mounts_checked": 1,
+            "usb_mounts_corrected": 1,
+            "failure_count": 0,
+        },
+    ) as run_mock:
+        response = manager_client.post("/introspection/reconcile-managed-mounts")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["scope"] == "managed_mounts_only"
+    assert payload["failure_count"] == 0
+    run_mock.assert_called_once()
+
+
+def test_reconcile_managed_mounts_conflict_when_run_in_progress(manager_client, db):
+    with patch(
+        "app.routers.introspection.reconciliation_service.run_manual_managed_mount_reconciliation",
+        side_effect=ConflictError(
+            message="A manual mount reconciliation run is already in progress.",
+            code="MANUAL_RECONCILIATION_IN_PROGRESS",
+        ),
+    ):
+        response = manager_client.post("/introspection/reconcile-managed-mounts")
+
+    assert response.status_code == 409
+    data = response.json()
+    assert data["code"] == "MANUAL_RECONCILIATION_IN_PROGRESS"
