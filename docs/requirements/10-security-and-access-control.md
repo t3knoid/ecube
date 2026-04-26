@@ -56,6 +56,7 @@ ECUBE defines four roles:
 | List drives / drive states                  |  ✔    |    ✔    |     ✔     |    ✔    |
 | Create jobs                                 |  ✔    |    ✔    |     ✔     |    ✖    |
 | Start copy jobs                             |  ✔    |    ✔    |     ✔     |    ✖    |
+| Retry failed file copies                    |  ✔    |    ✔    |     ✔     |    ✖    |
 | View job status                             |  ✔    |    ✔    |     ✔     |    ✔    |
 | Regenerate manifest / verify job            |  ✔    |    ✔    |     ✔     |    ✖    |
 | Read audit logs                             |  ✔    |    ✔    |     ✖     |    ✔    |
