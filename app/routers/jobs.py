@@ -363,7 +363,8 @@ def get_job(
 @router.get("/{job_id}/files", response_model=JobFilesResponse, responses={**R_401, **R_403, **R_404, **R_422})
 def get_job_files(
     job_id: int,
-    limit: int = Query(default=200, ge=1, le=2000, description="Maximum number of file rows to return"),
+    page: int = Query(default=1, ge=1, description="1-based page number of file rows to return"),
+    limit: int | None = Query(default=None, ge=20, le=100, description="Maximum number of file rows to return"),
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_ALL_ROLES),
 ):
@@ -376,9 +377,13 @@ def get_job_files(
     """
     job = job_service.get_job(job_id, db)
     file_repo = FileRepository(db)
-    files = file_repo.list_by_job(job.id, limit=limit)
+    effective_limit = int(limit or settings.job_detail_files_page_size)
+    offset = (page - 1) * effective_limit
+    files = file_repo.list_by_job(job.id, limit=effective_limit, offset=offset)
     return JobFilesResponse(
         job_id=job.id,
+        page=page,
+        page_size=effective_limit,
         total_files=file_repo.count_by_job(job.id),
         returned_files=len(files),
         files=files,
