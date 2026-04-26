@@ -294,7 +294,7 @@ Progress: `(copied_bytes / total_bytes) * 100`
 POST /jobs/{job_id}/verify
 ```
 
-Compares SHA-256 hashes of source and destination files. Status transitions: `COMPLETED` → `VERIFYING` → `COMPLETED` (pass) or `FAILED`.
+Compares SHA-256 hashes of source and destination files. This endpoint is available only for clean completed jobs with no failed or timed-out files; partial-success `COMPLETED` jobs return `409 Conflict` until the copy outcome is clean. Status transitions: `COMPLETED` → `VERIFYING` → `COMPLETED` (pass) or `FAILED`.
 
 ### Step 8 — Generate Manifest
 
@@ -302,7 +302,7 @@ Compares SHA-256 hashes of source and destination files. Status transitions: `CO
 POST /jobs/{job_id}/manifest
 ```
 
-Writes a JSON manifest to the USB drive containing file paths, sizes, hashes, and copy metadata for chain-of-custody.
+Writes a JSON manifest to the USB drive containing file paths, sizes, hashes, and copy metadata for chain-of-custody. This endpoint is available only for clean completed jobs with no failed or timed-out files; partial-success `COMPLETED` jobs return `409 Conflict`.
 
 ---
 
