@@ -1,0 +1,1401 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ECUBE Help</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --help-bg: #f4efe7;
+        --help-panel: #fffdf8;
+        --help-border: #d8cbb7;
+        --help-text: #2f261b;
+        --help-muted: #6b5f51;
+        --help-accent: #0f5c4d;
+        --help-accent-soft: #e2f0ec;
+        --help-code-bg: #f1e7d8;
+        --help-shadow: 0 18px 48px rgba(47, 38, 27, 0.12);
+        --help-radius: 18px;
+        --help-font: Georgia, 'Times New Roman', serif;
+        --help-ui-font: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        padding: 24px;
+        background:
+          radial-gradient(circle at top left, rgba(15, 92, 77, 0.08), transparent 30%),
+          linear-gradient(180deg, #f8f3ec 0%, var(--help-bg) 100%);
+        color: var(--help-text);
+        font-family: var(--help-font);
+        line-height: 1.6;
+      }
+
+      main {
+        max-width: 920px;
+        margin: 0 auto;
+        padding: 32px;
+        background: var(--help-panel);
+        border: 1px solid var(--help-border);
+        border-radius: var(--help-radius);
+        box-shadow: var(--help-shadow);
+      }
+
+      .help-kicker {
+        margin: 0;
+        font-family: var(--help-ui-font);
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--help-accent);
+      }
+
+      h1 {
+        margin: 0.35rem 0 0.25rem;
+        font-size: clamp(2rem, 3vw, 3rem);
+        line-height: 1.1;
+      }
+
+      .help-meta,
+      .help-lead {
+        margin: 0.25rem 0 0;
+        font-family: var(--help-ui-font);
+        color: var(--help-muted);
+      }
+
+      h1,
+      h2,
+      h3,
+      h4 {
+        color: #1e1a14;
+      }
+
+      h2,
+      h3,
+      h4 {
+        margin-top: 2rem;
+        font-family: var(--help-ui-font);
+      }
+
+      a {
+        color: var(--help-accent);
+      }
+
+      hr {
+        border: 0;
+        border-top: 1px solid var(--help-border);
+        margin: 2rem 0;
+      }
+
+      blockquote {
+        margin: 1rem 0;
+        padding: 0.9rem 1rem;
+        border-left: 4px solid var(--help-accent);
+        background: var(--help-accent-soft);
+        border-radius: 0 12px 12px 0;
+        font-family: var(--help-ui-font);
+      }
+
+      code,
+      pre {
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      }
+
+      code {
+        padding: 0.1rem 0.3rem;
+        background: var(--help-code-bg);
+        border-radius: 4px;
+      }
+
+      pre {
+        overflow-x: auto;
+        padding: 1rem;
+        background: #2f261b;
+        color: #fff8ee;
+        border-radius: 14px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1rem 0;
+        font-family: var(--help-ui-font);
+      }
+
+      th,
+      td {
+        padding: 0.75rem;
+        border: 1px solid var(--help-border);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: #f1e7d8;
+      }
+
+      ul,
+      ol {
+        padding-left: 1.5rem;
+      }
+
+      @media (max-width: 720px) {
+        body {
+          padding: 12px;
+        }
+
+        main {
+          padding: 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="help-kicker">In-App Help</p>
+      <h1>ECUBE User Guide</h1>
+      <p class="help-meta">Updated: 04/25/26</p>
+      <p class="help-lead">Generated from docs/operations/13-user-manual.md for authenticated in-app help.</p>
+      <h1 id="purpose">Purpose</h1>
+<p>This manual explains how to use the ECUBE web interface for day-to-day work. It focuses on tasks performed in the browser after the platform has already been deployed and made available by an administrator.</p>
+<p>Primary workflows covered in this guide:</p>
+<ul><li>
+Accessing the ECUBE web interface
+</li><li>
+Understanding role-based navigation
+</li><li>
+Viewing system status and drive state
+</li><li>
+Creating and monitoring export jobs
+</li><li>
+Reviewing job results, hashes, and file comparisons
+</li><li>
+Managing mount definitions
+</li><li>
+Viewing and exporting audit logs
+</li><li>
+Accessing user and system pages when your role permits it
+</li><li>
+Managing selected runtime configuration settings (admin-only)
+</li></ul>
+<h1 id="scope">Scope</h1>
+<p>This guide is intended for users who interact with ECUBE through the web UI. It does not cover operating-system setup, service management, certificate provisioning, Docker administration, or backend troubleshooting.</p>
+<p>For those topics, use the companion guides:</p>
+<ul><li>
+01-installation.md for packaged installation options
+</li><li>
+02-manual-installation.md for native/manual deployment
+</li><li>
+03-docker-deployment.md for Docker Compose deployment
+</li><li>
+09-administration-automation-guide.md for administrative and API-driven tasks
+</li><li>
+11-api-quick-reference.md for direct API usage
+</li></ul>
+<hr />
+<h1 id="2-before-you-begin">2. Before You Begin</h1>
+<p>Before using ECUBE, make sure you have:</p>
+<ul><li>
+A supported browser
+</li><li>
+The correct ECUBE URL
+</li><li>
+A valid user account and password or SSO-backed identity
+</li><li>
+Permission for the tasks you need to perform
+</li></ul>
+<p>Supported browser targets for the current frontend:</p>
+<ul><li>
+Google Chrome
+</li><li>
+Microsoft Edge
+</li><li>
+Safari
+</li></ul>
+<p>Use one of the latest two major browser versions maintained by your organization. Firefox is not currently a supported target for the frontend.</p>
+<p>If you do not know your role, ask your ECUBE administrator. ECUBE uses role-based access control, so some pages and buttons are visible only to certain users.</p>
+<hr />
+<h1 id="3-roles-and-access">3. Roles and Access</h1>
+<p>The UI adapts to the roles assigned to your account.</p>
+<table><thead><tr>
+<th>Role</th>
+<th>Typical Access</th>
+</tr></thead>
+<tbody>
+<tr>
+<td><code>admin</code></td>
+<td>Full access to all UI areas, including user administration</td>
+</tr>
+<tr>
+<td><code>manager</code></td>
+<td>Drive, mount, and job oversight</td>
+</tr>
+<tr>
+<td><code>processor</code></td>
+<td>Create and manage export jobs, view system state</td>
+</tr>
+<tr>
+<td><code>auditor</code></td>
+<td>Read-only access to audit, job verification, and evidence review areas</td>
+</tr>
+</tbody>
+</table>
+<p>Common role effects in the UI:</p>
+<ul><li>
+The <code>Audit</code> page is visible only to roles allowed to inspect audit records.
+</li><li>
+The <code>Users</code> page is visible only to roles allowed to manage users.
+</li><li>
+The <code>Configuration</code> page is visible only to <code>admin</code> users.
+</li><li>
+Action buttons such as formatting or initializing drives may be disabled if your role does not permit them.
+</li></ul>
+<hr />
+<h1 id="4-first-access">4. First Access</h1>
+<h2 id="4-2-login">4.2 Login</h2>
+<blockquote><p><strong>Access Summary</strong></p></blockquote>
+<blockquote><p><strong>Page visibility:</strong> Available to unauthenticated users after setup is complete.</p></blockquote>
+<blockquote><p><strong>Restricted actions:</strong> None.</p></blockquote>
+<p>After setup is complete, open the ECUBE URL and sign in with your assigned username and password.</p>
+<p>The login page includes:</p>
+<ul><li>
+Username field
+</li><li>
+Password field
+</li><li>
+Login button
+</li><li>
+Session-expired banner when you were redirected after token expiry
+</li><li>
+Error banner for invalid credentials or connectivity failures
+</li></ul>
+<p>If login fails:</p>
+<ul><li>
+Re-enter username and password carefully
+</li><li>
+Confirm you are using the correct ECUBE URL
+</li><li>
+Check whether your browser can reach the site over HTTPS
+</li><li>
+Contact an administrator if your account may be locked, missing, or incorrectly assigned
+</li></ul>
+<hr />
+<h1 id="5-interface-overview">5. Interface Overview</h1>
+<blockquote><p><strong>Access Summary</strong></p></blockquote>
+<blockquote><p><strong>Page visibility:</strong> Available to authenticated users.</p></blockquote>
+<blockquote><p><strong>Restricted actions:</strong> Navigation items shown in the shell depend on the roles assigned to your account.</p></blockquote>
+<p>After login, ECUBE displays a standard application shell:</p>
+<ul><li>
+Header at the top
+</li><li>
+Sidebar navigation on the left
+</li><li>
+Main content area in the center
+</li><li>
+Footer at the bottom
+</li></ul>
+<p>Common navigation items include:</p>
+<ul><li>
+<code>Dashboard</code>
+</li><li>
+<code>Drives</code>
+</li><li>
+<code>Mounts</code>
+</li><li>
+<code>Jobs</code>
+</li><li>
+<code>Audit</code> (role-restricted)
+</li><li>
+<code>System</code>
+</li><li>
+<code>Users</code> (admin-only or otherwise restricted)
+</li><li>
+<code>Configuration</code> (admin-only)
+</li></ul>
+<p>If you do not see a page described in this manual, your role may not include access to it.</p>
+<h2 id="5-1-theme-selection-light-dark-custom">5.1 Theme Selection (Light/Dark/Custom)</h2>
+<blockquote><p><strong>Access Summary</strong></p></blockquote>
+<blockquote><p><strong>Page visibility:</strong> Available to authenticated users.</p></blockquote>
+<blockquote><p><strong>Restricted actions:</strong> None. Theme selection is user-level and does not require an elevated role.</p></blockquote>
+<p>To change your theme in the current session:</p>
+<ol><li>
+Open the theme selector in the top-right header area.
+</li><li>
+Choose the desired theme (for example <code>Light</code> or <code>Dark</code>).
+</li><li>
+Confirm visual changes are applied immediately.
+</li></ol>
+<p>How theme preference is stored:</p>
+<ul><li>
+Theme choice is saved in browser local storage for that browser profile.
+</li><li>
+Different browsers or machines may show different themes for the same user account.
+</li></ul>
+<p>Important default-theme note:</p>
+<ul><li>
+The web UI currently does not provide an administrator control to set a system-wide default theme for all users.
+</li><li>
+Platform administrators can still influence the deployment default by controlling which CSS is served as <code>default.css</code> in the mounted themes directory.
+</li></ul>
+<p>For deployment-side theme and branding management, see 14-theme-and-branding-guide.md and 04-configuration-reference.md (<code>ECUBE_THEMES_DIR</code>).</p>
+<p>Example dark-theme appearance:</p>
+<hr />
+<h1 id="6-dashboard">6. Dashboard</h1>
+<blockquote><p><strong>Access Summary</strong></p></blockquote>
+<blockquote><p><strong>Page visibility:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code></p></blockquote>
+<blockquote><p><strong>Restricted actions:</strong> None described on this screen; use linked pages for operational actions.</p></blockquote>
+<p>The dashboard provides a quick operational summary.</p>
+<p>Typical information shown:</p>
+<ul><li>
+Overall system health
+</li><li>
+Database status
+</li><li>
+Number of active jobs
+</li><li>
+Drive state summary (<code>DISCONNECTED</code>, <code>AVAILABLE</code>, <code>IN_USE</code>)
+</li><li>
+Table of active jobs
+</li></ul>
+<p>Use the dashboard when you need a quick answer to questions such as:</p>
+<ul><li>
+Is the system healthy?
+</li><li>
+Are any jobs currently running or verifying?
+</li><li>
+How many drives are ready for use?
+</li></ul>
+<p>The dashboard is intended for situational awareness, not full task execution. Use the dedicated pages for detailed operations.</p>
+<hr />
+<h1 id="7-drives">7. Drives</h1>
+<blockquote><p><strong>Access Summary</strong></p></blockquote>
+<blockquote><p><strong>Page visibility:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code></p></blockquote>
+<blockquote><p><strong>Restricted actions:</strong> Drive detail actions such as format, initialize, and prepare eject are currently enabled only for <code>admin</code> and <code>manager</code>.</p></blockquote>
+<p>The <code>Drives</code> page shows detected USB drives and their current state.</p>
+<p>Typical drive fields include:</p>
+<ul><li>
+Device (port-based identifier such as <code>2-1</code>)
+</li><li>
+Serial Number
+</li><li>
+Filesystem type
+</li><li>
+Capacity
+</li><li>
+Assigned project
+</li><li>
+Current state
+</li></ul>
+<p>Available actions depend on your role and the selected drive.</p>
+<h2 id="7-1-drive-states">7.1 Drive States</h2>
+<p>Every drive moves through a defined set of states. Actions available in the UI depend on the current state.</p>
+<table><thead><tr>
+<th>State</th>
+<th>Meaning</th>
+<th>Actions available</th>
+</tr></thead>
+<tbody>
+<tr>
+<td><code>DISCONNECTED</code></td>
+<td>Drive is known to the system but not currently accessible — either not physically present, or present on a disabled port.</td>
+<td>Enable port when the drive is still physically detected on a known port</td>
+</tr>
+<tr>
+<td><code>AVAILABLE</code></td>
+<td>Drive is present on an enabled port and ready to be formatted or assigned to a project.</td>
+<td>Format, Initialize</td>
+</tr>
+<tr>
+<td><code>IN_USE</code></td>
+<td>Drive is assigned to a project. Jobs can target this drive.</td>
+<td>Prepare Eject</td>
+</tr>
+<tr>
+<td><code>ARCHIVED</code></td>
+<td>Drive has been permanently handed off via the Chain of Custody workflow.</td>
+<td>None — drive is read-only.</td>
+</tr>
+</tbody>
+</table>
+<p>State transitions follow this order:</p>
+<pre><code>DISCONNECTED → AVAILABLE → IN_USE → AVAILABLE → ARCHIVED
+                       ↑____________|
+                     (re-insert same project)</code></pre>
+<p>A drive assigned to one project cannot be re-assigned to a different project without first being formatted. Formatting wipes the drive and clears the project binding.</p>
+<p>After a service restart, ECUBE may automatically restore a previously mounted managed USB drive to its expected ECUBE mount slot. If a drive or mount appears to have changed state during startup, review the <code>Audit Logs</code> page for reconciliation events recorded by the system.</p>
+<h2 id="7-2-viewing-drives">7.2 Viewing Drives</h2>
+<p>Use the page controls to:</p>
+<ul><li>
+Refresh the current drive list
+</li><li>
+Trigger a rescan of connected drives
+</li><li>
+Search by device, serial number, or project information
+</li><li>
+Filter by drive state
+</li><li>
+Sort results
+</li></ul>
+<h2 id="7-3-drive-detail-page">7.3 Drive Detail Page</h2>
+<p>Selecting a drive opens a detail view showing:</p>
+<ul><li>
+The port-based <code>Device</code> value, the separate <code>Serial Number</code> value, and filesystem details, with sensitive path values shown as <code>Protected</code> in standard operator views when appropriate
+</li><li>
+Current project assignment
+</li><li>
+Current status badge
+</li><li>
+Available actions such as format, initialize, and prepare eject
+</li></ul>
+<p>Reference screen:</p>
+<h2 id="7-4-formatting-a-drive">7.4 Formatting a Drive</h2>
+<p>If your role allows it, you can format a drive from the detail page.</p>
+<p>Current UI options include:</p>
+<ul><li>
+<code>ext4</code>
+</li><li>
+<code>exfat</code>
+</li></ul>
+<p>Formatting removes all existing data and clears the project binding. After formatting, the drive can be initialized for any project that has an eligible mounted share.</p>
+<p>The Format action is unavailable while the drive is mounted. If the drive is currently mounted, use the appropriate unmount or prepare-eject workflow first.</p>
+<p>Confirm the target drive carefully before proceeding.</p>
+<h2 id="7-5-initializing-a-drive">7.5 Initializing a Drive</h2>
+<p>Initialization assigns a drive to a project identifier and transitions it to <code>IN_USE</code>. Once initialized, project isolation rules apply to all writes performed through ECUBE.</p>
+<p>Initialization now requires at least one network share that is both assigned to the same project and currently in the <code>MOUNTED</code> state. If no eligible mounted share exists, the UI disables submission and the API rejects the request.</p>
+<p>When you open the Initialize dialog:</p>
+<ul><li>
+The <strong>Project</strong> field is shown as a dropdown populated from distinct project IDs on mounted shares only.
+</li><li>
+The dialog also shows the mounted destination context for the selected USB drive while still redacting the raw internal path from standard operator views.
+</li><li>
+If the drive has a previous project assignment and that project still has an eligible mounted share, that project is pre-selected.
+</li><li>
+If no eligible mounted project exists, the dialog shows a helper message telling you to add and mount a share first.
+</li><li>
+Canceling the dialog does not change the drive state, project binding, or action availability.
+</li></ul>
+<p>Before initializing a drive:</p>
+<ul><li>
+Confirm the correct source share for the case or matter has already been added and mounted.
+</li><li>
+Select the correct project from the dropdown list.
+</li><li>
+Confirm the drive is the intended destination media.
+</li><li>
+If you need to assign the drive to a <em>different</em> project, format it first to clear the existing binding.
+</li></ul>
+<h2 id="7-6-prepare-eject">7.6 Prepare Eject</h2>
+<p>Use <code>Prepare Eject</code> before physically removing a drive. This flushes pending writes, unmounts the filesystem, and transitions the drive to <code>AVAILABLE</code>.</p>
+<p>After a successful prepare-eject:</p>
+<ul><li>
+The drive state returns to <code>AVAILABLE</code>.
+</li><li>
+The project binding is preserved so the drive can be re-initialized for the same project without reformatting.
+</li><li>
+The drive <strong>cannot</strong> be initialized for a <em>different</em> project until it has been formatted.
+</li><li>
+The drive can be physically removed once the operation completes.
+</li></ul>
+<p>If ECUBE reports that the drive is still busy, the confirmation dialog closes cleanly and the page shows a specific retry message. Close any open shell, file browser, or process still using the mounted drive, then retry <code>Prepare Eject</code>.</p>
+<p>If ECUBE detects timed-out or failed files in active drive assignments, the first <code>Prepare Eject</code> attempt is blocked with an explicit confirmation-required warning. Review the warning details, then confirm a second prompt to continue with ejection.</p>
+<blockquote><p>To permanently retire a drive after removal, use the Chain of Custody handoff workflow on the <code>Audit</code> page. Confirming a handoff transitions the drive to <code>ARCHIVED</code>.</p></blockquote>
+<hr />
+<h1 id="8-mounts">8. Mounts</h1>
+<blockquote><p><strong>Access Summary</strong></p></blockquote>
+<blockquote><p><strong>Page visibility:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code></p></blockquote>
+<blockquote><p><strong>Restricted actions:</strong> The mounts page is currently available to all authenticated users in the frontend.</p></blockquote>
+<p>The <code>Mounts</code> page manages source locations used for export jobs.</p>
+<p>You can typically:</p>
+<ul><li>
+Refresh the mount list
+</li><li>
+Validate all mounts
+</li><li>
+Validate an individual mount
+</li><li>
+Add a new mount definition
+</li><li>
+Edit an existing mount definition
+</li><li>
+Remove an existing mount definition
+</li></ul>
+<h2 id="8-1-adding-a-mount">8.1 Adding a Mount</h2>
+<p>The add-mount dialog supports common fields such as:</p>
+<ul><li>
+Type (<code>SMB</code> or <code>NFS</code>)
+</li><li>
+Project ID
+</li><li>
+Remote path
+</li><li>
+Username
+</li><li>
+Password
+</li><li>
+Credentials file
+</li></ul>
+<p>When adding a new mount, <code>admin</code> and <code>manager</code> users can use <code>Browse</code> inside the dialog to discover available SMB shares or NFS exports from the entered target server. The browse dialog reuses any credentials entered in the form, shows discovered shares in a scrollable picker when the result set is long, and selecting a result fills the <code>Remote path</code> field automatically.</p>
+<p>Project assignment is required when creating a mount. Drives can only be initialized for projects that have at least one assigned share in the <code>MOUNTED</code> state.</p>
+<p>ECUBE rejects exact duplicate remote paths and blocks overlapping parent or child remote paths across different projects. Nested paths for the same project remain allowed. If two operators submit changes at the same time, one request may briefly return a conflict while ECUBE finishes the in-progress update.</p>
+<p>For security, the standard mount list and browse labels intentionally redact raw remote paths and local mount points in operator-facing views.</p>
+<p>ECUBE now creates the local mount point automatically based on the remote path and mount type (for example, NFS mounts are created under <code>/nfs/<em></code> and SMB mounts under <code>/smb/</em></code>).</p>
+<p>After a service restart, ECUBE may automatically restore an expected managed share mount or remove a stale ECUBE-managed mount point that no longer matches persisted system state. These startup corrections are intentional and are recorded in the audit log with sanitized details.</p>
+<p>The exact credential fields required depend on the mount type and your environment.</p>
+<p>If share browsing is unavailable because the ECUBE host is missing a required discovery tool, the dialog now shows an actionable message telling the operator which host package to install before retrying. The browse control is hidden entirely when ECUBE is running in demo mode.</p>
+<h2 id="8-1-1-editing-a-mount">8.1.1 Editing a Mount</h2>
+<p>Use <code>Edit</code> on an existing mount row to reopen the same dialog in edit mode.</p>
+<ul><li>
+The dialog pre-fills the current type, remote path, and project ID.
+</li><li>
+The local mount point is shown as read-only informational context and is not directly editable.
+</li><li>
+Stored credentials are not returned to the UI. Leaving the credential fields blank preserves the stored values.
+</li><li>
+Use <code>Clear saved credentials</code> if you need to remove previously stored SMB credentials without replacing them in the same edit.
+</li></ul>
+<p>When you save, ECUBE updates the existing mount record instead of creating a new one, then refreshes the row status in the list. If the backend rejects the change, or if the returned mount status is <code>ERROR</code>, the dialog stays open so you can review the returned error state before closing it.</p>
+<h2 id="8-2-testing-mount-connectivity">8.2 Testing Mount Connectivity</h2>
+<p>Use <code>Test</code> or <code>Test All</code> to verify that configured source mounts are reachable and valid before creating jobs that depend on them.</p>
+<h2 id="8-3-removing-a-mount">8.3 Removing a Mount</h2>
+<p>Remove a mount only if it is no longer needed. If existing workflows depend on it, removing the definition can interrupt job creation or repeatability.</p>
+<hr />
+<h1 id="8-4-directory-browser">8.4 Directory Browser</h1>
+<p>The directory browser allows users to explore the contents of active mount points (USB drives and network shares) before creating an export job.</p>
+<p><strong>Accessing the browser:</strong></p>
+<ul><li>
+<strong>From Drive Detail:</strong> Click the mount path link on any mounted drive to open the directory browser rooted at that drive's mount point.
+</li><li>
+<strong>From Mounts:</strong> Click the <code>Browse</code> button on any mounted network share. The button is disabled for shares that are not currently mounted.
+</li></ul>
+<p><strong>Navigating:</strong></p>
+<ul><li>
+Click a folder name to descend into it. The breadcrumb trail at the top shows the current path.
+</li><li>
+Click any breadcrumb segment to navigate back up.
+</li><li>
+Symlinks appear with a link icon and are not navigable.
+</li><li>
+Results are paginated; use the page controls at the bottom to navigate large directories.
+</li></ul>
+<p><strong>Roles:</strong> All authenticated roles (<code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code>) can browse directories.</p>
+<blockquote><p><strong>Note:</strong> Only active, registered mount points can be browsed. Arbitrary filesystem paths are not accessible through this feature.</p></blockquote>
+<hr />
+<h1 id="9-jobs">9. Jobs</h1>
+<blockquote><p><strong>Access Summary</strong></p></blockquote>
+<blockquote><p><strong>Page visibility:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code></p></blockquote>
+<blockquote><p><strong>Restricted actions:</strong> Creating jobs in the current UI is enabled for <code>admin</code>, <code>manager</code>, and <code>processor</code>.</p></blockquote>
+<p>The <code>Jobs</code> page is the main workspace for creating and tracking export operations.</p>
+<p>The page includes:</p>
+<ul><li>
+A jobs table
+</li><li>
+Search and status filters
+</li><li>
+Refresh action
+</li><li>
+<code>Create Job</code> dialog
+</li></ul>
+<h2 id="9-1-viewing-jobs">9.1 Viewing Jobs</h2>
+<p>Use the jobs table to review:</p>
+<ul><li>
+Job ID
+</li><li>
+Project ID
+</li><li>
+Evidence number
+</li><li>
+Device
+</li><li>
+Current status
+</li><li>
+Progress label or percentage
+</li></ul>
+<p>For active jobs, the progress value stays synchronized with both copied bytes and completed file counts. During startup analysis, a newly started job can show <code>Preparing...</code> in the Jobs list while ECUBE scans the source files and calculates totals. A running, pausing, or verifying job does not show 100% until the finished-file totals also indicate completion.</p>
+<p>Common statuses include:</p>
+<ul><li>
+<code>PENDING</code>
+</li><li>
+<code>RUNNING</code>
+</li><li>
+<code>PAUSING</code>
+</li><li>
+<code>PAUSED</code>
+</li><li>
+<code>VERIFYING</code>
+</li><li>
+<code>COMPLETED</code>
+</li><li>
+<code>FAILED</code>
+</li></ul>
+<p>The jobs table also exposes row-level <code>Details</code>, <code>Start</code>, and <code>Pause</code> actions for authorized operators. <code>PAUSING</code> means ECUBE is waiting for in-flight copy threads to finish their current work before the job becomes fully <code>PAUSED</code>.</p>
+<h2 id="9-2-creating-a-job">9.2 Creating a Job</h2>
+<p>The current job-creation flow uses a grouped dialog instead of a four-step wizard.</p>
+<p>The dialog is organized into four sections:</p>
+<ol><li>
+<code>Job details</code> — project, evidence number, optional notes, and thread count
+</li><li>
+<code>Source</code> — the mounted project source and source path
+</li><li>
+<code>Destination</code> — the eligible mounted USB device for the selected project
+</li><li>
+<code>Execution</code> — the optional <code>Run job immediately</code> checkbox
+</li></ol>
+<p>Only the <code>Project</code> field is active when the dialog opens. After you select a project, ECUBE unlocks the remaining fields and filters the available mounts and destination drives to project-matching, currently eligible resources.</p>
+<p>The destination selector is labeled <code>Select device</code> and shows the same port-based <code>Device</code> value used elsewhere in the UI, rather than a serial number or <code>#id</code> prefix.</p>
+<p>Before creating a job, confirm:</p>
+<ul><li>
+The correct project is selected first
+</li><li>
+The source mount and destination drive both match that project
+</li><li>
+The evidence number and source path are correct
+</li><li>
+If you enable <code>Run job immediately</code>, the job will start as soon as creation succeeds
+</li></ul>
+<p>The source path is interpreted inside the selected mounted share. Entering only / uses the root of that share, and attempts to navigate outside the selected share are rejected before the job is created.</p>
+<h2 id="9-3-opening-a-job">9.3 Opening a Job</h2>
+<p>Open a job to view details and perform follow-up actions.</p>
+<hr />
+<h1 id="10-job-detail-verification-and-file-review">10. Job Detail, Verification, and File Review</h1>
+<blockquote><p><strong>Access Summary</strong></p></blockquote>
+<blockquote><p><strong>Page visibility:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code></p></blockquote>
+<blockquote><p><strong>Restricted actions:</strong> <code>Analyze</code>, <code>Edit</code>, <code>Start</code>, <code>Retry Failed Files</code>, <code>Pause</code>, <code>Complete</code>, <code>Verify</code>, and <code>Manifest</code> are enabled for <code>admin</code>, <code>manager</code>, and <code>processor</code> when the current job state allows them. <code>Clear startup analysis cache</code> is shown only to <code>admin</code> and <code>manager</code> when the job still has a persisted startup-analysis snapshot. <code>Delete</code> is shown only for eligible pending jobs. Hash inspection and source/destination comparison remain available to <code>admin</code> and <code>auditor</code>.</p></blockquote>
+<p>The job detail page provides deeper inspection and follow-up controls.</p>
+<p>Typical functions include:</p>
+<ul><li>
+Run manual startup analysis before copy starts so the operator can review discovered files and estimated bytes
+</li><li>
+Edit a pending, paused, or failed job before resuming work
+</li><li>
+Start a pending job or resume a paused one
+</li><li>
+Retry only the failed or timed-out files from a partial-success completed job
+</li><li>
+Pause a running job and resume it later
+</li><li>
+Manually complete a safe non-active job when required by the workflow
+</li><li>
+Clear a persisted startup-analysis snapshot before the next restart when the cached scan should be discarded
+</li><li>
+Generate a manifest and confirm where it was written
+</li><li>
+Review copied files
+</li><li>
+Inspect hashes for individual files
+</li><li>
+Compare a file's source version against its copied destination version
+</li></ul>
+<h2 id="10-1-editing-starting-retrying-failed-files-pausing-completing-verifying-and-generating-a-manifest">10.1 Editing, Starting, Retrying Failed Files, Pausing, Completing, Verifying, and Generating a Manifest</h2>
+<p>Action buttons are shown near the top of the job detail screen.</p>
+<p>Use them when appropriate:</p>
+<ul><li>
+<code>Analyze</code> to run startup analysis for an eligible job without starting copy
+</li><li>
+<code>Edit</code> to adjust evidence number, source path, drive, or thread count for a <code>PENDING</code>, <code>PAUSED</code>, or <code>FAILED</code> job
+</li><li>
+<code>Start</code> to begin a new job or resume a paused one
+</li><li>
+<code>Retry Failed Files</code> to re-queue only <code>ERROR</code> and <code>TIMEOUT</code> file rows on a <code>COMPLETED</code> job that finished with partial-success results
+</li><li>
+<code>Pause</code> to request a safe stop after the current copy work finishes
+</li><li>
+<code>Complete</code> to manually mark a pending, paused, or failed job as complete when the operational workflow requires it
+</li><li>
+<code>Clear startup analysis cache</code> to remove a persisted startup scan after explicit confirmation; this is available only to <code>admin</code> and <code>manager</code> when cached startup-analysis data exists for the job
+</li><li>
+<code>Verify</code> to run verification checks once the job is fully complete with no failed or timed-out files
+</li><li>
+<code>Manifest</code> to generate the manifest output once the job is fully complete with no failed or timed-out files
+</li></ul>
+<p>When a pause is requested, the Jobs list and Job Detail page can show a <code>Pause in progress</code> dialog while ECUBE waits for active copy threads to drain. The Start action remains unavailable during <code>PAUSING</code> and becomes available again once the job reaches <code>PAUSED</code>.</p>
+<p>While a job is actively copying, Job Detail shows a live <code>Duration</code> field that reflects cumulative active runtime only. The displayed value continues updating while the job is <code>RUNNING</code>, does not add paused time while the job is <code>PAUSED</code>, and resumes from the previously stored active runtime after a later restart instead of resetting to zero.</p>
+<p>Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed <code>manifest.json</code> file on the destination drive.</p>
+<p>For a partial-success <code>COMPLETED</code> job, Job Detail can show <code>Retry Failed Files</code> instead of exposing Verify or Manifest too early. This action is available only to <code>admin</code>, <code>manager</code>, and <code>processor</code>, moves the job back into <code>RUNNING</code>, re-queues only failed or timed-out files, and preserves already successful copies.</p>
+<p>The completion summary uses the normal success styling for clean completions. If the summary still shows any failed or timed-out file counts, the summary switches to a red warning background so operators can distinguish a partial-success completion from a clean completed run at a glance.</p>
+<p>During startup analysis, Job Detail can show <code>Preparing copy...</code> before any totals are known. While this state is visible, the page also explains that ECUBE is still scanning the source files and calculating totals, which can take time for large evidence sets.</p>
+<p>Manual Analyze runs use the same startup-analysis engine before copy begins. Job Detail can show <code>Startup analysis started.</code> while the scan is running, then replace it with <code>Startup analysis completed.</code> when the persisted analysis summary is ready. The summary panel can show the startup-analysis state, discovered files, estimated total bytes, last analyzed time, and a sanitized failure reason when analysis fails.</p>
+<p>While startup analysis is actively running, Job Detail disables conflicting lifecycle actions so operators cannot edit, start, complete, delete, or clear the startup-analysis cache until the analyze run finishes. Delete and <code>Clear startup analysis cache</code> can remain visible for eligible jobs but stay disabled until the startup-analysis state leaves <code>ANALYZING</code>.</p>
+<p>If the Jobs page remains open while a manual analyze run finishes, ECUBE can show a page-level completion message for that job so operators notice the result without reopening Job Detail.</p>
+<p>If a job is restarted after a failed, paused, or partially successful run and its persisted startup-analysis snapshot is still current, ECUBE can reuse that cached scan instead of repeating the full startup analysis. ECUBE clears the reusable snapshot automatically only after a clean completion with no failed or timed-out files. When operators need to discard that snapshot, the <code>Clear startup analysis cache</code> action opens a confirmation dialog and removes only the cached startup-analysis data. It does not remove per-file history, copied-file state, or other audit-relevant job records.</p>
+<p>When a job is paused, completed, or fails, the detail view shows a summary with the job start time, copy thread count, files copied, files failed, files timed out, total copied, elapsed time, copy rate, and any failure reason or related log hint. A <code>COMPLETED</code> job means all files reached a terminal state, not necessarily that every file copied successfully, so the summary can still report failed or timed-out files after a partial-success completion. The elapsed time remains cumulative across earlier run segments, so a paused and later resumed job keeps the same additive runtime history that was shown while it was active. Failed jobs prefer a persisted sanitized job-level failure reason when one is available, so operators can see stable messages such as <code>Unexpected copy failure</code> or <code>Job interrupted by service restart before completion</code> before any derived per-file fallback. Completed jobs with file-level failures instead show the safe per-file failure summaries and counters without exposing raw provider errors or host paths. When <code>COPY_JOB_TIMEOUT</code> is exceeded for an individual file attempt, that timeout is recorded as a per-file error (for example <code>File copy timed out after 3600s</code>) rather than a whole-job timeout reason.</p>
+<p>When ECUBE can safely correlate a failed copy to the selected source or destination for that job, the failure summary may add relative hints such as <code>source: reports/a.txt</code> or <code>destination: reports/a.txt</code>. Raw host or mount paths are not shown in the Job Detail summary.</p>
+<h2 id="10-2-file-list">10.2 File List</h2>
+<p>The Files panel is collapsed by default on Job Detail. Use <code>Show files</code> to expand it and <code>Hide files</code> to collapse it again without losing the current page.</p>
+<p>When expanded, the file table usually shows:</p>
+<ul><li>
+Relative path
+</li><li>
+Status
+</li><li>
+Failure details when a row includes a safe file-level error summary
+</li><li>
+<code>View Hashes</code> actions for users allowed to inspect file hashes
+</li></ul>
+<p>If the job contains more rows than fit on one page, the panel shows a numbered pagination control with 10-page shortcut windows and left/right navigation. The number of rows shown per page is controlled by the admin-only <code>Job Detail Files Per Page</code> runtime setting and is bounded between 20 and 100.</p>
+<h2 id="10-3-hash-viewer">10.3 Hash Viewer</h2>
+<p>Users with sufficient permissions can inspect file hashes, including values such as:</p>
+<ul><li>
+MD5
+</li><li>
+SHA-256
+</li></ul>
+<h2 id="10-4-compare-source-and-destination">10.4 Compare Source and Destination</h2>
+<p>The compare panel now uses clear <code>Source</code> and <code>Destination</code> terminology. After you load hashes for an exported file, choose that file in the compare selector to evaluate the original source version against the copied destination version.</p>
+<p>Comparison output includes:</p>
+<ul><li>
+Overall match
+</li><li>
+Hash match
+</li><li>
+Size match
+</li><li>
+Path match
+</li></ul>
+<p>This is useful when reviewing evidence consistency or confirming repeatability after copy or verification steps. If either side is unavailable, ECUBE shows a sanitized conflict message instead of exposing raw filesystem details.</p>
+<p>Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed <code>manifest.json</code> file on the destination drive and starts a browser download of the same generated manifest JSON.</p>
+<hr />
+<h1 id="11-audit-logs">11. Audit Logs</h1>
+<blockquote><p><strong>Access Summary</strong></p></blockquote>
+<blockquote><p><strong>Page visibility:</strong> <code>admin</code>, <code>manager</code>, <code>auditor</code></p></blockquote>
+<blockquote><p><strong>Restricted actions:</strong> CSV export is available from the page for authorized users.</p></blockquote>
+<p>The <code>Audit</code> page is available only to authorized roles.</p>
+<p>Use it to:</p>
+<ul><li>
+Refresh recent audit activity
+</li><li>
+Filter by user
+</li><li>
+Filter by action
+</li><li>
+Filter by date/time range
+</li><li>
+Expand structured details for individual records
+</li><li>
+Export the result set as CSV
+</li></ul>
+<p>The audit page is useful for review, compliance, and incident follow-up.</p>
+<p>When exporting CSV:</p>
+<ul><li>
+Review filters before export so the file contains the intended data set
+</li><li>
+Treat exported audit data as sensitive operational evidence
+</li></ul>
+<h2 id="11-1-chain-of-custody-workflow">11.1 Chain of Custody Workflow</h2>
+<p>Use the Chain of Custody panel on the <code>Audit</code> page to generate custody reports, prefill handoff fields, and record final transfer details when physical media leaves active operations.</p>
+<p>Typical workflow:</p>
+<ol><li>
+Open <code>Audit</code>.
+</li><li>
+In the <strong>Chain of Custody</strong> section, filter by drive ID, drive serial, and/or project ID.
+</li><li>
+Click <code>Load CoC</code> to load custody report data.
+</li><li>
+Review the report card for the selected drive (drive ID, serial, project, manifest summary, and custody events).
+</li><li>
+Click <code>Prefill Handoff</code> to populate the handoff form from the selected report.
+</li><li>
+Enter required handoff details (<code>Possessor</code> and <code>Delivery Time</code>) and any optional receipt fields. The delivery time picker uses your browser's local timezone; the application converts it to UTC automatically before storing.
+</li><li>
+Click <code>Confirm Handoff</code>.
+</li><li>
+Review the <strong>Permanent Archive Warning</strong> modal.
+</li><li>
+Choose one of the following:
+<ul><li>
+<code>Cancel</code>: closes the warning modal and does not record a handoff.
+</li><li>
+<code>Yes, archive drive</code>: records the handoff and archives the drive.
+</li></ul>
+</li></ol>
+<p>What happens when handoff is confirmed:</p>
+<ul><li>
+The custody handoff event is written to the immutable audit trail.
+</li><li>
+The selected drive is automatically transitioned to the <code>ARCHIVED</code> state.
+</li><li>
+The drive is removed from active circulation workflows.
+</li><li>
+The drive no longer appears in Chain of Custody search results intended for active media.
+</li><li>
+Operational actions for that drive are blocked as part of archival enforcement.
+</li></ul>
+<p>Operational guidance:</p>
+<ul><li>
+Treat <code>Yes, archive drive</code> as a finalization action.
+</li><li>
+Verify drive ID, project, possessor, and delivery timestamp before confirming.
+</li><li>
+Use <code>Cancel</code> if any custody detail needs correction before archival.
+</li></ul>
+<hr />
+<h1 id="12-users">12. Users</h1>
+<blockquote><p><strong>Access Summary</strong></p></blockquote>
+<blockquote><p><strong>Page visibility:</strong> <code>admin</code></p></blockquote>
+<blockquote><p><strong>Restricted actions:</strong> All user-management actions on this page are administrator-only.</p></blockquote>
+<p>The <code>Users</code> page is role-restricted and is generally intended for administrators.</p>
+<p>Functions available from this page can include:</p>
+<ul><li>
+Refreshing the current user list
+</li><li>
+Creating an operating-system user for ECUBE access
+</li><li>
+Assigning or removing ECUBE roles
+</li><li>
+Resetting a user's password
+</li></ul>
+<h2 id="12-1-reset-a-user-password">12.1 Reset a User Password</h2>
+<p><strong>Allowed roles:</strong> <code>admin</code></p>
+<ol><li>
+Open <code>Users</code>.
+</li><li>
+Locate the target account in the users table.
+</li><li>
+Open the password reset action for that user.
+</li><li>
+Enter a temporary or policy-compliant new password.
+</li><li>
+Confirm the reset action.
+</li><li>
+Verify the UI shows a success confirmation.
+</li><li>
+Communicate the temporary password through your approved secure channel.
+</li><li>
+Require the user to change it at first sign-in if required by your policy.
+</li></ol>
+<p>Notes:</p>
+<ul><li>
+Reset only ECUBE-managed accounts from this workflow.
+</li><li>
+Use strong passwords that meet your organization security requirements.
+</li><li>
+Record administrative password-reset actions according to your SOP.
+</li></ul>
+<p>If your role does not include access to this page, the navigation item will not appear.</p>
+<h2 id="12-2-configuration-page-administrator">12.2 Configuration Page (Administrator)</h2>
+<p><strong>Allowed roles:</strong> <code>admin</code></p>
+<p>Use the <code>Configuration</code> page to update selected runtime settings from the UI without logging into the host terminal.</p>
+<p>In a standard deployment, the Logging section loads with file logging already enabled and the log path prefilled as <code>/var/log/ecube/app.log</code>. Unchecking the file logging toggle clears <code>LOG_FILE</code> and returns ECUBE to console-only logging.</p>
+<p>What this page is for:</p>
+<ul><li>
+Adjusting logging behavior (level, format, and file logging options)
+</li><li>
+Adjusting selected database pool settings exposed by the UI
+</li><li>
+Applying safe configuration changes through role-restricted workflows
+</li></ul>
+<p>Basic workflow:</p>
+<ol><li>
+Open <code>Configuration</code> from the admin navigation area.
+</li><li>
+Review current values in each section.
+</li><li>
+Edit one or more fields.
+</li><li>
+Click <code>Save</code>.
+</li><li>
+Review post-save status: some changes apply immediately, and some changes are marked as pending restart.
+</li></ol>
+<p>Restart-required workflow:</p>
+<ol><li>
+If the page indicates that restart is required, review the listed changed settings.
+</li><li>
+Click <code>Restart Service</code> only when you are ready.
+</li><li>
+Read the confirmation dialog.
+</li><li>
+Confirm restart to submit the service restart request.
+</li><li>
+If you select cancel, no restart is triggered and the service keeps running.
+</li></ol>
+<p>Important operational notes:</p>
+<ul><li>
+Restart actions are never automatic from this page and always require explicit confirmation.
+</li><li>
+Restarting the application service can interrupt active operations. Prefer using a maintenance window or an idle period.
+</li><li>
+If restart submission fails, use the displayed error and contact platform support or perform restart through approved host-level procedures.
+</li><li>
+For field-by-field meaning and defaults, see 04-configuration-reference.md.
+</li></ul>
+<p>If your role does not include access to this page, the navigation item will not appear.</p>
+<hr />
+<h1 id="13-system">13. System</h1>
+<blockquote><p><strong>Access Summary</strong></p></blockquote>
+<blockquote><p><strong>Page visibility:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code></p></blockquote>
+<blockquote><p><strong>Restricted actions:</strong> Most diagnostics on this page are relevant to administrators and support personnel. Log viewing is admin-only.</p></blockquote>
+<p>The <code>System</code> page provides operational and diagnostic information. Depending on deployment and permissions, this may include system health, USB information, block-device data, mount diagnostics, application logs, and job-debug details.</p>
+<p>This page is useful when:</p>
+<ul><li>
+Confirming the backend is healthy
+</li><li>
+Checking whether hardware is visible to ECUBE
+</li><li>
+Reviewing mount or log details during issue investigation
+</li><li>
+Investigating system errors or performance issues via application logs (admin-only)
+</li></ul>
+<p>End users who only perform evidence exports may rarely need this page. Administrators and support personnel are more likely to use it during troubleshooting.</p>
+<p>In the <code>USB Topology</code> tab, ECUBE shows a sorted device table that includes <code>Device</code> and <code>Serial Number</code> columns. Rows with no meaningful USB metadata are hidden so the list stays focused on useful hardware entries.</p>
+<p>For users with <code>admin</code> or <code>manager</code> roles, the System tab bar includes a <code>Reconcile managed mounts</code> action button positioned between <code>Mounts</code> and <code>Logs</code>. This action triggers a manual managed-mount reconciliation pass and opens a dedicated results page.</p>
+<h2 id="13-1-application-logs-tab">13.1 Application Logs Tab</h2>
+<p><strong>Access:</strong> <code>admin</code> role only</p>
+<p>The <strong>Logs</strong> tab allows administrators to inspect the active application log and eligible rotated log files in real time without requiring SSH or command-line access to the ECUBE host. This is useful for diagnosing system issues, checking for errors, and monitoring application behavior.</p>
+<h3 id="viewing-logs">Viewing Logs</h3>
+<ol><li>
+Open the <code>System</code> page.
+</li><li>
+Click the <strong>Logs</strong> tab (visible to admins only).
+</li><li>
+Use the <strong>Source</strong> selector to choose the active application log or an available rotated file such as <code>app.log.1</code>.
+</li><li>
+The selected source loads automatically into the viewer.
+</li><li>
+Log entries are displayed in reverse chronological order (newest first) within the current window.
+</li><li>
+File metadata shows:
+<ul><li>
+<strong>Source:</strong> Log source display path (basename only, for example <code>app.log</code>)
+</li><li>
+<strong>Fetched at:</strong> Viewer-local date/time (converted by the browser from the UTC timestamp returned by the API)
+</li><li>
+<strong>File modified:</strong> Last modification time of the log file
+</li></ul>
+</li></ol>
+<h3 id="searching-logs">Searching Logs</h3>
+<ol><li>
+Enter a search term in the <strong>Search</strong> field.
+</li><li>
+Only log lines containing your search term will be displayed.
+</li><li>
+The search is case-insensitive.
+</li><li>
+Click <strong>Refresh</strong> to rerun the search with fresh log data.
+</li></ol>
+<h3 id="pagination">Pagination</h3>
+<ol><li>
+The current Logs tab UI does not expose <strong>Limit</strong> or <strong>Offset</strong> controls.
+</li><li>
+Scroll within the log viewer to move to older or newer pages of the selected source.
+</li><li>
+When you reach the end of the current buffer, ECUBE fetches the next page for that direction instead of loading the full file into memory.
+</li><li>
+A total-count indicator (for example, &quot;X of Y lines&quot;) is not currently shown in the UI.
+</li></ol>
+<h3 id="automatic-redaction">Automatic Redaction</h3>
+<p>All sensitive values are automatically redacted from displayed log lines:</p>
+<ul><li>
+<strong>Passwords and tokens:</strong> Any field containing password, secret, api_key, or token values are masked (e.g., <code>password=[REDACTED]</code>)
+</li><li>
+<strong>Authorization headers:</strong> Bearer tokens in Authorization headers are sanitized
+</li><li>
+<strong>Credential-like values:</strong> Other sensitive patterns (e.g., sensitive JSON fields) are masked
+</li></ul>
+<p>This redaction occurs automatically; you cannot bypass it via search or filter options.</p>
+<h3 id="refreshing-log-data">Refreshing Log Data</h3>
+<ol><li>
+Click the <strong>Refresh</strong> button to retrieve the latest log entries.
+</li><li>
+The displayed lines update immediately for the currently selected source and reset the viewer to the newest page for that selection.
+</li><li>
+The <strong>Download</strong> button exports the currently selected log source.
+</li><li>
+If the selected log file is unavailable, unreadable, or no longer present, an appropriate error message appears.
+</li></ol>
+<h3 id="troubleshooting-log-viewing">Troubleshooting Log Viewing</h3>
+<p>If the Logs tab shows an error or is unavailable:</p>
+<ul><li>
+Verify you have the <code>admin</code> role (non-admin users will not see this tab).
+</li><li>
+Check that the selected log file still exists on the ECUBE host.
+</li><li>
+Verify the ECUBE service account has read permissions on the selected log file.
+</li><li>
+If you selected a rotated file, confirm the file has not been removed or replaced during log rotation.
+</li><li>
+Consult <a href="#15-troubleshooting">15. Troubleshooting</a> for service-level issues.
+</li></ul>
+<p>Governance note: denied log access attempts by non-admin users are recorded in the audit trail for accountability and compliance visibility.</p>
+<h2 id="13-2-manual-mount-reconciliation">13.2 Manual Mount Reconciliation</h2>
+<p><strong>Access:</strong> <code>admin</code>, <code>manager</code> roles</p>
+<p>Use this action when mounted-share state appears stale or inconsistent and you need to reconcile managed network and USB mount state without restarting the service.</p>
+<h3 id="run-reconciliation-from-the-system-page">Run Reconciliation from the System Page</h3>
+<ol><li>
+Open the <code>System</code> page.
+</li><li>
+In the tab bar, locate <code>Reconcile managed mounts</code> next to <code>Mounts</code>:
+<ul><li>
+<code>admin</code>: between <code>Mounts</code> and <code>Logs</code>
+</li><li>
+<code>manager</code>: between <code>Mounts</code> and <code>Job Debug</code> (the <code>Logs</code> tab is admin-only)
+</li></ul>
+</li><li>
+Click <code>Reconcile managed mounts</code>.
+</li><li>
+While the request is running, the button label changes to <code>Loading</code>.
+</li><li>
+On success, ECUBE navigates to the <code>Reconciliation Results</code> page.
+</li></ol>
+<h3 id="interpret-reconciliation-results">Interpret Reconciliation Results</h3>
+<p>The results page shows:</p>
+<ul><li>
+A summary panel with <code>Status</code>, checked/corrected counts for network mounts and USB mounts, and <code>Corrective operations failed</code>.
+</li><li>
+A <code>Current USB Drives</code> table with drive fields similar to the Drives page.
+</li><li>
+A <code>Current Shared Mounts</code> table with mount fields similar to the Mounts page.
+</li></ul>
+<p>These tables are post-run snapshots of current drive and mount state to help operators investigate reconciliation outcomes; they are not limited to only rows that were corrected during the run.</p>
+<p>Status meanings:</p>
+<ul><li>
+<code>completed</code> means no corrective-operation failures were recorded.
+</li><li>
+<code>completed with warnings</code> means one or more corrective operations failed (<code>failure_count &gt; 0</code>).
+</li></ul>
+<h3 id="result-page-states">Result Page States</h3>
+<ul><li>
+If no result context is available (for example direct navigation or browser refresh), ECUBE shows <code>Reconciliation results are not available. Please run reconciliation from the System page.</code>
+</li><li>
+If reconciliation returns no mount or drive rows, ECUBE shows <code>No reconciliation data available. Run reconciliation to see results.</code>
+</li></ul>
+<p>Use the <code>Back</code> button on the results page to return to the System page.</p>
+<hr />
+<h1 id="14-common-tasks">14. Common Tasks</h1>
+<h2 id="14-1-insert-a-new-drive-and-associate-it-with-a-project">14.1 Insert a New Drive and Associate It with a Project</h2>
+<p><strong>Allowed roles:</strong> <code>admin</code>, <code>manager</code></p>
+<ol><li>
+Insert the new USB drive into the ECUBE host.
+</li><li>
+Open <code>Mounts</code> and confirm the correct source share for the project has been added, assigned to the project ID, and is currently <code>MOUNTED</code>.
+</li><li>
+Open <code>Drives</code>.
+</li><li>
+Refresh or rescan the drive list until the new device appears.
+</li><li>
+Open the drive detail page.
+</li><li>
+If the drive is not yet formatted (state is <code>DISCONNECTED</code> or filesystem shows <code>unformatted</code>), format it using the intended filesystem.
+</li><li>
+If the drive is not yet mounted to the ECUBE-managed mount root, click <code>Mount</code> and wait for the mount path to appear.
+</li><li>
+Click <code>Initialize</code>, choose the project from the dropdown list, and submit.
+</li><li>
+Confirm the drive now shows <code>IN_USE</code> and the expected project association.
+</li></ol>
+<p>Notes:</p>
+<ul><li>
+<code>processor</code> and <code>auditor</code> users can view drives but cannot perform format, mount, or initialize actions in the current UI.
+</li><li>
+Only projects backed by an actively mounted share appear in the Initialize dropdown.
+</li><li>
+The destination drive itself must also already be mounted; otherwise ECUBE returns a conflict and records the rejection in the audit log.
+</li><li>
+Confirm the project carefully before initialization because project isolation is enforced after association.
+</li></ul>
+<h2 id="14-1a-re-insert-a-drive-to-add-more-data-to-the-same-project">14.1a Re-insert a Drive to Add More Data to the Same Project</h2>
+<p><strong>Allowed roles:</strong> <code>admin</code>, <code>manager</code></p>
+<p>If a drive was previously ejected and needs to receive more data for the same project:</p>
+<ol><li>
+Re-insert the drive into the ECUBE host.
+</li><li>
+Confirm the project's source share is still configured and currently <code>MOUNTED</code>.
+</li><li>
+Open <code>Drives</code> and locate the drive (state will be <code>AVAILABLE</code>).
+</li><li>
+Open the drive detail page.
+</li><li>
+If the drive is not mounted, click <code>Mount</code> and wait for the mount path to appear.
+</li><li>
+Click <code>Initialize</code>. The previous project is selected automatically only if that project still has an eligible mounted share.
+</li><li>
+Confirm and submit.
+</li><li>
+The drive transitions back to <code>IN_USE</code> for the same project.
+</li></ol>
+<p>No format is required when re-using the same project, but both the mounted-share and mounted-drive prerequisites still apply.</p>
+<h2 id="14-1b-re-assign-a-drive-to-a-different-project">14.1b Re-assign a Drive to a Different Project</h2>
+<p><strong>Allowed roles:</strong> <code>admin</code>, <code>manager</code></p>
+<p>If a drive must be reassigned to a different project, a format is required to wipe existing data and clear the project binding:</p>
+<ol><li>
+Open <code>Mounts</code> and make sure the destination project's source share has already been added, assigned the correct project ID, and mounted successfully.
+</li><li>
+Open <code>Drives</code> and locate the drive (state must be <code>AVAILABLE</code>).
+</li><li>
+Open the drive detail page.
+</li><li>
+Click <code>Format</code> and select the target filesystem. Confirm the format.
+</li><li>
+If the drive is not yet mounted after formatting, click <code>Mount</code> and wait for the mount path to appear.
+</li><li>
+Click <code>Initialize</code>.
+</li><li>
+Choose the new project from the dropdown and confirm.
+</li><li>
+The drive transitions to <code>IN_USE</code> for the new project.
+</li></ol>
+<blockquote><p><strong>Warning:</strong> Formatting permanently deletes all data on the drive. Verify that copies and chain-of-custody records for prior project data are complete before proceeding.</p></blockquote>
+<h2 id="14-2-prepare-a-drive-for-removal-and-shipment">14.2 Prepare a Drive for Removal and Shipment</h2>
+<p><strong>Allowed roles:</strong> <code>admin</code>, <code>manager</code></p>
+<ol><li>
+Confirm the export job is complete and any required verification or manifest generation has finished.
+</li><li>
+Open <code>Drives</code> and select the target drive.
+</li><li>
+Review the drive details to confirm you have the correct media.
+</li><li>
+Click <code>Prepare Eject</code>.
+</li><li>
+Wait for the UI to indicate success.
+</li><li>
+Physically remove the drive only after the operation completes.
+</li></ol>
+<p>Notes:</p>
+<ul><li>
+Use this workflow before final packaging or shipment.
+</li><li>
+Do not remove the drive while a copy or verification step is still active.
+</li><li>
+After ejection the drive returns to <code>AVAILABLE</code> with its project binding intact. It can be re-initialized for the same project without reformatting.
+</li><li>
+To permanently retire the drive, complete the Chain of Custody handoff on the <code>Audit</code> page after removal.
+</li></ul>
+<h2 id="14-3-export-evidence-to-a-drive">14.3 Export Evidence to a Drive</h2>
+<p><strong>Allowed roles:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code></p>
+<ol><li>
+Confirm the correct drive is present and in the expected state.
+</li><li>
+Confirm the source mount is available.
+</li><li>
+Open <code>Jobs</code>.
+</li><li>
+Click <code>Create Job</code> to open the grouped dialog.
+</li><li>
+Select the project first.
+</li><li>
+Choose the filtered source mount and eligible destination drive, then enter the evidence number and source path.
+</li><li>
+Create the job, or enable <code>Run job immediately</code> if you want it to start as soon as creation succeeds.
+</li><li>
+Open the job detail page.
+</li><li>
+Monitor progress until completion.
+</li><li>
+Run verification and generate a manifest if required by your workflow.
+</li></ol>
+<h2 id="14-4-review-copy-results">14.4 Review Copy Results</h2>
+<p><strong>Allowed roles:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code></p>
+<ol><li>
+Open the job detail page.
+</li><li>
+Review the file list and status values.
+</li><li>
+Inspect hashes for specific files if your role allows it.
+</li><li>
+Compare files when you need side-by-side validation.
+</li><li>
+Export or retain the manifest as required by policy.
+</li></ol>
+<p>Notes:</p>
+<ul><li>
+Hash inspection is currently available to <code>admin</code> and <code>auditor</code> in the UI.
+</li><li>
+Operational actions such as <code>Start</code>, <code>Verify</code>, and <code>Manifest</code> are available to <code>admin</code>, <code>manager</code>, and <code>processor</code>.
+</li></ul>
+<h2 id="14-5-review-audit-activity">14.5 Review Audit Activity</h2>
+<p><strong>Allowed roles:</strong> <code>admin</code>, <code>manager</code>, <code>auditor</code></p>
+<ol><li>
+Open <code>Audit</code>.
+</li><li>
+Apply user, action, and date filters.
+</li><li>
+Expand details for relevant records.
+</li><li>
+Export CSV if you need to retain or share the filtered results.
+</li></ol>
+<h2 id="14-6-add-a-new-user">14.6 Add a New User</h2>
+<p><strong>Allowed roles:</strong> <code>admin</code></p>
+<ol><li>
+Open <code>Users</code>.
+</li><li>
+Click <code>Create User</code>.
+</li><li>
+Enter the username.
+</li><li>
+Select the appropriate ECUBE roles.
+</li><li>
+Click <code>Create</code>.
+</li><li>
+If the username already exists on the host (or directory-backed identity source), review the confirmation prompt and choose whether to add that existing account to ECUBE.
+</li><li>
+If this is a brand-new user, complete the password dialog by entering and confirming the password, then submit.
+</li><li>
+Refresh the page and confirm the user appears with the intended role assignments.
+</li></ol>
+<p>Notes:</p>
+<ul><li>
+Choose the smallest role set needed for the user's responsibilities.
+</li><li>
+If your organization uses a separate account-provisioning process, follow that policy before creating ECUBE access.
+</li><li>
+Existing users that are linked into ECUBE are not prompted for a new password in this flow.
+</li><li>
+For directory-backed users that cannot be fully enumerated by host account listing, ECUBE may show placeholder host fields while still exposing role management controls.
+</li></ul>
+<h2 id="14-7-remove-a-user-s-ecube-access">14.7 Remove a User's ECUBE Access</h2>
+<p><strong>Allowed roles:</strong> <code>admin</code></p>
+<ol><li>
+Open <code>Users</code>.
+</li><li>
+Locate the target user.
+</li><li>
+Clear all assigned ECUBE role checkboxes for that user.
+</li><li>
+Save the role changes.
+</li><li>
+Confirm the user no longer has ECUBE roles assigned.
+</li></ol>
+<p>Notes:</p>
+<ul><li>
+In the current web UI, removing all roles is the visible workflow for removing ECUBE access.
+</li><li>
+Full operating-system user deletion is not currently exposed in the web UI and should be handled through administrative procedures outside this manual.
+</li></ul>
+<h2 id="14-8-view-application-logs-for-troubleshooting">14.8 View Application Logs for Troubleshooting</h2>
+<p><strong>Allowed roles:</strong> <code>admin</code></p>
+<ol><li>
+Open the <code>System</code> page.
+</li><li>
+Click the <strong>Logs</strong> tab (available to admins only).
+</li><li>
+Choose the active log or a rotated file from the <strong>Source</strong> selector.
+</li><li>
+Optionally, enter a search term to filter the displayed lines.
+</li><li>
+Click <strong>Refresh</strong> to reload the newest page for the selected source.
+</li><li>
+Scroll within the viewer to move to older or newer log pages for that source.
+</li><li>
+Review the redacted log entries for errors, warnings, or relevant diagnostic messages.
+</li><li>
+If you need to investigate further, take note of timestamps or error messages to share with support, or click <strong>Download</strong> to export the currently selected log file.
+</li></ol>
+<p>Notes:</p>
+<ul><li>
+Sensitive values (passwords, tokens, API keys) are automatically redacted from displayed logs for security.
+</li><li>
+The log viewer pages through the selected source as you scroll and does not load the entire file into memory.
+</li><li>
+Download always follows the currently selected source.
+</li><li>
+This feature is admin-only to prevent information leakage from diagnostic data.
+</li></ul>
+<hr />
+<h1 id="15-troubleshooting">15. Troubleshooting</h1>
+<h2 id="15-1-i-cannot-log-in">15.1 I Cannot Log In</h2>
+<p>Possible causes:</p>
+<ul><li>
+Incorrect username or password
+</li><li>
+Wrong ECUBE URL
+</li><li>
+Browser cannot reach the site
+</li><li>
+Your account has not been created or assigned the right role
+</li></ul>
+<h2 id="15-2-a-page-or-menu-item-is-missing">15.2 A Page or Menu Item Is Missing</h2>
+<p>Possible causes:</p>
+<ul><li>
+Your role does not include access to that feature
+</li><li>
+The system is not fully initialized
+</li><li>
+The deployment is using an older or partially upgraded frontend/backend combination
+</li></ul>
+<h2 id="15-3-a-button-is-visible-but-disabled">15.3 A Button Is Visible but Disabled</h2>
+<p>Possible causes:</p>
+<ul><li>
+Your role is read-only for that operation
+</li><li>
+The selected object is not in a state that permits the action
+</li><li>
+Required data has not been entered yet
+</li></ul>
+<h2 id="15-4-the-ui-shows-a-network-error">15.4 The UI Shows a Network Error</h2>
+<p>Possible causes:</p>
+<ul><li>
+Backend service unavailable
+</li><li>
+Reverse proxy or TLS issue
+</li><li>
+Browser blocked cross-origin requests in a nonstandard deployment
+</li><li>
+Expired session or lost authentication state
+</li></ul>
+<p>If the problem persists, collect:</p>
+<ul><li>
+The exact page where the error occurred
+</li><li>
+The action you attempted
+</li><li>
+The visible error text
+</li><li>
+The approximate date and time
+</li></ul>
+<p>Then provide that information to your ECUBE administrator.</p>
+<h2 id="15-5-usb-drive-is-not-recognized">15.5 USB Drive Is Not Recognized</h2>
+<p><strong>Who can do what:</strong></p>
+<ul><li>
+End users (<code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code>) can perform UI-level checks.
+</li><li>
+Administrators (<code>admin</code>) can perform host-level diagnostics and recovery.
+</li></ul>
+<p>If a newly inserted USB drive does not appear in ECUBE, use this sequence.</p>
+<p>User-level checks:</p>
+<ol><li>
+Re-seat the drive and wait 10-20 seconds.
+</li><li>
+Open <code>Drives</code>, then click <code>Refresh</code> and <code>Rescan</code>.
+</li><li>
+Confirm the drive is connected to the expected copy station and not another host.
+</li><li>
+If available in your role, open <code>System</code> and review USB/device information for recent detection changes.
+</li><li>
+If the drive still does not appear, notify an administrator and include:
+<p>Approximate insert time, drive label/vendor/capacity (if known), and USB port or hub location used.</p>
+</li></ol>
+<p>Administrator checks:</p>
+<ol><li>
+Verify physical connectivity first:
+<p>Test a known-good port on the same hub and confirm hub power and cable integrity.</p>
+</li><li>
+Verify host-level USB detection:
+<p><code>lsusb</code> and <code>lsblk</code>.</p>
+</li><li>
+Check ECUBE service health and recent logs:
+<p><code>systemctl status ecube</code> and <code>journalctl -u ecube -n 200</code>.</p>
+</li><li>
+In Docker deployments, verify container USB passthrough configuration matches the deployment design.
+</li><li>
+If the device appears at OS level but not in ECUBE, capture logs and escalate with timestamps and device identifiers.
+</li></ol>
+<p>Common causes:</p>
+<ul><li>
+Faulty cable, port, or unpowered USB hub
+</li><li>
+Unsupported or failing media
+</li><li>
+Host permission/device passthrough issues (especially in containerized setups)
+</li><li>
+ECUBE service not running or unable to complete hardware discovery
+</li></ul>
+<hr />
+<h1 id="references">References</h1>
+<ul><li>
+docs/operations/00-operational-guide.md
+</li></ul>
+    </main>
+  </body>
+</html>
