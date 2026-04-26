@@ -654,6 +654,21 @@ class Settings(BaseSettings):
             return None
         return v
 
+    @field_validator("log_file", mode="before")
+    @classmethod
+    def _normalise_log_file(cls, v: str | None) -> str | None:  # noqa: N805
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        if not isinstance(v, str):
+            return v
+
+        path = os.path.expanduser(v.strip())
+        if not path:
+            return None
+        if not os.path.isabs(path):
+            path = os.path.sep + path.lstrip(os.path.sep)
+        return os.path.normpath(path)
+
     @field_validator("session_cookie_samesite", mode="before")
     @classmethod
     def _normalise_samesite(cls, v: str) -> str:  # noqa: N805

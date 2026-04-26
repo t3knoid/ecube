@@ -1063,7 +1063,7 @@ Optional parameters:
 | `callback_url` | `null` | HTTPS URL that receives a job-status callback when the job reaches `COMPLETED` or `FAILED` |
 | `created_by` | `null` | Optional username attribution override for audit/job metadata |
 
-> **Webhook callback details:** For callback payload format, retry behavior, delivery failure handling, and receiver examples, see [09-third-party-integration.md](09-third-party-integration.md#7-webhook-callbacks).
+> **Webhook callback details:** For callback payload format, retry behavior, delivery failure handling, and receiver examples, see [12-third-party-integration.md](12-third-party-integration.md#7-webhook-callbacks).
 
 #### callback_url integration note
 
@@ -1071,6 +1071,7 @@ Use `callback_url` when an external orchestration or case-management system shou
 
 - `callback_url` must be `https://`.
 - Callbacks are sent when the job reaches a terminal state (`COMPLETED` or `FAILED`).
+- Callback payloads include file outcome counters plus `completion_result` so downstream systems can distinguish clean success from partial-success completion.
 - Delivery outcomes are recorded in audit logs (`CALLBACK_SENT`, `CALLBACK_DELIVERY_FAILED`, `CALLBACK_DELIVERY_DROPPED`).
 
 #### Automatic Drive Assignment
@@ -1579,7 +1580,7 @@ Every audit entry contains:
 |--------|---------|
 | `FILE_COPY_START` | Individual file copy began |
 | `FILE_COPY_SUCCESS` | File copied and checksummed successfully |
-| `FILE_COPY_FAILURE` | File copy failed after all retries |
+| `FILE_COPY_FAILURE` | File copy failed after all retries; details are stored as safe classified values such as `error_code` and `error_detail` instead of raw provider text |
 | `FILE_COPY_RETRY` | File copy retried after transient failure |
 | `FILE_HASHES_RETRIEVED` | File hash lookup performed |
 | `FILE_COMPARE` | Two files compared by hash |

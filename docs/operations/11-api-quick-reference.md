@@ -139,8 +139,8 @@ Compatibility note: To support project-to-source-path policy, use project source
 | POST | `/jobs/{job_id}/pause` | processor+ | Request a safe pause for a running job; returns `PAUSING` until in-flight work drains |
 | POST | `/jobs/{job_id}/complete` | processor+ | Manually mark a pending, paused, or failed job as completed |
 | POST | `/jobs/{job_id}/startup-analysis/clear` | admin/manager | Clear the persisted startup-analysis cache after explicit `{ "confirm": true }` confirmation |
-| POST | `/jobs/{job_id}/verify` | processor+ | Verify copied data after the job is fully complete |
-| POST | `/jobs/{job_id}/manifest` | processor+ | Write or refresh `manifest.json` on the destination drive |
+| POST | `/jobs/{job_id}/verify` | processor+ | Verify copied data only after a clean completed job with no failed or timed-out files |
+| POST | `/jobs/{job_id}/manifest` | processor+ | Write or refresh `manifest.json` only after a clean completed job with no failed or timed-out files |
 
 **Pause and Resume Semantics:** `POST /jobs/{job_id}/pause` moves a running job into `PAUSING` immediately and into `PAUSED` once the active copy threads finish their current work. `POST /jobs/{job_id}/start` can then resume the job from `PAUSED`; attempts to start while a job is still `PAUSING` return **409 Conflict**.
 
@@ -150,7 +150,7 @@ Compatibility note: To support project-to-source-path policy, use project source
 
 **Startup Analysis Locking:** While `startup_analysis_status` is `ANALYZING`, the backend rejects Edit, Analyze, Start, Complete, Delete, and `POST /jobs/{job_id}/startup-analysis/clear` with **409 Conflict** so UI-disabled controls are enforced server-side.
 
-**Manifest and Compare Semantics:** Verify and Manifest remain disabled in the UI until the job is truly complete at 100%. Manifest generation overwrites the same `manifest.json` file on the destination drive and shows its location in the UI. When the same exported record is selected for file comparison, ECUBE compares the original source file against the copied destination version and returns a sanitized **409 Conflict** if either side is unavailable.
+**Manifest and Compare Semantics:** Verify and Manifest remain disabled in the UI until the job is truly complete at 100% and has no failed or timed-out files. The backend enforces the same clean-completion requirement with **409 Conflict** if a partial-success `COMPLETED` job is submitted anyway. Manifest generation overwrites the same `manifest.json` file on the destination drive and shows its location in the UI. When the same exported record is selected for file comparison, ECUBE compares the original source file against the copied destination version and returns a sanitized **409 Conflict** if either side is unavailable.
 
 **Automatic Drive Assignment:** When `drive_id` is omitted from `POST /jobs`, the system auto-selects a drive: picks the single project-bound `AVAILABLE` drive, or falls back to an unbound drive. Returns **409** if the drive is temporarily unavailable (retry), if multiple project-bound drives exist (caller must specify `drive_id`), or if no usable drive can be acquired for the requested project. In both auto-assign and explicit `drive_id` paths, unbound drives are automatically bound to the requested project.
 
@@ -170,7 +170,7 @@ Compatibility note: To support project-to-source-path policy, use project source
 
 **Startup Analysis Cache Semantics:** `startup_analysis_cached` indicates whether a persisted startup-analysis snapshot is available for restart reuse. ECUBE may reuse that snapshot on a later start when the source tree is still current, refresh it if the source changed, clear it automatically after successful completion, and clear it on explicit `POST /jobs/{job_id}/startup-analysis/clear` or manual completion paths. Summary fields such as discovered files, estimated total bytes, last analyzed time, and the safe failure reason can remain available after the reusable per-file snapshot has been discarded.
 
-**Webhook Callbacks:** Include `callback_url` (HTTPS only) when creating a job to receive a POST notification when the job reaches `COMPLETED` or `FAILED`. Makes up to 4 attempts on server errors with exponential backoff. Private/reserved IPs are blocked by default (SSRF protection). See the [Third-Party Integration Guide](09-third-party-integration.md) for payload details.
+**Webhook Callbacks:** Include `callback_url` (HTTPS only) when creating a job to receive a POST notification when the job reaches `COMPLETED` or `FAILED`. Callback payloads now include `files_succeeded`, `files_failed`, `files_timed_out`, and `completion_result` so integrations can distinguish clean success from partial-success completion. Makes up to 4 attempts on server errors with exponential backoff. Private/reserved IPs are blocked by default (SSRF protection). See the [Third-Party Integration Guide](12-third-party-integration.md) for payload details.
 
 ---
 

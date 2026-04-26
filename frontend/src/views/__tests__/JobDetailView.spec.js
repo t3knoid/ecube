@@ -656,6 +656,35 @@ describe('JobDetailView start action', () => {
     expect(manifestButton.attributes('disabled')).toBeDefined()
   })
 
+  it('keeps verify and manifest disabled for completed jobs with failed files', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 100,
+      total_bytes: 100,
+      file_count: 2,
+      files_succeeded: 1,
+      files_failed: 1,
+      files_timed_out: 0,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const verifyButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.verify'))
+    const manifestButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.manifest'))
+
+    expect(verifyButton).toBeTruthy()
+    expect(manifestButton).toBeTruthy()
+    expect(verifyButton.attributes('disabled')).toBeDefined()
+    expect(manifestButton.attributes('disabled')).toBeDefined()
+  })
+
   it('shows a completion summary with start time, copy threads, and transfer metrics', async () => {
     mocks.getJob.mockResolvedValue({
       id: 6,
