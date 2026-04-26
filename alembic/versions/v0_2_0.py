@@ -1,6 +1,6 @@
 """Initial schema
 
-This is the canonical baseline migration for ECUBE v1.0.
+This is the canonical release-scoped migration for ECUBE v0.2.0.
 
 Fresh install
 -------------
@@ -22,11 +22,12 @@ scratch and then run ``alembic upgrade head``.
 
 Mutability notice
 -----------------
-This migration may be edited in-place while ECUBE is pre-release (no
-production deployments exist). All dev/test environments are rebuilt from
+This migration may be edited in-place while ECUBE v0.2.0 remains unreleased
+(no production deployments exist). All dev/test environments are rebuilt from
 scratch (``drop → create → alembic upgrade head``), so columns or indexes
-added here will always be applied. Once v1.0 ships, this file becomes
-immutable and all schema changes must use new sequential migrations.
+added here will always be applied. Once v0.2.0 ships, this file becomes
+immutable and the next unreleased ECUBE version must use its own single
+release-scoped migration module.
 
 Revision ID: 0001
 Revises:
