@@ -20,6 +20,25 @@ class MountUpdate(MountCreate):
     pass
 
 
+class MountShareDiscoveryRequest(BaseModel):
+    type: MountType = Field(..., description="Mount protocol type (SMB, NFS, etc.)")
+    remote_path: StrictSafeStr = Field(..., min_length=1, description="Server address seed for share discovery (for example //server or server)")
+    username: Optional[SafeStr] = Field(default=None, description="Username for discovery when required")
+    password: Optional[SafeStr] = Field(default=None, description="Password for discovery when required")
+    credentials_file: Optional[StrictSafeStr] = Field(default=None, description="Path to credentials file used for discovery")
+
+    model_config = {"extra": "forbid"}
+
+
+class MountShareDiscoveryItem(BaseModel):
+    remote_path: str = Field(..., description="Discovered remote path that can populate the Add Mount dialog")
+    display_name: str = Field(..., description="Short operator-facing label for the discovered share")
+
+
+class MountShareDiscoveryResponse(BaseModel):
+    shares: list[MountShareDiscoveryItem] = Field(default_factory=list, description="Discovered shares or exports for the requested server")
+
+
 class NetworkMountSchema(BaseModel):
     id: int = Field(..., description="Unique identifier for the mount configuration")
     type: MountType = Field(..., description="Mount protocol type (SMB, NFS, etc.)")

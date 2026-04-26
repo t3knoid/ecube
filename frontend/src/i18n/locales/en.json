@@ -250,7 +250,13 @@
     "removeConfirmTitle": "Remove mount?",
     "removeConfirmBody": "Removing a mount may impact in-progress jobs.",
     "browse": "Browse",
-    "browseUnavailable": "Browse is only available for mounted shares"
+    "browseUnavailable": "Browse is only available for mounted shares",
+    "browseShares": "Browse",
+    "browseSharesTitle": "Browse Available Shares",
+    "browseSharesEmpty": "No shares were discovered for this server.",
+    "browseSharesHelp": "Select a discovered share to fill the Remote Path field.",
+    "browseSharesFailed": "Share discovery failed. Review the server address or credentials and try again.",
+    "selectShare": "Select"
   },
   "browse": {
     "browseContents": "Browse Drive Contents",
