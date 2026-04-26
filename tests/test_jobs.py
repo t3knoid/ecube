@@ -1341,6 +1341,36 @@ def test_create_manifest_overwrites_manifest_json_and_includes_metadata(client, 
     assert manifest_payload["generated_at"]
 
 
+def test_download_manifest_returns_latest_manifest_as_json_attachment(client, db, tmp_path):
+    job = ExportJob(
+        project_id="PROJ-MANIFEST-DOWNLOAD-001",
+        evidence_number="EV-MANIFEST-DOWNLOAD-001",
+        source_path="/data/evidence",
+        target_mount_path=str(tmp_path),
+        status=JobStatus.COMPLETED,
+    )
+    db.add(job)
+    db.flush()
+    db.add(ExportFile(job_id=job.id, relative_path="ok.txt", status=FileStatus.DONE, checksum="abc", size_bytes=1))
+    db.commit()
+
+    create_response = client.post(f"/jobs/{job.id}/manifest")
+    assert create_response.status_code == 200
+
+    download_response = client.get(f"/jobs/{job.id}/manifest/download")
+
+    assert download_response.status_code == 200
+    assert download_response.headers["content-type"].startswith("application/json")
+    assert 'attachment; filename="manifest.json"' in download_response.headers["content-disposition"]
+
+    manifest_path = tmp_path / "manifest.json"
+    assert manifest_path.read_bytes() == download_response.content
+
+    audit = db.query(AuditLog).filter(AuditLog.action == "MANIFEST_DOWNLOADED", AuditLog.job_id == job.id).first()
+    assert audit is not None
+    assert audit.details["manifest_file"] == "manifest.json"
+
+
 def test_create_manifest_conflict_when_drive_not_mounted(client, db):
     job = ExportJob(
         project_id="PROJ-MANIFEST-MISSING-001",
