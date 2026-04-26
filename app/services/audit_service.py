@@ -42,6 +42,8 @@ _COC_JOB_ACTIONS = {
 }
 
 _ACTION_LABELS = {
+    "MOUNT_SHARE_DISCOVERY_ATTEMPTED": "Mount share discovery attempted",
+    "MOUNT_SHARE_DISCOVERY_FAILED": "Mount share discovery failed",
     "MOUNT_UPDATED": "Mount updated",
     "DRIVE_DISCOVERED": "Drive discovered",
     "DRIVE_INITIALIZED": "Drive initialized",
