@@ -67,6 +67,57 @@
         color: var(--help-muted);
       }
 
+      .help-toc {
+        margin: 1.5rem 0 2rem;
+        padding: 1rem 1.25rem;
+        background: #f7f1e6;
+        border: 1px solid var(--help-border);
+        border-radius: 14px;
+      }
+
+      .help-toc-header {
+        margin-bottom: 0.75rem;
+      }
+
+      .help-toc-header h2,
+      .help-toc-header p {
+        margin: 0;
+      }
+
+      .help-toc-header p {
+        margin-top: 0.25rem;
+        font-family: var(--help-ui-font);
+        color: var(--help-muted);
+      }
+
+      .help-toc ol {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 0.35rem 1.5rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .help-toc li {
+        font-family: var(--help-ui-font);
+      }
+
+      .help-toc .toc-level-3,
+      .help-toc .toc-level-4 {
+        padding-left: 1rem;
+      }
+
+      .help-toc a {
+        display: inline-block;
+        text-decoration: none;
+      }
+
+      .help-toc a:hover,
+      .help-toc a:focus-visible {
+        text-decoration: underline;
+      }
+
       h1,
       h2,
       h3,
@@ -159,7 +210,80 @@
       <p class="help-kicker">In-App Help</p>
       <h1>ECUBE User Guide</h1>
       <p class="help-meta">Updated: 04/25/26</p>
-      <p class="help-lead">Generated from docs/operations/13-user-manual.md for authenticated in-app help.</p>
+      <p class="help-lead">Task-focused guidance for signed-in ECUBE users.</p>
+      <nav class="help-toc" aria-labelledby="help-toc-title">
+        <div class="help-toc-header">
+          <h2 id="help-toc-title">Quick Index</h2>
+          <p>Jump directly to a task or section.</p>
+        </div>
+        <ol>
+<li class="toc-level-1"><a href="#purpose">Purpose</a></li>
+<li class="toc-level-1"><a href="#scope">Scope</a></li>
+<li class="toc-level-1"><a href="#2-before-you-begin">2. Before You Begin</a></li>
+<li class="toc-level-1"><a href="#3-roles-and-access">3. Roles and Access</a></li>
+<li class="toc-level-1"><a href="#4-first-access">4. First Access</a></li>
+<li class="toc-level-2"><a href="#4-2-login">4.2 Login</a></li>
+<li class="toc-level-1"><a href="#5-interface-overview">5. Interface Overview</a></li>
+<li class="toc-level-2"><a href="#5-1-theme-selection-light-dark-custom">5.1 Theme Selection (Light/Dark/Custom)</a></li>
+<li class="toc-level-1"><a href="#6-dashboard">6. Dashboard</a></li>
+<li class="toc-level-1"><a href="#7-drives">7. Drives</a></li>
+<li class="toc-level-2"><a href="#7-1-drive-states">7.1 Drive States</a></li>
+<li class="toc-level-2"><a href="#7-2-viewing-drives">7.2 Viewing Drives</a></li>
+<li class="toc-level-2"><a href="#7-3-drive-detail-page">7.3 Drive Detail Page</a></li>
+<li class="toc-level-2"><a href="#7-4-formatting-a-drive">7.4 Formatting a Drive</a></li>
+<li class="toc-level-2"><a href="#7-5-initializing-a-drive">7.5 Initializing a Drive</a></li>
+<li class="toc-level-2"><a href="#7-6-prepare-eject">7.6 Prepare Eject</a></li>
+<li class="toc-level-1"><a href="#8-mounts">8. Mounts</a></li>
+<li class="toc-level-2"><a href="#8-1-adding-a-mount">8.1 Adding a Mount</a></li>
+<li class="toc-level-2"><a href="#8-1-1-editing-a-mount">8.1.1 Editing a Mount</a></li>
+<li class="toc-level-2"><a href="#8-2-testing-mount-connectivity">8.2 Testing Mount Connectivity</a></li>
+<li class="toc-level-2"><a href="#8-3-removing-a-mount">8.3 Removing a Mount</a></li>
+<li class="toc-level-1"><a href="#8-4-directory-browser">8.4 Directory Browser</a></li>
+<li class="toc-level-1"><a href="#9-jobs">9. Jobs</a></li>
+<li class="toc-level-2"><a href="#9-1-viewing-jobs">9.1 Viewing Jobs</a></li>
+<li class="toc-level-2"><a href="#9-2-creating-a-job">9.2 Creating a Job</a></li>
+<li class="toc-level-2"><a href="#9-3-opening-a-job">9.3 Opening a Job</a></li>
+<li class="toc-level-1"><a href="#10-job-detail-verification-and-file-review">10. Job Detail, Verification, and File Review</a></li>
+<li class="toc-level-2"><a href="#10-1-editing-starting-retrying-failed-files-pausing-completing-verifying-and-generating-a-manifest">10.1 Editing, Starting, Retrying Failed Files, Pausing, Completing, Verifying, and Generating a Manifest</a></li>
+<li class="toc-level-2"><a href="#10-2-file-list">10.2 File List</a></li>
+<li class="toc-level-2"><a href="#10-3-hash-viewer">10.3 Hash Viewer</a></li>
+<li class="toc-level-2"><a href="#10-4-compare-source-and-destination">10.4 Compare Source and Destination</a></li>
+<li class="toc-level-1"><a href="#11-audit-logs">11. Audit Logs</a></li>
+<li class="toc-level-2"><a href="#11-1-chain-of-custody-workflow">11.1 Chain of Custody Workflow</a></li>
+<li class="toc-level-1"><a href="#12-users">12. Users</a></li>
+<li class="toc-level-2"><a href="#12-1-reset-a-user-password">12.1 Reset a User Password</a></li>
+<li class="toc-level-2"><a href="#12-2-configuration-page-administrator">12.2 Configuration Page (Administrator)</a></li>
+<li class="toc-level-1"><a href="#13-system">13. System</a></li>
+<li class="toc-level-2"><a href="#13-1-application-logs-tab">13.1 Application Logs Tab</a></li>
+<li class="toc-level-3"><a href="#viewing-logs">Viewing Logs</a></li>
+<li class="toc-level-3"><a href="#searching-logs">Searching Logs</a></li>
+<li class="toc-level-3"><a href="#pagination">Pagination</a></li>
+<li class="toc-level-3"><a href="#automatic-redaction">Automatic Redaction</a></li>
+<li class="toc-level-3"><a href="#refreshing-log-data">Refreshing Log Data</a></li>
+<li class="toc-level-3"><a href="#troubleshooting-log-viewing">Troubleshooting Log Viewing</a></li>
+<li class="toc-level-2"><a href="#13-2-manual-mount-reconciliation">13.2 Manual Mount Reconciliation</a></li>
+<li class="toc-level-3"><a href="#run-reconciliation-from-the-system-page">Run Reconciliation from the System Page</a></li>
+<li class="toc-level-3"><a href="#interpret-reconciliation-results">Interpret Reconciliation Results</a></li>
+<li class="toc-level-3"><a href="#result-page-states">Result Page States</a></li>
+<li class="toc-level-1"><a href="#14-common-tasks">14. Common Tasks</a></li>
+<li class="toc-level-2"><a href="#14-1-insert-a-new-drive-and-associate-it-with-a-project">14.1 Insert a New Drive and Associate It with a Project</a></li>
+<li class="toc-level-2"><a href="#14-1a-re-insert-a-drive-to-add-more-data-to-the-same-project">14.1a Re-insert a Drive to Add More Data to the Same Project</a></li>
+<li class="toc-level-2"><a href="#14-1b-re-assign-a-drive-to-a-different-project">14.1b Re-assign a Drive to a Different Project</a></li>
+<li class="toc-level-2"><a href="#14-2-prepare-a-drive-for-removal-and-shipment">14.2 Prepare a Drive for Removal and Shipment</a></li>
+<li class="toc-level-2"><a href="#14-3-export-evidence-to-a-drive">14.3 Export Evidence to a Drive</a></li>
+<li class="toc-level-2"><a href="#14-4-review-copy-results">14.4 Review Copy Results</a></li>
+<li class="toc-level-2"><a href="#14-5-review-audit-activity">14.5 Review Audit Activity</a></li>
+<li class="toc-level-2"><a href="#14-6-add-a-new-user">14.6 Add a New User</a></li>
+<li class="toc-level-2"><a href="#14-7-remove-a-user-s-ecube-access">14.7 Remove a User's ECUBE Access</a></li>
+<li class="toc-level-2"><a href="#14-8-view-application-logs-for-troubleshooting">14.8 View Application Logs for Troubleshooting</a></li>
+<li class="toc-level-1"><a href="#15-troubleshooting">15. Troubleshooting</a></li>
+<li class="toc-level-2"><a href="#15-1-i-cannot-log-in">15.1 I Cannot Log In</a></li>
+<li class="toc-level-2"><a href="#15-2-a-page-or-menu-item-is-missing">15.2 A Page or Menu Item Is Missing</a></li>
+<li class="toc-level-2"><a href="#15-3-a-button-is-visible-but-disabled">15.3 A Button Is Visible but Disabled</a></li>
+<li class="toc-level-2"><a href="#15-4-the-ui-shows-a-network-error">15.4 The UI Shows a Network Error</a></li>
+<li class="toc-level-2"><a href="#15-5-usb-drive-is-not-recognized">15.5 USB Drive Is Not Recognized</a></li>
+        </ol>
+      </nav>
       <h1 id="purpose">Purpose</h1>
 <p>This manual explains how to use the ECUBE web interface for day-to-day work. It focuses on tasks performed in the browser after the platform has already been deployed and made available by an administrator.</p>
 <p>Primary workflows covered in this guide:</p>
@@ -186,15 +310,15 @@ Managing selected runtime configuration settings (admin-only)
 <p>This guide is intended for users who interact with ECUBE through the web UI. It does not cover operating-system setup, service management, certificate provisioning, Docker administration, or backend troubleshooting.</p>
 <p>For those topics, use the companion guides:</p>
 <ul><li>
-01-installation.md for packaged installation options
+Installation for packaged installation options
 </li><li>
-02-manual-installation.md for native/manual deployment
+Manual installation for native/manual deployment
 </li><li>
-03-docker-deployment.md for Docker Compose deployment
+Docker deployment for Docker Compose deployment
 </li><li>
-09-administration-automation-guide.md for administrative and API-driven tasks
+Administration automation guide for administrative and API-driven tasks
 </li><li>
-11-api-quick-reference.md for direct API usage
+API quick reference for direct API usage
 </li></ul>
 <hr />
 <h1 id="2-before-you-begin">2. Before You Begin</h1>
@@ -341,7 +465,7 @@ The web UI currently does not provide an administrator control to set a system-w
 </li><li>
 Platform administrators can still influence the deployment default by controlling which CSS is served as <code>default.css</code> in the mounted themes directory.
 </li></ul>
-<p>For deployment-side theme and branding management, see 14-theme-and-branding-guide.md and 04-configuration-reference.md (<code>ECUBE_THEMES_DIR</code>).</p>
+<p>For deployment-side theme and branding management, see Theme and branding guide and Configuration reference (<code>ECUBE_THEMES_DIR</code>).</p>
 <p>Example dark-theme appearance:</p>
 <hr />
 <h1 id="6-dashboard">6. Dashboard</h1>
@@ -919,7 +1043,7 @@ Restarting the application service can interrupt active operations. Prefer using
 </li><li>
 If restart submission fails, use the displayed error and contact platform support or perform restart through approved host-level procedures.
 </li><li>
-For field-by-field meaning and defaults, see 04-configuration-reference.md.
+For field-by-field meaning and defaults, see Configuration reference.
 </li></ul>
 <p>If your role does not include access to this page, the navigation item will not appear.</p>
 <hr />
@@ -1392,10 +1516,6 @@ Host permission/device passthrough issues (especially in containerized setups)
 ECUBE service not running or unable to complete hardware discovery
 </li></ul>
 <hr />
-<h1 id="references">References</h1>
-<ul><li>
-docs/operations/00-operational-guide.md
-</li></ul>
     </main>
   </body>
 </html>
