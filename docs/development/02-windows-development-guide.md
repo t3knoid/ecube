@@ -242,12 +242,17 @@ alembic upgrade head
 # Check current migration version
 alembic current
 
-# Auto-generate a migration from model changes
-alembic revision --autogenerate -m "describe change"
+# Ensure the current release-scoped migration exists (or print its path)
+ecube-release-migration ensure
+
+# Create the current release-scoped migration once for a new unreleased version
+ecube-release-migration create
 
 # Rollback one step
 alembic downgrade -1
 ```
+
+During the pre-release cycle, keep all schema edits for the current ECUBE version in the single versioned file that `ecube-release-migration ensure` reports, for example `alembic/versions/v0_2_0.py`.
 
 > **Note:** Migrations require a running PostgreSQL database. Start the Docker database first (see [Running the Application](#running-the-application)).
 
