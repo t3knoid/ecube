@@ -710,7 +710,7 @@ Typical workflow:
 3. Click `Load CoC` to load custody report data.
 4. Review the report card for the selected drive (drive ID, serial, project, manifest summary, and custody events).
 5. Click `Prefill Handoff` to populate the handoff form from the selected report.
-6. Enter required handoff details (`Possessor` and `Delivery Time`) and any optional receipt fields.
+6. Enter required handoff details (`Possessor` and `Delivery Time`) and any optional receipt fields. The delivery time picker uses your browser's local timezone; the application converts it to UTC automatically before storing.
 7. Click `Confirm Handoff`.
 8. Review the **Permanent Archive Warning** modal.
 9. Choose one of the following:
