@@ -79,9 +79,27 @@ function renderInline(value) {
     if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('#')) {
       return `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>`
     }
-    return escapeHtml(label)
+    return escapeHtml(formatDocReference(label, href))
   })
   return rendered
+}
+
+function formatDocReference(label, href) {
+  const candidate = label && label !== href ? label : href
+  const basename = candidate.split('/').pop() ?? candidate
+  const withoutExtension = basename.replace(/\.md$/i, '')
+  const withoutNumericPrefix = withoutExtension.replace(/^\d+[-_]?/, '')
+  const normalized = withoutNumericPrefix
+    .replace(/[-_]+/g, ' ')
+    .replace(/\bapi\b/gi, 'API')
+    .replace(/\becube\b/gi, 'ECUBE')
+    .trim()
+
+  if (!normalized) {
+    return 'related documentation'
+  }
+
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1)
 }
 
 function parseMetadata(markdown) {
@@ -92,7 +110,7 @@ function parseMetadata(markdown) {
 }
 
 function curateMarkdown(markdown) {
-  const excludedSections = new Set(['Table of Contents', '1. Installation Options'])
+  const excludedSections = new Set(['Table of Contents', '1. Installation Options', 'References'])
   const excludedSubsections = new Set(['4.1 First-Run Setup Screen'])
   const curated = []
   const lines = markdown.split(/\r?\n/)
@@ -302,9 +320,46 @@ function renderMarkdown(markdown) {
   return output.join('\n')
 }
 
+function extractHeadings(markdown) {
+  return markdown
+    .split(/\r?\n/)
+    .map((line) => line.match(/^(#{2,4})\s+(.*)$/))
+    .filter(Boolean)
+    .map((match) => ({
+      level: match[1].length - 1,
+      text: match[2].trim(),
+      id: slugify(match[2].trim()),
+    }))
+}
+
+function renderTableOfContents(headings) {
+  if (!headings.length) {
+    return ''
+  }
+
+  const items = headings
+    .map(
+      (heading) =>
+        `<li class="toc-level-${heading.level}"><a href="#${heading.id}">${escapeHtml(heading.text)}</a></li>`,
+    )
+    .join('\n')
+
+  return `<nav class="help-toc" aria-labelledby="help-toc-title">
+        <div class="help-toc-header">
+          <h2 id="help-toc-title">Quick Index</h2>
+          <p>Jump directly to a task or section.</p>
+        </div>
+        <ol>
+${items}
+        </ol>
+      </nav>`
+}
+
 function buildHtml(markdown, metadata) {
   const curated = curateMarkdown(markdown)
+  const headings = extractHeadings(curated)
   const body = renderMarkdown(curated)
+  const toc = renderTableOfContents(headings)
   const updatedLabel = metadata.updatedOn ? `<p class="help-meta">Updated: ${escapeHtml(metadata.updatedOn)}</p>` : ''
   return `<!doctype html>
 <html lang="en">
@@ -373,6 +428,57 @@ function buildHtml(markdown, metadata) {
         margin: 0.25rem 0 0;
         font-family: var(--help-ui-font);
         color: var(--help-muted);
+      }
+
+      .help-toc {
+        margin: 1.5rem 0 2rem;
+        padding: 1rem 1.25rem;
+        background: #f7f1e6;
+        border: 1px solid var(--help-border);
+        border-radius: 14px;
+      }
+
+      .help-toc-header {
+        margin-bottom: 0.75rem;
+      }
+
+      .help-toc-header h2,
+      .help-toc-header p {
+        margin: 0;
+      }
+
+      .help-toc-header p {
+        margin-top: 0.25rem;
+        font-family: var(--help-ui-font);
+        color: var(--help-muted);
+      }
+
+      .help-toc ol {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 0.35rem 1.5rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .help-toc li {
+        font-family: var(--help-ui-font);
+      }
+
+      .help-toc .toc-level-3,
+      .help-toc .toc-level-4 {
+        padding-left: 1rem;
+      }
+
+      .help-toc a {
+        display: inline-block;
+        text-decoration: none;
+      }
+
+      .help-toc a:hover,
+      .help-toc a:focus-visible {
+        text-decoration: underline;
       }
 
       h1,
@@ -467,7 +573,8 @@ function buildHtml(markdown, metadata) {
       <p class="help-kicker">In-App Help</p>
       <h1>ECUBE User Guide</h1>
       ${updatedLabel}
-      <p class="help-lead">Generated from docs/operations/13-user-manual.md for authenticated in-app help.</p>
+      <p class="help-lead">Task-focused guidance for signed-in ECUBE users.</p>
+      ${toc}
       ${body}
     </main>
   </body>
