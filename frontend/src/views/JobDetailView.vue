@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
-import { analyzeJob, getJob, getJobFiles, startJob, retryFailedJob, pauseJob, verifyJob, generateManifest, updateJob, completeJob, deleteJob, clearJobStartupAnalysisCache } from '@/api/jobs.js'
+import { analyzeJob, getJob, getJobFiles, startJob, retryFailedJob, pauseJob, verifyJob, generateManifest, downloadManifest, updateJob, completeJob, deleteJob, clearJobStartupAnalysisCache } from '@/api/jobs.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import { getFileHashes, compareFiles } from '@/api/files.js'
 import { getDrives } from '@/api/drives.js'
@@ -399,6 +399,28 @@ function buildManifestPath(currentJob) {
   return `${targetPath}/manifest.json`
 }
 
+function extractDownloadFilename(response, fallback = 'manifest.json') {
+  const contentDisposition = response?.headers?.['content-disposition'] || response?.headers?.['Content-Disposition']
+  if (!contentDisposition) return fallback
+
+  const match = String(contentDisposition).match(/filename="?([^";]+)"?/i)
+  return match?.[1] || fallback
+}
+
+async function downloadGeneratedManifest(jobId) {
+  const response = await downloadManifest(jobId)
+  const contentType = response?.headers?.['content-type'] || response?.headers?.['Content-Type'] || 'application/json'
+  const blob = response?.data instanceof Blob ? response.data : new Blob([response?.data], { type: contentType })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = extractDownloadFilename(response)
+  document.body.appendChild(anchor)
+  anchor.click()
+  document.body.removeChild(anchor)
+  URL.revokeObjectURL(url)
+}
+
 async function loadSupportingData() {
   const [driveResult, mountResult] = await Promise.allSettled([getDrives(), getMounts()])
   supportingDrives.value = driveResult.status === 'fulfilled'
@@ -744,6 +766,12 @@ async function runAction(action) {
       infoMessage.value = manifestPath
         ? t('jobs.manifestSuccessWithPath', { path: manifestPath })
         : t('jobs.manifestSuccess')
+
+      try {
+        await downloadGeneratedManifest(job.value.id)
+      } catch {
+        error.value = t('jobs.manifestDownloadFailed')
+      }
     }
 
     if (isTerminalStatus(job.value?.status)) {
