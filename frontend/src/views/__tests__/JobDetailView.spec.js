@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getJob: vi.fn(),
   getJobFiles: vi.fn(),
   startJob: vi.fn(),
+  retryFailedJob: vi.fn(),
   verifyJob: vi.fn(),
   pauseJob: vi.fn(),
   generateManifest: vi.fn(),
@@ -43,6 +44,7 @@ vi.mock('@/api/jobs.js', () => ({
   getJob: (...args) => mocks.getJob(...args),
   getJobFiles: (...args) => mocks.getJobFiles(...args),
   startJob: (...args) => mocks.startJob(...args),
+  retryFailedJob: (...args) => mocks.retryFailedJob(...args),
   verifyJob: (...args) => mocks.verifyJob(...args),
   pauseJob: (...args) => mocks.pauseJob(...args),
   generateManifest: (...args) => mocks.generateManifest(...args),
@@ -121,6 +123,7 @@ describe('JobDetailView start action', () => {
     mocks.analyzeJob.mockReset()
     mocks.getJobFiles.mockReset()
     mocks.startJob.mockReset()
+    mocks.retryFailedJob.mockReset()
     mocks.verifyJob.mockReset()
     mocks.pauseJob.mockReset()
     mocks.generateManifest.mockReset()
@@ -178,6 +181,7 @@ describe('JobDetailView start action', () => {
     ])
     mocks.updateJob.mockResolvedValue({ id: 6, status: 'PENDING', project_id: 'PROJ-001', evidence_number: 'EV-UPDATED', thread_count: 4, copied_bytes: 0, total_bytes: 0, source_path: '/nfs/project-001/updated', target_mount_path: '/mnt/ecube/1' })
     mocks.pauseJob.mockResolvedValue({ id: 6, status: 'PAUSING', project_id: 'PROJ-001', evidence_number: 'EV-006', thread_count: 4, copied_bytes: 0, total_bytes: 0, source_path: '/nfs/project-001/evidence', target_mount_path: '/mnt/ecube/1' })
+    mocks.retryFailedJob.mockResolvedValue({ id: 6, status: 'RUNNING', project_id: 'PROJ-001', evidence_number: 'EV-006', thread_count: 4, copied_bytes: 10, total_bytes: 20, files_failed: 0, files_timed_out: 0, source_path: '/nfs/project-001/evidence', target_mount_path: '/mnt/ecube/1' })
     mocks.completeJob.mockResolvedValue({ id: 6, status: 'COMPLETED', project_id: 'PROJ-001', evidence_number: 'EV-006', thread_count: 4, copied_bytes: 0, total_bytes: 0 })
     mocks.deleteJob.mockResolvedValue({ status: 'deleted' })
     mocks.clearJobStartupAnalysisCache.mockResolvedValue({ id: 6, status: 'FAILED', project_id: 'PROJ-001', evidence_number: 'EV-006', thread_count: 4, copied_bytes: 0, total_bytes: 0, startup_analysis_cached: false })
@@ -417,6 +421,54 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain('Related log entry')
     expect(wrapper.text()).toContain('JOB_FAILED job_id=6 error_count=1')
     expect(wrapper.text()).toContain('1 file failed: Permission denied (/evidence/report.pdf)')
+  })
+
+  it('shows retry failed files for partial-success jobs and calls the retry endpoint', async () => {
+    mocks.getJob
+      .mockResolvedValueOnce({
+        id: 6,
+        status: 'COMPLETED',
+        project_id: 'PROJ-001',
+        evidence_number: 'EV-006',
+        source_path: '/nfs/project-001/evidence',
+        target_mount_path: '/mnt/ecube/1',
+        thread_count: 4,
+        copied_bytes: 10,
+        total_bytes: 20,
+        file_count: 2,
+        files_succeeded: 1,
+        files_failed: 1,
+        files_timed_out: 0,
+        startup_analysis_status: 'READY',
+      })
+      .mockResolvedValueOnce({
+        id: 6,
+        status: 'RUNNING',
+        project_id: 'PROJ-001',
+        evidence_number: 'EV-006',
+        source_path: '/nfs/project-001/evidence',
+        target_mount_path: '/mnt/ecube/1',
+        thread_count: 4,
+        copied_bytes: 10,
+        total_bytes: 20,
+        file_count: 2,
+        files_succeeded: 1,
+        files_failed: 0,
+        files_timed_out: 0,
+        startup_analysis_status: 'READY',
+      })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const retryButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.retryFailedFiles'))
+    expect(retryButton).toBeTruthy()
+
+    await retryButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.retryFailedJob).toHaveBeenCalledWith(6)
+    expect(wrapper.text()).toContain('RUNNING')
   })
 
   it('prefers the persisted job-level failure reason when present', async () => {
@@ -719,6 +771,33 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain('2s')
     expect(wrapper.text()).toContain('Copy rate')
     expect(wrapper.text()).toContain('5.0 MB/s')
+    expect(wrapper.find('.completion-summary').classes()).not.toContain('completion-summary--danger')
+  })
+
+  it('uses a danger background for the completion summary when file copy failures are present', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 5242880,
+      total_bytes: 10485760,
+      file_count: 4,
+      files_succeeded: 3,
+      files_failed: 1,
+      files_timed_out: 0,
+      started_at: '2026-04-18T10:00:00Z',
+      completed_at: '2026-04-18T10:00:02Z',
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Completion summary')
+    expect(wrapper.find('.completion-summary').classes()).toContain('completion-summary--danger')
   })
 
   it('uses source and destination terminology for file comparison', async () => {

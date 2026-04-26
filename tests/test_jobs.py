@@ -1015,6 +1015,133 @@ def test_start_already_running_job(client, db):
     assert response.status_code == 409
 
 
+def test_retry_failed_files_requeues_only_failed_terminal_files(client, db):
+    job = ExportJob(
+        project_id="PROJ-RETRY-001",
+        evidence_number="EV-RETRY-001",
+        source_path="/data/retry-source",
+        target_mount_path="/mnt/ecube/retry-001",
+        status=JobStatus.COMPLETED,
+        file_count=3,
+        total_bytes=30,
+        copied_bytes=10,
+    )
+    db.add(job)
+    db.flush()
+    done_file = ExportFile(
+        job_id=job.id,
+        relative_path="done.txt",
+        status=FileStatus.DONE,
+        checksum="done-checksum",
+        size_bytes=10,
+        retry_attempts=2,
+    )
+    error_file = ExportFile(
+        job_id=job.id,
+        relative_path="error.txt",
+        status=FileStatus.ERROR,
+        error_message="Permission denied",
+        size_bytes=10,
+        retry_attempts=4,
+    )
+    timeout_file = ExportFile(
+        job_id=job.id,
+        relative_path="timeout.txt",
+        status=FileStatus.TIMEOUT,
+        error_message="Operation timed out",
+        size_bytes=10,
+        retry_attempts=3,
+    )
+    db.add_all([done_file, error_file, timeout_file])
+    db.commit()
+
+    with patch("app.services.copy_engine.run_copy_job", return_value=None) as mock_copy:
+        response = client.post(f"/jobs/{job.id}/retry-failed")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "RUNNING"
+    assert payload["files_failed"] == 0
+    assert payload["files_timed_out"] == 0
+    mock_copy.assert_called_once_with(job.id)
+
+    db.refresh(job)
+    db.refresh(done_file)
+    db.refresh(error_file)
+    db.refresh(timeout_file)
+
+    assert job.status == JobStatus.RUNNING
+    assert done_file.status == FileStatus.DONE
+    assert done_file.checksum == "done-checksum"
+    assert error_file.status == FileStatus.PENDING
+    assert error_file.error_message is None
+    assert error_file.retry_attempts == 0
+    assert timeout_file.status == FileStatus.PENDING
+    assert timeout_file.error_message is None
+    assert timeout_file.retry_attempts == 0
+
+    audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_RETRY_FAILED_FILES_STARTED", AuditLog.job_id == job.id)
+        .first()
+    )
+    assert audit is not None
+    assert audit.details["retry_file_count"] == 2
+    assert audit.details["error_count"] == 1
+    assert audit.details["timeout_count"] == 1
+
+
+def test_retry_failed_files_conflict_when_job_has_no_failed_files(client, db):
+    job = ExportJob(
+        project_id="PROJ-RETRY-002",
+        evidence_number="EV-RETRY-002",
+        source_path="/data/retry-source-2",
+        target_mount_path="/mnt/ecube/retry-002",
+        status=JobStatus.COMPLETED,
+        file_count=1,
+        total_bytes=10,
+        copied_bytes=10,
+    )
+    db.add(job)
+    db.flush()
+    db.add(
+        ExportFile(
+            job_id=job.id,
+            relative_path="done.txt",
+            status=FileStatus.DONE,
+            checksum="done-checksum",
+            size_bytes=10,
+        )
+    )
+    db.commit()
+
+    with patch("app.services.copy_engine.run_copy_job") as mock_copy:
+        response = client.post(f"/jobs/{job.id}/retry-failed")
+
+    assert response.status_code == 409
+    assert response.json()["message"] == "Job has no failed files to retry"
+    mock_copy.assert_not_called()
+
+
+def test_retry_failed_files_conflict_when_job_not_completed(client, db):
+    job = ExportJob(
+        project_id="PROJ-RETRY-003",
+        evidence_number="EV-RETRY-003",
+        source_path="/data/retry-source-3",
+        target_mount_path="/mnt/ecube/retry-003",
+        status=JobStatus.FAILED,
+    )
+    db.add(job)
+    db.commit()
+
+    with patch("app.services.copy_engine.run_copy_job") as mock_copy:
+        response = client.post(f"/jobs/{job.id}/retry-failed")
+
+    assert response.status_code == 409
+    assert response.json()["message"] == "Only completed jobs with failed files can retry failed copies"
+    mock_copy.assert_not_called()
+
+
 def test_start_job_conflict_while_startup_analysis_running(client, db):
     drive = UsbDrive(
         device_identifier="USB-START-ANALYZING-001",
@@ -1044,6 +1171,21 @@ def test_start_job_conflict_while_startup_analysis_running(client, db):
     assert response.status_code == 409
     assert "startup analysis is in progress" in response.json()["message"].lower()
     mock_copy.assert_not_called()
+
+
+def test_retry_failed_files_auditor_forbidden(auditor_client, db):
+    job = ExportJob(
+        project_id="PROJ-RETRY-DENY",
+        evidence_number="EV-RETRY-DENY",
+        source_path="/data/retry-deny",
+        status=JobStatus.COMPLETED,
+    )
+    db.add(job)
+    db.commit()
+
+    response = auditor_client.post(f"/jobs/{job.id}/retry-failed")
+
+    assert response.status_code == 403
 
 
 def test_pause_job_running_state(client, db):
