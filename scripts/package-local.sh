@@ -99,10 +99,11 @@ require_cmd sha256sum
 
 if [[ "${SKIP_FRONTEND_BUILD}" == false ]]; then
   require_cmd npm
-  echo "==> Building frontend (npm ci && npm run build)"
+  echo "==> Verifying generated help and building frontend"
   (
     cd frontend
     npm ci
+    npm run build:help:check
     npm run build
   )
 else
