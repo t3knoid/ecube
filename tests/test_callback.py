@@ -10,6 +10,7 @@ Covers:
 """
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -18,10 +19,11 @@ from pydantic import ValidationError
 
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
-from app.models.jobs import ExportJob, JobStatus
+from app.models.jobs import ExportFile, ExportJob, FileStatus, JobStatus
 from app.schemas.jobs import ExportJobSchema, JobCreate
 from app.services.callback_service import (
     _do_deliver,
+    _count_file_outcomes,
     _resolve_safe,
     _sanitize_url_for_log,
     build_payload,
@@ -245,6 +247,28 @@ class TestSanitizeUrlForLog:
 
 class TestBuildPayload:
 
+    def test_count_file_outcomes_uses_aggregate_query_for_mapped_jobs(self, db):
+        job = ExportJob(
+            project_id="PROJ-CALLBACK-COUNTS",
+            evidence_number="EV-CALLBACK-COUNTS",
+            source_path="/data/evidence",
+            status=JobStatus.COMPLETED,
+            file_count=3,
+        )
+        db.add(job)
+        db.flush()
+        db.add(ExportFile(job_id=job.id, relative_path="ok.txt", status=FileStatus.DONE))
+        db.add(ExportFile(job_id=job.id, relative_path="bad.txt", status=FileStatus.ERROR))
+        db.add(ExportFile(job_id=job.id, relative_path="slow.txt", status=FileStatus.TIMEOUT))
+        db.commit()
+        db.refresh(job)
+
+        with patch("app.services.callback_service.FileRepository.count_done_errors_and_timeouts", return_value=(1, 1, 1)) as mock_count:
+            counts = _count_file_outcomes(job)
+
+        mock_count.assert_called_once_with(job.id)
+        assert counts == (1, 1, 1)
+
     def test_completed_payload(self):
         job = MagicMock(spec=ExportJob)
         job.id = 42
@@ -256,12 +280,45 @@ class TestBuildPayload:
         job.copied_bytes = 1024
         job.file_count = 10
         job.completed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        job.files = [
+            ExportFile(status=FileStatus.DONE),
+            ExportFile(status=FileStatus.DONE),
+        ]
 
         payload = build_payload(job)
         assert payload["event"] == "JOB_COMPLETED"
         assert payload["job_id"] == 42
         assert payload["status"] == "COMPLETED"
         assert payload["completed_at"] == "2026-01-01T00:00:00+00:00"
+        assert payload["files_succeeded"] == 2
+        assert payload["files_failed"] == 0
+        assert payload["files_timed_out"] == 0
+        assert payload["completion_result"] == "success"
+
+    def test_completed_payload_marks_partial_success(self):
+        job = MagicMock(spec=ExportJob)
+        job.id = 43
+        job.project_id = "PROJ-001"
+        job.evidence_number = "EV-001"
+        job.status = JobStatus.COMPLETED
+        job.source_path = "/data/evidence"
+        job.total_bytes = 1024
+        job.copied_bytes = 900
+        job.file_count = 3
+        job.completed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        job.files = [
+            ExportFile(status=FileStatus.DONE),
+            ExportFile(status=FileStatus.ERROR),
+            ExportFile(status=FileStatus.TIMEOUT),
+        ]
+
+        payload = build_payload(job)
+
+        assert payload["event"] == "JOB_COMPLETED"
+        assert payload["files_succeeded"] == 1
+        assert payload["files_failed"] == 1
+        assert payload["files_timed_out"] == 1
+        assert payload["completion_result"] == "partial_success"
 
     def test_failed_payload(self):
         job = MagicMock(spec=ExportJob)
@@ -274,10 +331,37 @@ class TestBuildPayload:
         job.copied_bytes = 200
         job.file_count = 5
         job.completed_at = None
+        job.files = [ExportFile(status=FileStatus.ERROR)]
 
         payload = build_payload(job)
         assert payload["event"] == "JOB_FAILED"
+        assert payload["files_failed"] == 1
+        assert payload["completion_result"] == "failed"
         assert "completed_at" not in payload
+
+    def test_build_payload_falls_back_to_in_memory_files_for_unmapped_objects(self):
+        job = SimpleNamespace(
+            id=44,
+            project_id="PROJ-LOCAL",
+            evidence_number="EV-LOCAL",
+            status=JobStatus.COMPLETED,
+            source_path="/data/local",
+            total_bytes=123,
+            copied_bytes=123,
+            file_count=2,
+            completed_at=None,
+            files=[
+                ExportFile(status=FileStatus.DONE),
+                ExportFile(status=FileStatus.ERROR),
+            ],
+        )
+
+        payload = build_payload(job)
+
+        assert payload["files_succeeded"] == 1
+        assert payload["files_failed"] == 1
+        assert payload["files_timed_out"] == 0
+        assert payload["completion_result"] == "partial_success"
 
     @pytest.mark.parametrize("status", [
         JobStatus.PENDING,
