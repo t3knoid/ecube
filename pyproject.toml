@@ -30,6 +30,7 @@ dependencies = [
 [project.scripts]
 ecube-setup = "app.setup:main"
 ecube-demo-bootstrap = "app.demo_bootstrap:main"
+ecube-release-migration = "app.utils.release_migration:main"
 
 [project.optional-dependencies]
 redis = [

@@ -351,11 +351,15 @@ All models inherit from `app.database.Base` and live in `app/models/`. Key conve
 ### Creating Migrations
 
 ```bash
-# Auto-generate from model changes
-alembic revision --autogenerate -m "describe change"
+# Ensure the current release-scoped migration exists (or print its path)
+ecube-release-migration ensure
 
-# Or create an empty migration for manual SQL
-alembic revision -m "describe change"
+# Create the current release-scoped migration once when a new unreleased
+# ECUBE version starts and no versioned migration file exists yet
+ecube-release-migration create
+
+# Refresh the current release-scoped migration from model metadata
+ecube-release-migration autogenerate
 
 # Apply
 alembic upgrade head
@@ -366,6 +370,8 @@ alembic current
 # Rollback one step
 alembic downgrade -1
 ```
+
+For ECUBE's pre-release workflow, all schema changes for the current app version accumulate in a single Alembic module named from `project.version`, for example `alembic/versions/v0_2_0.py`. Run `ecube-release-migration ensure` first, use `ecube-release-migration create` only when a new unreleased version starts, and use `ecube-release-migration autogenerate` to refresh that one file from current model metadata instead of creating additional unreleased revisions.
 
 ### Reset PostgreSQL Database (Start Fresh)
 
@@ -394,7 +400,7 @@ sudo -u postgres psql -c "DROP OWNED BY ecube; DROP ROLE IF EXISTS ecube;"
 
 ### Migration Naming
 
-Migrations use sequential revision IDs. While ECUBE remains pre-release, the baseline migration may still be amended in place when the history is intentionally collapsed; once the schema is locked for release, all further changes must use new sequential revision files.
+Release-scoped migration filenames use `v<major>_<minor>_<patch>.py`, derived from `[project].version` in `pyproject.toml`. While a version remains unreleased, ECUBE keeps exactly one mutable migration module for that version, and `ecube-release-migration create` fails clearly if that file already exists. Once the version ships, that file becomes immutable and the next unreleased version gets its own release-scoped migration module.
 
 ---
 
