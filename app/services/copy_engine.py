@@ -230,6 +230,26 @@ def _sanitize_job_failure_reason(
     return sanitized
 
 
+def _classify_file_failure(reason: object) -> tuple[str, str]:
+    """Return a safe ``(error_code, message)`` pair for file-level failures."""
+    raw = str(reason or "").strip()
+    lowered = raw.lower()
+
+    if any(token in lowered for token in ("permission denied", "access denied", "auth", "not authorized")):
+        return "permission_failure", "Permission or authentication failure"
+    if any(token in lowered for token in ("disk full", "no space left", "not enough space")):
+        return "target_full", "Target storage is full"
+    if any(token in lowered for token in ("i/o error", "io error", "input/output error")):
+        return "io_failure", "I/O failure"
+    if "checksum" in lowered:
+        return "checksum_failure", "Checksum verification failed"
+    if "timed out" in lowered or "timeout" in lowered:
+        return "copy_timeout", "Operation timed out"
+    if "no such file" in lowered or "not found" in lowered:
+        return "source_not_found", "Source file was not found"
+    return "copy_failed", "File copy failed"
+
+
 def _log_job_path_context(job_id: int, source_path: str, target_mount_path: Optional[str], phase: str) -> None:
     """Emit detailed path information at debug level only."""
     logger.debug(
@@ -1100,13 +1120,27 @@ def _process_file(
                     logger.exception("DB commit failed rolling back copied_bytes for file %s", export_file_id)
 
             last_err = err
-            logger.error(
-                "FILE_COPY_FAILURE job_id=%s file_id=%s relative_path=%s attempt=%s reason=%s",
-                ef.job_id,
-                ef.id,
-                ef.relative_path,
-                attempt,
-                err or "unknown error",
+            error_code, safe_error_message = _classify_file_failure(last_err)
+            logger.info(
+                "File copy failure recorded",
+                extra={
+                    "job_id": ef.job_id,
+                    "file_id": ef.id,
+                    "relative_path": ef.relative_path,
+                    "attempt": attempt,
+                    "error_code": error_code,
+                },
+            )
+            logger.debug(
+                "File copy failure detail",
+                extra={
+                    "job_id": ef.job_id,
+                    "file_id": ef.id,
+                    "relative_path": ef.relative_path,
+                    "attempt": attempt,
+                    "error_code": error_code,
+                    "raw_error": str(last_err or "unknown error"),
+                },
             )
             try:
                 audit_repo.add(
@@ -1116,7 +1150,8 @@ def _process_file(
                         "file_id": ef.id,
                         "relative_path": ef.relative_path,
                         "attempt": attempt,
-                        "error": err,
+                        "error_code": error_code,
+                        "error_detail": safe_error_message,
                     },
                 )
             except Exception:
@@ -1157,7 +1192,8 @@ def _process_file(
                         logger.exception("DB commit failed restoring copied_bytes for file", {"file_id": export_file_id})
         else:
             ef.status = FileStatus.ERROR
-            ef.error_message = last_err
+            _error_code, safe_error_message = _classify_file_failure(last_err)
+            ef.error_message = safe_error_message
             try:
                 file_repo.save(ef)
             except Exception:
@@ -1315,12 +1351,18 @@ def run_copy_job(job_id: int) -> None:
                     except Exception:
                         logger.error("DB commit failed setting job %s to PAUSED", job_id)
                 else:
-                    # Only fail on actual errors; timeouts do not fail the job (they can be retried later).
-                    job.status = JobStatus.FAILED if error_count > 0 else JobStatus.COMPLETED
+                    # File-level ERROR/TIMEOUT outcomes are preserved for recall/retry,
+                    # but they do not make the whole job FAILED once all files finish.
+                    job.status = JobStatus.COMPLETED if all_files_finished else JobStatus.FAILED
                     job.completed_at = datetime.now(timezone.utc)
                     cache_cleared = False
                     cache_clear_details: dict[str, int] = {}
-                    if job.status == JobStatus.COMPLETED and job.startup_analysis_cached:
+                    if (
+                        job.status == JobStatus.COMPLETED
+                        and error_count == 0
+                        and timeout_count == 0
+                        and job.startup_analysis_cached
+                    ):
                         cache_clear_details = _startup_analysis_cache_details(job)
                         _clear_startup_analysis_entries(job)
                         cache_cleared = True
