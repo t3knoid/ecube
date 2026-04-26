@@ -31,6 +31,7 @@ const form = ref({
   db_pool_max_overflow: 10,
   db_pool_recycle_seconds: -1,
   copy_job_timeout: 3600,
+  job_detail_files_page_size: 40,
 })
 const originalForm = ref({ ...form.value })
 
@@ -44,6 +45,7 @@ const fieldOrder = [
   'db_pool_max_overflow',
   'db_pool_recycle_seconds',
   'copy_job_timeout',
+  'job_detail_files_page_size',
 ]
 
 const levelOptions = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
@@ -272,6 +274,16 @@ onMounted(loadConfiguration)
       <label for="cfg-copy-job-timeout">{{ t('configuration.fields.copy_job_timeout.label') }}</label>
       <input id="cfg-copy-job-timeout" v-model.number="form.copy_job_timeout" type="number" min="0" />
       <p class="field-help">{{ t('configuration.fields.copy_job_timeout.help') }}</p>
+
+      <label for="cfg-job-detail-files-page-size">{{ t('configuration.fields.job_detail_files_page_size.label') }}</label>
+      <input
+        id="cfg-job-detail-files-page-size"
+        v-model.number="form.job_detail_files_page_size"
+        type="number"
+        min="20"
+        max="100"
+      />
+      <p class="field-help">{{ t('configuration.fields.job_detail_files_page_size.help') }}</p>
     </article>
 
     <article v-if="restartPending" class="panel warning-panel">

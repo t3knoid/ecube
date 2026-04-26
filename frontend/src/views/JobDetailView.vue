@@ -10,6 +10,7 @@ import { getDrives } from '@/api/drives.js'
 import { getMounts } from '@/api/mounts.js'
 import { usePolling } from '@/composables/usePolling.js'
 import DataTable from '@/components/common/DataTable.vue'
+import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -27,10 +28,10 @@ const jobId = computed(() => {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null
 })
 
-const MAX_JOB_FILE_ROWS = 200
+const DEFAULT_JOB_FILES_PAGE_SIZE = 40
 
 const job = ref(null)
-const debug = ref({ files: [], total_files: 0, returned_files: 0 })
+const debug = ref({ files: [], total_files: 0, returned_files: 0, page: 1, page_size: DEFAULT_JOB_FILES_PAGE_SIZE })
 const loading = ref(false)
 const filesLoading = ref(false)
 const acting = ref(false)
@@ -45,6 +46,7 @@ const compareFileId = ref(null)
 const compareResult = ref(null)
 const supportingDrives = ref([])
 const supportingMounts = ref([])
+const filesPanelExpanded = ref(false)
 const showEditDialog = ref(false)
 const showDeleteDialog = ref(false)
 const showStartupAnalysisCleanupDialog = ref(false)
@@ -117,7 +119,6 @@ const fileColumns = computed(() => {
     { key: 'id', label: t('common.labels.id'), align: 'right' },
     { key: 'relative_path', label: t('jobs.path') },
     { key: 'status', label: t('common.labels.status') },
-    { key: 'checksum', label: t('jobs.checksum') },
   ]
 
   if ((debug.value.files || []).some((row) => String(row?.error_message || '').trim())) {
@@ -145,7 +146,12 @@ const jobFailureReason = computed(() => {
 const fileListNotice = computed(() => {
   const total = Number(debug.value.total_files || 0)
   const shown = Number(debug.value.returned_files || 0)
-  return total > shown ? t('jobs.showingFiles', { shown, total }) : ''
+  if (total === 0 || shown === 0) return ''
+  const page = Number(debug.value.page || 1)
+  const pageSize = Number(debug.value.page_size || DEFAULT_JOB_FILES_PAGE_SIZE)
+  const start = (page - 1) * pageSize + 1
+  const end = Math.min(start + shown - 1, total)
+  return t('jobs.showingFiles', { start, end, total })
 })
 
 const selectedCompareFile = computed(() => (
@@ -604,15 +610,29 @@ async function loadDebug(force = false) {
 
   filesLoading.value = true
   try {
-    const response = await getJobFiles(jobId.value, { limit: MAX_JOB_FILE_ROWS })
+    const response = await getJobFiles(jobId.value, {
+      page: Number(debug.value.page || 1),
+    })
+    const totalFiles = Number(response?.total_files || 0)
+    const pageSize = Number(response?.page_size || DEFAULT_JOB_FILES_PAGE_SIZE)
+    const page = Number(response?.page || debug.value.page || 1)
+    const totalPages = totalFiles > 0 ? Math.ceil(totalFiles / pageSize) : 1
+
+    if (page > totalPages) {
+      debug.value = { ...debug.value, page: totalPages, page_size: pageSize }
+      return
+    }
+
     debug.value = {
       files: Array.isArray(response?.files) ? response.files : [],
-      total_files: Number(response?.total_files || 0),
+      total_files: totalFiles,
       returned_files: Number(response?.returned_files || 0),
+      page,
+      page_size: pageSize,
     }
   } catch {
     if (force) {
-      debug.value = { files: [], total_files: 0, returned_files: 0 }
+      debug.value = { files: [], total_files: 0, returned_files: 0, page: 1, page_size: DEFAULT_JOB_FILES_PAGE_SIZE }
     }
   } finally {
     filesLoading.value = false
@@ -644,7 +664,7 @@ async function refreshAll() {
   if (!jobId.value) {
     error.value = t('common.errors.invalidRequest')
     job.value = null
-    debug.value = { files: [], total_files: 0, returned_files: 0 }
+    debug.value = { files: [], total_files: 0, returned_files: 0, page: 1, page_size: DEFAULT_JOB_FILES_PAGE_SIZE }
     return
   }
 
@@ -659,6 +679,17 @@ async function refreshAll() {
     loading.value = false
   }
 }
+
+watch(() => debug.value.page, (nextPage, previousPage) => {
+  if (nextPage === previousPage) return
+  void loadDebug(true)
+})
+
+watch(() => debug.value.files, (files) => {
+  const hasSelectedFile = (files || []).some((file) => Number(file.id) === Number(compareFileId.value))
+  if (hasSelectedFile) return
+  compareFileId.value = null
+}, { deep: false })
 
 function buildJobError(err) {
   const status = err?.response?.status
@@ -744,7 +775,7 @@ async function loadHashes(fileId) {
 }
 
 async function runCompare() {
-  if (!compareFileId.value) return
+  if (!selectedCompareFile.value) return
   compareResult.value = null
   error.value = ''
   try {
@@ -943,24 +974,43 @@ onUnmounted(() => {
       </div>
     </article>
 
-    <article class="panel">
-      <h2>{{ t('jobs.files') }}</h2>
-      <p v-if="filesLoading" class="muted">{{ t('common.labels.loading') }}</p>
-      <p v-else-if="fileListNotice" class="muted">{{ fileListNotice }}</p>
-      <DataTable :columns="fileColumns" :rows="debug.files || []" row-key="id" :empty-text="t('jobs.noFiles')">
-        <template #cell-status="{ row }">
-          <StatusBadge :status="row.status" />
-        </template>
-        <template #cell-checksum="{ row }">
-          <span class="mono">{{ row.checksum || '-' }}</span>
-        </template>
-        <template #cell-error_message="{ row }">
-          <span class="error-text">{{ row.error_message || '-' }}</span>
-        </template>
-        <template #cell-actions="{ row }">
-          <button class="btn" :disabled="!canInspectHashes" @click="loadHashes(row.id)">{{ t('jobs.hashes') }}</button>
-        </template>
-      </DataTable>
+    <article class="panel files-panel">
+      <div class="files-panel-header">
+        <h2>{{ t('jobs.files') }}</h2>
+        <button
+          type="button"
+          class="btn files-panel-toggle"
+          :aria-expanded="filesPanelExpanded"
+          aria-controls="job-files-panel"
+          @click="filesPanelExpanded = !filesPanelExpanded"
+        >
+          {{ filesPanelExpanded ? t('jobs.hideFiles') : t('jobs.showFiles') }}
+        </button>
+      </div>
+      <div v-if="filesPanelExpanded" id="job-files-panel" class="files-panel-body">
+        <p v-if="filesLoading" class="muted">{{ t('common.labels.loading') }}</p>
+        <p v-else-if="fileListNotice" class="muted">{{ fileListNotice }}</p>
+        <DataTable :columns="fileColumns" :rows="debug.files || []" row-key="id" :empty-text="t('jobs.noFiles')">
+          <template #cell-status="{ row }">
+            <StatusBadge :status="row.status" />
+          </template>
+          <template #cell-error_message="{ row }">
+            <span class="error-text">{{ row.error_message || '-' }}</span>
+          </template>
+          <template #cell-actions="{ row }">
+            <button class="btn" :disabled="!canInspectHashes" @click="loadHashes(row.id)">{{ t('jobs.hashes') }}</button>
+          </template>
+        </DataTable>
+        <Pagination
+          v-if="debug.total_files > debug.page_size"
+          :page="debug.page"
+          :page-size="debug.page_size"
+          :total="debug.total_files"
+          :show-page-window="true"
+          :window-size="10"
+          @update:page="debug.page = $event"
+        />
+      </div>
     </article>
 
     <teleport to="body">
@@ -1046,7 +1096,7 @@ onUnmounted(() => {
           </select>
           <label>{{ t('jobs.fileB') }}</label>
           <strong class="mono wrap-anywhere">{{ selectedCompareFile ? `#${selectedCompareFile.id} ${selectedCompareFile.relative_path}` : '-' }}</strong>
-          <button class="btn" :disabled="!compareFileId" @click="runCompare">
+          <button class="btn" :disabled="!selectedCompareFile" @click="runCompare">
             {{ t('jobs.compare') }}
           </button>
         </div>
@@ -1205,9 +1255,19 @@ select {
 .compare-form,
 .hash-grid {
   display: grid;
-  grid-template-columns: 120px 1fr;
+  grid-template-columns: 120px minmax(0, 1fr);
   gap: var(--space-xs) var(--space-sm);
   align-items: center;
+}
+
+.compare-form select,
+.compare-form strong {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.compare-form select {
+  width: 100%;
 }
 
 .compare-results {
@@ -1220,6 +1280,23 @@ select {
   grid-template-columns: 120px repeat(2, minmax(0, 1fr));
   gap: var(--space-xs) var(--space-sm);
   align-items: start;
+}
+
+.files-panel {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.files-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.files-panel-body {
+  display: grid;
+  gap: var(--space-sm);
 }
 
 .mono {
