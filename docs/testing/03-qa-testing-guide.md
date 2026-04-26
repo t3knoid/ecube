@@ -60,6 +60,7 @@ sudo apt install -y \
   postgresql-contrib \
   nfs-common \
   cifs-utils \
+  smbclient \
   usbutils \
   udev \
   curl \
@@ -1048,6 +1049,9 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 18 | View drive detail after initialization | Sensitive device and path fields are shown as `Protected` instead of raw internal identifiers |
 | 19 | View the mounts list and browse controls | Raw remote and local mount paths are redacted in the table; browse remains enabled only for mounted shares |
 | 20 | Operate the Initialize and Add Mount dialogs with keyboard only | Focus enters the dialog, Tab stays trapped within it, Escape closes it, and focus returns to the triggering control |
+| 21 | Use `Browse` in the Add Mount dialog with many discovered shares | The share picker opens, supports vertical scrolling, and selecting a share fills the `Remote path` field |
+| 22 | Open Add Mount while demo mode is enabled | The share-discovery `Browse` control is hidden |
+| 23 | Trigger share browsing on a host missing `smbclient` or `showmount` | The dialog shows an actionable message telling the operator which host tool to install before retrying |
 
 ### 12.4.1 Filesystem Detection
 
