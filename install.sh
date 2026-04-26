@@ -1098,6 +1098,33 @@ run() {
   fi
 }
 
+_ensure_runtime_mount_packages() {
+  local packages=(smbclient)
+  local missing_packages=()
+  local package
+
+  if [[ "${ID}" != "ubuntu" && "${ID}" != "debian" && "${ID_LIKE:-}" != *"debian"* ]]; then
+    warn "Skipping runtime mount package installation on unsupported OS family '${ID}'."
+    return 0
+  fi
+
+  for package in "${packages[@]}"; do
+    if ! dpkg -s "${package}" >/dev/null 2>&1; then
+      missing_packages+=("${package}")
+    fi
+  done
+
+  if (( ${#missing_packages[@]} == 0 )); then
+    ok "Runtime mount packages already installed: ${packages[*]}"
+    return 0
+  fi
+
+  info "Installing runtime mount packages: ${missing_packages[*]}"
+  run apt-get update -qq
+  run apt-get install -y "${missing_packages[@]}"
+  ok "Runtime mount packages installed: ${missing_packages[*]}"
+}
+
 # Run a command as the ecube user, dropping privileges from root.
 # Prefers runuser(1) (util-linux, always present on Debian/Ubuntu and does not
 # require a sudoers entry) and falls back to sudo -u for environments where
@@ -1777,6 +1804,9 @@ _provision_pg_superuser() {
 # ===========================================================================
 install_backend() {
   header "\n── Backend installation ────────────────────────────────────────"
+
+  # 0. Install host packages needed for runtime mount discovery.
+  _ensure_runtime_mount_packages
 
   # 1. System user and USB device access
   _ensure_ecube_user
