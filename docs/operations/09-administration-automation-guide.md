@@ -1063,7 +1063,7 @@ Optional parameters:
 | `callback_url` | `null` | HTTPS URL that receives a job-status callback when the job reaches `COMPLETED` or `FAILED` |
 | `created_by` | `null` | Optional username attribution override for audit/job metadata |
 
-> **Webhook callback details:** For callback payload format, retry behavior, delivery failure handling, and receiver examples, see [09-third-party-integration.md](09-third-party-integration.md#7-webhook-callbacks).
+> **Webhook callback details:** For callback payload format, retry behavior, delivery failure handling, and receiver examples, see [12-third-party-integration.md](12-third-party-integration.md#7-webhook-callbacks).
 
 #### callback_url integration note
 
