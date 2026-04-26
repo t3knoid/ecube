@@ -72,6 +72,7 @@ test.describe('chain of custody handoff', () => {
           {
             id: 1,
             device_identifier: 'sdb',
+            display_device_label: 'Kingston DataTraveler - Port 1',
             current_state: 'IN_USE',
             current_project_id: 'PRJ-001',
           },
@@ -132,7 +133,13 @@ test.describe('chain of custody handoff', () => {
 
     await page.goto('/audit')
 
-    await page.getByLabel('Filter by drive ID').first().selectOption({ label: '#1 (sdb)' })
+  const cocDriveSelect = page.getByLabel('Filter by drive ID').first()
+  await expect(cocDriveSelect.locator('option')).toContainText(['Any drive', 'Kingston DataTraveler - Port 1'])
+
+  const handoffDriveSelect = page.locator('.handoff-form').getByLabel('Filter by drive ID')
+  await expect(handoffDriveSelect.locator('option')).toContainText(['Select drive', 'Kingston DataTraveler - Port 1'])
+
+  await page.getByLabel('Filter by drive ID').first().selectOption({ label: 'Kingston DataTraveler - Port 1' })
     await page.getByRole('button', { name: 'Load CoC' }).click()
     await expect(page.getByText('Drive #1 (SN-001)')).toBeVisible()
 
