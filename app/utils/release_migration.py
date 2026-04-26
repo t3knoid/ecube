@@ -2,8 +2,13 @@ from __future__ import annotations
 
 import argparse
 import re
+import shutil
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+
+from alembic import command
+from alembic.config import Config
 
 
 _SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
@@ -105,14 +110,47 @@ def create_release_migration(repo_root: Path) -> ReleaseMigrationResult:
     )
 
 
+def autogenerate_release_migration(repo_root: Path) -> ReleaseMigrationResult:
+    current = ensure_release_migration(repo_root)
+    if not current.path.exists():
+        raise ReleaseMigrationError(
+            f"Release migration {current.path.name} does not exist for ECUBE {current.version}. Run 'ecube-release-migration create' first."
+        )
+
+    backup_path = current.path.with_suffix(".py.bak")
+    if backup_path.exists():
+        raise ReleaseMigrationError(
+            f"Temporary backup file already exists at {backup_path}. Remove it before re-running the release migration workflow."
+        )
+
+    current.path.replace(backup_path)
+    temp_dir: Path | None = None
+    try:
+        generated_path, temp_dir = _run_autogenerate_revision(repo_root, current)
+        if generated_path != current.path:
+            generated_path.replace(current.path)
+    except Exception:
+        if backup_path.exists():
+            backup_path.replace(current.path)
+        raise
+    finally:
+        if temp_dir is not None and temp_dir.exists():
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    if backup_path.exists():
+        backup_path.unlink()
+
+    return ensure_release_migration(repo_root)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Locate or create the single unreleased ECUBE Alembic migration for the current project.version."
     )
     parser.add_argument(
         "command",
-        choices=("ensure", "create"),
-        help="'ensure' prints the current release migration path; 'create' scaffolds it if missing and otherwise fails clearly.",
+        choices=("ensure", "create", "autogenerate"),
+        help="'ensure' prints the current release migration path; 'create' scaffolds it if missing; 'autogenerate' refreshes the current release migration from model metadata.",
     )
     parser.add_argument(
         "--repo-root",
@@ -123,7 +161,12 @@ def main(argv: list[str] | None = None) -> int:
 
     repo_root = Path(args.repo_root).resolve()
     try:
-        result = ensure_release_migration(repo_root) if args.command == "ensure" else create_release_migration(repo_root)
+        if args.command == "ensure":
+            result = ensure_release_migration(repo_root)
+        elif args.command == "create":
+            result = create_release_migration(repo_root)
+        else:
+            result = autogenerate_release_migration(repo_root)
     except ReleaseMigrationError as exc:
         parser.exit(1, f"error: {exc}\n")
 
@@ -199,3 +242,30 @@ def upgrade() -> None:
 def downgrade() -> None:
     pass
 '''
+
+
+def _run_autogenerate_revision(repo_root: Path, current: ReleaseMigrationResult) -> tuple[Path, Path]:
+    versions_dir = _versions_dir(repo_root)
+    temp_dir = Path(tempfile.mkdtemp(prefix="ecube-release-migration-", dir=versions_dir))
+    try:
+        config = Config(str(repo_root / "alembic.ini"))
+        config.set_main_option("script_location", str(repo_root / "alembic"))
+        config.set_main_option("version_locations", str(temp_dir))
+        script = command.revision(
+            config,
+            message=f"release {current.version}",
+            autogenerate=True,
+            rev_id=current.revision,
+            head=current.down_revision or "base",
+            version_path=str(temp_dir),
+        )
+        if script is None:
+            raise ReleaseMigrationError("Alembic did not return a generated release migration path.")
+        script_path = Path(script.path)
+        if not script_path.exists():
+            raise ReleaseMigrationError(f"Alembic generated release migration path does not exist: {script_path}")
+        return script_path, temp_dir
+    except ReleaseMigrationError:
+        raise
+    except Exception as exc:
+        raise ReleaseMigrationError(f"Failed to autogenerate release migration for ECUBE {current.version}: {exc}") from exc
