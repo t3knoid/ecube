@@ -221,7 +221,7 @@ This section documents the concrete table layout represented by the SQLAlchemy m
 - `size_bytes` (BigInteger, nullable)
 - `checksum` (String, nullable)
 - `status` (Enum `FileStatus`, `native_enum=False`, default `PENDING`)
-- `error_message` (Text, nullable)
+- `error_message` (Text, nullable) — operator-safe classified file failure summary exposed to UI/API consumers; raw provider error text remains limited to debug logging and is not persisted here.
 - `retry_attempts` (Integer, default `0`)
 
 #### `manifests`

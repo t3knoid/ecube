@@ -1116,7 +1116,7 @@ def test_create_manifest_overwrites_manifest_json_and_includes_metadata(client, 
         evidence_number="EV-MANIFEST-DATA-001",
         source_path="/data/evidence",
         target_mount_path=str(tmp_path),
-        status=JobStatus.PENDING,
+        status=JobStatus.COMPLETED,
     )
     db.add(job)
     db.commit()
@@ -1159,6 +1159,28 @@ def test_create_manifest_conflict_when_drive_not_mounted(client, db):
     assert audit.details["error"]
 
 
+def test_create_manifest_rejects_partial_success_completion(client, db, tmp_path):
+    job = ExportJob(
+        project_id="PROJ-MANIFEST-PARTIAL-001",
+        evidence_number="EV-MANIFEST-PARTIAL-001",
+        source_path="/data/evidence",
+        target_mount_path=str(tmp_path),
+        status=JobStatus.COMPLETED,
+        file_count=2,
+    )
+    db.add(job)
+    db.flush()
+    db.add(ExportFile(job_id=job.id, relative_path="ok.txt", status=FileStatus.DONE, checksum="abc", size_bytes=1))
+    db.add(ExportFile(job_id=job.id, relative_path="bad.txt", status=FileStatus.ERROR, error_message="Target storage is full"))
+    db.commit()
+
+    response = client.post(f"/jobs/{job.id}/manifest")
+
+    assert response.status_code == 409
+    assert "clean completed jobs" in response.json()["message"]
+    assert db.query(Manifest).filter(Manifest.job_id == job.id).count() == 0
+
+
 def test_create_manifest_write_failure_returns_server_error_and_sanitized_audit(client, db, tmp_path):
     job = ExportJob(
         project_id="PROJ-MANIFEST-WRITE-001",
@@ -1184,27 +1206,17 @@ def test_create_manifest_write_failure_returns_server_error_and_sanitized_audit(
     assert "disk full" not in json.dumps(audit.details)
 
 
-def test_create_manifest_writes_application_log_line(client, db, caplog):
-    drive = UsbDrive(
-        device_identifier="USB-MANIFEST-LOG-001",
-        current_state=DriveState.AVAILABLE,
-        current_project_id="PROJ-MANIFEST-LOG-001",
-        mount_path="/tmp/ecube-manifest-log-001",
+def test_create_manifest_writes_application_log_line(client, db, caplog, tmp_path):
+    job = ExportJob(
+        project_id="PROJ-MANIFEST-LOG-001",
+        evidence_number="EV-MANIFEST-LOG-001",
+        source_path="/data/evidence",
+        target_mount_path=str(tmp_path),
+        status=JobStatus.COMPLETED,
     )
-    db.add(drive)
+    db.add(job)
     db.commit()
-
-    create_response = client.post(
-        "/jobs",
-        json={
-            "project_id": "PROJ-MANIFEST-LOG-001",
-            "evidence_number": "EV-MANIFEST-LOG-001",
-            "source_path": "/data/evidence",
-            "drive_id": drive.id,
-        },
-    )
-    assert create_response.status_code == 200
-    job_id = create_response.json()["id"]
+    job_id = job.id
 
     with caplog.at_level(logging.INFO):
         response = client.post(f"/jobs/{job_id}/manifest")
@@ -1899,30 +1911,62 @@ def test_create_job_conflict_when_drive_already_in_use(client, db):
 
 
 def test_verify_job(client, db):
-    db.add(UsbDrive(
-        device_identifier="USB-VERIFY-001",
-        current_state=DriveState.AVAILABLE,
-        current_project_id="PROJ-001",
-        mount_path="/mnt/ecube/verify-001",
-    ))
-    db.commit()
-
-    create_response = client.post(
-        "/jobs",
-        json={
-            "project_id": "PROJ-001",
-            "evidence_number": "EV-001",
-            "source_path": "/tmp",
-        },
+    job = ExportJob(
+        project_id="PROJ-VERIFY-001",
+        evidence_number="EV-VERIFY-001",
+        source_path="/tmp",
+        status=JobStatus.COMPLETED,
+        target_mount_path="/mnt/ecube/verify-001",
+        file_count=1,
     )
-    assert create_response.status_code == 200
-    job_id = create_response.json()["id"]
+    db.add(job)
+    db.flush()
+    db.add(ExportFile(job_id=job.id, relative_path="ok.txt", status=FileStatus.DONE, checksum="abc", size_bytes=1))
+    db.commit()
 
     with patch("app.services.copy_engine.run_verify_job") as mock_verify:
         mock_verify.return_value = None
-        response = client.post(f"/jobs/{job_id}/verify")
+        response = client.post(f"/jobs/{job.id}/verify")
     assert response.status_code == 200
     assert response.json()["status"] == "VERIFYING"
+
+
+def test_verify_job_rejects_partial_success_completion(client, db):
+    job = ExportJob(
+        project_id="PROJ-VERIFY-PARTIAL",
+        evidence_number="EV-VERIFY-PARTIAL",
+        source_path="/tmp",
+        status=JobStatus.COMPLETED,
+        target_mount_path="/mnt/ecube/verify-partial",
+        file_count=2,
+    )
+    db.add(job)
+    db.flush()
+    db.add(ExportFile(job_id=job.id, relative_path="ok.txt", status=FileStatus.DONE, checksum="abc", size_bytes=1))
+    db.add(ExportFile(job_id=job.id, relative_path="bad.txt", status=FileStatus.ERROR, error_message="Target storage is full"))
+    db.commit()
+
+    response = client.post(f"/jobs/{job.id}/verify")
+
+    assert response.status_code == 409
+    assert "clean completed jobs" in response.json()["message"]
+
+
+def test_verify_job_rejects_non_completed_status(client, db):
+    job = ExportJob(
+        project_id="PROJ-VERIFY-PENDING",
+        evidence_number="EV-VERIFY-PENDING",
+        source_path="/tmp",
+        status=JobStatus.PENDING,
+        target_mount_path="/mnt/ecube/verify-pending",
+    )
+    db.add(job)
+    db.commit()
+
+    response = client.post(f"/jobs/{job.id}/verify")
+
+    assert response.status_code == 409
+    assert "Only completed jobs can be verified" in response.json()["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -2102,6 +2146,46 @@ def test_failed_job_with_error_summary(client, db):
     assert "2 files failed" in data["error_summary"]
     assert "disk full" in data["error_summary"]
     assert "permission denied" in data["error_summary"]
+
+
+def test_completed_job_with_file_errors_includes_error_summary(client, db):
+    """Completed jobs still expose failed-file counts and summary details."""
+    job = ExportJob(
+        project_id="PROJ-PARTIAL",
+        evidence_number="EV-PARTIAL",
+        source_path="/data",
+        status=JobStatus.COMPLETED,
+        total_bytes=1000,
+        copied_bytes=500,
+        file_count=4,
+    )
+    db.add(job)
+    db.flush()
+
+    db.add(ExportFile(job_id=job.id, relative_path="ok1.txt", status=FileStatus.DONE, size_bytes=200))
+    db.add(ExportFile(job_id=job.id, relative_path="ok2.txt", status=FileStatus.DONE, size_bytes=300))
+    db.add(ExportFile(
+        job_id=job.id, relative_path="report.zip", status=FileStatus.ERROR,
+        error_message="Target storage is full",
+    ))
+    db.add(ExportFile(
+        job_id=job.id, relative_path="archive.tar.gz", status=FileStatus.ERROR,
+        error_message="Permission or authentication failure",
+    ))
+    db.commit()
+
+    response = client.get(f"/jobs/{job.id}")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["status"] == "COMPLETED"
+    assert data["files_succeeded"] == 2
+    assert data["files_failed"] == 2
+    assert data["files_timed_out"] == 0
+    assert data["error_summary"] is not None
+    assert "2 files failed" in data["error_summary"]
+    assert "Target storage is full" in data["error_summary"]
+    assert "Permission or authentication failure" in data["error_summary"]
 
 
 def test_job_with_no_drive_assigned(client, db):
@@ -2653,6 +2737,8 @@ def test_list_jobs_includes_files_succeeded_and_failed(client, db):
     assert data[0]["files_succeeded"] == 2
     assert data[0]["files_failed"] == 1
     assert data[0]["files_timed_out"] == 0
+    assert data[0]["error_summary"] is not None
+    assert "1 file failed" in data[0]["error_summary"]
 
 
 def test_get_job_details_includes_timed_out_count(client, db):

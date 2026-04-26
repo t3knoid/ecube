@@ -460,6 +460,12 @@ class TestJobAuditLogging:
         )
         job_id = create_resp.json()["id"]
 
+        job = db.get(ExportJob, job_id)
+        assert job is not None
+        job.status = JobStatus.COMPLETED
+        db.add(ExportFile(job_id=job_id, relative_path="ok.txt", status=FileStatus.DONE, checksum="abc", size_bytes=1))
+        db.commit()
+
         with patch("app.services.copy_engine.run_verify_job"):
             response = client.post(f"/jobs/{job_id}/verify")
         assert response.status_code == 200
@@ -487,6 +493,13 @@ class TestJobAuditLogging:
             },
         )
         job_id = create_resp.json()["id"]
+
+        job = db.get(ExportJob, job_id)
+        assert job is not None
+        job.status = JobStatus.COMPLETED
+        job.target_mount_path = str(tmp_path)
+        db.add(ExportFile(job_id=job_id, relative_path="ok.txt", status=FileStatus.DONE, checksum="abc", size_bytes=1))
+        db.commit()
 
         response = client.post(f"/jobs/{job_id}/manifest")
         assert response.status_code == 200
@@ -687,7 +700,8 @@ class TestFileCopyAuditLogging:
         assert failure.job_id == job_id
         assert failure.details["file_id"] == file_id
         assert failure.details["relative_path"] == relative_path
-        assert failure.details["error"] == sanitize_error_message("simulated I/O error")
+        assert failure.details["error_code"] == "io_failure"
+        assert failure.details["error_detail"] == "I/O failure"
 
         assert _audit_by_action(db, "FILE_COPY_SUCCESS") is None
 
@@ -705,8 +719,8 @@ class TestFileCopyAuditLogging:
 
         failure = _audit_by_action(db, "FILE_COPY_FAILURE")
         assert failure is not None
-        assert "error" in failure.details
-        assert failure.details["error"] == sanitize_error_message("Permission denied")
+        assert failure.details["error_code"] == "permission_failure"
+        assert failure.details["error_detail"] == "Permission or authentication failure"
 
     def test_file_copy_start_event_schema(self, db):
         from app.services.copy_engine import _process_file
