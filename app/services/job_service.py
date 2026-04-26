@@ -1121,6 +1121,103 @@ def start_job(
     return job
 
 
+def retry_failed_files(
+    job_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session,
+    actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
+) -> ExportJob:
+    job_repo = JobRepository(db)
+    file_repo = FileRepository(db)
+    audit_repo = AuditRepository(db)
+
+    job = job_repo.get_for_update(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    job_row = _row(job)
+    _reject_when_startup_analysis_running(job, action="retry failed files for this job")
+    current_status = cast(JobStatus, job_row.status)
+    if current_status != JobStatus.COMPLETED:
+        raise HTTPException(
+            status_code=409,
+            detail="Only completed jobs with failed files can retry failed copies",
+        )
+
+    try:
+        job_row.source_path = validate_source_path(
+            cast(str, job_row.source_path),
+            usb_mount_base_path=settings.usb_mount_base_path,
+            target_mount_path=cast(Optional[str], job_row.target_mount_path),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    _done_count, error_count, timeout_count = file_repo.count_done_errors_and_timeouts(job_id)
+    retryable_count = int(error_count) + int(timeout_count)
+    if retryable_count <= 0:
+        raise HTTPException(status_code=409, detail="Job has no failed files to retry")
+
+    file_repo.reset_failed_for_retry(job_id)
+    job_row.status = JobStatus.RUNNING
+    job_row.started_by = actor
+    job_row.started_at = datetime.now(timezone.utc)
+    job_row.active_duration_seconds = int(cast(Optional[int], job_row.active_duration_seconds) or 0)
+    job_row.completed_at = None
+    job_row.failure_reason = None
+    try:
+        job_repo.save(job)
+    except Exception:
+        logger.exception("DB commit failed while retrying failed files", {"job_id": job_id})
+        raise HTTPException(
+            status_code=500,
+            detail="Database error while retrying failed files",
+        )
+
+    assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
+    assignment_row = _row(assignment) if assignment is not None else None
+    active_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
+    job_project_id = cast(Optional[str], job_row.project_id)
+
+    logger.info(
+        f"JOB_RETRY_FAILED_FILES_STARTED job_id={job_id} project_id={job_project_id} "
+        f"retry_file_count={retryable_count} error_count={error_count} timeout_count={timeout_count} "
+        f"actor={actor or 'system'}",
+        extra={
+            "job_id": job_id,
+            "project_id": job_project_id,
+            "retry_file_count": retryable_count,
+            "error_count": int(error_count),
+            "timeout_count": int(timeout_count),
+            "actor": actor or "system",
+        },
+    )
+
+    try:
+        audit_repo.add(
+            action="JOB_RETRY_FAILED_FILES_STARTED",
+            user=actor,
+            project_id=job_project_id,
+            drive_id=active_drive_id,
+            job_id=job_id,
+            details={
+                "project_id": job_project_id,
+                "drive_id": active_drive_id,
+                "retry_file_count": retryable_count,
+                "error_count": int(error_count),
+                "timeout_count": int(timeout_count),
+            },
+            client_ip=client_ip,
+        )
+    except Exception:
+        logger.exception("Failed to write audit log for JOB_RETRY_FAILED_FILES_STARTED")
+
+    background_tasks.add_task(copy_engine.run_copy_job, job_id)
+    db.refresh(job)
+    return job
+
+
 def pause_job(
     job_id: int,
     db: Session,

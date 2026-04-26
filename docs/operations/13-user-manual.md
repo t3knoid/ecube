@@ -588,7 +588,7 @@ Open a job to view details and perform follow-up actions.
 
 > **Access Summary**
 > **Page visibility:** `admin`, `manager`, `processor`, `auditor`
-> **Restricted actions:** `Analyze`, `Edit`, `Start`, `Pause`, `Complete`, `Verify`, and `Manifest` are enabled for `admin`, `manager`, and `processor` when the current job state allows them. `Clear startup analysis cache` is shown only to `admin` and `manager` when the job still has a persisted startup-analysis snapshot. `Delete` is shown only for eligible pending jobs. Hash inspection and source/destination comparison remain available to `admin` and `auditor`.
+> **Restricted actions:** `Analyze`, `Edit`, `Start`, `Retry Failed Files`, `Pause`, `Complete`, `Verify`, and `Manifest` are enabled for `admin`, `manager`, and `processor` when the current job state allows them. `Clear startup analysis cache` is shown only to `admin` and `manager` when the job still has a persisted startup-analysis snapshot. `Delete` is shown only for eligible pending jobs. Hash inspection and source/destination comparison remain available to `admin` and `auditor`.
 
 The job detail page provides deeper inspection and follow-up controls.
 
@@ -597,6 +597,7 @@ Typical functions include:
 - Run manual startup analysis before copy starts so the operator can review discovered files and estimated bytes
 - Edit a pending, paused, or failed job before resuming work
 - Start a pending job or resume a paused one
+- Retry only the failed or timed-out files from a partial-success completed job
 - Pause a running job and resume it later
 - Manually complete a safe non-active job when required by the workflow
 - Clear a persisted startup-analysis snapshot before the next restart when the cached scan should be discarded
@@ -605,7 +606,7 @@ Typical functions include:
 - Inspect hashes for individual files
 - Compare a file's source version against its copied destination version
 
-### 10.1 Editing, Starting, Pausing, Completing, Verifying, and Generating a Manifest
+### 10.1 Editing, Starting, Retrying Failed Files, Pausing, Completing, Verifying, and Generating a Manifest
 
 Action buttons are shown near the top of the job detail screen.
 
@@ -614,6 +615,7 @@ Use them when appropriate:
 - `Analyze` to run startup analysis for an eligible job without starting copy
 - `Edit` to adjust evidence number, source path, drive, or thread count for a `PENDING`, `PAUSED`, or `FAILED` job
 - `Start` to begin a new job or resume a paused one
+- `Retry Failed Files` to re-queue only `ERROR` and `TIMEOUT` file rows on a `COMPLETED` job that finished with partial-success results
 - `Pause` to request a safe stop after the current copy work finishes
 - `Complete` to manually mark a pending, paused, or failed job as complete when the operational workflow requires it
 - `Clear startup analysis cache` to remove a persisted startup scan after explicit confirmation; this is available only to `admin` and `manager` when cached startup-analysis data exists for the job
@@ -625,6 +627,10 @@ When a pause is requested, the Jobs list and Job Detail page can show a `Pause i
 While a job is actively copying, Job Detail shows a live `Duration` field that reflects cumulative active runtime only. The displayed value continues updating while the job is `RUNNING`, does not add paused time while the job is `PAUSED`, and resumes from the previously stored active runtime after a later restart instead of resetting to zero.
 
 Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed `manifest.json` file on the destination drive.
+
+For a partial-success `COMPLETED` job, Job Detail can show `Retry Failed Files` instead of exposing Verify or Manifest too early. This action is available only to `admin`, `manager`, and `processor`, moves the job back into `RUNNING`, re-queues only failed or timed-out files, and preserves already successful copies.
+
+The completion summary uses the normal success styling for clean completions. If the summary still shows any failed or timed-out file counts, the summary switches to a red warning background so operators can distinguish a partial-success completion from a clean completed run at a glance.
 
 During startup analysis, Job Detail can show `Preparing copy...` before any totals are known. While this state is visible, the page also explains that ECUBE is still scanning the source files and calculating totals, which can take time for large evidence sets.
 

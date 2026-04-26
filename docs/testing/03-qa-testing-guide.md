@@ -658,6 +658,10 @@ For the current Jobs page UI, verify the grouped `Create Job` dialog behaves as 
 - After a pause and resume cycle, the final duration and copy-rate summary remain additive across the full run rather than resetting to only the most recent segment.
 - For a failed or paused job with cached startup analysis, `admin` and `manager` see `Clear startup analysis cache`, processor-only users do not, and the confirmation dialog explains that the next restart will rescan the source.
 - After confirming cleanup, the success message appears, the cleanup action disappears, and later restart behavior performs a fresh startup analysis.
+- For a `COMPLETED` job with partial-success results, `admin`, `manager`, and `processor` see `Retry Failed Files` only when `files_failed` or `files_timed_out` is non-zero; `auditor` does not.
+- For that same partial-success `COMPLETED` job, the completion summary panel switches to the red failure styling instead of the normal success styling so the operator can visually distinguish the failed-copy result state.
+- Clicking `Retry Failed Files` moves the job back to `RUNNING`, preserves `DONE` file rows, and re-queues only the failed or timed-out file rows.
+- Verify `Verify` and `Generate Manifest` remain unavailable on that partial-success completion until the retried files finish cleanly and no failed or timed-out files remain.
 
 #### 11.4c Manual Startup Analysis Checks
 
@@ -667,7 +671,7 @@ Use a pending job with a mounted source and eligible destination drive.
 - Verify Job Detail shows `Startup analysis started.` and later replaces it with `Startup analysis completed.` when the persisted summary is ready.
 - Confirm the startup-analysis summary includes the final lifecycle state plus discovered file count and estimated total bytes, and that failed runs show only a sanitized failure reason.
 - While the job is `ANALYZING`, verify `Analyze`, `Edit`, `Start`, `Complete`, `Delete`, and `Clear startup analysis cache` are unavailable in the UI according to role and state.
-- During the same window, verify direct API attempts to edit, start, complete, delete, re-analyze, or clear startup-analysis cache return `409 Conflict`.
+- During the same window, verify direct API attempts to edit, start, retry failed files, complete, delete, re-analyze, or clear startup-analysis cache return `409 Conflict` when otherwise applicable.
 - After analysis reaches `READY` or `STALE`, verify the blocked actions become available again according to the normal role and job-state rules.
 - Start and complete the job after a successful analyze run, then verify the startup-analysis summary remains visible in Job Detail even though the reusable startup-analysis entry snapshot has been cleared.
 
@@ -1161,7 +1165,7 @@ These tests exercise real hardware paths that must be validated during manual QA
 | # | Test | Steps | Expected |
 |---|------|-------|----------|
 | 1 | Active job progress stays conservative | Start a multi-file job and observe the Dashboard, Jobs list, and Job Detail view while bytes advance faster than completed file rows | All three views stay below 100% until the finished-file counts indicate completion; no view reports 100% while status remains RUNNING or VERIFYING |
-| 2 | Completion summary is visible | Let a job finish and open its detail page | The detail screen shows start time, copy threads, files copied, files failed, files timed out, total copied, elapsed time, and copy rate |
+| 2 | Completion summary reflects clean vs partial-success state | Let one job finish cleanly and let a second job finish `COMPLETED` with at least one failed or timed-out file, then open each detail page | Both detail screens show start time, copy threads, files copied, files failed, files timed out, total copied, elapsed time, and copy rate; the clean completion keeps normal success styling while the partial-success completion uses the red failure styling |
 | 3 | Mount-root source selection works | In Create Job, choose a mounted share and enter / as the source path | The job is created successfully and the selected mount root is used as the source |
 | 4 | Path traversal outside selected mount is blocked | In Create Job, choose a mounted share and enter a traversal path such as ../../etc | The UI/API rejects the request, no job is created, and the operator sees a validation-style error rather than a host path leak |
 | 5 | Destination selector uses device label | Open Create Job or edit an eligible job after selecting a project | The destination control is labeled `Select device`, each option uses the port-based `Device` value, and the Jobs list shows the same value in its `Device` column |
