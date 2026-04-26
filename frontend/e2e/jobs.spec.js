@@ -137,6 +137,7 @@ test('jobs create, start, compare, and manifest flow', async ({ page }) => {
 
   await expect(page.locator('.status-badge').filter({ hasText: 'COMPLETED' }).first()).toBeVisible()
   await expect(page.getByText('Source / Destination Compare')).toBeVisible()
+  await page.getByRole('button', { name: 'Show files' }).click()
   await page.getByRole('button', { name: 'View Hashes' }).click()
   await page.locator('#compare-file-source').selectOption('101')
   await page.getByRole('button', { name: 'Compare' }).click()
