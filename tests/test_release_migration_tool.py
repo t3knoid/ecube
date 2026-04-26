@@ -70,6 +70,29 @@ def test_ensure_release_migration_returns_existing_release_file(tmp_path: Path) 
     assert result.version == "0.2.0"
 
 
+def test_ensure_release_migration_accepts_typed_alembic_metadata(tmp_path: Path) -> None:
+    repo_root = tmp_path
+    versions_dir = repo_root / "alembic" / "versions"
+    versions_dir.mkdir(parents=True)
+    _write_pyproject(repo_root, "0.2.0")
+    existing_path = versions_dir / "v0_2_0.py"
+    existing_path.write_text(
+        """
+revision: str = "v0_2_0"
+down_revision: str | None = None
+branch_labels = None
+depends_on = None
+""".strip(),
+        encoding="utf-8",
+    )
+
+    result = ensure_release_migration(repo_root)
+
+    assert result.path == existing_path
+    assert result.revision == "v0_2_0"
+    assert result.down_revision is None
+
+
 def test_create_release_migration_fails_when_current_release_file_exists(tmp_path: Path) -> None:
     repo_root = tmp_path
     versions_dir = repo_root / "alembic" / "versions"
