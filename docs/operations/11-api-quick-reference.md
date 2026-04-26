@@ -102,11 +102,14 @@ Drive responses include both the stable `device_identifier` and the port-based `
 | GET | `/mounts` | admin/manager/processor/auditor | List network mounts |
 | POST | `/mounts` | admin/manager | Add new mount with required project assignment |
 | PATCH | `/mounts/{mount_id}` | admin/manager | Update an existing mount in place while preserving the generated local mount point |
+| POST | `/mounts/discover` | admin/manager | Discover SMB shares or NFS exports from the Add Mount dialog using the submitted server seed and optional credentials |
 | POST | `/mounts/{mount_id}/validate` | admin/manager | Validate mount connectivity |
 | POST | `/mounts/validate` | admin/manager | Validate all mounts |
 | DELETE | `/mounts/{mount_id}` | admin/manager | Remove mount |
 
 Project identifiers are canonicalized by trimming surrounding whitespace and converting the value to uppercase before storage and comparison. The mount-create endpoint also rejects exact duplicate remote sources and cross-project parent or child overlaps with `409 Conflict`; same-project nested sources remain allowed. A temporary `409 Conflict` can also be returned when another mount update is already in progress and holds the serialization lock.
+
+`POST /mounts/discover` is a trusted helper for the Add Mount dialog. It accepts the selected mount type plus the entered server seed and optional credentials, returns sanitized remote paths suitable for populating the dialog, hides the feature in demo mode, and can return actionable `500` guidance when the ECUBE host is missing required discovery tools such as `smbclient` or `showmount`.
 
 ---
 
