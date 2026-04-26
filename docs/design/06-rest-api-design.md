@@ -968,7 +968,9 @@ Download the most recently generated manifest for the job as an `application/jso
 
 - `401 Unauthorized` — Missing/invalid credentials
 - `403 Forbidden` — Insufficient role
+- `409 Conflict` — Assigned drive is not mounted
 - `404 Not Found` — Job not found or manifest not generated yet
+- `422 Validation Error` — Invalid path parameter
 - `500 Internal Server Error` — Manifest file unavailable
 
 ---
