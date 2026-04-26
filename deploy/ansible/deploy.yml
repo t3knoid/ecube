@@ -117,6 +117,7 @@
         - exfatprogs
         - nfs-common
         - cifs-utils
+        - smbclient
       state: present
       update_cache: true
 
