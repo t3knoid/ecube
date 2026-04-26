@@ -124,6 +124,11 @@ class Settings(BaseSettings):
     #: ``0`` disables timeout enforcement.
     copy_job_timeout: int = 3600
 
+    #: Default number of Job Detail file rows returned per page.
+    #: This value is operator-configurable for the UI and bounded to prevent
+    #: overly small or excessively large file page requests.
+    job_detail_files_page_size: int = Field(default=40, ge=20, le=100)
+
     #: Interval in seconds between automatic USB discovery sweeps.
     #: ``0`` disables periodic discovery.
     usb_discovery_interval: int = 30

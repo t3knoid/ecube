@@ -135,13 +135,21 @@ class FileRepository:
         """Return a single export file by primary key, or ``None``."""
         return self.db.get(ExportFile, file_id)
 
-    def list_by_job(self, job_id: int, *, limit: int | None = None) -> List[ExportFile]:
-        """Return files belonging to *job_id*, optionally capped by *limit*."""
+    def list_by_job(
+        self,
+        job_id: int,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> List[ExportFile]:
+        """Return files belonging to *job_id*, optionally paged by *offset* and *limit*."""
         query = (
             self.db.query(ExportFile)
             .filter(ExportFile.job_id == job_id)
             .order_by(ExportFile.id)
         )
+        if offset:
+            query = query.offset(offset)
         if limit is not None:
             query = query.limit(limit)
         return query.all()
