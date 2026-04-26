@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
-import { analyzeJob, getJob, getJobFiles, startJob, pauseJob, verifyJob, generateManifest, updateJob, completeJob, deleteJob, clearJobStartupAnalysisCache } from '@/api/jobs.js'
+import { analyzeJob, getJob, getJobFiles, startJob, retryFailedJob, pauseJob, verifyJob, generateManifest, updateJob, completeJob, deleteJob, clearJobStartupAnalysisCache } from '@/api/jobs.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import { getFileHashes, compareFiles } from '@/api/files.js'
 import { getDrives } from '@/api/drives.js'
@@ -189,6 +189,14 @@ const canStart = computed(() => {
     && currentStartupAnalysisStatus.value !== 'ANALYZING'
 })
 
+const canRetryFailed = computed(() => {
+  const status = String(job.value?.status || '').toUpperCase()
+  return canOperate.value
+    && status === 'COMPLETED'
+    && currentStartupAnalysisStatus.value !== 'ANALYZING'
+    && (Number(job.value?.files_failed || 0) > 0 || Number(job.value?.files_timed_out || 0) > 0)
+})
+
 const canPause = computed(() => canOperate.value && currentStatus.value === 'RUNNING')
 const isJobFullyComplete = computed(() => {
   const status = currentStatus.value
@@ -290,6 +298,11 @@ const completionSummary = computed(() => {
     copyRate: formatCopyRate(Number(job.value.copied_bytes || 0), durationSeconds),
     completedAt: formatTimestamp(job.value.completed_at),
   }
+})
+
+const completionSummaryHasFailures = computed(() => {
+  if (!completionSummary.value) return false
+  return completionSummary.value.filesFailed > 0 || completionSummary.value.filesTimedOut > 0
 })
 
 function formatBytes(value) {
@@ -679,6 +692,9 @@ async function runAction(action) {
     if (action === 'start') {
       closePausePendingDialog()
       job.value = await startJob(job.value.id, { thread_count: job.value.thread_count || 4 })
+    } else if (action === 'retry-failed') {
+      closePausePendingDialog()
+      job.value = await retryFailedJob(job.value.id)
     } else if (action === 'pause') {
       dialogTriggerRef.value = document.activeElement instanceof HTMLElement ? document.activeElement : null
       job.value = await pauseJob(job.value.id)
@@ -880,7 +896,11 @@ onUnmounted(() => {
         <p v-if="startupAnalysisSummary.failureReason" class="error-text">{{ t('jobs.analysisFailureReason') }}: {{ startupAnalysisSummary.failureReason }}</p>
       </div>
 
-      <div v-if="completionSummary" class="completion-summary" aria-live="polite">
+      <div
+        v-if="completionSummary"
+        :class="['completion-summary', { 'completion-summary--danger': completionSummaryHasFailures }]"
+        aria-live="polite"
+      >
         <strong>{{ t('jobs.completionSummary') }}</strong>
         <div class="hash-grid">
           <span>{{ t('jobs.startedAt') }}</span><strong>{{ completionSummary.startedAt }}</strong>
@@ -913,6 +933,7 @@ onUnmounted(() => {
         <button class="btn" :disabled="!canEdit || acting" @click="openEditDialog">{{ t('common.actions.edit') }}</button>
         <button class="btn" :disabled="!canAnalyze || acting" @click="runAnalyze">{{ t('jobs.analyze') }}</button>
         <button class="btn" :disabled="!canStart || acting" @click="runAction('start')">{{ t('jobs.start') }}</button>
+        <button class="btn" :disabled="!canRetryFailed || acting" @click="runAction('retry-failed')">{{ t('jobs.retryFailedFiles') }}</button>
         <button class="btn" :disabled="!canPause || acting" @click="runAction('pause')">{{ t('jobs.pause') }}</button>
         <button class="btn" :disabled="!canComplete || acting" @click="runComplete">{{ t('jobs.complete') }}</button>
         <button class="btn" :disabled="!canVerify || acting" @click="runAction('verify')">{{ t('jobs.verify') }}</button>
@@ -1217,6 +1238,11 @@ select {
   border: 1px solid color-mix(in srgb, var(--color-success, #16a34a) 35%, var(--color-border));
   border-radius: var(--border-radius);
   padding: var(--space-sm);
+}
+
+.completion-summary--danger {
+  background: var(--color-alert-danger-bg, #fef2f2);
+  border-color: var(--color-alert-danger-border, #fca5a5);
 }
 
 .failure-summary {
