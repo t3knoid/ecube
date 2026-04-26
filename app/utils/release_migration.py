@@ -4,12 +4,11 @@ import argparse
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 
 _SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
-_REVISION_RE = re.compile(r'^revision\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
-_DOWN_REVISION_RE = re.compile(r'^down_revision\s*=\s*(None|["\']([^"\']+)["\'])', re.MULTILINE)
+_REVISION_RE = re.compile(r'^revision(?:\s*:[^=]+)?\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
+_DOWN_REVISION_RE = re.compile(r'^down_revision(?:\s*:[^=]+)?\s*=\s*(None|["\']([^"\']+)["\'])', re.MULTILINE)
 
 
 class ReleaseMigrationError(RuntimeError):
