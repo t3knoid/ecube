@@ -193,7 +193,8 @@ const canPause = computed(() => canOperate.value && currentStatus.value === 'RUN
 const isJobFullyComplete = computed(() => {
   const status = currentStatus.value
   if (status !== 'COMPLETED') return false
-  return progressMetrics.value.percent >= 100
+  if (progressMetrics.value.percent < 100) return false
+  return Number(job.value?.files_failed || 0) === 0 && Number(job.value?.files_timed_out || 0) === 0
 })
 const canVerify = computed(() => canOperate.value && isJobFullyComplete.value)
 const canGenerateManifest = computed(() => canOperate.value && isJobFullyComplete.value)

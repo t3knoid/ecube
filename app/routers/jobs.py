@@ -462,7 +462,7 @@ def pause_job(
     return _redact_ip(job, current_user, db)
 
 
-@router.post("/{job_id}/startup-analysis/clear", response_model=ExportJobSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_500})
+@router.post("/{job_id}/startup-analysis/clear", response_model=ExportJobSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_422, **R_500})
 def clear_startup_analysis_cache(
     job_id: int,
     body: JobStartupAnalysisClearRequest,
@@ -488,7 +488,7 @@ def clear_startup_analysis_cache(
     return _redact_ip(job, current_user, db)
 
 
-@router.post("/{job_id}/verify", response_model=ExportJobSchema, responses={**R_401, **R_403, **R_404, **R_422, **R_500})
+@router.post("/{job_id}/verify", response_model=ExportJobSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
 def verify_job(
     job_id: int,
     background_tasks: BackgroundTasks,
@@ -499,8 +499,11 @@ def verify_job(
 ):
     """Verify the integrity of copied data by comparing hashes and file counts.
 
+    Available only for clean ``COMPLETED`` jobs with no failed or timed-out files.
     Launches verification in a background task and transitions the job to ``VERIFYING``.
-    Upon completion, sets the job to ``COMPLETED`` if verification succeeds or ``FAILED`` if it fails.
+    Jobs outside that precondition return ``409 Conflict``. Upon completion,
+    the job returns to ``COMPLETED`` if verification succeeds or moves to
+    ``FAILED`` if verification fails.
 
     **Roles:** ``admin``, ``manager``, ``processor``
     """
@@ -518,8 +521,11 @@ def create_manifest(
 ):
     """Generate a JSON manifest document containing file hashes and copy metadata.
 
+    Available only for clean ``COMPLETED`` jobs with no failed or timed-out
+    files. Jobs outside that precondition return ``409 Conflict``.
     Creates a manifest file on the USB drive listing all copied files with their
-    checksums and sizes. The manifest is written as plain JSON for audit and compliance purposes.
+    checksums and sizes. The manifest is written as plain JSON for audit and
+    compliance purposes.
 
     **Roles:** ``admin``, ``manager``, ``processor``
     """
