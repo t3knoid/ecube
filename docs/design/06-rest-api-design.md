@@ -218,6 +218,20 @@ The request body must include `project_id`. ECUBE trims surrounding whitespace a
 - `403 Forbidden` — Insufficient role
 - `422 Unprocessable Entity` — Invalid or missing request fields
 
+### `POST /mounts/discover`
+
+Discover SMB shares or NFS exports for the Add Mount workflow. The caller submits a server seed plus any optional credentials already entered in the dialog, and the backend returns sanitized remote paths that can populate the trusted add-mount form without exposing raw host mount details.
+
+**Roles:** `admin`, `manager`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role or share browsing disabled in demo mode
+- `409 Conflict` — Share discovery failed because the server address or credentials could not be used successfully
+- `422 Unprocessable Entity` — Invalid request body or missing server address seed
+- `500 Internal Server Error` — Required host discovery tooling is unavailable (for example `smbclient` for SMB or `showmount` for NFS)
+
 ### `DELETE /mounts/{mount_id}`
 
 Unmount and remove mount.

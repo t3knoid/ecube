@@ -104,6 +104,7 @@ The ECUBE service depends on several non-standard OS packages for USB formatting
 | `exfatprogs` | Provides `mkfs.exfat` for formatting evidence drives as exFAT. |
 | `nfs-common` | NFS client utilities for mounting evidence shares. |
 | `cifs-utils` | SMB/CIFS client utilities for mounting evidence shares. |
+| `smbclient` | SMB share-discovery support for the Add Mount browse dialog. |
 | `usbutils` | Provides `lsusb` and USB enumeration support. |
 | `util-linux` | Provides core block and session utilities such as `lsblk`, `blkid`, and `runuser`. |
 
@@ -115,9 +116,11 @@ sudo apt-get install -y \
   python3.11 python3.11-venv \
   postgresql postgresql-contrib \
   curl openssl \
-  exfatprogs nfs-common cifs-utils usbutils util-linux \
+  exfatprogs nfs-common cifs-utils smbclient usbutils util-linux \
   "linux-modules-extra-$(uname -r)"
 ```
+
+For NFS share browsing, ensure the host `showmount` command is available. On Debian and Ubuntu hosts this is typically provided by `nfs-common`.
 
 **Required commands (must be present before running `install.sh`):**
 
