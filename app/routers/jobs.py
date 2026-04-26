@@ -1,9 +1,11 @@
 import logging
 import os
 import re
+from io import BytesIO
 from typing import Dict, List, Tuple
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, Query, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, require_roles
@@ -564,3 +566,31 @@ def create_manifest(
     """
     job = job_service.create_manifest(job_id, db, actor=current_user.username, client_ip=get_client_ip(request))
     return _redact_ip(job, current_user, db)
+
+
+@router.get("/{job_id}/manifest/download", responses={**R_401, **R_403, **R_404, **R_500})
+def download_manifest(
+    job_id: int,
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
+    request: Request,
+):
+    """Download the most recently generated manifest for a job as JSON.
+
+    Available only to the same roles that can generate manifests and returns
+    the latest manifest content without exposing the host filesystem path.
+
+    **Roles:** ``admin``, ``manager``, ``processor``
+    """
+    manifest_bytes, manifest_name = job_service.download_manifest(
+        job_id,
+        db,
+        actor=current_user.username,
+        client_ip=get_client_ip(request),
+    )
+    return StreamingResponse(
+        BytesIO(manifest_bytes),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{manifest_name}"'},
+    )

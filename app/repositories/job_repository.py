@@ -499,3 +499,12 @@ class ManifestRepository:
             raise
         self.db.refresh(manifest)
         return manifest
+
+    def get_latest_for_job(self, job_id: int) -> Optional[Manifest]:
+        """Return the newest manifest recorded for *job_id*, or ``None``."""
+        return (
+            self.db.query(Manifest)
+            .filter(Manifest.job_id == job_id)
+            .order_by(Manifest.id.desc())
+            .first()
+        )
