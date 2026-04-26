@@ -995,6 +995,85 @@ def test_validate_mount_candidate_returns_candidate_without_persisting(manager_c
     assert provider.unmount_calls == ["/nfs/evidence"]
 
 
+def test_discover_mount_shares_returns_sanitized_remote_paths_and_reuses_credentials(manager_client, db):
+    class FakeProvider:
+        def __init__(self):
+            self.calls = []
+
+        def discover_shares(self, mount_type, remote_path, *, credentials_file=None, username=None, password=None):
+            self.calls.append(
+                {
+                    "mount_type": mount_type,
+                    "remote_path": remote_path,
+                    "credentials_file": credentials_file,
+                    "username": username,
+                    "password": password,
+                }
+            )
+            return ["//fileserver/CaseDrop", "//fileserver/Review"]
+
+    provider = FakeProvider()
+
+    with patch("app.services.mount_service._default_provider", return_value=provider):
+        response = manager_client.post(
+            "/mounts/discover",
+            json={
+                "type": "SMB",
+                "remote_path": "//fileserver",
+                "username": "svc-reader",
+                "password": "top-secret",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "shares": [
+            {"remote_path": "//fileserver/CaseDrop", "display_name": "CaseDrop"},
+            {"remote_path": "//fileserver/Review", "display_name": "Review"},
+        ]
+    }
+    assert provider.calls == [
+        {
+            "mount_type": MountType.SMB,
+            "remote_path": "//fileserver",
+            "credentials_file": None,
+            "username": "svc-reader",
+            "password": "top-secret",
+        }
+    ]
+
+
+def test_discover_mount_shares_rejected_in_demo_mode(manager_client, db):
+    with patch.object(type(settings), "is_demo_mode_enabled", return_value=True):
+        response = manager_client.post(
+            "/mounts/discover",
+            json={
+                "type": "NFS",
+                "remote_path": "nfs-server",
+            },
+        )
+
+    assert response.status_code == 403
+
+
+def test_discover_mount_shares_returns_actionable_message_when_host_tool_is_missing(manager_client, db):
+    class MissingToolProvider:
+        def discover_shares(self, mount_type, remote_path, *, credentials_file=None, username=None, password=None):
+            raise FileNotFoundError("smbclient not available")
+
+    with patch("app.services.mount_service._default_provider", return_value=MissingToolProvider()):
+        response = manager_client.post(
+            "/mounts/discover",
+            json={
+                "type": "SMB",
+                "remote_path": "//fileserver",
+            },
+        )
+
+    assert response.status_code == 500
+    assert "Share browsing requires the host smbclient tool. Install smbclient on the ECUBE host, then try again." in response.text
+
+
 def test_validate_mount_with_candidate_payload_uses_unsaved_values_without_persisting(db):
     mount = NetworkMount(
         type=MountType.SMB,
