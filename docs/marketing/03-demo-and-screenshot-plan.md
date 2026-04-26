@@ -47,7 +47,7 @@ Capture or refresh these polished screenshots from the live product:
 
 - Dashboard with active jobs and drive counts
 - Jobs list with progress and Details action
-- Job detail with completion summary and progress panel
+- Job detail with completion summary, including the partial-success red summary state, and progress panel
 - Drives view showing role-aware operations
 - Mounts view showing mounted-share management
 - Audit page showing searchable event history

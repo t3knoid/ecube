@@ -134,6 +134,7 @@
     "threadCount": "Thread count",
     "analyze": "Analyze",
     "start": "Start",
+    "retryFailedFiles": "Retry Failed Files",
     "pause": "Pause",
     "complete": "Complete",
     "editDialog": "Edit Job",
