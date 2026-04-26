@@ -462,7 +462,7 @@ def pause_job(
     return _redact_ip(job, current_user, db)
 
 
-@router.post("/{job_id}/startup-analysis/clear", response_model=ExportJobSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_500})
+@router.post("/{job_id}/startup-analysis/clear", response_model=ExportJobSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_422, **R_500})
 def clear_startup_analysis_cache(
     job_id: int,
     body: JobStartupAnalysisClearRequest,
