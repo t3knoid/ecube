@@ -26,10 +26,13 @@ from typing import Any, Dict, Optional
 from urllib.parse import urlparse, urlunparse
 
 import httpx
+from sqlalchemy.orm import object_session
+from sqlalchemy.orm.exc import UnmappedInstanceError
 
 from app.config import settings
 from app.models.jobs import ExportJob, FileStatus, JobStatus
 from app.repositories.audit_repository import AuditRepository
+from app.repositories.job_repository import FileRepository
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +151,24 @@ def _resolve_safe(hostname: str) -> str:
     return first_ip  # type: ignore[return-value]
 
 
+def _count_file_outcomes(job: ExportJob) -> tuple[int, int, int]:
+    """Return ``(files_succeeded, files_failed, files_timed_out)`` for *job*."""
+    try:
+        session = object_session(job)
+    except UnmappedInstanceError:
+        session = None
+
+    if session is not None and job.id is not None:
+        return FileRepository(session).count_done_errors_and_timeouts(job.id)
+
+    files = list(getattr(job, "files", []) or [])
+    return (
+        sum(1 for export_file in files if export_file.status == FileStatus.DONE),
+        sum(1 for export_file in files if export_file.status == FileStatus.ERROR),
+        sum(1 for export_file in files if export_file.status == FileStatus.TIMEOUT),
+    )
+
+
 def build_payload(job: ExportJob) -> Dict[str, Any]:
     """Construct the JSON callback payload from a terminal job.
 
@@ -159,10 +180,7 @@ def build_payload(job: ExportJob) -> Dict[str, Any]:
             f"got {job.status!r}"
         )
 
-    files = list(getattr(job, "files", []) or [])
-    files_succeeded = sum(1 for export_file in files if export_file.status == FileStatus.DONE)
-    files_failed = sum(1 for export_file in files if export_file.status == FileStatus.ERROR)
-    files_timed_out = sum(1 for export_file in files if export_file.status == FileStatus.TIMEOUT)
+    files_succeeded, files_failed, files_timed_out = _count_file_outcomes(job)
 
     event = "JOB_COMPLETED" if job.status == JobStatus.COMPLETED else "JOB_FAILED"
     completion_result = "failed"
