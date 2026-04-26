@@ -349,3 +349,15 @@ def test_create_manifest_writes_record_file_and_audit(integration_client, integr
     assert audit is not None
     assert audit.details["generated_by"] == "integration-user"
 
+    download_response = integration_client.get(f"/jobs/{job_id}/manifest/download")
+    assert download_response.status_code == 200
+    assert download_response.content == manifest_file.read_bytes()
+
+    download_audit = (
+        integration_db.query(AuditLog)
+        .filter(AuditLog.action == "MANIFEST_DOWNLOADED", AuditLog.job_id == job_id)
+        .first()
+    )
+    assert download_audit is not None
+    assert download_audit.details["manifest_file"] == "manifest.json"
+
