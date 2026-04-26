@@ -617,8 +617,8 @@ Use them when appropriate:
 - `Pause` to request a safe stop after the current copy work finishes
 - `Complete` to manually mark a pending, paused, or failed job as complete when the operational workflow requires it
 - `Clear startup analysis cache` to remove a persisted startup scan after explicit confirmation; this is available only to `admin` and `manager` when cached startup-analysis data exists for the job
-- `Verify` to run verification checks once the job is fully complete
-- `Manifest` to generate the manifest output once the job is fully complete
+- `Verify` to run verification checks once the job is fully complete with no failed or timed-out files
+- `Manifest` to generate the manifest output once the job is fully complete with no failed or timed-out files
 
 When a pause is requested, the Jobs list and Job Detail page can show a `Pause in progress` dialog while ECUBE waits for active copy threads to drain. The Start action remains unavailable during `PAUSING` and becomes available again once the job reaches `PAUSED`.
 

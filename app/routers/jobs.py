@@ -488,7 +488,7 @@ def clear_startup_analysis_cache(
     return _redact_ip(job, current_user, db)
 
 
-@router.post("/{job_id}/verify", response_model=ExportJobSchema, responses={**R_401, **R_403, **R_404, **R_422, **R_500})
+@router.post("/{job_id}/verify", response_model=ExportJobSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
 def verify_job(
     job_id: int,
     background_tasks: BackgroundTasks,
