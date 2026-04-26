@@ -15,7 +15,13 @@ from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
 
 
-_STARTUP_RECONCILIATION_ACTIONS = {"USB_DISCOVERY_SYNC", "DRIVE_DISCOVERED"}
+_STARTUP_RECONCILIATION_ACTIONS = {
+    "USB_DISCOVERY_SYNC",
+    "DRIVE_DISCOVERED",
+    "STARTUP_RECONCILIATION_STARTED",
+    "STARTUP_RECONCILIATION_FAILED",
+    "STARTUP_RECONCILIATION_COMPLETED",
+}
 
 
 # ---------------------------------------------------------------------------
