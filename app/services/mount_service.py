@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.mount_repository import MountRepository
-from app.schemas.network import MountCreate, MountUpdate
+from app.schemas.network import MountCreate, MountShareDiscoveryItem, MountShareDiscoveryRequest, MountShareDiscoveryResponse, MountUpdate
 from app.config import settings
 from app.exceptions import ConflictError, EncodingError
 from app.services.mount_credentials_service import decrypt_mount_secret, encrypt_mount_secret
@@ -73,6 +73,75 @@ def _log_mount_debug_failure(
 
 class LinuxMountProvider:
     """Linux implementation using ``mount(8)``, ``umount(8)``, and ``mountpoint(1)``."""
+
+    def discover_shares(
+        self,
+        mount_type: MountType,
+        remote_path: str,
+        *,
+        credentials_file: Optional[str] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+    ) -> list[str]:
+        if mount_type == MountType.NFS:
+            server = _extract_share_discovery_target(mount_type, remote_path)
+            showmount_bin = _resolve_showmount_binary()
+            if not showmount_bin:
+                raise FileNotFoundError("showmount not available")
+
+            result = subprocess.run(
+                [showmount_bin, "-e", server],
+                capture_output=True,
+                text=True,
+                timeout=settings.subprocess_timeout_seconds,
+            )
+            if result.returncode != 0:
+                error = (result.stderr or result.stdout or "").strip() or "showmount failed"
+                raise RuntimeError(error)
+
+            discovered: list[str] = []
+            for line in (result.stdout or "").splitlines():
+                stripped = line.strip()
+                if not stripped or stripped.lower().startswith("exports list on"):
+                    continue
+                export_path = stripped.split()[0]
+                if export_path.startswith("/"):
+                    discovered.append(f"{server}:{export_path}")
+            return discovered
+
+        server = _extract_share_discovery_target(mount_type, remote_path)
+        smbclient_bin = _resolve_smbclient_binary()
+        if not smbclient_bin:
+            raise FileNotFoundError("smbclient not available")
+
+        cmd = [smbclient_bin, "-g", "-L", server]
+        if credentials_file:
+            cmd.extend(["-A", credentials_file])
+        elif username is not None or password is not None:
+            cmd.extend(["-U", f"{username or ''}%{password or ''}"])
+        else:
+            cmd.append("-N")
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=settings.subprocess_timeout_seconds,
+        )
+        if result.returncode != 0:
+            error = (result.stderr or result.stdout or "").strip() or "smbclient failed"
+            raise RuntimeError(error)
+
+        discovered: list[str] = []
+        for line in (result.stdout or "").splitlines():
+            parts = [part.strip() for part in line.split("|")]
+            if len(parts) < 2 or parts[0] != "Disk":
+                continue
+            share_name = parts[1]
+            if not share_name or share_name.upper() in {"IPC$", "PRINT$"}:
+                continue
+            discovered.append(f"//{server}/{share_name}")
+        return discovered
 
     def os_mount(self, mount_type: MountType, remote_path: str, local_mount_point: str,
                  *, credentials_file: Optional[str] = None, username: Optional[str] = None, password: Optional[str] = None) -> Tuple[bool, Optional[str]]:
@@ -244,6 +313,22 @@ class LinuxMountProvider:
 
 def _resolve_mount_nfs_binary() -> Optional[str]:
     for candidate in ("/sbin/mount.nfs", "/usr/sbin/mount.nfs", "mount.nfs"):
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+    return None
+
+
+def _resolve_showmount_binary() -> Optional[str]:
+    for candidate in ("/usr/sbin/showmount", "/sbin/showmount", "showmount"):
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+    return None
+
+
+def _resolve_smbclient_binary() -> Optional[str]:
+    for candidate in ("/usr/bin/smbclient", "/bin/smbclient", "smbclient"):
         resolved = shutil.which(candidate)
         if resolved:
             return resolved
@@ -529,6 +614,43 @@ def _normalize_remote_reference(mount_type: MountType, remote_path: str) -> tupl
     host = parts[0].strip().lower()
     share_path = "/" + "/".join(parts[1:]) if len(parts) > 1 else "/"
     return mount_type.value, host, _normalize_remote_subpath(share_path)
+
+
+def _extract_share_discovery_target(mount_type: MountType, remote_path: str) -> str:
+    protocol, host, _path = _normalize_remote_reference(mount_type, remote_path)
+    if protocol and host:
+        return host
+    raise HTTPException(status_code=422, detail="Enter a server address before browsing shares")
+
+
+def _discovered_share_display_name(mount_type: MountType, remote_path: str) -> str:
+    if mount_type == MountType.NFS:
+        export_path = remote_path.split(":", 1)[1] if ":" in remote_path else remote_path
+        parts = [part for part in export_path.split("/") if part]
+        return parts[-1] if parts else "/"
+
+    parts = [part for part in remote_path.replace("\\", "/").lstrip("/").split("/") if part]
+    return parts[-1] if parts else remote_path
+
+
+def _share_discovery_unavailable_detail(mount_type: MountType) -> str:
+    if mount_type == MountType.NFS:
+        return "Share browsing requires the host showmount tool. Install showmount on the ECUBE host, then try again."
+    return "Share browsing requires the host smbclient tool. Install smbclient on the ECUBE host, then try again."
+
+
+def _normalize_discovered_share_paths(mount_type: MountType, remote_paths: list[str]) -> list[str]:
+    seen: set[str] = set()
+    normalized: list[str] = []
+    for raw_path in remote_paths:
+        if not isinstance(raw_path, str):
+            continue
+        candidate = raw_path.strip()
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        normalized.append(candidate)
+    return normalized
 
 
 def _remote_paths_overlap(left: str, right: str) -> bool:
@@ -886,6 +1008,121 @@ def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Option
         status=candidate_status,
         last_checked_at=checked_at,
     )
+
+
+def discover_mount_shares(
+    discovery_data: MountShareDiscoveryRequest,
+    db: Session,
+    actor: Optional[str] = None,
+    provider: Optional["MountProvider"] = None,
+    client_ip: Optional[str] = None,
+) -> MountShareDiscoveryResponse:
+    audit_repo = AuditRepository(db)
+    provider = provider or _default_provider()
+
+    if settings.is_demo_mode_enabled():
+        try:
+            audit_repo.add(
+                action="MOUNT_SHARE_DISCOVERY_FAILED",
+                user=actor,
+                details={
+                    "type": discovery_data.type.value,
+                    "reason": "demo_mode_disabled",
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for MOUNT_SHARE_DISCOVERY_FAILED")
+        raise HTTPException(status_code=403, detail="Share browsing is unavailable in demo mode")
+
+    discovery_target = _extract_share_discovery_target(discovery_data.type, discovery_data.remote_path)
+    logger.info(
+        "Mount share discovery started",
+        extra={"context": {"type": discovery_data.type.value, "actor": actor or "system"}},
+    )
+
+    try:
+        discovered_paths = provider.discover_shares(
+            discovery_data.type,
+            discovery_data.remote_path,
+            credentials_file=discovery_data.credentials_file,
+            username=discovery_data.username,
+            password=discovery_data.password,
+        )
+    except FileNotFoundError as exc:
+        logger.info(
+            "Mount share discovery unavailable",
+            extra={"context": {"type": discovery_data.type.value, "reason": "tool_unavailable"}},
+        )
+        logger.debug(
+            "Mount share discovery unavailable details",
+            extra={"context": {"type": discovery_data.type.value, "server": discovery_target, "raw_error": str(exc)}},
+        )
+        try:
+            audit_repo.add(
+                action="MOUNT_SHARE_DISCOVERY_FAILED",
+                user=actor,
+                details={
+                    "type": discovery_data.type.value,
+                    "reason": "tool_unavailable",
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for MOUNT_SHARE_DISCOVERY_FAILED")
+        raise HTTPException(
+            status_code=500,
+            detail=_share_discovery_unavailable_detail(discovery_data.type),
+        ) from exc
+    except Exception as exc:
+        logger.info(
+            "Mount share discovery failed",
+            extra={"context": {"type": discovery_data.type.value, "reason": "discovery_failed"}},
+        )
+        logger.debug(
+            "Mount share discovery failure details",
+            extra={"context": {"type": discovery_data.type.value, "server": discovery_target, "raw_error": str(exc)}},
+        )
+        try:
+            audit_repo.add(
+                action="MOUNT_SHARE_DISCOVERY_FAILED",
+                user=actor,
+                details={
+                    "type": discovery_data.type.value,
+                    "reason": "discovery_failed",
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for MOUNT_SHARE_DISCOVERY_FAILED")
+        raise HTTPException(
+            status_code=409,
+            detail="Share discovery failed. Review the server address or credentials and try again.",
+        ) from exc
+
+    normalized_paths = _normalize_discovered_share_paths(discovery_data.type, list(discovered_paths or []))
+    shares = [
+        MountShareDiscoveryItem(
+            remote_path=remote_path,
+            display_name=_discovered_share_display_name(discovery_data.type, remote_path),
+        )
+        for remote_path in normalized_paths
+    ]
+
+    try:
+        audit_repo.add(
+            action="MOUNT_SHARE_DISCOVERY_ATTEMPTED",
+            user=actor,
+            details={
+                "type": discovery_data.type.value,
+                "share_count": len(shares),
+            },
+            client_ip=client_ip,
+        )
+    except Exception:
+        logger.exception("Failed to write audit log for MOUNT_SHARE_DISCOVERY_ATTEMPTED")
+
+    return MountShareDiscoveryResponse(shares=shares)
 
 
 def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,

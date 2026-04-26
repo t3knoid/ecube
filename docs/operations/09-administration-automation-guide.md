@@ -1434,6 +1434,25 @@ Response: returns the mount object with `status` reflecting the connection resul
 
 > **Note:** As an alternative to inline credentials, use `credentials_file` to reference a file on the host containing credentials.
 
+### Discover Available Shares
+
+Discovers SMB shares or NFS exports before creating a mount. This endpoint is intended for the Add Mount browse dialog and reuses the server seed plus optional credentials entered by the operator.
+
+```bash
+# Requires admin or manager role
+curl -k -X POST https://localhost:8443/mounts/discover \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "SMB",
+    "remote_path": "//fileserver",
+    "username": "svc-ecube",
+    "password": "s3cret"
+  }'
+```
+
+Response: returns a `shares` array of sanitized remote paths and display names suitable for the Add Mount dialog. In demo mode the endpoint returns `403 Forbidden`, and if required host discovery tooling is missing it returns a `500` detail telling the operator which package to install before retrying.
+
 ### Remove Mount
 
 Deletes a mount configuration. Any in-progress jobs using this mount as a

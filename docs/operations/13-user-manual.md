@@ -455,6 +455,8 @@ The add-mount dialog supports common fields such as:
 - Password
 - Credentials file
 
+When adding a new mount, `admin` and `manager` users can use `Browse` inside the dialog to discover available SMB shares or NFS exports from the entered target server. The browse dialog reuses any credentials entered in the form, shows discovered shares in a scrollable picker when the result set is long, and selecting a result fills the `Remote path` field automatically.
+
 Project assignment is required when creating a mount. Drives can only be initialized for projects that have at least one assigned share in the `MOUNTED` state.
 
 ECUBE rejects exact duplicate remote paths and blocks overlapping parent or child remote paths across different projects. Nested paths for the same project remain allowed. If two operators submit changes at the same time, one request may briefly return a conflict while ECUBE finishes the in-progress update.
@@ -466,6 +468,8 @@ ECUBE now creates the local mount point automatically based on the remote path a
 After a service restart, ECUBE may automatically restore an expected managed share mount or remove a stale ECUBE-managed mount point that no longer matches persisted system state. These startup corrections are intentional and are recorded in the audit log with sanitized details.
 
 The exact credential fields required depend on the mount type and your environment.
+
+If share browsing is unavailable because the ECUBE host is missing a required discovery tool, the dialog now shows an actionable message telling the operator which host package to install before retrying. The browse control is hidden entirely when ECUBE is running in demo mode.
 
 ### 8.1.1 Editing a Mount
 
