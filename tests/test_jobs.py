@@ -795,7 +795,7 @@ def test_get_job_files_processor_allowed(client, db):
     assert data["files"][0]["status"] == "DONE"
     assert data["files"][0]["checksum"] == "sha256:a"
     assert data["page"] == 1
-    assert data["page_size"] == 40
+    assert data["page_size"] == jobs_router.settings.job_detail_files_page_size
 
 
 def test_get_job_files_supports_page_navigation(client, db):
