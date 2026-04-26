@@ -11,6 +11,7 @@ import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const { t } = useI18n()
@@ -66,7 +67,7 @@ const initializedDrives = computed(() =>
 )
 
 function _toDriveOption(drive) {
-  return { id: String(drive.id), label: `#${drive.id} (${drive.device_identifier || '-'})` }
+  return { id: String(drive.id), label: formatDriveIdentity(drive) }
 }
 
 function _toProjectList(drives) {
