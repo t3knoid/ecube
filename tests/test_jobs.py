@@ -2104,6 +2104,46 @@ def test_failed_job_with_error_summary(client, db):
     assert "permission denied" in data["error_summary"]
 
 
+def test_completed_job_with_file_errors_includes_error_summary(client, db):
+    """Completed jobs still expose failed-file counts and summary details."""
+    job = ExportJob(
+        project_id="PROJ-PARTIAL",
+        evidence_number="EV-PARTIAL",
+        source_path="/data",
+        status=JobStatus.COMPLETED,
+        total_bytes=1000,
+        copied_bytes=500,
+        file_count=4,
+    )
+    db.add(job)
+    db.flush()
+
+    db.add(ExportFile(job_id=job.id, relative_path="ok1.txt", status=FileStatus.DONE, size_bytes=200))
+    db.add(ExportFile(job_id=job.id, relative_path="ok2.txt", status=FileStatus.DONE, size_bytes=300))
+    db.add(ExportFile(
+        job_id=job.id, relative_path="report.zip", status=FileStatus.ERROR,
+        error_message="Target storage is full",
+    ))
+    db.add(ExportFile(
+        job_id=job.id, relative_path="archive.tar.gz", status=FileStatus.ERROR,
+        error_message="Permission or authentication failure",
+    ))
+    db.commit()
+
+    response = client.get(f"/jobs/{job.id}")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["status"] == "COMPLETED"
+    assert data["files_succeeded"] == 2
+    assert data["files_failed"] == 2
+    assert data["files_timed_out"] == 0
+    assert data["error_summary"] is not None
+    assert "2 files failed" in data["error_summary"]
+    assert "Target storage is full" in data["error_summary"]
+    assert "Permission or authentication failure" in data["error_summary"]
+
+
 def test_job_with_no_drive_assigned(client, db):
     """A job with no drive assignment should have drive=null."""
     job = ExportJob(
@@ -2653,6 +2693,8 @@ def test_list_jobs_includes_files_succeeded_and_failed(client, db):
     assert data[0]["files_succeeded"] == 2
     assert data[0]["files_failed"] == 1
     assert data[0]["files_timed_out"] == 0
+    assert data[0]["error_summary"] is not None
+    assert "1 file failed" in data[0]["error_summary"]
 
 
 def test_get_job_details_includes_timed_out_count(client, db):
