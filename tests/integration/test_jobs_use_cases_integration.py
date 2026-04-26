@@ -5,7 +5,7 @@ import pytest
 
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
-from app.models.jobs import DriveAssignment, ExportJob, JobStatus, Manifest
+from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, Manifest
 
 
 @pytest.mark.integration
@@ -200,6 +200,20 @@ def test_verify_job_sets_verifying_and_audits(integration_client, integration_db
     )
     job_id = create_response.json()["id"]
 
+    job = integration_db.get(ExportJob, job_id)
+    assert job is not None
+    job.status = JobStatus.COMPLETED
+    integration_db.add(
+        ExportFile(
+            job_id=job_id,
+            relative_path="ok.txt",
+            status=FileStatus.DONE,
+            checksum="abc",
+            size_bytes=1,
+        )
+    )
+    integration_db.commit()
+
     with patch("app.services.copy_engine.run_verify_job", return_value=None) as mock_verify:
         response = integration_client.post(f"/jobs/{job_id}/verify")
 
@@ -223,9 +237,20 @@ def test_create_manifest_writes_record_file_and_audit(integration_client, integr
         evidence_number="EV-008",
         source_path="/tmp/source",
         target_mount_path=str(target_path),
-        status=JobStatus.PENDING,
+        status=JobStatus.COMPLETED,
+        file_count=1,
     )
     integration_db.add(job)
+    integration_db.flush()
+    integration_db.add(
+        ExportFile(
+            job_id=job.id,
+            relative_path="ok.txt",
+            status=FileStatus.DONE,
+            checksum="abc",
+            size_bytes=1,
+        )
+    )
     integration_db.commit()
     job_id = job.id
 
