@@ -135,7 +135,7 @@ test('chain of custody handoff requires warning confirmation and submits archive
 
   await page.getByRole('button', { name: 'Prefill Handoff' }).click()
   await page.getByLabel('Possessor').fill('Officer Jane Doe')
-  await page.getByLabel('Delivery Time (UTC)').fill('2026-04-01T10:30')
+  await page.getByLabel('Delivery Time (Local Time)').fill('2026-04-01T10:30')
 
   await page.getByRole('button', { name: 'Confirm Handoff' }).click()
   await expect(page.getByRole('heading', { name: 'Permanent Archive Warning' })).toBeVisible()
