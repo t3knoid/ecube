@@ -648,12 +648,16 @@ When ECUBE can safely correlate a failed copy to the selected source or destinat
 
 ### 10.2 File List
 
-The file table usually shows:
+The Files panel is collapsed by default on Job Detail. Use `Show files` to expand it and `Hide files` to collapse it again without losing the current page.
+
+When expanded, the file table usually shows:
 
 - Relative path
 - Status
-- Size
-- Checksum information
+- Failure details when a row includes a safe file-level error summary
+- `View Hashes` actions for users allowed to inspect file hashes
+
+If the job contains more rows than fit on one page, the panel shows a numbered pagination control with 10-page shortcut windows and left/right navigation. The number of rows shown per page is controlled by the admin-only `Job Detail Files Per Page` runtime setting and is bounded between 20 and 100.
 
 ### 10.3 Hash Viewer
 

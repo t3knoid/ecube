@@ -890,6 +890,11 @@ Return operator-safe file status rows for a job.
 This endpoint is intended for role-safe job detail views and returns per-file
 copy status metadata without requiring introspection-only debug access.
 
+**Query parameters:**
+
+- `page` — 1-based page number, default `1`
+- `limit` — optional page size override; when supplied it must be between `20` and `100`; when omitted the backend uses the configured `JOB_DETAIL_FILES_PAGE_SIZE` default
+
 **Roles:** `admin`, `manager`, `processor`, `auditor`
 
 **Response (200 OK):**
@@ -897,6 +902,10 @@ copy status metadata without requiring introspection-only debug access.
 ```json
 {
     "job_id": 17,
+    "page": 1,
+    "page_size": 40,
+    "total_files": 2,
+    "returned_files": 2,
     "files": [
         {
             "id": 9001,

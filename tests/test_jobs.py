@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timezone
 from unittest.mock import patch
 
+from app.routers import jobs as jobs_router
 from app.models.audit import AuditLog
 from app.models.hardware import UsbDrive, DriveState, UsbHub, UsbPort
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, Manifest, StartupAnalysisStatus
@@ -793,6 +794,67 @@ def test_get_job_files_processor_allowed(client, db):
     assert data["files"][0]["relative_path"] == "doc/a.txt"
     assert data["files"][0]["status"] == "DONE"
     assert data["files"][0]["checksum"] == "sha256:a"
+    assert data["page"] == 1
+    assert data["page_size"] == jobs_router.settings.job_detail_files_page_size
+
+
+def test_get_job_files_supports_page_navigation(client, db):
+    job = ExportJob(
+        project_id="PROJ-FILES-PAGE-001",
+        evidence_number="EV-FILES-PAGE-001",
+        source_path="/data/files-page",
+        status=JobStatus.RUNNING,
+    )
+    db.add(job)
+    db.flush()
+    db.add_all([
+        ExportFile(
+            job_id=job.id,
+            relative_path=f"doc/{index}.txt",
+            status=FileStatus.DONE if index < 21 else FileStatus.ERROR,
+            checksum=f"sha256:{index}" if index < 21 else None,
+        )
+        for index in range(1, 22)
+    ])
+    db.commit()
+
+    response = client.get(f"/jobs/{job.id}/files?page=2&limit=20")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["job_id"] == job.id
+    assert data["page"] == 2
+    assert data["page_size"] == 20
+    assert data["total_files"] == 21
+    assert data["returned_files"] == 1
+    assert [row["relative_path"] for row in data["files"]] == ["doc/21.txt"]
+
+
+def test_get_job_files_uses_configured_default_page_size(client, db, monkeypatch):
+    monkeypatch.setattr(jobs_router.settings, "job_detail_files_page_size", 20)
+
+    job = ExportJob(
+        project_id="PROJ-FILES-CONFIG-001",
+        evidence_number="EV-FILES-CONFIG-001",
+        source_path="/data/files-config",
+        status=JobStatus.RUNNING,
+    )
+    db.add(job)
+    db.flush()
+    db.add_all([
+        ExportFile(job_id=job.id, relative_path=f"doc/{index:03d}.txt", status=FileStatus.DONE, checksum=f"sha256:{index}")
+        for index in range(1, 26)
+    ])
+    db.commit()
+
+    response = client.get(f"/jobs/{job.id}/files")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["page"] == 1
+    assert data["page_size"] == 20
+    assert data["returned_files"] == 20
+    assert data["total_files"] == 25
 
 
 def test_get_job_files_manager_allowed(manager_client, db):
