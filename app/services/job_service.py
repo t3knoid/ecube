@@ -1169,7 +1169,10 @@ def retry_failed_files(
     try:
         job_repo.save(job)
     except Exception:
-        logger.exception("DB commit failed while retrying failed files", {"job_id": job_id})
+        logger.exception(
+            "DB commit failed while retrying failed files",
+            extra={"job_id": job_id},
+        )
         raise HTTPException(
             status_code=500,
             detail="Database error while retrying failed files",
