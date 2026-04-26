@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   validateAllMounts: vi.fn(),
   validateMountCandidate: vi.fn(),
   validateMount: vi.fn(),
+  discoverMountShares: vi.fn(),
+  getPublicAuthConfig: vi.fn(),
 }))
 
 const authState = vi.hoisted(() => ({
@@ -25,6 +27,11 @@ vi.mock('@/api/mounts.js', () => ({
   validateAllMounts: (...args) => mocks.validateAllMounts(...args),
   validateMountCandidate: (...args) => mocks.validateMountCandidate(...args),
   validateMount: (...args) => mocks.validateMount(...args),
+  discoverMountShares: (...args) => mocks.discoverMountShares(...args),
+}))
+
+vi.mock('@/api/auth.js', () => ({
+  getPublicAuthConfig: (...args) => mocks.getPublicAuthConfig(...args),
 }))
 
 vi.mock('@/stores/auth.js', () => ({
@@ -110,6 +117,8 @@ describe('MountsView removal flow', () => {
     mocks.validateAllMounts.mockReset()
     mocks.validateMountCandidate.mockReset()
     mocks.validateMount.mockReset()
+    mocks.discoverMountShares.mockReset()
+    mocks.getPublicAuthConfig.mockReset()
 
     mocks.createMount.mockResolvedValue({})
     mocks.updateMount.mockResolvedValue({})
@@ -117,6 +126,13 @@ describe('MountsView removal flow', () => {
     mocks.validateAllMounts.mockResolvedValue([])
     mocks.validateMountCandidate.mockResolvedValue(buildMount({ id: 999, status: 'MOUNTED' }))
     mocks.validateMount.mockResolvedValue(buildMount())
+    mocks.discoverMountShares.mockResolvedValue({
+      shares: [
+        { remote_path: '//server/CaseDrop', display_name: 'CaseDrop' },
+        { remote_path: '//server/Review', display_name: 'Review' },
+      ],
+    })
+    mocks.getPublicAuthConfig.mockResolvedValue({ demo_mode_enabled: false })
   })
 
   it('removes an unmounted entry immediately without showing confirmation', async () => {
@@ -328,6 +344,91 @@ describe('MountsView removal flow', () => {
 
     expect(wrapper.find('#mount-password').element.value).toBe('')
     expect(wrapper.find('#mount-creds-file').element.value).toBe('')
+  })
+
+  it('discovers shares from the add dialog and fills the remote path from the selected share', async () => {
+    mocks.getMounts.mockResolvedValue([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    expect(addButton).toBeTruthy()
+
+    await addButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#mount-remote-path').setValue('//server')
+    await wrapper.find('#mount-username').setValue('svc-reader')
+    await wrapper.find('#mount-password').setValue('top-secret')
+
+    const dialogButtons = wrapper.find('.dialog-actions').findAll('button').map((node) => node.text())
+    expect(dialogButtons.indexOf(i18n.global.t('common.actions.cancel'))).toBeLessThan(dialogButtons.indexOf(i18n.global.t('mounts.browseShares')))
+    expect(dialogButtons.indexOf(i18n.global.t('mounts.browseShares'))).toBeLessThan(dialogButtons.indexOf(i18n.global.t('common.actions.create')))
+
+    await findDialogButton(wrapper, i18n.global.t('mounts.browseShares')).trigger('click')
+    await flushPromises()
+
+    expect(mocks.discoverMountShares).toHaveBeenCalledWith({
+      type: 'SMB',
+      remote_path: '//server',
+      username: 'svc-reader',
+      password: 'top-secret',
+      credentials_file: null,
+    })
+    expect(wrapper.text()).toContain(i18n.global.t('mounts.browseSharesTitle'))
+    expect(wrapper.find('.share-browser-panel').exists()).toBe(true)
+    expect(wrapper.find('.share-discovery-scroll').exists()).toBe(true)
+
+    const selectButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.selectShare'))
+    expect(selectButton).toBeTruthy()
+    await selectButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('#mount-remote-path').element.value).toBe('//server/CaseDrop')
+    expect(wrapper.text()).not.toContain(i18n.global.t('mounts.browseSharesTitle'))
+  })
+
+  it('hides share discovery controls in demo mode', async () => {
+    mocks.getMounts.mockResolvedValue([])
+    mocks.getPublicAuthConfig.mockResolvedValue({ demo_mode_enabled: true })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    expect(addButton).toBeTruthy()
+
+    await addButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.dialog-actions').text()).not.toContain(i18n.global.t('mounts.browseShares'))
+  })
+
+  it('shows actionable guidance when share browsing is unavailable on the host', async () => {
+    mocks.getMounts.mockResolvedValue([])
+    mocks.discoverMountShares.mockRejectedValue({
+      response: {
+        data: {
+          detail: 'Share browsing requires the host smbclient tool. Install smbclient on the ECUBE host, then try again.',
+        },
+      },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    expect(addButton).toBeTruthy()
+
+    await addButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#mount-remote-path').setValue('//server')
+    await findDialogButton(wrapper, i18n.global.t('mounts.browseShares')).trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Install smbclient on the ECUBE host, then try again.')
   })
 
   it('opens the existing dialog in edit mode with the selected mount prefilled', async () => {

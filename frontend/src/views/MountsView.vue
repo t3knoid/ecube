@@ -1,7 +1,8 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getMounts, createMount, updateMount, deleteMount, validateMount, validateMountCandidate } from '@/api/mounts.js'
+import { getMounts, createMount, updateMount, deleteMount, validateMount, validateMountCandidate, discoverMountShares } from '@/api/mounts.js'
+import { getPublicAuthConfig } from '@/api/auth.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
@@ -24,9 +25,11 @@ const dialogError = ref('')
 const dialogSuccessMessage = ref('')
 const editingMountId = ref(null)
 const dialogValidationPassed = ref(false)
+const dialogBrowsing = ref(false)
 
 const showAddDialog = ref(false)
 const showRemoveDialog = ref(false)
+const showShareBrowserDialog = ref(false)
 const removeTarget = ref(null)
 
 const page = ref(1)
@@ -61,6 +64,16 @@ const credentialFieldState = ref({
 const addDialogRef = ref(null)
 const addDialogTriggerRef = ref(null)
 const addMountDialogTitleId = 'add-mount-dialog-title'
+const shareBrowserDialogRef = ref(null)
+const shareBrowserTriggerRef = ref(null)
+const shareBrowserTitleId = 'mount-share-browser-title'
+
+const publicAuthConfig = ref({
+  demo_mode_enabled: false,
+})
+
+const discoveredShares = ref([])
+const shareBrowserError = ref('')
 
 const canManageMounts = computed(() => authStore.hasAnyRole(['admin', 'manager']))
 const isEditMode = computed(() => editingMountId.value !== null)
@@ -72,6 +85,7 @@ const activeEditMount = computed(() => (
 const dialogTitle = computed(() => (isEditMode.value ? t('mounts.editDialogTitle') : t('mounts.addDialogTitle')))
 const dialogSubmitLabel = computed(() => (isEditMode.value ? t('common.actions.save') : t('common.actions.create')))
 const dialogLocalMountPoint = computed(() => activeEditMount.value?.local_mount_point || '')
+const shareDiscoveryAvailable = computed(() => !isEditMode.value && !publicAuthConfig.value?.demo_mode_enabled)
 
 const columns = computed(() => [
   { key: 'id', label: t('common.labels.id'), align: 'right' },
@@ -116,6 +130,17 @@ async function loadMounts() {
   }
 }
 
+async function loadPublicAuthConfig() {
+  try {
+    const config = await getPublicAuthConfig()
+    publicAuthConfig.value = {
+      demo_mode_enabled: Boolean(config?.demo_mode_enabled),
+    }
+  } catch {
+    publicAuthConfig.value = { demo_mode_enabled: false }
+  }
+}
+
 function resetForm() {
   editingMountId.value = null
   dialogValidationPassed.value = false
@@ -135,6 +160,10 @@ function resetForm() {
     password: false,
     credentials_file: false,
   }
+  dialogBrowsing.value = false
+  showShareBrowserDialog.value = false
+  discoveredShares.value = []
+  shareBrowserError.value = ''
 }
 
 function invalidateDialogValidation() {
@@ -223,6 +252,16 @@ function buildMountPayload() {
   return payload
 }
 
+function buildShareDiscoveryPayload() {
+  return {
+    type: form.value.type,
+    remote_path: form.value.remote_path.trim(),
+    username: form.value.username.trim() || null,
+    password: form.value.password || null,
+    credentials_file: form.value.credentials_file.trim() || null,
+  }
+}
+
 function replaceMount(nextMount) {
   if (!nextMount || nextMount.id == null) return
   const normalizedMount = normalizeProjectRecord(nextMount, ['project_id'])
@@ -285,6 +324,38 @@ async function runDialogValidate() {
   }
 }
 
+async function openShareBrowser(event) {
+  if (!shareDiscoveryAvailable.value || !form.value.type || !form.value.remote_path.trim()) return
+
+  shareBrowserTriggerRef.value = event?.currentTarget instanceof HTMLElement ? event.currentTarget : document.activeElement
+  showShareBrowserDialog.value = true
+  dialogBrowsing.value = true
+  shareBrowserError.value = ''
+  discoveredShares.value = []
+
+  try {
+    const result = await discoverMountShares(buildShareDiscoveryPayload())
+    discoveredShares.value = Array.isArray(result?.shares) ? result.shares : []
+  } catch (requestError) {
+    shareBrowserError.value = normalizeErrorMessage(requestError?.response?.data, t('mounts.browseSharesFailed'))
+  } finally {
+    dialogBrowsing.value = false
+  }
+}
+
+function closeShareBrowser() {
+  showShareBrowserDialog.value = false
+  dialogBrowsing.value = false
+  shareBrowserError.value = ''
+  discoveredShares.value = []
+}
+
+function selectDiscoveredShare(remotePath) {
+  form.value.remote_path = String(remotePath || '')
+  invalidateDialogValidation()
+  closeShareBrowser()
+}
+
 function openAddDialog(event) {
   addDialogTriggerRef.value = event?.currentTarget instanceof HTMLElement ? event.currentTarget : document.activeElement
   editingMountId.value = null
@@ -332,6 +403,7 @@ function openEditDialog(mount, event) {
 
 function closeAddDialog() {
   showAddDialog.value = false
+  closeShareBrowser()
   dialogError.value = ''
   dialogSuccessMessage.value = ''
   resetForm()
@@ -339,6 +411,17 @@ function closeAddDialog() {
 
 function handleAddDialogKeydown(event) {
   if (!showAddDialog.value) return
+  if (showShareBrowserDialog.value) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeShareBrowser()
+      return
+    }
+    if (event.key === 'Tab') {
+      trapFocusWithin(event, shareBrowserDialogRef.value)
+    }
+    return
+  }
   if (event.key === 'Escape') {
     event.preventDefault()
     closeAddDialog()
@@ -393,7 +476,9 @@ async function toggleBrowse(mountId) {
   }
 }
 
-onMounted(loadMounts)
+onMounted(async () => {
+  await Promise.allSettled([loadMounts(), loadPublicAuthConfig()])
+})
 
 watch(
   () => form.value.project_id,
@@ -428,6 +513,24 @@ watch(showAddDialog, async (open) => {
   addDialogTriggerRef.value = null
   await nextTick()
   if (trigger instanceof HTMLElement) {
+    trigger.focus()
+  }
+})
+
+watch(showShareBrowserDialog, async (open) => {
+  if (open) {
+    await nextTick()
+    const target = shareBrowserDialogRef.value?.querySelector('.share-select-btn, .share-browser-close-btn')
+    if (target instanceof HTMLElement) {
+      target.focus()
+    }
+    return
+  }
+
+  const trigger = shareBrowserTriggerRef.value
+  shareBrowserTriggerRef.value = null
+  await nextTick()
+  if (trigger instanceof HTMLElement && showAddDialog.value) {
     trigger.focus()
   }
 })
@@ -540,6 +643,14 @@ onBeforeUnmount(() => {
           <div class="dialog-actions">
             <button class="btn" @click="closeAddDialog">{{ t('common.actions.cancel') }}</button>
             <button
+              v-if="shareDiscoveryAvailable"
+              class="btn"
+              :disabled="saving || dialogTesting || dialogBrowsing || !form.type || !form.remote_path.trim()"
+              @click="openShareBrowser($event)"
+            >
+              {{ dialogBrowsing ? t('common.labels.loading') : t('mounts.browseShares') }}
+            </button>
+            <button
               class="btn"
               :disabled="saving || dialogTesting || !formValid()"
               @click="runDialogValidate"
@@ -553,6 +664,32 @@ onBeforeUnmount(() => {
             >
               {{ saving ? t('common.labels.loading') : dialogSubmitLabel }}
             </button>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="showShareBrowserDialog" class="dialog-overlay">
+        <div ref="shareBrowserDialogRef" class="dialog-panel share-browser-panel" role="dialog" aria-modal="true" :aria-labelledby="shareBrowserTitleId">
+          <h2 :id="shareBrowserTitleId">{{ t('mounts.browseSharesTitle') }}</h2>
+          <p class="muted">{{ t('mounts.browseSharesHelp') }}</p>
+          <p v-if="shareBrowserError" class="error-banner" role="alert" aria-live="assertive">{{ shareBrowserError }}</p>
+          <p v-else-if="dialogBrowsing" class="muted">{{ t('common.labels.loading') }}</p>
+          <p v-else-if="!discoveredShares.length" class="muted">{{ t('mounts.browseSharesEmpty') }}</p>
+          <div v-else class="share-discovery-scroll" aria-live="polite">
+            <ul class="share-discovery-list">
+              <li v-for="share in discoveredShares" :key="share.remote_path" class="share-discovery-item">
+                <div class="share-discovery-copy">
+                  <strong>{{ share.display_name }}</strong>
+                  <span class="muted">{{ share.remote_path }}</span>
+                </div>
+                <button class="btn share-select-btn" @click="selectDiscoveredShare(share.remote_path)">
+                  {{ t('mounts.selectShare') }}
+                </button>
+              </li>
+            </ul>
+          </div>
+          <div class="dialog-actions">
+            <button class="btn share-browser-close-btn" @click="closeShareBrowser">{{ t('common.actions.cancel') }}</button>
           </div>
         </div>
       </div>
@@ -580,7 +717,8 @@ onBeforeUnmount(() => {
 .header-row,
 .actions,
 .row-actions,
-.credential-header-row {
+.credential-header-row,
+.share-discovery-item {
   display: flex;
   gap: var(--space-sm);
 }
@@ -594,6 +732,33 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: center;
   margin-top: var(--space-xs);
+}
+
+.share-discovery-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.share-discovery-scroll {
+  max-height: min(55vh, 26rem);
+  overflow-y: auto;
+  padding-right: var(--space-2xs);
+}
+
+.share-discovery-item {
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  padding: var(--space-sm);
+}
+
+.share-discovery-copy {
+  display: grid;
+  gap: var(--space-2xs);
 }
 
 input,
@@ -643,6 +808,10 @@ select {
   padding: var(--space-lg);
   display: grid;
   gap: var(--space-xs);
+}
+
+.share-browser-panel {
+  max-height: min(85vh, 44rem);
 }
 
 .field-label {
