@@ -28,7 +28,7 @@ from urllib.parse import urlparse, urlunparse
 import httpx
 
 from app.config import settings
-from app.models.jobs import ExportJob, JobStatus
+from app.models.jobs import ExportJob, FileStatus, JobStatus
 from app.repositories.audit_repository import AuditRepository
 
 logger = logging.getLogger(__name__)
@@ -158,7 +158,17 @@ def build_payload(job: ExportJob) -> Dict[str, Any]:
             f"build_payload requires a terminal status (COMPLETED/FAILED), "
             f"got {job.status!r}"
         )
+
+    files = list(getattr(job, "files", []) or [])
+    files_succeeded = sum(1 for export_file in files if export_file.status == FileStatus.DONE)
+    files_failed = sum(1 for export_file in files if export_file.status == FileStatus.ERROR)
+    files_timed_out = sum(1 for export_file in files if export_file.status == FileStatus.TIMEOUT)
+
     event = "JOB_COMPLETED" if job.status == JobStatus.COMPLETED else "JOB_FAILED"
+    completion_result = "failed"
+    if job.status == JobStatus.COMPLETED:
+        completion_result = "partial_success" if (files_failed or files_timed_out) else "success"
+
     payload: Dict[str, Any] = {
         "event": event,
         "job_id": job.id,
@@ -169,6 +179,10 @@ def build_payload(job: ExportJob) -> Dict[str, Any]:
         "total_bytes": job.total_bytes,
         "copied_bytes": job.copied_bytes,
         "file_count": job.file_count,
+        "files_succeeded": files_succeeded,
+        "files_failed": files_failed,
+        "files_timed_out": files_timed_out,
+        "completion_result": completion_result,
     }
     if job.completed_at:
         payload["completed_at"] = job.completed_at.isoformat()

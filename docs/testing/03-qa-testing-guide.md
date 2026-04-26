@@ -1273,6 +1273,7 @@ Use a controlled HTTPS webhook sink when validating callback behavior.
 | 3 | Callback URL with embedded credentials rejected | `POST /jobs` with `"callback_url": "https://user:pass@example.com/hook"` | 422, validation error rejects URL credentials |
 | 4 | Callback URL with no hostname rejected | `POST /jobs` with malformed HTTPS URL such as `"https:///path-only"` | 422 |
 | 5 | Terminal-state callback delivered | Create a job with a reachable HTTPS webhook sink, run job to completion, inspect sink | Sink receives terminal-state payload and job completes normally |
+| 5a | Partial-success callback is distinguishable | Create a job with a reachable HTTPS webhook sink, finish with one or more failed or timed-out files, then inspect sink | Sink receives `event: JOB_COMPLETED` together with `completion_result: partial_success` and nonzero `files_failed` or `files_timed_out` |
 | 6 | Callback delivery audit trail | After terminal-state delivery, query `GET /audit?action=CALLBACK_SENT` | Audit entry records delivery result without leaking secret material |
 
 ### 12.7 Error Handling

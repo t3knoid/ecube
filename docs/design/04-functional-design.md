@@ -242,6 +242,10 @@ The callback body is a JSON object containing:
 | `total_bytes` | integer | Total bytes to copy |
 | `copied_bytes` | integer | Bytes actually copied |
 | `file_count` | integer | Total file count |
+| `files_succeeded` | integer | Number of files that completed successfully |
+| `files_failed` | integer | Number of files that ended in error |
+| `files_timed_out` | integer | Number of files that timed out |
+| `completion_result` | string | `success`, `partial_success`, or `failed`; consumers must use this to distinguish clean success from partial-success `JOB_COMPLETED` callbacks |
 | `completed_at` | string or null | ISO 8601 timestamp (present when `completed_at` is set) |
 
 ### Retry & Backoff
