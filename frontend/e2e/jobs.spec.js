@@ -99,6 +99,21 @@ test('jobs create, start, compare, and manifest flow', async ({ page }) => {
     jobState = { ...jobState, status: 'COMPLETED', copied_bytes: 100, total_bytes: 100, files_succeeded: 1 }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobState) })
   })
+  await page.route('**/api/jobs/77/manifest/download', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Content-Disposition': 'attachment; filename="manifest.json"' },
+      body: JSON.stringify({
+        job_id: 77,
+        project_id: 'P-77',
+        evidence_number: 'EV-77-UPDATED',
+        generated_at: '2026-04-26T12:00:00Z',
+        generated_by: 'admin-user',
+        files: [{ path: 'a.txt', checksum: 'abc', size_bytes: 12 }],
+      }),
+    })
+  })
 
   await page.goto('/jobs')
   await expect(page.getByText('Device')).toBeVisible()
@@ -145,9 +160,12 @@ test('jobs create, start, compare, and manifest flow', async ({ page }) => {
   await expect(page.getByText('Hash Match')).toBeVisible()
   await expect(page.getByText('Path Match')).toBeVisible()
 
+  const manifestDownload = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Generate Manifest' }).click()
+  const download = await manifestDownload
   await expect(page.getByText('Manifest generated successfully.')).toBeVisible()
   await expect(page.getByText('/mnt/ecube/1/manifest.json')).toBeVisible()
+  expect(download.suggestedFilename()).toBe('manifest.json')
 
   await expectNoCriticalA11yViolations(page)
 })
