@@ -1071,6 +1071,7 @@ Use `callback_url` when an external orchestration or case-management system shou
 
 - `callback_url` must be `https://`.
 - Callbacks are sent when the job reaches a terminal state (`COMPLETED` or `FAILED`).
+- Callback payloads include file outcome counters plus `completion_result` so downstream systems can distinguish clean success from partial-success completion.
 - Delivery outcomes are recorded in audit logs (`CALLBACK_SENT`, `CALLBACK_DELIVERY_FAILED`, `CALLBACK_DELIVERY_DROPPED`).
 
 #### Automatic Drive Assignment

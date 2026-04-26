@@ -18,7 +18,7 @@ from pydantic import ValidationError
 
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
-from app.models.jobs import ExportJob, JobStatus
+from app.models.jobs import ExportFile, ExportJob, FileStatus, JobStatus
 from app.schemas.jobs import ExportJobSchema, JobCreate
 from app.services.callback_service import (
     _do_deliver,
@@ -256,12 +256,45 @@ class TestBuildPayload:
         job.copied_bytes = 1024
         job.file_count = 10
         job.completed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        job.files = [
+            ExportFile(status=FileStatus.DONE),
+            ExportFile(status=FileStatus.DONE),
+        ]
 
         payload = build_payload(job)
         assert payload["event"] == "JOB_COMPLETED"
         assert payload["job_id"] == 42
         assert payload["status"] == "COMPLETED"
         assert payload["completed_at"] == "2026-01-01T00:00:00+00:00"
+        assert payload["files_succeeded"] == 2
+        assert payload["files_failed"] == 0
+        assert payload["files_timed_out"] == 0
+        assert payload["completion_result"] == "success"
+
+    def test_completed_payload_marks_partial_success(self):
+        job = MagicMock(spec=ExportJob)
+        job.id = 43
+        job.project_id = "PROJ-001"
+        job.evidence_number = "EV-001"
+        job.status = JobStatus.COMPLETED
+        job.source_path = "/data/evidence"
+        job.total_bytes = 1024
+        job.copied_bytes = 900
+        job.file_count = 3
+        job.completed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        job.files = [
+            ExportFile(status=FileStatus.DONE),
+            ExportFile(status=FileStatus.ERROR),
+            ExportFile(status=FileStatus.TIMEOUT),
+        ]
+
+        payload = build_payload(job)
+
+        assert payload["event"] == "JOB_COMPLETED"
+        assert payload["files_succeeded"] == 1
+        assert payload["files_failed"] == 1
+        assert payload["files_timed_out"] == 1
+        assert payload["completion_result"] == "partial_success"
 
     def test_failed_payload(self):
         job = MagicMock(spec=ExportJob)
@@ -274,9 +307,12 @@ class TestBuildPayload:
         job.copied_bytes = 200
         job.file_count = 5
         job.completed_at = None
+        job.files = [ExportFile(status=FileStatus.ERROR)]
 
         payload = build_payload(job)
         assert payload["event"] == "JOB_FAILED"
+        assert payload["files_failed"] == 1
+        assert payload["completion_result"] == "failed"
         assert "completed_at" not in payload
 
     @pytest.mark.parametrize("status", [
