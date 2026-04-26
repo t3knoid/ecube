@@ -357,6 +357,22 @@ function formatMountLabel(mount) {
   return mount?.remote_path || t('jobs.chooseMount')
 }
 
+function resolveJobDestinationLabel(currentJob) {
+  const driveId = Number(currentJob?.drive?.id)
+  const targetPath = String(currentJob?.target_mount_path || '').trim()
+  const matchedDrive = supportingDrives.value.find((drive) => {
+    if (Number.isInteger(driveId) && driveId > 0 && Number(drive?.id) === driveId) {
+      return true
+    }
+    return targetPath && String(drive?.mount_path || '').trim() === targetPath
+  })
+
+  if (matchedDrive) {
+    return formatDriveIdentity(matchedDrive)
+  }
+  return targetPath || '-'
+}
+
 function buildManifestPath(currentJob) {
   const targetPath = String(currentJob?.target_mount_path || '').trim().replace(/\/+$/, '')
   if (!targetPath) return ''
@@ -621,7 +637,7 @@ async function refreshAll() {
   loading.value = true
   error.value = ''
   try {
-    await jobPoller.tick()
+    await Promise.all([jobPoller.tick(), loadSupportingData()])
     void loadDebug(true)
   } catch (err) {
     error.value = buildJobError(err)
@@ -828,8 +844,7 @@ onUnmounted(() => {
       </div>
 
       <div class="hash-grid">
-        <span>{{ t('jobs.sourceGroup') }}</span><strong class="mono wrap-anywhere">{{ job.source_path || '-' }}</strong>
-        <span>{{ t('jobs.destinationGroup') }}</span><strong class="mono wrap-anywhere">{{ job.target_mount_path || '-' }}</strong>
+        <span>{{ t('jobs.destinationGroup') }}</span><strong class="mono wrap-anywhere">{{ resolveJobDestinationLabel(job) }}</strong>
       </div>
 
       <ProgressBar

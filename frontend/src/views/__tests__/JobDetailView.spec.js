@@ -408,10 +408,9 @@ describe('JobDetailView start action', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Source')
     expect(wrapper.text()).toContain('Destination')
-    expect(wrapper.text()).toContain('/nfs/project-001/evidence')
-    expect(wrapper.text()).toContain('/mnt/ecube/1')
+    expect(wrapper.text()).toContain('2-1')
+    expect(wrapper.text()).not.toContain('/mnt/ecube/1')
     expect(wrapper.text()).toContain('Failure reason')
     expect(wrapper.text()).toContain('Job ID')
     expect(wrapper.text()).toContain('Failed at')
