@@ -499,8 +499,11 @@ def verify_job(
 ):
     """Verify the integrity of copied data by comparing hashes and file counts.
 
+    Available only for clean ``COMPLETED`` jobs with no failed or timed-out files.
     Launches verification in a background task and transitions the job to ``VERIFYING``.
-    Upon completion, sets the job to ``COMPLETED`` if verification succeeds or ``FAILED`` if it fails.
+    Jobs outside that precondition return ``409 Conflict``. Upon completion,
+    the job returns to ``COMPLETED`` if verification succeeds or moves to
+    ``FAILED`` if verification fails.
 
     **Roles:** ``admin``, ``manager``, ``processor``
     """
@@ -518,8 +521,11 @@ def create_manifest(
 ):
     """Generate a JSON manifest document containing file hashes and copy metadata.
 
+    Available only for clean ``COMPLETED`` jobs with no failed or timed-out
+    files. Jobs outside that precondition return ``409 Conflict``.
     Creates a manifest file on the USB drive listing all copied files with their
-    checksums and sizes. The manifest is written as plain JSON for audit and compliance purposes.
+    checksums and sizes. The manifest is written as plain JSON for audit and
+    compliance purposes.
 
     **Roles:** ``admin``, ``manager``, ``processor``
     """
