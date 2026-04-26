@@ -1043,6 +1043,52 @@ def test_discover_mount_shares_returns_sanitized_remote_paths_and_reuses_credent
     ]
 
 
+def test_discover_mount_shares_allows_admin_role(admin_client, db):
+    class FakeProvider:
+        def discover_shares(self, mount_type, remote_path, *, credentials_file=None, username=None, password=None):
+            return ["//fileserver/AdminShare"]
+
+    with patch("app.services.mount_service._default_provider", return_value=FakeProvider()):
+        response = admin_client.post(
+            "/mounts/discover",
+            json={
+                "type": "SMB",
+                "remote_path": "//fileserver",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "shares": [
+            {"remote_path": "//fileserver/AdminShare", "display_name": "AdminShare"},
+        ]
+    }
+
+
+def test_discover_mount_shares_requires_authentication(unauthenticated_client, db):
+    response = unauthenticated_client.post(
+        "/mounts/discover",
+        json={
+            "type": "SMB",
+            "remote_path": "//fileserver",
+        },
+    )
+
+    assert response.status_code == 401
+
+
+def test_discover_mount_shares_requires_admin_or_manager(auditor_client, db):
+    response = auditor_client.post(
+        "/mounts/discover",
+        json={
+            "type": "SMB",
+            "remote_path": "//fileserver",
+        },
+    )
+
+    assert response.status_code == 403
+
+
 def test_discover_mount_shares_rejected_in_demo_mode(manager_client, db):
     with patch.object(type(settings), "is_demo_mode_enabled", return_value=True):
         response = manager_client.post(
@@ -1054,6 +1100,19 @@ def test_discover_mount_shares_rejected_in_demo_mode(manager_client, db):
         )
 
     assert response.status_code == 403
+
+
+def test_discover_mount_shares_requires_server_seed(manager_client, db):
+    response = manager_client.post(
+        "/mounts/discover",
+        json={
+            "type": "SMB",
+            "remote_path": "//",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "Enter a server address before browsing shares" in response.text
 
 
 def test_discover_mount_shares_returns_actionable_message_when_host_tool_is_missing(manager_client, db):
