@@ -28,12 +28,14 @@ Check for required updates in places such as:
 - architecture diagrams or design docs
 - setup and deployment instructions
 - ECUBE-specific operator and workflow documentation
+- Updated screenshots or UI mockups
 
 For each required update:
 1. Show the exact diff lines, changed behavior, or concrete evidence that triggered the documentation need.
 2. Name the document that must be updated and explain why.
 3. Propose the minimal documentation change in 1 to 3 sentences.
 4. If the change introduces a new UI state or workflow, propose a QA test case.
+5. Implement the change in the relevant document.
 
 Constraints:
 - Be evidence-based. Do not suggest speculative documentation work.
