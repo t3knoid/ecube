@@ -18,6 +18,10 @@ export function validateMount(mountId, payload) {
   return toData(apiClient.post(`${API_BASE}/mounts/${mountId}/validate`, payload))
 }
 
+export function discoverMountShares(payload) {
+  return toData(apiClient.post(`${API_BASE}/mounts/discover`, payload))
+}
+
 export function createMount(payload) {
   return toData(apiClient.post(`${API_BASE}/mounts`, payload))
 }

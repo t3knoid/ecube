@@ -5,7 +5,7 @@ from typing import List
 
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
-from app.schemas.network import CandidateNetworkMountSchema, MountCreate, MountUpdate, NetworkMountSchema
+from app.schemas.network import CandidateNetworkMountSchema, MountCreate, MountShareDiscoveryRequest, MountShareDiscoveryResponse, MountUpdate, NetworkMountSchema
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500
 from app.services import mount_service
 from app.utils.client_ip import get_client_ip
@@ -108,6 +108,30 @@ def validate_mount_candidate(
     **Roles:** ``admin``, ``manager``
     """
     return mount_service.validate_mount_candidate(
+        body,
+        db,
+        actor=current_user.username,
+        client_ip=get_client_ip(request),
+    )
+
+
+@router.post("/discover", response_model=MountShareDiscoveryResponse, responses={**R_401, **R_403, **R_409, **R_422, **R_500})
+def discover_mount_shares(
+    body: MountShareDiscoveryRequest,
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER),
+    request: Request,
+):
+    """Discover shares or exports from the Add Mount flow.
+
+    Uses the submitted mount type plus any entered credentials to enumerate
+    available NFS exports or SMB shares from the target server. Results are
+    returned as sanitized remote paths suitable for the Add Mount dialog.
+
+    **Roles:** ``admin``, ``manager``
+    """
+    return mount_service.discover_mount_shares(
         body,
         db,
         actor=current_user.username,
