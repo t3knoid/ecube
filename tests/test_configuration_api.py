@@ -25,6 +25,14 @@ class TestConfigurationSchemaValidation:
         req = ConfigurationUpdateRequest(copy_job_timeout=120)
         assert req.copy_job_timeout == 120
 
+    def test_update_accepts_job_detail_files_page_size(self):
+        req = ConfigurationUpdateRequest(job_detail_files_page_size=60)
+        assert req.job_detail_files_page_size == 60
+
+    def test_update_rejects_job_detail_files_page_size_below_minimum(self):
+        with pytest.raises(ValidationError):
+            ConfigurationUpdateRequest(job_detail_files_page_size=10)
+
 
 class TestConfigurationEndpoints:
     def test_get_configuration_admin_allowed(self, admin_client):
@@ -35,6 +43,7 @@ class TestConfigurationEndpoints:
         assert "log_level" in keys
         assert "db_pool_recycle_seconds" in keys
         assert "copy_job_timeout" in keys
+        assert "job_detail_files_page_size" in keys
 
     def test_get_configuration_returns_default_enabled_log_file(self, admin_client):
         resp = admin_client.get("/admin/configuration")

@@ -133,7 +133,7 @@ Compatibility note: To support project-to-source-path policy, use project source
 | PUT | `/jobs/{job_id}` | processor+ | Update a pending, paused, or failed job from the Job Detail page |
 | DELETE | `/jobs/{job_id}` | processor+ | Delete a pending job and release its current drive assignment |
 | GET | `/jobs/{job_id}` | admin/manager/processor/auditor | Get job detail, including progress, cumulative active duration that excludes paused time, and sanitized failure summaries |
-| GET | `/jobs/{job_id}/files` | admin/manager/processor/auditor | List operator-safe file status rows for the job |
+| GET | `/jobs/{job_id}/files` | admin/manager/processor/auditor | List operator-safe file status rows for the job with `page` and optional `limit` pagination |
 | POST | `/jobs/{job_id}/analyze` | processor+ | Run manual startup analysis without starting copy so operators can review scan results first |
 | POST | `/jobs/{job_id}/start` | processor+ | Start a new job or resume a paused job |
 | POST | `/jobs/{job_id}/retry-failed` | processor+ | Re-queue only `ERROR` and `TIMEOUT` file rows on a partially successful `COMPLETED` job |
@@ -144,6 +144,8 @@ Compatibility note: To support project-to-source-path policy, use project source
 | POST | `/jobs/{job_id}/manifest` | processor+ | Write or refresh `manifest.json` only after a clean completed job with no failed or timed-out files |
 
 **Pause, Resume, and Retry Semantics:** `POST /jobs/{job_id}/pause` moves a running job into `PAUSING` immediately and into `PAUSED` once the active copy threads finish their current work. `POST /jobs/{job_id}/start` can then resume the job from `PAUSED`; attempts to start while a job is still `PAUSING` return **409 Conflict**. `POST /jobs/{job_id}/retry-failed` is the follow-up path for a partial-success `COMPLETED` job and returns **409 Conflict** if the job is not completed or no failed files remain.
+
+**Job File Pagination:** `GET /jobs/{job_id}/files` accepts `page` (default `1`, minimum `1`) and optional `limit`. When `limit` is omitted, ECUBE uses the configured `JOB_DETAIL_FILES_PAGE_SIZE` default. Explicit `limit` values must stay between **20** and **100**. Responses include `page`, `page_size`, `total_files`, and `returned_files` in addition to the file rows.
 
 **Active Duration Semantics:** `GET /jobs/{job_id}` returns cumulative active runtime for the job. The value increases while the job is actively running, excludes time spent paused, and after a later resume continues from the previously stored active duration instead of resetting to zero.
 
