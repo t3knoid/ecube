@@ -248,11 +248,14 @@ ecube-release-migration ensure
 # Create the current release-scoped migration once for a new unreleased version
 ecube-release-migration create
 
+# Refresh the current release-scoped migration from model metadata
+ecube-release-migration autogenerate
+
 # Rollback one step
 alembic downgrade -1
 ```
 
-During the pre-release cycle, keep all schema edits for the current ECUBE version in the single versioned file that `ecube-release-migration ensure` reports, for example `alembic/versions/v0_2_0.py`.
+During the pre-release cycle, keep all schema edits for the current ECUBE version in the single versioned file that `ecube-release-migration ensure` reports, for example `alembic/versions/v0_2_0.py`. Use `ecube-release-migration autogenerate` when you need to refresh that file from current model metadata.
 
 > **Note:** Migrations require a running PostgreSQL database. Start the Docker database first (see [Running the Application](#running-the-application)).
 
