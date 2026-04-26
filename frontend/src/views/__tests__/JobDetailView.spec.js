@@ -90,8 +90,13 @@ function mountView() {
       stubs: {
         teleport: true,
         DataTable: {
-          props: ['rows'],
-          template: '<div class="rows-stub">{{ rows.length }}</div>',
+          props: ['rows', 'columns'],
+          template: `
+            <div>
+              <div class="columns-stub">{{ (columns || []).map((column) => column.label).join('|') }}</div>
+              <div class="rows-stub">{{ rows.length }}</div>
+            </div>
+          `,
         },
         StatusBadge: {
           props: ['status'],
@@ -172,7 +177,7 @@ describe('JobDetailView start action', () => {
       target_mount_path: '/mnt/ecube/1',
       drive: { id: 1 },
     })
-    mocks.getJobFiles.mockResolvedValue({ files: [] })
+    mocks.getJobFiles.mockResolvedValue({ files: [], total_files: 0, returned_files: 0, page: 1, page_size: 40 })
     mocks.getDrives.mockResolvedValue([
       { id: 1, device_identifier: 'USB-001', port_system_path: '2-1', current_project_id: 'PROJ-001', current_state: 'AVAILABLE', mount_path: '/mnt/ecube/1' },
     ])
@@ -469,6 +474,72 @@ describe('JobDetailView start action', () => {
 
     expect(mocks.retryFailedJob).toHaveBeenCalledWith(6)
     expect(wrapper.text()).toContain('RUNNING')
+  })
+
+  it('keeps the files panel collapsed by default and pages through file rows with a 10-page window', async () => {
+    mocks.getJobFiles.mockImplementation((_jobId, params = {}) => {
+      if (params.limit === 100) {
+        return Promise.resolve({
+          files: [{ id: 1, relative_path: 'doc/001.txt', status: 'DONE', checksum: 'sha256:001' }],
+          total_files: 480,
+          returned_files: 100,
+          page: 1,
+          page_size: 100,
+        })
+      }
+      if (params.page === 11) {
+        return Promise.resolve({
+          files: [{ id: 401, relative_path: 'doc/401.txt', status: 'DONE', checksum: 'sha256:401' }],
+          total_files: 480,
+          returned_files: 40,
+          page: 11,
+          page_size: 40,
+        })
+      }
+      return Promise.resolve({
+        files: [{ id: 1, relative_path: 'doc/001.txt', status: 'DONE', checksum: 'sha256:001' }],
+        total_files: 480,
+        returned_files: 40,
+        page: 1,
+        page_size: 40,
+      })
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(mocks.getJobFiles.mock.calls).toContainEqual([6, { page: 1, limit: 100 }])
+    expect(mocks.getJobFiles.mock.calls).toContainEqual([6, { page: 1 }])
+
+    const toggle = wrapper.find('.files-panel-toggle')
+    expect(toggle.exists()).toBe(true)
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    expect(wrapper.find('#job-files-panel').exists()).toBe(false)
+
+    await toggle.trigger('click')
+    await flushPromises()
+
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    expect(wrapper.find('.columns-stub').text()).not.toContain(i18n.global.t('jobs.checksum'))
+    expect(wrapper.find('.columns-stub').text()).toContain(i18n.global.t('common.actions.edit'))
+    expect(wrapper.findAll('.page-number-btn').map((node) => node.text())).toEqual([
+      '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
+    ])
+
+    await wrapper.find('.page-window-next').trigger('click')
+    await flushPromises()
+
+    expect(mocks.getJobFiles.mock.calls).toContainEqual([6, { page: 11 }])
+    expect(wrapper.findAll('.page-number-btn').map((node) => node.text())).toEqual(['11', '12'])
+
+    await toggle.trigger('click')
+    await flushPromises()
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+
+    await toggle.trigger('click')
+    await flushPromises()
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    expect(wrapper.find('.page-number-btn--active').text()).toBe('11')
   })
 
   it('prefers the persisted job-level failure reason when present', async () => {
@@ -815,7 +886,18 @@ describe('JobDetailView start action', () => {
       files_succeeded: 1,
       files_failed: 0,
     })
-    mocks.getJobFiles.mockResolvedValue({ files: [{ id: 9, relative_path: 'doc.txt', status: 'DONE', checksum: 'abc' }] })
+    mocks.getJobFiles.mockImplementation((_jobId, params = {}) => {
+      if (params.limit === 100) {
+        return Promise.resolve({
+          files: [{ id: 9, relative_path: 'doc.txt', status: 'DONE', checksum: 'abc' }],
+          total_files: 1,
+          returned_files: 1,
+          page: 1,
+          page_size: 100,
+        })
+      }
+      return Promise.resolve({ files: [], total_files: 0, returned_files: 0, page: 1, page_size: 40 })
+    })
     mocks.compareFiles.mockResolvedValue({
       match: true,
       hash_match: true,
@@ -832,6 +914,7 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain('Destination')
     expect(wrapper.text()).not.toContain('File A')
     expect(wrapper.text()).not.toContain('File B')
+    expect(mocks.getJobFiles.mock.calls).toContainEqual([6, { page: 1, limit: 100 }])
 
     await wrapper.find('#compare-file-source').setValue('9')
     const compareButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.compare'))
@@ -863,20 +946,20 @@ describe('JobDetailView start action', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(mocks.getJobFiles).toHaveBeenCalledTimes(1)
+    expect(mocks.getJobFiles).toHaveBeenCalledTimes(2)
     expect(typeof mocks.pollerTick).toBe('function')
 
     await mocks.pollerTick()
     await flushPromises()
 
-    expect(mocks.getJobFiles).toHaveBeenCalledTimes(1)
+    expect(mocks.getJobFiles).toHaveBeenCalledTimes(2)
 
     const refreshButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.refresh'))
     expect(refreshButton).toBeTruthy()
     await refreshButton.trigger('click')
     await flushPromises()
 
-    expect(mocks.getJobFiles).toHaveBeenCalledTimes(2)
+    expect(mocks.getJobFiles).toHaveBeenCalledTimes(4)
   })
 
   it('shows a pause-in-progress dialog after pausing a running job', async () => {
