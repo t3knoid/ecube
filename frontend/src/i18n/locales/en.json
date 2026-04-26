@@ -171,6 +171,7 @@
     "manifest": "Generate Manifest",
     "manifestSuccess": "Manifest generated successfully.",
     "manifestSuccessWithPath": "Manifest generated successfully. Location: {path}",
+    "manifestDownloadFailed": "Manifest generated, but the download could not be started.",
     "completionSummary": "Completion summary",
     "liveCopySummary": "Live copy summary",
     "startedAt": "Started at",

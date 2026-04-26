@@ -384,6 +384,10 @@ class TestJobAuthorization:
         c = _client_for_role(db, ["auditor"])
         _assert_forbidden(c.post("/jobs/1/manifest"))
 
+    def test_manifest_download_auditor_denied(self, db):
+        c = _client_for_role(db, ["auditor"])
+        _assert_forbidden(c.get("/jobs/1/manifest/download"))
+
 
 # ---------------------------------------------------------------------------
 # Introspection endpoints

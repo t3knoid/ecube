@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   verifyJob: vi.fn(),
   pauseJob: vi.fn(),
   generateManifest: vi.fn(),
+  downloadManifest: vi.fn(),
   updateJob: vi.fn(),
   completeJob: vi.fn(),
   deleteJob: vi.fn(),
@@ -48,6 +49,7 @@ vi.mock('@/api/jobs.js', () => ({
   verifyJob: (...args) => mocks.verifyJob(...args),
   pauseJob: (...args) => mocks.pauseJob(...args),
   generateManifest: (...args) => mocks.generateManifest(...args),
+  downloadManifest: (...args) => mocks.downloadManifest(...args),
   updateJob: (...args) => mocks.updateJob(...args),
   completeJob: (...args) => mocks.completeJob(...args),
   deleteJob: (...args) => mocks.deleteJob(...args),
@@ -132,6 +134,7 @@ describe('JobDetailView start action', () => {
     mocks.verifyJob.mockReset()
     mocks.pauseJob.mockReset()
     mocks.generateManifest.mockReset()
+    mocks.downloadManifest.mockReset()
     mocks.updateJob.mockReset()
     mocks.completeJob.mockReset()
     mocks.deleteJob.mockReset()
@@ -1099,6 +1102,14 @@ describe('JobDetailView start action', () => {
   })
 
   it('shows a success banner after generating a manifest', async () => {
+    const createObjectUrl = vi.fn(() => 'blob:manifest')
+    const revokeObjectUrl = vi.fn()
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const originalCreateObjectUrl = URL.createObjectURL
+    const originalRevokeObjectUrl = URL.revokeObjectURL
+    URL.createObjectURL = createObjectUrl
+    URL.revokeObjectURL = revokeObjectUrl
+
     mocks.getJob.mockResolvedValue({
       id: 6,
       status: 'COMPLETED',
@@ -1110,18 +1121,35 @@ describe('JobDetailView start action', () => {
       copied_bytes: 10485760,
       total_bytes: 10485760,
     })
+    mocks.downloadManifest.mockResolvedValue({
+      data: new Blob(['{"job_id":6}'], { type: 'application/json' }),
+      headers: {
+        'content-type': 'application/json',
+        'content-disposition': 'attachment; filename="manifest.json"',
+      },
+    })
 
-    const wrapper = mountView()
-    await flushPromises()
+    try {
+      const wrapper = mountView()
+      await flushPromises()
 
-    const manifestButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.manifest'))
-    expect(manifestButton).toBeTruthy()
-    await manifestButton.trigger('click')
-    await flushPromises()
+      const manifestButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.manifest'))
+      expect(manifestButton).toBeTruthy()
+      await manifestButton.trigger('click')
+      await flushPromises()
 
-    expect(mocks.generateManifest).toHaveBeenCalledWith(6)
-    expect(wrapper.text()).toContain('Manifest generated successfully.')
-    expect(wrapper.text()).toContain('/mnt/ecube/1/manifest.json')
+      expect(mocks.generateManifest).toHaveBeenCalledWith(6)
+      expect(mocks.downloadManifest).toHaveBeenCalledWith(6)
+      expect(createObjectUrl).toHaveBeenCalledTimes(1)
+      expect(clickSpy).toHaveBeenCalledTimes(1)
+      expect(revokeObjectUrl).toHaveBeenCalledWith('blob:manifest')
+      expect(wrapper.text()).toContain('Manifest generated successfully.')
+      expect(wrapper.text()).toContain('/mnt/ecube/1/manifest.json')
+    } finally {
+      URL.createObjectURL = originalCreateObjectUrl
+      URL.revokeObjectURL = originalRevokeObjectUrl
+      clickSpy.mockRestore()
+    }
   })
 
   it('uses accumulated active duration after pause and resume cycles', async () => {
