@@ -568,7 +568,7 @@ def create_manifest(
     return _redact_ip(job, current_user, db)
 
 
-@router.get("/{job_id}/manifest/download", responses={**R_401, **R_403, **R_404, **R_500})
+@router.get("/{job_id}/manifest/download", responses={**R_401, **R_403, **R_404, **R_409, **R_500})
 def download_manifest(
     job_id: int,
     *,

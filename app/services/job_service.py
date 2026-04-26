@@ -1488,6 +1488,7 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
 def download_manifest(job_id: int, db: Session, actor: Optional[str] = None, client_ip: Optional[str] = None) -> Tuple[bytes, str]:
     job_repo = JobRepository(db)
     manifest_repo = ManifestRepository(db)
+    assignment_repo = DriveAssignmentRepository(db)
     audit_repo = AuditRepository(db)
 
     job = job_repo.get(job_id)
@@ -1501,13 +1502,27 @@ def download_manifest(job_id: int, db: Session, actor: Optional[str] = None, cli
         raise HTTPException(status_code=404, detail="Manifest not found")
 
     manifest_name = os.path.basename(manifest_path) or "manifest.json"
-    assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
+    assignment = assignment_repo.get_active_for_job(job_id)
     assignment_row = _row(assignment) if assignment is not None else None
     active_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
     job_project_id = cast(Optional[str], job_row.project_id)
+    drive_mount_path = (
+        cast(Optional[str], getattr(assignment_row.drive, "mount_path", None))
+        if assignment_row is not None and getattr(assignment_row, "drive", None) is not None
+        else None
+    )
+
+    if not drive_mount_path:
+        logger.warning(
+            "Manifest download rejected",
+            extra={"job_id": job_id, "project_id": job_project_id, "reason": "drive_not_mounted"},
+        )
+        raise HTTPException(status_code=409, detail="Assigned drive is not mounted")
+
+    candidate_path = os.path.join(drive_mount_path, manifest_name)
 
     try:
-        with open(manifest_path, "rb") as manifest_file:
+        with open(candidate_path, "rb") as manifest_file:
             manifest_bytes = manifest_file.read()
     except FileNotFoundError as exc:
         logger.info(
@@ -1516,7 +1531,7 @@ def download_manifest(job_id: int, db: Session, actor: Optional[str] = None, cli
         )
         logger.debug(
             "Manifest download file missing",
-            {"path": manifest_path, "raw_error": str(exc)},
+            extra={"path": candidate_path, "raw_error": str(exc)},
         )
         raise HTTPException(status_code=404, detail="Manifest file not found") from exc
     except OSError as exc:
@@ -1526,7 +1541,7 @@ def download_manifest(job_id: int, db: Session, actor: Optional[str] = None, cli
         )
         logger.debug(
             "Manifest download file unavailable",
-            {"path": manifest_path, "raw_error": str(exc)},
+            extra={"path": candidate_path, "raw_error": str(exc)},
         )
         raise HTTPException(status_code=500, detail="Manifest file is unavailable") from exc
 
