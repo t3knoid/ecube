@@ -1579,7 +1579,7 @@ Every audit entry contains:
 |--------|---------|
 | `FILE_COPY_START` | Individual file copy began |
 | `FILE_COPY_SUCCESS` | File copied and checksummed successfully |
-| `FILE_COPY_FAILURE` | File copy failed after all retries |
+| `FILE_COPY_FAILURE` | File copy failed after all retries; details are stored as safe classified values such as `error_code` and `error_detail` instead of raw provider text |
 | `FILE_COPY_RETRY` | File copy retried after transient failure |
 | `FILE_HASHES_RETRIEVED` | File hash lookup performed |
 | `FILE_COMPARE` | Two files compared by hash |

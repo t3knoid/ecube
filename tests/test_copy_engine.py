@@ -1,5 +1,6 @@
 """Tests for retry/resume semantics in the copy engine."""
 
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -200,7 +201,54 @@ def test_process_file_exhausts_retries_marks_error(db, tmp_path):
     db.refresh(ef)
 
     assert ef.status == FileStatus.ERROR
-    assert ef.error_message == "persistent I/O error"
+    assert ef.error_message == "I/O failure"
+
+
+def test_process_file_persists_safe_failure_message_and_audit_details(db, tmp_path):
+    """_process_file stores safe failure details for UI and audit consumers."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    test_file = source_dir / "fail.txt"
+    test_file.write_bytes(b"data")
+
+    job = _make_job(db, str(source_dir), max_file_retries=0, retry_delay_seconds=0)
+
+    ef = ExportFile(
+        job_id=job.id,
+        relative_path="fail.txt",
+        size_bytes=4,
+        status=FileStatus.PENDING,
+        retry_attempts=0,
+    )
+    db.add(ef)
+    db.commit()
+    db.refresh(ef)
+
+    raw_error = "Permission denied: /mnt/ecube/private/fail.txt"
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch(
+            "app.services.copy_engine.copy_file",
+            return_value=(False, None, raw_error),
+        ):
+            copy_engine._process_file(ef.id, test_file, tmp_path / "target", max_retries=0, retry_delay=0)
+
+    db.expire_all()
+    db.refresh(ef)
+
+    audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "FILE_COPY_FAILURE", AuditLog.job_id == job.id)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+
+    assert ef.status == FileStatus.ERROR
+    assert ef.error_message == "Permission or authentication failure"
+    assert audit is not None
+    assert audit.details["error_code"] == "permission_failure"
+    assert audit.details["error_detail"] == "Permission or authentication failure"
+    assert "/mnt/ecube/private" not in json.dumps(audit.details)
 
 
 def test_process_file_no_retries_on_first_success(db, tmp_path):
@@ -581,8 +629,8 @@ def test_stale_paused_run_does_not_override_resumed_job(db, tmp_path):
     assert job.started_at == resumed_started_at.replace(tzinfo=None)
 
 
-def test_run_copy_job_failed_job_is_failed_status(db, tmp_path):
-    """run_copy_job marks the job FAILED when any file errors out."""
+def test_run_copy_job_with_file_errors_still_completes(db, tmp_path):
+    """run_copy_job completes when files fail but all file outcomes are recorded."""
     source_dir = tmp_path / "source"
     source_dir.mkdir()
     (source_dir / "bad.txt").write_bytes(b"data")
@@ -603,7 +651,7 @@ def test_run_copy_job_failed_job_is_failed_status(db, tmp_path):
     db.expire_all()
     db.refresh(job)
 
-    assert job.status == JobStatus.FAILED
+    assert job.status == JobStatus.COMPLETED
 
 
 def test_run_copy_job_marks_job_failed_when_source_scan_disappears(db, tmp_path):
@@ -689,7 +737,7 @@ def test_run_copy_job_copied_bytes_excludes_previously_done_on_resume(db, tmp_pa
 
 
 def test_run_copy_job_with_retry_recovers_on_resume(db, tmp_path):
-    """Full flow: first run fails some files; resume with retries recovers them."""
+    """A later rerun can recover files even after an earlier partial completion."""
     source_dir = tmp_path / "source"
     source_dir.mkdir()
     (source_dir / "file.txt").write_bytes(b"content")
@@ -715,7 +763,7 @@ def test_run_copy_job_with_retry_recovers_on_resume(db, tmp_path):
 
     db.expire_all()
     db.refresh(job)
-    assert job.status == JobStatus.FAILED
+    assert job.status == JobStatus.COMPLETED
 
     # Simulate the operator increasing retries and restarting.
     job.max_file_retries = 1
@@ -977,7 +1025,7 @@ def test_prepare_job_startup_analysis_completion_audit_failure_logs_sanitized_re
     assert debug_records == []
 
 
-def test_run_copy_job_refreshes_stale_startup_analysis_cache_on_failed_run(db, tmp_path):
+def test_run_copy_job_refreshes_stale_startup_analysis_cache_on_completed_run_with_file_errors(db, tmp_path):
     source_dir = tmp_path / "source"
     source_dir.mkdir()
     (source_dir / "file.txt").write_bytes(b"content")
@@ -1009,7 +1057,7 @@ def test_run_copy_job_refreshes_stale_startup_analysis_cache_on_failed_run(db, t
     db.expire_all()
     db.refresh(job)
 
-    assert job.status == JobStatus.FAILED
+    assert job.status == JobStatus.COMPLETED
     assert job.startup_analysis_cached is True
     assert job.startup_analysis_file_count == 2
     assert job.startup_analysis_total_bytes == len(b"content") + len(b"more")
@@ -1028,7 +1076,7 @@ def test_run_copy_job_refreshes_stale_startup_analysis_cache_on_failed_run(db, t
     ]
 
 
-def test_run_copy_job_persists_startup_analysis_cache_on_failed_run(db, tmp_path):
+def test_run_copy_job_persists_startup_analysis_cache_on_completed_run_with_file_errors(db, tmp_path):
     source_dir = tmp_path / "source"
     source_dir.mkdir()
     (source_dir / "file.txt").write_bytes(b"content")
@@ -1046,7 +1094,7 @@ def test_run_copy_job_persists_startup_analysis_cache_on_failed_run(db, tmp_path
     db.expire_all()
     db.refresh(job)
 
-    assert job.status == JobStatus.FAILED
+    assert job.status == JobStatus.COMPLETED
     assert job.startup_analysis_cached is True
     assert job.startup_analysis_file_count == 1
     assert job.startup_analysis_total_bytes == len(b"content")
@@ -1182,8 +1230,8 @@ def test_pause_request_after_last_file_still_completes_job(db, tmp_path):
     assert job.status == JobStatus.COMPLETED
 
 
-def test_pause_request_after_last_failed_file_still_fails_job(db, tmp_path):
-    """A late pause request must not override a terminal failed result."""
+def test_pause_request_after_last_failed_file_still_completes_job(db, tmp_path):
+    """A late pause request must not override a terminal completed result with file errors."""
     source_dir = tmp_path / "source"
     source_dir.mkdir()
     (source_dir / "failed.txt").write_bytes(b"failed")
@@ -1233,7 +1281,7 @@ def test_pause_request_after_last_failed_file_still_fails_job(db, tmp_path):
     db.expire_all()
     db.refresh(job)
 
-    assert job.status == JobStatus.FAILED
+    assert job.status == JobStatus.COMPLETED
 
 
 # ---------------------------------------------------------------------------
@@ -1250,15 +1298,16 @@ def test_list_incomplete_by_job(db):
     db.commit()
     db.refresh(job)
 
-    statuses = [FileStatus.PENDING, FileStatus.COPYING, FileStatus.RETRYING, FileStatus.ERROR, FileStatus.DONE]
+    statuses = [FileStatus.PENDING, FileStatus.COPYING, FileStatus.RETRYING, FileStatus.ERROR, FileStatus.TIMEOUT, FileStatus.DONE]
     for i, st in enumerate(statuses):
         db.add(ExportFile(job_id=job.id, relative_path=f"file{i}.txt", status=st))
     db.commit()
 
     incomplete = FileRepository(db).list_incomplete_by_job(job.id)
-    assert len(incomplete) == 4  # all except DONE
+    assert len(incomplete) == 5  # all except DONE
     result_statuses = {f.status for f in incomplete}
     assert FileStatus.DONE not in result_statuses
+    assert FileStatus.TIMEOUT in result_statuses
 
 
 # ---------------------------------------------------------------------------
@@ -1298,8 +1347,8 @@ def test_run_copy_job_emits_job_completed_audit(db, tmp_path):
     assert log.details["copy_rate_mb_s"] >= 0
 
 
-def test_run_copy_job_emits_job_failed_audit(db, tmp_path):
-    """A failed copy job emits a JOB_FAILED audit entry."""
+def test_run_copy_job_emits_job_completed_audit_for_partial_success(db, tmp_path):
+    """A job with file errors still emits JOB_COMPLETED with error counts."""
     source_dir = tmp_path / "source"
     source_dir.mkdir()
     (source_dir / "bad.txt").write_bytes(b"data")
@@ -1319,16 +1368,16 @@ def test_run_copy_job_emits_job_failed_audit(db, tmp_path):
 
     log = (
         db.query(AuditLog)
-        .filter(AuditLog.action == "JOB_FAILED", AuditLog.job_id == job.id)
+        .filter(AuditLog.action == "JOB_COMPLETED", AuditLog.job_id == job.id)
         .first()
     )
     assert log is not None
-    assert log.details["status"] == "FAILED"
+    assert log.details["status"] == "COMPLETED"
     assert log.details["error_count"] > 0
 
 
-def test_run_copy_job_logs_job_id_on_failure(db, tmp_path, caplog):
-    """A failed copy job writes an application log entry with the job ID."""
+def test_run_copy_job_logs_job_id_on_partial_success_completion(db, tmp_path, caplog):
+    """A partial-success completion writes an application log entry with the job ID."""
     source_dir = tmp_path / "source"
     source_dir.mkdir()
     (source_dir / "bad.txt").write_bytes(b"data")
@@ -1344,7 +1393,7 @@ def test_run_copy_job_logs_job_id_on_failure(db, tmp_path, caplog):
                 "app.services.copy_engine._checksum_only",
                 return_value=(False, None, "disk full"),
             ):
-                with caplog.at_level("ERROR"):
+                with caplog.at_level("INFO"):
                     copy_engine.run_copy_job(job.id)
 
     messages = [record.getMessage() for record in caplog.records]
