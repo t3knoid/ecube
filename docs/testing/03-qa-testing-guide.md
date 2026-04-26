@@ -1496,6 +1496,7 @@ Chain-of-Custody (CoC) handoff ensures legal custody transfer of evidence is pro
 | 9 | Confirm handoff — processor denied | `POST /audit/chain-of-custody/handoff` with processor token | 403, `FORBIDDEN` |
 | 10 | Confirm handoff — auditor denied | `POST /audit/chain-of-custody/handoff` with auditor token | 403, `FORBIDDEN` |
 | 11 | Audit trail — COC_HANDOFF_CONFIRMED | Query `GET /audit?action=COC_HANDOFF_CONFIRMED` after handoff | Entry includes drive_id, project_id, possessor, delivery_time (ISO), received_by, receipt_ref, actor |
+| 12 | UI — delivery time local-to-UTC conversion | In the Confirm Custody Handoff panel, enter a delivery time (browser local timezone); submit the handoff | Submitted `delivery_time` in the API request body is in UTC ISO 8601; stored audit event reflects the UTC equivalent of the local time entered |
 
 #### 12.12.3 Drive Archival After Handoff
 
