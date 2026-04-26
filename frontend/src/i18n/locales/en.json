@@ -33,6 +33,13 @@
     "sessionExpiresIn": "Session expires in {minutes} minute | Session expires in {minutes} minutes",
     "sessionTimerShort": "{minutes}m"
   },
+  "help": {
+    "open": "Help",
+    "title": "How To Use ECUBE",
+    "kicker": "User Guide",
+    "description": "This in-app guide is generated from the user manual so the packaged help stays aligned with the reviewed documentation.",
+    "frameTitle": "ECUBE help manual"
+  },
   "drives": {
     "title": "Drives",
     "detail": "Drive Detail",
