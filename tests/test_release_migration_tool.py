@@ -1,9 +1,12 @@
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 from app.utils.release_migration import (
     ReleaseMigrationError,
+    ReleaseMigrationResult,
+    autogenerate_release_migration,
     create_release_migration,
     ensure_release_migration,
     release_migration_module_name,
@@ -119,3 +122,46 @@ def test_create_release_migration_creates_single_file_for_current_version(tmp_pa
     assert 'revision = "v0_2_0"' in created_text
     assert 'down_revision = "v0_1_0"' in created_text
     assert "ECUBE release-scoped migration for v0.2.0" in created_text
+
+
+def test_autogenerate_release_migration_requires_existing_release_file(tmp_path: Path) -> None:
+    repo_root = tmp_path
+    versions_dir = repo_root / "alembic" / "versions"
+    versions_dir.mkdir(parents=True)
+    _write_pyproject(repo_root, "0.2.0")
+
+    with pytest.raises(ReleaseMigrationError, match="Run 'ecube-release-migration create' first"):
+        autogenerate_release_migration(repo_root)
+
+
+def test_autogenerate_release_migration_replaces_existing_release_file(tmp_path: Path) -> None:
+    repo_root = tmp_path
+    versions_dir = repo_root / "alembic" / "versions"
+    versions_dir.mkdir(parents=True)
+    _write_pyproject(repo_root, "0.2.0")
+    release_path = versions_dir / "v0_2_0.py"
+    _write_migration(release_path, revision="v0_2_0", down_revision=None)
+
+    generated_path = versions_dir / "generated.py"
+    generated_path.write_text(
+        """
+revision: str = "v0_2_0"
+down_revision: str | None = None
+branch_labels = None
+depends_on = None
+""".strip(),
+        encoding="utf-8",
+    )
+
+    temp_dir = versions_dir / "ecube-release-migration-temp"
+    temp_dir.mkdir()
+
+    with patch("app.utils.release_migration._run_autogenerate_revision", return_value=(generated_path, temp_dir)):
+        result = autogenerate_release_migration(repo_root)
+
+    assert result.path == release_path
+    assert result.revision == "v0_2_0"
+    assert release_path.read_text(encoding="utf-8").startswith('revision: str = "v0_2_0"')
+    assert not generated_path.exists()
+    assert not release_path.with_suffix(".py.bak").exists()
+    assert not temp_dir.exists()

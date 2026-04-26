@@ -358,6 +358,9 @@ ecube-release-migration ensure
 # ECUBE version starts and no versioned migration file exists yet
 ecube-release-migration create
 
+# Refresh the current release-scoped migration from model metadata
+ecube-release-migration autogenerate
+
 # Apply
 alembic upgrade head
 
@@ -368,7 +371,7 @@ alembic current
 alembic downgrade -1
 ```
 
-For ECUBE's pre-release workflow, all schema changes for the current app version accumulate in a single Alembic module named from `project.version`, for example `alembic/versions/v0_2_0.py`. Run `ecube-release-migration ensure` first, then update that one file in place instead of creating additional unreleased revisions.
+For ECUBE's pre-release workflow, all schema changes for the current app version accumulate in a single Alembic module named from `project.version`, for example `alembic/versions/v0_2_0.py`. Run `ecube-release-migration ensure` first, use `ecube-release-migration create` only when a new unreleased version starts, and use `ecube-release-migration autogenerate` to refresh that one file from current model metadata instead of creating additional unreleased revisions.
 
 ### Reset PostgreSQL Database (Start Fresh)
 
