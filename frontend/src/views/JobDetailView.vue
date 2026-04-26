@@ -29,11 +29,9 @@ const jobId = computed(() => {
 })
 
 const DEFAULT_JOB_FILES_PAGE_SIZE = 40
-const COMPARE_SOURCE_FILE_LIMIT = 100
 
 const job = ref(null)
 const debug = ref({ files: [], total_files: 0, returned_files: 0, page: 1, page_size: DEFAULT_JOB_FILES_PAGE_SIZE })
-const compareSourceFiles = ref([])
 const loading = ref(false)
 const filesLoading = ref(false)
 const acting = ref(false)
@@ -157,7 +155,7 @@ const fileListNotice = computed(() => {
 })
 
 const selectedCompareFile = computed(() => (
-  (compareSourceFiles.value || []).find((file) => Number(file.id) === Number(compareFileId.value)) || null
+  (debug.value.files || []).find((file) => Number(file.id) === Number(compareFileId.value)) || null
 ))
 
 const progressMetrics = computed(() => {
@@ -641,22 +639,6 @@ async function loadDebug(force = false) {
   }
 }
 
-async function loadCompareSourceFiles(force = false) {
-  if (!jobId.value) return
-
-  try {
-    const response = await getJobFiles(jobId.value, {
-      page: 1,
-      limit: COMPARE_SOURCE_FILE_LIMIT,
-    })
-    compareSourceFiles.value = Array.isArray(response?.files) ? response.files : []
-  } catch {
-    if (force) {
-      compareSourceFiles.value = []
-    }
-  }
-}
-
 const jobPoller = usePolling(
   async () => {
     const next = await getJob(jobId.value)
@@ -683,14 +665,13 @@ async function refreshAll() {
     error.value = t('common.errors.invalidRequest')
     job.value = null
     debug.value = { files: [], total_files: 0, returned_files: 0, page: 1, page_size: DEFAULT_JOB_FILES_PAGE_SIZE }
-    compareSourceFiles.value = []
     return
   }
 
   loading.value = true
   error.value = ''
   try {
-    await Promise.all([jobPoller.tick(), loadSupportingData(), loadCompareSourceFiles(true)])
+    await Promise.all([jobPoller.tick(), loadSupportingData()])
     void loadDebug(true)
   } catch (err) {
     error.value = buildJobError(err)
@@ -703,6 +684,12 @@ watch(() => debug.value.page, (nextPage, previousPage) => {
   if (nextPage === previousPage) return
   void loadDebug(true)
 })
+
+watch(() => debug.value.files, (files) => {
+  const hasSelectedFile = (files || []).some((file) => Number(file.id) === Number(compareFileId.value))
+  if (hasSelectedFile) return
+  compareFileId.value = null
+}, { deep: false })
 
 function buildJobError(err) {
   const status = err?.response?.status
@@ -788,7 +775,7 @@ async function loadHashes(fileId) {
 }
 
 async function runCompare() {
-  if (!compareFileId.value) return
+  if (!selectedCompareFile.value) return
   compareResult.value = null
   error.value = ''
   try {
@@ -1103,13 +1090,13 @@ onUnmounted(() => {
           <label for="compare-file-source">{{ t('jobs.fileA') }}</label>
           <select id="compare-file-source" v-model="compareFileId">
             <option :value="null">-</option>
-            <option v-for="file in compareSourceFiles || []" :key="`compare-${file.id}`" :value="file.id">
+            <option v-for="file in debug.files || []" :key="`compare-${file.id}`" :value="file.id">
               #{{ file.id }} {{ file.relative_path }}
             </option>
           </select>
           <label>{{ t('jobs.fileB') }}</label>
           <strong class="mono wrap-anywhere">{{ selectedCompareFile ? `#${selectedCompareFile.id} ${selectedCompareFile.relative_path}` : '-' }}</strong>
-          <button class="btn" :disabled="!compareFileId" @click="runCompare">
+          <button class="btn" :disabled="!selectedCompareFile" @click="runCompare">
             {{ t('jobs.compare') }}
           </button>
         </div>
