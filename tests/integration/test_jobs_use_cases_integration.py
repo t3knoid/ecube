@@ -181,6 +181,76 @@ def test_start_job_conflict_when_already_running(integration_client, integration
 
 
 @pytest.mark.integration
+def test_retry_failed_files_requeues_failed_rows_and_audits(integration_client, integration_db):
+    job = ExportJob(
+        project_id="PROJ-JOB-006B",
+        evidence_number="EV-006B",
+        source_path="/tmp/source",
+        target_mount_path="/mnt/ecube/it-retry-006b",
+        status=JobStatus.COMPLETED,
+        file_count=3,
+        total_bytes=30,
+        copied_bytes=10,
+    )
+    integration_db.add(job)
+    integration_db.flush()
+    integration_db.add_all([
+        ExportFile(
+            job_id=job.id,
+            relative_path="done.txt",
+            status=FileStatus.DONE,
+            checksum="done-checksum",
+            size_bytes=10,
+        ),
+        ExportFile(
+            job_id=job.id,
+            relative_path="error.txt",
+            status=FileStatus.ERROR,
+            error_message="Permission denied",
+            size_bytes=10,
+        ),
+        ExportFile(
+            job_id=job.id,
+            relative_path="timeout.txt",
+            status=FileStatus.TIMEOUT,
+            error_message="Operation timed out",
+            size_bytes=10,
+        ),
+    ])
+    integration_db.commit()
+
+    with patch("app.services.copy_engine.run_copy_job", return_value=None) as mock_copy:
+        response = integration_client.post(f"/jobs/{job.id}/retry-failed")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "RUNNING"
+    assert response.json()["files_failed"] == 0
+    assert response.json()["files_timed_out"] == 0
+    mock_copy.assert_called_once_with(job.id)
+
+    rows = (
+        integration_db.query(ExportFile)
+        .filter(ExportFile.job_id == job.id)
+        .order_by(ExportFile.relative_path)
+        .all()
+    )
+    statuses = {row.relative_path: row.status for row in rows}
+    assert statuses == {
+        "done.txt": FileStatus.DONE,
+        "error.txt": FileStatus.PENDING,
+        "timeout.txt": FileStatus.PENDING,
+    }
+
+    audit = (
+        integration_db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_RETRY_FAILED_FILES_STARTED", AuditLog.job_id == job.id)
+        .first()
+    )
+    assert audit is not None
+    assert audit.details["retry_file_count"] == 2
+
+
+@pytest.mark.integration
 def test_verify_job_sets_verifying_and_audits(integration_client, integration_db):
     drive = UsbDrive(
         device_identifier="IT-DRV-AUTO-007",
