@@ -36,6 +36,7 @@ function buildResponse(overrides = {}) {
     db_pool_max_overflow: 10,
     db_pool_recycle_seconds: -1,
     copy_job_timeout: 3600,
+    job_detail_files_page_size: 40,
     ...overrides,
   }
 
@@ -82,5 +83,26 @@ describe('ConfigurationView logging defaults', () => {
     expect(enabled.element.checked).toBe(true)
     expect(logFile.element.value).toBe('/var/log/ecube/app.log')
     expect(logFile.attributes('disabled')).toBeUndefined()
+  })
+
+  it('loads and saves the configured Job Detail files page size', async () => {
+    mocks.getConfiguration.mockResolvedValue(buildResponse({ job_detail_files_page_size: 60 }))
+    mocks.updateConfiguration.mockResolvedValue({
+      restart_required: false,
+      restart_required_settings: [],
+      applied_immediately: ['job_detail_files_page_size'],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const pageSizeInput = wrapper.find('#cfg-job-detail-files-page-size')
+    expect(pageSizeInput.element.value).toBe('60')
+
+    await pageSizeInput.setValue('80')
+    await wrapper.find('.action-row .btn.btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateConfiguration).toHaveBeenCalledWith({ job_detail_files_page_size: 80 })
   })
 })

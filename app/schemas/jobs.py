@@ -141,6 +141,8 @@ class JobFilesResponse(BaseModel):
     """Response for ``GET /jobs/{job_id}/files``."""
 
     job_id: int = Field(..., description="Parent export job ID")
+    page: int = Field(default=1, description="Current 1-based page of file rows returned")
+    page_size: int = Field(default=40, description="Requested page size for file rows")
     total_files: int = Field(default=0, description="Total number of file rows available for this job")
     returned_files: int = Field(default=0, description="Number of file rows included in this response")
     files: list[JobFileRowSchema] = Field(default_factory=list, description="File-level status rows for the job")

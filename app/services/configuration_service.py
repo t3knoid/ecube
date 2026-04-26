@@ -49,6 +49,7 @@ _EDITABLE_FIELDS: Dict[str, _FieldSpec] = {
     "db_pool_max_overflow": _FieldSpec("DB_POOL_MAX_OVERFLOW", False, _serialize_plain),
     "db_pool_recycle_seconds": _FieldSpec("DB_POOL_RECYCLE_SECONDS", True, _serialize_plain),
     "copy_job_timeout": _FieldSpec("COPY_JOB_TIMEOUT", False, _serialize_plain),
+    "job_detail_files_page_size": _FieldSpec("JOB_DETAIL_FILES_PAGE_SIZE", False, _serialize_plain),
 }
 
 
