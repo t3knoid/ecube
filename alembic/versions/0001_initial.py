@@ -177,7 +177,7 @@ def upgrade() -> None:
         sa.Column("startup_analysis_share_read_mbps", sa.Float(), nullable=True),
         sa.Column("startup_analysis_drive_write_mbps", sa.Float(), nullable=True),
         sa.Column("startup_analysis_estimated_duration_seconds", sa.Integer(), nullable=True),
-        sa.Column("startup_analysis_entries", JSONB(), nullable=True),
+        sa.Column("startup_analysis_entries", sa.JSON().with_variant(JSONB(), "postgresql"), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

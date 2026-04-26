@@ -17,6 +17,7 @@ from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
 from app.repositories.job_repository import (
     DriveAssignmentRepository,
+    FileRepository,
     JobRepository,
     ManifestRepository,
 )
@@ -1200,6 +1201,20 @@ def verify_job(
         raise HTTPException(status_code=404, detail="Job not found")
 
     job_row = _row(job)
+    if cast(JobStatus, job_row.status) != JobStatus.COMPLETED:
+        raise HTTPException(
+            status_code=409,
+            detail="Only completed jobs can be verified",
+        )
+
+    file_repo = FileRepository(db)
+    _done, failed, timed_out = file_repo.count_done_errors_and_timeouts(job_id)
+    if failed or timed_out:
+        raise HTTPException(
+            status_code=409,
+            detail="Only clean completed jobs can be verified",
+        )
+
     job_row.status = JobStatus.VERIFYING
     try:
         job_repo.save(job)
@@ -1237,12 +1252,23 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
     job_repo = JobRepository(db)
     manifest_repo = ManifestRepository(db)
     audit_repo = AuditRepository(db)
+    file_repo = FileRepository(db)
 
     job = job_repo.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
     job_row = _row(job)
+    if cast(JobStatus, job_row.status) != JobStatus.COMPLETED:
+        raise HTTPException(status_code=409, detail="Only completed jobs can generate a manifest")
+
+    _done, failed, timed_out = file_repo.count_done_errors_and_timeouts(job_id)
+    if failed or timed_out:
+        raise HTTPException(
+            status_code=409,
+            detail="Only clean completed jobs can generate a manifest",
+        )
+
     job_project_id = cast(Optional[str], job_row.project_id)
     target_mount_path = cast(Optional[str], job_row.target_mount_path)
     assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)

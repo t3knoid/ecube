@@ -294,7 +294,7 @@ Progress: `(copied_bytes / total_bytes) * 100`
 POST /jobs/{job_id}/verify
 ```
 
-Compares SHA-256 hashes of source and destination files. Status transitions: `COMPLETED` → `VERIFYING` → `COMPLETED` (pass) or `FAILED`.
+Compares SHA-256 hashes of source and destination files. This endpoint is available only for clean completed jobs with no failed or timed-out files; partial-success `COMPLETED` jobs return `409 Conflict` until the copy outcome is clean. Status transitions: `COMPLETED` → `VERIFYING` → `COMPLETED` (pass) or `FAILED`.
 
 ### Step 8 — Generate Manifest
 
@@ -302,7 +302,7 @@ Compares SHA-256 hashes of source and destination files. Status transitions: `CO
 POST /jobs/{job_id}/manifest
 ```
 
-Writes a JSON manifest to the USB drive containing file paths, sizes, hashes, and copy metadata for chain-of-custody.
+Writes a JSON manifest to the USB drive containing file paths, sizes, hashes, and copy metadata for chain-of-custody. This endpoint is available only for clean completed jobs with no failed or timed-out files; partial-success `COMPLETED` jobs return `409 Conflict`.
 
 ---
 
@@ -821,6 +821,10 @@ When the job reaches a terminal state, ECUBE delivers a `POST` request with a JS
 | `total_bytes` | `integer` | Total bytes to copy. |
 | `copied_bytes` | `integer` | Bytes actually copied. |
 | `file_count` | `integer` | Total file count. |
+| `files_succeeded` | `integer` | Number of files that completed successfully. |
+| `files_failed` | `integer` | Number of files that ended in error. |
+| `files_timed_out` | `integer` | Number of files that timed out. |
+| `completion_result` | `string` | `success`, `partial_success`, or `failed` so receivers can distinguish clean completion from partial-success `JOB_COMPLETED` callbacks. |
 | `completed_at` | `string` or absent | ISO 8601 timestamp. Present only when the job recorded a completion time. |
 
 **Example payload:**
@@ -836,9 +840,15 @@ When the job reaches a terminal state, ECUBE delivers a `POST` request with a JS
   "total_bytes": 1073741824,
   "copied_bytes": 1073741824,
   "file_count": 156,
+  "files_succeeded": 156,
+  "files_failed": 0,
+  "files_timed_out": 0,
+  "completion_result": "success",
   "completed_at": "2026-03-18T16:45:00+00:00"
 }
 ```
+
+For partial-success runs that still end in `JOB_COMPLETED`, rely on `completion_result`, `files_failed`, and `files_timed_out` rather than the event name alone.
 
 The request includes the header `Content-Type: application/json`.
 
