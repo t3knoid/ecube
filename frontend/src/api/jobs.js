@@ -100,3 +100,10 @@ export function generateManifest(jobId) {
   const id = normalizeJobId(jobId)
   return toData(apiClient.post(`${API_BASE}/jobs/${id}/manifest`))
 }
+
+export function downloadManifest(jobId) {
+  const id = normalizeJobId(jobId)
+  return apiClient.get(`${API_BASE}/jobs/${id}/manifest/download`, {
+    responseType: 'blob',
+  })
+}

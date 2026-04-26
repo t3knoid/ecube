@@ -946,7 +946,7 @@ Re-verify checksums after the job is fully complete. The Job Detail UI keeps thi
 
 ### `POST /jobs/{job_id}/manifest`
 
-Regenerate the manifest and refresh the single destination-side `manifest.json` file. The operator UI shows a visible success banner with the resolved output path.
+Regenerate the manifest and refresh the single destination-side `manifest.json` file. The operator UI shows a visible success banner with the resolved output path and then downloads the same generated manifest content through the companion download endpoint.
 
 **Roles:** `admin`, `manager`, `processor`
 
@@ -957,6 +957,21 @@ Regenerate the manifest and refresh the single destination-side `manifest.json` 
 - `404 Not Found` — Job not found
 - `422 Validation Error` — Invalid path parameter
 - `500 Internal Server Error` — Database error
+
+### `GET /jobs/{job_id}/manifest/download`
+
+Download the most recently generated manifest for the job as an `application/json` attachment. This endpoint does not regenerate the manifest; it returns the latest successfully written `manifest.json` content without exposing the host filesystem path.
+
+**Roles:** `admin`, `manager`, `processor`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid credentials
+- `403 Forbidden` — Insufficient role
+- `409 Conflict` — Assigned drive is not mounted
+- `404 Not Found` — Job not found or manifest not generated yet
+- `422 Validation Error` — Invalid path parameter
+- `500 Internal Server Error` — Manifest file unavailable
 
 ---
 
