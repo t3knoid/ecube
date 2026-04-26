@@ -158,23 +158,18 @@ function toIsoDate(value) {
 }
 
 /**
- * Convert a datetime-local string to a UTC ISO-8601 timestamp.
+ * Convert a datetime-local string (browser local time) to a UTC ISO-8601 timestamp.
  *
  * <input type="datetime-local"> yields a bare "YYYY-MM-DDTHH:mm" string with no
- * timezone.  If we pass that directly to `new Date()`, JavaScript interprets it
- * as local time and toISOString() silently shifts it by the browser's UTC offset
- * -- recording the wrong physical moment and triggering the backend UTC
- * validation check.
- *
- * The user is entering the handoff time in UTC (field labelled "UTC"), so we
- * treat the value as-is UTC by appending ":00Z" (or just "Z" when seconds are
- * already present) without any offset conversion.
+ * timezone.  new Date() interprets that as local (browser) time, and toISOString()
+ * converts it to UTC before the value is sent to the API.  The backend stores and
+ * returns all delivery timestamps in UTC.
  */
 function localDateTimeAsUtcIso(value) {
   if (!value) return undefined
-  // datetime-local format: "YYYY-MM-DDTHH:mm" (16 chars) or "YYYY-MM-DDTHH:mm:ss" (19 chars)
-  const withSeconds = value.length === 16 ? value + ':00' : value
-  return withSeconds + 'Z'
+  // <input type="datetime-local"> yields "YYYY-MM-DDTHH:mm" with no timezone designator.
+  // new Date() interprets that string as local (browser) time; toISOString() converts to UTC.
+  return new Date(value).toISOString()
 }
 
 async function loadAudit() {
@@ -456,8 +451,16 @@ onMounted(() => {
     <div class="filters">
       <input v-model="filters.user" type="text" :placeholder="t('audit.userFilter')" :aria-label="t('audit.userFilter')" />
       <input v-model="filters.action" type="text" :placeholder="t('audit.actionFilter')" :aria-label="t('audit.actionFilter')" />
-      <input v-model="filters.since" type="datetime-local" :aria-label="t('audit.dateFrom')" />
-      <input v-model="filters.until" type="datetime-local" :aria-label="t('audit.dateTo')" />
+      <input
+        v-model="filters.since"
+        type="datetime-local"
+        :aria-label="t('audit.dateFrom')"
+      />
+      <input
+        v-model="filters.until"
+        type="datetime-local"
+        :aria-label="t('audit.dateTo')"
+      />
       <button class="btn" @click="loadAudit">{{ t('audit.applyFilters') }}</button>
     </div>
 
@@ -552,8 +555,12 @@ onMounted(() => {
           </select>
           <input v-model="handoffForm.possessor" type="text" :placeholder="t('audit.possessor')" :aria-label="t('audit.possessor')" />
           <div class="datetime-field">
-            <input v-model="handoffForm.delivery_time" type="datetime-local" :placeholder="t('audit.deliveryTime')" :aria-label="t('audit.deliveryTime')" />
-            <small class="field-hint">{{ t('audit.deliveryTimeHint') }}</small>
+            <input
+              v-model="handoffForm.delivery_time"
+              type="datetime-local"
+              :placeholder="t('audit.deliveryTimeLocalInput')"
+              :aria-label="t('audit.deliveryTimeLocalInput')"
+            />
           </div>
           <input v-model="handoffForm.received_by" type="text" :placeholder="t('audit.receivedBy')" :aria-label="t('audit.receivedBy')" />
           <input v-model="handoffForm.receipt_ref" type="text" :placeholder="t('audit.receiptRef')" :aria-label="t('audit.receiptRef')" />
@@ -712,11 +719,6 @@ pre {
 .datetime-field {
   display: grid;
   gap: 2px;
-}
-
-.field-hint {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
 }
 
 .manifest-item {
