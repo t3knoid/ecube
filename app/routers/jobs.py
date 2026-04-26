@@ -406,6 +406,34 @@ def start_job(
     return _redact_ip(job, current_user, db)
 
 
+@router.post("/{job_id}/retry-failed", response_model=ExportJobSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
+def retry_failed_files(
+    job_id: int,
+    background_tasks: BackgroundTasks,
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
+    request: Request,
+):
+    """Retry failed and timed-out file copies for a partially successful completed job.
+
+    Available only for ``COMPLETED`` jobs that still contain file rows in
+    ``ERROR`` or ``TIMEOUT`` state. The operation re-queues only those failed
+    terminal files, leaves successful copies unchanged, and restarts the copy
+    engine for that narrowed retry set.
+
+    **Roles:** ``admin``, ``manager``, ``processor``
+    """
+    job = job_service.retry_failed_files(
+        job_id,
+        background_tasks,
+        db,
+        actor=current_user.username,
+        client_ip=get_client_ip(request),
+    )
+    return _redact_ip(job, current_user, db)
+
+
 @router.post("/{job_id}/analyze", response_model=ExportJobSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
 def analyze_job(
     job_id: int,

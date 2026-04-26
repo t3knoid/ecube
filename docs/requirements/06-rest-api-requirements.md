@@ -163,7 +163,7 @@ Acceptance criteria:
 
 ### 4.5 Job Lifecycle Management
 
-- The platform shall support job creation, job start, job verification, manifest regeneration, and job progress and status visibility.
+- The platform shall support job creation, job start, operator-invoked retry of failed file copies on existing jobs, job verification, manifest regeneration, and job progress and status visibility.
 - Job behavior shall preserve attribution for who created and who started work.
 - Failed jobs may be restarted only when lifecycle policy permits it.
 - Job detail visibility shall support operational monitoring without requiring privileged debug-only access.
