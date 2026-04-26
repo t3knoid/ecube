@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build:help": "node ../scripts/build-help.mjs",
+    "build:help:check": "node ../scripts/build-help.mjs --check",
+    "build": "npm run build:help && vite build",
     "preview": "vite preview",
     "test:unit": "vitest run --coverage",
     "test:e2e": "playwright test"
