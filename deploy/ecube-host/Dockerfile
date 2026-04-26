@@ -22,6 +22,7 @@ RUN apt-get update && apt-get -y upgrade && apt-get install -y --no-install-reco
     mount \
     nfs-common \
     cifs-utils \
+    smbclient \
     openssl \
     procps \
     udev \
