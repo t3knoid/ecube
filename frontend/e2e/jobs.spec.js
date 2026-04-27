@@ -71,7 +71,6 @@ test('jobs create, start, compare, and manifest flow', async ({ page }) => {
     returned_files: 1,
     files: [{ id: 101, relative_path: 'a.txt', status: 'COMPLETED', checksum: 'abc' }],
   })
-  await routeJson(page, '**/api/introspection/jobs/77/debug', { files: [{ id: 101, relative_path: 'a.txt', status: 'COMPLETED', checksum: 'abc' }] })
   await routeJson(page, '**/api/files/101/hashes', { file_id: 101, relative_path: 'a.txt', md5: 'md5-abc', sha256: 'sha-abc', size_bytes: 12 })
   await page.route('**/api/files/compare', async (route) => {
     await route.fulfill({
@@ -274,7 +273,6 @@ test('jobs surfaces preparing labels during startup analysis', async ({ page }) 
     drive: { id: 9, port_system_path: '2-9', device_identifier: 'USB-009' },
   })
   await routeJson(page, '**/api/jobs/92/files', { files: [] })
-  await routeJson(page, '**/api/introspection/jobs/92/debug', { files: [] })
 
   await page.goto('/jobs')
   await expect(page.getByText('Preparing...', { exact: true }).first()).toBeVisible()
@@ -319,7 +317,6 @@ test('job detail lets manager clear cached startup analysis', async ({ page }) =
     })
   })
   await routeJson(page, '**/api/jobs/93/files', { files: [] })
-  await routeJson(page, '**/api/introspection/jobs/93/debug', { files: [] })
   await page.route('**/api/jobs/93/startup-analysis/clear', async (route) => {
     cleanupCalls += 1
     expect(route.request().postDataJSON()).toEqual({ confirm: true })
@@ -386,7 +383,6 @@ test('job detail lets processor analyze and then start from prepared analysis', 
     })
   })
   await routeJson(page, '**/api/jobs/94/files', { files: [] })
-  await routeJson(page, '**/api/introspection/jobs/94/debug', { files: [] })
   await page.route('**/api/jobs/94/analyze', async (route) => {
     analyzeCalls += 1
     jobState = {
@@ -454,7 +450,6 @@ test('job detail polls and reflects status progression', async ({ page }) => {
   await routeJson(page, '**/api/drives', [])
   await routeJson(page, '**/api/mounts', [])
   await routeJson(page, '**/api/jobs/88/files', { files: [] })
-  await routeJson(page, '**/api/introspection/jobs/88/debug', { files: [] })
   await page.route('**/api/jobs/88', async (route) => {
     pollCount += 1
     const copied = Math.min(pollCount * 100, 400)
@@ -505,11 +500,6 @@ test('job detail prefers persisted failure reasons over derived file summaries',
     returned_files: 1,
     files: [{ id: 201, relative_path: 'bad.txt', status: 'ERROR', error_message: 'Permission denied' }],
   })
-  await routeJson(page, '**/api/introspection/jobs/91/debug', {
-    total_files: 1,
-    returned_files: 1,
-    files: [{ id: 201, relative_path: 'bad.txt', status: 'ERROR', error_message: 'Permission denied' }],
-  })
 
   await page.goto('/jobs/91')
   await expect(page).toHaveURL(/\/jobs\/91$/)
@@ -548,14 +538,6 @@ test('job detail opens per-file error details from the errored status control', 
     failure_reason: null,
   })
   await routeJson(page, '**/api/jobs/92/files', {
-    total_files: 2,
-    returned_files: 2,
-    files: [
-      { id: 301, relative_path: 'bad.txt', status: 'ERROR', error_message: 'Target storage is full' },
-      { id: 302, relative_path: 'good.txt', status: 'DONE', error_message: null },
-    ],
-  })
-  await routeJson(page, '**/api/introspection/jobs/92/debug', {
     total_files: 2,
     returned_files: 2,
     files: [

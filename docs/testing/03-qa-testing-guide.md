@@ -686,6 +686,7 @@ At a narrow viewport (for example `<= 768px` wide), verify the responsive operat
 - Job Detail keeps the highest-priority lifecycle actions visible on mobile and moves the remaining actions into an overflow menu without changing role-based availability.
 - In the Job Detail Files panel, selecting a file path opens the hash viewer popup, the compare workflow is available inside the same popup, and mobile pagination uses a shorter page-number window than desktop.
 - On the System page, the USB Topology and Mounts tabs reduce visible columns on mobile and expose the remaining details through per-row overflow menus.
+- On the System page, the tab set no longer includes `Job Debug`; verify authenticated roles only see the remaining supported tabs, with `Logs` still hidden from non-admin users.
 - On the Reconciliation Results page, the Current USB Drives and Current Shared Mounts tables follow the same compact mobile treatment as the main Drives and Mounts pages.
 
 For the current System page Logs tab UI, verify the admin-only log workflow behaves as follows:

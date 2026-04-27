@@ -182,33 +182,3 @@ class ManualManagedMountReconciliationResponse(BaseModel):
     usb_mounts_checked: int = Field(default=0, description="Managed USB mount slots inspected")
     usb_mounts_corrected: int = Field(default=0, description="Managed USB mount slots corrected")
     failure_count: int = Field(default=0, description="Number of corrective operations that failed")
-
-
-# ---------------------------------------------------------------------------
-# /introspection/jobs/{job_id}/debug
-# ---------------------------------------------------------------------------
-
-
-class DebugFileItem(BaseModel):
-    """Single file in a job debug snapshot."""
-
-    id: int = Field(..., description="Unique file identifier")
-    relative_path: str = Field(..., description="Relative path from source root")
-    status: str = Field(..., description="Copy/verification status")
-    checksum: Optional[str] = Field(default=None, description="SHA-256 checksum")
-    error_message: Optional[str] = Field(default=None, description="Error detail if status is ERROR")
-
-
-class JobDebugResponse(BaseModel):
-    """Response for ``GET /introspection/jobs/{job_id}/debug``."""
-
-    job_id: int = Field(..., description="Export job ID")
-    status: str = Field(..., description="Current job status")
-    project_id: str = Field(..., description="Project ID")
-    source_path: str = Field(..., description="Source data path")
-    target_mount_path: Optional[str] = Field(default=None, description="Target mount path")
-    total_bytes: int = Field(default=0, description="Total bytes to copy")
-    copied_bytes: int = Field(default=0, description="Bytes copied so far")
-    file_count: int = Field(default=0, description="Total number of files")
-    thread_count: int = Field(default=0, description="Parallel thread count")
-    files: List[DebugFileItem] = Field(default_factory=list, description="File-level status details")
