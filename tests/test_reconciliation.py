@@ -155,6 +155,15 @@ def _isolate_live_mount_table():
         yield
 
 
+@pytest.fixture(autouse=True)
+def _allow_mount_validation_directory_checks():
+    with (
+        patch("app.services.mount_service._ensure_mount_directory", return_value=None),
+        patch("app.services.mount_service._validate_mount_directory_owner", return_value=None),
+    ):
+        yield
+
+
 class FakeFilesystemDetector:
     def detect(self, path: str) -> str:
         return "ext4"
@@ -240,7 +249,7 @@ def _empty_topology() -> DiscoveredTopology:
 # =======================================================================
 
 class TestReconcileMounts:
-    """Mount reconciliation: MOUNTED mounts verified against OS."""
+    """Mount reconciliation: persisted network mounts are restored on startup."""
 
     def test_mounted_mount_still_active_no_change(self, db: Session):
         mount = _make_mount(db, MountStatus.MOUNTED, "/mnt/active")
@@ -253,28 +262,29 @@ class TestReconcileMounts:
         assert result["mounts_checked"] == 1
         assert result["mounts_corrected"] == 0
 
-    def test_stale_mounted_corrected_to_unmounted(self, db: Session):
+    def test_stale_mounted_is_remounted(self, db: Session):
         mount = _make_mount(db, MountStatus.MOUNTED, "/mnt/stale")
         provider = FakeMountProvider(mounted_paths=set())
 
         result = reconcile_mounts(db, provider)
 
         db.refresh(mount)
-        assert mount.status == MountStatus.UNMOUNTED
+        assert mount.status == MountStatus.MOUNTED
         assert result["mounts_corrected"] == 1
-        assert provider.mount_calls == []
+        assert provider.mount_calls == [(MountType.NFS, "server:/export", "/mnt/stale")]
 
     def test_unexpected_live_unmounted_mount_is_removed(self, db: Session):
         mount = _make_mount(db, MountStatus.UNMOUNTED, "/nfs/unexpected")
-        provider = FakeMountProvider(mounted_sources={"/nfs/unexpected": "server:/export"})
+        provider = FakeMountProvider(mounted_sources={"/nfs/unexpected": "server:/wrong-export"})
 
-        with patch("app.services.reconciliation_service.read_mount_table", return_value={"/nfs/unexpected": "server:/export"}):
+        with patch("app.services.reconciliation_service.read_mount_table", return_value={"/nfs/unexpected": "server:/wrong-export"}):
             result = reconcile_mounts(db, provider)
 
         db.refresh(mount)
-        assert mount.status == MountStatus.UNMOUNTED
+        assert mount.status == MountStatus.MOUNTED
         assert result["mounts_corrected"] == 1
         assert provider.unmount_calls == ["/nfs/unexpected"]
+        assert provider.mount_calls == [(MountType.NFS, "server:/export", "/nfs/unexpected")]
 
     def test_orphan_generated_network_mount_is_removed(self, db: Session):
         provider = FakeMountProvider(mounted_sources={"/nfs/orphan": "server:/orphan"})
@@ -365,31 +375,45 @@ class TestReconcileMounts:
         assert audit is not None
         assert audit.details["mount_id"] == mount.id
         assert audit.details["old_status"] == "MOUNTED"
-        assert audit.details["new_status"] == "UNMOUNTED"
+        assert audit.details["new_status"] == "MOUNTED"
         assert audit.details["reason"] == "startup reconciliation"
 
-    def test_unmounted_mounts_not_touched(self, db: Session):
+    def test_unmounted_mounts_are_remounted(self, db: Session):
         mount = _make_mount(db, MountStatus.UNMOUNTED, "/mnt/already-unmounted")
         provider = FakeMountProvider(mounted_paths=set())
 
         result = reconcile_mounts(db, provider)
 
         db.refresh(mount)
-        assert mount.status == MountStatus.UNMOUNTED
-        assert result["mounts_checked"] == 0  # Only MOUNTED are checked
+        assert mount.status == MountStatus.MOUNTED
+        assert result["mounts_checked"] == 1
+        assert provider.mount_calls == [(MountType.NFS, "server:/export", "/mnt/already-unmounted")]
 
-    def test_error_status_mounts_not_touched(self, db: Session):
+    def test_error_status_mounts_are_remounted(self, db: Session):
         mount = _make_mount(db, MountStatus.ERROR, "/mnt/error")
         provider = FakeMountProvider(mounted_paths=set())
 
         result = reconcile_mounts(db, provider)
 
         db.refresh(mount)
-        assert mount.status == MountStatus.ERROR
-        assert result["mounts_checked"] == 0
+        assert mount.status == MountStatus.MOUNTED
+        assert result["mounts_checked"] == 1
+        assert provider.mount_calls == [(MountType.NFS, "server:/export", "/mnt/error")]
+
+    def test_unmounted_live_expected_mount_is_marked_mounted(self, db: Session):
+        mount = _make_mount(db, MountStatus.UNMOUNTED, "/nfs/expected-live")
+        provider = FakeMountProvider(mounted_sources={"/nfs/expected-live": "server:/export"})
+
+        with patch("app.services.reconciliation_service.read_mount_table", return_value={"/nfs/expected-live": "server:/export"}):
+            result = reconcile_mounts(db, provider)
+
+        db.refresh(mount)
+        assert mount.status == MountStatus.MOUNTED
+        assert result["mounts_corrected"] == 1
+        assert provider.mount_calls == []
 
     def test_check_mounted_returns_none_sets_error(self, db: Session):
-        """When check_mounted returns None (OS error), set status to ERROR."""
+        """When the OS check is inconclusive, startup still attempts a remount."""
         mount = _make_mount(db, MountStatus.MOUNTED, "/mnt/os-error")
 
         class ErrorProvider(FakeMountProvider):
@@ -399,7 +423,7 @@ class TestReconcileMounts:
         result = reconcile_mounts(db, ErrorProvider())
 
         db.refresh(mount)
-        assert mount.status == MountStatus.ERROR
+        assert mount.status == MountStatus.MOUNTED
         assert result["mounts_corrected"] == 1
 
     def test_check_mounted_exception_treated_as_error(self, db: Session):
@@ -433,9 +457,9 @@ class TestReconcileMounts:
         db.refresh(m1)
         db.refresh(m2)
         db.refresh(m3)
-        assert m1.status == MountStatus.UNMOUNTED
+        assert m1.status == MountStatus.MOUNTED
         assert m2.status == MountStatus.MOUNTED
-        assert m3.status == MountStatus.UNMOUNTED
+        assert m3.status == MountStatus.MOUNTED
         assert result["mounts_checked"] == 3
         assert result["mounts_corrected"] == 2
 
@@ -447,11 +471,11 @@ class TestReconcileMounts:
             result = reconcile_mounts(db, provider)
 
         db.refresh(mount)
-        assert mount.status == MountStatus.UNMOUNTED
+        assert mount.status == MountStatus.MOUNTED
         assert result["mounts_checked"] == 1
         assert result["mounts_corrected"] == 1
         assert provider.unmount_calls == ["/nfs/project-a"]
-        assert provider.mount_calls == []
+        assert provider.mount_calls == [(MountType.NFS, "server:/export", "/nfs/project-a")]
 
     def test_reconcile_mounts_passes_configured_timeout(self, db: Session):
         mount = _make_mount(db, MountStatus.MOUNTED, "/mnt/timeout-aware")
@@ -976,7 +1000,7 @@ class TestIdempotency:
         ).count()
 
         assert r1["mounts_corrected"] == 1
-        assert r2["mounts_checked"] == 0  # Now UNMOUNTED, not rechecked
+        assert r2["mounts_checked"] == 1
         assert r2["mounts_corrected"] == 0
         assert audit_after_first == 1
         assert audit_after_second == 1  # No duplicate audit rows

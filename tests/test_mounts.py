@@ -904,7 +904,7 @@ def test_validate_mount_unmounted(manager_client, db):
 
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "UNMOUNTED"
+    assert data["status"] == "ERROR"
     assert data["last_checked_at"] is not None
 
 
