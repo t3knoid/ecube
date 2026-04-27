@@ -110,8 +110,16 @@ function parseMetadata(markdown) {
 }
 
 function curateMarkdown(markdown) {
-  const excludedSections = new Set(['Table of Contents', '1. Installation Options', 'References'])
-  const excludedSubsections = new Set(['4.1 First-Run Setup Screen'])
+  const excludedSections = new Set([
+    'Table of Contents',
+    'Purpose',
+    'Scope',
+    '1. Installation Options',
+    '2. Before You Begin',
+    '4. First Access',
+    'References',
+  ])
+  const excludedSubsections = new Set()
   const curated = []
   const lines = markdown.split(/\r?\n/)
   let skippingTitleBlock = true
@@ -153,6 +161,84 @@ function curateMarkdown(markdown) {
   return curated.join('\n').trim()
 }
 
+function parseNumberedHeading(text) {
+  const match = text.trim().match(/^(\d+)((?:\.[0-9A-Za-z]+)*)\.?\s+(.+)$/)
+  if (!match) {
+    return null
+  }
+
+  return {
+    major: Number.parseInt(match[1], 10),
+    suffix: match[2] ?? '',
+    title: match[3].trim(),
+  }
+}
+
+function renumberCuratedMarkdown(markdown) {
+  const lines = markdown.split(/\r?\n/)
+  const headingIdMap = new Map()
+  const headingTextMap = new Map()
+  const majorNumberMap = new Map()
+  let nextMajorNumber = 1
+
+  for (const line of lines) {
+    const headingMatch = line.match(/^(#{2,4})\s+(.*)$/)
+    if (!headingMatch || headingMatch[1].length !== 2) {
+      continue
+    }
+
+    const numberedHeading = parseNumberedHeading(headingMatch[2].trim())
+    if (!numberedHeading) {
+      continue
+    }
+
+    if (!majorNumberMap.has(numberedHeading.major)) {
+      majorNumberMap.set(numberedHeading.major, nextMajorNumber)
+      nextMajorNumber += 1
+    }
+  }
+
+  for (const line of lines) {
+    const headingMatch = line.match(/^(#{2,4})\s+(.*)$/)
+    if (!headingMatch) {
+      continue
+    }
+
+    const originalText = headingMatch[2].trim()
+    const numberedHeading = parseNumberedHeading(originalText)
+    if (!numberedHeading) {
+      continue
+    }
+
+    const renumberedMajor = majorNumberMap.get(numberedHeading.major)
+    const renumberedText = numberedHeading.suffix
+      ? `${renumberedMajor}${numberedHeading.suffix} ${numberedHeading.title}`
+      : `${renumberedMajor}. ${numberedHeading.title}`
+    headingTextMap.set(originalText, renumberedText)
+    headingIdMap.set(slugify(originalText), slugify(renumberedText))
+  }
+
+  return lines
+    .map((line) => {
+      const headingMatch = line.match(/^(#{2,4})\s+(.*)$/)
+      if (headingMatch) {
+        const originalText = headingMatch[2].trim()
+        const renumberedText = headingTextMap.get(originalText)
+        if (renumberedText) {
+          return `${headingMatch[1]} ${renumberedText}`
+        }
+      }
+
+      return line.replace(/\[([^\]]+)\]\((#[^)]+)\)/g, (_match, label, href) => {
+        const originalId = href.slice(1)
+        const updatedHref = headingIdMap.has(originalId) ? `#${headingIdMap.get(originalId)}` : href
+        const updatedLabel = headingTextMap.get(label) ?? label
+        return `[${updatedLabel}](${updatedHref})`
+      })
+    })
+    .join('\n')
+}
+
 function renderMarkdown(markdown) {
   const lines = markdown.split(/\r?\n/)
   const output = []
@@ -161,6 +247,7 @@ function renderMarkdown(markdown) {
   let inCodeBlock = false
   let codeLines = []
   let tableState = null
+  const backToTopHtml = '<p class="help-back-to-top"><a href="#help-toc-title">Back to top</a></p>'
 
   function flushParagraph() {
     if (!paragraph.length) return
@@ -287,6 +374,7 @@ function renderMarkdown(markdown) {
     if (/^---+$/.test(line.trim())) {
       flushParagraph()
       closeLists()
+      output.push(backToTopHtml)
       output.push('<hr />')
       continue
     }
@@ -317,6 +405,9 @@ function renderMarkdown(markdown) {
   flushParagraph()
   flushTable()
   closeLists()
+  if (output.length && output.at(-1) !== '<hr />') {
+    output.push(backToTopHtml)
+  }
   return output.join('\n')
 }
 
@@ -325,6 +416,11 @@ function extractHeadings(markdown) {
     .split(/\r?\n/)
     .map((line) => line.match(/^(#{2,4})\s+(.*)$/))
     .filter(Boolean)
+    .filter((match) => match[1].length === 2)
+    .filter((match) => {
+      const numberedHeading = parseNumberedHeading(match[2].trim())
+      return !numberedHeading || numberedHeading.suffix === ''
+    })
     .map((match) => ({
       level: match[1].length - 1,
       text: match[2].trim(),
@@ -344,11 +440,8 @@ function renderTableOfContents(headings) {
     )
     .join('\n')
 
-  return `<nav class="help-toc" aria-labelledby="help-toc-title">
-        <div class="help-toc-header">
-          <h2 id="help-toc-title">Quick Index</h2>
-          <p>Jump directly to a task or section.</p>
-        </div>
+    return `<nav class="help-toc" aria-labelledby="help-toc-title">
+      <h2 id="help-toc-title">Table of Contents</h2>
         <ol>
 ${items}
         </ol>
@@ -356,65 +449,97 @@ ${items}
 }
 
 function buildHtml(markdown, metadata) {
-  const curated = curateMarkdown(markdown)
+  const curated = renumberCuratedMarkdown(curateMarkdown(markdown))
   const headings = extractHeadings(curated)
   const body = renderMarkdown(curated)
   const toc = renderTableOfContents(headings)
-  const updatedLabel = metadata.updatedOn ? `<p class="help-meta">Updated: ${escapeHtml(metadata.updatedOn)}</p>` : ''
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ECUBE Help</title>
+    <link id="ecube-theme-stylesheet" rel="stylesheet" href="../themes/default.css" />
+    <script>
+      (() => {
+        const themeStorageKey = 'ecube_theme'
+        const validThemeName = /^[a-z0-9][a-z0-9-]*$/
+        let themeName = 'default'
+
+        try {
+          const storedTheme = localStorage.getItem(themeStorageKey)
+          if (storedTheme && validThemeName.test(storedTheme)) {
+            themeName = storedTheme
+          }
+        } catch {
+          // Ignore storage access failures and keep the default theme.
+        }
+
+        const themeLink = document.getElementById('ecube-theme-stylesheet')
+        if (themeLink) {
+          themeLink.href = '../themes/' + themeName + '.css'
+        }
+      })()
+    </script>
     <style>
       :root {
-        color-scheme: light;
-        --help-bg: #f4efe7;
-        --help-panel: #fffdf8;
-        --help-border: #d8cbb7;
-        --help-text: #2f261b;
-        --help-muted: #6b5f51;
-        --help-accent: #0f5c4d;
-        --help-accent-soft: #e2f0ec;
-        --help-code-bg: #f1e7d8;
-        --help-shadow: 0 18px 48px rgba(47, 38, 27, 0.12);
-        --help-radius: 18px;
-        --help-font: Georgia, 'Times New Roman', serif;
-        --help-ui-font: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        color-scheme: light dark;
+        --help-bg: var(--color-bg-secondary, #f8f9fa);
+        --help-panel: var(--color-bg-primary, #ffffff);
+        --help-border: var(--color-border, #e2e8f0);
+        --help-text: var(--color-text-primary, #1e293b);
+        --help-muted: var(--color-text-secondary, #64748b);
+        --help-accent: var(--color-text-link, #2563eb);
+        --help-accent-soft: var(--color-bg-selected, #dbeafe);
+        --help-code-bg: var(--color-bg-hover, #e2e8f0);
+        --help-shadow: var(--shadow-lg, 0 10px 15px rgba(0, 0, 0, 0.1));
+        --help-radius: var(--border-radius-lg, 8px);
+        --help-font: var(--font-family, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+        --help-ui-font: var(--font-family, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
       }
 
       * { box-sizing: border-box; }
 
+      html {
+        overflow-y: scroll;
+        scrollbar-gutter: stable;
+        scrollbar-width: auto;
+        scrollbar-color: var(--color-border) var(--color-bg-secondary);
+      }
+
       body {
         margin: 0;
-        padding: 24px;
-        background:
-          radial-gradient(circle at top left, rgba(15, 92, 77, 0.08), transparent 30%),
-          linear-gradient(180deg, #f8f3ec 0%, var(--help-bg) 100%);
+        padding: 0;
+        background: var(--help-panel);
         color: var(--help-text);
         font-family: var(--help-font);
         line-height: 1.6;
+      }
+
+      html::-webkit-scrollbar {
+        width: 12px;
+        height: 12px;
+      }
+
+      html::-webkit-scrollbar-track {
+        background: var(--color-bg-secondary);
+        border-left: 1px solid var(--color-border);
+      }
+
+      html::-webkit-scrollbar-thumb {
+        background: var(--color-border);
+        border-radius: 999px;
+        border: 2px solid var(--color-bg-secondary);
+      }
+
+      html::-webkit-scrollbar-thumb:hover {
+        background: var(--color-text-secondary);
       }
 
       main {
         max-width: 920px;
         margin: 0 auto;
         padding: 32px;
-        background: var(--help-panel);
-        border: 1px solid var(--help-border);
-        border-radius: var(--help-radius);
-        box-shadow: var(--help-shadow);
-      }
-
-      .help-kicker {
-        margin: 0;
-        font-family: var(--help-ui-font);
-        font-size: 0.8rem;
-        font-weight: 700;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--help-accent);
       }
 
       h1 {
@@ -423,40 +548,19 @@ function buildHtml(markdown, metadata) {
         line-height: 1.1;
       }
 
-      .help-meta,
-      .help-lead {
-        margin: 0.25rem 0 0;
-        font-family: var(--help-ui-font);
-        color: var(--help-muted);
-      }
-
       .help-toc {
         margin: 1.5rem 0 2rem;
-        padding: 1rem 1.25rem;
-        background: #f7f1e6;
-        border: 1px solid var(--help-border);
-        border-radius: 14px;
+        padding: 0;
       }
 
-      .help-toc-header {
-        margin-bottom: 0.75rem;
-      }
-
-      .help-toc-header h2,
-      .help-toc-header p {
-        margin: 0;
-      }
-
-      .help-toc-header p {
-        margin-top: 0.25rem;
-        font-family: var(--help-ui-font);
-        color: var(--help-muted);
+      .help-toc h2 {
+        margin: 0 0 0.75rem;
+        font-size: clamp(2rem, 3vw, 3rem);
+        line-height: 1.1;
       }
 
       .help-toc ol {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 0.35rem 1.5rem;
+        display: block;
         margin: 0;
         padding: 0;
         list-style: none;
@@ -464,6 +568,7 @@ function buildHtml(markdown, metadata) {
 
       .help-toc li {
         font-family: var(--help-ui-font);
+        margin: 0.25rem 0;
       }
 
       .help-toc .toc-level-3,
@@ -472,7 +577,6 @@ function buildHtml(markdown, metadata) {
       }
 
       .help-toc a {
-        display: inline-block;
         text-decoration: none;
       }
 
@@ -481,11 +585,27 @@ function buildHtml(markdown, metadata) {
         text-decoration: underline;
       }
 
+      .help-back-to-top {
+        margin: 1.5rem 0 0.75rem;
+        font-family: var(--help-ui-font);
+        font-size: 0.95rem;
+        text-align: right;
+      }
+
+      .help-back-to-top a {
+        text-decoration: none;
+      }
+
+      .help-back-to-top a:hover,
+      .help-back-to-top a:focus-visible {
+        text-decoration: underline;
+      }
+
       h1,
       h2,
       h3,
       h4 {
-        color: #1e1a14;
+        color: var(--help-text);
       }
 
       h2,
@@ -528,8 +648,8 @@ function buildHtml(markdown, metadata) {
       pre {
         overflow-x: auto;
         padding: 1rem;
-        background: #2f261b;
-        color: #fff8ee;
+        background: var(--color-bg-sidebar, #1e293b);
+        color: var(--help-text);
         border-radius: 14px;
       }
 
@@ -549,7 +669,7 @@ function buildHtml(markdown, metadata) {
       }
 
       th {
-        background: #f1e7d8;
+        background: var(--help-bg);
       }
 
       ul,
@@ -558,10 +678,6 @@ function buildHtml(markdown, metadata) {
       }
 
       @media (max-width: 720px) {
-        body {
-          padding: 12px;
-        }
-
         main {
           padding: 20px;
         }
@@ -570,10 +686,6 @@ function buildHtml(markdown, metadata) {
   </head>
   <body>
     <main>
-      <p class="help-kicker">In-App Help</p>
-      <h1>ECUBE User Guide</h1>
-      ${updatedLabel}
-      <p class="help-lead">Task-focused guidance for signed-in ECUBE users.</p>
       ${toc}
       ${body}
     </main>
