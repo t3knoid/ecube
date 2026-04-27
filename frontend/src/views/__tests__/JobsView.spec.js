@@ -15,6 +15,12 @@ const mocks = vi.hoisted(() => ({
   hasAnyRole: vi.fn(),
 }))
 
+const viewportState = vi.hoisted(() => ({
+  mobile: false,
+}))
+
+const matchMediaListeners = vi.hoisted(() => new Set())
+
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mocks.push }),
 }))
@@ -102,9 +108,25 @@ function mountView() {
   })
 }
 
+function installMatchMediaMock() {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    configurable: true,
+    value: vi.fn().mockImplementation(() => ({
+      matches: viewportState.mobile,
+      media: '(max-width: 768px)',
+      addEventListener: (_event, listener) => matchMediaListeners.add(listener),
+      removeEventListener: (_event, listener) => matchMediaListeners.delete(listener),
+    })),
+  })
+}
+
 describe('JobsView grouped create dialog', () => {
   beforeEach(() => {
     vi.useRealTimers()
+    viewportState.mobile = false
+    matchMediaListeners.clear()
+    installMatchMediaMock()
     mocks.push.mockReset()
     mocks.listJobs.mockReset()
     mocks.createJob.mockReset()
@@ -636,6 +658,68 @@ describe('JobsView grouped create dialog', () => {
     expect(wrapper.find('.row-values-stub').text()).not.toContain('USB-001')
     expect(wrapper.text()).toContain('Details')
     expect(wrapper.text()).not.toContain('Open')
+  })
+
+  it('omits evidence and progress columns in mobile view while keeping compact status and row actions', async () => {
+    viewportState.mobile = true
+    installMatchMediaMock()
+    mocks.listJobs.mockResolvedValue([
+      {
+        id: 44,
+        project_id: 'PROJ-001',
+        evidence_number: 'EV-044',
+        status: 'PENDING',
+        source_path: '/nfs/project-001',
+        drive: { id: 1, port_system_path: '2-1', device_identifier: 'USB-001' },
+      },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('.columns-stub').text().split('|')).toEqual([
+      'ID',
+      'Project',
+      'Device',
+      'Status',
+      '',
+    ])
+    expect(wrapper.find('.job-status-icon').attributes('aria-label')).toBe(i18n.global.t('jobs.statuses.pending'))
+    expect(wrapper.find('.row-actions-toggle-dots').exists()).toBe(true)
+  })
+
+  it('routes compact row actions through the existing detail, start, and pause handlers', async () => {
+    viewportState.mobile = true
+    installMatchMediaMock()
+    mocks.listJobs.mockResolvedValue([
+      { id: 44, project_id: 'PROJ-001', evidence_number: 'EV-044', status: 'PENDING', source_path: '/nfs/project-001', thread_count: 4 },
+    ])
+
+    const startWrapper = mountView()
+    await flushPromises()
+
+    const detailsButton = startWrapper.findAll('.row-action-menu-details')[0]
+    await detailsButton.trigger('click')
+    await flushPromises()
+    expect(mocks.push).toHaveBeenCalledWith({ name: 'job-detail', params: { id: 44 } })
+
+    const startButton = startWrapper.findAll('.row-action-menu-start')[0]
+    await startButton.trigger('click')
+    await flushPromises()
+    expect(mocks.startJob).toHaveBeenCalledWith(44, { thread_count: 4 })
+
+    mocks.listJobs.mockReset()
+    mocks.listJobs.mockResolvedValue([
+      { id: 45, project_id: 'PROJ-001', evidence_number: 'EV-045', status: 'RUNNING', source_path: '/nfs/project-001', thread_count: 2 },
+    ])
+
+    const pauseWrapper = mountView()
+    await flushPromises()
+
+    const pauseButton = pauseWrapper.findAll('.row-action-menu-pause')[0]
+    await pauseButton.trigger('click')
+    await flushPromises()
+    expect(mocks.pauseJob).toHaveBeenCalledWith(45)
   })
 
   it('does not fall back to the drive serial when the device value is missing', async () => {
