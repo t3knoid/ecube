@@ -27,7 +27,22 @@ const mocks = vi.hoisted(() => ({
   pollerStart: vi.fn(),
   pollerStop: vi.fn(),
   pollerTick: null,
+  mobileViewportMatches: false,
 }))
+
+function setMobileViewport(matches) {
+  mocks.mobileViewportMatches = matches
+}
+
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: vi.fn(() => ({
+    matches: mocks.mobileViewportMatches,
+    media: '(max-width: 768px)',
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  })),
+})
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { id: '6' } }),
@@ -154,6 +169,7 @@ describe('JobDetailView start action', () => {
     mocks.pollerStart.mockReset()
     mocks.pollerStop.mockReset()
     mocks.pollerTick = null
+    setMobileViewport(false)
 
     mocks.hasAnyRole.mockReturnValue(true)
     mocks.getJob.mockResolvedValue({
@@ -485,6 +501,7 @@ describe('JobDetailView start action', () => {
   })
 
   it('keeps the files panel collapsed by default and pages through file rows with a 5-page window', async () => {
+    setMobileViewport(true)
     mocks.getJobFiles.mockImplementation((_jobId, params = {}) => {
       if (params.page === 6) {
         return Promise.resolve({
@@ -539,6 +556,7 @@ describe('JobDetailView start action', () => {
   })
 
   it('renders compact accessible status icons in the files panel', async () => {
+    setMobileViewport(true)
     mocks.getJobFiles.mockResolvedValue({
       files: [{ id: 1, relative_path: 'doc/001.txt', status: 'DONE' }],
       total_files: 1,
@@ -562,7 +580,7 @@ describe('JobDetailView start action', () => {
 
   it('opens the hash viewer dialog when a file path is clicked', async () => {
     mocks.getJobFiles.mockResolvedValue({
-      files: [{ id: 1, relative_path: 'doc/001.txt', status: 'DONE' }],
+      files: [{ id: 1, relative_path: 'evidence/2026/04/device-images/doc/001.txt', status: 'DONE' }],
       total_files: 1,
       returned_files: 1,
       page: 1,
@@ -583,6 +601,8 @@ describe('JobDetailView start action', () => {
 
     const filePathButton = wrapper.find('.file-path-button')
     expect(filePathButton.exists()).toBe(true)
+  expect(filePathButton.attributes('title')).toBe('evidence/2026/04/device-images/doc/001.txt')
+  expect(filePathButton.attributes('aria-label')).toBe('evidence/2026/04/device-images/doc/001.txt')
     await filePathButton.trigger('click')
     await flushPromises()
 
@@ -1324,6 +1344,7 @@ describe('JobDetailView start action', () => {
   })
 
   it('keeps pending-job edit analyze and start as primary buttons and moves the rest into overflow', async () => {
+    setMobileViewport(true)
     const wrapper = mountView()
     await flushPromises()
 
@@ -1340,6 +1361,7 @@ describe('JobDetailView start action', () => {
   })
 
   it('keeps pause primary for running jobs and moves the rest into overflow', async () => {
+    setMobileViewport(true)
     mocks.getJob.mockResolvedValue({
       id: 6,
       status: 'RUNNING',
@@ -1368,6 +1390,41 @@ describe('JobDetailView start action', () => {
     await flushPromises()
 
     expect(mocks.pauseJob).toHaveBeenCalledWith(6)
+  })
+
+  it('keeps desktop job detail actions expanded and files pagination wide', async () => {
+    mocks.getJobFiles.mockResolvedValue({
+      files: [{ id: 1, relative_path: 'doc/001.txt', status: 'DONE' }],
+      total_files: 480,
+      returned_files: 40,
+      page: 1,
+      page_size: 40,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('.actions-menu').exists()).toBe(false)
+    expect(wrapper.findAll('.actions > button').map((button) => button.text())).toEqual([
+      i18n.global.t('common.actions.edit'),
+      i18n.global.t('jobs.analyze'),
+      i18n.global.t('jobs.start'),
+      i18n.global.t('jobs.retryFailedFiles'),
+      i18n.global.t('jobs.pause'),
+      i18n.global.t('jobs.complete'),
+      i18n.global.t('jobs.verify'),
+      i18n.global.t('jobs.manifest'),
+      i18n.global.t('common.actions.delete'),
+    ])
+
+    await wrapper.find('.files-panel-toggle').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.file-status-icon').exists()).toBe(false)
+    expect(wrapper.text()).toContain('DONE')
+    expect(wrapper.findAll('.page-number-btn').map((node) => node.text())).toEqual([
+      '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
+    ])
   })
 
   it('shows the startup-analysis cleanup control for manager roles and confirms cleanup', async () => {
