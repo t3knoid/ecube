@@ -12,7 +12,7 @@
 - `GET /introspection/usb/topology`: derive hub/port/device graph from persisted mapping + live probe.
 - `GET /introspection/block-devices`: include capacity, fs type, mount state, encryption indicators.
 - `GET /introspection/mounts`: report active mount table and ECUBE-managed entries.
-- `GET /introspection/system-health`: aggregate CPU/memory/disk and queue depth.
+- `GET /introspection/system-health`: host CPU/memory/disk and queue depth plus ECUBE process diagnostics and active copy-thread correlation.
 - `GET /admin/logs/view`: view recent application log lines with filtering, pagination, and automatic sensitive-value redaction.
 
 ## Design Guardrails

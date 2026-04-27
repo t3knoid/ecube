@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock, mock_open, patch
 
 from app.exceptions import ConflictError
@@ -19,6 +20,7 @@ def test_system_health(client, db):
     assert "memory_total_bytes" in data
     assert "disk_read_bytes" in data
     assert "disk_write_bytes" in data
+    assert "ecube_process" in data
 
 
 def test_system_health_psutil_metrics(client, db):
@@ -70,6 +72,198 @@ def test_system_health_psutil_unavailable(client, db):
     assert data["memory_total_bytes"] is None
     assert data["disk_read_bytes"] is None
     assert data["disk_write_bytes"] is None
+    assert data["ecube_process"]["cpu_percent"] is None
+    assert data["ecube_process"]["active_copy_threads"] == []
+
+
+def test_system_health_reports_ecube_process_metrics_and_active_copy_threads(client, db):
+    """system-health includes ECUBE-owned process diagnostics and job correlation."""
+    from app.models.jobs import ExportJob, JobStatus
+
+    job = ExportJob(
+        project_id="PROJ-OBS",
+        evidence_number="EV-OBS",
+        source_path="/data/obs",
+        status=JobStatus.RUNNING,
+        thread_count=3,
+    )
+    db.add(job)
+    db.commit()
+
+    fake_process = MagicMock()
+    fake_process.cpu_percent.side_effect = [0.0, 6.5]
+    fake_process.cpu_times.return_value = SimpleNamespace(user=2.0, system=1.5)
+    fake_process.memory_info.return_value = SimpleNamespace(rss=4_096, vms=8_192)
+    fake_process.num_threads.return_value = 7
+    fake_process.threads.return_value = [
+        SimpleNamespace(id=7001, user_time=0.75, system_time=0.25),
+    ]
+
+    fake_vm = MagicMock()
+    fake_vm.percent = 42.0
+    fake_vm.used = 2_000_000_000
+    fake_vm.total = 8_000_000_000
+
+    fake_io = MagicMock()
+    fake_io.read_bytes = 1_000_000
+    fake_io.write_bytes = 500_000
+
+    with (
+        patch("app.routers.introspection._PSUTIL_AVAILABLE", True),
+        patch("app.routers.introspection._psutil") as mock_psutil,
+        patch("app.services.introspection_service._PROCESS_CPU_SAMPLER", None),
+        patch("app.services.introspection_service._PROCESS_CPU_SAMPLER_PID", None),
+        patch("app.services.introspection_service._PROCESS_CPU_SAMPLER_PRIMED", False),
+        patch(
+            "app.services.introspection_service.list_active_copy_workers",
+            return_value=[
+                {
+                    "job_id": job.id,
+                    "worker_label": "copy-job-1_0",
+                    "native_thread_id": 7001,
+                    "started_at": "2026-04-27T10:00:00Z",
+                    "started_monotonic": 100.0,
+                }
+            ],
+        ),
+        patch("app.services.introspection_service.time.monotonic", return_value=105.5),
+    ):
+        mock_psutil.cpu_percent.return_value = 12.5
+        mock_psutil.virtual_memory.return_value = fake_vm
+        mock_psutil.disk_io_counters.return_value = fake_io
+        mock_psutil.Process.return_value = fake_process
+
+        from app.services import introspection_service
+
+        introspection_service.prime_process_cpu_sampler(psutil_module=mock_psutil)
+
+        response = client.get("/introspection/system-health")
+
+    assert response.status_code == 200
+    data = response.json()
+    ecube_process = data["ecube_process"]
+    assert ecube_process["cpu_percent"] == 6.5
+    assert ecube_process["cpu_time_seconds"] == 3.5
+    assert ecube_process["memory_rss_bytes"] == 4_096
+    assert ecube_process["memory_vms_bytes"] == 8_192
+    assert ecube_process["thread_count"] == 7
+    assert ecube_process["active_copy_thread_count"] == 1
+
+    active_thread = ecube_process["active_copy_threads"][0]
+    assert active_thread["job_id"] == job.id
+    assert active_thread["project_id"] == "PROJ-OBS"
+    assert active_thread["job_status"] == "RUNNING"
+    assert active_thread["configured_thread_count"] == 3
+    assert active_thread["worker_label"] == "copy-job-1_0"
+    assert active_thread["started_at"] == "2026-04-27T10:00:00Z"
+    assert active_thread["elapsed_seconds"] == 5.5
+    assert active_thread["cpu_user_seconds"] == 0.75
+    assert active_thread["cpu_system_seconds"] == 0.25
+    assert active_thread["cpu_time_seconds"] == 1.0
+    assert active_thread["memory_bytes"] is None
+    assert active_thread["metrics_available"] is True
+    assert active_thread["metrics_note"] == "Per-thread memory metrics are not available on this host."
+
+
+def test_system_health_hides_unprimed_process_cpu_percent_until_a_baseline_exists(client, db):
+    fake_process = MagicMock()
+    fake_process.cpu_percent.return_value = 0.0
+    fake_process.cpu_times.return_value = SimpleNamespace(user=2.0, system=1.5)
+    fake_process.memory_info.return_value = SimpleNamespace(rss=4_096, vms=8_192)
+    fake_process.num_threads.return_value = 7
+    fake_process.threads.return_value = []
+
+    with (
+        patch("app.routers.introspection._PSUTIL_AVAILABLE", True),
+        patch("app.routers.introspection._psutil") as mock_psutil,
+        patch("app.services.introspection_service._PROCESS_CPU_SAMPLER", None),
+        patch("app.services.introspection_service._PROCESS_CPU_SAMPLER_PID", None),
+        patch("app.services.introspection_service._PROCESS_CPU_SAMPLER_PRIMED", False),
+    ):
+        mock_psutil.cpu_percent.return_value = 12.5
+        mock_psutil.Process.return_value = fake_process
+
+        response = client.get("/introspection/system-health")
+
+    assert response.status_code == 200
+    ecube_process = response.json()["ecube_process"]
+    assert ecube_process["cpu_percent"] is None
+    assert ecube_process["cpu_time_seconds"] == 3.5
+    assert ecube_process["memory_rss_bytes"] == 4_096
+    assert ecube_process["memory_vms_bytes"] == 8_192
+    assert ecube_process["thread_count"] == 7
+    fake_process.cpu_percent.assert_called_once_with(interval=None)
+
+
+def test_prime_cpu_sampler_primes_process_cpu_sampler():
+    with (
+        patch("app.routers.introspection._PSUTIL_AVAILABLE", True),
+        patch("app.routers.introspection._psutil") as mock_psutil,
+        patch("app.routers.introspection.introspection_service.prime_process_cpu_sampler") as mock_prime,
+    ):
+        from app.routers.introspection import prime_cpu_sampler
+
+        prime_cpu_sampler()
+
+    mock_psutil.cpu_percent.assert_called_once_with(interval=1.0)
+    mock_prime.assert_called_once_with(psutil_module=mock_psutil)
+
+
+def test_system_health_marks_thread_metrics_unavailable_when_runtime_data_cannot_be_matched(client, db):
+    with (
+        patch("app.routers.introspection._PSUTIL_AVAILABLE", False),
+        patch(
+            "app.services.introspection_service.list_active_copy_workers",
+            return_value=[
+                {
+                    "job_id": 77,
+                    "worker_label": "copy-job-77_0",
+                    "native_thread_id": 9999,
+                    "started_at": "2026-04-27T10:00:00Z",
+                    "started_monotonic": 50.0,
+                }
+            ],
+        ),
+        patch("app.services.introspection_service.time.monotonic", return_value=55.0),
+    ):
+        response = client.get("/introspection/system-health")
+
+    assert response.status_code == 200
+    payload = response.json()["ecube_process"]["active_copy_threads"]
+    assert len(payload) == 1
+    assert payload[0]["metrics_available"] is False
+    assert payload[0]["cpu_time_seconds"] is None
+    assert payload[0]["memory_bytes"] is None
+    assert payload[0]["metrics_note"] == "Per-thread CPU metrics are currently unavailable."
+
+
+def test_system_health_degrades_safely_when_active_worker_job_correlation_fails(client, db):
+    with (
+        patch("app.routers.introspection._PSUTIL_AVAILABLE", False),
+        patch(
+            "app.services.introspection_service.list_active_copy_workers",
+            return_value=[
+                {
+                    "job_id": 77,
+                    "worker_label": "copy-job-77_0",
+                    "native_thread_id": 9999,
+                    "started_at": "2026-04-27T10:00:00Z",
+                    "started_monotonic": 50.0,
+                }
+            ],
+        ),
+        patch("app.services.introspection_service.time.monotonic", return_value=55.0),
+        patch("sqlalchemy.orm.query.Query.all", side_effect=RuntimeError("query failed")),
+    ):
+        response = client.get("/introspection/system-health")
+
+    assert response.status_code == 200
+    payload = response.json()["ecube_process"]["active_copy_threads"]
+    assert len(payload) == 1
+    assert payload[0]["job_id"] == 77
+    assert payload[0]["project_id"] is None
+    assert payload[0]["job_status"] is None
+    assert payload[0]["configured_thread_count"] is None
 
 
 def test_system_health_worker_queue_size(client, db):

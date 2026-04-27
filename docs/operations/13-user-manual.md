@@ -849,7 +849,7 @@ If your role does not include access to this page, the navigation item will not 
 > **Page visibility:** `admin`, `manager`, `processor`, `auditor`
 > **Restricted actions:** Most diagnostics on this page are relevant to administrators and support personnel. Log viewing is admin-only.
 
-The `System` page provides operational and diagnostic information. Depending on deployment and permissions, this may include system health, USB information, block-device data, mount diagnostics, and application logs.
+The `System` page provides operational and diagnostic information. Depending on deployment and permissions, this may include host-level system health, ECUBE process metrics, active copy-thread diagnostics, USB information, block-device data, mount diagnostics, and application logs.
 
 This page is useful when:
 
@@ -859,6 +859,8 @@ This page is useful when:
 - Investigating system errors or performance issues via application logs (admin-only)
 
 End users who only perform evidence exports may rarely need this page. Administrators and support personnel are more likely to use it during troubleshooting.
+
+In the `System Health` tab, ECUBE separates host metrics from ECUBE-owned process diagnostics. The ECUBE process section shows ECUBE CPU and memory usage, the total ECUBE thread count, the number of active copy workers, and a table that correlates each active copy thread to its parent job and project, including status, configured threads, elapsed time, and CPU time.
 
 In the `USB Topology` tab, ECUBE shows a sorted device table and hides rows with no meaningful USB metadata so the list stays focused on useful hardware entries. On smaller screens, the table tightens to primary columns such as `Device` and `Product`, and the remaining hardware details move into a per-row overflow menu.
 
