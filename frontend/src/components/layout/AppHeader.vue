@@ -13,8 +13,11 @@ const now = ref(Date.now())
 const logoLoadFailed = ref(false)
 const showHelpDialog = ref(false)
 const helpDialogRef = ref(null)
+const helpFrameRef = ref(null)
+const helpCloseButtonRef = ref(null)
 const helpTriggerRef = ref(null)
 let timerInterval = null
+let helpFrameDocument = null
 
 const showLogoImage = computed(() => Boolean(themeStore.currentLogo) && !logoLoadFailed.value)
 
@@ -56,12 +59,53 @@ function handleLogoError() {
 }
 
 function getFocusableElements(container) {
-  if (!(container instanceof HTMLElement)) return []
+  if (!(container instanceof HTMLElement) && !(container instanceof Document)) return []
   return Array.from(
     container.querySelectorAll(
-      'button, [href], input, select, textarea, iframe, [tabindex]:not([tabindex="-1"])',
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
     ),
   ).filter((element) => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true')
+}
+
+function getHelpFrameDocument() {
+  return helpFrameRef.value?.contentDocument ?? null
+}
+
+function focusHelpCloseButton() {
+  if (helpCloseButtonRef.value instanceof HTMLElement) {
+    helpCloseButtonRef.value.focus()
+    return true
+  }
+  return false
+}
+
+function focusHelpContent(position = 'first') {
+  const frameDocument = getHelpFrameDocument()
+  const frameFocusable = getFocusableElements(frameDocument)
+  const target = position === 'last' ? frameFocusable.at(-1) : frameFocusable[0]
+
+  if (target instanceof HTMLElement) {
+    target.focus()
+    return true
+  }
+
+  return false
+}
+
+function detachHelpFrameListeners() {
+  if (helpFrameDocument) {
+    helpFrameDocument.removeEventListener('keydown', handleHelpFrameKeydown)
+    helpFrameDocument = null
+  }
+}
+
+function attachHelpFrameListeners() {
+  const frameDocument = getHelpFrameDocument()
+  if (!frameDocument || frameDocument === helpFrameDocument) return
+
+  detachHelpFrameListeners()
+  frameDocument.addEventListener('keydown', handleHelpFrameKeydown)
+  helpFrameDocument = frameDocument
 }
 
 function trapFocusWithin(event, container) {
@@ -97,22 +141,52 @@ function handleHelpDialogKeydown(event) {
     return
   }
   if (event.key === 'Tab') {
+    if (document.activeElement === helpCloseButtonRef.value) {
+      event.preventDefault()
+      focusHelpContent(event.shiftKey ? 'last' : 'first') || focusHelpCloseButton()
+      return
+    }
+
     trapFocusWithin(event, helpDialogRef.value)
   }
+}
+
+function handleHelpFrameKeydown(event) {
+  if (!showHelpDialog.value) return
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeHelpDialog()
+    return
+  }
+  if (event.key !== 'Tab') return
+
+  const frameDocument = getHelpFrameDocument()
+  const frameFocusable = getFocusableElements(frameDocument)
+  const active = frameDocument?.activeElement
+  const first = frameFocusable[0]
+  const last = frameFocusable.at(-1)
+
+  if (!frameFocusable.length || (event.shiftKey && active === first) || (!event.shiftKey && active === last)) {
+    event.preventDefault()
+    focusHelpCloseButton()
+  }
+}
+
+function handleHelpFrameLoad() {
+  attachHelpFrameListeners()
 }
 
 watch(showHelpDialog, async (open) => {
   if (open) {
     document.addEventListener('keydown', handleHelpDialogKeydown)
     await nextTick()
-    const firstFocusable = getFocusableElements(helpDialogRef.value)[0]
-    if (firstFocusable instanceof HTMLElement) {
-      firstFocusable.focus()
-    }
+    attachHelpFrameListeners()
+    focusHelpCloseButton()
     return
   }
 
   document.removeEventListener('keydown', handleHelpDialogKeydown)
+  detachHelpFrameListeners()
   const trigger = helpTriggerRef.value
   helpTriggerRef.value = null
   await nextTick()
@@ -123,6 +197,7 @@ watch(showHelpDialog, async (open) => {
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleHelpDialogKeydown)
+  detachHelpFrameListeners()
 })
 </script>
 
@@ -170,9 +245,16 @@ onUnmounted(() => {
       :aria-label="t('help.frameTitle')"
     >
       <p class="help-panel-kicker">{{ t('help.kicker') }}</p>
-      <iframe class="help-frame" :src="'/help/manual.html'" :title="t('help.frameTitle')" loading="lazy" />
+      <iframe
+        ref="helpFrameRef"
+        class="help-frame"
+        :src="'/help/manual.html'"
+        :title="t('help.frameTitle')"
+        loading="lazy"
+        @load="handleHelpFrameLoad"
+      />
       <div class="help-panel-footer">
-        <button class="btn-help-close" @click="closeHelpDialog">{{ t('common.actions.close') }}</button>
+        <button ref="helpCloseButtonRef" class="btn-help-close" @click="closeHelpDialog">{{ t('common.actions.close') }}</button>
       </div>
     </section>
   </div>
