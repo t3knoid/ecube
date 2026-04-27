@@ -1370,10 +1370,14 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
         )
 
     job_project_id = cast(Optional[str], job_row.project_id)
-    target_mount_path = cast(Optional[str], job_row.target_mount_path)
     assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
     assignment_row = _row(assignment) if assignment is not None else None
     active_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
+    target_mount_path = (
+        cast(Optional[str], getattr(assignment_row.drive, "mount_path", None))
+        if assignment_row is not None and getattr(assignment_row, "drive", None) is not None
+        else None
+    )
     generated_at = datetime.now(timezone.utc).isoformat()
     generated_by = actor or "system"
     manifest_data = {
