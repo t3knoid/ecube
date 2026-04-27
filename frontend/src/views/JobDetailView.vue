@@ -1010,7 +1010,10 @@ async function runCompare() {
   compareResult.value = null
   error.value = ''
   try {
-    compareResult.value = await compareFiles({ file_id_a: Number(compareFileId.value), file_id_b: Number(compareFileId.value) })
+    compareResult.value = await compareFiles({
+      file_id_a: Number(compareFileId.value),
+      file_id_b: Number(selectedFileId.value),
+    })
   } catch (err) {
     error.value = buildJobError(err)
   }

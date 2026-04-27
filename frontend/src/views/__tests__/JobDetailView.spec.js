@@ -959,9 +959,12 @@ describe('JobDetailView start action', () => {
     mocks.getJobFiles.mockImplementation((_jobId, params = {}) => {
       if (params.page === 1) {
         return Promise.resolve({
-          files: [{ id: 9, relative_path: 'doc.txt', status: 'DONE', checksum: 'abc' }],
+          files: [
+            { id: 7, relative_path: 'source.txt', status: 'DONE', checksum: 'src' },
+            { id: 9, relative_path: 'doc.txt', status: 'DONE', checksum: 'abc' },
+          ],
           total_files: 1,
-          returned_files: 1,
+          returned_files: 2,
           page: 1,
           page_size: 100,
         })
@@ -973,7 +976,7 @@ describe('JobDetailView start action', () => {
       hash_match: true,
       size_match: true,
       path_match: true,
-      file_a: { file_id: 9, relative_path: 'doc.txt', size_bytes: 12, sha256: 'abc' },
+      file_a: { file_id: 7, relative_path: 'source.txt', size_bytes: 12, sha256: 'abc' },
       file_b: { file_id: 9, relative_path: 'doc.txt', size_bytes: 12, sha256: 'abc' },
     })
 
@@ -984,7 +987,7 @@ describe('JobDetailView start action', () => {
 
     await wrapper.find('.files-panel-toggle').trigger('click')
     await flushPromises()
-    await wrapper.find('.file-path-button').trigger('click')
+    await wrapper.findAll('.file-path-button')[1].trigger('click')
     await flushPromises()
 
     expect(wrapper.text()).toContain('Source')
@@ -992,13 +995,14 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).not.toContain('File A')
     expect(wrapper.text()).not.toContain('File B')
 
-    await wrapper.find('#compare-file-source').setValue('9')
+    await wrapper.find('#compare-file-source').setValue('7')
     const compareButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.compare'))
     expect(compareButton).toBeTruthy()
     await compareButton.trigger('click')
     await flushPromises()
 
-    expect(mocks.compareFiles).toHaveBeenCalledWith({ file_id_a: 9, file_id_b: 9 })
+    expect(mocks.compareFiles).toHaveBeenCalledWith({ file_id_a: 7, file_id_b: 9 })
+    expect(wrapper.text()).toContain('source.txt')
     expect(wrapper.text()).toContain('doc.txt')
   })
 
@@ -1041,7 +1045,7 @@ describe('JobDetailView start action', () => {
       size_match: true,
       path_match: true,
       file_a: { file_id: 150, relative_path: 'doc-150.txt', size_bytes: 12, sha256: 'def' },
-      file_b: { file_id: 150, relative_path: 'doc-150.txt', size_bytes: 12, sha256: 'def' },
+      file_b: { file_id: 9, relative_path: 'doc-009.txt', size_bytes: 12, sha256: 'abc' },
     })
 
     const wrapper = mountView()
@@ -1070,7 +1074,7 @@ describe('JobDetailView start action', () => {
     await flushPromises()
 
     expect(mocks.getJobFiles.mock.calls).toContainEqual([6, { page: 4 }])
-    expect(mocks.compareFiles).toHaveBeenCalledWith({ file_id_a: 150, file_id_b: 150 })
+    expect(mocks.compareFiles).toHaveBeenCalledWith({ file_id_a: 150, file_id_b: 9 })
     expect(wrapper.text()).toContain('doc-150.txt')
   })
 
