@@ -299,13 +299,13 @@ class TestMountAuditLogging:
             mock_run.return_value = MagicMock(returncode=1)
             response = manager_client.post(f"/mounts/{mount.id}/validate")
         assert response.status_code == 200
-        assert response.json()["status"] == "UNMOUNTED"
+        assert response.json()["status"] == "ERROR"
 
         entry = _audit_by_action(db, "MOUNT_VALIDATED")
         assert entry is not None
         assert entry.details["mount_label"] == "[redacted]"
         assert "local_mount_point" not in entry.details
-        assert entry.details["status"] == "UNMOUNTED"
+        assert entry.details["status"] == "ERROR"
 
 
 # ---------------------------------------------------------------------------

@@ -107,12 +107,17 @@ function mountView() {
       stubs: {
         teleport: true,
         DataTable: {
-          props: ['rows', 'columns'],
+          props: ['rows', 'columns', 'rowClass'],
           template: `
             <div>
               <div class="columns-stub">{{ (columns || []).map((column) => column.label).join('|') }}</div>
               <div class="rows-stub">{{ rows.length }}</div>
-              <div v-for="row in rows" :key="row.id" class="row-stub">
+              <div
+                v-for="(row, index) in rows"
+                :key="row.id"
+                class="row-stub"
+                :class="typeof rowClass === 'function' ? rowClass(row, index) : rowClass"
+              >
                 <span v-for="column in columns" :key="column.key" class="cell-stub">
                   <slot :name="'cell-' + column.key" :row="row" :value="row[column.key]" :column="column">{{ row[column.key] }}</slot>
                 </span>
@@ -610,6 +615,67 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain(i18n.global.t('jobs.hashViewer'))
     expect(wrapper.text()).toContain('abc123')
     expect(wrapper.text()).toContain('def456')
+  })
+
+  it('shows failed file details in a dialog and emphasizes only failed rows', async () => {
+    const longError = 'Copy failed because the destination file could not be written after multiple safe retries. Review destination availability and retry the failed file set.'
+    mocks.getJobFiles.mockResolvedValue({
+      files: [
+        { id: 1, relative_path: 'failed/doc-001.txt', status: 'FAILED', error_message: longError },
+        { id: 2, relative_path: 'done/doc-002.txt', status: 'DONE', error_message: '' },
+      ],
+      total_files: 2,
+      returned_files: 2,
+      page: 1,
+      page_size: 40,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.find('.files-panel-toggle').trigger('click')
+    await flushPromises()
+
+    const rows = wrapper.findAll('.row-stub')
+    expect(rows[0].classes()).toContain('job-file-row-error')
+    expect(rows[1].classes()).not.toContain('job-file-row-error')
+
+    const columns = wrapper.find('.columns-stub').text()
+    expect(columns).toContain(i18n.global.t('common.labels.status'))
+    expect(columns).not.toContain(i18n.global.t('jobs.details'))
+
+    const detailButtons = wrapper.findAll('.file-status-button')
+    expect(detailButtons).toHaveLength(1)
+
+    await detailButtons[0].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.fileErrorDetails'))
+    expect(wrapper.text()).toContain(longError)
+
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.close')).trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain(i18n.global.t('jobs.fileErrorDetailsEmpty'))
+  })
+
+  it('does not show a file error affordance when the current page has no file errors', async () => {
+    mocks.getJobFiles.mockResolvedValue({
+      files: [{ id: 1, relative_path: 'done/doc-001.txt', status: 'DONE', error_message: '' }],
+      total_files: 1,
+      returned_files: 1,
+      page: 1,
+      page_size: 40,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.find('.files-panel-toggle').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.file-status-button').exists()).toBe(false)
+    expect(wrapper.find('.job-file-row-error').exists()).toBe(false)
   })
 
   it('prefers the persisted job-level failure reason when present', async () => {
