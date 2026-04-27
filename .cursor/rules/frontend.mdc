@@ -37,6 +37,8 @@ Apply when touching Vue, frontend components, templates, CSS, frontend tests, or
 
 ## CSS and Templates
 
+- Before creating new UI styling, inspect the closest existing component with the same visual or interaction pattern and match it unless the task explicitly asks for a new variant
+- Reuse the same design tokens, spacing, scrollbar styling, button treatment, panel treatment, and hover or focus states from the existing component when those patterns already exist nearby
 - Remove unused styles
 - Keep class names aligned with template usage
 
