@@ -382,8 +382,7 @@
       "usb": "USB Topology",
       "block": "Block Devices",
       "mounts": "Mounts",
-      "logs": "Logs",
-      "job-debug": "Job Debug"
+      "logs": "Logs"
     },
     "device": "Device",
     "serialNumber": "Serial Number",
@@ -401,10 +400,6 @@
     "memory": "Memory",
     "diskIo": "Disk I/O",
     "workerQueue": "Worker Queue",
-    "loadDebug": "Load Debug",
-    "jobPickerLabel": "Select Job",
-    "jobPickerPlaceholder": "Choose a job (or enter ID manually)",
-    "jobPickerUnavailable": "Job picker is unavailable on this server version. Enter a job ID manually.",
     "reconcileManagedMounts": "Reconcile managed mounts",
     "reconcileSummary": "Managed-mount reconciliation {status}. Network: {networkCorrected}/{networkChecked} corrected. USB: {usbCorrected}/{usbChecked} corrected. Failed corrective operations: {failures}.",
     "reconcileStatuses": {
@@ -434,9 +429,7 @@
     "logFileModifiedAt": "File modified",
     "logLoadNewer": "Load newer lines",
     "logLoadOlder": "Load older lines",
-    "logViewerEmpty": "No log lines available for the selected filters.",
-    "enterJobId": "Enter a job ID before loading debug details.",
-    "jobNotFound": "No job was found for the provided job ID."
+    "logViewerEmpty": "No log lines available for the selected filters."
   },
   "dashboard": {
     "systemHealth": "System Health",

@@ -22,10 +22,6 @@ export function getSystemMounts() {
   return toData(apiClient.get(`${API_BASE}/introspection/mounts`))
 }
 
-export function getJobDebug(jobId) {
-  return toData(apiClient.get(`${API_BASE}/introspection/jobs/${jobId}/debug`))
-}
-
 export function reconcileManagedMounts() {
   return toData(apiClient.post(`${API_BASE}/introspection/reconcile-managed-mounts`))
 }

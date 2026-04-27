@@ -196,7 +196,6 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 | UC-8.3 | View USB hub/port topology | Any authenticated user | any |
 | UC-8.4 | View block device metadata | Any authenticated user | any |
 | UC-8.5 | View mounted filesystems | Any authenticated user | any |
-| UC-8.6 | View job debug info | Admin, Auditor | admin, auditor |
 | UC-8.7 | Select the active or rotated application log source from the Logs tab | Admin | admin |
 | UC-8.8 | Download the currently selected log source from the Logs toolbar | Admin | admin |
 | UC-8.9 | Scroll within the log viewer to page to older or newer content for the selected source | Admin | admin |

@@ -56,7 +56,6 @@ from app.schemas.errors import R_401, R_403, R_404, R_409, R_422, R_500
 from app.schemas.introspection import (
     BlockDevicesResponse,
     IntrospectionDrivesResponse,
-    JobDebugResponse,
     ManualManagedMountReconciliationResponse,
     SystemHealthResponse,
     SystemMountsResponse,
@@ -310,43 +309,3 @@ def reconcile_managed_mounts(
     )
 
 
-@router.get("/jobs/{job_id}/debug", response_model=JobDebugResponse, responses={**R_401, **R_403, **R_404, **R_422})
-def job_debug(
-    job_id: int,
-    db: Session = Depends(get_db),
-    _: CurrentUser = Depends(_ADMIN_AUDITOR),
-):
-    """Retrieve detailed debug information for a specific export job.
-
-    Returns internal state, paths, and progress metrics for troubleshooting.
-    Restricted to administrators and auditors who need to investigate job issues.
-
-    Includes source and target paths as these are necessary for debugging copy operations.
-
-    **Roles:** ``admin``, ``auditor``
-    """
-    job = db.get(ExportJob, job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-
-    return {
-        "job_id": job.id,
-        "status": job.status.value,
-        "project_id": job.project_id,
-        "source_path": job.source_path,
-        "target_mount_path": job.target_mount_path,
-        "total_bytes": job.total_bytes,
-        "copied_bytes": job.copied_bytes,
-        "file_count": job.file_count,
-        "thread_count": job.thread_count,
-        "files": [
-            {
-                "id": f.id,
-                "relative_path": f.relative_path,
-                "status": f.status.value,
-                "checksum": f.checksum,
-                "error_message": f.error_message,
-            }
-            for f in job.files
-        ],
-    }

@@ -7,16 +7,14 @@ import {
   getUsbTopology,
   getBlockDevices,
   getSystemMounts,
-  getJobDebug,
   reconcileManagedMounts,
 } from '@/api/introspection.js'
 import { downloadLogFile, getLogFiles, getLogLines } from '@/api/admin.js'
-import { listJobs } from '@/api/jobs.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import { useAuthStore } from '@/stores/auth.js'
-import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
+import { normalizeProjectId } from '@/utils/projectId.js'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -29,7 +27,6 @@ const tabs = computed(() => {
   if (canViewLogs.value) {
     items.push('logs')
   }
-  items.push('job-debug')
   return items
 })
 const activeTab = ref('health')
@@ -45,10 +42,6 @@ const logs = ref([])
 const downloadingLogName = ref('')
 const logViewer = ref({ source: '', search: '', limit: 200, offset: 0, reverse: true })
 const logView = ref(null)
-const jobDebug = ref(null)
-const jobDebugId = ref('')
-const jobs = ref([])
-const jobsListUnavailable = ref(false)
 const loadingLogPage = ref(false)
 const logViewerElement = ref(null)
 const suppressedLogViewerScrollTop = ref(null)
@@ -422,53 +415,6 @@ async function loadTabData() {
   }
 }
 
-async function loadJobDebug() {
-  if (!jobDebugId.value) {
-    error.value = t('system.enterJobId')
-    return
-  }
-  loading.value = true
-  error.value = ''
-  try {
-    jobDebug.value = normalizeProjectRecord(await getJobDebug(Number(jobDebugId.value)), ['project_id'])
-  } catch (err) {
-    const status = err?.response?.status
-    if (status === 404) {
-      error.value = t('system.jobNotFound')
-      jobDebug.value = null
-    } else {
-      error.value = extractApiMessage(err) || t('common.errors.requestConflict')
-    }
-  } finally {
-    loading.value = false
-  }
-}
-
-async function loadJobOptions() {
-  loading.value = true
-  error.value = ''
-  jobsListUnavailable.value = false
-  try {
-    const response = await listJobs({ limit: 200 })
-    jobs.value = Array.isArray(response)
-      ? response.map((item) => normalizeProjectRecord(item, ['project_id']))
-      : []
-  } catch {
-    jobs.value = []
-    jobsListUnavailable.value = true
-  } finally {
-    loading.value = false
-  }
-}
-
-function onJobPickerChange(event) {
-  const selected = String(event?.target?.value || '')
-  jobDebugId.value = selected
-  if (selected) {
-    loadJobDebug()
-  }
-}
-
 async function downloadLog() {
   const name = selectedLogDownloadName.value
   if (!name) return
@@ -568,11 +514,7 @@ async function onLogViewerScroll(event) {
 watch(activeTab, async () => {
   page.value = 1
   error.value = ''
-  if (activeTab.value === 'job-debug') {
-    await loadJobOptions()
-  } else {
-    await loadTabData()
-  }
+  await loadTabData()
 })
 
 watch(canViewLogs, (isAdmin) => {
@@ -602,7 +544,7 @@ onBeforeUnmount(() => {
   <section class="view-root">
     <header class="header-row">
       <h1>{{ t('system.title') }}</h1>
-      <button class="btn" @click="activeTab === 'job-debug' ? loadJobDebug() : loadTabData()">
+      <button class="btn" @click="loadTabData()">
         {{ t('common.actions.refresh') }}
       </button>
     </header>
@@ -649,41 +591,6 @@ onBeforeUnmount(() => {
         <span>{{ t('system.diskIo') }}</span><strong>{{ diskIoDisplay }}</strong>
         <span>{{ t('system.workerQueue') }}</span><strong>{{ workerQueueDisplay }}</strong>
       </div>
-    </article>
-
-    <article v-else-if="activeTab === 'job-debug'" class="panel">
-      <div class="job-debug-form">
-        <label class="job-picker-label" for="job-picker">{{ t('system.jobPickerLabel') }}</label>
-        <select id="job-picker" class="job-picker" :value="jobDebugId" @change="onJobPickerChange">
-          <option value="">{{ t('system.jobPickerPlaceholder') }}</option>
-          <option v-for="job in jobs" :key="job.id" :value="String(job.id)">
-            #{{ job.id }} - {{ formatProjectId(job.project_id) }} - {{ job.status || t('common.labels.unknown') }}
-          </option>
-        </select>
-        <input v-model="jobDebugId" type="number" min="1" :placeholder="t('jobs.jobId')" />
-        <button class="btn" @click="loadJobDebug">{{ t('system.loadDebug') }}</button>
-      </div>
-      <p v-if="jobsListUnavailable" class="muted">{{ t('system.jobPickerUnavailable') }}</p>
-
-      <div v-if="jobDebug" class="health-grid">
-        <span>{{ t('jobs.jobId') }}</span><strong>{{ jobDebug.job_id }}</strong>
-        <span>{{ t('common.labels.status') }}</span><StatusBadge :status="jobDebug.status" />
-        <span>{{ t('dashboard.project') }}</span><strong>{{ formatProjectId(jobDebug.project_id) }}</strong>
-        <span>{{ t('dashboard.progress') }}</span><strong>{{ jobDebug.copied_bytes || 0 }} / {{ jobDebug.total_bytes || 0 }}</strong>
-      </div>
-
-      <DataTable
-        :columns="[
-          { key: 'id', label: t('common.labels.id'), align: 'right' },
-          { key: 'relative_path', label: t('jobs.path') },
-          { key: 'status', label: t('common.labels.status') },
-          { key: 'checksum', label: t('jobs.checksum') },
-          { key: 'error_message', label: t('system.error') },
-        ]"
-        :rows="jobDebug?.files || []"
-      >
-        <template #cell-status="{ row }"><StatusBadge :status="row.status" /></template>
-      </DataTable>
     </article>
 
     <article v-else-if="activeTab === 'logs'" class="panel">
@@ -793,7 +700,6 @@ onBeforeUnmount(() => {
 
 .header-row,
 .tabs,
-.job-debug-form,
 .header-actions {
   display: flex;
   gap: var(--space-sm);
@@ -804,8 +710,7 @@ onBeforeUnmount(() => {
   align-items: center;
 }
 
-.tabs,
-.job-debug-form {
+.tabs {
   flex-wrap: wrap;
 }
 
