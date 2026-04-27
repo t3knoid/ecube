@@ -357,7 +357,7 @@ class TestCopyJobTimeout:
         files = db.query(ExportFile).filter(ExportFile.job_id == job.id).all()
         assert files
         assert any(f.status == FileStatus.TIMEOUT for f in files), "At least one file should be marked TIMEOUT"
-        assert any("timed out after 1s" in (f.error_message or "") for f in files)
+        assert any((f.error_message or "") == "Operation timed out" for f in files)
 
         # Timeout should emit FILE_COPY_TIMEOUT audit record, not JOB_TIMEOUT
         timeout_entries = db.query(AuditLog).filter(AuditLog.action == "FILE_COPY_TIMEOUT").all()

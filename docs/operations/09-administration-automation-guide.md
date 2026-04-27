@@ -1887,10 +1887,6 @@ curl -k -H "Authorization: Bearer $TOKEN" \
 # Block devices — all devices detected by the kernel (requires auth)
 curl -k -H "Authorization: Bearer $TOKEN" \
   https://localhost:8443/introspection/block-devices
-
-# Job debug info — detailed paths and file statuses (admin or auditor)
-curl -k -H "Authorization: Bearer $TOKEN" \
-  https://localhost:8443/introspection/jobs/1/debug
 ```
 
 ### Application Logs API

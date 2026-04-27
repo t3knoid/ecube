@@ -13,7 +13,6 @@
 - `GET /introspection/block-devices`: include capacity, fs type, mount state, encryption indicators.
 - `GET /introspection/mounts`: report active mount table and ECUBE-managed entries.
 - `GET /introspection/system-health`: aggregate CPU/memory/disk and queue depth.
-- `GET /introspection/jobs/{job_id}/debug`: expose worker states, retries, and pending queue details.
 - `GET /admin/logs/view`: view recent application log lines with filtering, pagination, and automatic sensitive-value redaction.
 
 ## Design Guardrails
