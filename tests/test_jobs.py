@@ -1315,6 +1315,15 @@ def test_pause_job_status_conflict(client, db):
 
 
 def test_create_manifest_overwrites_manifest_json_and_includes_metadata(client, db, tmp_path):
+    drive = UsbDrive(
+        device_identifier="USB-MANIFEST-DATA-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-MANIFEST-DATA-001",
+        mount_path=str(tmp_path),
+    )
+    db.add(drive)
+    db.flush()
+
     job = ExportJob(
         project_id="PROJ-MANIFEST-DATA-001",
         evidence_number="EV-MANIFEST-DATA-001",
@@ -1323,6 +1332,8 @@ def test_create_manifest_overwrites_manifest_json_and_includes_metadata(client, 
         status=JobStatus.COMPLETED,
     )
     db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
     db.commit()
 
     first_response = client.post(f"/jobs/{job.id}/manifest")
@@ -1413,14 +1424,25 @@ def test_download_manifest_conflict_when_drive_not_mounted(client, db, tmp_path)
 
 
 def test_create_manifest_conflict_when_drive_not_mounted(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-MANIFEST-MISSING-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-MANIFEST-MISSING-001",
+        mount_path=None,
+    )
+    db.add(drive)
+    db.flush()
+
     job = ExportJob(
         project_id="PROJ-MANIFEST-MISSING-001",
         evidence_number="EV-MANIFEST-MISSING-001",
         source_path="/data/evidence",
-        target_mount_path=None,
+        target_mount_path="/stale/mount/path",
         status=JobStatus.COMPLETED,
     )
     db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
     db.commit()
 
     response = client.post(f"/jobs/{job.id}/manifest")
@@ -1457,6 +1479,15 @@ def test_create_manifest_rejects_partial_success_completion(client, db, tmp_path
 
 
 def test_create_manifest_write_failure_returns_server_error_and_sanitized_audit(client, db, tmp_path):
+    drive = UsbDrive(
+        device_identifier="USB-MANIFEST-WRITE-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-MANIFEST-WRITE-001",
+        mount_path=str(tmp_path),
+    )
+    db.add(drive)
+    db.flush()
+
     job = ExportJob(
         project_id="PROJ-MANIFEST-WRITE-001",
         evidence_number="EV-MANIFEST-WRITE-001",
@@ -1465,6 +1496,8 @@ def test_create_manifest_write_failure_returns_server_error_and_sanitized_audit(
         status=JobStatus.COMPLETED,
     )
     db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
     db.commit()
 
     with patch("builtins.open", side_effect=OSError("disk full: /tmp/private-path")):
@@ -1482,6 +1515,15 @@ def test_create_manifest_write_failure_returns_server_error_and_sanitized_audit(
 
 
 def test_create_manifest_writes_application_log_line(client, db, caplog, tmp_path):
+    drive = UsbDrive(
+        device_identifier="USB-MANIFEST-LOG-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-MANIFEST-LOG-001",
+        mount_path=str(tmp_path),
+    )
+    db.add(drive)
+    db.flush()
+
     job = ExportJob(
         project_id="PROJ-MANIFEST-LOG-001",
         evidence_number="EV-MANIFEST-LOG-001",
@@ -1490,6 +1532,8 @@ def test_create_manifest_writes_application_log_line(client, db, caplog, tmp_pat
         status=JobStatus.COMPLETED,
     )
     db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
     db.commit()
     job_id = job.id
 
