@@ -230,9 +230,11 @@ If login fails:
 After login, ECUBE displays a standard application shell:
 
 - Header at the top
-- Sidebar navigation on the left
+- Sidebar navigation on the left on wider screens
 - Main content area in the center
 - Footer at the bottom
+
+On narrower screens, the sidebar collapses behind a header navigation toggle. Use the menu button in the header to open navigation, then tap outside the sidebar or choose a destination link to close it again.
 
 Common navigation items include:
 
@@ -661,20 +663,23 @@ When expanded, the file table usually shows:
 - Relative path
 - Status
 - Failure details when a row includes a safe file-level error summary
-- `View Hashes` actions for users allowed to inspect file hashes
 
-If the job contains more rows than fit on one page, the panel shows a numbered pagination control with 10-page shortcut windows and left/right navigation. The number of rows shown per page is controlled by the admin-only `Job Detail Files Per Page` runtime setting and is bounded between 20 and 100.
+Users allowed to inspect hashes open the hash viewer by selecting the file path itself. On smaller screens, ECUBE may replace full status badges with compact status icons and shorten the visible pagination window so the file list stays within the viewport.
+
+If the job contains more rows than fit on one page, the panel shows a numbered pagination control with left/right navigation. Desktop layouts expose a wider page-number window, while smaller screens show a shorter page-number window to reduce horizontal crowding. The number of rows shown per page is controlled by the admin-only `Job Detail Files Per Page` runtime setting and is bounded between 20 and 100.
 
 ### 10.3 Hash Viewer
 
-Users with sufficient permissions can inspect file hashes, including values such as:
+Users with sufficient permissions can inspect file hashes in a popup dialog opened from the file path in the Files panel. The dialog includes values such as:
 
 - MD5
 - SHA-256
 
+The same popup also includes the compare workflow, so operators can inspect hashes and then compare the selected exported file against its source version without leaving Job Detail.
+
 ### 10.4 Compare Source and Destination
 
-The compare panel now uses clear `Source` and `Destination` terminology. After you load hashes for an exported file, choose that file in the compare selector to evaluate the original source version against the copied destination version.
+The compare workflow now uses clear `Source` and `Destination` terminology inside the hash viewer popup. After you open hashes for an exported file, choose the source file in the compare selector to evaluate the original source version against the copied destination version.
 
 Comparison output includes:
 
@@ -853,7 +858,9 @@ This page is useful when:
 
 End users who only perform evidence exports may rarely need this page. Administrators and support personnel are more likely to use it during troubleshooting.
 
-In the `USB Topology` tab, ECUBE shows a sorted device table that includes `Device` and `Serial Number` columns. Rows with no meaningful USB metadata are hidden so the list stays focused on useful hardware entries.
+In the `USB Topology` tab, ECUBE shows a sorted device table and hides rows with no meaningful USB metadata so the list stays focused on useful hardware entries. On smaller screens, the table tightens to primary columns such as `Device` and `Product`, and the remaining hardware details move into a per-row overflow menu.
+
+In the `Mounts` tab, ECUBE continues to show device, mount point, filesystem type, and mount options on wider screens. On smaller screens, it keeps `Device` and `Mount Point` visible and moves the remaining fields into a per-row overflow menu.
 
 For users with `admin` or `manager` roles, the System tab bar includes a `Reconcile managed mounts` action button positioned between `Mounts` and `Logs`. This action triggers a manual managed-mount reconciliation pass and opens a dedicated results page.
 
@@ -945,6 +952,8 @@ The results page shows:
 - A `Current Shared Mounts` table with mount fields similar to the Mounts page.
 
 These tables are post-run snapshots of current drive and mount state to help operators investigate reconciliation outcomes; they are not limited to only rows that were corrected during the run.
+
+On smaller screens, these tables follow the same compact treatment as the main Drives and Mounts pages by keeping the most important columns visible and reducing lower-priority metadata.
 
 Status meanings:
 
