@@ -222,7 +222,7 @@ def _reconcile_usb_mounts(
 
     drives = (
         db.query(UsbDrive)
-        .filter(UsbDrive.mount_path.isnot(None))
+        .filter(UsbDrive.filesystem_path.isnot(None))
         .filter(UsbDrive.current_state.in_((DriveState.AVAILABLE, DriveState.IN_USE)))
         .all()
     )
@@ -239,6 +239,15 @@ def _reconcile_usb_mounts(
         actual_target = find_device_mount_point(str(drive.filesystem_path)) if drive.filesystem_path else None
 
         if actual_target == expected_target:
+            if drive.mount_path != expected_target:
+                drive.mount_path = expected_target
+                corrected += 1
+                audit_entries.append({
+                    "action": "DRIVE_MOUNT_RECONCILED",
+                    "user": "system",
+                    "drive_id": drive.id,
+                    "details": {"drive_id": drive.id, "status": "MOUNTED", "reason": "startup_reconciled"},
+                })
             continue
 
         if actual_target and actual_target != expected_target:
@@ -276,6 +285,7 @@ def _reconcile_usb_mounts(
 
         success, error = drive_mount_provider.mount_drive(str(drive.filesystem_path), expected_target)
         if success:
+            drive.mount_path = expected_target
             if not corrected_this_drive:
                 corrected += 1
             audit_entries.append({
@@ -330,6 +340,14 @@ def _reconcile_usb_mounts(
             "user": "system",
             "details": {"status": "UNMOUNTED", "reason": "orphan_managed_mount_removed"},
         })
+
+    if checked:
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("DB commit failed during USB mount reconciliation")
+            raise
 
     if audit_entries:
         try:
