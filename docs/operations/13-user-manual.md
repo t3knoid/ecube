@@ -607,7 +607,7 @@ Typical functions include:
 - Pause a running job and resume it later
 - Manually complete a safe non-active job when required by the workflow
 - Clear a persisted startup-analysis snapshot before the next restart when the cached scan should be discarded
-- Generate a manifest and confirm where it was written
+- Generate a manifest, review the reported location, and download the generated file
 - Review copied files
 - Inspect hashes for individual files
 - Compare a file's source version against its copied destination version
@@ -632,7 +632,7 @@ When a pause is requested, the Jobs list and Job Detail page can show a `Pause i
 
 While a job is actively copying, Job Detail shows a live `Duration` field that reflects cumulative active runtime only. The displayed value continues updating while the job is `RUNNING`, does not add paused time while the job is `PAUSED`, and resumes from the previously stored active runtime after a later restart instead of resetting to zero.
 
-Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed `manifest.json` file on the destination drive.
+Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed `manifest.json` file on the destination drive and immediately starts a browser download of the generated manifest without an extra confirmation step.
 
 For a partial-success `COMPLETED` job, Job Detail can show `Retry Failed Files` instead of exposing Verify or Manifest too early. This action is available only to `admin`, `manager`, and `processor`, moves the job back into `RUNNING`, re-queues only failed or timed-out files, and preserves already successful copies.
 
@@ -685,7 +685,7 @@ Comparison output includes:
 
 This is useful when reviewing evidence consistency or confirming repeatability after copy or verification steps. If either side is unavailable, ECUBE shows a sanitized conflict message instead of exposing raw filesystem details.
 
-Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed `manifest.json` file on the destination drive and starts a browser download of the same generated manifest JSON.
+Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed `manifest.json` file on the destination drive and immediately starts a browser download of the same generated manifest JSON without an extra confirmation step.
 
 ![Job detail page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/job-detail-default-chromium-linux.png)
 
