@@ -23,6 +23,7 @@ If a requested change conflicts with security, isolation, or trust boundaries, p
 
 Always:
 - Inspect nearby code before changing patterns
+- Inspect the closest existing implementation before introducing a new visual or interaction pattern
 - Prefer the smallest correct change
 - Preserve existing abstractions unless the task requires restructuring
 - Add or update focused tests for changed behavior
