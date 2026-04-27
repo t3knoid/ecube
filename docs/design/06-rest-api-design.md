@@ -1929,20 +1929,6 @@ CPU, memory, disk I/O, worker queue.
 - `401 Unauthorized` — Missing/invalid token
 - `403 Forbidden` — Insufficient role
 
-### `GET /introspection/jobs/{job_id}/debug`
-
-Internal worker state.
-
-**Roles:** `admin`, `manager`, `processor`, `auditor`
-
-**Error responses:**
-
-- `401 Unauthorized` — Missing/invalid token
-- `403 Forbidden` — Insufficient role
-- `404 Not Found` — Job ID does not exist
-
----
-
 ## 3.10 Directory Browsing
 
 ### `GET /browse`
