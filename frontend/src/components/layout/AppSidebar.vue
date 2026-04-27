@@ -1,10 +1,10 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { AUDIT_ROLES, USERS_ROLES } from '@/constants/roles.js'
 
-defineProps({
+const props = defineProps({
   sidebarOpen: {
     type: Boolean,
     default: false,
@@ -15,6 +15,8 @@ const emit = defineEmits(['close-sidebar'])
 
 const { t } = useI18n()
 const authStore = useAuthStore()
+const isMobileViewport = ref(false)
+let mobileMediaQuery = null
 
 const navItems = computed(() => [
   { label: t('nav.dashboard'), to: '/', roles: null },
@@ -37,10 +39,45 @@ function isVisible(item) {
 
 const visibleNav = computed(() => navItems.value.filter(isVisible))
 const visibleAdmin = computed(() => adminItems.value.filter(isVisible))
+const isSidebarHidden = computed(() => isMobileViewport.value && !props.sidebarOpen)
+
+function syncMobileViewport(event) {
+  isMobileViewport.value = event.matches
+}
+
+onMounted(() => {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+  mobileMediaQuery = window.matchMedia('(max-width: 768px)')
+  syncMobileViewport(mobileMediaQuery)
+
+  if (typeof mobileMediaQuery.addEventListener === 'function') {
+    mobileMediaQuery.addEventListener('change', syncMobileViewport)
+    return
+  }
+
+  mobileMediaQuery.addListener(syncMobileViewport)
+})
+
+onUnmounted(() => {
+  if (!mobileMediaQuery) return
+
+  if (typeof mobileMediaQuery.removeEventListener === 'function') {
+    mobileMediaQuery.removeEventListener('change', syncMobileViewport)
+    return
+  }
+
+  mobileMediaQuery.removeListener(syncMobileViewport)
+})
 </script>
 
 <template>
-  <aside id="app-sidebar" class="app-sidebar" :class="{ 'app-sidebar-open': sidebarOpen }">
+  <aside
+    id="app-sidebar"
+    class="app-sidebar"
+    :class="{ 'app-sidebar-open': sidebarOpen }"
+    :aria-hidden="isSidebarHidden ? 'true' : undefined"
+    :inert="isSidebarHidden || undefined"
+  >
     <nav>
       <RouterLink
         v-for="item in visibleNav"
@@ -122,6 +159,11 @@ const visibleAdmin = computed(() => adminItems.value.filter(isVisible))
     transition: transform 0.2s ease;
     z-index: 950;
     box-shadow: var(--shadow-lg);
+  }
+
+  .app-sidebar[aria-hidden='true'] {
+    visibility: hidden;
+    pointer-events: none;
   }
 
   .app-sidebar-open {
