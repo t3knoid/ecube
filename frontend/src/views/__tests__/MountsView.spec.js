@@ -72,6 +72,7 @@ function mountView() {
             <div>
               <div class="column-labels">{{ (columns || []).map((column) => column.label).join('|') }}</div>
               <div v-for="row in rows" :key="row.id" class="row-stub">
+                <slot name="cell-status" :row="row" />
                 <slot name="cell-actions" :row="row" />
               </div>
             </div>
@@ -216,7 +217,7 @@ describe('MountsView removal flow', () => {
     expect(wrapper.text()).toContain(i18n.global.t('mounts.removeConfirmTitle'))
   })
 
-  it('omits wide metadata columns in mobile view while keeping the compact row menu trigger', async () => {
+  it('omits wide metadata columns in mobile view while keeping compact status and the row menu trigger', async () => {
     viewportState.mobile = true
     installMatchMediaMock()
     mocks.getMounts.mockResolvedValue([buildMount({ status: 'MOUNTED' })])
@@ -227,6 +228,7 @@ describe('MountsView removal flow', () => {
     const labels = wrapper.find('.column-labels').text()
     expect(labels).not.toContain(i18n.global.t('common.labels.type'))
     expect(labels).not.toContain(i18n.global.t('mounts.lastChecked'))
+    expect(wrapper.find('.mount-status-icon').attributes('aria-label')).toBe('MOUNTED')
     expect(wrapper.find('.row-actions-toggle-dots').exists()).toBe(true)
   })
 
