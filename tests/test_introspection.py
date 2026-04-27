@@ -186,6 +186,35 @@ def test_system_health_marks_thread_metrics_unavailable_when_runtime_data_cannot
     assert payload[0]["metrics_note"] == "Per-thread CPU metrics are currently unavailable."
 
 
+def test_system_health_degrades_safely_when_active_worker_job_correlation_fails(client, db):
+    with (
+        patch("app.routers.introspection._PSUTIL_AVAILABLE", False),
+        patch(
+            "app.services.introspection_service.list_active_copy_workers",
+            return_value=[
+                {
+                    "job_id": 77,
+                    "worker_label": "copy-job-77_0",
+                    "native_thread_id": 9999,
+                    "started_at": "2026-04-27T10:00:00Z",
+                    "started_monotonic": 50.0,
+                }
+            ],
+        ),
+        patch("app.services.introspection_service.time.monotonic", return_value=55.0),
+        patch("sqlalchemy.orm.query.Query.all", side_effect=RuntimeError("query failed")),
+    ):
+        response = client.get("/introspection/system-health")
+
+    assert response.status_code == 200
+    payload = response.json()["ecube_process"]["active_copy_threads"]
+    assert len(payload) == 1
+    assert payload[0]["job_id"] == 77
+    assert payload[0]["project_id"] is None
+    assert payload[0]["job_status"] is None
+    assert payload[0]["configured_thread_count"] is None
+
+
 def test_system_health_worker_queue_size(client, db):
     """worker_queue_size counts PENDING jobs."""
     from app.models.jobs import ExportJob, JobStatus
