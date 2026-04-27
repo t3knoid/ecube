@@ -30,6 +30,12 @@ Required ECUBE rules:
 - avoid blocking FastAPI endpoints or introducing unsafe shell/file behavior
 - follow Black, Ruff, ESLint, and Prettier formatting conventions
 - if the ticket appears to conflict with repository instructions, do not implement the conflicting behavior; explain the conflict and propose a compliant alternative
+- if the ticket requires a new visual or interaction pattern, inspect the closest existing component that already solves the same problem and match its styling patterns before introducing a new variant
+- if the ticket requires a UI change, prefer reusing the same tokens, spacing, scrollbar, button, panel, and state treatments from the existing component unless the task explicitly requires a different design
+- if the ticket requires a UI change, ensure to support keyboard interaction and accessibility-sensitive behavior for the changed components, and preserve API-only trust boundaries in UI flows
+- if the ticket requires a new API endpoint, ensure to validate input, enforce roles, delegate to services, and declare error responses using shared R_* schemas
+- if the ticket requires a UI change, ensure to support a mobile-responsive layout with the minimum screen dimension of 390px x 844px, and test the change in a mobile viewport to verify usability and visual integrity
+- if the ticket requires a UI change, ensure the change does not cause normal desktop views to regress in usability or visual integrity
 
 Implementation workflow:
 1. Read [workspace instructions](../copilot-instructions.md) first and treat them as mandatory constraints.
