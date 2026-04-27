@@ -17,6 +17,46 @@ from app.utils.sanitize import sanitize_error_message
 
 logger = logging.getLogger(__name__)
 
+_PROCESS_CPU_SAMPLER: Any | None = None
+_PROCESS_CPU_SAMPLER_PID: int | None = None
+_PROCESS_CPU_SAMPLER_PRIMED = False
+
+
+def _get_process_cpu_sampler(psutil_module: Any) -> Any | None:
+    global _PROCESS_CPU_SAMPLER
+    global _PROCESS_CPU_SAMPLER_PID
+    global _PROCESS_CPU_SAMPLER_PRIMED
+
+    current_pid = os.getpid()
+    if _PROCESS_CPU_SAMPLER is not None and _PROCESS_CPU_SAMPLER_PID == current_pid:
+        return _PROCESS_CPU_SAMPLER
+
+    try:
+        _PROCESS_CPU_SAMPLER = psutil_module.Process(current_pid)
+    except Exception:
+        _PROCESS_CPU_SAMPLER = None
+        _PROCESS_CPU_SAMPLER_PID = None
+        _PROCESS_CPU_SAMPLER_PRIMED = False
+        return None
+
+    _PROCESS_CPU_SAMPLER_PID = current_pid
+    _PROCESS_CPU_SAMPLER_PRIMED = False
+    return _PROCESS_CPU_SAMPLER
+
+
+def prime_process_cpu_sampler(*, psutil_module: Any) -> None:
+    global _PROCESS_CPU_SAMPLER_PRIMED
+
+    process = _get_process_cpu_sampler(psutil_module)
+    if process is None:
+        return
+
+    try:
+        process.cpu_percent(interval=None)
+        _PROCESS_CPU_SAMPLER_PRIMED = True
+    except Exception:
+        logger.debug("Failed to prime ECUBE process CPU sampler", exc_info=True)
+
 
 def get_system_health(
     db: Session,
@@ -103,6 +143,8 @@ def _build_ecube_process_metrics(
     psutil_available: bool,
     psutil_module: Any | None,
 ) -> dict[str, Any]:
+    global _PROCESS_CPU_SAMPLER_PRIMED
+
     active_workers = list_active_copy_workers()
     process_cpu_percent: float | None = None
     process_cpu_time_seconds: float | None = None
@@ -113,16 +155,20 @@ def _build_ecube_process_metrics(
     per_thread_metrics_reason = "Per-thread CPU metrics are currently unavailable."
 
     if psutil_available and psutil_module is not None:
-        try:
-            process = psutil_module.Process(os.getpid())
-        except Exception:
-            process = None
+        process = _get_process_cpu_sampler(psutil_module)
 
         if process is not None:
-            try:
-                process_cpu_percent = process.cpu_percent(interval=None)
-            except Exception:
-                pass
+            if _PROCESS_CPU_SAMPLER_PRIMED:
+                try:
+                    process_cpu_percent = process.cpu_percent(interval=None)
+                except Exception:
+                    pass
+            else:
+                try:
+                    process.cpu_percent(interval=None)
+                    _PROCESS_CPU_SAMPLER_PRIMED = True
+                except Exception:
+                    pass
             try:
                 cpu_times = process.cpu_times()
                 process_cpu_time_seconds = float(cpu_times.user + cpu_times.system)
