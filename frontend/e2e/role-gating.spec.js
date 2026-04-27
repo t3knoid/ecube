@@ -5,7 +5,18 @@ import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
 async function commonRoutes(page) {
   await routeJson(page, '**/api/drives', [{ id: 1, current_state: 'AVAILABLE', device_identifier: '/dev/sdb', filesystem_type: 'ext4', capacity_bytes: 1000 }])
   await routeJson(page, '**/api/mounts', [])
-  await routeJson(page, '**/api/jobs**', [])
+  await page.route('**/api/jobs**', async (route) => {
+    const url = route.request().url()
+    if (route.request().method() === 'GET' && /\/api\/jobs(?:\?|$)/.test(url)) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([]),
+      })
+      return
+    }
+    await route.fallback()
+  })
   await routeJson(page, /\/api\/audit(?!\/)/, [])
 }
 
@@ -39,6 +50,7 @@ test('auditor cannot run write actions', async ({ page }) => {
   await routeJson(page, '**/api/introspection/jobs/1/debug', { files: [] })
 
   await page.goto('/jobs/1')
+  await expect(page).toHaveURL(/\/jobs\/1$/)
   await expect(page.getByRole('button', { name: 'Analyze' })).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Start' })).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Verify' })).toBeDisabled()
@@ -63,6 +75,7 @@ test('processor does not see startup-analysis cleanup control', async ({ page })
   await routeJson(page, '**/api/introspection/jobs/1/debug', { files: [] })
 
   await page.goto('/jobs/1')
+  await expect(page).toHaveURL(/\/jobs\/1$/)
   await expect(page.getByRole('button', { name: 'Clear startup analysis cache' })).toHaveCount(0)
 
   await expectNoCriticalA11yViolations(page)
