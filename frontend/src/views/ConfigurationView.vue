@@ -270,7 +270,7 @@ onMounted(loadConfiguration)
       </article>
     </div>
 
-    <div class="settings-grid">
+    <div class="settings-grid" :class="{ 'settings-grid-single': !restartPending }">
       <article class="panel">
         <h2>{{ t('configuration.sections.copyJobs') }}</h2>
 
@@ -332,6 +332,10 @@ onMounted(loadConfiguration)
   display: grid;
   gap: var(--space-md);
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.settings-grid-single {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .header-row {
