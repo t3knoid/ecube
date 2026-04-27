@@ -736,12 +736,13 @@ Compare a file's source version against its copied destination version
 <p>The Files panel is collapsed by default on Job Detail. Use <code>Show files</code> to expand it and <code>Hide files</code> to collapse it again without losing the current page.</p>
 <p>When expanded, the file table usually shows:</p>
 <ul><li>
+File ID
+</li><li>
 Relative path
 </li><li>
 Status
-</li><li>
-Failure details when a row includes a safe file-level error summary
 </li></ul>
+<p>Rows that include a safe file-level error summary are visually emphasized in the Files panel. Select the <code>ERROR</code> or <code>FAILED</code> status badge on desktop, or the matching compact status icon on smaller screens, to open the <code>File Error Details</code> dialog for that row. The dialog shows the file ID, relative path, status, and the sanitized per-file error text returned by the trusted backend.</p>
 <p>Users allowed to inspect hashes open the hash viewer by selecting the file path itself. On smaller screens, ECUBE may replace full status badges with compact status icons and shorten the visible pagination window so the file list stays within the viewport.</p>
 <p>If the job contains more rows than fit on one page, the panel shows a numbered pagination control with left/right navigation. Desktop layouts expose a wider page-number window, while smaller screens show a shorter page-number window to reduce horizontal crowding. The number of rows shown per page is controlled by the admin-only <code>Job Detail Files Per Page</code> runtime setting and is bounded between 20 and 100.</p>
 <h2 id="7-3-hash-viewer">7.3 Hash Viewer</h2>

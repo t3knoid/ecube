@@ -55,11 +55,15 @@ const showDeleteDialog = ref(false)
 const showStartupAnalysisCleanupDialog = ref(false)
 const showPausePendingDialog = ref(false)
 const showHashDialog = ref(false)
+const showFileErrorDialog = ref(false)
 const editDialogRef = ref(null)
 const pauseDialogRef = ref(null)
 const hashDialogRef = ref(null)
+const fileErrorDialogRef = ref(null)
 const dialogTriggerRef = ref(null)
 const hashDialogTriggerRef = ref(null)
+const fileErrorDialogTriggerRef = ref(null)
+const selectedErrorFile = ref(null)
 
 const editForm = ref({
   project_id: '',
@@ -109,6 +113,25 @@ function fileStatusIcon(status) {
   return '?'
 }
 
+function fileErrorMessage(row) {
+  return String(row?.error_message || '').trim()
+}
+
+function hasFileError(row) {
+  return fileErrorMessage(row).length > 0
+}
+
+function fileRowClass(row) {
+  return hasFileError(row) ? 'job-file-row-error' : ''
+}
+
+function fileErrorPreview(row) {
+  const message = fileErrorMessage(row)
+  if (!message) return '-'
+  if (message.length <= 120) return message
+  return `${message.slice(0, 117)}...`
+}
+
 const canEdit = computed(() => {
   return canOperate.value
     && ['PENDING', 'PAUSED', 'FAILED'].includes(currentStatus.value)
@@ -154,18 +177,11 @@ const startupAnalysisSummary = computed(() => {
   }
 })
 
-const fileColumns = computed(() => {
-  const columns = [
-    { key: 'id', label: t('common.labels.id'), align: 'right' },
-    { key: 'relative_path', label: t('jobs.path'), width: isMobileViewport.value ? '12rem' : null },
-    { key: 'status', label: t('common.labels.status'), align: 'center' },
-  ]
-
-  if ((debug.value.files || []).some((row) => String(row?.error_message || '').trim())) {
-    columns.push({ key: 'error_message', label: t('common.labels.details') })
-  }
-  return columns
-})
+const fileColumns = computed(() => ([
+  { key: 'id', label: t('common.labels.id'), align: 'right' },
+  { key: 'relative_path', label: t('jobs.path'), width: isMobileViewport.value ? '12rem' : null },
+  { key: 'status', label: t('common.labels.status'), align: 'center' },
+]))
 
 const jobFailureReason = computed(() => {
   if (!job.value) return ''
@@ -659,6 +675,21 @@ function closeHashDialog() {
   showHashDialog.value = false
 }
 
+function closeFileErrorDialog() {
+  showFileErrorDialog.value = false
+}
+
+function openFileErrorDialog(row, event) {
+  if (!hasFileError(row)) return
+  fileErrorDialogTriggerRef.value = event?.currentTarget instanceof HTMLElement
+    ? event.currentTarget
+    : document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+  selectedErrorFile.value = row
+  showFileErrorDialog.value = true
+}
+
 function closeActionMenu(event) {
   const menu = event?.currentTarget instanceof HTMLElement ? event.currentTarget.closest('details') : null
   if (menu instanceof HTMLDetailsElement) {
@@ -704,6 +735,18 @@ function handleDialogKeydown(event) {
     }
     if (event.key === 'Tab') {
       trapFocusWithin(event, hashDialogRef.value)
+    }
+    return
+  }
+
+  if (showFileErrorDialog.value) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeFileErrorDialog()
+      return
+    }
+    if (event.key === 'Tab') {
+      trapFocusWithin(event, fileErrorDialogRef.value)
     }
   }
 }
@@ -1108,6 +1151,29 @@ watch(showHashDialog, async (open) => {
   }
 })
 
+watch(showFileErrorDialog, async (open) => {
+  if (open) {
+    document.addEventListener('keydown', handleDialogKeydown)
+    await nextTick()
+    const target = fileErrorDialogRef.value?.querySelector('button')
+    if (target instanceof HTMLElement) {
+      target.focus()
+    }
+    return
+  }
+
+  if (!showEditDialog.value && !showPausePendingDialog.value && !showHashDialog.value) {
+    document.removeEventListener('keydown', handleDialogKeydown)
+  }
+  const trigger = fileErrorDialogTriggerRef.value
+  fileErrorDialogTriggerRef.value = null
+  selectedErrorFile.value = null
+  await nextTick()
+  if (trigger instanceof HTMLElement) {
+    trigger.focus()
+  }
+})
+
 onMounted(async () => {
   syncViewportState()
   if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
@@ -1293,10 +1359,11 @@ onUnmounted(() => {
       <div v-if="filesPanelExpanded" id="job-files-panel" class="files-panel-body">
         <p v-if="filesLoading" class="muted">{{ t('common.labels.loading') }}</p>
         <p v-else-if="fileListNotice" class="muted">{{ fileListNotice }}</p>
-        <DataTable class="job-files-table" :columns="fileColumns" :rows="debug.files || []" row-key="id" :empty-text="t('jobs.noFiles')">
+        <DataTable class="job-files-table" :columns="fileColumns" :rows="debug.files || []" row-key="id" :row-class="fileRowClass" :empty-text="t('jobs.noFiles')">
           <template #cell-relative_path="{ row }">
             <button
               class="file-path-button"
+              :class="{ 'file-path-button-error': hasFileError(row) }"
               :disabled="!canInspectHashes"
               :title="row.relative_path"
               :aria-label="row.relative_path"
@@ -1306,8 +1373,27 @@ onUnmounted(() => {
             </button>
           </template>
           <template #cell-status="{ row }">
+            <button
+              v-if="hasFileError(row)"
+              type="button"
+              class="file-status-button"
+              :class="{ 'file-status-button-mobile': isMobileViewport }"
+              :aria-label="`${t('jobs.fileErrorDetailsOpen')}: ${row.relative_path}`"
+              :title="fileErrorMessage(row)"
+              @click="openFileErrorDialog(row, $event)"
+            >
+              <span
+                v-if="isMobileViewport"
+                class="file-status-icon file-status-icon-button"
+                :class="`file-status-icon--${fileStatusTone(row.status)}`"
+                aria-hidden="true"
+              >
+                <span aria-hidden="true">{{ fileStatusIcon(row.status) }}</span>
+              </span>
+              <StatusBadge v-else :status="row.status" />
+            </button>
             <span
-              v-if="isMobileViewport"
+              v-else-if="isMobileViewport"
               class="file-status-icon"
               :class="`file-status-icon--${fileStatusTone(row.status)}`"
               :aria-label="normalizeFileStatus(row.status)"
@@ -1317,9 +1403,6 @@ onUnmounted(() => {
               <span aria-hidden="true">{{ fileStatusIcon(row.status) }}</span>
             </span>
             <StatusBadge v-else :status="row.status" />
-          </template>
-          <template #cell-error_message="{ row }">
-            <span class="error-text">{{ row.error_message || '-' }}</span>
           </template>
         </DataTable>
         <Pagination
@@ -1439,6 +1522,33 @@ onUnmounted(() => {
           </div>
           <div class="dialog-actions">
             <button class="btn" @click="closeHashDialog">{{ t('common.actions.close') }}</button>
+          </div>
+        </div>
+      </div>
+    </teleport>
+
+    <teleport to="body">
+      <div v-if="showFileErrorDialog" class="dialog-overlay" @click.self="closeFileErrorDialog">
+        <div
+          ref="fileErrorDialogRef"
+          class="dialog-panel hash-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="file-error-dialog-title"
+        >
+          <h2 id="file-error-dialog-title">{{ t('jobs.fileErrorDetails') }}</h2>
+          <div v-if="selectedErrorFile" class="hash-grid">
+            <span>{{ t('common.labels.id') }}</span><strong>{{ selectedErrorFile.id }}</strong>
+            <span>{{ t('jobs.path') }}</span><strong class="mono wrap-anywhere">{{ selectedErrorFile.relative_path || '-' }}</strong>
+            <span>{{ t('common.labels.status') }}</span><strong>{{ selectedErrorFile.status || '-' }}</strong>
+          </div>
+          <p v-if="!selectedErrorFile || !hasFileError(selectedErrorFile)" class="muted">{{ t('jobs.fileErrorDetailsEmpty') }}</p>
+          <div v-else class="compare-section">
+            <strong>{{ t('jobs.details') }}</strong>
+            <pre class="file-error-detail-text">{{ fileErrorMessage(selectedErrorFile) }}</pre>
+          </div>
+          <div class="dialog-actions">
+            <button class="btn" @click="closeFileErrorDialog">{{ t('common.actions.close') }}</button>
           </div>
         </div>
       </div>
@@ -1656,10 +1766,14 @@ select {
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--color-link, var(--color-text-primary));
+  color: inherit;
   text-align: left;
   text-decoration: underline;
   cursor: pointer;
+}
+
+.file-path-button-error {
+  font-weight: var(--font-weight-bold);
 }
 
 .file-path-button:disabled {
@@ -1679,6 +1793,30 @@ select {
   font-size: 0.9rem;
   font-weight: var(--font-weight-bold);
   line-height: 1;
+}
+
+.file-status-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.file-status-button-mobile {
+  line-height: 0;
+}
+
+.file-status-button:focus-visible {
+  outline: 2px solid var(--color-link, var(--color-info));
+  outline-offset: 3px;
+  border-radius: 9999px;
+}
+
+.file-status-icon-button {
+  cursor: pointer;
 }
 
 .file-status-icon--success {
@@ -1714,6 +1852,22 @@ select {
 .compare-results {
   display: grid;
   gap: var(--space-sm);
+}
+
+.file-error-detail-text {
+  margin: 0;
+  padding: var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  font-family: ui-monospace, Menlo, Monaco, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.job-files-table :deep(.job-file-row-error td) {
+  color: var(--color-alert-danger-text, #991b1b);
 }
 
 .compare-section {
