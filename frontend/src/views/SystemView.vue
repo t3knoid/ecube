@@ -87,6 +87,14 @@ const tabColumns = computed(() => {
     ]
   }
   if (activeTab.value === 'mounts') {
+    if (isMobileViewport.value) {
+      return [
+        { key: 'device', label: t('system.device') },
+        { key: 'mount_point', label: t('system.mountPoint') },
+        { key: 'details', label: '', align: 'center' },
+      ]
+    }
+
     return [
       { key: 'device', label: t('system.device') },
       { key: 'mount_point', label: t('system.mountPoint') },
@@ -719,7 +727,7 @@ onBeforeUnmount(() => {
     </article>
 
     <article v-else class="panel">
-      <DataTable :class="{ 'usb-topology-table': activeTab === 'usb' && isMobileViewport }" :columns="tabColumns" :rows="pagedRows" :empty-text="t('system.empty')">
+      <DataTable :class="{ 'usb-topology-table': activeTab === 'usb' && isMobileViewport, 'system-mounts-table': activeTab === 'mounts' && isMobileViewport }" :columns="tabColumns" :rows="pagedRows" :empty-text="t('system.empty')">
         <template #cell-product="{ row }">
           <span
             v-if="activeTab === 'usb' && isMobileViewport"
@@ -730,8 +738,18 @@ onBeforeUnmount(() => {
           </span>
           <span v-else>{{ row.product || '-' }}</span>
         </template>
+        <template #cell-mount_point="{ row }">
+          <span
+            v-if="activeTab === 'mounts' && isMobileViewport"
+            class="mount-point-cell"
+            :title="row.mount_point || '-'"
+          >
+            {{ row.mount_point || '-' }}
+          </span>
+          <span v-else>{{ row.mount_point || '-' }}</span>
+        </template>
         <template #cell-details="{ row }">
-          <details v-if="activeTab === 'usb' && isMobileViewport" class="usb-topology-menu">
+          <details v-if="(activeTab === 'usb' || activeTab === 'mounts') && isMobileViewport" class="usb-topology-menu">
             <summary class="usb-topology-menu-toggle" :aria-label="`${row.device || t('system.device')} ${t('drives.details')}`">
               <span class="usb-topology-menu-toggle-dots" aria-hidden="true">
                 <span class="usb-topology-menu-toggle-dot" />
@@ -740,11 +758,15 @@ onBeforeUnmount(() => {
               </span>
             </summary>
             <div class="usb-topology-menu-popover">
-              <div class="usb-topology-menu-grid">
+              <div v-if="activeTab === 'usb'" class="usb-topology-menu-grid">
                 <span>{{ t('system.manufacturer') }}</span><strong>{{ row.manufacturer || '-' }}</strong>
                 <span>{{ t('system.serialNumber') }}</span><strong>{{ row.serial || '-' }}</strong>
                 <span>{{ t('system.vendorId') }}</span><strong>{{ row.idVendor || '-' }}</strong>
                 <span>{{ t('system.productId') }}</span><strong>{{ row.idProduct || '-' }}</strong>
+              </div>
+              <div v-else class="usb-topology-menu-grid">
+                <span>{{ t('system.fsType') }}</span><strong>{{ row.fs_type || '-' }}</strong>
+                <span>{{ t('system.options') }}</span><strong>{{ row.options || '-' }}</strong>
               </div>
               <button class="btn usb-topology-menu-close" @click="closeUsbDetailsMenu($event)">{{ t('common.actions.close') }}</button>
             </div>
@@ -923,6 +945,15 @@ onBeforeUnmount(() => {
   vertical-align: top;
 }
 
+.mount-point-cell {
+  display: inline-block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+}
+
 @media (max-width: 768px) {
   .usb-topology-table :deep(.data-table) {
     table-layout: fixed;
@@ -945,6 +976,30 @@ onBeforeUnmount(() => {
 
   .usb-topology-table :deep(.data-table th:nth-child(3)),
   .usb-topology-table :deep(.data-table td:nth-child(3)) {
+    width: 2.5rem;
+  }
+
+  .system-mounts-table :deep(.data-table) {
+    table-layout: fixed;
+  }
+
+  .system-mounts-table :deep(.data-table th),
+  .system-mounts-table :deep(.data-table td) {
+    padding: var(--space-xs) var(--space-sm);
+  }
+
+  .system-mounts-table :deep(.data-table th:nth-child(1)),
+  .system-mounts-table :deep(.data-table td:nth-child(1)) {
+    width: 6rem;
+  }
+
+  .system-mounts-table :deep(.data-table th:nth-child(2)),
+  .system-mounts-table :deep(.data-table td:nth-child(2)) {
+    width: auto;
+  }
+
+  .system-mounts-table :deep(.data-table th:nth-child(3)),
+  .system-mounts-table :deep(.data-table td:nth-child(3)) {
     width: 2.5rem;
   }
 }
