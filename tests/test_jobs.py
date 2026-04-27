@@ -782,7 +782,7 @@ def test_get_job_files_processor_allowed(client, db):
     db.add(job)
     db.flush()
     db.add(ExportFile(job_id=job.id, relative_path="doc/a.txt", status=FileStatus.DONE, checksum="sha256:a"))
-    db.add(ExportFile(job_id=job.id, relative_path="doc/b.txt", status=FileStatus.ERROR, checksum=None))
+    db.add(ExportFile(job_id=job.id, relative_path="doc/b.txt", status=FileStatus.ERROR, checksum=None, error_message="Target storage is full"))
     db.commit()
 
     response = client.get(f"/jobs/{job.id}/files")
@@ -794,6 +794,11 @@ def test_get_job_files_processor_allowed(client, db):
     assert data["files"][0]["relative_path"] == "doc/a.txt"
     assert data["files"][0]["status"] == "DONE"
     assert data["files"][0]["checksum"] == "sha256:a"
+    assert data["files"][0]["error_message"] is None
+    assert data["files"][1]["relative_path"] == "doc/b.txt"
+    assert data["files"][1]["status"] == "ERROR"
+    assert data["files"][1]["checksum"] is None
+    assert data["files"][1]["error_message"] == "Target storage is full"
     assert data["page"] == 1
     assert data["page_size"] == jobs_router.settings.job_detail_files_page_size
 

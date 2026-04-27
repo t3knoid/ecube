@@ -451,11 +451,8 @@ test('job detail polls and reflects status progression', async ({ page }) => {
   let pollCount = 0
   const base = { id: 88, project_id: 'P-88', evidence_number: 'EV-88', thread_count: 4, total_bytes: 400 }
 
-  // Register the broad catch-all FIRST so that more-specific handlers registered
-  // afterward take precedence (Playwright uses LIFO route priority).
   await routeJson(page, '**/api/drives', [])
   await routeJson(page, '**/api/mounts', [])
-  await routeJson(page, '**/api/jobs**', [{ ...base, copied_bytes: 0, status: 'RUNNING' }])
   await routeJson(page, '**/api/jobs/88/files', { files: [] })
   await routeJson(page, '**/api/introspection/jobs/88/debug', { files: [] })
   await page.route('**/api/jobs/88', async (route) => {
@@ -470,9 +467,10 @@ test('job detail polls and reflects status progression', async ({ page }) => {
   })
 
   await page.goto('/jobs/88')
+  await expect(page).toHaveURL(/\/jobs\/88$/)
 
   // First render: job is RUNNING
-  await expect(page.getByText('RUNNING')).toBeVisible()
+  await expect(page.locator('.status-badge').filter({ hasText: 'RUNNING' }).first()).toBeVisible()
   // Progress bar is rendered while in progress
   await expect(page.locator('.progress-bar')).toBeVisible()
   // Polling eventually advances to COMPLETED (polling interval is 3 s; allow up to 20 s)
@@ -484,7 +482,6 @@ test('job detail prefers persisted failure reasons over derived file summaries',
 
   await routeJson(page, '**/api/drives', [])
   await routeJson(page, '**/api/mounts', [])
-  await routeJson(page, '**/api/jobs**', [])
   await routeJson(page, '**/api/jobs/91', {
     id: 91,
     project_id: 'P-91',
@@ -515,6 +512,7 @@ test('job detail prefers persisted failure reasons over derived file summaries',
   })
 
   await page.goto('/jobs/91')
+  await expect(page).toHaveURL(/\/jobs\/91$/)
 
   const failureSummary = page.locator('.failure-summary')
   await expect(failureSummary).toBeVisible()
@@ -523,6 +521,68 @@ test('job detail prefers persisted failure reasons over derived file summaries',
   await expect(failureSummary).not.toContainText('1 file failed: Permission denied (/evidence/bad.txt)')
   await expect(failureSummary.getByText('Related log entry')).toBeVisible()
   await expect(failureSummary.getByText('JOB_FAILED job_id=91')).toBeVisible()
+
+  await expectNoCriticalA11yViolations(page)
+})
+
+test('job detail opens per-file error details from the errored status control', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['admin'])
+
+  await routeJson(page, '**/api/drives', [])
+  await routeJson(page, '**/api/mounts', [])
+  await routeJson(page, '**/api/jobs**', [])
+  await routeJson(page, '**/api/jobs/92', {
+    id: 92,
+    project_id: 'P-92',
+    evidence_number: 'EV-92',
+    status: 'COMPLETED',
+    copied_bytes: 90,
+    total_bytes: 100,
+    file_count: 2,
+    files_succeeded: 1,
+    files_failed: 1,
+    thread_count: 4,
+    source_path: '/nfs/project-092/evidence',
+    target_mount_path: '/mnt/ecube/10',
+    completed_at: '2026-04-18T10:22:33Z',
+    failure_reason: null,
+  })
+  await routeJson(page, '**/api/jobs/92/files', {
+    total_files: 2,
+    returned_files: 2,
+    files: [
+      { id: 301, relative_path: 'bad.txt', status: 'ERROR', error_message: 'Target storage is full' },
+      { id: 302, relative_path: 'good.txt', status: 'DONE', error_message: null },
+    ],
+  })
+  await routeJson(page, '**/api/introspection/jobs/92/debug', {
+    total_files: 2,
+    returned_files: 2,
+    files: [
+      { id: 301, relative_path: 'bad.txt', status: 'ERROR', error_message: 'Target storage is full' },
+      { id: 302, relative_path: 'good.txt', status: 'DONE', error_message: null },
+    ],
+  })
+
+  await page.goto('/jobs/92')
+
+  await page.getByRole('button', { name: 'Show files' }).click()
+
+  await expect(page.locator('.job-file-row-error')).toHaveCount(1)
+  await expect(page.getByRole('button', { name: 'View full error: bad.txt' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'View full error: good.txt' })).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'View full error: bad.txt' }).click()
+
+  const errorDialog = page.getByRole('dialog', { name: 'File Error Details' })
+  await expect(errorDialog).toBeVisible()
+  await expect(errorDialog.getByText('301')).toBeVisible()
+  await expect(errorDialog.getByText('bad.txt')).toBeVisible()
+  await expect(errorDialog.getByText('ERROR', { exact: true })).toBeVisible()
+  await expect(errorDialog.getByText('Target storage is full')).toBeVisible()
+
+  await errorDialog.getByRole('button', { name: 'Close' }).click()
+  await expect(errorDialog).toBeHidden()
 
   await expectNoCriticalA11yViolations(page)
 })

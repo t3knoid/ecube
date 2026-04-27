@@ -133,6 +133,7 @@ class JobFileRowSchema(BaseModel):
     relative_path: str = Field(..., description="Relative path from source root")
     status: FileStatus = Field(..., description="Current file status")
     checksum: Optional[str] = Field(default=None, description="Stored checksum when available")
+    error_message: Optional[str] = Field(default=None, description="Operator-safe file error detail when available")
 
     model_config = {"from_attributes": True}
 
