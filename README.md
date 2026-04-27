@@ -32,6 +32,12 @@ To locally preflight the same packaging path used by CI workflows, run:
 bash scripts/package-local.sh --sha "$(git rev-parse --short=8 HEAD)"
 ```
 
+The installer packaging flow now expects the generated in-app help asset to be current before packaging. Review or refresh it with:
+
+```bash
+node scripts/build-help.mjs
+```
+
 ```bash
 tar -xzf ecube-package-<version>.tar.gz
 cd ecube-package-<version>
@@ -159,6 +165,7 @@ Installer/package artifact workflows (`build-artifact.yml` and `tag-release.yml`
 
 - **Testing** — see [docs/testing/01-automated-test-requirements.md](docs/testing/01-automated-test-requirements.md) for test conventions, fixture patterns, and backend/frontend suite execution. For manual QA procedures and test-case assets, use [docs/testing/](docs/testing/).
 - **Development** — start with [docs/development/00-development-guide.md](docs/development/00-development-guide.md) for local setup and workflow. Windows-specific development guidance is in [docs/development/02-windows-development-guide.md](docs/development/02-windows-development-guide.md).
+- **In-app help generation** — the packaged Help modal is generated from [docs/operations/13-user-manual.md](docs/operations/13-user-manual.md) by `node scripts/build-help.mjs`, which writes [frontend/public/help/manual.html](frontend/public/help/manual.html). Run the generator locally, review the HTML output, and then package so CI and local artifacts use the same curated help content.
 - **Documentation** — operational and end-user documentation is in [docs/operations/](docs/operations/). System design and requirement sources are in [docs/design/](docs/design/) and [docs/requirements/](docs/requirements/).
 
 ## Documentation
