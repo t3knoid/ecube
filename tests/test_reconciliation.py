@@ -326,6 +326,25 @@ class TestReconcileMounts:
         assert result["usb_mounts_corrected"] == 1
         assert drive_provider.mount_calls == [(drive.filesystem_path, f"{settings.usb_mount_base_path}/{drive.id}")]
 
+        db.refresh(drive)
+        assert drive.mount_path == f"{settings.usb_mount_base_path}/{drive.id}"
+
+    def test_in_use_usb_drive_with_cleared_mount_path_is_remounted(self, db: Session):
+        drive = _make_drive(db, "USB-STARTUP-CLEARED", DriveState.IN_USE)
+        drive.filesystem_type = "ext4"
+        drive.mount_path = None
+        db.commit()
+        drive_provider = FakeDriveMountProvider()
+
+        with patch("app.services.reconciliation_service.find_device_mount_point", return_value=None):
+            result = reconcile_mounts(db, FakeMountProvider(), drive_provider)
+
+        db.refresh(drive)
+        assert result["usb_mounts_checked"] == 1
+        assert result["usb_mounts_corrected"] == 1
+        assert drive_provider.mount_calls == [(drive.filesystem_path, f"{settings.usb_mount_base_path}/{drive.id}")]
+        assert drive.mount_path == f"{settings.usb_mount_base_path}/{drive.id}"
+
     def test_persisted_usb_mount_outside_managed_root_is_unmounted_before_remount(self, db: Session):
         drive = _make_drive(db, "USB-STARTUP-EXTERNAL", DriveState.IN_USE)
         drive.filesystem_type = "ext4"
