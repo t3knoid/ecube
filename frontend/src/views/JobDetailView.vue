@@ -39,6 +39,8 @@ const error = ref('')
 const infoMessage = ref('')
 const currentTimeMs = ref(Date.now())
 let currentTimeIntervalId = null
+const isMobileViewport = ref(false)
+let mobileViewportQuery = null
 
 const selectedFileId = ref(null)
 const fileHashes = ref(null)
@@ -155,7 +157,7 @@ const startupAnalysisSummary = computed(() => {
 const fileColumns = computed(() => {
   const columns = [
     { key: 'id', label: t('common.labels.id'), align: 'right' },
-    { key: 'relative_path', label: t('jobs.path') },
+    { key: 'relative_path', label: t('jobs.path'), width: isMobileViewport.value ? '12rem' : null },
     { key: 'status', label: t('common.labels.status'), align: 'center' },
   ]
 
@@ -643,6 +645,16 @@ function closePausePendingDialog() {
   showPausePendingDialog.value = false
 }
 
+function syncViewportState() {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+
+  if (!mobileViewportQuery) {
+    mobileViewportQuery = window.matchMedia('(max-width: 768px)')
+  }
+
+  isMobileViewport.value = mobileViewportQuery.matches
+}
+
 function closeHashDialog() {
   showHashDialog.value = false
 }
@@ -1094,6 +1106,14 @@ watch(showHashDialog, async (open) => {
 })
 
 onMounted(async () => {
+  syncViewportState()
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    if (!mobileViewportQuery) {
+      mobileViewportQuery = window.matchMedia('(max-width: 768px)')
+    }
+    mobileViewportQuery.addEventListener('change', syncViewportState)
+  }
+
   currentTimeIntervalId = window.setInterval(() => {
     currentTimeMs.value = Date.now()
   }, 1000)
@@ -1107,6 +1127,7 @@ onMounted(async () => {
 onUnmounted(() => {
   document.removeEventListener('keydown', handleDialogKeydown)
   jobPoller.stop()
+  mobileViewportQuery?.removeEventListener('change', syncViewportState)
   if (currentTimeIntervalId != null) {
     window.clearInterval(currentTimeIntervalId)
     currentTimeIntervalId = null
@@ -1202,17 +1223,31 @@ onUnmounted(() => {
       </div>
 
       <div class="actions">
-        <button
-          v-for="action in primaryActions"
-          :key="action.key"
-          class="btn"
-          :class="{ 'btn-danger': action.tone === 'danger' }"
-          :disabled="action.disabled"
-          @click="action.run()"
-        >
-          {{ action.label }}
-        </button>
-        <details v-if="secondaryActions.length" class="actions-menu">
+        <template v-if="!isMobileViewport">
+          <button
+            v-for="action in actionItems"
+            :key="action.key"
+            class="btn"
+            :class="{ 'btn-danger': action.tone === 'danger' }"
+            :disabled="action.disabled"
+            @click="action.run()"
+          >
+            {{ action.label }}
+          </button>
+        </template>
+        <template v-else>
+          <button
+            v-for="action in primaryActions"
+            :key="action.key"
+            class="btn"
+            :class="{ 'btn-danger': action.tone === 'danger' }"
+            :disabled="action.disabled"
+            @click="action.run()"
+          >
+            {{ action.label }}
+          </button>
+        </template>
+        <details v-if="isMobileViewport && secondaryActions.length" class="actions-menu">
           <summary class="actions-menu-toggle" :aria-label="`${t('jobs.detail')} actions`">
             <span class="actions-menu-toggle-dots" aria-hidden="true">
               <span class="actions-menu-toggle-dot" />
@@ -1255,14 +1290,21 @@ onUnmounted(() => {
       <div v-if="filesPanelExpanded" id="job-files-panel" class="files-panel-body">
         <p v-if="filesLoading" class="muted">{{ t('common.labels.loading') }}</p>
         <p v-else-if="fileListNotice" class="muted">{{ fileListNotice }}</p>
-        <DataTable :columns="fileColumns" :rows="debug.files || []" row-key="id" :empty-text="t('jobs.noFiles')">
+        <DataTable class="job-files-table" :columns="fileColumns" :rows="debug.files || []" row-key="id" :empty-text="t('jobs.noFiles')">
           <template #cell-relative_path="{ row }">
-            <button class="file-path-button" :disabled="!canInspectHashes" @click="loadHashes(row.id, $event)">
+            <button
+              class="file-path-button"
+              :disabled="!canInspectHashes"
+              :title="row.relative_path"
+              :aria-label="row.relative_path"
+              @click="loadHashes(row.id, $event)"
+            >
               {{ row.relative_path }}
             </button>
           </template>
           <template #cell-status="{ row }">
             <span
+              v-if="isMobileViewport"
               class="file-status-icon"
               :class="`file-status-icon--${fileStatusTone(row.status)}`"
               :aria-label="normalizeFileStatus(row.status)"
@@ -1271,6 +1313,7 @@ onUnmounted(() => {
             >
               <span aria-hidden="true">{{ fileStatusIcon(row.status) }}</span>
             </span>
+            <StatusBadge v-else :status="row.status" />
           </template>
           <template #cell-error_message="{ row }">
             <span class="error-text">{{ row.error_message || '-' }}</span>
@@ -1282,7 +1325,7 @@ onUnmounted(() => {
           :page-size="debug.page_size"
           :total="debug.total_files"
           :show-page-window="true"
-          :window-size="5"
+          :window-size="isMobileViewport ? 5 : 10"
           @update:page="debug.page = $event"
         />
       </div>
@@ -1697,6 +1740,42 @@ select {
 .files-panel-body {
   display: grid;
   gap: var(--space-sm);
+}
+
+@media (max-width: 420px) {
+  .job-files-table :deep(.data-table) {
+    table-layout: fixed;
+  }
+
+  .job-files-table :deep(.data-table th),
+  .job-files-table :deep(.data-table td) {
+    padding: var(--space-xs) var(--space-sm);
+  }
+
+  .job-files-table :deep(.data-table th:nth-child(1)),
+  .job-files-table :deep(.data-table td:nth-child(1)) {
+    width: 3rem;
+  }
+
+  .job-files-table :deep(.data-table th:nth-child(2)),
+  .job-files-table :deep(.data-table td:nth-child(2)) {
+    width: 12rem;
+    max-width: 12rem;
+  }
+
+  .job-files-table :deep(.data-table th:nth-child(3)),
+  .job-files-table :deep(.data-table td:nth-child(3)) {
+    width: 3.5rem;
+  }
+
+  .file-path-button {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 .mono {
