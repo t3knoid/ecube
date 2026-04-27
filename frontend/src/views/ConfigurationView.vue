@@ -223,79 +223,83 @@ onMounted(loadConfiguration)
     <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
     <p v-if="error" class="error-banner">{{ error }}</p>
 
-    <article class="panel">
-      <h2>{{ t('configuration.sections.logging') }}</h2>
+    <div class="settings-grid">
+      <article class="panel">
+        <h2>{{ t('configuration.sections.logging') }}</h2>
 
-      <label for="cfg-log-level">{{ t('configuration.fields.log_level.label') }}</label>
-      <select id="cfg-log-level" v-model="form.log_level">
-        <option v-for="option in levelOptions" :key="option" :value="option">{{ option }}</option>
-      </select>
-      <p class="field-help">{{ t('configuration.fields.log_level.help') }}</p>
+        <label for="cfg-log-level">{{ t('configuration.fields.log_level.label') }}</label>
+        <select id="cfg-log-level" v-model="form.log_level">
+          <option v-for="option in levelOptions" :key="option" :value="option">{{ option }}</option>
+        </select>
+        <p class="field-help">{{ t('configuration.fields.log_level.help') }}</p>
 
-      <label for="cfg-log-format">{{ t('configuration.fields.log_format.label') }}</label>
-      <select id="cfg-log-format" v-model="form.log_format">
-        <option v-for="option in formatOptions" :key="option" :value="option">{{ option }}</option>
-      </select>
-      <p class="field-help">{{ t('configuration.fields.log_format.help') }}</p>
+        <label for="cfg-log-format">{{ t('configuration.fields.log_format.label') }}</label>
+        <select id="cfg-log-format" v-model="form.log_format">
+          <option v-for="option in formatOptions" :key="option" :value="option">{{ option }}</option>
+        </select>
+        <p class="field-help">{{ t('configuration.fields.log_format.help') }}</p>
 
-      <label for="cfg-log-file">{{ t('configuration.fields.log_file.label') }}</label>
-      <label class="checkbox-row" for="cfg-log-file-enabled">
-        <input id="cfg-log-file-enabled" v-model="logFileEnabled" type="checkbox" />
-        <span>{{ t('configuration.fields.log_file.enabledLabel') }}</span>
-      </label>
-      <input id="cfg-log-file" v-model="form.log_file" type="text" :disabled="!logFileEnabled" />
-      <p class="field-help">{{ t('configuration.fields.log_file.help') }}</p>
+        <label for="cfg-log-file">{{ t('configuration.fields.log_file.label') }}</label>
+        <label class="checkbox-row" for="cfg-log-file-enabled">
+          <input id="cfg-log-file-enabled" v-model="logFileEnabled" type="checkbox" />
+          <span>{{ t('configuration.fields.log_file.enabledLabel') }}</span>
+        </label>
+        <input id="cfg-log-file" v-model="form.log_file" type="text" :disabled="!logFileEnabled" />
+        <p class="field-help">{{ t('configuration.fields.log_file.help') }}</p>
 
-      <label for="cfg-log-max-bytes">{{ t('configuration.fields.log_file_max_bytes.label') }}</label>
-      <input id="cfg-log-max-bytes" v-model.number="form.log_file_max_bytes" type="number" min="1" />
+        <label for="cfg-log-max-bytes">{{ t('configuration.fields.log_file_max_bytes.label') }}</label>
+        <input id="cfg-log-max-bytes" v-model.number="form.log_file_max_bytes" type="number" min="1" />
 
-      <label for="cfg-log-backup-count">{{ t('configuration.fields.log_file_backup_count.label') }}</label>
-      <input id="cfg-log-backup-count" v-model.number="form.log_file_backup_count" type="number" min="0" />
-    </article>
+        <label for="cfg-log-backup-count">{{ t('configuration.fields.log_file_backup_count.label') }}</label>
+        <input id="cfg-log-backup-count" v-model.number="form.log_file_backup_count" type="number" min="0" />
+      </article>
 
-    <article class="panel">
-      <h2>{{ t('configuration.sections.databasePool') }}</h2>
+      <article class="panel">
+        <h2>{{ t('configuration.sections.databasePool') }}</h2>
 
-      <label for="cfg-db-pool-size">{{ t('configuration.fields.db_pool_size.label') }}</label>
-      <input id="cfg-db-pool-size" v-model.number="form.db_pool_size" type="number" min="1" max="100" />
+        <label for="cfg-db-pool-size">{{ t('configuration.fields.db_pool_size.label') }}</label>
+        <input id="cfg-db-pool-size" v-model.number="form.db_pool_size" type="number" min="1" max="100" />
 
-      <label for="cfg-db-pool-overflow">{{ t('configuration.fields.db_pool_max_overflow.label') }}</label>
-      <input id="cfg-db-pool-overflow" v-model.number="form.db_pool_max_overflow" type="number" min="0" max="200" />
+        <label for="cfg-db-pool-overflow">{{ t('configuration.fields.db_pool_max_overflow.label') }}</label>
+        <input id="cfg-db-pool-overflow" v-model.number="form.db_pool_max_overflow" type="number" min="0" max="200" />
 
-      <label for="cfg-db-pool-recycle">{{ t('configuration.fields.db_pool_recycle_seconds.label') }}</label>
-      <input id="cfg-db-pool-recycle" v-model.number="form.db_pool_recycle_seconds" type="number" min="-1" />
-      <p class="field-help">{{ t('configuration.fields.db_pool_recycle_seconds.help') }}</p>
-      <p class="restart-chip">{{ t('configuration.restartRequiredField') }}</p>
-    </article>
+        <label for="cfg-db-pool-recycle">{{ t('configuration.fields.db_pool_recycle_seconds.label') }}</label>
+        <input id="cfg-db-pool-recycle" v-model.number="form.db_pool_recycle_seconds" type="number" min="-1" />
+        <p class="field-help">{{ t('configuration.fields.db_pool_recycle_seconds.help') }}</p>
+        <p class="restart-chip">{{ t('configuration.restartRequiredField') }}</p>
+      </article>
+    </div>
 
-    <article class="panel">
-      <h2>{{ t('configuration.sections.copyJobs') }}</h2>
+    <div class="settings-grid">
+      <article class="panel">
+        <h2>{{ t('configuration.sections.copyJobs') }}</h2>
 
-      <label for="cfg-copy-job-timeout">{{ t('configuration.fields.copy_job_timeout.label') }}</label>
-      <input id="cfg-copy-job-timeout" v-model.number="form.copy_job_timeout" type="number" min="0" />
-      <p class="field-help">{{ t('configuration.fields.copy_job_timeout.help') }}</p>
+        <label for="cfg-copy-job-timeout">{{ t('configuration.fields.copy_job_timeout.label') }}</label>
+        <input id="cfg-copy-job-timeout" v-model.number="form.copy_job_timeout" type="number" min="0" />
+        <p class="field-help">{{ t('configuration.fields.copy_job_timeout.help') }}</p>
 
-      <label for="cfg-job-detail-files-page-size">{{ t('configuration.fields.job_detail_files_page_size.label') }}</label>
-      <input
-        id="cfg-job-detail-files-page-size"
-        v-model.number="form.job_detail_files_page_size"
-        type="number"
-        min="20"
-        max="100"
-      />
-      <p class="field-help">{{ t('configuration.fields.job_detail_files_page_size.help') }}</p>
-    </article>
+        <label for="cfg-job-detail-files-page-size">{{ t('configuration.fields.job_detail_files_page_size.label') }}</label>
+        <input
+          id="cfg-job-detail-files-page-size"
+          v-model.number="form.job_detail_files_page_size"
+          type="number"
+          min="20"
+          max="100"
+        />
+        <p class="field-help">{{ t('configuration.fields.job_detail_files_page_size.help') }}</p>
+      </article>
 
-    <article v-if="restartPending" class="panel warning-panel">
-      <h2>{{ t('configuration.pendingRestartTitle') }}</h2>
-      <p>{{ t('configuration.pendingRestartBody') }}</p>
-      <ul>
-        <li v-for="label in changedFieldLabels" :key="label">{{ label }}</li>
-      </ul>
-      <button class="btn btn-primary" :disabled="restarting" @click="showRestartConfirm = true">
-        {{ t('configuration.actions.restartService') }}
-      </button>
-    </article>
+      <article v-if="restartPending" class="panel warning-panel">
+        <h2>{{ t('configuration.pendingRestartTitle') }}</h2>
+        <p>{{ t('configuration.pendingRestartBody') }}</p>
+        <ul>
+          <li v-for="label in changedFieldLabels" :key="label">{{ label }}</li>
+        </ul>
+        <button class="btn btn-primary" :disabled="restarting" @click="showRestartConfirm = true">
+          {{ t('configuration.actions.restartService') }}
+        </button>
+      </article>
+    </div>
 
     <footer class="action-row">
       <button class="btn" :disabled="saving || !hasChanges" @click="resetForm">
@@ -322,6 +326,12 @@ onMounted(loadConfiguration)
 .view-root {
   display: grid;
   gap: var(--space-md);
+}
+
+.settings-grid {
+  display: grid;
+  gap: var(--space-md);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .header-row {
@@ -387,5 +397,15 @@ select {
   border: 1px solid var(--color-alert-danger-border);
   border-radius: var(--border-radius);
   padding: var(--space-sm);
+}
+
+@media (max-width: 768px) {
+  .settings-grid,
+  .header-row,
+  .action-row {
+    grid-template-columns: minmax(0, 1fr);
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 </style>

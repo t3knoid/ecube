@@ -4,6 +4,15 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { AUDIT_ROLES, USERS_ROLES } from '@/constants/roles.js'
 
+defineProps({
+  sidebarOpen: {
+    type: Boolean,
+    default: false,
+  },
+})
+
+const emit = defineEmits(['close-sidebar'])
+
 const { t } = useI18n()
 const authStore = useAuthStore()
 
@@ -31,7 +40,7 @@ const visibleAdmin = computed(() => adminItems.value.filter(isVisible))
 </script>
 
 <template>
-  <aside class="app-sidebar">
+  <aside id="app-sidebar" class="app-sidebar" :class="{ 'app-sidebar-open': sidebarOpen }">
     <nav>
       <RouterLink
         v-for="item in visibleNav"
@@ -40,6 +49,7 @@ const visibleAdmin = computed(() => adminItems.value.filter(isVisible))
         class="sidebar-link"
         :active-class="item.to === '/' ? '' : 'sidebar-link-active'"
         :exact-active-class="item.to === '/' ? 'sidebar-link-active' : ''"
+        @click="emit('close-sidebar')"
       >
         {{ item.label }}
       </RouterLink>
@@ -53,6 +63,7 @@ const visibleAdmin = computed(() => adminItems.value.filter(isVisible))
         class="sidebar-link"
         :active-class="item.to === '/' ? '' : 'sidebar-link-active'"
         :exact-active-class="item.to === '/' ? 'sidebar-link-active' : ''"
+        @click="emit('close-sidebar')"
       >
         {{ item.label }}
       </RouterLink>
@@ -98,5 +109,23 @@ const visibleAdmin = computed(() => adminItems.value.filter(isVisible))
   margin: var(--space-sm) var(--space-md);
   border: none;
   border-top: 1px solid var(--color-divider);
+}
+
+@media (max-width: 768px) {
+  .app-sidebar {
+    position: fixed;
+    top: var(--header-height);
+    left: 0;
+    bottom: 0;
+    max-width: min(var(--sidebar-width), 90vw);
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    z-index: 950;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .app-sidebar-open {
+    transform: translateX(0);
+  }
 }
 </style>

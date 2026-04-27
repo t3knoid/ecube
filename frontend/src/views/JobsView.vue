@@ -821,6 +821,7 @@ textarea {
 .dialog-groups {
   display: grid;
   gap: var(--space-md);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .dialog-group {
@@ -846,5 +847,18 @@ textarea {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-sm);
+}
+
+@media (max-width: 768px) {
+  .header-row,
+  .actions,
+  .dialog-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dialog-groups {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 </style>
