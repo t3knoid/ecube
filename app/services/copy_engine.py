@@ -1180,7 +1180,8 @@ def _process_file(
         elif timed_out:
             # Mark file as TIMEOUT (not ERROR) so job continues; timeout can be retried later.
             ef.status = FileStatus.TIMEOUT
-            ef.error_message = last_err
+            _error_code, safe_error_message = _classify_file_failure(last_err)
+            ef.error_message = safe_error_message
             try:
                 file_repo.save(ef)
             except Exception:
@@ -1592,11 +1593,12 @@ def run_verify_job(job_id: int) -> None:
 
             if not success:
                 ef.status = FileStatus.ERROR
-                ef.error_message = err or "Checksum computation failed"
+                _error_code, safe_error_message = _classify_file_failure(err or "Checksum computation failed")
+                ef.error_message = safe_error_message
                 any_mismatch = True
             elif checksum != ef.checksum:
                 ef.status = FileStatus.ERROR
-                ef.error_message = f"Checksum mismatch: expected {ef.checksum}, got {checksum}"
+                ef.error_message = "Checksum verification failed"
                 any_mismatch = True
 
         try:
