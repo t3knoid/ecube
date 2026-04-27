@@ -8,7 +8,7 @@ agent: agent
 Create a polished pull request summary for the current ECUBE workspace changes.
 
 Your task:
-- Review the changed files, behavior changes, and any related tests or verification evidence.
+- Review the changed files, behavior changes, and any related tests or verification evidence in the current workspace.
 - Summarize the change set in a concise, reviewer-friendly format.
 - Focus on what changed, why it matters, and how it was validated.
 

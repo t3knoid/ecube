@@ -46,6 +46,10 @@ const props = defineProps({
     type: Number,
     default: 0,
   },
+  rowClass: {
+    type: [Function, String],
+    default: '',
+  },
 })
 
 const emit = defineEmits(['sort-change', 'page-change', 'update:page'])
@@ -111,6 +115,13 @@ function getRowKey(row, index) {
   }
   return index
 }
+
+function getRowClass(row, index) {
+  if (typeof props.rowClass === 'function') {
+    return props.rowClass(row, index)
+  }
+  return props.rowClass || undefined
+}
 </script>
 
 <template>
@@ -161,7 +172,7 @@ function getRowKey(row, index) {
               <slot name="empty">{{ resolvedEmptyText }}</slot>
             </td>
           </tr>
-          <tr v-for="(row, index) in displayRows" :key="getRowKey(row, index)">
+          <tr v-for="(row, index) in displayRows" :key="getRowKey(row, index)" :class="getRowClass(row, index)">
             <td
               v-for="column in normalizedColumns"
               :key="column.key"
