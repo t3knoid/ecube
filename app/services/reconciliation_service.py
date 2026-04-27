@@ -374,67 +374,13 @@ def reconcile_mounts(
         target = os.path.normpath(str(mount.local_mount_point))
         live_source = live_mounts.get(target)
         corrected_this_mount = False
+        previous_status = mount.status
         mount.last_checked_at = datetime.now(timezone.utc)
+        checked += 1
 
-        if mount.status == MountStatus.MOUNTED:
-            checked += 1
-            if live_source == str(mount.remote_path):
-                continue
-
-            if live_source is None:
-                try:
-                    result = check_mounted_with_configured_timeout(mount_provider, mount.local_mount_point)
-                except Exception:
-                    logger.exception(
-                        "OS check failed for mount %s during startup reconciliation",
-                        mount.id,
-                    )
-                    result = None
-
-                if result is True:
-                    continue
-
-            if live_source is not None and live_source != str(mount.remote_path):
-                unmount_ok, unmount_error = mount_provider.os_unmount(str(mount.local_mount_point))
-                if not unmount_ok:
-                    failures += 1
-                    mount.status = MountStatus.ERROR
-                    corrected += 1
-                    audit_entries.append({
-                        "mount_id": mount.id,
-                        "old_status": MountStatus.MOUNTED.value,
-                        "new_status": mount.status.value,
-                        "reason": "startup cleanup failed",
-                    })
-                    logger.debug(
-                        "Startup mount cleanup raw error",
-                        extra={"mount_id": mount.id, "mount_point": target, "raw_error": unmount_error},
-                    )
-                    continue
-                corrected_this_mount = True
-                _cleanup_generated_network_mount_directory(str(mount.local_mount_point))
-
-            previous_status = mount.status
-            try:
-                validate_mount(mount.id, db, actor="system", provider=mount_provider)
-            except Exception:
-                failures += 1
-                logger.exception(
-                    "Startup network remount failed unexpectedly",
-                    extra={"mount_id": mount.id},
-                )
-                mount.status = MountStatus.ERROR
-                if not corrected_this_mount:
-                    corrected += 1
-                audit_entries.append({
-                    "mount_id": mount.id,
-                    "old_status": previous_status.value,
-                    "new_status": mount.status.value,
-                    "reason": "startup reconciliation",
-                })
-                continue
-            db.refresh(mount)
-            if corrected_this_mount or mount.status != previous_status:
+        if live_source == str(mount.remote_path):
+            if mount.status != MountStatus.MOUNTED:
+                mount.status = MountStatus.MOUNTED
                 corrected += 1
                 audit_entries.append({
                     "mount_id": mount.id,
@@ -445,30 +391,76 @@ def reconcile_mounts(
             continue
 
         if live_source is None:
-            continue
+            try:
+                result = check_mounted_with_configured_timeout(mount_provider, mount.local_mount_point)
+            except Exception:
+                logger.exception(
+                    "OS check failed for mount %s during startup reconciliation",
+                    mount.id,
+                )
+                result = None
 
-        checked += 1
-        old_status = mount.status
-        unmount_ok, unmount_error = mount_provider.os_unmount(str(mount.local_mount_point))
-        if unmount_ok:
-            corrected += 1
-            mount.status = MountStatus.UNMOUNTED
+            if result is True:
+                if mount.status != MountStatus.MOUNTED:
+                    mount.status = MountStatus.MOUNTED
+                    corrected += 1
+                    audit_entries.append({
+                        "mount_id": mount.id,
+                        "old_status": previous_status.value,
+                        "new_status": mount.status.value,
+                        "reason": "startup reconciliation",
+                    })
+                continue
+
+            corrected_this_mount = True
+
+        if live_source is not None and live_source != str(mount.remote_path):
+            unmount_ok, unmount_error = mount_provider.os_unmount(str(mount.local_mount_point))
+            if not unmount_ok:
+                failures += 1
+                mount.status = MountStatus.ERROR
+                corrected += 1
+                audit_entries.append({
+                    "mount_id": mount.id,
+                    "old_status": previous_status.value,
+                    "new_status": mount.status.value,
+                    "reason": "startup cleanup failed",
+                })
+                logger.debug(
+                    "Startup mount cleanup raw error",
+                    extra={"mount_id": mount.id, "mount_point": target, "raw_error": unmount_error},
+                )
+                continue
+            corrected_this_mount = True
             _cleanup_generated_network_mount_directory(str(mount.local_mount_point))
-        else:
-            failures += 1
-            mount.status = MountStatus.ERROR
-            corrected += 1
-            logger.debug(
-                "Startup unexpected mount cleanup raw error",
-                extra={"mount_id": mount.id, "mount_point": target, "raw_error": unmount_error},
-            )
 
-        audit_entries.append({
-            "mount_id": mount.id,
-            "old_status": old_status.value,
-            "new_status": mount.status.value,
-            "reason": "startup reconciliation",
-        })
+        try:
+            validate_mount(mount.id, db, actor="system", provider=mount_provider)
+        except Exception:
+            failures += 1
+            logger.exception(
+                "Startup network remount failed unexpectedly",
+                extra={"mount_id": mount.id},
+            )
+            mount.status = MountStatus.ERROR
+            if corrected_this_mount or mount.status != previous_status:
+                corrected += 1
+            audit_entries.append({
+                "mount_id": mount.id,
+                "old_status": previous_status.value,
+                "new_status": mount.status.value,
+                "reason": "startup reconciliation",
+            })
+            continue
+        db.refresh(mount)
+        if corrected_this_mount or mount.status != previous_status:
+            corrected += 1
+            audit_entries.append({
+                "mount_id": mount.id,
+                "old_status": previous_status.value,
+                "new_status": mount.status.value,
+                "reason": "startup reconciliation",
+            })
 
     for target, source in live_mounts.items():
         normalized_target = os.path.normpath(target)
