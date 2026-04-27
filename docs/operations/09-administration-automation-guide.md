@@ -1868,7 +1868,7 @@ curl -k https://localhost:8443/health
 # API version endpoint (no auth required)
 curl -k https://localhost:8443/introspection/version
 
-# System health — DB connectivity and active job count (requires auth)
+# System health — host metrics plus ECUBE process diagnostics (requires auth)
 curl -k -H "Authorization: Bearer $TOKEN" \
   https://localhost:8443/introspection/system-health
 
