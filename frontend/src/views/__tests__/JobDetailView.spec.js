@@ -17,7 +17,6 @@ const mocks = vi.hoisted(() => ({
   completeJob: vi.fn(),
   deleteJob: vi.fn(),
   clearJobStartupAnalysisCache: vi.fn(),
-  getJobDebug: vi.fn(),
   getDrives: vi.fn(),
   getMounts: vi.fn(),
   getFileHashes: vi.fn(),
@@ -69,10 +68,6 @@ vi.mock('@/api/jobs.js', () => ({
   completeJob: (...args) => mocks.completeJob(...args),
   deleteJob: (...args) => mocks.deleteJob(...args),
   clearJobStartupAnalysisCache: (...args) => mocks.clearJobStartupAnalysisCache(...args),
-}))
-
-vi.mock('@/api/introspection.js', () => ({
-  getJobDebug: (...args) => mocks.getJobDebug(...args),
 }))
 
 vi.mock('@/api/drives.js', () => ({
@@ -164,7 +159,6 @@ describe('JobDetailView start action', () => {
     mocks.completeJob.mockReset()
     mocks.deleteJob.mockReset()
     mocks.clearJobStartupAnalysisCache.mockReset()
-    mocks.getJobDebug.mockReset()
     mocks.getDrives.mockReset()
     mocks.getMounts.mockReset()
     mocks.getFileHashes.mockReset()
