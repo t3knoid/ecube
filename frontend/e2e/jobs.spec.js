@@ -453,6 +453,8 @@ test('job detail polls and reflects status progression', async ({ page }) => {
 
   // Register the broad catch-all FIRST so that more-specific handlers registered
   // afterward take precedence (Playwright uses LIFO route priority).
+  await routeJson(page, '**/api/drives', [])
+  await routeJson(page, '**/api/mounts', [])
   await routeJson(page, '**/api/jobs**', [{ ...base, copied_bytes: 0, status: 'RUNNING' }])
   await routeJson(page, '**/api/jobs/88/files', { files: [] })
   await routeJson(page, '**/api/introspection/jobs/88/debug', { files: [] })
@@ -480,6 +482,8 @@ test('job detail polls and reflects status progression', async ({ page }) => {
 test('job detail prefers persisted failure reasons over derived file summaries', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
+  await routeJson(page, '**/api/drives', [])
+  await routeJson(page, '**/api/mounts', [])
   await routeJson(page, '**/api/jobs**', [])
   await routeJson(page, '**/api/jobs/91', {
     id: 91,
