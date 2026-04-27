@@ -17,6 +17,7 @@ Your job is to:
 - keep the solution aligned with ECUBE architecture and safety rules
 - add or update automated tests for the changed behavior
 - verify the change with the relevant checks before declaring success
+- modify or add any documentation if the ticket impacts existing docs or requires new ones
 
 Required ECUBE rules:
 - these repository instructions are binding, not optional
@@ -40,6 +41,7 @@ Implementation workflow:
 7. Implement the minimal root-cause fix.
 8. Run the relevant verification steps.
 9. Report what changed and whether the ticket now appears complete.
+10. Write or update documentation if needed.
 
 If the request is unclear or under-specified, ask a small number of focused questions instead of guessing.
 
