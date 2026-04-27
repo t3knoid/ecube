@@ -259,6 +259,38 @@ describe('SystemView USB topology tab', () => {
     expect(wrapper.find('.columns-stub').text()).not.toContain(i18n.global.t('system.vendorId'))
     expect(wrapper.find('.columns-stub').text()).not.toContain(i18n.global.t('system.productId'))
   })
+
+  it('uses a compact mounts table with overflow details on mobile', async () => {
+    setMobileViewport(true)
+    mocks.getSystemMounts.mockResolvedValue({
+      mounts: [{
+        device: '/dev/sdb1',
+        mount_point: '/media/ecube/evidence-share',
+        fs_type: 'ext4',
+        options: 'rw,relatime',
+      }],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const mountsButton = wrapper.findAll('button').find((b) => b.text() === i18n.global.t('system.tabs.mounts'))
+    expect(mountsButton).toBeTruthy()
+    await mountsButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.columns-stub').text()).toBe([
+      i18n.global.t('system.device'),
+      i18n.global.t('system.mountPoint'),
+      '',
+    ].join('|'))
+    expect(wrapper.find('.usb-topology-menu-toggle-dots').exists()).toBe(true)
+    expect(wrapper.find('.mount-point-cell').attributes('title')).toBe('/media/ecube/evidence-share')
+    expect(wrapper.text()).toContain('ext4')
+    expect(wrapper.text()).toContain('rw,relatime')
+    expect(wrapper.find('.columns-stub').text()).not.toContain(i18n.global.t('system.fsType'))
+    expect(wrapper.find('.columns-stub').text()).not.toContain(i18n.global.t('system.options'))
+  })
 })
 
 describe('SystemView logs tab', () => {
