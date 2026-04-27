@@ -77,6 +77,12 @@ sudo .venv/bin/uvicorn app.main:app --reload
 cd frontend && npm ci && npm run dev
 ```
 
+If you are editing the in-app help during development, regenerate the packaged help file from the repository root after changing the source manual or help generator:
+
+```bash
+node scripts/build-help.mjs
+```
+
 Then open the setup wizard at `http://localhost:5173` to provision the application database/user, run migrations, and create the first ECUBE admin user. The wizard auto-fills superuser credentials from `PG_SUPERUSER_NAME`/`PG_SUPERUSER_PASS` in `.env` (defaulting to `ecube`/`ecube`).
 
 | URL | Purpose |
@@ -331,6 +337,49 @@ npm run dev
 ```
 
 To access the frontend from another machine, browse to `http://<host-ip>:5173`.
+
+### In-App Help Development
+
+ECUBE's packaged in-app help is generated static HTML, not handwritten frontend component markup.
+
+The development workflow uses these files and tools:
+
+- Canonical source content: `docs/operations/13-user-manual.md`
+- Generator: `scripts/build-help.mjs`
+- Generated output: `frontend/public/help/manual.html`
+- Frontend build hook: `frontend/package.json` scripts `build:help`, `build:help:check`, and `build`
+- Frontend consumption point: `frontend/src/components/layout/AppHeader.vue` loads `/help/manual.html` in the Help modal iframe
+
+Typical workflow while developing help content:
+
+1. Edit `docs/operations/13-user-manual.md` when the canonical user-facing content changes.
+2. Edit `scripts/build-help.mjs` when the curated in-app help output, styling, numbering, filtering, or theme behavior needs to change.
+3. Regenerate the packaged help file from the repository root:
+
+```bash
+node scripts/build-help.mjs
+```
+
+4. Open the frontend and review the Help modal against the regenerated `frontend/public/help/manual.html` output.
+5. Before committing or packaging, verify the generated help file is current:
+
+```bash
+node scripts/build-help.mjs --check
+```
+
+6. When validating frontend packaging behavior, use the existing frontend build/test hooks:
+
+```bash
+npm --prefix frontend run build:help
+npm --prefix frontend run build:help:check
+npm --prefix frontend run test:unit -- --run src/build/__tests__/helpAsset.spec.js
+```
+
+Important workflow notes:
+
+- `npm run dev` serves the generated file from `frontend/public/`, but it does not regenerate help automatically when the manual changes.
+- `npm --prefix frontend run build` runs `build:help` before `vite build`, so packaged frontend artifacts include the current generated help.
+- The in-app help is curated from the user manual rather than mirroring it verbatim; generator logic controls which sections are excluded, renumbered, or restyled for the modal experience.
 
 ### Access URLs
 

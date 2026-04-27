@@ -11,6 +11,8 @@
 - Business logic must live in `services/`, not routers.
 - All new behavior must include tests.
 - Code must follow Black, Ruff, ESLint, and Prettier formatting.
+- When extending an existing UI surface, inspect the closest existing component that already solves the same visual or interaction problem and match its styling patterns before introducing a new variant.
+- For UI styling work, prefer reusing the same tokens, spacing, scrollbar, button, panel, and state treatments from the existing component unless the task explicitly requires a different design.
 
 ## 2. Architecture & Trust Boundaries
 
