@@ -127,6 +127,39 @@ function toIso(value) {
   return parsed.toLocaleString()
 }
 
+function normalizeStatusValue(status) {
+  return String(status ?? 'unknown').toUpperCase()
+}
+
+function mountStatusTone(status) {
+  const value = normalizeStatusValue(status)
+
+  if (['COMPLETED', 'DONE', 'MOUNTED', 'CONNECTED', 'AVAILABLE', 'OK', 'TRUE'].includes(value)) {
+    return 'success'
+  }
+  if (['FAILED', 'ERROR', 'DISCONNECTED', 'UNMOUNTED', 'FALSE'].includes(value)) {
+    return 'danger'
+  }
+  if (['RUNNING', 'VERIFYING', 'COPYING', 'IN_USE', 'DEGRADED'].includes(value)) {
+    return 'warning'
+  }
+  if (['PENDING', 'UNKNOWN'].includes(value)) {
+    return 'muted'
+  }
+
+  return 'info'
+}
+
+function mountStatusIcon(status) {
+  const tone = mountStatusTone(status)
+
+  if (tone === 'success') return '✓'
+  if (tone === 'warning') return '!'
+  if (tone === 'danger') return '×'
+  if (tone === 'muted') return '•'
+  return '?'
+}
+
 async function loadMounts() {
   loading.value = true
   error.value = ''
@@ -609,7 +642,19 @@ onBeforeUnmount(() => {
 
     <DataTable :columns="columns" :rows="paged" :empty-text="t('mounts.empty')">
       <template #cell-project_id="{ row }">{{ formatProjectId(row.project_id) }}</template>
-      <template #cell-status="{ row }"><StatusBadge :status="row.status" /></template>
+      <template #cell-status="{ row }">
+        <span
+          v-if="isMobileViewport"
+          class="mount-status-icon"
+          :class="`mount-status-icon--${mountStatusTone(row.status)}`"
+          :aria-label="row.status"
+          :title="row.status"
+          role="img"
+        >
+          <span aria-hidden="true">{{ mountStatusIcon(row.status) }}</span>
+        </span>
+        <StatusBadge v-else :status="row.status" />
+      </template>
       <template #cell-last_checked_at="{ row }">{{ toIso(row.last_checked_at) }}</template>
       <template #cell-actions="{ row }">
         <div class="row-actions">
@@ -807,6 +852,49 @@ onBeforeUnmount(() => {
 .share-discovery-item {
   display: flex;
   gap: var(--space-sm);
+}
+
+.mount-status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  font-size: 0.9rem;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+}
+
+.mount-status-icon--success {
+  background: color-mix(in srgb, var(--color-success) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-success) 45%, var(--color-border));
+  color: var(--color-status-ok-text, #14532d);
+}
+
+.mount-status-icon--warning {
+  background: color-mix(in srgb, var(--color-warning) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-warning) 45%, var(--color-border));
+  color: var(--color-status-warn-text, #7c3f00);
+}
+
+.mount-status-icon--danger {
+  background: color-mix(in srgb, var(--color-danger) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border));
+  color: var(--color-status-danger-text, #991b1b);
+}
+
+.mount-status-icon--info {
+  background: color-mix(in srgb, var(--color-info) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-info) 45%, var(--color-border));
+  color: var(--color-status-info-text, #1e40af);
+}
+
+.mount-status-icon--muted {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border);
+  color: var(--color-status-muted-text, #475569);
 }
 
 .header-row {
