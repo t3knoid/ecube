@@ -94,7 +94,6 @@ async function mockCoreApis(page) {
   })
   await routeJson(page, '**/api/jobs/55', { id: 55, project_id: 'PRJ', evidence_number: 'EV', status: 'RUNNING', copied_bytes: 20, total_bytes: 100, drive: { id: 1, port_system_path: '2-1', device_identifier: '/dev/sdb' } })
   await routeJson(page, '**/api/jobs/55/files', { files: [] })
-  await routeJson(page, '**/api/introspection/jobs/55/debug', { files: [] })
 }
 
 async function openCreateJobDialog(page) {

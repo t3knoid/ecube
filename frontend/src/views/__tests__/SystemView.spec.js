@@ -10,12 +10,10 @@ const mocks = vi.hoisted(() => ({
   getUsbTopology: vi.fn(),
   getBlockDevices: vi.fn(),
   getSystemMounts: vi.fn(),
-  getJobDebug: vi.fn(),
   reconcileManagedMounts: vi.fn(),
   getLogFiles: vi.fn(),
   getLogLines: vi.fn(),
   downloadLogFile: vi.fn(),
-  listJobs: vi.fn(),
   mobileViewportMatches: false,
 }))
 
@@ -50,7 +48,6 @@ vi.mock('@/api/introspection.js', () => ({
   getUsbTopology: mocks.getUsbTopology,
   getBlockDevices: mocks.getBlockDevices,
   getSystemMounts: mocks.getSystemMounts,
-  getJobDebug: mocks.getJobDebug,
   reconcileManagedMounts: mocks.reconcileManagedMounts,
 }))
 
@@ -58,10 +55,6 @@ vi.mock('@/api/admin.js', () => ({
   getLogFiles: mocks.getLogFiles,
   getLogLines: mocks.getLogLines,
   downloadLogFile: mocks.downloadLogFile,
-}))
-
-vi.mock('@/api/jobs.js', () => ({
-  listJobs: mocks.listJobs,
 }))
 
 async function flushPromises() {
@@ -123,19 +116,16 @@ describe('SystemView USB topology tab', () => {
     mocks.getUsbTopology.mockReset()
     mocks.getBlockDevices.mockReset()
     mocks.getSystemMounts.mockReset()
-    mocks.getJobDebug.mockReset()
     mocks.reconcileManagedMounts.mockReset()
     mocks.getLogFiles.mockReset()
     mocks.getLogLines.mockReset()
     mocks.downloadLogFile.mockReset()
-    mocks.listJobs.mockReset()
     setMobileViewport(false)
 
     mocks.hasRole.mockImplementation((role) => role === 'admin')
     mocks.getSystemHealth.mockResolvedValue({ status: 'ok', database: 'connected', active_jobs: 0 })
     mocks.getBlockDevices.mockResolvedValue({ block_devices: [] })
     mocks.getSystemMounts.mockResolvedValue({ mounts: [] })
-    mocks.getJobDebug.mockResolvedValue(null)
     mocks.reconcileManagedMounts.mockResolvedValue({
       status: 'ok',
       scope: 'managed_mounts_only',
@@ -156,7 +146,14 @@ describe('SystemView USB topology tab', () => {
       limit: 200,
       offset: 0,
     })
-    mocks.listJobs.mockResolvedValue([])
+  })
+
+  it('does not show a Job Debug tab', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const labels = wrapper.findAll('button').map((button) => button.text())
+    expect(labels).not.toContain('Job Debug')
   })
 
   it('hides devices only if Serial Number, Manufacturer, Product, Vendor ID, and Product ID are all empty, and sorts by device column', async () => {
@@ -301,19 +298,16 @@ describe('SystemView logs tab', () => {
     mocks.getUsbTopology.mockReset()
     mocks.getBlockDevices.mockReset()
     mocks.getSystemMounts.mockReset()
-    mocks.getJobDebug.mockReset()
     mocks.reconcileManagedMounts.mockReset()
     mocks.getLogFiles.mockReset()
     mocks.getLogLines.mockReset()
     mocks.downloadLogFile.mockReset()
-    mocks.listJobs.mockReset()
 
     mocks.hasRole.mockImplementation((role) => role === 'admin')
     mocks.getSystemHealth.mockResolvedValue({ status: 'ok', database: 'connected', active_jobs: 0 })
     mocks.getUsbTopology.mockResolvedValue({ devices: [] })
     mocks.getBlockDevices.mockResolvedValue({ block_devices: [] })
     mocks.getSystemMounts.mockResolvedValue({ mounts: [] })
-    mocks.getJobDebug.mockResolvedValue(null)
     mocks.reconcileManagedMounts.mockResolvedValue({
       status: 'ok',
       scope: 'managed_mounts_only',
@@ -334,7 +328,6 @@ describe('SystemView logs tab', () => {
       limit: 200,
       offset: 0,
     })
-    mocks.listJobs.mockResolvedValue([])
   })
 
   it('shows logs tab for admin and loads redacted lines', async () => {
@@ -909,18 +902,15 @@ describe('SystemView managed-mount reconciliation action', () => {
     mocks.getUsbTopology.mockReset()
     mocks.getBlockDevices.mockReset()
     mocks.getSystemMounts.mockReset()
-    mocks.getJobDebug.mockReset()
     mocks.reconcileManagedMounts.mockReset()
     mocks.getLogFiles.mockReset()
     mocks.getLogLines.mockReset()
     mocks.downloadLogFile.mockReset()
-    mocks.listJobs.mockReset()
 
     mocks.getSystemHealth.mockResolvedValue({ status: 'ok', database: 'connected', active_jobs: 0 })
     mocks.getUsbTopology.mockResolvedValue({ devices: [] })
     mocks.getBlockDevices.mockResolvedValue({ block_devices: [] })
     mocks.getSystemMounts.mockResolvedValue({ mounts: [] })
-    mocks.getJobDebug.mockResolvedValue(null)
     mocks.reconcileManagedMounts.mockResolvedValue({
       status: 'ok',
       scope: 'managed_mounts_only',
@@ -941,7 +931,6 @@ describe('SystemView managed-mount reconciliation action', () => {
       limit: 200,
       offset: 0,
     })
-    mocks.listJobs.mockResolvedValue([])
   })
 
   it('shows the reconcile action for admins and managers only', async () => {
