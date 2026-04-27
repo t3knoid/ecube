@@ -16,7 +16,22 @@ const mocks = vi.hoisted(() => ({
   getLogLines: vi.fn(),
   downloadLogFile: vi.fn(),
   listJobs: vi.fn(),
+  mobileViewportMatches: false,
 }))
+
+function setMobileViewport(matches) {
+  mocks.mobileViewportMatches = matches
+}
+
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: vi.fn(() => ({
+    matches: mocks.mobileViewportMatches,
+    media: '(max-width: 768px)',
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  })),
+})
 
 vi.mock('@/stores/auth.js', () => ({
   useAuthStore: () => ({
@@ -78,7 +93,16 @@ function mountView(options = {}) {
       stubs: {
         DataTable: {
           props: ['rows', 'columns'],
-          template: '<div>{{ (columns || []).map((column) => column.label).join(" ") }} {{ (rows || []).map((row) => row.name || row.id || row.device || "").join(" ") }} {{ (rows || []).map((row) => row.serial || "").join(" ") }}<slot /></div>',
+          template: `
+            <div>
+              <div class="columns-stub">{{ (columns || []).map((column) => column.label).join('|') }}</div>
+              <div v-for="row in rows" :key="row.name || row.id || row.device" class="row-stub">
+                <span v-for="column in columns" :key="column.key" class="cell-stub">
+                  <slot :name="'cell-' + column.key" :row="row" :value="row[column.key]" :column="column">{{ row[column.key] ?? '' }}</slot>
+                </span>
+              </div>
+            </div>
+          `,
         },
         Pagination: {
           template: '<div />',
@@ -105,6 +129,7 @@ describe('SystemView USB topology tab', () => {
     mocks.getLogLines.mockReset()
     mocks.downloadLogFile.mockReset()
     mocks.listJobs.mockReset()
+    setMobileViewport(false)
 
     mocks.hasRole.mockImplementation((role) => role === 'admin')
     mocks.getSystemHealth.mockResolvedValue({ status: 'ok', database: 'connected', active_jobs: 0 })
@@ -195,6 +220,44 @@ describe('SystemView USB topology tab', () => {
 
     expect(wrapper.text()).toContain(i18n.global.t('system.serialNumber'))
     expect(wrapper.text()).toContain('SER-USB-001')
+  })
+
+  it('uses a compact USB topology table with overflow details on mobile', async () => {
+    setMobileViewport(true)
+    mocks.getUsbTopology.mockResolvedValue({
+      devices: [{
+        device: '2-1',
+        serial: 'SER-USB-001',
+        manufacturer: 'ECUBE',
+        product: 'Evidence Drive',
+        idVendor: 'abcd',
+        idProduct: '1234',
+      }],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const usbButton = wrapper.findAll('button').find((b) => b.text() === i18n.global.t('system.tabs.usb'))
+    expect(usbButton).toBeTruthy()
+    await usbButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.columns-stub').text()).toBe([
+      i18n.global.t('system.device'),
+      i18n.global.t('system.product'),
+      '',
+    ].join('|'))
+    expect(wrapper.find('.usb-topology-menu-toggle-dots').exists()).toBe(true)
+    expect(wrapper.find('.usb-product-cell').attributes('title')).toBe('Evidence Drive')
+    expect(wrapper.text()).toContain('ECUBE')
+    expect(wrapper.text()).toContain('SER-USB-001')
+    expect(wrapper.text()).toContain('abcd')
+    expect(wrapper.text()).toContain('1234')
+    expect(wrapper.find('.columns-stub').text()).not.toContain(i18n.global.t('system.manufacturer'))
+    expect(wrapper.find('.columns-stub').text()).not.toContain(i18n.global.t('system.serialNumber'))
+    expect(wrapper.find('.columns-stub').text()).not.toContain(i18n.global.t('system.vendorId'))
+    expect(wrapper.find('.columns-stub').text()).not.toContain(i18n.global.t('system.productId'))
   })
 })
 
