@@ -1,10 +1,14 @@
 <script setup>
-import { onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppFooter from '@/components/layout/AppFooter.vue'
 
 const sidebarOpen = ref(false)
+const isMobileViewport = ref(false)
+let mobileViewportQuery = null
+
+const isContentObscured = computed(() => isMobileViewport.value && sidebarOpen.value)
 
 function toggleSidebar() {
   sidebarOpen.value = !sidebarOpen.value
@@ -18,7 +22,31 @@ watch(sidebarOpen, (open) => {
   document.body.style.overflow = open ? 'hidden' : ''
 })
 
+function syncViewportState(event) {
+  isMobileViewport.value = event.matches
+}
+
+onMounted(() => {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+  mobileViewportQuery = window.matchMedia('(max-width: 768px)')
+  syncViewportState(mobileViewportQuery)
+
+  if (typeof mobileViewportQuery.addEventListener === 'function') {
+    mobileViewportQuery.addEventListener('change', syncViewportState)
+    return
+  }
+
+  mobileViewportQuery.addListener(syncViewportState)
+})
+
 onUnmounted(() => {
+  if (mobileViewportQuery) {
+    if (typeof mobileViewportQuery.removeEventListener === 'function') {
+      mobileViewportQuery.removeEventListener('change', syncViewportState)
+    } else {
+      mobileViewportQuery.removeListener(syncViewportState)
+    }
+  }
   document.body.style.overflow = ''
 })
 </script>
@@ -29,7 +57,7 @@ onUnmounted(() => {
     <div class="shell-body">
       <div class="shell-backdrop" :class="{ 'shell-backdrop-open': sidebarOpen }" @click="closeSidebar" />
       <AppSidebar :sidebar-open="sidebarOpen" @close-sidebar="closeSidebar" />
-      <main class="shell-content">
+      <main class="shell-content" :aria-hidden="isContentObscured ? 'true' : undefined" :inert="isContentObscured || undefined">
         <RouterView />
       </main>
     </div>
