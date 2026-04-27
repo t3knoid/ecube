@@ -150,12 +150,16 @@ onUnmounted(() => {
           <StatusBadge :status="row.status" />
         </template>
         <template #cell-progress="{ row }">
-          <ProgressBar
-            :value="progressPercent(row)"
-            :total="100"
-            :label="progressLabel(row)"
-            :active="progressActive(row)"
-          />
+          <div class="dashboard-progress-cell">
+            <ProgressBar
+              class="dashboard-progress-bar"
+              :value="progressPercent(row)"
+              :total="100"
+              :label="progressLabel(row)"
+              :active="progressActive(row)"
+            />
+            <span class="dashboard-progress-mobile-label">{{ progressLabel(row) }}</span>
+          </div>
         </template>
       </DataTable>
     </article>
@@ -203,6 +207,18 @@ onUnmounted(() => {
   padding: var(--space-xs) 0;
 }
 
+.dashboard-progress-cell {
+  display: flex;
+  align-items: center;
+}
+
+.dashboard-progress-mobile-label {
+  display: none;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
 .error-banner {
   color: var(--color-alert-danger-text);
   background: var(--color-alert-danger-bg);
@@ -213,5 +229,32 @@ onUnmounted(() => {
 
 .muted {
   color: var(--color-text-secondary);
+}
+
+@media (max-width: 768px) {
+  .view-root {
+    gap: var(--space-md);
+  }
+
+  .view-header {
+    gap: var(--space-sm);
+  }
+
+  .card-grid {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+
+  .summary-card,
+  .panel {
+    padding: var(--space-sm);
+  }
+
+  .dashboard-progress-bar {
+    display: none;
+  }
+
+  .dashboard-progress-mobile-label {
+    display: inline;
+  }
 }
 </style>

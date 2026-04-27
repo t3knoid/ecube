@@ -99,7 +99,10 @@ async function mockCoreApis(page) {
 
 async function openCreateJobDialog(page) {
   await page.goto('/jobs')
-  await page.getByRole('button', { name: /create/i }).click()
+  await expect(page.getByRole('heading', { name: 'Jobs' })).toBeVisible()
+  const createJobButton = page.getByRole('button', { name: 'Create Job' })
+  await expect(createJobButton).toBeVisible()
+  await createJobButton.click()
   await expect(page.locator('.dialog-panel')).toBeVisible()
   await page.locator('#job-project').selectOption('PRJ')
 }

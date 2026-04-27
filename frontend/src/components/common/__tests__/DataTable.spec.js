@@ -22,6 +22,7 @@ describe('DataTable', () => {
 
     expect(wrapper.text()).toContain('Alpha')
     expect(wrapper.text()).toContain('Beta')
+    expect(wrapper.find('.table-scroll-wrapper').exists()).toBe(true)
   })
 
   it('emits sort-change on sortable header click', async () => {

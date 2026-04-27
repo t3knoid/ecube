@@ -293,12 +293,13 @@ Action buttons such as formatting or initializing drives may be disabled if your
 <ul><li>
 Header at the top
 </li><li>
-Sidebar navigation on the left
+Sidebar navigation on the left on wider screens
 </li><li>
 Main content area in the center
 </li><li>
 Footer at the bottom
 </li></ul>
+<p>On narrower screens, the sidebar collapses behind a header navigation toggle. Use the menu button in the header to open navigation, then tap outside the sidebar or choose a destination link to close it again.</p>
 <p>Common navigation items include:</p>
 <ul><li>
 <code>Dashboard</code>
@@ -662,6 +663,7 @@ The evidence number and source path are correct
 </li><li>
 If you enable <code>Run job immediately</code>, the job will start as soon as creation succeeds
 </li></ul>
+<p>For <code>thread count</code>, start with the default value unless your administrator has given you a different recommendation. If you need to change it, a good rule is to choose a value no higher than the number of CPUs visible to the operating system and reduce it again if the host becomes sluggish or copy speed does not improve.</p>
 <p>The source path is interpreted inside the selected mounted share. Entering only / uses the root of that share, and attempts to navigate outside the selected share are rejected before the job is created.</p>
 <h2 id="6-3-opening-a-job">6.3 Opening a Job</h2>
 <p>Open a job to view details and perform follow-up actions.</p>
@@ -688,7 +690,7 @@ Manually complete a safe non-active job when required by the workflow
 </li><li>
 Clear a persisted startup-analysis snapshot before the next restart when the cached scan should be discarded
 </li><li>
-Generate a manifest and confirm where it was written
+Generate a manifest, review the reported location, and download the generated file
 </li><li>
 Review copied files
 </li><li>
@@ -720,7 +722,7 @@ Compare a file's source version against its copied destination version
 </li></ul>
 <p>When a pause is requested, the Jobs list and Job Detail page can show a <code>Pause in progress</code> dialog while ECUBE waits for active copy threads to drain. The Start action remains unavailable during <code>PAUSING</code> and becomes available again once the job reaches <code>PAUSED</code>.</p>
 <p>While a job is actively copying, Job Detail shows a live <code>Duration</code> field that reflects cumulative active runtime only. The displayed value continues updating while the job is <code>RUNNING</code>, does not add paused time while the job is <code>PAUSED</code>, and resumes from the previously stored active runtime after a later restart instead of resetting to zero.</p>
-<p>Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed <code>manifest.json</code> file on the destination drive.</p>
+<p>Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed <code>manifest.json</code> file on the destination drive and immediately starts a browser download of the generated manifest without an extra confirmation step.</p>
 <p>For a partial-success <code>COMPLETED</code> job, Job Detail can show <code>Retry Failed Files</code> instead of exposing Verify or Manifest too early. This action is available only to <code>admin</code>, <code>manager</code>, and <code>processor</code>, moves the job back into <code>RUNNING</code>, re-queues only failed or timed-out files, and preserves already successful copies.</p>
 <p>The completion summary uses the normal success styling for clean completions. If the summary still shows any failed or timed-out file counts, the summary switches to a red warning background so operators can distinguish a partial-success completion from a clean completed run at a glance.</p>
 <p>During startup analysis, Job Detail can show <code>Preparing copy...</code> before any totals are known. While this state is visible, the page also explains that ECUBE is still scanning the source files and calculating totals, which can take time for large evidence sets.</p>
@@ -739,19 +741,19 @@ Relative path
 Status
 </li><li>
 Failure details when a row includes a safe file-level error summary
-</li><li>
-<code>View Hashes</code> actions for users allowed to inspect file hashes
 </li></ul>
-<p>If the job contains more rows than fit on one page, the panel shows a numbered pagination control with 10-page shortcut windows and left/right navigation. The number of rows shown per page is controlled by the admin-only <code>Job Detail Files Per Page</code> runtime setting and is bounded between 20 and 100.</p>
+<p>Users allowed to inspect hashes open the hash viewer by selecting the file path itself. On smaller screens, ECUBE may replace full status badges with compact status icons and shorten the visible pagination window so the file list stays within the viewport.</p>
+<p>If the job contains more rows than fit on one page, the panel shows a numbered pagination control with left/right navigation. Desktop layouts expose a wider page-number window, while smaller screens show a shorter page-number window to reduce horizontal crowding. The number of rows shown per page is controlled by the admin-only <code>Job Detail Files Per Page</code> runtime setting and is bounded between 20 and 100.</p>
 <h2 id="7-3-hash-viewer">7.3 Hash Viewer</h2>
-<p>Users with sufficient permissions can inspect file hashes, including values such as:</p>
+<p>Users with sufficient permissions can inspect file hashes in a popup dialog opened from the file path in the Files panel. The dialog includes values such as:</p>
 <ul><li>
 MD5
 </li><li>
 SHA-256
 </li></ul>
+<p>The same popup also includes the compare workflow, so operators can inspect hashes and then compare the selected exported file against its source version without leaving Job Detail.</p>
 <h2 id="7-4-compare-source-and-destination">7.4 Compare Source and Destination</h2>
-<p>The compare panel now uses clear <code>Source</code> and <code>Destination</code> terminology. After you load hashes for an exported file, choose that file in the compare selector to evaluate the original source version against the copied destination version.</p>
+<p>The compare workflow now uses clear <code>Source</code> and <code>Destination</code> terminology inside the hash viewer popup. After you open hashes for an exported file, choose the source file in the compare selector to evaluate the original source version against the copied destination version.</p>
 <p>Comparison output includes:</p>
 <ul><li>
 Overall match
@@ -763,7 +765,7 @@ Size match
 Path match
 </li></ul>
 <p>This is useful when reviewing evidence consistency or confirming repeatability after copy or verification steps. If either side is unavailable, ECUBE shows a sanitized conflict message instead of exposing raw filesystem details.</p>
-<p>Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed <code>manifest.json</code> file on the destination drive and starts a browser download of the same generated manifest JSON.</p>
+<p>Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed <code>manifest.json</code> file on the destination drive and immediately starts a browser download of the same generated manifest JSON without an extra confirmation step.</p>
 <p class="help-back-to-top"><a href="#help-toc-title">Back to top</a></p>
 <hr />
 <h1 id="8-audit-logs">8. Audit Logs</h1>
@@ -949,7 +951,8 @@ Reviewing mount or log details during issue investigation
 Investigating system errors or performance issues via application logs (admin-only)
 </li></ul>
 <p>End users who only perform evidence exports may rarely need this page. Administrators and support personnel are more likely to use it during troubleshooting.</p>
-<p>In the <code>USB Topology</code> tab, ECUBE shows a sorted device table that includes <code>Device</code> and <code>Serial Number</code> columns. Rows with no meaningful USB metadata are hidden so the list stays focused on useful hardware entries.</p>
+<p>In the <code>USB Topology</code> tab, ECUBE shows a sorted device table and hides rows with no meaningful USB metadata so the list stays focused on useful hardware entries. On smaller screens, the table tightens to primary columns such as <code>Device</code> and <code>Product</code>, and the remaining hardware details move into a per-row overflow menu.</p>
+<p>In the <code>Mounts</code> tab, ECUBE continues to show device, mount point, filesystem type, and mount options on wider screens. On smaller screens, it keeps <code>Device</code> and <code>Mount Point</code> visible and moves the remaining fields into a per-row overflow menu.</p>
 <p>For users with <code>admin</code> or <code>manager</code> roles, the System tab bar includes a <code>Reconcile managed mounts</code> action button positioned between <code>Mounts</code> and <code>Logs</code>. This action triggers a manual managed-mount reconciliation pass and opens a dedicated results page.</p>
 <h2 id="10-1-application-logs-tab">10.1 Application Logs Tab</h2>
 <p><strong>Access:</strong> <code>admin</code> role only</p>
@@ -1059,6 +1062,7 @@ A <code>Current USB Drives</code> table with drive fields similar to the Drives 
 A <code>Current Shared Mounts</code> table with mount fields similar to the Mounts page.
 </li></ul>
 <p>These tables are post-run snapshots of current drive and mount state to help operators investigate reconciliation outcomes; they are not limited to only rows that were corrected during the run.</p>
+<p>On smaller screens, these tables follow the same compact treatment as the main Drives and Mounts pages by keeping the most important columns visible and reducing lower-priority metadata.</p>
 <p>Status meanings:</p>
 <ul><li>
 <code>completed</code> means no corrective-operation failures were recorded.

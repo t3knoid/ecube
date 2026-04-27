@@ -676,6 +676,18 @@ Use a pending job with a mounted source and eligible destination drive.
 - After analysis reaches `READY` or `STALE`, verify the blocked actions become available again according to the normal role and job-state rules.
 - Start and complete the job after a successful analyze run, then verify the startup-analysis summary remains visible in Job Detail even though the reusable startup-analysis entry snapshot has been cleared.
 
+#### 11.4d Responsive Mobile Workflow Checks
+
+At a narrow viewport (for example `<= 768px` wide), verify the responsive operator workflows behave as follows:
+
+- The shell sidebar is hidden by default, opens from the header navigation toggle, and closes again when the operator taps the backdrop or chooses a navigation link.
+- Drives, Mounts, and Jobs hide lower-priority columns on smaller screens, keep the most important identifiers visible, and move row actions into an overflow menu instead of forcing horizontal page expansion.
+- Mobile Jobs, Drives, and Mounts rows render compact status indicators that still expose accessible labels or tooltips for the underlying state.
+- Job Detail keeps the highest-priority lifecycle actions visible on mobile and moves the remaining actions into an overflow menu without changing role-based availability.
+- In the Job Detail Files panel, selecting a file path opens the hash viewer popup, the compare workflow is available inside the same popup, and mobile pagination uses a shorter page-number window than desktop.
+- On the System page, the USB Topology and Mounts tabs reduce visible columns on mobile and expose the remaining details through per-row overflow menus.
+- On the Reconciliation Results page, the Current USB Drives and Current Shared Mounts tables follow the same compact mobile treatment as the main Drives and Mounts pages.
+
 For the current System page Logs tab UI, verify the admin-only log workflow behaves as follows:
 
 - The `Logs` tab is visible only to `admin` users.

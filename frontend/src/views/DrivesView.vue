@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getDrives, refreshDrives } from '@/api/drives.js'
@@ -25,6 +25,8 @@ const sortKey = ref('id')
 const sortDir = ref('asc')
 const page = ref(1)
 const pageSize = ref(10)
+const isMobileViewport = ref(false)
+let mobileViewportQuery = null
 
 /** Drive ID currently being browsed (null = none open). */
 const browsingDriveId = ref(null)
@@ -36,16 +38,29 @@ const activeBrowsedDrive = computed(() =>
     : null
 )
 
-const columns = computed(() => [
-  { key: 'id', label: t('common.labels.id'), align: 'right' },
-  { key: 'display_device_label', label: t('drives.device') },
-  { key: 'serial_number', label: t('drives.serialNumber') },
-  { key: 'filesystem_type', label: t('drives.filesystem') },
-  { key: 'capacity_bytes', label: t('common.labels.size'), align: 'right' },
-  { key: 'current_state', label: t('common.labels.status') },
-  { key: 'current_project_id', label: t('dashboard.project') },
-  { key: 'actions', label: '', align: 'center' },
-])
+const columns = computed(() => {
+  const nextColumns = [
+    { key: 'id', label: t('common.labels.id'), align: 'right' },
+    { key: 'display_device_label', label: t('drives.device') },
+    { key: 'serial_number', label: t('drives.serialNumber') },
+    { key: 'filesystem_type', label: t('drives.filesystem') },
+    { key: 'capacity_bytes', label: t('common.labels.size'), align: 'right' },
+    { key: 'current_state', label: t('common.labels.status') },
+    { key: 'current_project_id', label: t('dashboard.project') },
+    { key: 'actions', label: '', align: 'center' },
+  ]
+
+  if (isMobileViewport.value) {
+    return nextColumns.filter(
+      (column) =>
+        column.key !== 'serial_number' &&
+        column.key !== 'filesystem_type' &&
+        column.key !== 'capacity_bytes',
+    )
+  }
+
+  return nextColumns
+})
 
 function formatBytes(value) {
   if (typeof value !== 'number' || value <= 0) return '-'
@@ -61,6 +76,49 @@ function formatBytes(value) {
 
 function formatProjectId(value) {
   return normalizeProjectId(value) || '-'
+}
+
+function normalizeStatusValue(status) {
+  return String(status ?? 'unknown').toUpperCase()
+}
+
+function driveStatusTone(status) {
+  const value = normalizeStatusValue(status)
+
+  if (['COMPLETED', 'DONE', 'MOUNTED', 'CONNECTED', 'AVAILABLE', 'OK', 'TRUE'].includes(value)) {
+    return 'success'
+  }
+  if (['FAILED', 'ERROR', 'DISCONNECTED', 'UNMOUNTED', 'FALSE'].includes(value)) {
+    return 'danger'
+  }
+  if (['RUNNING', 'VERIFYING', 'COPYING', 'IN_USE', 'DEGRADED'].includes(value)) {
+    return 'warning'
+  }
+  if (['PENDING', 'UNKNOWN'].includes(value)) {
+    return 'muted'
+  }
+
+  return 'info'
+}
+
+function driveStatusIcon(status) {
+  const tone = driveStatusTone(status)
+
+  if (tone === 'success') return '✓'
+  if (tone === 'warning') return '!'
+  if (tone === 'danger') return '×'
+  if (tone === 'muted') return '•'
+  return '?'
+}
+
+function syncViewportState() {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+
+  if (!mobileViewportQuery) {
+    mobileViewportQuery = window.matchMedia('(max-width: 768px)')
+  }
+
+  isMobileViewport.value = mobileViewportQuery.matches
 }
 
 async function loadDrives() {
@@ -185,17 +243,50 @@ function openDrive(drive) {
   router.push({ name: 'drive-detail', params: { id: drive.id } })
 }
 
+function closeRowActionsMenu(event) {
+  const menu = event?.currentTarget instanceof HTMLElement ? event.currentTarget.closest('details') : null
+  if (menu instanceof HTMLDetailsElement) {
+    menu.removeAttribute('open')
+  }
+}
+
+function handleMenuOpenDrive(drive, event) {
+  closeRowActionsMenu(event)
+  openDrive(drive)
+}
+
+function handleMenuBrowse(drive, event) {
+  closeRowActionsMenu(event)
+  void toggleBrowse(drive.id)
+}
+
 const browsePanelRef = ref(null)
 
 async function toggleBrowse(driveId) {
   browsingDriveId.value = browsingDriveId.value === driveId ? null : driveId
   if (browsingDriveId.value !== null) {
     await nextTick()
-    browsePanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    if (typeof browsePanelRef.value?.scrollIntoView === 'function') {
+      browsePanelRef.value.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
   }
 }
 
-onMounted(loadDrives)
+onMounted(() => {
+  syncViewportState()
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    if (!mobileViewportQuery) {
+      mobileViewportQuery = window.matchMedia('(max-width: 768px)')
+    }
+    mobileViewportQuery.addEventListener('change', syncViewportState)
+  }
+
+  void loadDrives()
+})
+
+onBeforeUnmount(() => {
+  mobileViewportQuery?.removeEventListener('change', syncViewportState)
+})
 </script>
 
 <template>
@@ -245,7 +336,17 @@ onMounted(loadDrives)
         {{ formatProjectId(row.current_project_id) }}
       </template>
       <template #cell-current_state="{ row }">
-        <StatusBadge :status="row.current_state" :label="driveStateLabel(row.current_state)" />
+        <span
+          v-if="isMobileViewport"
+          class="drive-status-icon"
+          :class="`drive-status-icon--${driveStatusTone(row.current_state)}`"
+          :aria-label="driveStateLabel(row.current_state)"
+          :title="driveStateLabel(row.current_state)"
+          role="img"
+        >
+          <span aria-hidden="true">{{ driveStatusIcon(row.current_state) }}</span>
+        </span>
+        <StatusBadge v-else :status="row.current_state" :label="driveStateLabel(row.current_state)" />
       </template>
       <template #cell-capacity_bytes="{ row }">
         {{ formatBytes(row.capacity_bytes) }}
@@ -261,6 +362,27 @@ onMounted(loadDrives)
             {{ t('drives.browse') }}
           </button>
         </div>
+        <details class="row-actions-menu">
+          <summary class="row-actions-toggle" :aria-label="`${formatDriveIdentity(row)} drive actions`">
+            <span class="row-actions-toggle-dots" aria-hidden="true">
+              <span class="row-actions-toggle-dot" />
+              <span class="row-actions-toggle-dot" />
+              <span class="row-actions-toggle-dot" />
+            </span>
+          </summary>
+          <div class="row-actions-popover">
+            <button class="btn row-action-menu-details" @click="handleMenuOpenDrive(row, $event)">
+              {{ t('drives.details') }}
+            </button>
+            <button
+              v-if="row.mount_path"
+              class="btn row-action-menu-browse"
+              @click="handleMenuBrowse(row, $event)"
+            >
+              {{ t('drives.browse') }}
+            </button>
+          </div>
+        </details>
       </template>
     </DataTable>
 
@@ -305,6 +427,104 @@ onMounted(loadDrives)
   flex-wrap: wrap;
 }
 
+.row-actions {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.drive-status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  font-size: 0.9rem;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+}
+
+.drive-status-icon--success {
+  background: color-mix(in srgb, var(--color-success) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-success) 45%, var(--color-border));
+  color: var(--color-status-ok-text, #14532d);
+}
+
+.drive-status-icon--warning {
+  background: color-mix(in srgb, var(--color-warning) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-warning) 45%, var(--color-border));
+  color: var(--color-status-warn-text, #7c3f00);
+}
+
+.drive-status-icon--danger {
+  background: color-mix(in srgb, var(--color-danger) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border));
+  color: var(--color-status-danger-text, #991b1b);
+}
+
+.drive-status-icon--info {
+  background: color-mix(in srgb, var(--color-info) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-info) 45%, var(--color-border));
+  color: var(--color-status-info-text, #1e40af);
+}
+
+.drive-status-icon--muted {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border);
+  color: var(--color-status-muted-text, #475569);
+}
+
+.row-actions-menu {
+  display: none;
+  position: relative;
+}
+
+.row-actions-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.row-actions-toggle-dots {
+  display: inline-grid;
+  gap: 0.15rem;
+}
+
+.row-actions-toggle-dot {
+  width: 0.25rem;
+  height: 0.25rem;
+  border-radius: 9999px;
+  background: currentColor;
+}
+
+.row-actions-toggle::-webkit-details-marker {
+  display: none;
+}
+
+.row-actions-popover {
+  position: absolute;
+  top: calc(100% + var(--space-2xs));
+  right: 0;
+  z-index: 2;
+  min-width: 8.5rem;
+  display: grid;
+  gap: var(--space-2xs);
+  padding: var(--space-2xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg-primary);
+  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
+}
+
 .browse-panel {
   display: grid;
   gap: var(--space-sm);
@@ -336,5 +556,15 @@ select {
   border: 1px solid var(--color-alert-danger-border);
   border-radius: var(--border-radius);
   padding: var(--space-sm);
+}
+
+@media (max-width: 768px) {
+  .row-actions {
+    display: none;
+  }
+
+  .row-actions-menu {
+    display: inline-block;
+  }
 }
 </style>
