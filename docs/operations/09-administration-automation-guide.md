@@ -1063,6 +1063,16 @@ Optional parameters:
 | `callback_url` | `null` | HTTPS URL that receives a job-status callback when the job reaches `COMPLETED` or `FAILED` |
 | `created_by` | `null` | Optional username attribution override for audit/job metadata |
 
+> **Thread count guidance:** `thread_count` controls parallel copy workers, not a guaranteed throughput multiplier. Choose a value no higher than the number of logical CPUs visible to the operating system, start conservatively at `min(4, visible logical CPU count)`, and increase only if throughput improves without making the ECUBE host unresponsive.
+>
+> Typical starting points:
+>
+> - 2 visible CPUs: start with `2`
+> - 4 visible CPUs: start with `4`
+> - 8 or more visible CPUs: start with `4`, then test `6` and `8` only if the source share, destination drive, and host remain stable
+>
+> More copy threads are not always better. If copy speed plateaus, other services slow down, or the UI becomes sluggish, reduce `thread_count`.
+
 > **Webhook callback details:** For callback payload format, retry behavior, delivery failure handling, and receiver examples, see [12-third-party-integration.md](12-third-party-integration.md#7-webhook-callbacks).
 
 #### callback_url integration note
