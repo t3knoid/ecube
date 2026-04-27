@@ -167,17 +167,13 @@ onUnmounted(() => {
       class="help-panel"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="help-modal-title"
+      :aria-label="t('help.frameTitle')"
     >
-      <div class="help-panel-header">
-        <div>
-          <p class="help-kicker">{{ t('help.kicker') }}</p>
-          <h2 id="help-modal-title">{{ t('help.title') }}</h2>
-        </div>
+      <p class="help-panel-kicker">{{ t('help.kicker') }}</p>
+      <iframe class="help-frame" :src="'/help/manual.html'" :title="t('help.frameTitle')" loading="lazy" />
+      <div class="help-panel-footer">
         <button class="btn-help-close" @click="closeHelpDialog">{{ t('common.actions.close') }}</button>
       </div>
-      <p class="help-description">{{ t('help.description') }}</p>
-      <iframe class="help-frame" :src="'/help/manual.html'" :title="t('help.frameTitle')" loading="lazy" />
     </section>
   </div>
 </template>
@@ -318,14 +314,7 @@ onUnmounted(() => {
   box-shadow: var(--shadow-lg);
 }
 
-.help-panel-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-md);
-}
-
-.help-kicker {
+.help-panel-kicker {
   margin: 0;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-bold);
@@ -334,13 +323,11 @@ onUnmounted(() => {
   color: var(--color-text-secondary);
 }
 
-.help-panel-header h2,
-.help-description {
-  margin: 0;
-}
-
-.help-description {
-  color: var(--color-text-secondary);
+.help-panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-md);
 }
 
 .help-frame {
@@ -362,8 +349,9 @@ onUnmounted(() => {
     padding: var(--space-md);
   }
 
-  .help-panel-header {
+  .help-panel-footer {
     flex-direction: column;
+    align-items: stretch;
   }
 }
 </style>
