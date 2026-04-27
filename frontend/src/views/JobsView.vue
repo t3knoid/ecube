@@ -43,6 +43,8 @@ const search = ref('')
 const statusFilter = ref('ALL')
 const page = ref(1)
 const pageSize = ref(10)
+const isMobileViewport = ref(false)
+let mobileViewportQuery = null
 
 const form = ref({
   project_id: '',
@@ -59,15 +61,25 @@ const canOperate = computed(() => authStore.hasAnyRole(['admin', 'manager', 'pro
 const ACTIVE_OVERLAP_STATUSES = new Set(['PENDING', 'RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING'])
 const OVERLAP_QUERY_LIMIT = 1000
 
-const columns = computed(() => [
-  { key: 'id', label: t('common.labels.id'), align: 'right' },
-  { key: 'project_id', label: t('dashboard.project') },
-  { key: 'evidence_number', label: t('jobs.evidence') },
-  { key: 'device', label: t('jobs.device') },
-  { key: 'status', label: t('common.labels.status') },
-  { key: 'progress', label: t('dashboard.progress') },
-  { key: 'actions', label: '', align: 'center' },
-])
+const columns = computed(() => {
+  const nextColumns = [
+    { key: 'id', label: t('common.labels.id'), align: 'right' },
+    { key: 'project_id', label: t('dashboard.project') },
+    { key: 'evidence_number', label: t('jobs.evidence') },
+    { key: 'device', label: t('jobs.device') },
+    { key: 'status', label: t('common.labels.status') },
+    { key: 'progress', label: t('dashboard.progress') },
+    { key: 'actions', label: '', align: 'center' },
+  ]
+
+  if (isMobileViewport.value) {
+    return nextColumns.filter(
+      (column) => column.key !== 'evidence_number' && column.key !== 'progress',
+    )
+  }
+
+  return nextColumns
+})
 
 function normalizeJobStatus(status) {
   return String(status || '').toUpperCase()
@@ -75,6 +87,35 @@ function normalizeJobStatus(status) {
 
 function normalizeStartupAnalysisStatus(status) {
   return String(status || '').toUpperCase()
+}
+
+function jobStatusTone(status) {
+  const value = normalizeJobStatus(status)
+
+  if (['COMPLETED', 'DONE', 'MOUNTED', 'CONNECTED', 'AVAILABLE', 'OK', 'TRUE'].includes(value)) {
+    return 'success'
+  }
+  if (['FAILED', 'ERROR', 'DISCONNECTED', 'UNMOUNTED', 'FALSE'].includes(value)) {
+    return 'danger'
+  }
+  if (['RUNNING', 'VERIFYING', 'COPYING', 'IN_USE', 'DEGRADED', 'PAUSING'].includes(value)) {
+    return 'warning'
+  }
+  if (['PENDING', 'PAUSED', 'UNKNOWN'].includes(value)) {
+    return 'muted'
+  }
+
+  return 'info'
+}
+
+function jobStatusIcon(status) {
+  const tone = jobStatusTone(status)
+
+  if (tone === 'success') return '✓'
+  if (tone === 'warning') return '!'
+  if (tone === 'danger') return '×'
+  if (tone === 'muted') return '•'
+  return '?'
 }
 
 function isRowActionBusy(job) {
@@ -135,6 +176,16 @@ function progressLabel(job) {
   return `${metrics.percent}%`
 }
 
+function syncViewportState() {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+
+  if (!mobileViewportQuery) {
+    mobileViewportQuery = window.matchMedia('(max-width: 768px)')
+  }
+
+  isMobileViewport.value = mobileViewportQuery.matches
+}
+
 function formatProjectId(value) {
   return normalizeProjectId(value) || '-'
 }
@@ -145,6 +196,28 @@ function formatDriveLabel(drive) {
 
 function formatJobDevice(job) {
   return formatDriveIdentity(job?.drive)
+}
+
+function closeRowActionsMenu(event) {
+  const menu = event?.currentTarget instanceof HTMLElement ? event.currentTarget.closest('details') : null
+  if (menu instanceof HTMLDetailsElement) {
+    menu.removeAttribute('open')
+  }
+}
+
+function openJobDetails(job, event) {
+  closeRowActionsMenu(event)
+  router.push({ name: 'job-detail', params: { id: job.id } })
+}
+
+function handleMenuStart(job, event) {
+  closeRowActionsMenu(event)
+  void runJobAction(job, 'start')
+}
+
+function handleMenuPause(job, event) {
+  closeRowActionsMenu(event)
+  void runJobAction(job, 'pause')
 }
 
 function formatMountLabel(mount) {
@@ -540,6 +613,14 @@ watch(jobs, () => {
 })
 
 onMounted(async () => {
+  syncViewportState()
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    if (!mobileViewportQuery) {
+      mobileViewportQuery = window.matchMedia('(max-width: 768px)')
+    }
+    mobileViewportQuery.addEventListener('change', syncViewportState)
+  }
+
   await Promise.all([loadJobs(), loadSupportingData()])
   syncJobsRefreshTimer()
 })
@@ -547,6 +628,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleCreateDialogKeydown)
   stopJobsRefreshTimer()
+  mobileViewportQuery?.removeEventListener('change', syncViewportState)
 })
 </script>
 
@@ -584,12 +666,22 @@ onBeforeUnmount(() => {
       <template #cell-project_id="{ row }">{{ formatProjectId(row.project_id) }}</template>
       <template #cell-device="{ row }">{{ formatJobDevice(row) }}</template>
       <template #cell-status="{ row }">
-        <StatusBadge :status="row.status" :label="jobStatusLabel(row.status)" />
+        <span
+          v-if="isMobileViewport"
+          class="job-status-icon"
+          :class="`job-status-icon--${jobStatusTone(row.status)}`"
+          :aria-label="jobStatusLabel(row.status)"
+          :title="jobStatusLabel(row.status)"
+          role="img"
+        >
+          <span aria-hidden="true">{{ jobStatusIcon(row.status) }}</span>
+        </span>
+        <StatusBadge v-else :status="row.status" :label="jobStatusLabel(row.status)" />
       </template>
       <template #cell-progress="{ row }">{{ progressLabel(row) }}</template>
       <template #cell-actions="{ row }">
-        <div class="row-actions">
-          <button class="btn" @click="router.push({ name: 'job-detail', params: { id: row.id } })">
+        <div v-if="!isMobileViewport" class="row-actions">
+          <button class="btn" @click="openJobDetails(row)">
             {{ t('jobs.details') }}
           </button>
           <button class="btn" :disabled="!canStartJob(row) || isRowActionBusy(row)" @click="runJobAction(row, 'start')">
@@ -599,6 +691,34 @@ onBeforeUnmount(() => {
             {{ t('jobs.pause') }}
           </button>
         </div>
+        <details v-else class="row-actions-menu">
+          <summary class="row-actions-toggle" :aria-label="`${formatProjectId(row.project_id)} job actions`">
+            <span class="row-actions-toggle-dots" aria-hidden="true">
+              <span class="row-actions-toggle-dot" />
+              <span class="row-actions-toggle-dot" />
+              <span class="row-actions-toggle-dot" />
+            </span>
+          </summary>
+          <div class="row-actions-popover">
+            <button class="btn row-action-menu-details" @click="openJobDetails(row, $event)">
+              {{ t('jobs.details') }}
+            </button>
+            <button
+              class="btn row-action-menu-start"
+              :disabled="!canStartJob(row) || isRowActionBusy(row)"
+              @click="handleMenuStart(row, $event)"
+            >
+              {{ t('jobs.start') }}
+            </button>
+            <button
+              class="btn row-action-menu-pause"
+              :disabled="!canPauseJob(row) || isRowActionBusy(row)"
+              @click="handleMenuPause(row, $event)"
+            >
+              {{ t('jobs.pause') }}
+            </button>
+          </div>
+        </details>
       </template>
     </DataTable>
 
@@ -728,6 +848,99 @@ onBeforeUnmount(() => {
   gap: var(--space-sm);
 }
 
+.job-status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  font-size: 0.9rem;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+}
+
+.job-status-icon--success {
+  background: color-mix(in srgb, var(--color-success) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-success) 45%, var(--color-border));
+  color: var(--color-status-ok-text, #14532d);
+}
+
+.job-status-icon--warning {
+  background: color-mix(in srgb, var(--color-warning) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-warning) 45%, var(--color-border));
+  color: var(--color-status-warn-text, #7c3f00);
+}
+
+.job-status-icon--danger {
+  background: color-mix(in srgb, var(--color-danger) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border));
+  color: var(--color-status-danger-text, #991b1b);
+}
+
+.job-status-icon--info {
+  background: color-mix(in srgb, var(--color-info) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-info) 45%, var(--color-border));
+  color: var(--color-status-info-text, #1e40af);
+}
+
+.job-status-icon--muted {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border);
+  color: var(--color-status-muted-text, #475569);
+}
+
+.row-actions-menu {
+  display: none;
+  position: relative;
+}
+
+.row-actions-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.row-actions-toggle-dots {
+  display: inline-grid;
+  gap: 0.15rem;
+}
+
+.row-actions-toggle-dot {
+  width: 0.25rem;
+  height: 0.25rem;
+  border-radius: 9999px;
+  background: currentColor;
+}
+
+.row-actions-toggle::-webkit-details-marker {
+  display: none;
+}
+
+.row-actions-popover {
+  position: absolute;
+  top: calc(100% + var(--space-2xs));
+  right: 0;
+  z-index: 2;
+  min-width: 8.5rem;
+  display: grid;
+  gap: var(--space-2xs);
+  padding: var(--space-2xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg-primary);
+  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
+}
+
 .row-actions :deep(.btn),
 .row-actions .btn {
   min-width: 5.75rem;
@@ -821,6 +1034,7 @@ textarea {
 .dialog-groups {
   display: grid;
   gap: var(--space-md);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .dialog-group {
@@ -846,5 +1060,24 @@ textarea {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-sm);
+}
+
+@media (max-width: 768px) {
+  .row-actions {
+    display: none;
+  }
+
+  .row-actions-menu {
+    display: inline-block;
+  }
+
+  .dialog-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dialog-groups {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 </style>

@@ -5,6 +5,15 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useThemeStore } from '@/stores/theme.js'
 import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
 
+const props = defineProps({
+  sidebarOpen: {
+    type: Boolean,
+    default: false,
+  },
+})
+
+const emit = defineEmits(['toggle-sidebar'])
+
 const { t } = useI18n()
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
@@ -56,6 +65,10 @@ function handleLogout() {
 
 function handleLogoError() {
   logoLoadFailed.value = true
+}
+
+function toggleSidebar() {
+  emit('toggle-sidebar')
 }
 
 function getFocusableElements(container) {
@@ -204,6 +217,16 @@ onUnmounted(() => {
 <template>
   <header class="app-header">
     <div class="header-left">
+      <button
+        class="btn-sidebar-toggle"
+        type="button"
+        :aria-expanded="props.sidebarOpen ? 'true' : 'false'"
+        aria-controls="app-sidebar"
+        :aria-label="props.sidebarOpen ? t('nav.closeSidebar') : t('nav.openSidebar')"
+        @click="toggleSidebar"
+      >
+        <span aria-hidden="true">☰</span>
+      </button>
       <img
         v-if="showLogoImage"
         :src="themeStore.currentLogo"
@@ -265,8 +288,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--space-md);
-  height: var(--header-height);
+  padding: var(--space-sm) var(--space-md);
+  min-height: var(--header-height);
   background: var(--color-bg-header);
   border-bottom: 1px solid var(--color-border);
 }
@@ -294,6 +317,26 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.btn-sidebar-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font-size: var(--font-size-lg);
+}
+
+.btn-sidebar-toggle:hover {
+  background: var(--color-bg-hover);
 }
 
 .header-username {
@@ -434,6 +477,31 @@ onUnmounted(() => {
   .help-panel-footer {
     flex-direction: column;
     align-items: stretch;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-header {
+    gap: var(--space-sm);
+  }
+
+  .btn-sidebar-toggle {
+    display: inline-flex;
+  }
+
+  .header-logo-image {
+    max-width: 280px;
+    height: 64px;
+  }
+}
+
+@media (max-width: 480px) {
+  .header-username {
+    display: none;
+  }
+
+  .header-app-name {
+    font-size: var(--font-size-base);
   }
 }
 </style>
