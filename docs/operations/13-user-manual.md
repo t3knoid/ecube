@@ -849,7 +849,7 @@ If your role does not include access to this page, the navigation item will not 
 > **Page visibility:** `admin`, `manager`, `processor`, `auditor`
 > **Restricted actions:** Most diagnostics on this page are relevant to administrators and support personnel. Log viewing is admin-only.
 
-The `System` page provides operational and diagnostic information. Depending on deployment and permissions, this may include system health, USB information, block-device data, mount diagnostics, application logs, and job-debug details.
+The `System` page provides operational and diagnostic information. Depending on deployment and permissions, this may include system health, USB information, block-device data, mount diagnostics, and application logs.
 
 This page is useful when:
 
@@ -940,7 +940,7 @@ Use this action when mounted-share state appears stale or inconsistent and you n
 1. Open the `System` page.
 2. In the tab bar, locate `Reconcile managed mounts` next to `Mounts`:
    - `admin`: between `Mounts` and `Logs`
-   - `manager`: between `Mounts` and `Job Debug` (the `Logs` tab is admin-only)
+   - `manager`: after `Mounts` (the `Logs` tab is admin-only)
 3. Click `Reconcile managed mounts`.
 4. While the request is running, the button label changes to `Loading`.
 5. On success, ECUBE navigates to the `Reconciliation Results` page.

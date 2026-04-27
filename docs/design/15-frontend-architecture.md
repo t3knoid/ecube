@@ -297,7 +297,7 @@ Each module exports thin wrapper functions around Axios calls. Modules map 1:1 t
 | `files.js` | `GET /files/{file_id}/hashes`, `POST /files/compare` | JobDetailView (hash viewer, file compare) |
 | `users.js` | `GET /users`, `GET /users/{username}/roles`, `PUT /users/{username}/roles`, `DELETE /users/{username}/roles` | UsersView |
 | `admin.js` | `POST /admin/os-users`, `GET /admin/os-users`, `DELETE /admin/os-users/{username}`, `PUT /admin/os-users/{username}/password`, `PUT /admin/os-users/{username}/groups`, `POST /admin/os-users/{username}/groups`, `GET /admin/os-groups` | UsersView (single users/roles editor) |
-| `introspection.js` | `GET /introspection/usb/topology`, `GET /introspection/block-devices`, `GET /introspection/mounts`, `GET /introspection/system-health`, `GET /introspection/jobs/{job_id}/debug` | SystemView, DashboardView, AppFooter |
+| `introspection.js` | `GET /introspection/usb/topology`, `GET /introspection/block-devices`, `GET /introspection/mounts`, `GET /introspection/system-health` | SystemView, DashboardView, AppFooter |
 
 ### 6.3 Job Progress Polling
 
@@ -449,7 +449,7 @@ Vue I18n 9.x provides the localization infrastructure. All user-visible strings 
 | `JobDetailView.vue` | Screen 6b–d | UC-6.2 – UC-6.8 | Progress bar with polling; edit/pause/complete/delete lifecycle actions; gated verify/manifest controls; hash viewer; source/destination compare; manifest success feedback |
 | `AuditView.vue` | Screen 7 | UC-7.1 – UC-7.7 | Filterable audit log table; date range, user, action filters; CSV export; CoC report retrieval by drive/project (drive default) with print/save controls. Drive selector populated server-side via `GET /drives?state=IN_USE&state=AVAILABLE` to exclude DISCONNECTED and ARCHIVED drives. |
 | `UsersView.vue` | Screen 8 | UC-3.1 – UC-3.9 | Single editable users table: role selection, per-user save, password reset, and create-user flow; admin-only |
-| `SystemView.vue` | Screen 9 | UC-8.1 – UC-8.8 | Tabbed: Health, USB Topology, Block Devices, Mounts, Logs, Job Debug |
+| `SystemView.vue` | Screen 9 | UC-8.1 – UC-8.5, UC-8.7 – UC-8.9 | Tabbed: Health, USB Topology, Block Devices, Mounts, Logs |
 
 ### 9.3 Common/Shared Components
 
@@ -501,8 +501,7 @@ Vue I18n 9.x provides the localization infrastructure. All user-visible strings 
 | UC-8.1 – UC-8.2 | Screen 9a + Footer | `SystemView`, `AppFooter` |
 | UC-8.3 | Screen 9b: USB Topology | `SystemView` (tab) |
 | UC-8.4 – UC-8.5 | Screen 9a: Block Devices / Mounts | `SystemView` (tabs) |
-| UC-8.6 | Screen 9d: Job Debug | `SystemView` (tab) |
-| UC-8.7 – UC-8.8 | Screen 9c: Logs Tab | `SystemView` (tab) |
+| UC-8.7 – UC-8.9 | Screen 9c: Logs Tab | `SystemView` (tab) |
 
 ---
 
