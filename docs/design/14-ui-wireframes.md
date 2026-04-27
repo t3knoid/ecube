@@ -1056,6 +1056,8 @@ Sorted by `Device`; rows with no meaningful USB metadata are hidden.
 
 **Use Cases Covered:** UC-8.1 through UC-8.5 and UC-8.7 through UC-8.9
 
+Implementation note: the live System Health tab now separates host metrics from ECUBE process diagnostics and renders an Active Copy Threads table below the ECUBE process summary when copy workers are active.
+
 ---
 
 ## Screen 10: Configuration

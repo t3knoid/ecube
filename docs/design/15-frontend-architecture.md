@@ -449,7 +449,7 @@ Vue I18n 9.x provides the localization infrastructure. All user-visible strings 
 | `JobDetailView.vue` | Screen 6b–d | UC-6.2 – UC-6.8 | Progress bar with polling; edit/pause/complete/delete lifecycle actions; gated verify/manifest controls; hash viewer; source/destination compare; manifest success feedback |
 | `AuditView.vue` | Screen 7 | UC-7.1 – UC-7.7 | Filterable audit log table; date range, user, action filters; CSV export; CoC report retrieval by drive/project (drive default) with print/save controls. Drive selector populated server-side via `GET /drives?state=IN_USE&state=AVAILABLE` to exclude DISCONNECTED and ARCHIVED drives. |
 | `UsersView.vue` | Screen 8 | UC-3.1 – UC-3.9 | Single editable users table: role selection, per-user save, password reset, and create-user flow; admin-only |
-| `SystemView.vue` | Screen 9 | UC-8.1 – UC-8.5, UC-8.7 – UC-8.9 | Tabbed: Health, USB Topology, Block Devices, Mounts, Logs |
+| `SystemView.vue` | Screen 9 | UC-8.1 – UC-8.5, UC-8.7 – UC-8.9 | Tabbed: Health, USB Topology, Block Devices, Mounts, Logs; Health splits host metrics from ECUBE process diagnostics and shows an Active Copy Threads table with an empty state |
 
 ### 9.3 Common/Shared Components
 
