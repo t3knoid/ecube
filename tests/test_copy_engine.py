@@ -251,6 +251,43 @@ def test_process_file_persists_safe_failure_message_and_audit_details(db, tmp_pa
     assert "/mnt/ecube/private" not in json.dumps(audit.details)
 
 
+def test_process_file_persists_safe_timeout_message(db, tmp_path):
+    """_process_file stores a sanitized timeout message for retryable TIMEOUT rows."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    test_file = source_dir / "slow.txt"
+    test_file.write_bytes(b"data")
+
+    job = _make_job(db, str(source_dir), max_file_retries=0, retry_delay_seconds=0)
+
+    ef = ExportFile(
+        job_id=job.id,
+        relative_path="slow.txt",
+        size_bytes=4,
+        status=FileStatus.PENDING,
+        retry_attempts=0,
+    )
+    db.add(ef)
+    db.commit()
+    db.refresh(ef)
+
+    raw_error = TimeoutError("File copy timed out after 1s while writing /mnt/ecube/private/slow.txt")
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch(
+            "app.services.copy_engine.copy_file",
+            side_effect=raw_error,
+        ):
+            copy_engine._process_file(ef.id, test_file, tmp_path / "target", max_retries=0, retry_delay=0)
+
+    db.expire_all()
+    db.refresh(ef)
+
+    assert ef.status == FileStatus.TIMEOUT
+    assert ef.error_message == "Operation timed out"
+    assert "/mnt/ecube/private" not in (ef.error_message or "")
+
+
 def test_process_file_no_retries_on_first_success(db, tmp_path):
     """_process_file does not retry when the first attempt succeeds."""
     source_dir = tmp_path / "source"
@@ -1530,3 +1567,32 @@ def test_run_verify_job_emits_verification_failed_audit(db, tmp_path):
     assert log is not None
     assert log.details["status"] == "FAILED"
     assert log.details["mismatches"] is True
+
+
+def test_run_verify_job_sanitizes_persisted_checksum_errors(db, tmp_path):
+    """Verification failures persist only sanitized checksum detail for operator-facing rows."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "file.txt").write_bytes(b"data")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch(
+            "app.services.copy_engine._checksum_only",
+            return_value=(False, None, "checksum failed for /mnt/ecube/private/file.txt"),
+        ):
+            copy_engine.run_verify_job(job.id)
+
+    file_row = db.query(ExportFile).filter(ExportFile.job_id == job.id).one()
+    assert file_row.status == FileStatus.ERROR
+    assert file_row.error_message == "Checksum verification failed"
+    assert "/mnt/ecube/private" not in (file_row.error_message or "")
