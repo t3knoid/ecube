@@ -662,6 +662,7 @@ The evidence number and source path are correct
 </li><li>
 If you enable <code>Run job immediately</code>, the job will start as soon as creation succeeds
 </li></ul>
+<p>For <code>thread count</code>, start with the default value unless your administrator has given you a different recommendation. If you need to change it, a good rule is to choose a value no higher than the number of CPUs visible to the operating system and reduce it again if the host becomes sluggish or copy speed does not improve.</p>
 <p>The source path is interpreted inside the selected mounted share. Entering only / uses the root of that share, and attempts to navigate outside the selected share are rejected before the job is created.</p>
 <h2 id="6-3-opening-a-job">6.3 Opening a Job</h2>
 <p>Open a job to view details and perform follow-up actions.</p>
@@ -688,7 +689,7 @@ Manually complete a safe non-active job when required by the workflow
 </li><li>
 Clear a persisted startup-analysis snapshot before the next restart when the cached scan should be discarded
 </li><li>
-Generate a manifest and confirm where it was written
+Generate a manifest, review the reported location, and download the generated file
 </li><li>
 Review copied files
 </li><li>
@@ -720,7 +721,7 @@ Compare a file's source version against its copied destination version
 </li></ul>
 <p>When a pause is requested, the Jobs list and Job Detail page can show a <code>Pause in progress</code> dialog while ECUBE waits for active copy threads to drain. The Start action remains unavailable during <code>PAUSING</code> and becomes available again once the job reaches <code>PAUSED</code>.</p>
 <p>While a job is actively copying, Job Detail shows a live <code>Duration</code> field that reflects cumulative active runtime only. The displayed value continues updating while the job is <code>RUNNING</code>, does not add paused time while the job is <code>PAUSED</code>, and resumes from the previously stored active runtime after a later restart instead of resetting to zero.</p>
-<p>Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed <code>manifest.json</code> file on the destination drive.</p>
+<p>Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed <code>manifest.json</code> file on the destination drive and immediately starts a browser download of the generated manifest without an extra confirmation step.</p>
 <p>For a partial-success <code>COMPLETED</code> job, Job Detail can show <code>Retry Failed Files</code> instead of exposing Verify or Manifest too early. This action is available only to <code>admin</code>, <code>manager</code>, and <code>processor</code>, moves the job back into <code>RUNNING</code>, re-queues only failed or timed-out files, and preserves already successful copies.</p>
 <p>The completion summary uses the normal success styling for clean completions. If the summary still shows any failed or timed-out file counts, the summary switches to a red warning background so operators can distinguish a partial-success completion from a clean completed run at a glance.</p>
 <p>During startup analysis, Job Detail can show <code>Preparing copy...</code> before any totals are known. While this state is visible, the page also explains that ECUBE is still scanning the source files and calculating totals, which can take time for large evidence sets.</p>
@@ -763,7 +764,7 @@ Size match
 Path match
 </li></ul>
 <p>This is useful when reviewing evidence consistency or confirming repeatability after copy or verification steps. If either side is unavailable, ECUBE shows a sanitized conflict message instead of exposing raw filesystem details.</p>
-<p>Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed <code>manifest.json</code> file on the destination drive and starts a browser download of the same generated manifest JSON.</p>
+<p>Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed <code>manifest.json</code> file on the destination drive and immediately starts a browser download of the same generated manifest JSON without an extra confirmation step.</p>
 <p class="help-back-to-top"><a href="#help-toc-title">Back to top</a></p>
 <hr />
 <h1 id="8-audit-logs">8. Audit Logs</h1>
