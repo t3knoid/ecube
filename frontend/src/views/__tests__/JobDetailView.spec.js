@@ -97,6 +97,11 @@ function mountView() {
             <div>
               <div class="columns-stub">{{ (columns || []).map((column) => column.label).join('|') }}</div>
               <div class="rows-stub">{{ rows.length }}</div>
+              <div v-for="row in rows" :key="row.id" class="row-stub">
+                <span v-for="column in columns" :key="column.key" class="cell-stub">
+                  <slot :name="'cell-' + column.key" :row="row" :value="row[column.key]" :column="column">{{ row[column.key] }}</slot>
+                </span>
+              </div>
             </div>
           `,
         },
@@ -479,14 +484,14 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain('RUNNING')
   })
 
-  it('keeps the files panel collapsed by default and pages through file rows with a 10-page window', async () => {
+  it('keeps the files panel collapsed by default and pages through file rows with a 5-page window', async () => {
     mocks.getJobFiles.mockImplementation((_jobId, params = {}) => {
-      if (params.page === 11) {
+      if (params.page === 6) {
         return Promise.resolve({
-          files: [{ id: 401, relative_path: 'doc/401.txt', status: 'DONE', checksum: 'sha256:401' }],
+          files: [{ id: 201, relative_path: 'doc/201.txt', status: 'DONE', checksum: 'sha256:201' }],
           total_files: 480,
           returned_files: 40,
-          page: 11,
+          page: 6,
           page_size: 40,
         })
       }
@@ -514,16 +519,14 @@ describe('JobDetailView start action', () => {
 
     expect(toggle.attributes('aria-expanded')).toBe('true')
     expect(wrapper.find('.columns-stub').text()).not.toContain(i18n.global.t('jobs.checksum'))
-    expect(wrapper.find('.columns-stub').text()).toContain(i18n.global.t('common.actions.edit'))
-    expect(wrapper.findAll('.page-number-btn').map((node) => node.text())).toEqual([
-      '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
-    ])
+    expect(wrapper.find('.columns-stub').text()).not.toContain(i18n.global.t('common.actions.edit'))
+    expect(wrapper.findAll('.page-number-btn').map((node) => node.text())).toEqual(['1', '2', '3', '4', '5'])
 
     await wrapper.find('.page-window-next').trigger('click')
     await flushPromises()
 
-    expect(mocks.getJobFiles.mock.calls).toContainEqual([6, { page: 11 }])
-    expect(wrapper.findAll('.page-number-btn').map((node) => node.text())).toEqual(['11', '12'])
+    expect(mocks.getJobFiles.mock.calls).toContainEqual([6, { page: 6 }])
+    expect(wrapper.findAll('.page-number-btn').map((node) => node.text())).toEqual(['6', '7', '8', '9', '10'])
 
     await toggle.trigger('click')
     await flushPromises()
@@ -532,7 +535,61 @@ describe('JobDetailView start action', () => {
     await toggle.trigger('click')
     await flushPromises()
     expect(toggle.attributes('aria-expanded')).toBe('true')
-    expect(wrapper.find('.page-number-btn--active').text()).toBe('11')
+    expect(wrapper.find('.page-number-btn--active').text()).toBe('6')
+  })
+
+  it('renders compact accessible status icons in the files panel', async () => {
+    mocks.getJobFiles.mockResolvedValue({
+      files: [{ id: 1, relative_path: 'doc/001.txt', status: 'DONE' }],
+      total_files: 1,
+      returned_files: 1,
+      page: 1,
+      page_size: 40,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.find('.files-panel-toggle').trigger('click')
+    await flushPromises()
+
+    const statusIcon = wrapper.find('.file-status-icon')
+    expect(statusIcon.exists()).toBe(true)
+    expect(statusIcon.attributes('aria-label')).toBe('DONE')
+    expect(statusIcon.attributes('title')).toBe('DONE')
+    expect(statusIcon.text()).toBe('✓')
+  })
+
+  it('opens the hash viewer dialog when a file path is clicked', async () => {
+    mocks.getJobFiles.mockResolvedValue({
+      files: [{ id: 1, relative_path: 'doc/001.txt', status: 'DONE' }],
+      total_files: 1,
+      returned_files: 1,
+      page: 1,
+      page_size: 40,
+    })
+    mocks.getFileHashes.mockResolvedValue({
+      file_id: 1,
+      md5: 'abc123',
+      sha256: 'def456',
+      size_bytes: 2048,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.find('.files-panel-toggle').trigger('click')
+    await flushPromises()
+
+    const filePathButton = wrapper.find('.file-path-button')
+    expect(filePathButton.exists()).toBe(true)
+    await filePathButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.getFileHashes).toHaveBeenCalledWith(1)
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.hashViewer'))
+    expect(wrapper.text()).toContain('abc123')
+    expect(wrapper.text()).toContain('def456')
   })
 
   it('prefers the persisted job-level failure reason when present', async () => {
@@ -903,11 +960,17 @@ describe('JobDetailView start action', () => {
     const wrapper = mountView()
     await flushPromises()
 
+    expect(mocks.getJobFiles.mock.calls).toContainEqual([6, { page: 1 }])
+
+    await wrapper.find('.files-panel-toggle').trigger('click')
+    await flushPromises()
+    await wrapper.find('.file-path-button').trigger('click')
+    await flushPromises()
+
     expect(wrapper.text()).toContain('Source')
     expect(wrapper.text()).toContain('Destination')
     expect(wrapper.text()).not.toContain('File A')
     expect(wrapper.text()).not.toContain('File B')
-    expect(mocks.getJobFiles.mock.calls).toContainEqual([6, { page: 1 }])
 
     await wrapper.find('#compare-file-source').setValue('9')
     const compareButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.compare'))
@@ -964,14 +1027,20 @@ describe('JobDetailView start action', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.find('#compare-file-source').text()).toContain('doc-009.txt')
-    expect(wrapper.find('#compare-file-source').text()).not.toContain('doc-150.txt')
-
     await wrapper.find('.files-panel-toggle').trigger('click')
     await flushPromises()
 
+    await wrapper.find('.file-path-button').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('#compare-file-source').text()).toContain('doc-009.txt')
+    expect(wrapper.find('#compare-file-source').text()).not.toContain('doc-150.txt')
+
     await wrapper.findAll('.page-number-btn').find((node) => node.text() === '4').trigger('click')
     await flushPromises()
+
+    expect(wrapper.find('#compare-file-source').text()).toContain('doc-150.txt')
+    expect(wrapper.find('#compare-file-source').text()).not.toContain('doc-009.txt')
 
     await wrapper.find('#compare-file-source').setValue('150')
     const compareButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.compare'))
@@ -1252,6 +1321,53 @@ describe('JobDetailView start action', () => {
 
     expect(mocks.deleteJob).toHaveBeenCalledWith(6)
     expect(mocks.routerPush).toHaveBeenCalled()
+  })
+
+  it('keeps pending-job edit analyze and start as primary buttons and moves the rest into overflow', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const primaryButtons = wrapper.findAll('.actions > button')
+    expect(primaryButtons.map((button) => button.text())).toEqual([
+      i18n.global.t('common.actions.edit'),
+      i18n.global.t('jobs.analyze'),
+      i18n.global.t('jobs.start'),
+    ])
+
+    expect(wrapper.find('.actions-menu').exists()).toBe(true)
+    expect(wrapper.find('.detail-action-menu-complete').exists()).toBe(true)
+    expect(wrapper.find('.detail-action-menu-delete').exists()).toBe(true)
+  })
+
+  it('keeps pause primary for running jobs and moves the rest into overflow', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'RUNNING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 10,
+      total_bytes: 20,
+      startup_analysis_status: 'READY',
+      startup_analysis_ready: true,
+      drive: { id: 1 },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const primaryButtons = wrapper.findAll('.actions > button')
+    expect(primaryButtons.map((button) => button.text())).toEqual([
+      i18n.global.t('jobs.pause'),
+    ])
+    expect(wrapper.find('.detail-action-menu-edit').exists()).toBe(true)
+
+    await primaryButtons[0].trigger('click')
+    await flushPromises()
+
+    expect(mocks.pauseJob).toHaveBeenCalledWith(6)
   })
 
   it('shows the startup-analysis cleanup control for manager roles and confirms cleanup', async () => {
