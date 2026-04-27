@@ -115,64 +115,66 @@ function getRowKey(row, index) {
 
 <template>
   <div class="table-wrap">
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th
-            v-for="column in normalizedColumns"
-            :key="column.key"
-            :class="`align-${column.align}`"
-            :style="column.width ? { width: column.width } : undefined"
-            scope="col"
-            :aria-sort="columnSortable(column)
-              ? (sortKey === column.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none')
-              : undefined"
-          >
-            <button
-              v-if="columnSortable(column)"
-              type="button"
-              class="sort-button"
-              @click="onSort(column)"
+    <div class="table-scroll-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th
+              v-for="column in normalizedColumns"
+              :key="column.key"
+              :class="`align-${column.align}`"
+              :style="column.width ? { width: column.width } : undefined"
+              scope="col"
+              :aria-sort="columnSortable(column)
+                ? (sortKey === column.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none')
+                : undefined"
             >
-              <span>{{ column.label }}</span>
-              <span
-                class="sort-indicator"
-                :class="{
-                  active: sortKey === column.key,
-                  asc: sortKey === column.key && sortDir === 'asc',
-                  desc: sortKey === column.key && sortDir === 'desc',
-                }"
-                aria-hidden="true"
-              />
-              <span class="sr-only">{{
-                sortKey === column.key
-                  ? (sortDir === 'asc' ? t('table.sortAsc') : t('table.sortDesc'))
-                  : t('table.sortUnsorted')
-              }}</span>
-            </button>
-            <span v-else>{{ column.label }}</span>
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-if="displayRows.length === 0">
-          <td :colspan="normalizedColumns.length || 1" class="empty-state">
-            <slot name="empty">{{ resolvedEmptyText }}</slot>
-          </td>
-        </tr>
-        <tr v-for="(row, index) in displayRows" :key="getRowKey(row, index)">
-          <td
-            v-for="column in normalizedColumns"
-            :key="column.key"
-            :class="`align-${column.align}`"
-          >
-            <slot :name="`cell-${column.key}`" :row="row" :value="row[column.key]" :column="column">
-              {{ row[column.key] ?? '-' }}
-            </slot>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+              <button
+                v-if="columnSortable(column)"
+                type="button"
+                class="sort-button"
+                @click="onSort(column)"
+              >
+                <span>{{ column.label }}</span>
+                <span
+                  class="sort-indicator"
+                  :class="{
+                    active: sortKey === column.key,
+                    asc: sortKey === column.key && sortDir === 'asc',
+                    desc: sortKey === column.key && sortDir === 'desc',
+                  }"
+                  aria-hidden="true"
+                />
+                <span class="sr-only">{{
+                  sortKey === column.key
+                    ? (sortDir === 'asc' ? t('table.sortAsc') : t('table.sortDesc'))
+                    : t('table.sortUnsorted')
+                }}</span>
+              </button>
+              <span v-else>{{ column.label }}</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="displayRows.length === 0">
+            <td :colspan="normalizedColumns.length || 1" class="empty-state">
+              <slot name="empty">{{ resolvedEmptyText }}</slot>
+            </td>
+          </tr>
+          <tr v-for="(row, index) in displayRows" :key="getRowKey(row, index)">
+            <td
+              v-for="column in normalizedColumns"
+              :key="column.key"
+              :class="`align-${column.align}`"
+            >
+              <slot :name="`cell-${column.key}`" :row="row" :value="row[column.key]" :column="column">
+                {{ row[column.key] ?? '-' }}
+              </slot>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
     <Pagination
       v-if="hasPagination"
       :page="page"
@@ -186,14 +188,18 @@ function getRowKey(row, index) {
 <style scoped>
 .table-wrap {
   width: 100%;
-  overflow-x: auto;
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius);
   background: var(--color-bg-secondary);
 }
 
+.table-scroll-wrapper {
+  overflow-x: auto;
+}
+
 .data-table {
   width: 100%;
+  min-width: 100%;
   border-collapse: collapse;
 }
 
