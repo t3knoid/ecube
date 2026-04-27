@@ -1886,7 +1886,7 @@ Mounted filesystems.
 
 ### `GET /introspection/system-health`
 
-CPU, memory, disk I/O, worker queue.
+Host metrics plus ECUBE process diagnostics and active copy-thread correlation.
 
 **Roles:** `admin`, `manager`, `processor`, `auditor`
 
@@ -1904,7 +1904,32 @@ CPU, memory, disk I/O, worker queue.
   "memory_total_bytes": 8589934592,
   "disk_read_bytes": 1073741824,
   "disk_write_bytes": 536870912,
-  "worker_queue_size": 3
+    "worker_queue_size": 3,
+    "ecube_process": {
+        "cpu_percent": 8.1,
+        "cpu_time_seconds": 412.7,
+        "memory_rss_bytes": 2147483648,
+        "memory_vms_bytes": 3221225472,
+        "thread_count": 11,
+        "active_copy_thread_count": 2,
+        "active_copy_threads": [
+            {
+                "job_id": 42,
+                "project_id": "PROJ-042",
+                "job_status": "RUNNING",
+                "configured_thread_count": 4,
+                "worker_label": "copy-job-42_0",
+                "started_at": "2026-04-27T10:00:00Z",
+                "elapsed_seconds": 5.5,
+                "cpu_user_seconds": 0.75,
+                "cpu_system_seconds": 0.25,
+                "cpu_time_seconds": 1.0,
+                "memory_bytes": null,
+                "metrics_available": true,
+                "metrics_note": "Per-thread memory metrics are not available on this host."
+            }
+        ]
+    }
 }
 ```
 
@@ -1921,8 +1946,13 @@ CPU, memory, disk I/O, worker queue.
 | `disk_read_bytes` | integer\|null | Cumulative disk read bytes since boot |
 | `disk_write_bytes` | integer\|null | Cumulative disk write bytes since boot |
 | `worker_queue_size` | integer\|null | Number of jobs in `PENDING` state; `null` when the database is unreachable or the count query fails |
+| `ecube_process` | object | Nested ECUBE process diagnostics and active copy-thread correlation |
 
-**Implementation note:** CPU, memory, and disk I/O metrics are collected via `psutil`. All metric fields are `null` when `psutil` is not installed rather than returning a hard error. `worker_queue_size` is similarly `null` (rather than `0`) whenever the database is unavailable so that "no queued jobs" and "unknown" are distinguishable by consumers.
+**`ecube_process` fields:** `cpu_percent`, `cpu_time_seconds`, `memory_rss_bytes`, `memory_vms_bytes`, `thread_count`, `active_copy_thread_count`, and `active_copy_threads`.
+
+**`active_copy_threads[]` fields:** `job_id`, `project_id`, `job_status`, `configured_thread_count`, `worker_label`, `started_at`, `elapsed_seconds`, `cpu_user_seconds`, `cpu_system_seconds`, `cpu_time_seconds`, `memory_bytes`, `metrics_available`, and `metrics_note`.
+
+**Implementation note:** Host CPU, memory, and disk I/O metrics are collected via `psutil`. When available, ECUBE process metrics are collected from the current ECUBE process and active copy-worker threads are correlated using ECUBE-owned runtime tracking. Host-level metric fields remain `null` when `psutil` is not installed rather than returning a hard error. `worker_queue_size` is similarly `null` (rather than `0`) whenever the database is unavailable so that "no queued jobs" and "unknown" are distinguishable by consumers.
 
 **Error responses:**
 

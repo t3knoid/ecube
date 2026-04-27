@@ -296,10 +296,12 @@ Common errors for admin log endpoints: `400` (invalid filename or traversal atte
 | GET | `/introspection/usb/topology` | all | USB hub and device topology |
 | GET | `/introspection/block-devices` | all | Kernel block device inventory |
 | GET | `/introspection/mounts` | all | Mount inventory and status |
-| GET | `/introspection/system-health` | all | Database and job engine health |
+| GET | `/introspection/system-health` | all | Database health plus host and ECUBE process diagnostics |
 | POST | `/introspection/reconcile-managed-mounts` | admin,manager | Run a manual live-safe reconciliation pass for managed network and USB mounts |
 
 `GET /introspection/drives` includes the port-based `port_system_path` and separate `serial_number` for each registered drive. `GET /introspection/usb/topology` includes a `serial` field when sysfs exposes one.
+
+`GET /introspection/system-health` now returns the existing host-level CPU, memory, disk I/O, active-job, and worker-queue metrics plus an `ecube_process` object. That nested object includes ECUBE process CPU and memory counters, total ECUBE thread count, and an `active_copy_threads` list that correlates active copy workers to their parent jobs.
 
 `POST /introspection/reconcile-managed-mounts` returns a summary payload with `status` (`ok` or `partial`), `scope` (`managed_mounts_only`), `network_mounts_checked`, `network_mounts_corrected`, `usb_mounts_checked`, `usb_mounts_corrected`, and `failure_count`. The endpoint is lock-protected and returns `409 Conflict` (`MANUAL_RECONCILIATION_IN_PROGRESS`) if another manual run is already in progress.
 
