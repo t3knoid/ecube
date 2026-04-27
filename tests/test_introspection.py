@@ -91,7 +91,7 @@ def test_system_health_reports_ecube_process_metrics_and_active_copy_threads(cli
     db.commit()
 
     fake_process = MagicMock()
-    fake_process.cpu_percent.return_value = 6.5
+    fake_process.cpu_percent.side_effect = [0.0, 6.5]
     fake_process.cpu_times.return_value = SimpleNamespace(user=2.0, system=1.5)
     fake_process.memory_info.return_value = SimpleNamespace(rss=4_096, vms=8_192)
     fake_process.num_threads.return_value = 7
@@ -111,6 +111,9 @@ def test_system_health_reports_ecube_process_metrics_and_active_copy_threads(cli
     with (
         patch("app.routers.introspection._PSUTIL_AVAILABLE", True),
         patch("app.routers.introspection._psutil") as mock_psutil,
+        patch("app.services.introspection_service._PROCESS_CPU_SAMPLER", None),
+        patch("app.services.introspection_service._PROCESS_CPU_SAMPLER_PID", None),
+        patch("app.services.introspection_service._PROCESS_CPU_SAMPLER_PRIMED", False),
         patch(
             "app.services.introspection_service.list_active_copy_workers",
             return_value=[
@@ -129,6 +132,10 @@ def test_system_health_reports_ecube_process_metrics_and_active_copy_threads(cli
         mock_psutil.virtual_memory.return_value = fake_vm
         mock_psutil.disk_io_counters.return_value = fake_io
         mock_psutil.Process.return_value = fake_process
+
+        from app.services import introspection_service
+
+        introspection_service.prime_process_cpu_sampler(psutil_module=mock_psutil)
 
         response = client.get("/introspection/system-health")
 
@@ -156,6 +163,50 @@ def test_system_health_reports_ecube_process_metrics_and_active_copy_threads(cli
     assert active_thread["memory_bytes"] is None
     assert active_thread["metrics_available"] is True
     assert active_thread["metrics_note"] == "Per-thread memory metrics are not available on this host."
+
+
+def test_system_health_hides_unprimed_process_cpu_percent_until_a_baseline_exists(client, db):
+    fake_process = MagicMock()
+    fake_process.cpu_percent.return_value = 0.0
+    fake_process.cpu_times.return_value = SimpleNamespace(user=2.0, system=1.5)
+    fake_process.memory_info.return_value = SimpleNamespace(rss=4_096, vms=8_192)
+    fake_process.num_threads.return_value = 7
+    fake_process.threads.return_value = []
+
+    with (
+        patch("app.routers.introspection._PSUTIL_AVAILABLE", True),
+        patch("app.routers.introspection._psutil") as mock_psutil,
+        patch("app.services.introspection_service._PROCESS_CPU_SAMPLER", None),
+        patch("app.services.introspection_service._PROCESS_CPU_SAMPLER_PID", None),
+        patch("app.services.introspection_service._PROCESS_CPU_SAMPLER_PRIMED", False),
+    ):
+        mock_psutil.cpu_percent.return_value = 12.5
+        mock_psutil.Process.return_value = fake_process
+
+        response = client.get("/introspection/system-health")
+
+    assert response.status_code == 200
+    ecube_process = response.json()["ecube_process"]
+    assert ecube_process["cpu_percent"] is None
+    assert ecube_process["cpu_time_seconds"] == 3.5
+    assert ecube_process["memory_rss_bytes"] == 4_096
+    assert ecube_process["memory_vms_bytes"] == 8_192
+    assert ecube_process["thread_count"] == 7
+    fake_process.cpu_percent.assert_called_once_with(interval=None)
+
+
+def test_prime_cpu_sampler_primes_process_cpu_sampler():
+    with (
+        patch("app.routers.introspection._PSUTIL_AVAILABLE", True),
+        patch("app.routers.introspection._psutil") as mock_psutil,
+        patch("app.routers.introspection.introspection_service.prime_process_cpu_sampler") as mock_prime,
+    ):
+        from app.routers.introspection import prime_cpu_sampler
+
+        prime_cpu_sampler()
+
+    mock_psutil.cpu_percent.assert_called_once_with(interval=1.0)
+    mock_prime.assert_called_once_with(psutil_module=mock_psutil)
 
 
 def test_system_health_marks_thread_metrics_unavailable_when_runtime_data_cannot_be_matched(client, db):
