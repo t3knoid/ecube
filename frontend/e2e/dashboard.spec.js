@@ -44,7 +44,7 @@ test('dashboard shows preparing label for startup-phase active jobs', async ({ p
 
   await expect(page.getByRole('heading', { name: 'Active Jobs' })).toBeVisible()
   await expect(page.getByText('P-021')).toBeVisible()
-  await expect(page.getByText('Preparing...', { exact: true })).toBeVisible()
+  await expect(page.locator('.dashboard-progress-cell').getByText('Preparing...', { exact: true }).first()).toBeVisible()
 
   await expectNoCriticalA11yViolations(page)
 })

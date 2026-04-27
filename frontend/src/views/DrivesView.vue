@@ -266,7 +266,9 @@ async function toggleBrowse(driveId) {
   browsingDriveId.value = browsingDriveId.value === driveId ? null : driveId
   if (browsingDriveId.value !== null) {
     await nextTick()
-    browsePanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    if (typeof browsePanelRef.value?.scrollIntoView === 'function') {
+      browsePanelRef.value.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
   }
 }
 
