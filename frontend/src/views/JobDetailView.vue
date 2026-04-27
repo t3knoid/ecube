@@ -44,6 +44,7 @@ const selectedFileId = ref(null)
 const fileHashes = ref(null)
 const compareFileId = ref(null)
 const compareResult = ref(null)
+const selectedHashFileMeta = ref(null)
 const supportingDrives = ref([])
 const supportingMounts = ref([])
 const filesPanelExpanded = ref(false)
@@ -51,9 +52,12 @@ const showEditDialog = ref(false)
 const showDeleteDialog = ref(false)
 const showStartupAnalysisCleanupDialog = ref(false)
 const showPausePendingDialog = ref(false)
+const showHashDialog = ref(false)
 const editDialogRef = ref(null)
 const pauseDialogRef = ref(null)
+const hashDialogRef = ref(null)
 const dialogTriggerRef = ref(null)
+const hashDialogTriggerRef = ref(null)
 
 const editForm = ref({
   project_id: '',
@@ -69,6 +73,40 @@ const canManageStartupAnalysis = computed(() => authStore.hasAnyRole(['admin', '
 const canInspectHashes = computed(() => authStore.hasAnyRole(['admin', 'auditor']))
 const currentStatus = computed(() => String(job.value?.status || '').toUpperCase())
 const currentStartupAnalysisStatus = computed(() => String(job.value?.startup_analysis_status || 'NOT_ANALYZED').toUpperCase())
+
+function normalizeFileStatus(status) {
+  return String(status || '').toUpperCase()
+}
+
+function fileStatusTone(status) {
+  const value = normalizeFileStatus(status)
+
+  if (['DONE', 'COMPLETED', 'COPIED', 'VERIFIED', 'OK', 'TRUE'].includes(value)) {
+    return 'success'
+  }
+  if (['FAILED', 'ERROR', 'MISSING', 'SKIPPED', 'FALSE'].includes(value)) {
+    return 'danger'
+  }
+  if (['RUNNING', 'COPYING', 'VERIFYING', 'HASHING', 'PAUSING'].includes(value)) {
+    return 'warning'
+  }
+  if (['PENDING', 'PAUSED', 'QUEUED', 'UNKNOWN'].includes(value)) {
+    return 'muted'
+  }
+
+  return 'info'
+}
+
+function fileStatusIcon(status) {
+  const tone = fileStatusTone(status)
+
+  if (tone === 'success') return '✓'
+  if (tone === 'warning') return '!'
+  if (tone === 'danger') return '×'
+  if (tone === 'muted') return '•'
+  return '?'
+}
+
 const canEdit = computed(() => {
   return canOperate.value
     && ['PENDING', 'PAUSED', 'FAILED'].includes(currentStatus.value)
@@ -118,14 +156,12 @@ const fileColumns = computed(() => {
   const columns = [
     { key: 'id', label: t('common.labels.id'), align: 'right' },
     { key: 'relative_path', label: t('jobs.path') },
-    { key: 'status', label: t('common.labels.status') },
+    { key: 'status', label: t('common.labels.status'), align: 'center' },
   ]
 
   if ((debug.value.files || []).some((row) => String(row?.error_message || '').trim())) {
     columns.push({ key: 'error_message', label: t('common.labels.details') })
   }
-
-  columns.push({ key: 'actions', label: t('common.actions.edit'), align: 'center' })
   return columns
 })
 
@@ -157,6 +193,14 @@ const fileListNotice = computed(() => {
 const selectedCompareFile = computed(() => (
   (debug.value.files || []).find((file) => Number(file.id) === Number(compareFileId.value)) || null
 ))
+
+const selectedHashFile = computed(() => {
+  const currentPageFile = (debug.value.files || []).find((file) => Number(file.id) === Number(selectedFileId.value))
+  if (currentPageFile) {
+    return currentPageFile
+  }
+  return selectedHashFileMeta.value
+})
 
 const progressMetrics = computed(() => {
   const metrics = calculateJobProgress(job.value)
@@ -212,6 +256,120 @@ const isJobFullyComplete = computed(() => {
 })
 const canVerify = computed(() => canOperate.value && isJobFullyComplete.value)
 const canGenerateManifest = computed(() => canOperate.value && isJobFullyComplete.value)
+
+const primaryActionKeys = computed(() => {
+  const status = currentStatus.value
+
+  if (['PENDING', 'FAILED', 'PAUSED'].includes(status)) {
+    return ['edit', 'analyze', 'start']
+  }
+  if (status === 'RUNNING' || status === 'PAUSING') {
+    return ['pause']
+  }
+  if (status === 'COMPLETED') {
+    return canRetryFailed.value ? ['retry-failed'] : ['verify', 'manifest']
+  }
+
+  return ['edit', 'analyze', 'start']
+})
+
+const actionItems = computed(() => {
+  const items = [
+    {
+      key: 'edit',
+      label: t('common.actions.edit'),
+      disabled: !canEdit.value || acting.value,
+      run: () => openEditDialog(),
+      visible: true,
+    },
+    {
+      key: 'analyze',
+      label: t('jobs.analyze'),
+      disabled: !canAnalyze.value || acting.value,
+      run: () => runAnalyze(),
+      visible: true,
+    },
+    {
+      key: 'start',
+      label: t('jobs.start'),
+      disabled: !canStart.value || acting.value,
+      run: () => runAction('start'),
+      visible: true,
+    },
+    {
+      key: 'retry-failed',
+      label: t('jobs.retryFailedFiles'),
+      disabled: !canRetryFailed.value || acting.value,
+      run: () => runAction('retry-failed'),
+      visible: true,
+    },
+    {
+      key: 'pause',
+      label: t('jobs.pause'),
+      disabled: !canPause.value || acting.value,
+      run: () => runAction('pause'),
+      visible: true,
+    },
+    {
+      key: 'complete',
+      label: t('jobs.complete'),
+      disabled: !canComplete.value || acting.value,
+      run: () => runComplete(),
+      visible: true,
+    },
+    {
+      key: 'verify',
+      label: t('jobs.verify'),
+      disabled: !canVerify.value || acting.value,
+      run: () => runAction('verify'),
+      visible: true,
+    },
+    {
+      key: 'manifest',
+      label: t('jobs.manifest'),
+      disabled: !canGenerateManifest.value || acting.value,
+      run: () => runAction('manifest'),
+      visible: true,
+    },
+    {
+      key: 'clear-startup-analysis',
+      label: t('jobs.clearStartupAnalysis'),
+      disabled: !canClearStartupAnalysisCache.value || acting.value,
+      run: () => {
+        showStartupAnalysisCleanupDialog.value = true
+      },
+      visible: showClearStartupAnalysisCache.value,
+    },
+    {
+      key: 'delete',
+      label: t('common.actions.delete'),
+      disabled: !canDelete.value || acting.value,
+      run: () => {
+        showDeleteDialog.value = true
+      },
+      visible: showDelete.value,
+      tone: 'danger',
+    },
+  ]
+
+  return items.filter((item) => item.visible)
+})
+
+const primaryActions = computed(() => {
+  const keys = new Set(primaryActionKeys.value)
+  const items = actionItems.value.filter((item) => keys.has(item.key))
+
+  if (items.length > 0) {
+    return items
+  }
+
+  return actionItems.value.slice(0, 3)
+})
+
+const secondaryActions = computed(() => {
+  const primaryKeys = new Set(primaryActions.value.map((item) => item.key))
+  return actionItems.value.filter((item) => !primaryKeys.has(item.key))
+})
 
 const editEligibleMounts = computed(() => {
   const projectId = normalizeProjectId(editForm.value.project_id)
@@ -485,6 +643,22 @@ function closePausePendingDialog() {
   showPausePendingDialog.value = false
 }
 
+function closeHashDialog() {
+  showHashDialog.value = false
+}
+
+function closeActionMenu(event) {
+  const menu = event?.currentTarget instanceof HTMLElement ? event.currentTarget.closest('details') : null
+  if (menu instanceof HTMLDetailsElement) {
+    menu.removeAttribute('open')
+  }
+}
+
+function runOverflowAction(action, event) {
+  closeActionMenu(event)
+  action.run()
+}
+
 function handleDialogKeydown(event) {
   if (showEditDialog.value) {
     if (event.key === 'Escape') {
@@ -506,6 +680,18 @@ function handleDialogKeydown(event) {
     }
     if (event.key === 'Tab') {
       trapFocusWithin(event, pauseDialogRef.value)
+    }
+    return
+  }
+
+  if (showHashDialog.value) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeHashDialog()
+      return
+    }
+    if (event.key === 'Tab') {
+      trapFocusWithin(event, hashDialogRef.value)
     }
   }
 }
@@ -790,11 +976,16 @@ function formatCompareValue(value) {
   return value == null || value === '' ? '-' : String(value)
 }
 
-async function loadHashes(fileId) {
+async function loadHashes(fileId, event) {
   if (!canInspectHashes.value) return
+  const selectedFile = (debug.value.files || []).find((file) => Number(file.id) === Number(fileId)) || null
+  hashDialogTriggerRef.value = event?.currentTarget instanceof HTMLElement ? event.currentTarget : document.activeElement instanceof HTMLElement ? document.activeElement : null
   selectedFileId.value = fileId
+  selectedHashFileMeta.value = selectedFile
   compareFileId.value = fileId
   fileHashes.value = null
+  compareResult.value = null
+  showHashDialog.value = true
   try {
     fileHashes.value = await getFileHashes(fileId)
   } catch (err) {
@@ -874,6 +1065,28 @@ watch(showPausePendingDialog, async (open) => {
   }
   const trigger = dialogTriggerRef.value
   dialogTriggerRef.value = null
+  await nextTick()
+  if (trigger instanceof HTMLElement) {
+    trigger.focus()
+  }
+})
+
+watch(showHashDialog, async (open) => {
+  if (open) {
+    document.addEventListener('keydown', handleDialogKeydown)
+    await nextTick()
+    const target = hashDialogRef.value?.querySelector('button')
+    if (target instanceof HTMLElement) {
+      target.focus()
+    }
+    return
+  }
+
+  if (!showEditDialog.value && !showPausePendingDialog.value) {
+    document.removeEventListener('keydown', handleDialogKeydown)
+  }
+  const trigger = hashDialogTriggerRef.value
+  hashDialogTriggerRef.value = null
   await nextTick()
   if (trigger instanceof HTMLElement) {
     trigger.focus()
@@ -989,16 +1202,40 @@ onUnmounted(() => {
       </div>
 
       <div class="actions">
-        <button class="btn" :disabled="!canEdit || acting" @click="openEditDialog">{{ t('common.actions.edit') }}</button>
-        <button class="btn" :disabled="!canAnalyze || acting" @click="runAnalyze">{{ t('jobs.analyze') }}</button>
-        <button class="btn" :disabled="!canStart || acting" @click="runAction('start')">{{ t('jobs.start') }}</button>
-        <button class="btn" :disabled="!canRetryFailed || acting" @click="runAction('retry-failed')">{{ t('jobs.retryFailedFiles') }}</button>
-        <button class="btn" :disabled="!canPause || acting" @click="runAction('pause')">{{ t('jobs.pause') }}</button>
-        <button class="btn" :disabled="!canComplete || acting" @click="runComplete">{{ t('jobs.complete') }}</button>
-        <button class="btn" :disabled="!canVerify || acting" @click="runAction('verify')">{{ t('jobs.verify') }}</button>
-        <button class="btn" :disabled="!canGenerateManifest || acting" @click="runAction('manifest')">{{ t('jobs.manifest') }}</button>
-        <button v-if="showClearStartupAnalysisCache" class="btn" :disabled="!canClearStartupAnalysisCache || acting" @click="showStartupAnalysisCleanupDialog = true">{{ t('jobs.clearStartupAnalysis') }}</button>
-        <button v-if="showDelete" class="btn btn-danger" :disabled="!canDelete || acting" @click="showDeleteDialog = true">{{ t('common.actions.delete') }}</button>
+        <button
+          v-for="action in primaryActions"
+          :key="action.key"
+          class="btn"
+          :class="{ 'btn-danger': action.tone === 'danger' }"
+          :disabled="action.disabled"
+          @click="action.run()"
+        >
+          {{ action.label }}
+        </button>
+        <details v-if="secondaryActions.length" class="actions-menu">
+          <summary class="actions-menu-toggle" :aria-label="`${t('jobs.detail')} actions`">
+            <span class="actions-menu-toggle-dots" aria-hidden="true">
+              <span class="actions-menu-toggle-dot" />
+              <span class="actions-menu-toggle-dot" />
+              <span class="actions-menu-toggle-dot" />
+            </span>
+          </summary>
+          <div class="actions-menu-popover">
+            <button
+              v-for="action in secondaryActions"
+              :key="action.key"
+              class="btn"
+              :class="[
+                `detail-action-menu-${action.key}`,
+                { 'btn-danger': action.tone === 'danger' },
+              ]"
+              :disabled="action.disabled"
+              @click="runOverflowAction(action, $event)"
+            >
+              {{ action.label }}
+            </button>
+          </div>
+        </details>
       </div>
     </article>
 
@@ -1019,14 +1256,24 @@ onUnmounted(() => {
         <p v-if="filesLoading" class="muted">{{ t('common.labels.loading') }}</p>
         <p v-else-if="fileListNotice" class="muted">{{ fileListNotice }}</p>
         <DataTable :columns="fileColumns" :rows="debug.files || []" row-key="id" :empty-text="t('jobs.noFiles')">
+          <template #cell-relative_path="{ row }">
+            <button class="file-path-button" :disabled="!canInspectHashes" @click="loadHashes(row.id, $event)">
+              {{ row.relative_path }}
+            </button>
+          </template>
           <template #cell-status="{ row }">
-            <StatusBadge :status="row.status" />
+            <span
+              class="file-status-icon"
+              :class="`file-status-icon--${fileStatusTone(row.status)}`"
+              :aria-label="normalizeFileStatus(row.status)"
+              :title="normalizeFileStatus(row.status)"
+              role="img"
+            >
+              <span aria-hidden="true">{{ fileStatusIcon(row.status) }}</span>
+            </span>
           </template>
           <template #cell-error_message="{ row }">
             <span class="error-text">{{ row.error_message || '-' }}</span>
-          </template>
-          <template #cell-actions="{ row }">
-            <button class="btn" :disabled="!canInspectHashes" @click="loadHashes(row.id)">{{ t('jobs.hashes') }}</button>
           </template>
         </DataTable>
         <Pagination
@@ -1035,7 +1282,7 @@ onUnmounted(() => {
           :page-size="debug.page_size"
           :total="debug.total_files"
           :show-page-window="true"
-          :window-size="10"
+          :window-size="5"
           @update:page="debug.page = $event"
         />
       </div>
@@ -1099,52 +1346,57 @@ onUnmounted(() => {
       </div>
     </teleport>
 
-    <div class="split-grid">
-      <article class="panel">
-        <h2>{{ t('jobs.hashViewer') }}</h2>
-        <p class="muted" v-if="!selectedFileId">{{ t('jobs.hashViewerEmpty') }}</p>
-        <div v-else-if="fileHashes" class="hash-grid">
-          <span>{{ t('common.labels.id') }}</span><strong>{{ fileHashes.file_id }}</strong>
-          <span>{{ t('jobs.md5') }}</span><strong class="mono">{{ fileHashes.md5 || '-' }}</strong>
-          <span>{{ t('jobs.sha256') }}</span><strong class="mono">{{ fileHashes.sha256 || '-' }}</strong>
-          <span>{{ t('common.labels.size') }}</span><strong>{{ fileHashes.size_bytes || '-' }}</strong>
-        </div>
-      </article>
-
-      <article class="panel">
-        <h2>{{ t('jobs.compareTitle') }}</h2>
-        <p class="muted">{{ t('jobs.compareHelp') }}</p>
-        <div class="compare-form">
-          <label for="compare-file-source">{{ t('jobs.fileA') }}</label>
-          <select id="compare-file-source" v-model="compareFileId">
-            <option :value="null">-</option>
-            <option v-for="file in debug.files || []" :key="`compare-${file.id}`" :value="file.id">
-              #{{ file.id }} {{ file.relative_path }}
-            </option>
-          </select>
-          <label>{{ t('jobs.fileB') }}</label>
-          <strong class="mono wrap-anywhere">{{ selectedCompareFile ? `#${selectedCompareFile.id} ${selectedCompareFile.relative_path}` : '-' }}</strong>
-          <button class="btn" :disabled="!selectedCompareFile" @click="runCompare">
-            {{ t('jobs.compare') }}
-          </button>
-        </div>
-
-        <div v-if="compareResult" class="compare-results">
-          <div class="hash-grid">
-            <span>{{ t('jobs.compareMatch') }}</span><StatusBadge :status="compareResult.match" />
-            <span>{{ t('jobs.hashMatch') }}</span><StatusBadge :status="compareResult.hash_match" />
-            <span>{{ t('jobs.sizeMatch') }}</span><StatusBadge :status="compareResult.size_match" />
-            <span>{{ t('jobs.pathMatch') }}</span><StatusBadge :status="compareResult.path_match" />
+    <teleport to="body">
+      <div v-if="showHashDialog" class="dialog-overlay" @click.self="closeHashDialog">
+        <div ref="hashDialogRef" class="dialog-panel hash-dialog" role="dialog" aria-modal="true" aria-labelledby="hash-viewer-title">
+          <h2 id="hash-viewer-title">{{ t('jobs.hashViewer') }}</h2>
+          <p v-if="!selectedFileId" class="muted">{{ t('jobs.hashViewerEmpty') }}</p>
+          <p v-else-if="!fileHashes" class="muted">{{ t('common.labels.loading') }}</p>
+          <div v-else class="hash-grid">
+            <span>{{ t('common.labels.id') }}</span><strong>{{ fileHashes.file_id }}</strong>
+            <span>{{ t('jobs.md5') }}</span><strong class="mono wrap-anywhere">{{ fileHashes.md5 || '-' }}</strong>
+            <span>{{ t('jobs.sha256') }}</span><strong class="mono wrap-anywhere">{{ fileHashes.sha256 || '-' }}</strong>
+            <span>{{ t('common.labels.size') }}</span><strong>{{ fileHashes.size_bytes || '-' }}</strong>
           </div>
-          <div class="compare-detail-grid">
-            <span></span><strong>{{ t('jobs.fileA') }}</strong><strong>{{ t('jobs.fileB') }}</strong>
-            <span>{{ t('jobs.path') }}</span><strong class="mono wrap-anywhere">{{ formatCompareValue(compareResult.file_a?.relative_path) }}</strong><strong class="mono wrap-anywhere">{{ formatCompareValue(compareResult.file_b?.relative_path) }}</strong>
-            <span>{{ t('common.labels.size') }}</span><strong>{{ formatCompareValue(compareResult.file_a?.size_bytes) }}</strong><strong>{{ formatCompareValue(compareResult.file_b?.size_bytes) }}</strong>
-            <span>{{ t('jobs.sha256') }}</span><strong class="mono wrap-anywhere">{{ formatCompareValue(compareResult.file_a?.sha256 || compareResult.file_a?.md5) }}</strong><strong class="mono wrap-anywhere">{{ formatCompareValue(compareResult.file_b?.sha256 || compareResult.file_b?.md5) }}</strong>
+          <div v-if="selectedHashFile" class="compare-section">
+            <strong>{{ t('jobs.compareTitle') }}</strong>
+            <p class="muted">{{ t('jobs.compareHelp') }}</p>
+            <div class="compare-form">
+              <label for="compare-file-source">{{ t('jobs.fileA') }}</label>
+              <select id="compare-file-source" v-model="compareFileId">
+                <option :value="null">-</option>
+                <option v-for="file in debug.files || []" :key="`compare-${file.id}`" :value="file.id">
+                  #{{ file.id }} {{ file.relative_path }}
+                </option>
+              </select>
+              <label>{{ t('jobs.fileB') }}</label>
+              <strong class="mono wrap-anywhere">#{{ selectedHashFile.id }} {{ selectedHashFile.relative_path }}</strong>
+              <button class="btn" :disabled="!selectedCompareFile" @click="runCompare">
+                {{ t('jobs.compare') }}
+              </button>
+            </div>
+
+            <div v-if="compareResult" class="compare-results">
+              <div class="hash-grid">
+                <span>{{ t('jobs.compareMatch') }}</span><StatusBadge :status="compareResult.match" />
+                <span>{{ t('jobs.hashMatch') }}</span><StatusBadge :status="compareResult.hash_match" />
+                <span>{{ t('jobs.sizeMatch') }}</span><StatusBadge :status="compareResult.size_match" />
+                <span>{{ t('jobs.pathMatch') }}</span><StatusBadge :status="compareResult.path_match" />
+              </div>
+              <div class="compare-detail-grid">
+                <span></span><strong>{{ t('jobs.fileA') }}</strong><strong>{{ t('jobs.fileB') }}</strong>
+                <span>{{ t('jobs.path') }}</span><strong class="mono wrap-anywhere">{{ formatCompareValue(compareResult.file_a?.relative_path) }}</strong><strong class="mono wrap-anywhere">{{ formatCompareValue(compareResult.file_b?.relative_path) }}</strong>
+                <span>{{ t('common.labels.size') }}</span><strong>{{ formatCompareValue(compareResult.file_a?.size_bytes) }}</strong><strong>{{ formatCompareValue(compareResult.file_b?.size_bytes) }}</strong>
+                <span>{{ t('jobs.sha256') }}</span><strong class="mono wrap-anywhere">{{ formatCompareValue(compareResult.file_a?.sha256 || compareResult.file_a?.md5) }}</strong><strong class="mono wrap-anywhere">{{ formatCompareValue(compareResult.file_b?.sha256 || compareResult.file_b?.md5) }}</strong>
+              </div>
+            </div>
+          </div>
+          <div class="dialog-actions">
+            <button class="btn" @click="closeHashDialog">{{ t('common.actions.close') }}</button>
           </div>
         </div>
-      </article>
-    </div>
+      </div>
+    </teleport>
 
     <teleport to="body">
       <div v-if="showPausePendingDialog" class="dialog-overlay" @click.self="closePausePendingDialog">
@@ -1266,6 +1518,60 @@ onUnmounted(() => {
   align-items: center;
 }
 
+.actions {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.actions-menu {
+  position: relative;
+}
+
+.actions-menu-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.actions-menu-toggle::-webkit-details-marker {
+  display: none;
+}
+
+.actions-menu-toggle-dots {
+  display: inline-grid;
+  gap: 0.15rem;
+}
+
+.actions-menu-toggle-dot {
+  width: 0.25rem;
+  height: 0.25rem;
+  border-radius: 9999px;
+  background: currentColor;
+}
+
+.actions-menu-popover {
+  position: absolute;
+  top: calc(100% + var(--space-2xs));
+  right: 0;
+  z-index: 3;
+  min-width: 12rem;
+  display: grid;
+  gap: var(--space-2xs);
+  padding: var(--space-2xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg-primary);
+  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
+}
+
 select {
   border: 1px solid var(--color-border);
   background: var(--color-bg-input);
@@ -1298,7 +1604,73 @@ select {
   width: 100%;
 }
 
+.file-path-button {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-link, var(--color-text-primary));
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.file-path-button:disabled {
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  cursor: default;
+}
+
+.file-status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  font-size: 0.9rem;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+}
+
+.file-status-icon--success {
+  background: color-mix(in srgb, var(--color-success) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-success) 45%, var(--color-border));
+  color: var(--color-status-ok-text, #14532d);
+}
+
+.file-status-icon--warning {
+  background: color-mix(in srgb, var(--color-warning) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-warning) 45%, var(--color-border));
+  color: var(--color-status-warn-text, #7c3f00);
+}
+
+.file-status-icon--danger {
+  background: color-mix(in srgb, var(--color-danger) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border));
+  color: var(--color-status-danger-text, #991b1b);
+}
+
+.file-status-icon--info {
+  background: color-mix(in srgb, var(--color-info) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-info) 45%, var(--color-border));
+  color: var(--color-status-info-text, #1e40af);
+}
+
+.file-status-icon--muted {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border);
+  color: var(--color-status-muted-text, #475569);
+}
+
 .compare-results {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.compare-section {
   display: grid;
   gap: var(--space-sm);
 }
