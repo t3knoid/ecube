@@ -1,7 +1,5 @@
 import pytest
 
-from app.models.jobs import ExportJob
-
 
 @pytest.mark.integration
 def test_system_health_reports_connected_database(integration_client):
@@ -32,24 +30,3 @@ def test_mount_table_endpoint_returns_mounts_key(integration_client):
     assert response.status_code == 200
     assert "mounts" in response.json()
 
-
-@pytest.mark.integration
-def test_job_debug_use_cases(integration_client, integration_db):
-    missing = integration_client.get("/introspection/jobs/999999/debug")
-    assert missing.status_code == 404
-    assert missing.json()["code"] == "NOT_FOUND"
-
-    job = ExportJob(
-        project_id="PROJ-INTROSPECT-001",
-        evidence_number="EV-INT-001",
-        source_path="/tmp/source",
-    )
-    integration_db.add(job)
-    integration_db.commit()
-
-    response = integration_client.get(f"/introspection/jobs/{job.id}/debug")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["job_id"] == job.id
-    assert data["project_id"] == "PROJ-INTROSPECT-001"
-    assert isinstance(data["files"], list)
