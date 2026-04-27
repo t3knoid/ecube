@@ -156,6 +156,36 @@ class SystemMountsResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class EcubeCopyThreadResponse(BaseModel):
+    """Single active ECUBE copy worker correlated to its parent job."""
+
+    job_id: int = Field(..., description="Export job identifier that owns this active worker")
+    project_id: Optional[str] = Field(default=None, description="Project ID for the parent job when available")
+    job_status: Optional[str] = Field(default=None, description="Current parent job status when available")
+    configured_thread_count: Optional[int] = Field(default=None, description="Configured parallel thread count for the parent job")
+    worker_label: str = Field(..., description="ECUBE-owned worker label for the active thread")
+    started_at: str = Field(..., description="UTC timestamp when the active worker began its current file")
+    elapsed_seconds: Optional[float] = Field(default=None, description="Elapsed runtime for the current active worker task")
+    cpu_user_seconds: Optional[float] = Field(default=None, description="Per-thread user CPU time when available")
+    cpu_system_seconds: Optional[float] = Field(default=None, description="Per-thread system CPU time when available")
+    cpu_time_seconds: Optional[float] = Field(default=None, description="Combined per-thread CPU time when available")
+    memory_bytes: Optional[int] = Field(default=None, description="Per-thread memory usage when the host can provide it")
+    metrics_available: bool = Field(default=False, description="Whether per-thread CPU metrics were collected reliably")
+    metrics_note: Optional[str] = Field(default=None, description="Operator-facing note when thread metrics are partially unavailable")
+
+
+class EcubeProcessMetricsResponse(BaseModel):
+    """ECUBE-process diagnostics shown beside host-level system health."""
+
+    cpu_percent: Optional[float] = Field(default=None, description="CPU utilisation percent for the ECUBE process when available")
+    cpu_time_seconds: Optional[float] = Field(default=None, description="Combined user and system CPU time consumed by the ECUBE process")
+    memory_rss_bytes: Optional[int] = Field(default=None, description="Resident memory used by the ECUBE process in bytes")
+    memory_vms_bytes: Optional[int] = Field(default=None, description="Virtual memory reserved by the ECUBE process in bytes")
+    thread_count: Optional[int] = Field(default=None, description="Total OS threads currently owned by the ECUBE process")
+    active_copy_thread_count: int = Field(default=0, description="Number of active ECUBE copy workers currently tracked")
+    active_copy_threads: List[EcubeCopyThreadResponse] = Field(default_factory=list, description="Active ECUBE copy workers correlated to their parent export job")
+
+
 class SystemHealthResponse(BaseModel):
     """Response for ``GET /introspection/system-health``."""
 
@@ -170,6 +200,7 @@ class SystemHealthResponse(BaseModel):
     disk_read_bytes: Optional[int] = Field(default=None, description="Cumulative disk read bytes since boot")
     disk_write_bytes: Optional[int] = Field(default=None, description="Cumulative disk write bytes since boot")
     worker_queue_size: Optional[int] = Field(default=None, description="Number of pending (queued) export jobs; null when the database is unreachable or the count query fails")
+    ecube_process: EcubeProcessMetricsResponse = Field(..., description="ECUBE-process diagnostics and active copy worker correlation")
 
 
 class ManualManagedMountReconciliationResponse(BaseModel):

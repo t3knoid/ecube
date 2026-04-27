@@ -16,6 +16,10 @@ from app.models.jobs import ExportFile, FileStatus, JobStatus, StartupAnalysisSt
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.job_repository import FileRepository, JobRepository
 from app.services.callback_service import deliver_callback
+from app.services.copy_worker_runtime import (
+    register_active_copy_worker,
+    unregister_active_copy_worker,
+)
 from app.utils.sanitize import describe_relative_paths, sanitize_error_message, validate_source_path
 
 logger = logging.getLogger(__name__)
@@ -956,6 +960,7 @@ def _process_file(
     and file path.
     """
     db: Session = SessionLocal()
+    worker_snapshot: Optional[dict[str, object]] = None
     try:
         file_repo = FileRepository(db)
         audit_repo = AuditRepository(db)
@@ -975,6 +980,8 @@ def _process_file(
             except Exception:
                 logger.exception("DB commit failed restoring PENDING status for file %s", export_file_id)
             return
+
+        worker_snapshot = register_active_copy_worker(job_id=ef.job_id)
 
         ef.status = FileStatus.COPYING
         try:
@@ -1200,6 +1207,7 @@ def _process_file(
             except Exception:
                 logger.exception("DB commit failed saving ERROR status for file %s", export_file_id)
     finally:
+        unregister_active_copy_worker(worker_snapshot)
         db.close()
 
 
@@ -1279,7 +1287,10 @@ def run_copy_job(job_id: int) -> None:
 
             pause_requested = False
 
-            executor = ThreadPoolExecutor(max_workers=job.thread_count or settings.copy_default_thread_count)
+            executor = ThreadPoolExecutor(
+                max_workers=job.thread_count or settings.copy_default_thread_count,
+                thread_name_prefix=f"copy-job-{job_id}",
+            )
             try:
                 futures = {
                     executor.submit(_process_file, ef_id, src, target, max_retries, retry_delay): ef_id

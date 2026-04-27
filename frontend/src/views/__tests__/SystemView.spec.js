@@ -156,6 +156,69 @@ describe('SystemView USB topology tab', () => {
     expect(labels).not.toContain('Job Debug')
   })
 
+  it('renders host metrics and ECUBE process diagnostics separately', async () => {
+    mocks.getSystemHealth.mockResolvedValue({
+      status: 'ok',
+      database: 'connected',
+      active_jobs: 1,
+      cpu_percent: 18.5,
+      memory_percent: 41.2,
+      memory_used_bytes: 4096,
+      memory_total_bytes: 8192,
+      disk_read_bytes: 1024,
+      disk_write_bytes: 2048,
+      worker_queue_size: 2,
+      ecube_process: {
+        cpu_percent: 6.5,
+        cpu_time_seconds: 3.5,
+        memory_rss_bytes: 4096,
+        memory_vms_bytes: 8192,
+        thread_count: 7,
+        active_copy_thread_count: 1,
+        active_copy_threads: [
+          {
+            job_id: 42,
+            project_id: 'proj-42',
+            job_status: 'RUNNING',
+            configured_thread_count: 3,
+            worker_label: 'copy-job-42_0',
+            elapsed_seconds: 5.5,
+            cpu_time_seconds: 1.0,
+          },
+        ],
+      },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('system.hostMetrics'))
+    expect(wrapper.text()).toContain(i18n.global.t('system.ecubeProcessTitle'))
+    expect(wrapper.text()).toContain('copy-job-42_0')
+    expect(wrapper.text()).toContain('PROJ-42')
+    expect(wrapper.text()).toContain('RUNNING')
+    expect(wrapper.text()).toContain('3')
+    expect(wrapper.text()).not.toContain('Memory Usage')
+    expect(wrapper.text()).not.toContain('Metrics Note')
+  })
+
+  it('shows a clear empty state when no ECUBE copy threads are active', async () => {
+    mocks.getSystemHealth.mockResolvedValue({
+      status: 'ok',
+      database: 'connected',
+      active_jobs: 0,
+      ecube_process: {
+        active_copy_thread_count: 0,
+        active_copy_threads: [],
+      },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('system.noActiveCopyThreads'))
+  })
+
   it('hides devices only if Serial Number, Manufacturer, Product, Vendor ID, and Product ID are all empty, and sorts by device column', async () => {
     const usbDevices = [
       { device: '', manufacturer: '', product: '', idVendor: '', idProduct: '' },

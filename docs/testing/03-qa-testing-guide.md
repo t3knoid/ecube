@@ -2007,9 +2007,12 @@ Contributor note: when adding or renumbering QA test cases in this guide, run `p
 | 5 | Active jobs count | Start an export job, call endpoint | `active_jobs` ≥ 1 |
 | 6 | Worker queue size | Create a PENDING job (created but not started), call endpoint | `worker_queue_size` ≥ 1 |
 | 7 | Worker queue size decrements | Start the pending job, call endpoint again | `worker_queue_size` decreases by 1 (is 0 if no other PENDING jobs exist; job moved to RUNNING) |
-| 8 | Degraded when DB down | Stop PostgreSQL, call endpoint with valid token | 200, `status: "degraded"`, `database: "error"`, `database_error` is non-null |
-| 9 | Unauthenticated rejected | `GET /introspection/system-health` without token | 401 |
-| 10 | Processor role allowed | `GET /introspection/system-health` with processor token | 200 |
+| 8 | ECUBE process metrics present | Inspect response body | `ecube_process` object exists with `cpu_percent`, `cpu_time_seconds`, `memory_rss_bytes`, `memory_vms_bytes`, `thread_count`, `active_copy_thread_count`, and `active_copy_threads` |
+| 9 | Active copy-thread correlation | Run an export job with active copy workers, call endpoint during the run | Each returned `active_copy_threads` row includes `job_id`, `project_id`, `job_status`, `configured_thread_count`, `worker_label`, `elapsed_seconds`, and `cpu_time_seconds` |
+| 10 | ECUBE process metrics degrade safely | Exercise the endpoint where process/thread metrics cannot be sampled reliably | `ecube_process` still exists; unavailable per-thread values remain `null` or the list is empty rather than returning unsafe host details |
+| 11 | Degraded when DB down | Stop PostgreSQL, call endpoint with valid token | 200, `status: "degraded"`, `database: "error"`, `database_error` is non-null |
+| 12 | Unauthenticated rejected | `GET /introspection/system-health` without token | 401 |
+| 13 | Processor role allowed | `GET /introspection/system-health` with processor token | 200 |
 
 ### 12.15.1 Liveness, Readiness, and Version
 
