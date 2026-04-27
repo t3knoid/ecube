@@ -1054,32 +1054,7 @@ Sorted by `Device`; rows with no meaningful USB metadata are hidden.
 │  └─────────────────────────────────────────────────────────────────────────┘ │
 ```
 
-### 9d — Job Debug View (UC-8.6)
-
-```
-│  Job Debug — Admin/Auditor Only                                              │
-│                                                                              │
-│  Job ID: [ 1 ]   [ Load Debug Info ]                                         │
-│                                                                              │
-│  ┌─ Debug Details ─────────────────────────────────────────────────────────┐ │
-│  │  Job ID:          1                                                     │ │
-│  │  Status:          COMPLETED                                             │ │
-│  │  Project:         PROJ-001                                              │ │
-│  │  Source:          /nfs/evidence/case-001                                 │ │
-│  │  Target:          /mnt/usb/drive4                                       │ │
-│  │  Total Bytes:     13,312,196,608                                        │ │
-│  │  Copied Bytes:    13,312,196,608                                        │ │
-│  │  Files:           1,247                                                 │ │
-│  │  Threads:         4                                                     │ │
-│  │                                                                         │ │
-│  │  Files with errors:                                                     │ │
-│  │  ID   │ Path                    │ Status │ Error                        │ │
-│  │  ─────┼─────────────────────────┼────────┼───────────────────────────── │ │
-│  │  156  │ archive/corrupted.bin   │ ERROR  │ I/O error reading source     │ │
-│  └─────────────────────────────────────────────────────────────────────────┘ │
-```
-
-**Use Cases Covered:** UC-8.1 through UC-8.8
+**Use Cases Covered:** UC-8.1 through UC-8.5 and UC-8.7 through UC-8.9
 
 ---
 
@@ -1338,7 +1313,6 @@ Used for: Format Drive (UC-4.4), Delete User (UC-3.8), Remove Mount (UC-5.4), Re
 | UC-8.1 – UC-8.2 | Screen 9a: System Health + Footer |
 | UC-8.3 | Screen 9b: USB Topology |
 | UC-8.4 – UC-8.5 | Screen 9a: Block Devices / Mounts tabs |
-| UC-8.6 | Screen 9d: Job Debug |
 | UC-8.7 – UC-8.8 | Screen 9c: Logs Tab |
 | UC-9.1 – UC-9.3 | Screen 10a: Configuration (Logging & Database sections) |
 | UC-9.4 – UC-9.5 | Screen 10a: Configuration (Password Policy section) |

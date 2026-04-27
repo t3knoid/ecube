@@ -424,20 +424,6 @@ class TestIntrospectionAuthorization:
         c = _client_for_role(db, [])
         _assert_forbidden(c.get(path))
 
-    def test_job_debug_auditor_allowed(self, db):
-        from app.models.jobs import ExportJob
-
-        job = ExportJob(project_id="P", evidence_number="E", source_path="/tmp")
-        db.add(job)
-        db.commit()
-        c = _client_for_role(db, ["auditor"])
-        assert c.get(f"/introspection/jobs/{job.id}/debug").status_code == 200
-
-    def test_job_debug_no_role_denied(self, db):
-        c = _client_for_role(db, [])
-        _assert_forbidden(c.get("/introspection/jobs/1/debug"))
-
-
 # ---------------------------------------------------------------------------
 # Unauthenticated access still returns 401
 # ---------------------------------------------------------------------------
