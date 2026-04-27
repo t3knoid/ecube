@@ -13,13 +13,14 @@ except Exception:  # pragma: no cover  # ImportError or dynamic-loader / ABI fai
 
 
 def prime_cpu_sampler() -> None:  # pragma: no cover
-    """Prime psutil's internal CPU baseline by making one blocking sample.
+    """Prime host and ECUBE-process CPU baselines during application startup.
 
     Intended to be called from a background thread during application startup
     (via ``asyncio.to_thread``) so the 1-second blocking sample does not add
     latency to the startup sequence.  Subsequent non-blocking
     ``cpu_percent(interval=None)`` calls in the system-health endpoint will
-    return a meaningful value rather than 0.0.
+    return a meaningful value rather than 0.0 for both host and ECUBE-process
+    metrics.
 
     When psutil could not be imported the failure is logged here (once, at
     startup) rather than at module-import time so that logging is already
@@ -34,6 +35,7 @@ def prime_cpu_sampler() -> None:  # pragma: no cover
         return
     try:
         _psutil.cpu_percent(interval=1.0)
+        introspection_service.prime_process_cpu_sampler(psutil_module=_psutil)
     except Exception:
         # Log rather than silently discard so failures are observable.
         # cpu_percent(interval=None) will fall back to 0.0 until psutil recovers.
