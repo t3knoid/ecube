@@ -29,6 +29,8 @@ ECUBE exposes a REST API that external systems (case management platforms, eDisc
 4. **Create and start the job** — Submit the copy job with source, optional drive, and parameters.
 5. **Monitor, verify, manifest** — Poll for completion, verify integrity, and generate a chain-of-custody manifest.
 
+For job lifecycle state, poll `GET /jobs/{job_id}` or rely on webhook callbacks. For operator-facing monitoring dashboards or automation that needs safe host and ECUBE runtime diagnostics, query `GET /introspection/system-health` to retrieve host metrics, ECUBE process metrics, and active copy-thread diagnostics.
+
 > **Webhook Callbacks:** Instead of (or in addition to) polling, you can
 > supply a `callback_url` when creating the job.  ECUBE will POST a JSON
 > payload to that URL when the job reaches a terminal state (`COMPLETED` or
@@ -287,6 +289,8 @@ GET /jobs/{job_id}
 Progress: `(copied_bytes / total_bytes) * 100`
 
 > **Polling interval:** Every 5–10 seconds. Avoid polling faster than once per second.
+
+> **Operational monitoring:** `GET /jobs/{job_id}` is the correct endpoint for job progress and terminal state. If your integration also exposes operator health views or alerting, pair job polling with `GET /introspection/system-health` rather than inferring host or process health from the job payload.
 
 ### Step 7 — Verify Integrity
 
