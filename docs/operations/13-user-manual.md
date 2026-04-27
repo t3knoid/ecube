@@ -578,6 +578,8 @@ Before creating a job, confirm:
 - The evidence number and source path are correct
 - If you enable `Run job immediately`, the job will start as soon as creation succeeds
 
+For `thread count`, start with the default value unless your administrator has given you a different recommendation. If you need to change it, a good rule is to choose a value no higher than the number of CPUs visible to the operating system and reduce it again if the host becomes sluggish or copy speed does not improve.
+
 The source path is interpreted inside the selected mounted share. Entering only / uses the root of that share, and attempts to navigate outside the selected share are rejected before the job is created.
 
 ### 9.3 Opening a Job
