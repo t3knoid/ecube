@@ -925,17 +925,21 @@ copy status metadata without requiring introspection-only debug access.
             "id": 9001,
             "relative_path": "evidence/case-17/documents/report.pdf",
             "status": "DONE",
-            "checksum": "c3ab8ff13720e8ad9047dd39466b3c89"
+            "checksum": "c3ab8ff13720e8ad9047dd39466b3c89",
+            "error_message": null
         },
         {
             "id": 9002,
             "relative_path": "evidence/case-17/videos/interview.mp4",
             "status": "ERROR",
-            "checksum": null
+            "checksum": null,
+            "error_message": "Target storage is full"
         }
     ]
 }
 ```
+
+`error_message` is operator-safe classified text for row-level file failures. It is intended for standard Job Detail views and must not expose raw provider errors, mount paths, or other introspection-only diagnostics.
 
 **Error responses:**
 

@@ -302,6 +302,15 @@ def test_verify_job_sets_verifying_and_audits(integration_client, integration_db
 @pytest.mark.integration
 def test_create_manifest_writes_record_file_and_audit(integration_client, integration_db, tmp_path):
     target_path = tmp_path / "manifest-target"
+    drive = UsbDrive(
+        device_identifier="IT-DRV-MANIFEST-008",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-JOB-008",
+        mount_path=str(target_path),
+    )
+    integration_db.add(drive)
+    integration_db.flush()
+
     job = ExportJob(
         project_id="PROJ-JOB-008",
         evidence_number="EV-008",
@@ -312,6 +321,7 @@ def test_create_manifest_writes_record_file_and_audit(integration_client, integr
     )
     integration_db.add(job)
     integration_db.flush()
+    integration_db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
     integration_db.add(
         ExportFile(
             job_id=job.id,
