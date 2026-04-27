@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeMount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getDrives } from '@/api/drives.js'
@@ -29,29 +29,123 @@ const drives = ref([])
 const mounts = ref([])
 const loading = ref(false)
 const error = ref('')
+const isMobileViewport = ref(false)
+let mobileViewportQuery = null
 
 const usbDrivesPage = ref(1)
 const usbDrivesPageSize = ref(5)
 const sharedMountsPage = ref(1)
 const sharedMountsPageSize = ref(5)
 
-const usbDrivesColumns = computed(() => [
-  { key: 'id', label: t('common.labels.id'), align: 'right' },
-  { key: 'display_device_label', label: t('drives.device') },
-  { key: 'serial_number', label: t('drives.serialNumber') },
-  { key: 'filesystem_type', label: t('drives.filesystem') },
-  { key: 'capacity_bytes', label: t('common.labels.size'), align: 'right' },
-  { key: 'current_state', label: t('common.labels.status') },
-  { key: 'current_project_id', label: t('dashboard.project') },
-])
+const usbDrivesColumns = computed(() => {
+  const columns = [
+    { key: 'id', label: t('common.labels.id'), align: 'right' },
+    { key: 'display_device_label', label: t('drives.device') },
+    { key: 'serial_number', label: t('drives.serialNumber') },
+    { key: 'filesystem_type', label: t('drives.filesystem') },
+    { key: 'capacity_bytes', label: t('common.labels.size'), align: 'right' },
+    { key: 'current_state', label: t('common.labels.status') },
+    { key: 'current_project_id', label: t('dashboard.project') },
+  ]
 
-const sharedMountsColumns = computed(() => [
-  { key: 'id', label: t('common.labels.id'), align: 'right' },
-  { key: 'type', label: t('common.labels.type') },
-  { key: 'project_id', label: t('dashboard.project') },
-  { key: 'status', label: t('common.labels.status') },
-  { key: 'local_mount_point', label: t('mounts.mountPoint') },
-])
+  if (isMobileViewport.value) {
+    return columns.filter(
+      (column) =>
+        column.key !== 'serial_number' &&
+        column.key !== 'filesystem_type' &&
+        column.key !== 'capacity_bytes',
+    )
+  }
+
+  return columns
+})
+
+const sharedMountsColumns = computed(() => {
+  const columns = [
+    { key: 'id', label: t('common.labels.id'), align: 'right' },
+    { key: 'type', label: t('common.labels.type') },
+    { key: 'project_id', label: t('dashboard.project') },
+    { key: 'status', label: t('common.labels.status') },
+  ]
+
+  if (isMobileViewport.value) {
+    return columns.filter((column) => column.key !== 'type')
+  }
+
+  return columns
+})
+
+function normalizeStatusValue(status) {
+  return String(status ?? 'unknown').toUpperCase()
+}
+
+function driveStatusTone(status) {
+  const value = normalizeStatusValue(status)
+
+  if (['COMPLETED', 'DONE', 'MOUNTED', 'CONNECTED', 'AVAILABLE', 'OK', 'TRUE'].includes(value)) {
+    return 'success'
+  }
+  if (['FAILED', 'ERROR', 'DISCONNECTED', 'UNMOUNTED', 'FALSE'].includes(value)) {
+    return 'danger'
+  }
+  if (['RUNNING', 'VERIFYING', 'COPYING', 'IN_USE', 'DEGRADED'].includes(value)) {
+    return 'warning'
+  }
+  if (['PENDING', 'PAUSED', 'UNKNOWN'].includes(value)) {
+    return 'muted'
+  }
+
+  return 'info'
+}
+
+function driveStatusIcon(status) {
+  const tone = driveStatusTone(status)
+
+  if (tone === 'success') return '✓'
+  if (tone === 'warning') return '!'
+  if (tone === 'danger') return '×'
+  if (tone === 'muted') return '•'
+  return '?'
+}
+
+function mountStatusTone(status) {
+  const value = normalizeStatusValue(status)
+
+  if (['MOUNTED', 'COMPLETED', 'DONE', 'OK', 'TRUE'].includes(value)) {
+    return 'success'
+  }
+  if (['FAILED', 'ERROR', 'UNMOUNTED', 'FALSE'].includes(value)) {
+    return 'danger'
+  }
+  if (['VERIFYING', 'CHECKING', 'DEGRADED'].includes(value)) {
+    return 'warning'
+  }
+  if (['PENDING', 'UNKNOWN'].includes(value)) {
+    return 'muted'
+  }
+
+  return 'info'
+}
+
+function mountStatusIcon(status) {
+  const tone = mountStatusTone(status)
+
+  if (tone === 'success') return '✓'
+  if (tone === 'warning') return '!'
+  if (tone === 'danger') return '×'
+  if (tone === 'muted') return '•'
+  return '?'
+}
+
+function syncViewportState() {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+
+  if (!mobileViewportQuery) {
+    mobileViewportQuery = window.matchMedia('(max-width: 768px)')
+  }
+
+  isMobileViewport.value = mobileViewportQuery.matches
+}
 
 function formatBytes(value) {
   if (typeof value !== 'number' || value <= 0) return '-'
@@ -112,6 +206,14 @@ const statusDisplay = computed(() => {
 })
 
 onMounted(async () => {
+  syncViewportState()
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    if (!mobileViewportQuery) {
+      mobileViewportQuery = window.matchMedia('(max-width: 768px)')
+    }
+    mobileViewportQuery.addEventListener('change', syncViewportState)
+  }
+
   if (!reconciliationResult.value) {
     error.value = t('system.reconciliationResultsNotAvailable')
     return
@@ -123,6 +225,10 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+})
+
+onBeforeUnmount(() => {
+  mobileViewportQuery?.removeEventListener('change', syncViewportState)
 })
 </script>
 
@@ -169,7 +275,17 @@ onMounted(async () => {
       <DataTable :columns="usbDrivesColumns" :rows="pagedUsbDrives" :empty-text="t('system.empty')">
         <template #cell-capacity_bytes="{ row }">{{ formatBytes(row.capacity_bytes) }}</template>
         <template #cell-current_state="{ row }">
-          <StatusBadge :status="row.current_state || 'unknown'" />
+          <span
+            v-if="isMobileViewport"
+            class="drive-status-icon"
+            :class="`drive-status-icon--${driveStatusTone(row.current_state)}`"
+            :aria-label="driveStateLabel(row.current_state)"
+            :title="driveStateLabel(row.current_state)"
+            role="img"
+          >
+            <span aria-hidden="true">{{ driveStatusIcon(row.current_state) }}</span>
+          </span>
+          <StatusBadge v-else :status="row.current_state || 'unknown'" :label="driveStateLabel(row.current_state)" />
         </template>
         <template #cell-current_project_id="{ row }">{{ formatProjectId(row.current_project_id) }}</template>
       </DataTable>
@@ -180,7 +296,17 @@ onMounted(async () => {
       <h2>{{ t('system.reconciledSharedMounts') }}</h2>
       <DataTable :columns="sharedMountsColumns" :rows="pagedSharedMounts" :empty-text="t('system.empty')">
         <template #cell-status="{ row }">
-          <StatusBadge :status="row.status || 'unknown'" />
+          <span
+            v-if="isMobileViewport"
+            class="mount-status-icon"
+            :class="`mount-status-icon--${mountStatusTone(row.status)}`"
+            :aria-label="row.status || 'UNKNOWN'"
+            :title="row.status || 'UNKNOWN'"
+            role="img"
+          >
+            <span aria-hidden="true">{{ mountStatusIcon(row.status) }}</span>
+          </span>
+          <StatusBadge v-else :status="row.status || 'unknown'" />
         </template>
         <template #cell-project_id="{ row }">{{ formatProjectId(row.project_id) }}</template>
       </DataTable>
@@ -252,5 +378,54 @@ onMounted(async () => {
 .muted {
   color: var(--color-text-secondary);
   padding: var(--space-md);
+}
+
+.drive-status-icon,
+.mount-status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  font-size: 0.9rem;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+}
+
+.drive-status-icon--success,
+.mount-status-icon--success {
+  background: color-mix(in srgb, var(--color-success) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-success) 45%, var(--color-border));
+  color: var(--color-status-ok-text, #14532d);
+}
+
+.drive-status-icon--warning,
+.mount-status-icon--warning {
+  background: color-mix(in srgb, var(--color-warning) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-warning) 45%, var(--color-border));
+  color: var(--color-status-warn-text, #7c3f00);
+}
+
+.drive-status-icon--danger,
+.mount-status-icon--danger {
+  background: color-mix(in srgb, var(--color-danger) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border));
+  color: var(--color-status-danger-text, #991b1b);
+}
+
+.drive-status-icon--info,
+.mount-status-icon--info {
+  background: color-mix(in srgb, var(--color-info) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-info) 45%, var(--color-border));
+  color: var(--color-status-info-text, #1e40af);
+}
+
+.drive-status-icon--muted,
+.mount-status-icon--muted {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border);
+  color: var(--color-status-muted-text, #475569);
 }
 </style>
