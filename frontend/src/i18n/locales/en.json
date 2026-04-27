@@ -16,7 +16,9 @@
     "audit": "Audit",
     "system": "System",
     "users": "Users",
-    "configuration": "Configuration"
+    "configuration": "Configuration",
+    "openSidebar": "Open navigation",
+    "closeSidebar": "Close navigation"
   },
   "auth": {
     "login": "Log In",

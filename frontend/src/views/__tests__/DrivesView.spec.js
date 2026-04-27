@@ -9,6 +9,12 @@ const mocks = vi.hoisted(() => ({
   refreshDrives: vi.fn(),
 }))
 
+const viewportState = vi.hoisted(() => ({
+  mobile: false,
+}))
+
+const matchMediaListeners = vi.hoisted(() => new Set())
+
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mocks.push }),
 }))
@@ -50,6 +56,7 @@ function mountView() {
               <div v-for="row in rows" :key="row.id" class="row-stub">
                 <span class="row-device">{{ row.display_device_label || row.port_system_path || '-' }}</span>
                 <span class="row-serial">{{ row.serial_number || '-' }}</span>
+                <slot name="cell-current_state" :row="row" />
                 <slot name="cell-current_project_id" :row="row" />
                 <slot name="cell-actions" :row="row" />
               </div>
@@ -68,8 +75,24 @@ function mountView() {
   })
 }
 
+function installMatchMediaMock() {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    configurable: true,
+    value: vi.fn().mockImplementation(() => ({
+      matches: viewportState.mobile,
+      media: '(max-width: 768px)',
+      addEventListener: (_event, listener) => matchMediaListeners.add(listener),
+      removeEventListener: (_event, listener) => matchMediaListeners.delete(listener),
+    })),
+  })
+}
+
 describe('DrivesView rescan and filter loading', () => {
   beforeEach(() => {
+    viewportState.mobile = false
+    matchMediaListeners.clear()
+    installMatchMediaMock()
     mocks.push.mockReset()
     mocks.getDrives.mockReset()
     mocks.refreshDrives.mockReset()
@@ -169,6 +192,45 @@ describe('DrivesView rescan and filter loading', () => {
 
     const labels = wrapper.findAll('button').map((node) => node.text())
     expect(labels).toContain(i18n.global.t('drives.browse'))
+  })
+
+  it('routes compact row action menu buttons to details and browse behavior', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/1' })])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const detailsButton = wrapper.find('.row-action-menu-details')
+    expect(detailsButton.exists()).toBe(true)
+
+    await detailsButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.push).toHaveBeenCalledWith({ name: 'drive-detail', params: { id: 1 } })
+
+    const browseButton = wrapper.find('.row-action-menu-browse')
+    expect(browseButton.exists()).toBe(true)
+
+    await browseButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('browse.browseContents'))
+  })
+
+  it('omits serial, filesystem, and size columns in mobile view while keeping compact status and row action controls', async () => {
+    viewportState.mobile = true
+    installMatchMediaMock()
+    mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/1' })])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const labels = wrapper.find('.column-labels').text()
+    expect(labels).not.toContain(i18n.global.t('drives.serialNumber'))
+    expect(labels).not.toContain(i18n.global.t('drives.filesystem'))
+    expect(labels).not.toContain(i18n.global.t('common.labels.size'))
+    expect(wrapper.find('.drive-status-icon').attributes('aria-label')).toBe(i18n.global.t('drives.states.available'))
+    expect(wrapper.find('.row-actions-toggle-dots').exists()).toBe(true)
   })
 
   it('sorts by project in ascending and descending order and keeps that sort after refresh', async () => {

@@ -151,14 +151,18 @@ test('jobs create, start, compare, and manifest flow', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Generate Manifest' })).toBeEnabled()
 
   await expect(page.locator('.status-badge').filter({ hasText: 'COMPLETED' }).first()).toBeVisible()
-  await expect(page.getByText('Source / Destination Compare')).toBeVisible()
   await page.getByRole('button', { name: 'Show files' }).click()
-  await page.getByRole('button', { name: 'View Hashes' }).click()
+  await page.getByRole('button', { name: 'a.txt' }).click()
+  await expect(page.getByRole('dialog', { name: 'Hash Viewer' })).toBeVisible()
+  await expect(page.getByText('Source / Destination Compare')).toBeVisible()
   await page.locator('#compare-file-source').selectOption('101')
   await page.getByRole('button', { name: 'Compare' }).click()
   await expect(page.getByText('Overall Match')).toBeVisible()
   await expect(page.getByText('Hash Match')).toBeVisible()
   await expect(page.getByText('Path Match')).toBeVisible()
+  const hashViewerDialog = page.getByRole('dialog', { name: 'Hash Viewer' })
+  await hashViewerDialog.getByRole('button', { name: 'Close' }).click()
+  await expect(hashViewerDialog).toBeHidden()
 
   const manifestDownload = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Generate Manifest' }).click()
@@ -449,6 +453,8 @@ test('job detail polls and reflects status progression', async ({ page }) => {
 
   // Register the broad catch-all FIRST so that more-specific handlers registered
   // afterward take precedence (Playwright uses LIFO route priority).
+  await routeJson(page, '**/api/drives', [])
+  await routeJson(page, '**/api/mounts', [])
   await routeJson(page, '**/api/jobs**', [{ ...base, copied_bytes: 0, status: 'RUNNING' }])
   await routeJson(page, '**/api/jobs/88/files', { files: [] })
   await routeJson(page, '**/api/introspection/jobs/88/debug', { files: [] })
@@ -476,6 +482,8 @@ test('job detail polls and reflects status progression', async ({ page }) => {
 test('job detail prefers persisted failure reasons over derived file summaries', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
+  await routeJson(page, '**/api/drives', [])
+  await routeJson(page, '**/api/mounts', [])
   await routeJson(page, '**/api/jobs**', [])
   await routeJson(page, '**/api/jobs/91', {
     id: 91,

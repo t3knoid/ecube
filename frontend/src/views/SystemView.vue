@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -57,9 +57,19 @@ const LOG_SCROLL_THRESHOLD = 24
 
 const page = ref(1)
 const pageSize = ref(10)
+const isMobileViewport = ref(false)
+let mobileViewportQuery = null
 
 const tabColumns = computed(() => {
   if (activeTab.value === 'usb') {
+    if (isMobileViewport.value) {
+      return [
+        { key: 'device', label: t('system.device') },
+        { key: 'product', label: t('system.product') },
+        { key: 'details', label: '', align: 'center' },
+      ]
+    }
+
     return [
       { key: 'device', label: t('system.device') },
       { key: 'serial', label: t('system.serialNumber') },
@@ -77,6 +87,14 @@ const tabColumns = computed(() => {
     ]
   }
   if (activeTab.value === 'mounts') {
+    if (isMobileViewport.value) {
+      return [
+        { key: 'device', label: t('system.device') },
+        { key: 'mount_point', label: t('system.mountPoint') },
+        { key: 'details', label: '', align: 'center' },
+      ]
+    }
+
     return [
       { key: 'device', label: t('system.device') },
       { key: 'mount_point', label: t('system.mountPoint') },
@@ -234,6 +252,23 @@ const workerQueueDisplay = computed(() => {
 
 function formatProjectId(value) {
   return normalizeProjectId(value) || t('dashboard.project')
+}
+
+function closeUsbDetailsMenu(event) {
+  const menu = event?.currentTarget instanceof HTMLElement ? event.currentTarget.closest('details') : null
+  if (menu instanceof HTMLDetailsElement) {
+    menu.removeAttribute('open')
+  }
+}
+
+function syncViewportState() {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+
+  if (!mobileViewportQuery) {
+    mobileViewportQuery = window.matchMedia('(max-width: 768px)')
+  }
+
+  isMobileViewport.value = mobileViewportQuery.matches
 }
 
 function extractApiMessage(err) {
@@ -546,7 +581,21 @@ watch(canViewLogs, (isAdmin) => {
   }
 })
 
-onMounted(loadTabData)
+onMounted(() => {
+  syncViewportState()
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    if (!mobileViewportQuery) {
+      mobileViewportQuery = window.matchMedia('(max-width: 768px)')
+    }
+    mobileViewportQuery.addEventListener('change', syncViewportState)
+  }
+
+  void loadTabData()
+})
+
+onBeforeUnmount(() => {
+  mobileViewportQuery?.removeEventListener('change', syncViewportState)
+})
 </script>
 
 <template>
@@ -678,7 +727,51 @@ onMounted(loadTabData)
     </article>
 
     <article v-else class="panel">
-      <DataTable :columns="tabColumns" :rows="pagedRows" :empty-text="t('system.empty')">
+      <DataTable :class="{ 'usb-topology-table': activeTab === 'usb' && isMobileViewport, 'system-mounts-table': activeTab === 'mounts' && isMobileViewport }" :columns="tabColumns" :rows="pagedRows" :empty-text="t('system.empty')">
+        <template #cell-product="{ row }">
+          <span
+            v-if="activeTab === 'usb' && isMobileViewport"
+            class="usb-product-cell"
+            :title="row.product || '-'"
+          >
+            {{ row.product || '-' }}
+          </span>
+          <span v-else>{{ row.product || '-' }}</span>
+        </template>
+        <template #cell-mount_point="{ row }">
+          <span
+            v-if="activeTab === 'mounts' && isMobileViewport"
+            class="mount-point-cell"
+            :title="row.mount_point || '-'"
+          >
+            {{ row.mount_point || '-' }}
+          </span>
+          <span v-else>{{ row.mount_point || '-' }}</span>
+        </template>
+        <template #cell-details="{ row }">
+          <details v-if="(activeTab === 'usb' || activeTab === 'mounts') && isMobileViewport" class="usb-topology-menu">
+            <summary class="usb-topology-menu-toggle" :aria-label="`${row.device || t('system.device')} ${t('drives.details')}`">
+              <span class="usb-topology-menu-toggle-dots" aria-hidden="true">
+                <span class="usb-topology-menu-toggle-dot" />
+                <span class="usb-topology-menu-toggle-dot" />
+                <span class="usb-topology-menu-toggle-dot" />
+              </span>
+            </summary>
+            <div class="usb-topology-menu-popover">
+              <div v-if="activeTab === 'usb'" class="usb-topology-menu-grid">
+                <span>{{ t('system.manufacturer') }}</span><strong>{{ row.manufacturer || '-' }}</strong>
+                <span>{{ t('system.serialNumber') }}</span><strong>{{ row.serial || '-' }}</strong>
+                <span>{{ t('system.vendorId') }}</span><strong>{{ row.idVendor || '-' }}</strong>
+                <span>{{ t('system.productId') }}</span><strong>{{ row.idProduct || '-' }}</strong>
+              </div>
+              <div v-else class="usb-topology-menu-grid">
+                <span>{{ t('system.fsType') }}</span><strong>{{ row.fs_type || '-' }}</strong>
+                <span>{{ t('system.options') }}</span><strong>{{ row.options || '-' }}</strong>
+              </div>
+              <button class="btn usb-topology-menu-close" @click="closeUsbDetailsMenu($event)">{{ t('common.actions.close') }}</button>
+            </div>
+          </details>
+        </template>
         <template #cell-size="{ row }">{{ formatBytes(row.size) }}</template>
         <template #cell-modified="{ row }">{{ asLocalDate(row.modified) }}</template>
         <template #cell-download="{ row }">
@@ -776,6 +869,139 @@ onMounted(loadTabData)
 
 .log-viewer::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-secondary);
+}
+
+.usb-topology-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.usb-topology-menu-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.usb-topology-menu-toggle::-webkit-details-marker {
+  display: none;
+}
+
+.usb-topology-menu-toggle-dots {
+  display: inline-flex;
+  gap: 0.15rem;
+}
+
+.usb-topology-menu-toggle-dot {
+  width: 0.25rem;
+  height: 0.25rem;
+  border-radius: 9999px;
+  background: currentColor;
+}
+
+.usb-topology-menu-popover {
+  position: absolute;
+  top: calc(100% + var(--space-2xs));
+  right: 0;
+  z-index: 2;
+  min-width: 14rem;
+  display: grid;
+  gap: var(--space-2xs);
+  padding: var(--space-2xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg-primary);
+  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
+}
+
+.usb-topology-menu-grid {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-xs) var(--space-sm);
+  align-items: start;
+}
+
+.usb-topology-menu-grid strong {
+  overflow-wrap: anywhere;
+}
+
+.usb-topology-menu-close {
+  justify-self: end;
+}
+
+.usb-product-cell {
+  display: inline-block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+}
+
+.mount-point-cell {
+  display: inline-block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+}
+
+@media (max-width: 768px) {
+  .usb-topology-table :deep(.data-table) {
+    table-layout: fixed;
+  }
+
+  .usb-topology-table :deep(.data-table th),
+  .usb-topology-table :deep(.data-table td) {
+    padding: var(--space-xs) var(--space-sm);
+  }
+
+  .usb-topology-table :deep(.data-table th:nth-child(1)),
+  .usb-topology-table :deep(.data-table td:nth-child(1)) {
+    width: 6.5rem;
+  }
+
+  .usb-topology-table :deep(.data-table th:nth-child(2)),
+  .usb-topology-table :deep(.data-table td:nth-child(2)) {
+    width: auto;
+  }
+
+  .usb-topology-table :deep(.data-table th:nth-child(3)),
+  .usb-topology-table :deep(.data-table td:nth-child(3)) {
+    width: 2.5rem;
+  }
+
+  .system-mounts-table :deep(.data-table) {
+    table-layout: fixed;
+  }
+
+  .system-mounts-table :deep(.data-table th),
+  .system-mounts-table :deep(.data-table td) {
+    padding: var(--space-xs) var(--space-sm);
+  }
+
+  .system-mounts-table :deep(.data-table th:nth-child(1)),
+  .system-mounts-table :deep(.data-table td:nth-child(1)) {
+    width: 6rem;
+  }
+
+  .system-mounts-table :deep(.data-table th:nth-child(2)),
+  .system-mounts-table :deep(.data-table td:nth-child(2)) {
+    width: auto;
+  }
+
+  .system-mounts-table :deep(.data-table th:nth-child(3)),
+  .system-mounts-table :deep(.data-table td:nth-child(3)) {
+    width: 2.5rem;
+  }
 }
 
 .job-picker-label {

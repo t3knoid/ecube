@@ -18,7 +18,22 @@ const mockRouter = createRouter({
 const mocks = vi.hoisted(() => ({
   getDrives: vi.fn(),
   getMounts: vi.fn(),
+  mobileViewportMatches: false,
 }))
+
+function setMobileViewport(matches) {
+  mocks.mobileViewportMatches = matches
+}
+
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: vi.fn(() => ({
+    matches: mocks.mobileViewportMatches,
+    media: '(max-width: 768px)',
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  })),
+})
 
 vi.mock('@/api/drives.js', () => ({
   getDrives: mocks.getDrives,
@@ -44,7 +59,16 @@ function mountView(options = {}) {
       stubs: {
         DataTable: {
           props: ['rows', 'columns'],
-          template: '<div><tr v-for="col in columns" :key="col.key">{{ col.label }}</tr><tr v-for="row in rows" :key="row.id">{{ row.id }}</tr></div>',
+          template: `
+            <div>
+              <div class="columns-stub">{{ (columns || []).map((column) => column.label).join('|') }}</div>
+              <div v-for="row in rows" :key="row.id" class="row-stub">
+                <span v-for="column in columns" :key="column.key" class="cell-stub">
+                  <slot :name="'cell-' + column.key" :row="row" :value="row[column.key]" :column="column">{{ row[column.key] }}</slot>
+                </span>
+              </div>
+            </div>
+          `,
         },
         Pagination: {
           template: '<div />',
@@ -62,6 +86,7 @@ describe('ReconciliationResultsView', () => {
   beforeEach(() => {
     mocks.getDrives.mockReset()
     mocks.getMounts.mockReset()
+    setMobileViewport(false)
     mocks.getDrives.mockResolvedValue([
       {
         id: 1,
@@ -156,6 +181,38 @@ describe('ReconciliationResultsView', () => {
 
     expect(wrapper.text()).toContain(i18n.global.t('system.reconciledSharedMounts'))
     expect(mocks.getMounts).toHaveBeenCalled()
+  })
+
+  it('uses the Drives and Mounts mobile table treatment in reconciliation panels', async () => {
+    setMobileViewport(true)
+
+    const reconciliationResult = {
+      status: 'ok',
+      scope: 'managed_mounts_only',
+      network_mounts_checked: 1,
+      network_mounts_corrected: 1,
+      usb_mounts_checked: 1,
+      usb_mounts_corrected: 1,
+      failure_count: 0,
+    }
+
+    const wrapper = mountView({
+      props: {
+        reconciliationResult,
+      },
+    })
+
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    const columnSets = wrapper.findAll('.columns-stub').map((node) => node.text())
+    expect(columnSets[0]).not.toContain(i18n.global.t('drives.serialNumber'))
+    expect(columnSets[0]).not.toContain(i18n.global.t('drives.filesystem'))
+    expect(columnSets[0]).not.toContain(i18n.global.t('common.labels.size'))
+    expect(columnSets[1]).not.toContain(i18n.global.t('common.labels.type'))
+
+    expect(wrapper.find('.drive-status-icon').exists()).toBe(true)
+    expect(wrapper.find('.mount-status-icon').exists()).toBe(true)
   })
 
   it('shows warning status badge for partial results', async () => {
