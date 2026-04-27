@@ -288,8 +288,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--space-md);
-  height: var(--header-height);
+  padding: var(--space-sm) var(--space-md);
+  min-height: var(--header-height);
   background: var(--color-bg-header);
   border-bottom: 1px solid var(--color-border);
 }
