@@ -19,6 +19,12 @@ const authState = vi.hoisted(() => ({
   roles: ['admin', 'manager'],
 }))
 
+const viewportState = vi.hoisted(() => ({
+  mobile: false,
+}))
+
+const matchMediaListeners = vi.hoisted(() => new Set())
+
 vi.mock('@/api/mounts.js', () => ({
   getMounts: (...args) => mocks.getMounts(...args),
   createMount: (...args) => mocks.createMount(...args),
@@ -99,6 +105,19 @@ function mountView() {
   })
 }
 
+function installMatchMediaMock() {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    configurable: true,
+    value: vi.fn().mockImplementation(() => ({
+      matches: viewportState.mobile,
+      media: '(max-width: 768px)',
+      addEventListener: (_event, listener) => matchMediaListeners.add(listener),
+      removeEventListener: (_event, listener) => matchMediaListeners.delete(listener),
+    })),
+  })
+}
+
 function findDialogButton(wrapper, label) {
   return wrapper.find('.dialog-actions').findAll('button').find((node) => node.text() === label)
 }
@@ -110,6 +129,9 @@ function findDialogSuccessBanner(wrapper) {
 describe('MountsView removal flow', () => {
   beforeEach(() => {
     authState.roles = ['admin', 'manager']
+    viewportState.mobile = false
+    matchMediaListeners.clear()
+    installMatchMediaMock()
     mocks.getMounts.mockReset()
     mocks.createMount.mockReset()
     mocks.updateMount.mockReset()
@@ -167,6 +189,45 @@ describe('MountsView removal flow', () => {
 
     expect(mocks.deleteMount).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain(i18n.global.t('mounts.removeConfirmTitle'))
+  })
+
+  it('forwards compact row action menu buttons to the existing browse and remove handlers', async () => {
+    mocks.getMounts
+      .mockResolvedValueOnce([buildMount({ status: 'MOUNTED', local_mount_point: '/smb/demo-case-002' })])
+      .mockResolvedValueOnce([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const browseButton = wrapper.find('.row-action-menu-browse')
+    expect(browseButton.exists()).toBe(true)
+
+    await browseButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.directory-browser-stub').exists()).toBe(true)
+
+    const removeButton = wrapper.find('.row-action-menu-remove')
+    expect(removeButton.exists()).toBe(true)
+
+    await removeButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('mounts.removeConfirmTitle'))
+  })
+
+  it('omits wide metadata columns in mobile view while keeping the compact row menu trigger', async () => {
+    viewportState.mobile = true
+    installMatchMediaMock()
+    mocks.getMounts.mockResolvedValue([buildMount({ status: 'MOUNTED' })])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const labels = wrapper.find('.column-labels').text()
+    expect(labels).not.toContain(i18n.global.t('common.labels.type'))
+    expect(labels).not.toContain(i18n.global.t('mounts.lastChecked'))
+    expect(wrapper.find('.row-actions-toggle-dots').exists()).toBe(true)
   })
 
   it('uppercases the project ID as the operator types and submits it normalized', async () => {
