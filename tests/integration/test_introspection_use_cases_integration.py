@@ -8,6 +8,8 @@ def test_system_health_reports_connected_database(integration_client):
     data = response.json()
     assert data["database"] in {"connected", "error"}
     assert data["status"] in {"ok", "degraded"}
+    assert "ecube_process" in data
+    assert "active_copy_threads" in data["ecube_process"]
 
 
 @pytest.mark.integration

@@ -13,13 +13,14 @@ except Exception:  # pragma: no cover  # ImportError or dynamic-loader / ABI fai
 
 
 def prime_cpu_sampler() -> None:  # pragma: no cover
-    """Prime psutil's internal CPU baseline by making one blocking sample.
+    """Prime host and ECUBE-process CPU baselines during application startup.
 
     Intended to be called from a background thread during application startup
     (via ``asyncio.to_thread``) so the 1-second blocking sample does not add
     latency to the startup sequence.  Subsequent non-blocking
     ``cpu_percent(interval=None)`` calls in the system-health endpoint will
-    return a meaningful value rather than 0.0.
+    return a meaningful value rather than 0.0 for both host and ECUBE-process
+    metrics.
 
     When psutil could not be imported the failure is logged here (once, at
     startup) rather than at module-import time so that logging is already
@@ -34,6 +35,7 @@ def prime_cpu_sampler() -> None:  # pragma: no cover
         return
     try:
         _psutil.cpu_percent(interval=1.0)
+        introspection_service.prime_process_cpu_sampler(psutil_module=_psutil)
     except Exception:
         # Log rather than silently discard so failures are observable.
         # cpu_percent(interval=None) will fall back to 0.0 until psutil recovers.
@@ -43,7 +45,6 @@ def prime_cpu_sampler() -> None:  # pragma: no cover
         )
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, require_roles
@@ -51,7 +52,6 @@ from app.config import settings
 from app.database import get_db
 from app.infrastructure import get_drive_mount, get_mount_provider
 from app.models.hardware import UsbDrive
-from app.models.jobs import ExportJob, JobStatus
 from app.schemas.errors import R_401, R_403, R_404, R_409, R_422, R_500
 from app.schemas.introspection import (
     BlockDevicesResponse,
@@ -61,7 +61,7 @@ from app.schemas.introspection import (
     SystemMountsResponse,
     UsbTopologyResponse,
 )
-from app.services import reconciliation_service
+from app.services import introspection_service, reconciliation_service
 
 logger = logging.getLogger(__name__)
 
@@ -217,72 +217,11 @@ def system_health(
 
     **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
     """
-    db_status = "connected"
-    db_error = None
-    try:
-        db.execute(text("SELECT 1"))
-    except Exception as exc:
-        db_status = "error"
-        db_error = str(exc)
-
-    active_jobs = 0
-    if db_status == "connected":
-        try:
-            active_jobs = (
-                db.query(ExportJob).filter(ExportJob.status == JobStatus.RUNNING).count()
-            )
-        except Exception:
-            pass
-
-    worker_queue_size: int | None = None
-    if db_status == "connected":
-        try:
-            worker_queue_size = (
-                db.query(ExportJob).filter(ExportJob.status == JobStatus.PENDING).count()
-            )
-        except Exception:
-            pass  # leave None — count is unknown, not zero
-
-    cpu_percent: float | None = None
-    memory_percent: float | None = None
-    memory_used_bytes: int | None = None
-    memory_total_bytes: int | None = None
-    disk_read_bytes: int | None = None
-    disk_write_bytes: int | None = None
-
-    if _PSUTIL_AVAILABLE:
-        try:
-            cpu_percent = _psutil.cpu_percent(interval=None)
-        except Exception:
-            pass
-        try:
-            vm = _psutil.virtual_memory()
-            memory_percent = vm.percent
-            memory_used_bytes = vm.used
-            memory_total_bytes = vm.total
-        except Exception:
-            pass
-        try:
-            disk_counters = _psutil.disk_io_counters()
-            if disk_counters is not None:
-                disk_read_bytes = disk_counters.read_bytes
-                disk_write_bytes = disk_counters.write_bytes
-        except Exception:
-            pass
-
-    return {
-        "status": "ok" if db_status == "connected" else "degraded",
-        "database": db_status,
-        "database_error": db_error,
-        "active_jobs": active_jobs,
-        "cpu_percent": cpu_percent,
-        "memory_percent": memory_percent,
-        "memory_used_bytes": memory_used_bytes,
-        "memory_total_bytes": memory_total_bytes,
-        "disk_read_bytes": disk_read_bytes,
-        "disk_write_bytes": disk_write_bytes,
-        "worker_queue_size": worker_queue_size,
-    }
+    return introspection_service.get_system_health(
+        db,
+        psutil_available=_PSUTIL_AVAILABLE,
+        psutil_module=_psutil if _PSUTIL_AVAILABLE else None,
+    )
 
 
 @router.post(
