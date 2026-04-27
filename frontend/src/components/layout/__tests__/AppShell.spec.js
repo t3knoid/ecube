@@ -1,8 +1,26 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import AppShell from '@/components/layout/AppShell.vue'
 
 describe('AppShell responsive sidebar', () => {
+  function mockMatchMedia(matches) {
+    const listeners = new Set()
+
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: vi.fn().mockImplementation(() => ({
+        matches,
+        addEventListener: (_eventName, handler) => listeners.add(handler),
+        removeEventListener: (_eventName, handler) => listeners.delete(handler),
+      })),
+    })
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   function mountShell() {
     return mount(AppShell, {
       global: {
@@ -25,6 +43,7 @@ describe('AppShell responsive sidebar', () => {
   }
 
   it('opens the mobile sidebar backdrop when the header toggles it', async () => {
+    mockMatchMedia(true)
     const wrapper = mountShell()
 
     await wrapper.get('.header-toggle').trigger('click')
@@ -36,6 +55,7 @@ describe('AppShell responsive sidebar', () => {
   })
 
   it('closes the mobile sidebar when the backdrop is clicked', async () => {
+    mockMatchMedia(true)
     const wrapper = mountShell()
 
     await wrapper.get('.header-toggle').trigger('click')
@@ -43,6 +63,18 @@ describe('AppShell responsive sidebar', () => {
 
     expect(wrapper.get('.shell-backdrop').classes()).not.toContain('shell-backdrop-open')
     expect(wrapper.get('.sidebar-stub').attributes('data-open')).toBe('false')
+
+    wrapper.unmount()
+  })
+
+  it('hides the shell content from assistive technology while the mobile sidebar is open', async () => {
+    mockMatchMedia(true)
+    const wrapper = mountShell()
+
+    await wrapper.get('.header-toggle').trigger('click')
+
+    expect(wrapper.get('.shell-content').attributes('aria-hidden')).toBe('true')
+    expect(wrapper.get('.shell-content').attributes()).toHaveProperty('inert')
 
     wrapper.unmount()
   })
