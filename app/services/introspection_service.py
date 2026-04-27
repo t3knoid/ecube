@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from typing import Any
@@ -12,6 +13,9 @@ from sqlalchemy.orm import Session
 from app.models.jobs import ExportJob, JobStatus
 from app.services.copy_worker_runtime import list_active_copy_workers
 from app.utils.sanitize import sanitize_error_message
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_system_health(
@@ -147,12 +151,19 @@ def _build_ecube_process_metrics(
     if db_status == "connected" and active_workers:
         job_ids = sorted({int(worker["job_id"]) for worker in active_workers if worker.get("job_id") is not None})
         if job_ids:
-            for job in db.query(ExportJob).filter(ExportJob.id.in_(job_ids)).all():
-                job_context[int(job.id)] = {
-                    "project_id": job.project_id,
-                    "job_status": job.status.value if job.status else None,
-                    "configured_thread_count": job.thread_count,
-                }
+            try:
+                for job in db.query(ExportJob).filter(ExportJob.id.in_(job_ids)).all():
+                    job_context[int(job.id)] = {
+                        "project_id": job.project_id,
+                        "job_status": job.status.value if job.status else None,
+                        "configured_thread_count": job.thread_count,
+                    }
+            except Exception:
+                logger.info("System health could not correlate active copy workers to jobs")
+                logger.debug(
+                    "Active copy worker correlation query failed",
+                    exc_info=True,
+                )
 
     active_copy_threads: list[dict[str, Any]] = []
     now_monotonic = time.monotonic()
