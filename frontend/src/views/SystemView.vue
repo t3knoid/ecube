@@ -192,6 +192,17 @@ function asLocalDate(value) {
   return parsed.toLocaleString()
 }
 
+function formatSeconds(value) {
+  if (typeof value !== 'number' || value < 0) return t('common.labels.notAvailable')
+  if (value === 0) return '0 s'
+  return `${value.toFixed(value >= 10 ? 0 : 1)} s`
+}
+
+function formatByteMetric(value) {
+  if (typeof value !== 'number' || value < 0) return t('common.labels.notAvailable')
+  return formatBytes(value)
+}
+
 function displayLogSourcePath(value) {
   if (!value) return '-'
   const normalized = String(value).trim().replace(/\\/g, '/')
@@ -241,6 +252,36 @@ const workerQueueDisplay = computed(() => {
   const q = health.value?.worker_queue_size
   if (q == null) return t('common.labels.notAvailable')
   return q
+})
+
+const ecubeProcess = computed(() => {
+  const value = health.value?.ecube_process
+  if (!value || typeof value !== 'object') {
+    return { active_copy_threads: [] }
+  }
+  return {
+    ...value,
+    active_copy_threads: Array.isArray(value.active_copy_threads) ? value.active_copy_threads : [],
+  }
+})
+
+const ecubeCpuDisplay = computed(() => {
+  const p = ecubeProcess.value?.cpu_percent
+  return p != null ? `${p.toFixed(1)}%` : t('common.labels.notAvailable')
+})
+
+const ecubeCpuTimeDisplay = computed(() => formatSeconds(ecubeProcess.value?.cpu_time_seconds))
+const ecubeMemoryRssDisplay = computed(() => formatByteMetric(ecubeProcess.value?.memory_rss_bytes))
+const ecubeMemoryVmsDisplay = computed(() => formatByteMetric(ecubeProcess.value?.memory_vms_bytes))
+
+const ecubeThreadCountDisplay = computed(() => {
+  const count = ecubeProcess.value?.thread_count
+  return count != null ? count : t('common.labels.notAvailable')
+})
+
+const activeCopyThreadCountDisplay = computed(() => {
+  const count = ecubeProcess.value?.active_copy_thread_count
+  return count != null ? count : ecubeProcess.value?.active_copy_threads?.length || 0
 })
 
 function formatProjectId(value) {
@@ -582,15 +623,65 @@ onBeforeUnmount(() => {
     <p v-if="error" class="error-banner">{{ error }}</p>
 
     <article v-if="activeTab === 'health'" class="panel">
-      <div class="health-grid">
-        <span>{{ t('common.labels.status') }}</span><StatusBadge :status="health?.status || 'unknown'" />
-        <span>{{ t('common.labels.db') }}</span><StatusBadge :status="health?.database || 'unknown'" />
-        <span>{{ t('jobs.activeJobs') }}</span><strong>{{ health?.active_jobs || 0 }}</strong>
-        <span>{{ t('system.cpu') }}</span><strong>{{ cpuDisplay }}</strong>
-        <span>{{ t('system.memory') }}</span><strong>{{ memoryDisplay }}</strong>
-        <span>{{ t('system.diskIo') }}</span><strong>{{ diskIoDisplay }}</strong>
-        <span>{{ t('system.workerQueue') }}</span><strong>{{ workerQueueDisplay }}</strong>
-      </div>
+      <section class="health-section">
+        <h2 class="health-section-title">{{ t('system.hostMetrics') }}</h2>
+        <div class="health-grid">
+          <span>{{ t('common.labels.status') }}</span><StatusBadge :status="health?.status || 'unknown'" />
+          <span>{{ t('common.labels.db') }}</span><StatusBadge :status="health?.database || 'unknown'" />
+          <span>{{ t('jobs.activeJobs') }}</span><strong>{{ health?.active_jobs || 0 }}</strong>
+          <span>{{ t('system.cpu') }}</span><strong>{{ cpuDisplay }}</strong>
+          <span>{{ t('system.memory') }}</span><strong>{{ memoryDisplay }}</strong>
+          <span>{{ t('system.diskIo') }}</span><strong>{{ diskIoDisplay }}</strong>
+          <span>{{ t('system.workerQueue') }}</span><strong>{{ workerQueueDisplay }}</strong>
+        </div>
+      </section>
+
+      <section class="health-section">
+        <h2 class="health-section-title">{{ t('system.ecubeProcessTitle') }}</h2>
+        <div class="health-grid">
+          <span>{{ t('system.ecubeCpu') }}</span><strong>{{ ecubeCpuDisplay }}</strong>
+          <span>{{ t('system.ecubeCpuTime') }}</span><strong>{{ ecubeCpuTimeDisplay }}</strong>
+          <span>{{ t('system.ecubeMemoryRss') }}</span><strong>{{ ecubeMemoryRssDisplay }}</strong>
+          <span>{{ t('system.ecubeMemoryVms') }}</span><strong>{{ ecubeMemoryVmsDisplay }}</strong>
+          <span>{{ t('system.ecubeThreadCount') }}</span><strong>{{ ecubeThreadCountDisplay }}</strong>
+          <span>{{ t('system.activeCopyThreads') }}</span><strong>{{ activeCopyThreadCountDisplay }}</strong>
+        </div>
+
+        <div class="health-thread-divider" aria-hidden="true" />
+
+        <div class="health-thread-table-wrap">
+          <table class="health-thread-table">
+            <caption class="health-thread-table-caption">{{ t('system.activeCopyThreads') }}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{{ t('system.workerLabel') }}</th>
+                <th scope="col">{{ t('dashboard.jobId') }}</th>
+                <th scope="col">{{ t('dashboard.project') }}</th>
+                <th scope="col">{{ t('common.labels.status') }}</th>
+                <th scope="col">{{ t('system.configuredThreads') }}</th>
+                <th scope="col">{{ t('system.elapsed') }}</th>
+                <th scope="col">{{ t('system.cpuTime') }}</th>
+              </tr>
+            </thead>
+            <tbody v-if="ecubeProcess.active_copy_threads.length">
+              <tr v-for="thread in ecubeProcess.active_copy_threads" :key="`${thread.job_id}-${thread.worker_label}`">
+                <td>{{ thread.worker_label }}</td>
+                <td>{{ thread.job_id }}</td>
+                <td>{{ thread.project_id ? formatProjectId(thread.project_id) : t('common.labels.notAvailable') }}</td>
+                <td>{{ thread.job_status || t('common.labels.notAvailable') }}</td>
+                <td>{{ thread.configured_thread_count ?? t('common.labels.notAvailable') }}</td>
+                <td>{{ formatSeconds(thread.elapsed_seconds) }}</td>
+                <td>{{ formatSeconds(thread.cpu_time_seconds) }}</td>
+              </tr>
+            </tbody>
+            <tbody v-else>
+              <tr>
+                <td class="health-thread-table-empty" colspan="7">{{ t('system.noActiveCopyThreads') }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </article>
 
     <article v-else-if="activeTab === 'logs'" class="panel">
@@ -719,6 +810,53 @@ onBeforeUnmount(() => {
   gap: var(--space-sm);
   align-items: center;
   flex-wrap: wrap;
+}
+
+.health-section {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.health-section + .health-section {
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.health-section-title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.health-thread-table-wrap {
+  overflow-x: auto;
+}
+
+.health-thread-divider {
+  border-top: 1px solid var(--color-border);
+}
+
+.health-thread-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.health-thread-table caption {
+  text-align: left;
+  font-weight: 600;
+  margin-bottom: var(--space-xs);
+}
+
+.health-thread-table th,
+.health-thread-table td {
+  padding: var(--space-xs) var(--space-sm);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.health-thread-table-empty {
+  color: var(--color-text-secondary);
 }
 
 .log-meta {
