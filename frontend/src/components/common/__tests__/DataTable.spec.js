@@ -70,4 +70,19 @@ describe('DataTable', () => {
     expect(wrapper.emitted('update:page')?.[0]).toEqual([2])
     expect(wrapper.emitted('page-change')?.[0]).toEqual([2])
   })
+
+  it('applies row classes from a rowClass callback', () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        columns,
+        rows,
+        rowClass: (row) => (row.id === 2 ? 'table-row-highlight' : ''),
+      },
+      global: { plugins: [i18n] },
+    })
+
+    const bodyRows = wrapper.findAll('tbody tr')
+    expect(bodyRows[0].classes()).not.toContain('table-row-highlight')
+    expect(bodyRows[1].classes()).toContain('table-row-highlight')
+  })
 })

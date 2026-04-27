@@ -660,9 +660,11 @@ The Files panel is collapsed by default on Job Detail. Use `Show files` to expan
 
 When expanded, the file table usually shows:
 
+- File ID
 - Relative path
 - Status
-- Failure details when a row includes a safe file-level error summary
+
+Rows that include a safe file-level error summary are visually emphasized in the Files panel. Select the `ERROR` or `FAILED` status badge on desktop, or the matching compact status icon on smaller screens, to open the `File Error Details` dialog for that row. The dialog shows the file ID, relative path, status, and the sanitized per-file error text returned by the trusted backend.
 
 Users allowed to inspect hashes open the hash viewer by selecting the file path itself. On smaller screens, ECUBE may replace full status badges with compact status icons and shorten the visible pagination window so the file list stays within the viewport.
 
