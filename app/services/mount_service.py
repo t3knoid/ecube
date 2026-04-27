@@ -1748,41 +1748,42 @@ def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None,
     if result is True:
         mount.status = MountStatus.MOUNTED
     else:
-        if not _stored_credentials_present(mount):
-            mount.status = MountStatus.UNMOUNTED if result is False else MountStatus.ERROR
+        create_dir_error = _ensure_mount_directory(mount.local_mount_point)
+        if create_dir_error:
+            logger.warning(
+                "Mountpoint preparation failed during validation: mount_id=%s type=%s mount_label=%s reason=%s",
+                mount.id,
+                mount.type.value,
+                _redacted_mount_label(str(mount.local_mount_point)),
+                sanitize_error_message(create_dir_error, "Mountpoint preparation failed"),
+            )
+            mount.status = MountStatus.ERROR
         else:
-            create_dir_error = _ensure_mount_directory(mount.local_mount_point)
-            if create_dir_error:
+            owner_error = _validate_mount_directory_owner(mount.local_mount_point)
+            if owner_error:
                 logger.warning(
-                    "Mountpoint preparation failed during validation: mount_id=%s type=%s mount_label=%s reason=%s",
+                    "Mountpoint ownership failed during validation: mount_id=%s type=%s mount_label=%s reason=%s",
                     mount.id,
                     mount.type.value,
                     _redacted_mount_label(str(mount.local_mount_point)),
-                    sanitize_error_message(create_dir_error, "Mountpoint preparation failed"),
+                    sanitize_error_message(owner_error, "Mountpoint ownership failed"),
                 )
                 mount.status = MountStatus.ERROR
             else:
-                owner_error = _validate_mount_directory_owner(mount.local_mount_point)
-                if owner_error:
-                    logger.warning(
-                        "Mountpoint ownership failed during validation: mount_id=%s type=%s mount_label=%s reason=%s",
-                        mount.id,
-                        mount.type.value,
-                        _redacted_mount_label(str(mount.local_mount_point)),
-                        sanitize_error_message(owner_error, "Mountpoint ownership failed"),
-                    )
-                    mount.status = MountStatus.ERROR
-                else:
-                    stored_credentials = _load_stored_mount_credentials(mount)
-                    success, _mount_error = provider.os_mount(
-                        mount.type,
-                        mount.remote_path,
-                        mount.local_mount_point,
-                        credentials_file=stored_credentials["credentials_file"],
-                        username=stored_credentials["username"],
-                        password=stored_credentials["password"],
-                    )
-                    mount.status = MountStatus.MOUNTED if success else MountStatus.ERROR
+                stored_credentials = (
+                    _load_stored_mount_credentials(mount)
+                    if _stored_credentials_present(mount)
+                    else {"username": None, "password": None, "credentials_file": None}
+                )
+                success, _mount_error = provider.os_mount(
+                    mount.type,
+                    mount.remote_path,
+                    mount.local_mount_point,
+                    credentials_file=stored_credentials["credentials_file"],
+                    username=stored_credentials["username"],
+                    password=stored_credentials["password"],
+                )
+                mount.status = MountStatus.MOUNTED if success else MountStatus.ERROR
 
     mount.last_checked_at = datetime.now(timezone.utc)
     try:
