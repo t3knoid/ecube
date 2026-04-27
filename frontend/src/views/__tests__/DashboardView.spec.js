@@ -123,4 +123,25 @@ describe('DashboardView active jobs', () => {
 
     expect(wrapper.find('.progress-stub').text()).toContain('Preparing...')
   })
+
+  it('renders a compact progress label alongside the dashboard progress bar', async () => {
+    mocks.listJobs.mockResolvedValue([
+      {
+        id: 18,
+        project_id: 'PROJ-001',
+        status: 'RUNNING',
+        copied_bytes: 1000,
+        total_bytes: 1000,
+        file_count: 5,
+        files_succeeded: 2,
+        files_failed: 0,
+      },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('.dashboard-progress-mobile-label').text()).toBe('40%')
+    expect(wrapper.find('.progress-stub').text()).toBe('40/100 40%')
+  })
 })
