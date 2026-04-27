@@ -18,12 +18,15 @@ function closeSidebar() {
   sidebarOpen.value = false
 }
 
-watch(sidebarOpen, (open) => {
-  document.body.style.overflow = open ? 'hidden' : ''
+watch([sidebarOpen, isMobileViewport], ([open, mobile]) => {
+  document.body.style.overflow = open && mobile ? 'hidden' : ''
 })
 
 function syncViewportState(event) {
   isMobileViewport.value = event.matches
+  if (!event.matches) {
+    closeSidebar()
+  }
 }
 
 onMounted(() => {
