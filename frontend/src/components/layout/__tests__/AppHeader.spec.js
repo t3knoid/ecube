@@ -139,4 +139,13 @@ describe('AppHeader help modal', () => {
 
     wrapper.unmount()
   })
+
+  it('emits a sidebar toggle request from the hamburger button', async () => {
+    const wrapper = mountHeader()
+
+    await wrapper.get('.btn-sidebar-toggle').trigger('click')
+
+    expect(wrapper.emitted('toggle-sidebar')?.[0]).toEqual([])
+    wrapper.unmount()
+  })
 })
