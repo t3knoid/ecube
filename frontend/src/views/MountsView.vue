@@ -35,6 +35,8 @@ const removeTarget = ref(null)
 const page = ref(1)
 const pageSize = ref(10)
 const search = ref('')
+const isMobileViewport = ref(false)
+let mobileViewportQuery = null
 
 /** Mount ID currently being browsed (null = none open). */
 const browsingMountId = ref(null)
@@ -87,14 +89,22 @@ const dialogSubmitLabel = computed(() => (isEditMode.value ? t('common.actions.s
 const dialogLocalMountPoint = computed(() => activeEditMount.value?.local_mount_point || '')
 const shareDiscoveryAvailable = computed(() => !isEditMode.value && !publicAuthConfig.value?.demo_mode_enabled)
 
-const columns = computed(() => [
-  { key: 'id', label: t('common.labels.id'), align: 'right' },
-  { key: 'type', label: t('common.labels.type') },
-  { key: 'project_id', label: t('dashboard.project') },
-  { key: 'status', label: t('common.labels.status') },
-  { key: 'last_checked_at', label: t('mounts.lastChecked') },
-  { key: 'actions', label: '', align: 'center' },
-])
+const columns = computed(() => {
+  const nextColumns = [
+    { key: 'id', label: t('common.labels.id'), align: 'right' },
+    { key: 'type', label: t('common.labels.type') },
+    { key: 'project_id', label: t('dashboard.project') },
+    { key: 'status', label: t('common.labels.status') },
+    { key: 'last_checked_at', label: t('mounts.lastChecked') },
+    { key: 'actions', label: '', align: 'center' },
+  ]
+
+  if (isMobileViewport.value) {
+    return nextColumns.filter((column) => column.key !== 'type' && column.key !== 'last_checked_at')
+  }
+
+  return nextColumns
+})
 
 const filtered = computed(() => {
   const query = search.value.trim().toLowerCase()
@@ -115,6 +125,39 @@ function toIso(value) {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return '-'
   return parsed.toLocaleString()
+}
+
+function normalizeStatusValue(status) {
+  return String(status ?? 'unknown').toUpperCase()
+}
+
+function mountStatusTone(status) {
+  const value = normalizeStatusValue(status)
+
+  if (['COMPLETED', 'DONE', 'MOUNTED', 'CONNECTED', 'AVAILABLE', 'OK', 'TRUE'].includes(value)) {
+    return 'success'
+  }
+  if (['FAILED', 'ERROR', 'DISCONNECTED', 'UNMOUNTED', 'FALSE'].includes(value)) {
+    return 'danger'
+  }
+  if (['RUNNING', 'VERIFYING', 'COPYING', 'IN_USE', 'DEGRADED'].includes(value)) {
+    return 'warning'
+  }
+  if (['PENDING', 'UNKNOWN'].includes(value)) {
+    return 'muted'
+  }
+
+  return 'info'
+}
+
+function mountStatusIcon(status) {
+  const tone = mountStatusTone(status)
+
+  if (tone === 'success') return '✓'
+  if (tone === 'warning') return '!'
+  if (tone === 'danger') return '×'
+  if (tone === 'muted') return '•'
+  return '?'
 }
 
 async function loadMounts() {
@@ -217,6 +260,16 @@ function protectedValue(value) {
 
 function formatProjectId(value) {
   return normalizeProjectId(value) || '-'
+}
+
+function syncViewportState() {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+
+  if (!mobileViewportQuery) {
+    mobileViewportQuery = window.matchMedia('(max-width: 768px)')
+  }
+
+  isMobileViewport.value = mobileViewportQuery.matches
 }
 
 function browseLabel(mount) {
@@ -464,6 +517,28 @@ function requestRemove(mount) {
   void runRemove(mount)
 }
 
+function closeRowActionsMenu(event) {
+  const menu = event?.currentTarget instanceof HTMLElement ? event.currentTarget.closest('details') : null
+  if (menu instanceof HTMLDetailsElement) {
+    menu.removeAttribute('open')
+  }
+}
+
+function handleMenuEdit(mount, event) {
+  closeRowActionsMenu(event)
+  openEditDialog(mount, event)
+}
+
+function handleMenuBrowse(mount, event) {
+  closeRowActionsMenu(event)
+  void toggleBrowse(mount.id)
+}
+
+function handleMenuRemove(mount, event) {
+  closeRowActionsMenu(event)
+  requestRemove(mount)
+}
+
 const browsePanelRef = ref(null)
 
 async function toggleBrowse(mountId) {
@@ -477,6 +552,14 @@ async function toggleBrowse(mountId) {
 }
 
 onMounted(async () => {
+  syncViewportState()
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    if (!mobileViewportQuery) {
+      mobileViewportQuery = window.matchMedia('(max-width: 768px)')
+    }
+    mobileViewportQuery.addEventListener('change', syncViewportState)
+  }
+
   await Promise.allSettled([loadMounts(), loadPublicAuthConfig()])
 })
 
@@ -537,6 +620,7 @@ watch(showShareBrowserDialog, async (open) => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleAddDialogKeydown)
+  mobileViewportQuery?.removeEventListener('change', syncViewportState)
 })
 </script>
 
@@ -558,7 +642,19 @@ onBeforeUnmount(() => {
 
     <DataTable :columns="columns" :rows="paged" :empty-text="t('mounts.empty')">
       <template #cell-project_id="{ row }">{{ formatProjectId(row.project_id) }}</template>
-      <template #cell-status="{ row }"><StatusBadge :status="row.status" /></template>
+      <template #cell-status="{ row }">
+        <span
+          v-if="isMobileViewport"
+          class="mount-status-icon"
+          :class="`mount-status-icon--${mountStatusTone(row.status)}`"
+          :aria-label="row.status"
+          :title="row.status"
+          role="img"
+        >
+          <span aria-hidden="true">{{ mountStatusIcon(row.status) }}</span>
+        </span>
+        <StatusBadge v-else :status="row.status" />
+      </template>
       <template #cell-last_checked_at="{ row }">{{ toIso(row.last_checked_at) }}</template>
       <template #cell-actions="{ row }">
         <div class="row-actions">
@@ -575,6 +671,41 @@ onBeforeUnmount(() => {
           </button>
           <button v-if="canManageMounts" class="btn btn-danger" @click="requestRemove(row)">{{ t('mounts.remove') }}</button>
         </div>
+        <details class="row-actions-menu">
+          <summary class="row-actions-toggle" :aria-label="`${formatProjectId(row.project_id)} mount actions`">
+            <span class="row-actions-toggle-dots" aria-hidden="true">
+              <span class="row-actions-toggle-dot" />
+              <span class="row-actions-toggle-dot" />
+              <span class="row-actions-toggle-dot" />
+            </span>
+          </summary>
+          <div class="row-actions-popover">
+            <button
+              v-if="canManageMounts"
+              class="btn row-action-menu-edit"
+              @click="handleMenuEdit(row, $event)"
+            >
+              {{ t('common.actions.edit') }}
+            </button>
+            <button
+              class="btn row-action-menu-browse"
+              :disabled="row.status !== 'MOUNTED' || !row.local_mount_point"
+              :title="row.status !== 'MOUNTED' || !row.local_mount_point ? t('mounts.browseUnavailable') : ''"
+              :aria-expanded="browsingMountId === row.id"
+              :aria-label="browseLabel(row)"
+              @click="handleMenuBrowse(row, $event)"
+            >
+              {{ t('mounts.browse') }}
+            </button>
+            <button
+              v-if="canManageMounts"
+              class="btn btn-danger row-action-menu-remove"
+              @click="handleMenuRemove(row, $event)"
+            >
+              {{ t('mounts.remove') }}
+            </button>
+          </div>
+        </details>
       </template>
     </DataTable>
 
@@ -723,6 +854,49 @@ onBeforeUnmount(() => {
   gap: var(--space-sm);
 }
 
+.mount-status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  font-size: 0.9rem;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+}
+
+.mount-status-icon--success {
+  background: color-mix(in srgb, var(--color-success) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-success) 45%, var(--color-border));
+  color: var(--color-status-ok-text, #14532d);
+}
+
+.mount-status-icon--warning {
+  background: color-mix(in srgb, var(--color-warning) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-warning) 45%, var(--color-border));
+  color: var(--color-status-warn-text, #7c3f00);
+}
+
+.mount-status-icon--danger {
+  background: color-mix(in srgb, var(--color-danger) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border));
+  color: var(--color-status-danger-text, #991b1b);
+}
+
+.mount-status-icon--info {
+  background: color-mix(in srgb, var(--color-info) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-info) 45%, var(--color-border));
+  color: var(--color-status-info-text, #1e40af);
+}
+
+.mount-status-icon--muted {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border);
+  color: var(--color-status-muted-text, #475569);
+}
+
 .header-row {
   justify-content: space-between;
   align-items: center;
@@ -759,6 +933,61 @@ onBeforeUnmount(() => {
 .share-discovery-copy {
   display: grid;
   gap: var(--space-2xs);
+}
+
+.row-actions {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.row-actions-menu {
+  display: none;
+  position: relative;
+}
+
+.row-actions-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.row-actions-toggle-dots {
+  display: inline-grid;
+  gap: 0.15rem;
+}
+
+.row-actions-toggle-dot {
+  width: 0.25rem;
+  height: 0.25rem;
+  border-radius: 9999px;
+  background: currentColor;
+}
+
+.row-actions-toggle::-webkit-details-marker {
+  display: none;
+}
+
+.row-actions-popover {
+  position: absolute;
+  top: calc(100% + var(--space-2xs));
+  right: 0;
+  z-index: 2;
+  min-width: 8.5rem;
+  display: grid;
+  gap: var(--space-2xs);
+  padding: var(--space-2xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg-primary);
+  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
 }
 
 input,
@@ -828,5 +1057,15 @@ select {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-sm);
+}
+
+@media (max-width: 768px) {
+  .row-actions {
+    display: none;
+  }
+
+  .row-actions-menu {
+    display: inline-block;
+  }
 }
 </style>

@@ -105,4 +105,16 @@ describe('ConfigurationView logging defaults', () => {
 
     expect(mocks.updateConfiguration).toHaveBeenCalledWith({ job_detail_files_page_size: 80 })
   })
+
+  it('keeps the copy jobs section full width when no restart warning is shown', async () => {
+    mocks.getConfiguration.mockResolvedValue(buildResponse())
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const settingsGrids = wrapper.findAll('.settings-grid')
+    expect(settingsGrids).toHaveLength(2)
+    expect(settingsGrids[1].classes()).toContain('settings-grid-single')
+    expect(wrapper.find('.warning-panel').exists()).toBe(false)
+  })
 })
