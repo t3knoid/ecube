@@ -850,8 +850,6 @@ textarea {
 }
 
 @media (max-width: 768px) {
-  .header-row,
-  .actions,
   .dialog-actions {
     flex-direction: column;
     align-items: stretch;
