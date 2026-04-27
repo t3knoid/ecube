@@ -174,6 +174,16 @@ function parseNumberedHeading(text) {
   }
 }
 
+function getRenderedHeadingLevel(markdownHeadingLevel, headingText) {
+  const numberedHeading = parseNumberedHeading(headingText)
+  if (!numberedHeading) {
+    return Math.max(1, markdownHeadingLevel - 1)
+  }
+
+  const subsectionDepth = numberedHeading.suffix ? numberedHeading.suffix.split('.').filter(Boolean).length : 0
+  return Math.min(4, subsectionDepth + 1)
+}
+
 function renumberCuratedMarkdown(markdown) {
   const lines = markdown.split(/\r?\n/)
   const headingIdMap = new Map()
@@ -364,10 +374,10 @@ function renderMarkdown(markdown) {
     if (headingMatch) {
       flushParagraph()
       closeLists()
-      const level = headingMatch[1].length
       const text = headingMatch[2].trim()
       const id = slugify(text)
-      output.push(`<h${level - 1} id="${id}">${renderInline(text)}</h${level - 1}>`)
+      const level = getRenderedHeadingLevel(headingMatch[1].length, text)
+      output.push(`<h${level} id="${id}">${renderInline(text)}</h${level}>`)
       continue
     }
 

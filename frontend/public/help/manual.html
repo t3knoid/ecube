@@ -550,7 +550,7 @@ Credentials file
 <p>After a service restart, ECUBE may automatically restore an expected managed share mount or remove a stale ECUBE-managed mount point that no longer matches persisted system state. These startup corrections are intentional and are recorded in the audit log with sanitized details.</p>
 <p>The exact credential fields required depend on the mount type and your environment.</p>
 <p>If share browsing is unavailable because the ECUBE host is missing a required discovery tool, the dialog now shows an actionable message telling the operator which host package to install before retrying. The browse control is hidden entirely when ECUBE is running in demo mode.</p>
-<h2 id="5-1-1-editing-a-mount">5.1.1 Editing a Mount</h2>
+<h3 id="5-1-1-editing-a-mount">5.1.1 Editing a Mount</h3>
 <p>Use <code>Edit</code> on an existing mount row to reopen the same dialog in edit mode.</p>
 <ul><li>
 The dialog pre-fills the current type, remote path, and project ID.
@@ -568,7 +568,7 @@ Use <code>Clear saved credentials</code> if you need to remove previously stored
 <p>Remove a mount only if it is no longer needed. If existing workflows depend on it, removing the definition can interrupt job creation or repeatability.</p>
 <p class="help-back-to-top"><a href="#help-toc-title">Back to top</a></p>
 <hr />
-<h1 id="5-4-directory-browser">5.4 Directory Browser</h1>
+<h2 id="5-4-directory-browser">5.4 Directory Browser</h2>
 <p>The directory browser allows users to explore the contents of active mount points (USB drives and network shares) before creating an export job.</p>
 <p><strong>Accessing the browser:</strong></p>
 <ul><li>
