@@ -151,7 +151,7 @@ Compatibility note: To support project-to-source-path policy, use project source
 
 **Archived Job Visibility:** `GET /jobs` excludes `ARCHIVED` jobs by default. Pass `include_archived=true` when operator or QA workflows need to review archived jobs alongside active and terminal jobs.
 
-**Archive Semantics:** `POST /jobs/{job_id}/archive` is limited to `admin` and `manager`, requires `{ "confirm": true }`, and returns **409 Conflict** unless the current job is `COMPLETED` or `FAILED`. Archived jobs remain available through `GET /jobs/{job_id}` but are removed from the default list flow.
+**Archive Semantics:** `POST /jobs/{job_id}/archive` is limited to `admin` and `manager`, requires `{ "confirm": true }`, and returns **409 Conflict** unless the current job is `COMPLETED` or `FAILED` and any related drive has already been through `Prepare Eject` so it is no longer mounted. Archived jobs remain available through `GET /jobs/{job_id}` but are removed from the default list flow.
 
 **Duplicate Blocking Semantics:** ECUBE continues blocking parent/child source-path overlap against active jobs on the same assigned drive. For terminal jobs, ECUBE still blocks recreation of the same exact source-path/destination combination until the earlier `COMPLETED` or `FAILED` job is explicitly archived.
 
