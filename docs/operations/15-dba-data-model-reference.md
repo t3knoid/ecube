@@ -4,7 +4,7 @@
 |---|---|
 | Title | DBA Data Model Reference |
 | Purpose | Provides database administrators with a reference for ECUBE table structure, column types, relationships, and common query patterns. |
-| Updated on | 04/08/26 |
+| Updated on | 04/28/26 |
 | Audience | Database administrators, SQL support engineers, data governance teams. |
 
 ## Table of Contents
@@ -27,10 +27,11 @@ This document is a standalone DBA-focused schema reference for ECUBE and is inte
 
 ## Conceptual Model
 
-At a conceptual level, ECUBE has six domains: Hardware Topology, Mounts, Export Jobs, Audit Trail, Authorization, and System Guards.
+At a conceptual level, ECUBE has seven domains: Hardware Topology, Mounts, Projects, Export Jobs, Audit Trail, Authorization, and System Guards.
 
 - Hardware Topology: hubs, ports, and drives discovered from the host.
 - Mounts: NFS/SMB source definitions and mount health state.
+- Projects: normalized case identifiers that provide a durable relational project anchor across jobs.
 - Export Jobs: export job lifecycle, files, manifests, and drive assignments.
 - Audit Trail: immutable event records for security and operations.
 - Authorization: explicit user-to-role mapping used by API authorization.
@@ -40,6 +41,7 @@ At a conceptual level, ECUBE has six domains: Hardware Topology, Mounts, Export 
 erDiagram
   USB_HUBS ||--o{ USB_PORTS : contains
   USB_PORTS ||--o{ USB_DRIVES : hosts
+  PROJECTS ||--o{ EXPORT_JOBS : scopes
   USB_DRIVES ||--o{ DRIVE_ASSIGNMENTS : assigned_to
   EXPORT_JOBS ||--o{ DRIVE_ASSIGNMENTS : uses
   EXPORT_JOBS ||--o{ EXPORT_FILES : contains
@@ -66,15 +68,20 @@ Key relationships:
 
 - `network_mounts`: external source mount definitions with protocol and health status.
 
+### Project Domain
+
+- `projects`: normalized, unique project identifiers used as the durable relational anchor for project-scoped job history.
+
 ### Job Domain
 
-- `export_jobs`: top-level export lifecycle, throughput metadata, the persisted sanitized `failure_reason` used for failed-job triage, and persisted startup-analysis cache metadata used to accelerate restart and resume flows.
+- `export_jobs`: top-level export lifecycle, the relational `project_id` reference to `projects.normalized_project_id`, throughput metadata, the persisted sanitized `failure_reason` used for failed-job triage, and persisted startup-analysis cache metadata used to accelerate restart and resume flows.
 - `export_files`: per-file copy/verify tracking rows.
 - `manifests`: manifest artifacts generated per job.
 - `drive_assignments`: assignment history linking drives to jobs.
 
 Key relationships:
 
+- `export_jobs.project_id` -> `projects.normalized_project_id`
 - `export_files.job_id` -> `export_jobs.id`
 - `manifests.job_id` -> `export_jobs.id`
 - `drive_assignments.drive_id` -> `usb_drives.id`
@@ -104,6 +111,7 @@ This section captures the primary physical schema details used by DBAs.
 - `usb_ports`
 - `usb_drives`
 - `network_mounts`
+- `projects`
 - `export_jobs`
 - `export_files`
 - `manifests`
@@ -129,6 +137,7 @@ This section captures the primary physical schema details used by DBAs.
 
 - Port and drive identities are unique at the schema level (`usb_ports.system_path`, `usb_drives.device_identifier`).
 - `network_mounts.local_mount_point` is unique.
+- `projects.normalized_project_id` is unique and stores the normalized project identity used by `export_jobs.project_id`.
 - `user_roles` enforces composite uniqueness on (`username`, `role`).
 - Guard tables enforce single-row behavior via check constraints (`id = 1`).
 - Audit payloads are stored as JSON (PostgreSQL JSONB variant).
