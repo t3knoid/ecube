@@ -1,5 +1,6 @@
 from app.models.hardware import UsbHub, UsbPort, UsbDrive, DriveState
 from app.models.network import NetworkMount, MountType, MountStatus
+from app.models.projects import Project
 from app.models.jobs import (
     ExportJob,
     ExportFile,
@@ -20,6 +21,7 @@ __all__ = [
     "NetworkMount",
     "MountType",
     "MountStatus",
+    "Project",
     "ExportJob",
     "ExportFile",
     "Manifest",
