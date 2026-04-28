@@ -81,7 +81,18 @@ const canManageStartupAnalysis = computed(() => authStore.hasAnyRole(['admin', '
 const canInspectHashes = computed(() => authStore.hasAnyRole(['admin', 'auditor']))
 const currentStatus = computed(() => String(job.value?.status || '').toUpperCase())
 const currentStartupAnalysisStatus = computed(() => String(job.value?.startup_analysis_status || 'NOT_ANALYZED').toUpperCase())
-const canArchive = computed(() => canArchiveJobs.value && ['COMPLETED', 'FAILED'].includes(currentStatus.value))
+const archiveDriveReady = computed(() => {
+  const driveState = String(job.value?.drive?.current_state || '').toUpperCase()
+  return !job.value?.drive || driveState === 'AVAILABLE'
+})
+const archiveBlockedByDriveEject = computed(() => canArchiveJobs.value
+  && ['COMPLETED', 'FAILED'].includes(currentStatus.value)
+  && !!job.value?.drive
+  && !archiveDriveReady.value)
+const archivePrerequisiteNotice = computed(() => (archiveBlockedByDriveEject.value ? t('jobs.archiveRequiresEject') : ''))
+const canArchive = computed(() => canArchiveJobs.value
+  && ['COMPLETED', 'FAILED'].includes(currentStatus.value)
+  && archiveDriveReady.value)
 
 function normalizeFileStatus(status) {
   return String(status || '').toUpperCase()
@@ -1373,6 +1384,7 @@ onUnmounted(() => {
           </div>
         </details>
       </div>
+      <p v-if="archivePrerequisiteNotice" class="muted">{{ archivePrerequisiteNotice }}</p>
     </article>
 
     <article class="panel files-panel">
