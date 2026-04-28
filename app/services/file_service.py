@@ -101,6 +101,17 @@ def _file_to_item(ef: ExportFile, db: Session) -> FileCompareItem:
     )
 
 
+def _shared_project_id(*export_files: ExportFile) -> Optional[str]:
+    project_ids = {
+        export_file.project_id
+        for export_file in export_files
+        if isinstance(export_file.project_id, str) and export_file.project_id
+    }
+    if len(project_ids) != 1:
+        return None
+    return next(iter(project_ids))
+
+
 def get_file_hashes(
     file_id: int, db: Session, actor: Optional[str] = None,
     client_ip: Optional[str] = None,
@@ -130,6 +141,7 @@ def get_file_hashes(
     audit_repo.add(
         action="FILE_HASHES_RETRIEVED",
         user=actor,
+        project_id=ef.project_id,
         job_id=ef.job_id,
         details={
             "file_id": file_id,
@@ -209,9 +221,12 @@ def compare_files(
     audit_repo.add(
         action="FILE_COMPARE",
         user=actor,
+        project_id=_shared_project_id(ef_a, ef_b),
         details={
             "file_id_a": body.file_id_a,
             "file_id_b": body.file_id_b,
+            "file_a_project_id": ef_a.project_id,
+            "file_b_project_id": ef_b.project_id,
             "compare_mode": compare_mode,
             "match": match,
             "hash_match": hash_match,
