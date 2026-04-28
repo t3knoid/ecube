@@ -145,6 +145,8 @@ def test_get_file_hashes_creates_audit_log(admin_client, db):
         .first()
     )
     assert entry is not None
+    assert entry.project_id == job.project_id
+    assert entry.job_id == job.id
     assert entry.details["file_id"] == ef.id
 
 
@@ -360,5 +362,6 @@ def test_compare_files_creates_audit_log(admin_client, db):
         db.query(AuditLog).filter(AuditLog.action == "FILE_COMPARE").first()
     )
     assert entry is not None
+    assert entry.project_id == job.project_id
     assert entry.details["file_id_a"] == ef_a.id
     assert entry.details["file_id_b"] == ef_b.id
