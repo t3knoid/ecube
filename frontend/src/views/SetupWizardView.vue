@@ -63,7 +63,7 @@ function routeAfterSetupCheck() {
     router.replace({ name: 'dashboard' })
     return
   }
-  router.replace({ name: 'login' })
+  router.replace({ name: 'login', query: { reason: 'setup_already_initialized' } })
 }
 
 function step1Valid() {
@@ -92,7 +92,6 @@ async function runConnectDatabase() {
     connectionOk.value = true
   } catch (err) {
     if (err?.response?.status === 401) {
-      error.value = t('setup.alreadyInitialized')
       routeAfterSetupCheck()
       return
     }
@@ -132,7 +131,6 @@ async function runProvision() {
       error.value = ''
       provisionNote.value = t('setup.provisionAlready')
     } else if (err?.response?.status === 401) {
-      error.value = t('setup.alreadyInitialized')
       routeAfterSetupCheck()
     } else {
       provisionOk.value = false
@@ -163,7 +161,6 @@ async function runInitializeSetup() {
     complete.value = true
   } catch (err) {
     if (err?.response?.status === 401) {
-      error.value = t('setup.alreadyInitialized')
       routeAfterSetupCheck()
       return
     }
@@ -204,7 +201,6 @@ onMounted(async () => {
 
     const setupStatus = await getSetupStatus()
     if (setupStatus?.initialized === true) {
-      error.value = t('setup.alreadyInitialized')
       routeAfterSetupCheck()
       return
     }
