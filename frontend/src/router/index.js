@@ -155,7 +155,9 @@ router.beforeEach(async (to) => {
       destination,
       routeName: authStore.isAuthenticated ? 'dashboard' : 'login',
     })
-    return authStore.isAuthenticated ? { name: 'dashboard' } : { name: 'login' }
+    return authStore.isAuthenticated
+      ? { name: 'dashboard' }
+      : { name: 'login', query: { reason: 'setup_already_initialized' } }
   }
 
   // Allow unauthenticated routes
