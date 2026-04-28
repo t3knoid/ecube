@@ -41,7 +41,7 @@ def test_add_mount(manager_client, db):
     data = response.json()
     assert data["type"] == "NFS"
     assert data["project_id"] == "PROJ-001"
-    assert data["nfs_client_version"] == "4.1"
+    assert data["nfs_client_version"] is None
     assert data["local_mount_point"] == "/nfs/evidence"
     assert data["status"] == "MOUNTED"
 
@@ -80,6 +80,9 @@ def test_add_mount_uses_nfs_v4_1_to_avoid_slow_negotiation(manager_client, db):
         "nfs",
     ]
     assert "vers=4.1" in first_call.args[0]
+
+    mount = db.query(NetworkMount).filter(NetworkMount.project_id == "PROJ-NFS41").one()
+    assert mount.nfs_client_version is None
 
 
 def test_add_mount_persists_requested_nfs_client_version(manager_client, db):
@@ -1072,7 +1075,7 @@ def test_validate_mount_candidate_returns_candidate_without_persisting(manager_c
     assert data["type"] == "NFS"
     assert data["remote_path"] == "192.168.1.1:/exports/evidence"
     assert data["project_id"] == "PROJ-NEW"
-    assert data["nfs_client_version"] == "4.1"
+    assert data["nfs_client_version"] is None
     assert data["local_mount_point"] == "/nfs/evidence"
     assert data["status"] == "MOUNTED"
     assert data["last_checked_at"] is not None
