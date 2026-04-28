@@ -366,6 +366,8 @@ def _resolve_nfs_client_version(requested_version: Optional[str]) -> str:
 def _stored_nfs_client_version(mount_type: MountType, requested_version: Optional[str]) -> Optional[str]:
     if mount_type != MountType.NFS:
         return None
+    if requested_version is None or not str(requested_version).strip():
+        return None
     return _resolve_nfs_client_version(requested_version)
 
 
