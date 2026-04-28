@@ -52,7 +52,7 @@ const form = ref({
   type: 'SMB',
   remote_path: '',
   project_id: '',
-  nfs_client_version: '4.1',
+  nfs_client_version: '',
   username: '',
   password: '',
   credentials_file: '',
@@ -97,6 +97,15 @@ const nfsClientVersionOptions = computed(() => {
     : []
   return configured.length ? configured : ['4.2', '4.1', '4.0', '3']
 })
+const nfsClientVersionSelectOptions = computed(() => [
+  {
+    value: '',
+    label: t('mounts.nfsClientVersionDefaultOption', {
+      version: publicAuthConfig.value.default_nfs_client_version || '4.1',
+    }),
+  },
+  ...nfsClientVersionOptions.value.map((option) => ({ value: option, label: option })),
+])
 
 const columns = computed(() => {
   const nextColumns = [
@@ -211,7 +220,7 @@ function resetForm() {
     type: 'SMB',
     remote_path: '',
     project_id: '',
-    nfs_client_version: publicAuthConfig.value.default_nfs_client_version || '4.1',
+    nfs_client_version: '',
     username: '',
     password: '',
     credentials_file: '',
@@ -314,7 +323,9 @@ function buildMountPayload() {
   }
 
   if (form.value.type === 'NFS') {
-    payload.nfs_client_version = form.value.nfs_client_version || publicAuthConfig.value.default_nfs_client_version || '4.1'
+    if (form.value.nfs_client_version) {
+      payload.nfs_client_version = form.value.nfs_client_version
+    }
   }
 
   const username = form.value.username.trim()
@@ -458,7 +469,7 @@ function openEditDialog(mount, event) {
     type: mount.type || 'SMB',
     remote_path: mount.remote_path || '',
     project_id: normalizeProjectId(mount.project_id),
-    nfs_client_version: mount.nfs_client_version || publicAuthConfig.value.default_nfs_client_version || '4.1',
+    nfs_client_version: mount.nfs_client_version || '',
     username: '',
     password: '',
     credentials_file: '',
@@ -780,7 +791,7 @@ onBeforeUnmount(() => {
           <template v-if="form.type === 'NFS'">
             <label for="mount-nfs-client-version">{{ t('mounts.nfsClientVersion') }}</label>
             <select id="mount-nfs-client-version" v-model="form.nfs_client_version">
-              <option v-for="option in nfsClientVersionOptions" :key="option" :value="option">{{ option }}</option>
+              <option v-for="option in nfsClientVersionSelectOptions" :key="option.value || 'default'" :value="option.value">{{ option.label }}</option>
             </select>
             <p class="field-help">{{ t('mounts.nfsClientVersionHelp') }}</p>
           </template>
