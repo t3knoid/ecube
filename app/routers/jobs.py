@@ -205,6 +205,7 @@ def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
     active = assignment_repo.get_active_for_job(job.id)
     if active and getattr(active, "drive", None):
         schema.drive = DriveInfoSchema.model_validate(active.drive)
+        schema.drive.is_mounted = bool(getattr(active.drive, "mount_path", None))
 
     return schema
 
@@ -258,6 +259,7 @@ def _enrich_jobs_bulk(
         active = assignments_map.get(job.id)
         if active and getattr(active, "drive", None):
             schema.drive = DriveInfoSchema.model_validate(active.drive)
+            schema.drive.is_mounted = bool(getattr(active.drive, "mount_path", None))
 
         result.append(schema)
     return result
