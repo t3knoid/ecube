@@ -43,7 +43,100 @@ branch_labels = None
 depends_on = None
 
 
+def _normalize_project_id(value: object) -> object:
+    if not isinstance(value, str):
+        return value
+    value = value.replace("\x00", "")
+    value = "".join(character for character in value if not 0xD800 <= ord(character) <= 0xDFFF)
+    return value.strip().upper()
+
+
+def _create_projects_table() -> None:
+    op.create_table(
+        "projects",
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column("normalized_project_id", sa.String(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
+        ),
+        sa.UniqueConstraint("normalized_project_id", name="uq_projects_normalized_project_id"),
+    )
+
+
+def _backfill_projects_from_jobs() -> None:
+    bind = op.get_bind()
+    rows = bind.execute(
+        sa.text(
+            "SELECT id, project_id "
+            "FROM export_jobs "
+            "WHERE project_id IS NOT NULL"
+        )
+    ).fetchall()
+
+    normalized_jobs = []
+    normalized_project_ids = set()
+    for job_id, project_id in rows:
+        normalized = _normalize_project_id(project_id)
+        if not isinstance(normalized, str) or not normalized:
+            continue
+        normalized_jobs.append({"id": job_id, "project_id": normalized})
+        normalized_project_ids.add(normalized)
+
+    if normalized_jobs:
+        bind.execute(
+            sa.text("UPDATE export_jobs SET project_id = :project_id WHERE id = :id"),
+            normalized_jobs,
+        )
+
+    if normalized_project_ids:
+        bind.execute(
+            sa.text(
+                "INSERT INTO projects (normalized_project_id) VALUES (:normalized_project_id)"
+            ),
+            [
+                {"normalized_project_id": project_id}
+                for project_id in sorted(normalized_project_ids)
+            ],
+        )
+
+
+def _export_jobs_project_fk_exists(inspector: sa.Inspector) -> bool:
+    return any(
+        fk.get("referred_table") == "projects"
+        and fk.get("constrained_columns") == ["project_id"]
+        and fk.get("referred_columns") == ["normalized_project_id"]
+        for fk in inspector.get_foreign_keys("export_jobs")
+    )
+
+
+def _upgrade_legacy_project_schema(inspector: sa.Inspector, existing_tables: set[str]) -> None:
+    if "projects" not in existing_tables:
+        _create_projects_table()
+
+    _backfill_projects_from_jobs()
+
+    if not _export_jobs_project_fk_exists(inspector):
+        with op.batch_alter_table("export_jobs") as batch_op:
+            batch_op.create_foreign_key(
+                "fk_export_jobs_project_id_projects",
+                "projects",
+                ["project_id"],
+                ["normalized_project_id"],
+            )
+
+
 def upgrade() -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing_tables = set(inspector.get_table_names())
+
+    if "export_jobs" in existing_tables:
+        _upgrade_legacy_project_schema(inspector, existing_tables)
+        return
+
     op.create_table(
         "usb_hubs",
         sa.Column("id", sa.Integer, primary_key=True),
@@ -131,10 +224,12 @@ def upgrade() -> None:
     op.create_index("ix_network_mounts_project_id", "network_mounts", ["project_id"])
     op.create_index("ix_network_mounts_status_project", "network_mounts", ["status", "project_id"])
 
+    _create_projects_table()
+
     op.create_table(
         "export_jobs",
         sa.Column("id", sa.Integer, primary_key=True),
-        sa.Column("project_id", sa.String, nullable=False),
+        sa.Column("project_id", sa.String, sa.ForeignKey("projects.normalized_project_id"), nullable=False),
         sa.Column("evidence_number", sa.String, nullable=False),
         sa.Column("source_path", sa.String, nullable=False),
         sa.Column("target_mount_path", sa.String, nullable=True),
@@ -329,6 +424,7 @@ def downgrade() -> None:
     op.drop_table("manifests")
     op.drop_table("export_files")
     op.drop_table("export_jobs")
+    op.drop_table("projects")
     op.drop_table("network_mounts")
     op.drop_table("usb_drives")
     op.drop_table("usb_ports")

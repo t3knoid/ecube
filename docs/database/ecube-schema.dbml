@@ -3,6 +3,24 @@ Project ECUBE {
   Note: "ECUBE core operational schema (generated from SQLAlchemy metadata)"
 }
 
+Enum mount_type {
+  NFS
+  SMB
+}
+
+Enum mount_status {
+  MOUNTED
+  UNMOUNTED
+  ERROR
+}
+
+Enum ecube_role {
+  admin
+  manager
+  processor
+  auditor
+}
+
 Enum job_status {
   PENDING
   RUNNING
@@ -22,24 +40,6 @@ Enum startup_analysis_status {
   FAILED
 }
 
-Enum mount_type {
-  NFS
-  SMB
-}
-
-Enum mount_status {
-  MOUNTED
-  UNMOUNTED
-  ERROR
-}
-
-Enum ecube_role {
-  admin
-  manager
-  processor
-  auditor
-}
-
 Enum file_status {
   PENDING
   COPYING
@@ -54,6 +54,63 @@ Enum drive_state {
   AVAILABLE
   IN_USE
   ARCHIVED
+}
+
+Table network_mounts {
+  id int [pk, not null]
+  type mount_type [not null]
+  remote_path varchar [not null]
+  project_id varchar [not null, default: 'UNASSIGNED']
+  local_mount_point varchar [not null, unique]
+  encrypted_username varchar
+  encrypted_password varchar
+  encrypted_credentials_file varchar
+  status mount_status [default: 'UNMOUNTED']
+  last_checked_at timestamptz
+
+  indexes {
+    project_id [name: 'ix_network_mounts_project_id']
+    status [name: 'ix_network_mounts_status']
+    (status, project_id) [name: 'ix_network_mounts_status_project']
+  }
+}
+
+Table projects {
+  id int [pk, not null]
+  normalized_project_id varchar [not null, unique]
+  created_at timestamptz [not null]
+}
+
+Table reconciliation_lock {
+  id int [pk, not null, default: 1]
+  locked_by varchar [not null]
+  locked_at timestamptz [not null]
+}
+
+Table system_initialization {
+  id int [pk, not null, default: 1]
+  initialized_by varchar [not null]
+  initialized_at timestamptz [not null]
+}
+
+Table usb_hubs {
+  id int [pk, not null]
+  name varchar [not null]
+  system_identifier varchar [not null, unique]
+  location_hint varchar
+  vendor_id varchar
+  product_id varchar
+}
+
+Table user_roles {
+  id int [pk, not null]
+  username varchar [not null]
+  role ecube_role [not null]
+
+  indexes {
+    (username, role) [unique, name: 'uq_user_role']
+    username [name: 'ix_user_roles_username']
+  }
 }
 
 Table export_jobs {
@@ -93,54 +150,19 @@ Table export_jobs {
   }
 }
 
-Table network_mounts {
+Table usb_ports {
   id int [pk, not null]
-  type mount_type [not null]
-  remote_path varchar [not null]
-  project_id varchar [not null, default: 'UNASSIGNED']
-  local_mount_point varchar [not null, unique]
-  encrypted_username varchar
-  encrypted_password varchar
-  encrypted_credentials_file varchar
-  status mount_status [default: 'UNMOUNTED']
-  last_checked_at timestamptz
-
-  indexes {
-    project_id [name: 'ix_network_mounts_project_id']
-    status [name: 'ix_network_mounts_status']
-    (status, project_id) [name: 'ix_network_mounts_status_project']
-  }
-}
-
-Table reconciliation_lock {
-  id int [pk, not null, default: 1]
-  locked_by varchar [not null]
-  locked_at timestamptz [not null]
-}
-
-Table system_initialization {
-  id int [pk, not null, default: 1]
-  initialized_by varchar [not null]
-  initialized_at timestamptz [not null]
-}
-
-Table usb_hubs {
-  id int [pk, not null]
-  name varchar [not null]
-  system_identifier varchar [not null, unique]
-  location_hint varchar
+  hub_id int [not null]
+  port_number int [not null]
+  system_path varchar [not null]
+  friendly_label varchar
+  enabled boolean [not null, default: false]
   vendor_id varchar
   product_id varchar
-}
-
-Table user_roles {
-  id int [pk, not null]
-  username varchar [not null]
-  role ecube_role [not null]
+  speed varchar
 
   indexes {
-    (username, role) [unique, name: 'uq_user_role']
-    username [name: 'ix_user_roles_username']
+    system_path [unique, name: 'uq_usb_ports_system_path']
   }
 }
 
@@ -161,22 +183,6 @@ Table manifests {
   manifest_path varchar
   format varchar [default: 'JSON']
   created_at timestamptz
-}
-
-Table usb_ports {
-  id int [pk, not null]
-  hub_id int [not null]
-  port_number int [not null]
-  system_path varchar [not null]
-  friendly_label varchar
-  enabled boolean [not null, default: false]
-  vendor_id varchar
-  product_id varchar
-  speed varchar
-
-  indexes {
-    system_path [unique, name: 'uq_usb_ports_system_path']
-  }
 }
 
 Table usb_drives {
@@ -227,6 +233,7 @@ Ref: audit_logs.job_id > export_jobs.id
 Ref: drive_assignments.drive_id > usb_drives.id
 Ref: drive_assignments.job_id > export_jobs.id
 Ref: export_files.job_id > export_jobs.id
+Ref: export_jobs.project_id > projects.normalized_project_id
 Ref: manifests.job_id > export_jobs.id
 Ref: usb_drives.port_id > usb_ports.id
 Ref: usb_ports.hub_id > usb_hubs.id
