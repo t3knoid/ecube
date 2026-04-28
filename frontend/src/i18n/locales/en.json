@@ -496,6 +496,7 @@
     "description": "Update selected runtime settings without shell access. Admin role required.",
     "sections": {
       "logging": "Logging",
+      "shares": "Shares",
       "databasePool": "Database Connection Pool",
       "copyJobs": "Copy Jobs"
     },
