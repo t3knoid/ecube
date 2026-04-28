@@ -5,7 +5,6 @@ import pytest
 
 from app.utils.release_migration import (
     ReleaseMigrationError,
-    ReleaseMigrationResult,
     autogenerate_release_migration,
     create_release_migration,
     ensure_release_migration,
