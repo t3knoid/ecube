@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
-import { analyzeJob, getJob, getJobFiles, startJob, retryFailedJob, pauseJob, verifyJob, generateManifest, downloadManifest, updateJob, completeJob, deleteJob, clearJobStartupAnalysisCache } from '@/api/jobs.js'
+import { analyzeJob, archiveJob, getJob, getJobFiles, startJob, retryFailedJob, pauseJob, verifyJob, generateManifest, downloadManifest, updateJob, completeJob, deleteJob, clearJobStartupAnalysisCache } from '@/api/jobs.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import { getFileHashes, compareFiles } from '@/api/files.js'
 import { getDrives } from '@/api/drives.js'
@@ -52,6 +52,7 @@ const supportingMounts = ref([])
 const filesPanelExpanded = ref(false)
 const showEditDialog = ref(false)
 const showDeleteDialog = ref(false)
+const showArchiveDialog = ref(false)
 const showStartupAnalysisCleanupDialog = ref(false)
 const showPausePendingDialog = ref(false)
 const showHashDialog = ref(false)
@@ -75,10 +76,23 @@ const editForm = ref({
 })
 
 const canOperate = computed(() => authStore.hasAnyRole(['admin', 'manager', 'processor']))
+const canArchiveJobs = computed(() => authStore.hasAnyRole(['admin', 'manager']))
 const canManageStartupAnalysis = computed(() => authStore.hasAnyRole(['admin', 'manager']))
 const canInspectHashes = computed(() => authStore.hasAnyRole(['admin', 'auditor']))
 const currentStatus = computed(() => String(job.value?.status || '').toUpperCase())
 const currentStartupAnalysisStatus = computed(() => String(job.value?.startup_analysis_status || 'NOT_ANALYZED').toUpperCase())
+const archiveDriveReady = computed(() => {
+  const driveState = String(job.value?.drive?.current_state || '').toUpperCase()
+  return !job.value?.drive || (driveState === 'AVAILABLE' && !job.value?.drive?.is_mounted)
+})
+const archiveBlockedByDriveEject = computed(() => canArchiveJobs.value
+  && ['COMPLETED', 'FAILED'].includes(currentStatus.value)
+  && !!job.value?.drive
+  && !archiveDriveReady.value)
+const archivePrerequisiteNotice = computed(() => (archiveBlockedByDriveEject.value ? t('jobs.archiveRequiresEject') : ''))
+const canArchive = computed(() => canArchiveJobs.value
+  && ['COMPLETED', 'FAILED'].includes(currentStatus.value)
+  && archiveDriveReady.value)
 
 function normalizeFileStatus(status) {
   return String(status || '').toUpperCase()
@@ -288,6 +302,10 @@ const primaryActionKeys = computed(() => {
     return canRetryFailed.value ? ['retry-failed'] : ['verify', 'manifest']
   }
 
+  if (status === 'ARCHIVED') {
+    return ['edit', 'analyze', 'start']
+  }
+
   return ['edit', 'analyze', 'start']
 })
 
@@ -357,6 +375,15 @@ const actionItems = computed(() => {
         showStartupAnalysisCleanupDialog.value = true
       },
       visible: showClearStartupAnalysisCache.value,
+    },
+    {
+      key: 'archive',
+      label: t('jobs.archive'),
+      disabled: !canArchive.value || acting.value,
+      run: () => {
+        showArchiveDialog.value = true
+      },
+      visible: canArchiveJobs.value && currentStatus.value !== 'ARCHIVED',
     },
     {
       key: 'delete',
@@ -850,6 +877,22 @@ async function confirmDelete() {
   }
 }
 
+async function confirmArchive() {
+  if (!job.value || !canArchive.value) return
+  acting.value = true
+  error.value = ''
+  try {
+    job.value = normalizeProjectRecord(await archiveJob(job.value.id, { confirm: true }), ['project_id'])
+    showArchiveDialog.value = false
+    await refreshAll()
+    jobPoller.stop()
+  } catch (err) {
+    error.value = buildJobError(err)
+  } finally {
+    acting.value = false
+  }
+}
+
 async function confirmStartupAnalysisCleanup() {
   if (!job.value || !canClearStartupAnalysisCache.value) return
   acting.value = true
@@ -913,14 +956,14 @@ const jobPoller = usePolling(
     intervalMs: 3000,
     isTerminal: (next) => {
       const status = String(next?.status || '').toUpperCase()
-      return status === 'COMPLETED' || status === 'FAILED'
+      return status === 'COMPLETED' || status === 'FAILED' || status === 'ARCHIVED'
     },
   },
 )
 
 function isTerminalStatus(status) {
   const normalized = String(status || '').toUpperCase()
-  return normalized === 'COMPLETED' || normalized === 'FAILED'
+  return normalized === 'COMPLETED' || normalized === 'FAILED' || normalized === 'ARCHIVED'
 }
 
 async function refreshAll() {
@@ -1341,6 +1384,7 @@ onUnmounted(() => {
           </div>
         </details>
       </div>
+      <p v-if="archivePrerequisiteNotice" class="muted">{{ archivePrerequisiteNotice }}</p>
     </article>
 
     <article class="panel files-panel">
@@ -1575,6 +1619,17 @@ onUnmounted(() => {
       :cancel-label="t('common.actions.cancel')"
       :busy="acting"
       @confirm="confirmStartupAnalysisCleanup"
+    />
+
+    <ConfirmDialog
+      v-model="showArchiveDialog"
+      :title="t('jobs.archiveConfirmTitle')"
+      :message="t('jobs.archiveConfirmBody')"
+      :confirm-label="t('jobs.archive')"
+      :cancel-label="t('common.actions.cancel')"
+      :busy="acting"
+      dangerous
+      @confirm="confirmArchive"
     />
 
     <ConfirmDialog

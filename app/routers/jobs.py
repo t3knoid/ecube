@@ -17,6 +17,7 @@ from app.repositories.job_repository import DriveAssignmentRepository, FileRepos
 from app.schemas.jobs import (
     DriveInfoSchema,
     ExportJobSchema,
+    JobArchiveRequest,
     JobAnalyzeRequest,
     JobCreate,
     JobDeleteResponse,
@@ -204,6 +205,7 @@ def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
     active = assignment_repo.get_active_for_job(job.id)
     if active and getattr(active, "drive", None):
         schema.drive = DriveInfoSchema.model_validate(active.drive)
+        schema.drive.is_mounted = bool(getattr(active.drive, "mount_path", None))
 
     return schema
 
@@ -257,6 +259,7 @@ def _enrich_jobs_bulk(
         active = assignments_map.get(job.id)
         if active and getattr(active, "drive", None):
             schema.drive = DriveInfoSchema.model_validate(active.drive)
+            schema.drive.is_mounted = bool(getattr(active.drive, "mount_path", None))
 
         result.append(schema)
     return result
@@ -268,6 +271,7 @@ def list_jobs(
     offset: int = Query(default=0, ge=0, description="Number of jobs to skip before returning results"),
     drive_id: int | None = Query(default=None, ge=1, description="Filter jobs by currently assigned drive ID"),
     statuses: list[JobStatus] | None = Query(default=None, description="Filter jobs by status"),
+    include_archived: bool = Query(default=False, description="Include archived jobs in the result set"),
     *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ALL_ROLES),
@@ -285,6 +289,7 @@ def list_jobs(
         offset=offset,
         drive_id=drive_id,
         statuses=tuple(statuses) if statuses else None,
+        include_archived=include_archived,
     )
     return _enrich_jobs_bulk(jobs, current_user, db)
 
@@ -475,6 +480,32 @@ def complete_job(
     **Roles:** ``admin``, ``manager``, ``processor``
     """
     job = job_service.complete_job(job_id, db, actor=current_user.username, client_ip=get_client_ip(request))
+    return _redact_ip(job, current_user, db)
+
+
+@router.post("/{job_id}/archive", response_model=ExportJobSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
+def archive_job(
+    job_id: int,
+    body: JobArchiveRequest,
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER),
+    request: Request,
+):
+    """Archive a completed or failed job after explicit confirmation.
+
+    Archived jobs remain viewable, but they are excluded from the default Jobs
+    list and no longer block recreating the same work definition.
+
+    **Roles:** ``admin``, ``manager``
+    """
+    job = job_service.archive_job(
+        job_id,
+        confirm=body.confirm,
+        db=db,
+        actor=current_user.username,
+        client_ip=get_client_ip(request),
+    )
     return _redact_ip(job, current_user, db)
 
 

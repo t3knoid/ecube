@@ -141,7 +141,7 @@ def upgrade() -> None:
         sa.Column(
             "status",
             sa.Enum(
-                "PENDING", "RUNNING", "PAUSING", "PAUSED", "COMPLETED", "FAILED", "VERIFYING",
+                "PENDING", "RUNNING", "PAUSING", "PAUSED", "COMPLETED", "FAILED", "VERIFYING", "ARCHIVED",
                 name="jobstatus",
                 native_enum=False,
             ),
