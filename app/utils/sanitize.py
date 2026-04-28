@@ -264,6 +264,8 @@ _AUDIT_SENSITIVE_KEYS = {
     "mount_path",
     "local_mount_point",
     "remote_path",
+    "new_source_path",
+    "existing_source_path",
     "device_name",
     "system_path",
     "mount_label",

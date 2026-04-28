@@ -693,7 +693,7 @@ All job endpoints that return a single job use the `ExportJobSchema` response, w
 | `evidence_number` | string | Evidence case number |
 | `source_path` | string | Source path of evidence data |
 | `target_mount_path` | string or null | Target mount path for copied data |
-| `status` | string | `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `VERIFYING` |
+| `status` | string | `PENDING`, `RUNNING`, `PAUSING`, `PAUSED`, `COMPLETED`, `FAILED`, `VERIFYING`, `ARCHIVED` |
 | `total_bytes` | integer | Total bytes to copy |
 | `copied_bytes` | integer | Bytes copied so far |
 | `file_count` | integer | Total number of files to copy |
@@ -724,7 +724,8 @@ All job endpoints that return a single job use the `ExportJobSchema` response, w
 | `filesystem_path` | string or null | OS block device node (e.g. `/dev/sdb`) |
 | `capacity_bytes` | integer or null | Total storage capacity in bytes |
 | `filesystem_type` | string or null | Detected filesystem label |
-| `current_state` | string | `DISCONNECTED`, `AVAILABLE`, `IN_USE` |
+| `current_state` | string | `DISCONNECTED`, `AVAILABLE`, `IN_USE`, `ARCHIVED` |
+| `is_mounted` | boolean | Whether the related drive is still mounted on the host |
 | `current_project_id` | string or null | Bound project ID |
 
 #### Example response (completed job)
@@ -759,6 +760,7 @@ All job endpoints that return a single job use the `ExportJobSchema` response, w
     "capacity_bytes": 64023257088,
     "filesystem_type": "exfat",
     "current_state": "IN_USE",
+        "is_mounted": true,
     "current_project_id": "PROJECT-42"
   },
     "failure_reason": null,
@@ -779,8 +781,12 @@ List the most recent export jobs, ordered by creation time descending.
 | Parameter | Type | Default | Constraints | Description |
 |-----------|------|---------|-------------|-------------|
 | `limit` | integer | `200` | `1 ≤ limit ≤ 1000` | Maximum number of jobs to return |
+| `offset` | integer | `0` | `offset ≥ 0` | Number of jobs to skip before returning results |
+| `drive_id` | integer or null | `null` | `drive_id ≥ 1` | Filter jobs by currently assigned drive ID |
+| `statuses` | repeatable string | omitted | must be valid `JobStatus` values | Filter jobs by one or more explicit statuses |
+| `include_archived` | boolean | `false` | none | Include `ARCHIVED` jobs in the result set |
 
-**Response:** `200 OK` — JSON array of `ExportJobSchema` objects. Each job includes `files_succeeded`, `files_failed`, `failure_reason`, `error_summary`, and the nested `drive` object, populated via bulk queries (no N+1). `error_summary` is a derived fallback and may be omitted when a persisted sanitized `failure_reason` is available.
+**Response:** `200 OK` — JSON array of `ExportJobSchema` objects. Each job includes `files_succeeded`, `files_failed`, `failure_reason`, `error_summary`, and the nested `drive` object, populated via bulk queries (no N+1). `error_summary` is a derived fallback and may be omitted when a persisted sanitized `failure_reason` is available. Archived jobs are excluded unless `include_archived=true` is supplied.
 
 **Error responses:**
 
@@ -805,7 +811,7 @@ Create a new job.
 - `401 Unauthorized` — Missing/invalid credentials
 - `403 Forbidden` — Insufficient role, project isolation violation, or source-path policy violation
 - `404 Not Found` — Drive not found
-- `409 Conflict` — Drive already in use, ambiguous auto-assignment, or project source binding configuration conflict
+- `409 Conflict` — Drive already in use, ambiguous auto-assignment, project source binding configuration conflict, or exact duplicate work is still blocked by a prior non-archived `COMPLETED`/`FAILED` job on the same assigned drive
 - `422 Validation Error` — Invalid request body (includes non-HTTPS `callback_url`)
 - `500 Internal Server Error` — Database error
 
@@ -882,6 +888,31 @@ Manually mark a safe non-active job as completed. This override is limited to `P
 - `404 Not Found` — Job not found
 - `409 Conflict` — Only pending, paused, or failed jobs can be manually completed
 - `422 Validation Error` — Invalid path parameter
+- `500 Internal Server Error` — Database error
+
+### `POST /jobs/{job_id}/archive`
+
+Archive a completed or failed job after explicit confirmation. Archived jobs remain viewable through `GET /jobs/{job_id}`, but they are excluded from the default Jobs list and no longer block recreation of the same exact work definition on the same assigned drive.
+
+**Roles:** `admin`, `manager`
+
+**Request body:**
+
+```json
+{
+    "confirm": true
+}
+```
+
+The request returns `409 Conflict` unless the job is currently `COMPLETED` or `FAILED` and any related drive has already been through `Prepare Eject`, leaving the drive in `AVAILABLE` state and no longer mounted.
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid credentials
+- `403 Forbidden` — Insufficient role
+- `404 Not Found` — Job not found
+- `409 Conflict` — Job is not archivable from its current status, or the related drive still needs `Prepare Eject`
+- `422 Validation Error` — Invalid path/body parameters
 - `500 Internal Server Error` — Database error
 
 ### `GET /jobs/{job_id}`

@@ -1,6 +1,6 @@
 ---
 name: PR Review
-description: "Review an ECUBE pull request against the project Cursor rules, security requirements, architecture fit, and test coverage"
+description: "Review an ECUBE pull request against the project Cursor rules, security requirements, architecture fit, test coverage, and required documentation updates"
 argument-hint: "Optional focus area, risk, file, or reviewer concern"
 agent: "agent"
 ---
@@ -27,6 +27,7 @@ If project Cursor rules are missing, say so clearly in the review summary and th
 When reporting findings:
 - identify violations against the project Cursor rules first
 - then identify violations against the ECUBE architecture, security, and testing rules below
+- identify missing or stale documentation required by the code changes before approving the PR
 - avoid approving changes that conflict with either set of rules
 
 -------------------------------------------------------------------------------
@@ -259,7 +260,35 @@ CSS & Template Consistency:
 - Class names must match template usage.
 
 -------------------------------------------------------------------------------
-12. BEHAVIOR–COMMENT CONSISTENCY
+12. DOCUMENTATION SYNC REQUIREMENTS
+-------------------------------------------------------------------------------
+
+- Every PR review must evaluate whether the code changes require documentation updates.
+- Treat missing documentation as a review finding when user-facing behavior, developer workflow, API behavior, architecture, setup, operations, QA guidance, or UI states changed.
+- Comments and documentation must match actual behavior.
+- When behavior changes, comments and nearby documentation should be updated in the same change.
+- Treat stale, stricter, or looser comments and documentation as review findings, not just missing files.
+- Check the closest relevant docs, including as applicable:
+  - README.md
+  - docs/operations/
+  - docs/testing/
+  - docs/design/
+  - docs/development/
+  - API reference and in-app help sources
+- Review for documentation impact when changes add or alter:
+  - endpoints, query parameters, schemas, response fields, or error contracts
+  - role-based permissions, audit behavior, project-isolation behavior, or drive/job/mount workflows
+  - buttons, dialogs, filters, loading states, empty states, error states, or navigation paths
+  - setup, deployment, environment, migration, or test-run instructions
+- If docs or comments were updated, verify that they match the implemented behavior and do not overstate or understate the contract.
+- If docs were not updated but should have been, report the missing document(s) and the specific behavior that now needs to be documented.
+- If nearby comments or existing docs now misdescribe the behavior, report the mismatch and the file that should be corrected.
+- PR review output must explicitly state one of the following:
+  - documentation is already aligned with the code changes, or
+  - documentation updates are required, with the affected document names and the behavior that triggered the need.
+
+-------------------------------------------------------------------------------
+13. BEHAVIOR–COMMENT CONSISTENCY
 -------------------------------------------------------------------------------
 
 - Comments must match actual behavior.
@@ -268,7 +297,7 @@ CSS & Template Consistency:
 - Fix mismatches immediately.
 
 -------------------------------------------------------------------------------
-13. DOMAIN-SPECIFIC INVARIANTS
+14. DOMAIN-SPECIFIC INVARIANTS
 -------------------------------------------------------------------------------
 
 - Drive FSM: DISCONNECTED → AVAILABLE → IN_USE.
@@ -279,7 +308,7 @@ CSS & Template Consistency:
 - Drive lifecycle transitions must be atomic.
 
 -------------------------------------------------------------------------------
-14. CI & TOOLING REQUIREMENTS
+15. CI & TOOLING REQUIREMENTS
 -------------------------------------------------------------------------------
 
 - CI runs backend tests, frontend tests, integration tests, E2E tests.
