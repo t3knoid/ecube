@@ -57,7 +57,7 @@ Secure evidence export without giving operators direct filesystem control.
 
 Suggested subheading:
 
-ECUBE moves approved case data from network shares to encrypted USB drives through a governed, audited, browser-based workflow built for legal, forensic, and compliance teams.
+ECUBE moves approved case data from network shares to encrypted USB drives through a governed, audited, browser-based workflow built for legal, forensic, and compliance teams across desktop, tablet, and mobile devices.
 
 Primary CTA: Request a Demo
 Secondary CTA: View Appliance Options
@@ -78,7 +78,7 @@ Highlight these feature cards:
 
 - Audit trail and logging
 - Role-based access control
-- Simple task-focused interface
+- Simple task-focused interface across desktop, tablet, and mobile browsers
 - Multi-drive export workflow
 - REST API and webhooks
 - Compliance and chain-of-custody support
@@ -113,7 +113,7 @@ Recommended sections:
 
 Suggested message:
 
-ECUBE gives operations teams a controlled way to export evidence with visibility, auditability, automation support, and a simple interface that stays focused on each user’s role and task.
+ECUBE gives operations teams a controlled way to export evidence with visibility, auditability, automation support, and a simple interface that stays focused on each user’s role and task across desktop, tablet, and mobile devices.
 
 ## 4. Appliances Page
 
@@ -130,7 +130,7 @@ Recommended sections:
 
 Suggested message:
 
-ECUBE appliances combine validated hardware and secure workflow software into a dedicated export station that is ready for production use, with dedicated USB 3.1 controller hardware selected for optimal multi-drive export speed.
+ECUBE appliances combine validated hardware and secure workflow software into a dedicated export station that is ready for production use, with dedicated USB 3.1 controller hardware selected for optimal multi-drive export speed and responsive browser access from desktop, tablet, and mobile devices.
 
 ## 5. Security and Compliance Page
 
@@ -152,6 +152,7 @@ Recommended content:
 
 - short explanation of what the demo shows;
 - note that the demo uses sanitized sample data;
+- call out that the guided demo can be evaluated from desktop, tablet, and mobile browsers;
 - request-access or shared-evaluation flow;
 - screenshot preview and expected demo scenarios.
 
