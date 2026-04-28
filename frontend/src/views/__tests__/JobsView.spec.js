@@ -226,6 +226,7 @@ describe('JobsView grouped create dialog', () => {
     expect(mocks.listJobs).toHaveBeenNthCalledWith(1, { limit: 200, include_archived: false })
     expect(wrapper.text()).toContain('EV-ACTIVE-001')
     expect(wrapper.text()).not.toContain('EV-ARCHIVED-001')
+    expect(wrapper.find('select').text()).not.toContain(i18n.global.t('jobs.statuses.archived'))
 
     const checkbox = wrapper.find('#jobs-show-archived')
     expect(checkbox.exists()).toBe(true)

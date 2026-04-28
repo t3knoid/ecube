@@ -588,9 +588,6 @@ watch(
 
 watch(showArchivedJobs, async (nextValue) => {
   page.value = 1
-  if (!nextValue && statusFilter.value === 'ARCHIVED') {
-    statusFilter.value = 'ALL'
-  }
   await loadJobs()
 })
 
@@ -671,7 +668,6 @@ onBeforeUnmount(() => {
         <option value="VERIFYING">{{ t('jobs.statuses.verifying') }}</option>
         <option value="COMPLETED">{{ t('jobs.statuses.completed') }}</option>
         <option value="FAILED">{{ t('jobs.statuses.failed') }}</option>
-        <option value="ARCHIVED">{{ t('jobs.statuses.archived') }}</option>
       </select>
       <label class="jobs-show-archived-toggle" for="jobs-show-archived">
         <input id="jobs-show-archived" v-model="showArchivedJobs" type="checkbox" />

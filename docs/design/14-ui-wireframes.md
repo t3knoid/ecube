@@ -751,7 +751,7 @@ Accessible from the Drive Management screen via a "Manage Hubs" button. Visible 
 - ✔ COMPLETED (green) · ✖ FAILED (red) · ◌ ARCHIVED (muted)
 - Active progress remains conservative and should not display 100% until byte and finished-file progress agree
 
-Archived jobs are hidden from the default Jobs list. The list view exposes a `Show Archived Jobs` toggle and an `Archived` status filter when operators need to review sunset job records.
+Archived jobs are hidden from the default Jobs list. The list view exposes a `Show Archived Jobs` toggle when operators need to review sunset job records.
 
 ### 6b — Job Detail & Monitoring View (UC-6.3, UC-6.4, UC-6.5, UC-6.6)
 
