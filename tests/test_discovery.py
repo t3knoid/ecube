@@ -585,7 +585,7 @@ def test_existing_tests_still_pass_with_enabled_port(db):
     assert drive.current_state == DriveState.AVAILABLE
 
 
-def test_disabled_port_drive_reconciles_to_in_use_when_reenabled_and_already_mounted(db):
+def test_disabled_port_drive_reconciles_to_available_when_reenabled_and_mounted_without_project(db):
     topology = DiscoveredTopology(
         hubs=[DiscoveredHub(system_identifier="usb1", name="Test Hub", vendor_id="1d6b", product_id="0002")],
         ports=[DiscoveredPort(
@@ -621,7 +621,52 @@ def test_disabled_port_drive_reconciles_to_in_use_when_reenabled_and_already_mou
 
     db.refresh(drive)
     assert summary["drives_updated"] == 1
+    assert drive.current_state == DriveState.AVAILABLE
+    assert drive.current_project_id is None
+    assert drive.mount_path == "/media/ecube/usb-mounted"
+
+
+def test_disabled_port_drive_reconciles_to_in_use_when_reenabled_and_mounted_with_project(db):
+    topology = DiscoveredTopology(
+        hubs=[DiscoveredHub(system_identifier="usb1", name="Test Hub", vendor_id="1d6b", product_id="0002")],
+        ports=[DiscoveredPort(
+            hub_system_identifier="usb1",
+            port_number=1,
+            system_path="1-1",
+            vendor_id="0781",
+            product_id="5583",
+            speed="5000",
+        )],
+        drives=[DiscoveredDrive(
+            device_identifier="SN-MOUNTED-BOUND",
+            port_system_path="1-1",
+            filesystem_path="/dev/sdb",
+            mount_path="/media/ecube/usb-mounted",
+            capacity_bytes=64_000_000_000,
+            manufacturer="SanDisk",
+            product_name="Ultra",
+            speed="5000",
+        )],
+    )
+
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+
+    drive = db.query(UsbDrive).filter(UsbDrive.device_identifier == "SN-MOUNTED-BOUND").one()
+    assert drive.current_state == DriveState.DISCONNECTED
+
+    drive.current_project_id = "PROJ-BOUND"
+    db.commit()
+
+    port = db.query(UsbPort).one()
+    port.enabled = True
+    db.commit()
+
+    summary = run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+
+    db.refresh(drive)
+    assert summary["drives_updated"] == 1
     assert drive.current_state == DriveState.IN_USE
+    assert drive.current_project_id == "PROJ-BOUND"
     assert drive.mount_path == "/media/ecube/usb-mounted"
 
 
