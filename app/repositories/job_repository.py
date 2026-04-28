@@ -95,6 +95,7 @@ class JobRepository:
         offset: int = 0,
         drive_id: Optional[int] = None,
         statuses: Optional[Iterable[JobStatus]] = None,
+        include_archived: bool = False,
     ) -> List[ExportJob]:
         """Return recent jobs ordered by creation time descending.
 
@@ -113,14 +114,46 @@ class JobRepository:
                 )
             )
 
-        if statuses:
-            query = query.filter(ExportJob.status.in_(tuple(statuses)))
+        effective_statuses = tuple(statuses) if statuses else None
+        if effective_statuses and not include_archived:
+            effective_statuses = tuple(
+                status for status in effective_statuses if status != JobStatus.ARCHIVED
+            )
+            if not effective_statuses:
+                return []
+
+        if effective_statuses:
+            query = query.filter(ExportJob.status.in_(effective_statuses))
+        elif not include_archived:
+            query = query.filter(ExportJob.status != JobStatus.ARCHIVED)
 
         return (
             query
             .order_by(ExportJob.created_at.desc(), ExportJob.id.desc())
             .offset(offset)
             .limit(limit)
+            .all()
+        )
+
+    def list_assigned_jobs_for_drive(
+        self,
+        drive_id: int,
+        *,
+        statuses: tuple[JobStatus, ...],
+    ) -> List[ExportJob]:
+        """Return jobs currently assigned to *drive_id* with unreleased assignments."""
+        return (
+            self.db.query(ExportJob)
+            .filter(
+                ExportJob.assignments.any(
+                    and_(
+                        DriveAssignment.drive_id == drive_id,
+                        DriveAssignment.released_at.is_(None),
+                    )
+                ),
+                ExportJob.status.in_(statuses),
+            )
+            .order_by(ExportJob.created_at.desc(), ExportJob.id.desc())
             .all()
         )
 
@@ -467,20 +500,7 @@ class DriveAssignmentRepository:
         statuses: tuple[JobStatus, ...],
     ) -> List[ExportJob]:
         """Return active jobs assigned to *drive_id* with unreleased assignments."""
-        return (
-            self.db.query(ExportJob)
-            .filter(
-                ExportJob.assignments.any(
-                    and_(
-                        DriveAssignment.drive_id == drive_id,
-                        DriveAssignment.released_at.is_(None),
-                    )
-                ),
-                ExportJob.status.in_(statuses),
-            )
-            .order_by(ExportJob.created_at.desc(), ExportJob.id.desc())
-            .all()
-        )
+        return JobRepository(self.db).list_assigned_jobs_for_drive(drive_id, statuses=statuses)
 
 
 class ManifestRepository:

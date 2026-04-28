@@ -667,12 +667,14 @@ If you enable <code>Run job immediately</code>, the job will start as soon as cr
 <p>The source path is interpreted inside the selected mounted share. Entering only / uses the root of that share, and attempts to navigate outside the selected share are rejected before the job is created.</p>
 <h2 id="6-3-opening-a-job">6.3 Opening a Job</h2>
 <p>Open a job to view details and perform follow-up actions.</p>
+<p>The Jobs list hides archived jobs by default. To review archived work, enable <code>Show Archived Jobs</code>, then optionally use the <code>Archived</code> status filter to narrow the list further.</p>
+<p>Archived jobs remain readable from Job Detail, but they are intentionally treated as sunset records instead of active work. Once a job is archived, the normal lifecycle actions stay visible only as disabled context or disappear where appropriate, and the archive action itself is no longer shown.</p>
 <p class="help-back-to-top"><a href="#help-toc-title">Back to top</a></p>
 <hr />
 <h1 id="7-job-detail-verification-and-file-review">7. Job Detail, Verification, and File Review</h1>
 <blockquote><p><strong>Access Summary</strong></p></blockquote>
 <blockquote><p><strong>Page visibility:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code></p></blockquote>
-<blockquote><p><strong>Restricted actions:</strong> <code>Analyze</code>, <code>Edit</code>, <code>Start</code>, <code>Retry Failed Files</code>, <code>Pause</code>, <code>Complete</code>, <code>Verify</code>, and <code>Manifest</code> are enabled for <code>admin</code>, <code>manager</code>, and <code>processor</code> when the current job state allows them. <code>Clear startup analysis cache</code> is shown only to <code>admin</code> and <code>manager</code> when the job still has a persisted startup-analysis snapshot. <code>Delete</code> is shown only for eligible pending jobs. Hash inspection and source/destination comparison remain available to <code>admin</code> and <code>auditor</code>.</p></blockquote>
+<blockquote><p><strong>Restricted actions:</strong> <code>Analyze</code>, <code>Edit</code>, <code>Start</code>, <code>Retry Failed Files</code>, <code>Pause</code>, <code>Complete</code>, <code>Verify</code>, and <code>Manifest</code> are enabled for <code>admin</code>, <code>manager</code>, and <code>processor</code> when the current job state allows them. <code>Archive</code> and <code>Clear startup analysis cache</code> are shown only to <code>admin</code> and <code>manager</code> when the current job state allows them. <code>Delete</code> is shown only for eligible pending jobs. Hash inspection and source/destination comparison remain available to <code>admin</code> and <code>auditor</code>.</p></blockquote>
 <p>The job detail page provides deeper inspection and follow-up controls.</p>
 <p>Typical functions include:</p>
 <ul><li>
@@ -687,6 +689,10 @@ Retry only the failed or timed-out files from a partial-success completed job
 Pause a running job and resume it later
 </li><li>
 Manually complete a safe non-active job when required by the workflow
+</li><li>
+Prepare Eject before Archive so the related drive leaves active use and the media can move into chain of custody
+</li><li>
+Archive a completed or failed job after explicit confirmation so the same work definition can be created again later
 </li><li>
 Clear a persisted startup-analysis snapshot before the next restart when the cached scan should be discarded
 </li><li>
@@ -714,6 +720,8 @@ Compare a file's source version against its copied destination version
 </li><li>
 <code>Complete</code> to manually mark a pending, paused, or failed job as complete when the operational workflow requires it
 </li><li>
+<code>Archive</code> to sunset a completed or failed job after confirmation; this action is limited to <code>admin</code> and <code>manager</code> and requires <code>Prepare Eject</code> first when the job still has a related drive assignment
+</li><li>
 <code>Clear startup analysis cache</code> to remove a persisted startup scan after explicit confirmation; this is available only to <code>admin</code> and <code>manager</code> when cached startup-analysis data exists for the job
 </li><li>
 <code>Verify</code> to run verification checks once the job is fully complete with no failed or timed-out files
@@ -724,6 +732,7 @@ Compare a file's source version against its copied destination version
 <p>While a job is actively copying, Job Detail shows a live <code>Duration</code> field that reflects cumulative active runtime only. The displayed value continues updating while the job is <code>RUNNING</code>, does not add paused time while the job is <code>PAUSED</code>, and resumes from the previously stored active runtime after a later restart instead of resetting to zero.</p>
 <p>Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed <code>manifest.json</code> file on the destination drive and immediately starts a browser download of the generated manifest without an extra confirmation step.</p>
 <p>For a partial-success <code>COMPLETED</code> job, Job Detail can show <code>Retry Failed Files</code> instead of exposing Verify or Manifest too early. This action is available only to <code>admin</code>, <code>manager</code>, and <code>processor</code>, moves the job back into <code>RUNNING</code>, re-queues only failed or timed-out files, and preserves already successful copies.</p>
+<p><code>Archive</code> opens its own confirmation dialog and is available only for <code>COMPLETED</code> or <code>FAILED</code> jobs after the related drive has been through <code>Prepare Eject</code>. In practice, treat this as <code>Prepare Eject before Archive</code>: first prepare the drive for eject so the media can move into chain of custody, then archive the job record. After confirmation, the job transitions to <code>ARCHIVED</code>, remains viewable in Job Detail for audit and review purposes, drops out of the default Jobs list, and no longer blocks recreation of the same exact project/source/destination work definition.</p>
 <p>The completion summary uses the normal success styling for clean completions. If the summary still shows any failed or timed-out file counts, the summary switches to a red warning background so operators can distinguish a partial-success completion from a clean completed run at a glance.</p>
 <p>During startup analysis, Job Detail can show <code>Preparing copy...</code> before any totals are known. While this state is visible, the page also explains that ECUBE is still scanning the source files and calculating totals, which can take time for large evidence sets.</p>
 <p>Manual Analyze runs use the same startup-analysis engine before copy begins. Job Detail can show <code>Startup analysis started.</code> while the scan is running, then replace it with <code>Startup analysis completed.</code> when the persisted analysis summary is ready. The summary panel can show the startup-analysis state, discovered files, estimated total bytes, last analyzed time, and a sanitized failure reason when analysis fails.</p>

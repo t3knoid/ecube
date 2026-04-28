@@ -420,8 +420,8 @@ class TestJobAuditLogging:
         assert entry.details["actor"] == "test-user"
         assert entry.details["overlapping_job_id"] == existing_job.id
         assert entry.details["overlap_type"] == "exact"
-        assert entry.details["new_source_path"] == "[redacted-path]"
-        assert entry.details["existing_source_path"] == "[redacted-path]"
+        assert entry.details["new_source_path"] == "[redacted]"
+        assert entry.details["existing_source_path"] == "[redacted]"
 
     def test_start_job_logs_actor(self, client, db):
         self._add_drive(db, "PROJ-AUDIT", "USB-AUDIT-START")
