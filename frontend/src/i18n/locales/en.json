@@ -246,6 +246,9 @@
     "addDialogTitle": "Add Share",
     "editDialogTitle": "Edit Share",
     "remotePath": "Remote Path",
+    "nfsClientVersion": "NFS Client Version",
+    "nfsClientVersionDefaultOption": "Use default ({version})",
+    "nfsClientVersionHelp": "Select the NFS protocol version ECUBE should request for this mount.",
     "localPath": "Local Mount Point",
     "localMountPointInfo": "Local Mount Point",
     "lastChecked": "Last Checked",
@@ -494,6 +497,7 @@
     "description": "Update selected runtime settings without shell access. Admin role required.",
     "sections": {
       "logging": "Logging",
+      "shares": "Shares",
       "databasePool": "Database Connection Pool",
       "copyJobs": "Copy Jobs"
     },
@@ -516,6 +520,10 @@
       },
       "log_file_backup_count": {
         "label": "Log File Backup Count"
+      },
+      "nfs_client_version": {
+        "label": "Default NFS Client Version",
+        "help": "Preferred NFS protocol version used when a mount does not override it. Lower versions can avoid slow fallback on hosts that do not support NFS 4.2."
       },
       "db_pool_size": {
         "label": "DB Pool Size"

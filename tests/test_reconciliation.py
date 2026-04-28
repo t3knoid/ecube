@@ -280,6 +280,29 @@ class TestReconcileMounts:
         assert result["mounts_corrected"] == 1
         assert provider.mount_calls == [(MountType.NFS, "server:/export", "/mnt/stale")]
 
+    def test_startup_reconciliation_uses_persisted_nfs_client_version(self, db: Session):
+        mount = _make_mount(db, MountStatus.MOUNTED, "/mnt/nfs-versioned")
+        mount.nfs_client_version = "4.2"
+        db.commit()
+
+        class VersionAwareProvider(FakeMountProvider):
+            def __init__(self):
+                super().__init__(mounted_paths=set())
+                self.seen_nfs_versions = []
+
+            def os_mount(self, mount_type, remote_path, local_mount_point, **kwargs) -> Tuple[bool, Optional[str]]:
+                self.seen_nfs_versions.append(kwargs.get("nfs_client_version"))
+                return super().os_mount(mount_type, remote_path, local_mount_point, **kwargs)
+
+        provider = VersionAwareProvider()
+
+        result = reconcile_mounts(db, provider)
+
+        db.refresh(mount)
+        assert mount.status == MountStatus.MOUNTED
+        assert result["mounts_corrected"] == 1
+        assert provider.seen_nfs_versions == ["4.2"]
+
     def test_unexpected_live_unmounted_mount_is_removed(self, db: Session):
         mount = _make_mount(db, MountStatus.UNMOUNTED, "/nfs/unexpected")
         provider = FakeMountProvider(mounted_sources={"/nfs/unexpected": "server:/wrong-export"})

@@ -41,8 +41,70 @@ def test_add_mount(manager_client, db):
     data = response.json()
     assert data["type"] == "NFS"
     assert data["project_id"] == "PROJ-001"
+    assert data["nfs_client_version"] is None
     assert data["local_mount_point"] == "/nfs/evidence"
     assert data["status"] == "MOUNTED"
+
+
+def test_add_mount_uses_nfs_v4_1_to_avoid_slow_negotiation(manager_client, db):
+    with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
+         patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        response = manager_client.post(
+            "/mounts",
+            json={
+                "type": "NFS",
+                "remote_path": "192.168.20.240:/volume1/demo-case-001",
+                "project_id": "PROJ-NFS41",
+            },
+        )
+
+    assert response.status_code == 200
+    first_call = mock_run.call_args_list[0]
+    assert first_call.args[0][:5] == [
+        "sudo",
+        "-n",
+        settings.mount_binary_path,
+        "-t",
+        "nfs",
+    ] or first_call.args[0][:9] == [
+        "sudo",
+        "-n",
+        "/usr/bin/nsenter",
+        "-t",
+        "1",
+        "-m",
+        settings.mount_binary_path,
+        "-t",
+        "nfs",
+    ]
+    assert "vers=4.1" in first_call.args[0]
+
+    mount = db.query(NetworkMount).filter(NetworkMount.project_id == "PROJ-NFS41").one()
+    assert mount.nfs_client_version is None
+
+
+def test_add_mount_persists_requested_nfs_client_version(manager_client, db):
+    with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
+         patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        response = manager_client.post(
+            "/mounts",
+            json={
+                "type": "NFS",
+                "remote_path": "192.168.20.240:/volume1/demo-case-001",
+                "project_id": "PROJ-NFS42",
+                "nfs_client_version": "4.2",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["nfs_client_version"] == "4.2"
+    mount = db.query(NetworkMount).filter(NetworkMount.project_id == "PROJ-NFS42").one()
+    assert mount.nfs_client_version == "4.2"
+    assert "vers=4.2" in mock_run.call_args_list[0].args[0]
 
 
 def test_add_mount_persists_credentials_encrypted(manager_client, db):
@@ -238,7 +300,7 @@ def test_update_mount_uses_stored_credentials_when_not_resubmitted(db):
         def __init__(self):
             self.calls = []
 
-        def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None):
+        def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None, nfs_client_version=None):
             self.calls.append(
                 {
                     "mount_type": mount_type,
@@ -300,7 +362,7 @@ def test_validate_mount_uses_stored_credentials_when_share_is_not_active(db):
         def __init__(self):
             self.calls = []
 
-        def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None):
+        def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None, nfs_client_version=None):
             self.calls.append(
                 {
                     "mount_type": mount_type,
@@ -973,7 +1035,7 @@ def test_validate_mount_candidate_returns_candidate_without_persisting(manager_c
         def check_mounted(self, local_mount_point: str, *, timeout_seconds=None):
             return self.mounted
 
-        def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None):
+        def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None, nfs_client_version=None):
             self.mount_calls.append(
                 {
                     "mount_type": mount_type,
@@ -1013,6 +1075,7 @@ def test_validate_mount_candidate_returns_candidate_without_persisting(manager_c
     assert data["type"] == "NFS"
     assert data["remote_path"] == "192.168.1.1:/exports/evidence"
     assert data["project_id"] == "PROJ-NEW"
+    assert data["nfs_client_version"] is None
     assert data["local_mount_point"] == "/nfs/evidence"
     assert data["status"] == "MOUNTED"
     assert data["last_checked_at"] is not None
@@ -1220,7 +1283,7 @@ def test_validate_mount_with_candidate_payload_uses_unsaved_values_without_persi
         def check_mounted(self, local_mount_point: str, *, timeout_seconds=None):
             return self.mounted
 
-        def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None):
+        def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None, nfs_client_version=None):
             self.mount_calls.append(
                 {
                     "mount_type": mount_type,
@@ -1303,7 +1366,7 @@ def test_validate_mount_with_candidate_payload_returns_sanitized_failure_and_pre
         def check_mounted(self, local_mount_point: str, *, timeout_seconds=None):
             return self.mounted
 
-        def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None):
+        def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None, nfs_client_version=None):
             self.mount_calls.append(
                 {
                     "mount_type": mount_type,
