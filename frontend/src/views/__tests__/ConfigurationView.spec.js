@@ -32,6 +32,7 @@ function buildResponse(overrides = {}) {
     log_file: '/var/log/ecube/app.log',
     log_file_max_bytes: 10485760,
     log_file_backup_count: 5,
+    nfs_client_version: '4.1',
     db_pool_size: 5,
     db_pool_max_overflow: 10,
     db_pool_recycle_seconds: -1,
@@ -104,6 +105,27 @@ describe('ConfigurationView logging defaults', () => {
     await flushPromises()
 
     expect(mocks.updateConfiguration).toHaveBeenCalledWith({ job_detail_files_page_size: 80 })
+  })
+
+  it('loads and saves the default NFS client version', async () => {
+    mocks.getConfiguration.mockResolvedValue(buildResponse({ nfs_client_version: '4.1' }))
+    mocks.updateConfiguration.mockResolvedValue({
+      restart_required: false,
+      restart_required_settings: [],
+      applied_immediately: ['nfs_client_version'],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const versionSelect = wrapper.find('#cfg-nfs-client-version')
+    expect(versionSelect.element.value).toBe('4.1')
+
+    await versionSelect.setValue('4.2')
+    await wrapper.find('.action-row .btn.btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateConfiguration).toHaveBeenCalledWith({ nfs_client_version: '4.2' })
   })
 
   it('keeps the copy jobs section full width when no restart warning is shown', async () => {
