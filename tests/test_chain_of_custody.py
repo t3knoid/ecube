@@ -158,6 +158,23 @@ class TestChainOfCustodyGet:
         assert payload["selector_mode"] == "PROJECT"
         assert [report["drive_id"] for report in payload["reports"]] == [drive_one_id, drive_two_id]
 
+    def test_project_selector_normalizes_case_and_whitespace(self, auditor_client, db):
+        drive = _seed_drive(db, device_identifier="COC-PROJECT-NORM", project_id="CASE-1")
+        drive_id = _as_int(drive.id)
+
+        _seed_audit(db, action="DRIVE_INITIALIZED", drive_id=drive_id, project_id="CASE-1", details={"drive_id": drive_id})
+
+        response = auditor_client.get(
+            "/audit/chain-of-custody",
+            params={"project_id": " case-1 "},
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["selector_mode"] == "PROJECT"
+        assert payload["project_id"] == "CASE-1"
+        assert [report["drive_id"] for report in payload["reports"]] == [drive_id]
+
     def test_project_mismatch_with_drive_returns_conflict(self, auditor_client, db):
         drive = _seed_drive(db, device_identifier="COC-MISMATCH", project_id="CASE-A")
         drive_id = _as_int(drive.id)
