@@ -243,20 +243,10 @@ def archive_job(
             )
 
     job_row.status = JobStatus.ARCHIVED
-
-    try:
-        job_repo.save(job)
-    except Exception:
-        logger.exception("DB commit failed while archiving job", {"job_id": job_id})
-        raise HTTPException(
-            status_code=500,
-            detail="Database error while archiving job",
-        )
-
     active_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
 
     try:
-        audit_repo.add(
+        audit_repo.add_uncommitted(
             action="JOB_ARCHIVED",
             user=actor,
             project_id=cast(Optional[str], job_row.project_id),
@@ -268,8 +258,14 @@ def archive_job(
             },
             client_ip=client_ip,
         )
+        db.commit()
     except Exception:
-        logger.exception("Failed to write audit log for JOB_ARCHIVED")
+        db.rollback()
+        logger.exception("DB commit failed while archiving job", {"job_id": job_id})
+        raise HTTPException(
+            status_code=500,
+            detail="Database error while archiving job",
+        )
 
     db.refresh(job)
     return job
