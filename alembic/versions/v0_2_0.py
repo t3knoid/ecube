@@ -37,6 +37,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
+from app.utils.sanitize import normalize_project_id
+
 revision = "0001"
 down_revision = None
 branch_labels = None
@@ -59,19 +61,40 @@ def _create_projects_table() -> None:
 
 
 def _backfill_projects_from_jobs() -> None:
-    op.execute(
+    bind = op.get_bind()
+    rows = bind.execute(
         sa.text(
-            "INSERT INTO projects (normalized_project_id) "
-            "SELECT DISTINCT export_jobs.project_id "
+            "SELECT id, project_id "
             "FROM export_jobs "
-            "WHERE export_jobs.project_id IS NOT NULL "
-            "AND TRIM(export_jobs.project_id) <> '' "
-            "AND NOT EXISTS ("
-            "    SELECT 1 FROM projects "
-            "    WHERE projects.normalized_project_id = export_jobs.project_id"
-            ")"
+            "WHERE project_id IS NOT NULL"
         )
-    )
+    ).fetchall()
+
+    normalized_jobs = []
+    normalized_project_ids = set()
+    for job_id, project_id in rows:
+        normalized = normalize_project_id(project_id)
+        if not isinstance(normalized, str) or not normalized:
+            continue
+        normalized_jobs.append({"id": job_id, "project_id": normalized})
+        normalized_project_ids.add(normalized)
+
+    if normalized_jobs:
+        bind.execute(
+            sa.text("UPDATE export_jobs SET project_id = :project_id WHERE id = :id"),
+            normalized_jobs,
+        )
+
+    if normalized_project_ids:
+        bind.execute(
+            sa.text(
+                "INSERT INTO projects (normalized_project_id) VALUES (:normalized_project_id)"
+            ),
+            [
+                {"normalized_project_id": project_id}
+                for project_id in sorted(normalized_project_ids)
+            ],
+        )
 
 
 def _export_jobs_project_fk_exists(inspector: sa.Inspector) -> bool:
