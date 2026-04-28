@@ -13,6 +13,7 @@ from app.database import Base
 from app.models.hardware import DriveState, UsbDrive, UsbHub, UsbPort
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, Manifest
 from app.models.network import MountStatus, MountType, NetworkMount
+from app.models.projects import Project
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
 from app.repositories.hardware_repository import PortRepository
@@ -118,6 +119,28 @@ def test_job_repo_add_and_get(db):
     fetched = repo.get(saved.id)
     assert fetched is not None
     assert fetched.project_id == "PROJ-REPO"
+
+
+def test_job_repo_add_creates_linked_project(db):
+    repo = JobRepository(db)
+    saved = repo.add(
+        ExportJob(
+            project_id=" project-repo ",
+            evidence_number="EV-LINK",
+            source_path="/data",
+        )
+    )
+
+    project = (
+        db.query(Project)
+        .filter(Project.normalized_project_id == "PROJECT-REPO")
+        .one()
+    )
+
+    assert saved.project_id == "PROJECT-REPO"
+    assert saved.project is not None
+    assert saved.project.id == project.id
+    assert project.jobs[0].id == saved.id
 
 
 def test_job_repo_get_missing(db):
