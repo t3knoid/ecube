@@ -549,6 +549,33 @@ class TestReconcileMounts:
         assert drive.current_project_id is None
         assert drive_provider.unmount_calls == [f"{settings.usb_mount_base_path}/{drive.id}"]
 
+    def test_unreleased_assignment_with_different_target_does_not_restore_binding(self, db: Session):
+        drive = _make_drive(db, "USB-STALE-ACTIVE", DriveState.IN_USE)
+        drive.filesystem_type = "ext4"
+        drive.current_project_id = None
+        drive.mount_path = f"{settings.usb_mount_base_path}/{drive.id}"
+        job = _make_job(
+            db,
+            project_id="PROJ-STALE",
+            target_mount_path="/mnt/ecube/other-drive",
+        )
+        db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+        db.commit()
+
+        drive_provider = FakeDriveMountProvider({f"{settings.usb_mount_base_path}/{drive.id}": drive.filesystem_path})
+
+        with patch(
+            "app.services.reconciliation_service.find_device_mount_point",
+            return_value=f"{settings.usb_mount_base_path}/{drive.id}",
+        ):
+            reconcile_mounts(db, FakeMountProvider(), drive_provider)
+
+        db.refresh(drive)
+        assert drive.current_state == DriveState.AVAILABLE
+        assert drive.current_project_id is None
+        assert drive.mount_path is None
+        assert drive_provider.unmount_calls == [f"{settings.usb_mount_base_path}/{drive.id}"]
+
     def test_stale_mount_emits_audit_record(self, db: Session):
         mount = _make_mount(db, MountStatus.MOUNTED, "/mnt/audit-test")
         provider = FakeMountProvider(mounted_paths=set())
