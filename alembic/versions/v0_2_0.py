@@ -112,6 +112,71 @@ def _export_jobs_project_fk_exists(inspector: sa.Inspector) -> bool:
     )
 
 
+def _export_files_project_fk_exists(inspector: sa.Inspector) -> bool:
+    return any(
+        fk.get("referred_table") == "projects"
+        and fk.get("constrained_columns") == ["project_id"]
+        and fk.get("referred_columns") == ["normalized_project_id"]
+        for fk in inspector.get_foreign_keys("export_files")
+    )
+
+
+def _export_files_has_project_id(inspector: sa.Inspector) -> bool:
+    return any(column.get("name") == "project_id" for column in inspector.get_columns("export_files"))
+
+
+def _backfill_export_file_projects() -> None:
+    bind = op.get_bind()
+    rows = bind.execute(
+        sa.text(
+            "SELECT export_files.id, export_jobs.project_id "
+            "FROM export_files "
+            "JOIN export_jobs ON export_jobs.id = export_files.job_id "
+            "WHERE export_jobs.project_id IS NOT NULL"
+        )
+    ).fetchall()
+
+    normalized_files = []
+    for file_id, project_id in rows:
+        normalized = _normalize_project_id(project_id)
+        if not isinstance(normalized, str) or not normalized:
+            continue
+        normalized_files.append({"id": file_id, "project_id": normalized})
+
+    if normalized_files:
+        bind.execute(
+            sa.text("UPDATE export_files SET project_id = :project_id WHERE id = :id"),
+            normalized_files,
+        )
+
+
+def _ensure_export_files_project_indexes() -> None:
+    op.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_export_files_project_id ON export_files (project_id)"))
+    op.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_export_files_project_status ON export_files (project_id, status)"))
+
+
+def _upgrade_legacy_export_file_project_schema(inspector: sa.Inspector) -> None:
+    if not _export_files_has_project_id(inspector):
+        with op.batch_alter_table("export_files") as batch_op:
+            batch_op.add_column(sa.Column("project_id", sa.String(), nullable=True))
+
+    _backfill_export_file_projects()
+
+    if not _export_files_project_fk_exists(inspector):
+        with op.batch_alter_table("export_files") as batch_op:
+            batch_op.create_foreign_key(
+                "fk_export_files_project_id_projects",
+                "projects",
+                ["project_id"],
+                ["normalized_project_id"],
+            )
+
+    with op.batch_alter_table("export_files") as batch_op:
+        batch_op.alter_column("project_id", existing_type=sa.String(), nullable=False)
+
+    _ensure_export_files_project_indexes()
+
+
 def _upgrade_legacy_project_schema(inspector: sa.Inspector, existing_tables: set[str]) -> None:
     if "projects" not in existing_tables:
         _create_projects_table()
@@ -135,6 +200,8 @@ def upgrade() -> None:
 
     if "export_jobs" in existing_tables:
         _upgrade_legacy_project_schema(inspector, existing_tables)
+        if "export_files" in existing_tables:
+            _upgrade_legacy_export_file_project_schema(inspector)
         return
 
     op.create_table(
@@ -287,6 +354,7 @@ def upgrade() -> None:
         "export_files",
         sa.Column("id", sa.Integer, primary_key=True),
         sa.Column("job_id", sa.Integer, sa.ForeignKey("export_jobs.id"), nullable=False),
+        sa.Column("project_id", sa.String, sa.ForeignKey("projects.normalized_project_id"), nullable=False),
         sa.Column("relative_path", sa.String, nullable=False),
         sa.Column("size_bytes", sa.BigInteger, nullable=True),
         sa.Column("checksum", sa.String, nullable=True),
@@ -298,6 +366,8 @@ def upgrade() -> None:
         sa.Column("error_message", sa.Text, nullable=True),
         sa.Column("retry_attempts", sa.Integer(), nullable=True, server_default="0"),
     )
+    op.create_index("ix_export_files_project_id", "export_files", ["project_id"])
+    op.create_index("ix_export_files_project_status", "export_files", ["project_id", "status"])
 
     op.create_table(
         "manifests",
@@ -408,6 +478,8 @@ def downgrade() -> None:
     op.execute(sa.text("DROP INDEX IF EXISTS ix_audit_logs_action_timestamp"))
     op.execute(sa.text("DROP INDEX IF EXISTS ix_audit_logs_drive_timestamp"))
     op.execute(sa.text("DROP INDEX IF EXISTS ix_audit_logs_project_timestamp"))
+    op.drop_index("ix_export_files_project_status", table_name="export_files")
+    op.drop_index("ix_export_files_project_id", table_name="export_files")
     op.drop_index("ix_export_jobs_project_id", table_name="export_jobs")
     op.drop_index("ix_network_mounts_status_project", table_name="network_mounts")
     op.drop_index("ix_network_mounts_project_id", table_name="network_mounts")

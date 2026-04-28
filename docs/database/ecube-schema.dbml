@@ -169,12 +169,18 @@ Table usb_ports {
 Table export_files {
   id int [pk, not null]
   job_id int [not null]
+  project_id varchar [not null]
   relative_path varchar [not null]
   size_bytes bigint
   checksum varchar
   status file_status [default: 'PENDING']
   error_message text
   retry_attempts int [default: 0]
+
+  indexes {
+    project_id [name: 'ix_export_files_project_id']
+    (project_id, status) [name: 'ix_export_files_project_status']
+  }
 }
 
 Table manifests {
@@ -233,6 +239,7 @@ Ref: audit_logs.job_id > export_jobs.id
 Ref: drive_assignments.drive_id > usb_drives.id
 Ref: drive_assignments.job_id > export_jobs.id
 Ref: export_files.job_id > export_jobs.id
+Ref: export_files.project_id > projects.normalized_project_id
 Ref: export_jobs.project_id > projects.normalized_project_id
 Ref: manifests.job_id > export_jobs.id
 Ref: usb_drives.port_id > usb_ports.id
