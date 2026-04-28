@@ -125,6 +125,10 @@ def _export_files_has_project_id(inspector: sa.Inspector) -> bool:
     return any(column.get("name") == "project_id" for column in inspector.get_columns("export_files"))
 
 
+def _network_mounts_has_nfs_client_version(inspector: sa.Inspector) -> bool:
+    return any(column.get("name") == "nfs_client_version" for column in inspector.get_columns("network_mounts"))
+
+
 def _backfill_export_file_projects() -> None:
     bind = op.get_bind()
     rows = bind.execute(
@@ -199,6 +203,9 @@ def upgrade() -> None:
     existing_tables = set(inspector.get_table_names())
 
     if "export_jobs" in existing_tables:
+        if "network_mounts" in existing_tables and not _network_mounts_has_nfs_client_version(inspector):
+            with op.batch_alter_table("network_mounts") as batch_op:
+                batch_op.add_column(sa.Column("nfs_client_version", sa.String(), nullable=True))
         _upgrade_legacy_project_schema(inspector, existing_tables)
         if "export_files" in existing_tables:
             _upgrade_legacy_export_file_project_schema(inspector)
@@ -271,6 +278,7 @@ def upgrade() -> None:
         ),
         sa.Column("remote_path", sa.String, nullable=False),
         sa.Column("project_id", sa.String(), nullable=False, server_default="UNASSIGNED"),
+        sa.Column("nfs_client_version", sa.String(), nullable=True),
         sa.Column("local_mount_point", sa.String, nullable=False, unique=True),
         sa.Column("encrypted_username", sa.String(), nullable=True),
         sa.Column("encrypted_password", sa.String(), nullable=True),
