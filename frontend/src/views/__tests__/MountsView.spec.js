@@ -51,6 +51,7 @@ function buildMount(overrides = {}) {
     id: 11,
     type: 'SMB',
     project_id: 'PROJ-011',
+    nfs_client_version: null,
     remote_path: '//server/share',
     local_mount_point: '/smb/project2',
     status: 'UNMOUNTED',
@@ -155,7 +156,11 @@ describe('MountsView removal flow', () => {
         { remote_path: '//server/Review', display_name: 'Review' },
       ],
     })
-    mocks.getPublicAuthConfig.mockResolvedValue({ demo_mode_enabled: false })
+    mocks.getPublicAuthConfig.mockResolvedValue({
+      demo_mode_enabled: false,
+      default_nfs_client_version: '4.1',
+      nfs_client_version_options: ['4.2', '4.1', '4.0', '3'],
+    })
   })
 
   it('removes an unmounted entry immediately without showing confirmation', async () => {
@@ -267,6 +272,96 @@ describe('MountsView removal flow', () => {
       type: 'SMB',
       remote_path: '//server/new-share',
       project_id: 'PROJ-NEW',
+      username: null,
+      password: null,
+      credentials_file: null,
+    })
+  })
+
+  it('shows the configured NFS client version selector and submits the selected version for NFS mounts', async () => {
+    mocks.getMounts.mockResolvedValue([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    expect(addButton).toBeTruthy()
+
+    await addButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#mount-type').setValue('NFS')
+    await wrapper.find('#mount-remote-path').setValue('192.168.20.240:/volume1/demo-case-001')
+    await wrapper.find('#mount-project-id').setValue('proj-nfs42')
+
+    const versionSelect = wrapper.find('#mount-nfs-client-version')
+    expect(versionSelect.exists()).toBe(true)
+    expect(versionSelect.element.value).toBe('')
+
+    await versionSelect.setValue('4.2')
+    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
+    await flushPromises()
+
+    await findDialogButton(wrapper, i18n.global.t('common.actions.create')).trigger('click')
+    await flushPromises()
+
+    expect(mocks.validateMountCandidate).toHaveBeenCalledWith({
+      type: 'NFS',
+      remote_path: '192.168.20.240:/volume1/demo-case-001',
+      project_id: 'PROJ-NFS42',
+      nfs_client_version: '4.2',
+      username: null,
+      password: null,
+      credentials_file: null,
+    })
+    expect(mocks.createMount).toHaveBeenCalledWith({
+      type: 'NFS',
+      remote_path: '192.168.20.240:/volume1/demo-case-001',
+      project_id: 'PROJ-NFS42',
+      nfs_client_version: '4.2',
+      username: null,
+      password: null,
+      credentials_file: null,
+    })
+  })
+
+  it('omits the per-mount NFS version when the dialog is left on the default option', async () => {
+    mocks.getMounts.mockResolvedValue([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    expect(addButton).toBeTruthy()
+
+    await addButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#mount-type').setValue('NFS')
+    await wrapper.find('#mount-remote-path').setValue('192.168.20.240:/volume1/default-share')
+    await wrapper.find('#mount-project-id').setValue('proj-default')
+
+    const versionSelect = wrapper.find('#mount-nfs-client-version')
+    expect(versionSelect.element.value).toBe('')
+
+    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
+    await flushPromises()
+
+    await findDialogButton(wrapper, i18n.global.t('common.actions.create')).trigger('click')
+    await flushPromises()
+
+    expect(mocks.validateMountCandidate).toHaveBeenCalledWith({
+      type: 'NFS',
+      remote_path: '192.168.20.240:/volume1/default-share',
+      project_id: 'PROJ-DEFAULT',
+      username: null,
+      password: null,
+      credentials_file: null,
+    })
+    expect(mocks.createMount).toHaveBeenCalledWith({
+      type: 'NFS',
+      remote_path: '192.168.20.240:/volume1/default-share',
+      project_id: 'PROJ-DEFAULT',
       username: null,
       password: null,
       credentials_file: null,

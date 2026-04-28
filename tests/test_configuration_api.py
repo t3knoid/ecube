@@ -25,6 +25,10 @@ class TestConfigurationSchemaValidation:
         req = ConfigurationUpdateRequest(copy_job_timeout=120)
         assert req.copy_job_timeout == 120
 
+    def test_update_accepts_nfs_client_version(self):
+        req = ConfigurationUpdateRequest(nfs_client_version="4.2")
+        assert req.nfs_client_version == "4.2"
+
     def test_update_accepts_job_detail_files_page_size(self):
         req = ConfigurationUpdateRequest(job_detail_files_page_size=60)
         assert req.job_detail_files_page_size == 60
@@ -41,6 +45,7 @@ class TestConfigurationEndpoints:
         data = resp.json()
         keys = {item["key"] for item in data["settings"]}
         assert "log_level" in keys
+        assert "nfs_client_version" in keys
         assert "db_pool_recycle_seconds" in keys
         assert "copy_job_timeout" in keys
         assert "job_detail_files_page_size" in keys

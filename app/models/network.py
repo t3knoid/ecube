@@ -27,6 +27,7 @@ class NetworkMount(Base):
     type = Column(Enum(MountType, native_enum=False), nullable=False)
     remote_path = Column(String, nullable=False)
     project_id = Column(String, nullable=False, default="UNASSIGNED", index=True)
+    nfs_client_version = Column(String, nullable=True)
     local_mount_point = Column(String, nullable=False, unique=True)
     encrypted_username = Column(String, nullable=True)
     encrypted_password = Column(String, nullable=True)

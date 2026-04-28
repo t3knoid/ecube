@@ -52,6 +52,7 @@ const form = ref({
   type: 'SMB',
   remote_path: '',
   project_id: '',
+  nfs_client_version: '',
   username: '',
   password: '',
   credentials_file: '',
@@ -72,6 +73,8 @@ const shareBrowserTitleId = 'mount-share-browser-title'
 
 const publicAuthConfig = ref({
   demo_mode_enabled: false,
+  default_nfs_client_version: '4.1',
+  nfs_client_version_options: ['4.2', '4.1', '4.0', '3'],
 })
 
 const discoveredShares = ref([])
@@ -88,6 +91,21 @@ const dialogTitle = computed(() => (isEditMode.value ? t('mounts.editDialogTitle
 const dialogSubmitLabel = computed(() => (isEditMode.value ? t('common.actions.save') : t('common.actions.create')))
 const dialogLocalMountPoint = computed(() => activeEditMount.value?.local_mount_point || '')
 const shareDiscoveryAvailable = computed(() => !isEditMode.value && !publicAuthConfig.value?.demo_mode_enabled)
+const nfsClientVersionOptions = computed(() => {
+  const configured = Array.isArray(publicAuthConfig.value?.nfs_client_version_options)
+    ? publicAuthConfig.value.nfs_client_version_options
+    : []
+  return configured.length ? configured : ['4.2', '4.1', '4.0', '3']
+})
+const nfsClientVersionSelectOptions = computed(() => [
+  {
+    value: '',
+    label: t('mounts.nfsClientVersionDefaultOption', {
+      version: publicAuthConfig.value.default_nfs_client_version || '4.1',
+    }),
+  },
+  ...nfsClientVersionOptions.value.map((option) => ({ value: option, label: option })),
+])
 
 const columns = computed(() => {
   const nextColumns = [
@@ -178,9 +196,17 @@ async function loadPublicAuthConfig() {
     const config = await getPublicAuthConfig()
     publicAuthConfig.value = {
       demo_mode_enabled: Boolean(config?.demo_mode_enabled),
+      default_nfs_client_version: String(config?.default_nfs_client_version || '4.1'),
+      nfs_client_version_options: Array.isArray(config?.nfs_client_version_options) && config.nfs_client_version_options.length
+        ? config.nfs_client_version_options.map((value) => String(value))
+        : ['4.2', '4.1', '4.0', '3'],
     }
   } catch {
-    publicAuthConfig.value = { demo_mode_enabled: false }
+    publicAuthConfig.value = {
+      demo_mode_enabled: false,
+      default_nfs_client_version: '4.1',
+      nfs_client_version_options: ['4.2', '4.1', '4.0', '3'],
+    }
   }
 }
 
@@ -194,6 +220,7 @@ function resetForm() {
     type: 'SMB',
     remote_path: '',
     project_id: '',
+    nfs_client_version: '',
     username: '',
     password: '',
     credentials_file: '',
@@ -293,6 +320,12 @@ function buildMountPayload() {
     type: form.value.type,
     remote_path: form.value.remote_path.trim(),
     project_id: normalizeProjectId(form.value.project_id),
+  }
+
+  if (form.value.type === 'NFS') {
+    if (form.value.nfs_client_version) {
+      payload.nfs_client_version = form.value.nfs_client_version
+    }
   }
 
   const username = form.value.username.trim()
@@ -436,6 +469,7 @@ function openEditDialog(mount, event) {
     type: mount.type || 'SMB',
     remote_path: mount.remote_path || '',
     project_id: normalizeProjectId(mount.project_id),
+    nfs_client_version: mount.nfs_client_version || '',
     username: '',
     password: '',
     credentials_file: '',
@@ -754,6 +788,13 @@ onBeforeUnmount(() => {
             <span class="sr-only">required</span>
           </label>
           <input id="mount-project-id" v-model="form.project_id" type="text" required aria-required="true" />
+          <template v-if="form.type === 'NFS'">
+            <label for="mount-nfs-client-version">{{ t('mounts.nfsClientVersion') }}</label>
+            <select id="mount-nfs-client-version" v-model="form.nfs_client_version">
+              <option v-for="option in nfsClientVersionSelectOptions" :key="option.value || 'default'" :value="option.value">{{ option.label }}</option>
+            </select>
+            <p class="field-help">{{ t('mounts.nfsClientVersionHelp') }}</p>
+          </template>
           <template v-if="isEditMode && dialogLocalMountPoint">
             <label for="mount-local-path">{{ t('mounts.localMountPointInfo') }}</label>
             <input id="mount-local-path" :value="dialogLocalMountPoint" type="text" readonly />

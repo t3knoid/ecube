@@ -27,6 +27,7 @@ const form = ref({
   log_file: '',
   log_file_max_bytes: 10485760,
   log_file_backup_count: 5,
+  nfs_client_version: '4.1',
   db_pool_size: 5,
   db_pool_max_overflow: 10,
   db_pool_recycle_seconds: -1,
@@ -41,6 +42,7 @@ const fieldOrder = [
   'log_file',
   'log_file_max_bytes',
   'log_file_backup_count',
+  'nfs_client_version',
   'db_pool_size',
   'db_pool_max_overflow',
   'db_pool_recycle_seconds',
@@ -50,6 +52,7 @@ const fieldOrder = [
 
 const levelOptions = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
 const formatOptions = ['text', 'json']
+const nfsClientVersionOptions = ['4.2', '4.1', '4.0', '3']
 
 const hasChanges = computed(() => Object.keys(buildPatchPayload()).length > 0)
 
@@ -255,6 +258,16 @@ onMounted(loadConfiguration)
       </article>
 
       <article class="panel">
+        <h2>{{ t('configuration.sections.shares') }}</h2>
+
+        <label for="cfg-nfs-client-version">{{ t('configuration.fields.nfs_client_version.label') }}</label>
+        <select id="cfg-nfs-client-version" v-model="form.nfs_client_version">
+          <option v-for="option in nfsClientVersionOptions" :key="option" :value="option">{{ option }}</option>
+        </select>
+        <p class="field-help">{{ t('configuration.fields.nfs_client_version.help') }}</p>
+      </article>
+
+      <article class="panel">
         <h2>{{ t('configuration.sections.databasePool') }}</h2>
 
         <label for="cfg-db-pool-size">{{ t('configuration.fields.db_pool_size.label') }}</label>
@@ -268,9 +281,7 @@ onMounted(loadConfiguration)
         <p class="field-help">{{ t('configuration.fields.db_pool_recycle_seconds.help') }}</p>
         <p class="restart-chip">{{ t('configuration.restartRequiredField') }}</p>
       </article>
-    </div>
 
-    <div class="settings-grid" :class="{ 'settings-grid-single': !restartPending }">
       <article class="panel">
         <h2>{{ t('configuration.sections.copyJobs') }}</h2>
 
@@ -288,8 +299,10 @@ onMounted(loadConfiguration)
         />
         <p class="field-help">{{ t('configuration.fields.job_detail_files_page_size.help') }}</p>
       </article>
+    </div>
 
-      <article v-if="restartPending" class="panel warning-panel">
+    <div v-if="restartPending" class="settings-grid">
+      <article class="panel warning-panel">
         <h2>{{ t('configuration.pendingRestartTitle') }}</h2>
         <p>{{ t('configuration.pendingRestartBody') }}</p>
         <ul>
@@ -334,8 +347,10 @@ onMounted(loadConfiguration)
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.settings-grid-single {
-  grid-template-columns: minmax(0, 1fr);
+@media (max-width: 960px) {
+  .settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .header-row {
@@ -351,6 +366,7 @@ onMounted(loadConfiguration)
   padding: var(--space-md);
   display: grid;
   gap: var(--space-xs);
+  align-content: start;
 }
 
 .warning-panel {
@@ -381,7 +397,9 @@ select {
   background: var(--color-bg-input);
   color: var(--color-text-primary);
   border-radius: var(--border-radius);
-  padding: var(--space-xs) var(--space-sm);
+  font: inherit;
+  line-height: 1.4;
+  padding: 0.5em 0.75em;
 }
 
 .field-help,
