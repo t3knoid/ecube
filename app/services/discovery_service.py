@@ -50,6 +50,7 @@ from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
 from app.repositories.hardware_repository import HubRepository, PortRepository
 from app.utils.drive_identity import build_readable_device_label, mask_serial_number
+from app.utils.sanitize import normalize_project_id
 
 logger = logging.getLogger(__name__)
 
@@ -352,8 +353,17 @@ def run_discovery_sync(
 
             port_enabled = _port_is_enabled(port_id or existing.port_id)
 
-            # Mounted drives must never remain in AVAILABLE after rediscovery.
-            if port_enabled and existing.mount_path and existing.current_state != DriveState.IN_USE:
+            has_project_binding = bool(normalize_project_id(existing.current_project_id))
+
+            # Mounted drives become IN_USE on rediscovery only when they are
+            # still bound to a project. Mounted but uninitialized drives must
+            # remain AVAILABLE so discovery does not manufacture project ownership.
+            if (
+                port_enabled
+                and existing.mount_path
+                and has_project_binding
+                and existing.current_state != DriveState.IN_USE
+            ):
                 existing.current_state = DriveState.IN_USE
                 changed = True
             # Re-activate a previously disconnected drive only if the port is enabled.
