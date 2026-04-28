@@ -485,6 +485,7 @@
     "completeTitle": "Setup Complete",
     "completeBody": "System initialization has completed successfully.",
     "goToLogin": "Go to Login",
+    "alreadyInitializedTitle": "System already initialized",
     "alreadyInitialized": "Setup is already complete. Please log in.",
     "dockerHostHint": "Running inside a container — using the Docker Compose service name as the database host."
   },

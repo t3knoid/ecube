@@ -154,4 +154,35 @@ describe('SetupWizardView existing admin reconciliation', () => {
       trust_proxy_headers: true,
     })
   })
+
+  it('redirects already-initialized systems to login without showing a setup error', async () => {
+    mocks.getSetupStatus.mockResolvedValue({ initialized: true })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(mocks.replace).toHaveBeenCalledWith({
+      name: 'login',
+      query: { reason: 'setup_already_initialized' },
+    })
+    expect(wrapper.find('.error-banner').exists()).toBe(false)
+  })
+
+  it('redirects connect step 401 responses to login as guidance instead of showing an error', async () => {
+    mocks.connectDatabase.mockRejectedValue({ response: { status: 401, data: {} } })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.find('#db-admin-user').setValue('postgres')
+    await wrapper.find('#db-admin-pass').setValue('DbAdmin#123')
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('setup.connectDatabase')).trigger('click')
+    await flushPromises()
+
+    expect(mocks.replace).toHaveBeenCalledWith({
+      name: 'login',
+      query: { reason: 'setup_already_initialized' },
+    })
+    expect(wrapper.find('.error-banner').exists()).toBe(false)
+  })
 })
