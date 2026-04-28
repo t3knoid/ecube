@@ -588,6 +588,10 @@ The source path is interpreted inside the selected mounted share. Entering only 
 
 Open a job to view details and perform follow-up actions.
 
+The Jobs list hides archived jobs by default. To review archived work, enable `Show Archived Jobs`, then optionally use the `Archived` status filter to narrow the list further.
+
+Archived jobs remain readable from Job Detail, but they are intentionally treated as sunset records instead of active work. Once a job is archived, the normal lifecycle actions stay visible only as disabled context or disappear where appropriate, and the archive action itself is no longer shown.
+
 ![Jobs list and create workflow reference (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/jobs-list-default-chromium-linux.png)
 
 ---
@@ -596,7 +600,7 @@ Open a job to view details and perform follow-up actions.
 
 > **Access Summary**
 > **Page visibility:** `admin`, `manager`, `processor`, `auditor`
-> **Restricted actions:** `Analyze`, `Edit`, `Start`, `Retry Failed Files`, `Pause`, `Complete`, `Verify`, and `Manifest` are enabled for `admin`, `manager`, and `processor` when the current job state allows them. `Clear startup analysis cache` is shown only to `admin` and `manager` when the job still has a persisted startup-analysis snapshot. `Delete` is shown only for eligible pending jobs. Hash inspection and source/destination comparison remain available to `admin` and `auditor`.
+> **Restricted actions:** `Analyze`, `Edit`, `Start`, `Retry Failed Files`, `Pause`, `Complete`, `Verify`, and `Manifest` are enabled for `admin`, `manager`, and `processor` when the current job state allows them. `Archive` and `Clear startup analysis cache` are shown only to `admin` and `manager` when the current job state allows them. `Delete` is shown only for eligible pending jobs. Hash inspection and source/destination comparison remain available to `admin` and `auditor`.
 
 The job detail page provides deeper inspection and follow-up controls.
 
@@ -608,6 +612,7 @@ Typical functions include:
 - Retry only the failed or timed-out files from a partial-success completed job
 - Pause a running job and resume it later
 - Manually complete a safe non-active job when required by the workflow
+- Archive a completed or failed job after explicit confirmation so the same work definition can be created again later
 - Clear a persisted startup-analysis snapshot before the next restart when the cached scan should be discarded
 - Generate a manifest, review the reported location, and download the generated file
 - Review copied files
@@ -626,6 +631,7 @@ Use them when appropriate:
 - `Retry Failed Files` to re-queue only `ERROR` and `TIMEOUT` file rows on a `COMPLETED` job that finished with partial-success results
 - `Pause` to request a safe stop after the current copy work finishes
 - `Complete` to manually mark a pending, paused, or failed job as complete when the operational workflow requires it
+- `Archive` to sunset a completed or failed job after confirmation; this action is limited to `admin` and `manager`
 - `Clear startup analysis cache` to remove a persisted startup scan after explicit confirmation; this is available only to `admin` and `manager` when cached startup-analysis data exists for the job
 - `Verify` to run verification checks once the job is fully complete with no failed or timed-out files
 - `Manifest` to generate the manifest output once the job is fully complete with no failed or timed-out files
@@ -637,6 +643,8 @@ While a job is actively copying, Job Detail shows a live `Duration` field that r
 Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed `manifest.json` file on the destination drive and immediately starts a browser download of the generated manifest without an extra confirmation step.
 
 For a partial-success `COMPLETED` job, Job Detail can show `Retry Failed Files` instead of exposing Verify or Manifest too early. This action is available only to `admin`, `manager`, and `processor`, moves the job back into `RUNNING`, re-queues only failed or timed-out files, and preserves already successful copies.
+
+`Archive` opens its own confirmation dialog and is available only for `COMPLETED` or `FAILED` jobs. After confirmation, the job transitions to `ARCHIVED`, remains viewable in Job Detail for audit and review purposes, drops out of the default Jobs list, and no longer blocks recreation of the same exact project/source/destination work definition.
 
 The completion summary uses the normal success styling for clean completions. If the summary still shows any failed or timed-out file counts, the summary switches to a red warning background so operators can distinguish a partial-success completion from a clean completed run at a glance.
 

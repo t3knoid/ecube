@@ -100,6 +100,12 @@ class JobStartupAnalysisClearRequest(BaseModel):
     confirm: bool = Field(..., description="Must be true to confirm startup analysis cache cleanup")
 
 
+class JobArchiveRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    confirm: bool = Field(..., description="Must be true to confirm job archival")
+
+
 class JobAnalyzeRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
