@@ -10,7 +10,7 @@
 ## ECUBE
 ### Secure Evidence Export Software and Turnkey Appliance
 
-ECUBE is a secure, browser-based platform and turnkey appliance for exporting evidence from approved network shares to encrypted USB drives with auditability, role separation, and operational control built in.
+ECUBE is a secure, browser-based platform and turnkey appliance for exporting evidence from approved network shares to encrypted USB drives with auditability, role separation, and operational control built in across desktop, tablet, and mobile devices.
 
 ---
 
@@ -48,6 +48,7 @@ ECUBE replaces that process with a controlled workflow that helps teams:
 
 ### Intuitive browser interface
 - Simple, role-focused screens that keep each user on the task at hand
+- Responsive browser support for desktop, tablet, and mobile workflows
 - Real-time status for drives, mounts, jobs, and audits
 - Theme support for branded or customer-facing deployments
 
