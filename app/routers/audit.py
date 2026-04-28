@@ -20,7 +20,7 @@ from app.schemas.errors import R_401, R_403, R_404, R_409, R_410, R_422
 from app.schemas.types import OptionalDatetimeQuery, OptionalIntQuery
 from app.services import audit_service
 from app.utils.client_ip import get_client_ip
-from app.utils.sanitize import sanitize_string, strict_sanitize_string
+from app.utils.sanitize import normalize_project_id, sanitize_string, strict_sanitize_string
 
 logger = logging.getLogger(__name__)
 
@@ -58,10 +58,10 @@ def list_audit_logs(
     **Roles:** ``admin``, ``manager``, ``auditor``
     """
     if project_id is not None:
-        sanitized: str = sanitize_string(project_id)
-        if not sanitized:
+        normalized_project_id = normalize_project_id(project_id)
+        if not isinstance(normalized_project_id, str) or not normalized_project_id:
             raise EncodingError("project_id is empty after removing invalid characters")
-        project_id = sanitized
+        project_id = normalized_project_id
 
     entries = AuditRepository(db).query(
         user=user,
@@ -98,10 +98,10 @@ def get_chain_of_custody(
             raise EncodingError("drive_sn contains invalid characters")
 
     if project_id is not None:
-        sanitized_project: str = sanitize_string(project_id)
-        if not sanitized_project:
+        normalized_project_id = normalize_project_id(project_id)
+        if not isinstance(normalized_project_id, str) or not normalized_project_id:
             raise EncodingError("project_id is empty after removing invalid characters")
-        project_id = sanitized_project
+        project_id = normalized_project_id
 
     return audit_service.get_chain_of_custody_report(
         db,
