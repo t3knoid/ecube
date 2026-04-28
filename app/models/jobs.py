@@ -1,8 +1,12 @@
-from sqlalchemy import Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime, Text, JSON, Float
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import relationship, validates
+from itertools import chain
+
+from sqlalchemy import Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime, Text, JSON, Float, event
+from sqlalchemy.dialects.postgresql import JSONB, insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.orm import Session, relationship, validates
 from sqlalchemy.sql import func
 from app.database import Base
+from app.models.projects import Project
 from app.utils.sanitize import normalize_project_id
 import enum
 
@@ -38,7 +42,7 @@ class StartupAnalysisStatus(str, enum.Enum):
 class ExportJob(Base):
     __tablename__ = "export_jobs"
     id = Column(Integer, primary_key=True)
-    project_id = Column(String, nullable=False, index=True)
+    project_id = Column(String, ForeignKey("projects.normalized_project_id"), nullable=False, index=True)
     evidence_number = Column(String, nullable=False)
     source_path = Column(String, nullable=False)
     target_mount_path = Column(String)
@@ -67,6 +71,7 @@ class ExportJob(Base):
     startup_analysis_estimated_duration_seconds = Column(Integer, nullable=True)
     startup_analysis_entries = Column(JSON().with_variant(JSONB(), "postgresql"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    project = relationship(Project, back_populates="jobs")
     files = relationship("ExportFile", back_populates="job")
     manifests = relationship("Manifest", back_populates="job")
     assignments = relationship("DriveAssignment", back_populates="job")
@@ -117,3 +122,56 @@ class DriveAssignment(Base):
     released_at = Column(DateTime(timezone=True))
     drive = relationship("UsbDrive", back_populates="assignments")
     job = relationship("ExportJob", back_populates="assignments")
+
+
+@event.listens_for(Session, "before_flush")
+def _ensure_projects_for_jobs(session, _flush_context, _instances):
+    project_ids: set[str] = set()
+    for obj in chain(session.new, session.dirty):
+        if not isinstance(obj, ExportJob):
+            continue
+        normalized = normalize_project_id(obj.project_id)
+        if not isinstance(normalized, str) or not normalized:
+            continue
+        if obj.project_id != normalized:
+            obj.project_id = normalized
+        project_ids.add(normalized)
+
+    if not project_ids:
+        return
+
+    pending_project_ids = {
+        normalized
+        for obj in session.new
+        if isinstance(obj, Project)
+        and isinstance((normalized := normalize_project_id(obj.normalized_project_id)), str)
+        and normalized
+    }
+
+    for project_id in sorted(project_ids - pending_project_ids):
+        _insert_project_if_missing(session, project_id)
+
+
+def _insert_project_if_missing(session: Session, project_id: str) -> None:
+    bind = session.get_bind()
+    dialect_name = bind.dialect.name if bind is not None else ""
+
+    if dialect_name == "postgresql":
+        session.execute(
+            postgresql_insert(Project)
+            .values(normalized_project_id=project_id)
+            .on_conflict_do_nothing(index_elements=["normalized_project_id"])
+        )
+        return
+
+    if dialect_name == "sqlite":
+        session.execute(
+            sqlite_insert(Project)
+            .values(normalized_project_id=project_id)
+            .on_conflict_do_nothing(index_elements=["normalized_project_id"])
+        )
+        return
+
+    existing_project = session.get(Project, {"normalized_project_id": project_id})
+    if existing_project is None:
+        session.add(Project(normalized_project_id=project_id))
