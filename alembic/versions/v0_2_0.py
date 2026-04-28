@@ -37,12 +37,18 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
-from app.utils.sanitize import normalize_project_id
-
 revision = "0001"
 down_revision = None
 branch_labels = None
 depends_on = None
+
+
+def _normalize_project_id(value: object) -> object:
+    if not isinstance(value, str):
+        return value
+    value = value.replace("\x00", "")
+    value = "".join(character for character in value if not 0xD800 <= ord(character) <= 0xDFFF)
+    return value.strip().upper()
 
 
 def _create_projects_table() -> None:
@@ -73,7 +79,7 @@ def _backfill_projects_from_jobs() -> None:
     normalized_jobs = []
     normalized_project_ids = set()
     for job_id, project_id in rows:
-        normalized = normalize_project_id(project_id)
+        normalized = _normalize_project_id(project_id)
         if not isinstance(normalized, str) or not normalized:
             continue
         normalized_jobs.append({"id": job_id, "project_id": normalized})
