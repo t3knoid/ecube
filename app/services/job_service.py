@@ -247,7 +247,7 @@ def archive_job(
     try:
         job_repo.save(job)
     except Exception:
-        logger.exception("DB commit failed while archiving job %s", job_id)
+        logger.exception("DB commit failed while archiving job", {"job_id": job_id})
         raise HTTPException(
             status_code=500,
             detail="Database error while archiving job",
