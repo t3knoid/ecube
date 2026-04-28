@@ -4,7 +4,7 @@
 |---|---|
 | Title | Automated Test Runbook |
 | Purpose | Explains how to install dependencies, run all automated test suites, and reproduce CI behavior locally. |
-| Updated on | 04/08/26 |
+| Updated on | 04/28/26 |
 | Audience | Developers, contributors, QA. |
 
 ## Table of Contents
@@ -28,6 +28,13 @@ pip install -e ".[dev]"
 cd frontend
 npm ci
 npx playwright install --with-deps chromium webkit
+```
+
+On Linux hosts that exercise SMB-related mount behavior locally, install the host SMB tools before running backend tests that touch mount flows:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y cifs-utils smbclient
 ```
 
 Then run:
@@ -54,6 +61,13 @@ npx playwright test
 
 ```bash
 pip install -e ".[dev]"
+```
+
+If you are validating SMB mount or share-discovery behavior on a Linux host, also install:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y cifs-utils smbclient
 ```
 
 ### 2.2 Frontend
@@ -86,19 +100,32 @@ python -m pytest tests/ -v
 ### 3.2 Backend integration tests
 
 ```bash
-export INTEGRATION_DATABASE_URL="postgresql://ecube:ecube@localhost:5432/ecube"
-python -m pytest tests/integration/ -v --run-integration
-```
-
-CI-equivalent local DB URL (matches GitHub Actions postgres service in `run-tests.yml`):
-
-```bash
 export INTEGRATION_DATABASE_URL="postgresql://ecube_test:ecube_test@localhost:5432/ecube_integration"
 python -m pytest tests/integration/ -v --run-integration
 ```
 
-Note: `tests/integration/conftest.py` default URL uses `localhost:5433`, so set
+This CI-equivalent URL is the recommended default because it keeps integration runs isolated from a developer's regular local ECUBE database.
+
+If you intentionally want to point integration tests at a separate local developer database instead, use:
+
+```bash
+export INTEGRATION_DATABASE_URL="postgresql://ecube:ecube@localhost:5432/ecube"
+python -m pytest tests/integration/ -v --run-integration
+```
+
+Note: `tests/integration/conftest.py` default URL uses `localhost:5432`, so set
 `INTEGRATION_DATABASE_URL` explicitly when matching CI.
+
+If the integration database already exists from an older copy of the unreleased `0.2.0` baseline migration, `alembic upgrade head` alone may not be enough because the release-scoped `0001` migration is still mutable during development. In that stale-baseline case, rebuild the integration database from scratch, then rerun Alembic:
+
+```bash
+# example flow
+dropdb ecube_integration
+createdb -O ecube_test ecube_integration
+export INTEGRATION_DATABASE_URL="postgresql://ecube_test:ecube_test@localhost:5432/ecube_integration"
+alembic upgrade head
+python -m pytest tests/integration/ -v --run-integration
+```
 
 ### 3.3 Hardware-in-the-loop tests
 
@@ -154,9 +181,11 @@ docker compose -f docker-compose.ecube-win.yml up -d postgres
 ### 4.2 Run integration tests
 
 ```bash
-INTEGRATION_DATABASE_URL=postgresql://ecube:ecube@localhost:5432/ecube \
+INTEGRATION_DATABASE_URL=postgresql://ecube_test:ecube_test@localhost:5432/ecube_integration \
   python -m pytest tests/integration/ -v --run-integration
 ```
+
+If the database was created earlier from an older copy of the current unreleased `0001` baseline, recreate it before running `alembic upgrade head`. The integration harness now fails fast with a rebuild message when it detects this stale-baseline state.
 
 ### 4.3 Tear down and clean DB volume
 
@@ -239,7 +268,7 @@ For installer-oriented package artifact generation details, see:
 | Workflow | Trigger | What runs |
 |----------|---------|----------|
 | `run-tests.yml` — backend unit tests | manual (`workflow_dispatch`) and push to `main` when `app/**`, `frontend/**`, or `tests/**` changes | `python -m pytest tests/ --ignore=tests/integration --ignore=tests/hardware -v` on ubuntu-latest |
-| `run-tests.yml` — backend integration tests | manual (`workflow_dispatch`) and push to `main` with same path filter | postgres service + `alembic upgrade head` + `python -m pytest tests/integration/ -v --run-integration` |
+| `run-tests.yml` — backend integration tests | manual (`workflow_dispatch`) and push to `main` with same path filter | fresh postgres service + `alembic upgrade head` + `python -m pytest tests/integration/ -v --run-integration` |
 | `run-tests.yml` — frontend unit tests | manual (`workflow_dispatch`) and push to `main` with same path filter | `npm run test:unit` |
 | `run-tests.yml` — frontend E2E tests | manual (`workflow_dispatch`) and push to `main` with same path filter | `npm run build` + `npx playwright test` (Chromium + WebKit), upload `frontend/playwright-report/` artifact |
 | `update-e2e-snapshots.yml` | manual (`workflow_dispatch`) | `npx playwright test --update-snapshots --reporter=line`, then commit and push snapshots |
