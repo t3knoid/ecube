@@ -114,8 +114,16 @@ class JobRepository:
                 )
             )
 
-        if statuses:
-            query = query.filter(ExportJob.status.in_(tuple(statuses)))
+        effective_statuses = tuple(statuses) if statuses else None
+        if effective_statuses and not include_archived:
+            effective_statuses = tuple(
+                status for status in effective_statuses if status != JobStatus.ARCHIVED
+            )
+            if not effective_statuses:
+                return []
+
+        if effective_statuses:
+            query = query.filter(ExportJob.status.in_(effective_statuses))
         elif not include_archived:
             query = query.filter(ExportJob.status != JobStatus.ARCHIVED)
 
