@@ -197,7 +197,8 @@ This section documents the concrete table layout represented by the SQLAlchemy m
 - `evidence_number` (String, required)
 - `source_path` (String, required)
 - `target_mount_path` (String, nullable)
-- `status` (Enum `JobStatus`, `native_enum=False`, default `PENDING`)
+- `status` (Enum `JobStatus: PENDING | RUNNING | PAUSING | PAUSED | COMPLETED | FAILED | VERIFYING | ARCHIVED`, `native_enum=False`, default `PENDING`)
+  - `ARCHIVED` is a terminal sunset state for completed or failed jobs that remain readable for audit/review but are excluded from the default jobs list.
 - `total_bytes` (BigInteger, default `0`)
 - `copied_bytes` (BigInteger, default `0`)
 - `file_count` (Integer, default `0`)
