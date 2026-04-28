@@ -13,6 +13,7 @@ class Project(Base):
     normalized_project_id = Column(String, nullable=False, unique=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     jobs = relationship("ExportJob", back_populates="project")
+    files = relationship("ExportFile", back_populates="project")
 
     @validates("normalized_project_id")
     def _normalize_project_id(self, _key, value):
