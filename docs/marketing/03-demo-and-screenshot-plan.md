@@ -17,7 +17,7 @@ Recommended demo guardrails:
 - expose only demo-safe users and roles;
 - reset the environment on a schedule;
 - avoid showing infrastructure internals or real host paths;
-- keep the demo responsive and visually polished.
+- keep the demo responsive and visually polished on desktop, tablet, and mobile browsers.
 
 Recommended demo story:
 
@@ -67,5 +67,7 @@ Each screenshot should reinforce one clear message:
 ## 5. Implementation Notes
 
 Use screenshots with consistent browser framing, clean sample project names, and realistic but non-sensitive evidence examples.
+
+When website copy calls out mobile support, pair that claim with demo flows and screenshots that still read clearly on smaller screens.
 
 If the first website release needs to move quickly, use the staged E2E screenshots as placeholders and replace them with polished production captures before launch.
