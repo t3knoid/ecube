@@ -325,6 +325,8 @@ def test_auth_public_config_returns_safe_defaults_when_demo_disabled(unauthentic
     body = resp.json()
     assert body == {
         "demo_mode_enabled": False,
+        "default_nfs_client_version": settings.nfs_client_version,
+        "nfs_client_version_options": ["4.2", "4.1", "4.0", "3"],
         "login_message": None,
         "demo_accounts": [],
         "shared_password": None,
@@ -357,6 +359,8 @@ def test_auth_public_config_returns_only_display_safe_demo_metadata(unauthentica
     assert resp.status_code == 200
     body = resp.json()
     assert body["demo_mode_enabled"] is True
+    assert body["default_nfs_client_version"] == settings.nfs_client_version
+    assert body["nfs_client_version_options"] == ["4.2", "4.1", "4.0", "3"]
     assert body["login_message"] == "Use the demo accounts below."
     assert body["shared_password"] == "demo"
     assert body["password_change_allowed"] is False
@@ -410,6 +414,7 @@ def test_auth_public_config_falls_back_to_demo_metadata_file(unauthenticated_cli
     assert resp.status_code == 200
     body = resp.json()
     assert body["demo_mode_enabled"] is True
+    assert body["default_nfs_client_version"] == settings.nfs_client_version
     assert body["login_message"] == "Use the seeded demo accounts below."
     assert body["shared_password"] == "demo"
     assert body["password_change_allowed"] is False
@@ -459,6 +464,7 @@ def test_auth_public_config_stays_in_demo_mode_after_seed_even_if_env_flag_is_fa
     assert resp.status_code == 200
     body = resp.json()
     assert body["demo_mode_enabled"] is True
+    assert body["default_nfs_client_version"] == settings.nfs_client_version
     assert body["login_message"] == "Seeded demo remains active."
     assert body["demo_accounts"] == [
         {

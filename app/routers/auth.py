@@ -81,6 +81,8 @@ class DemoAccountResponse(BaseModel):
 
 class PublicAuthConfigResponse(BaseModel):
     demo_mode_enabled: bool = Field(default=False, description="Whether demo mode is enabled")
+    default_nfs_client_version: str = Field(default="4.1", description="Default NFS client version suggested by ECUBE host configuration")
+    nfs_client_version_options: list[str] = Field(default_factory=lambda: ["4.2", "4.1", "4.0", "3"], description="Supported NFS client versions operators may select in the UI")
     login_message: str | None = Field(default=None, description="Optional public-safe login instructions")
     demo_accounts: list[DemoAccountResponse] = Field(default_factory=list, description="Demo-safe accounts for display on the login screen")
     shared_password: str | None = Field(default=None, description="Optional shared demo password intentionally shown on the login screen")
@@ -103,6 +105,8 @@ def public_auth_config() -> PublicAuthConfigResponse:
     if not settings.is_demo_mode_enabled():
         return PublicAuthConfigResponse(
             demo_mode_enabled=False,
+            default_nfs_client_version=settings.nfs_client_version,
+            nfs_client_version_options=["4.2", "4.1", "4.0", "3"],
             login_message=None,
             demo_accounts=[],
             shared_password=None,
@@ -126,6 +130,8 @@ def public_auth_config() -> PublicAuthConfigResponse:
 
     return PublicAuthConfigResponse(
         demo_mode_enabled=True,
+        default_nfs_client_version=settings.nfs_client_version,
+        nfs_client_version_options=["4.2", "4.1", "4.0", "3"],
         login_message=settings.get_demo_login_message() or None,
         demo_accounts=accounts,
         shared_password=settings.get_demo_shared_password() or None,
