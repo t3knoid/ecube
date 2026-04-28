@@ -230,6 +230,24 @@ def test_file_repo_add_bulk_and_list(db):
     paths = {f.relative_path for f in result}
     assert paths == {"a.txt", "b.txt"}
 
+    project_ids = {f.project_id for f in result}
+    assert project_ids == {job.project_id}
+
+
+def test_file_repo_add_bulk_links_files_to_project(db):
+    job = _make_job(db)
+    repo = FileRepository(db)
+
+    repo.add_bulk([
+        ExportFile(job_id=job.id, relative_path="case/a.txt", status=FileStatus.DONE),
+        ExportFile(job=job, relative_path="case/b.txt", status=FileStatus.ERROR),
+    ])
+
+    project = db.query(Project).filter(Project.normalized_project_id == job.project_id).one()
+
+    assert {export_file.project_id for export_file in project.files} == {job.project_id}
+    assert {export_file.relative_path for export_file in project.files} == {"case/a.txt", "case/b.txt"}
+
 
 def test_file_repo_get_and_save(db):
     job = _make_job(db)

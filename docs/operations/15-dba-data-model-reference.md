@@ -70,18 +70,19 @@ Key relationships:
 
 ### Project Domain
 
-- `projects`: normalized, unique project identifiers used as the durable relational anchor for project-scoped job history.
+- `projects`: normalized, unique project identifiers used as the durable relational anchor for project-scoped job and copied-file history.
 
 ### Job Domain
 
 - `export_jobs`: top-level export lifecycle, the relational `project_id` reference to `projects.normalized_project_id`, throughput metadata, the persisted sanitized `failure_reason` used for failed-job triage, and persisted startup-analysis cache metadata used to accelerate restart and resume flows.
-- `export_files`: per-file copy/verify tracking rows.
+- `export_files`: per-file copy/verify tracking rows with direct project ownership for long-term project attribution after job lifecycle changes.
 - `manifests`: manifest artifacts generated per job.
 - `drive_assignments`: assignment history linking drives to jobs.
 
 Key relationships:
 
 - `export_jobs.project_id` -> `projects.normalized_project_id`
+- `export_files.project_id` -> `projects.normalized_project_id`
 - `export_files.job_id` -> `export_jobs.id`
 - `manifests.job_id` -> `export_jobs.id`
 - `drive_assignments.drive_id` -> `usb_drives.id`
@@ -138,6 +139,7 @@ This section captures the primary physical schema details used by DBAs.
 - Port and drive identities are unique at the schema level (`usb_ports.system_path`, `usb_drives.device_identifier`).
 - `network_mounts.local_mount_point` is unique.
 - `projects.normalized_project_id` is unique and stores the normalized project identity used by `export_jobs.project_id`.
+- `export_files.project_id` persists copied-file ownership directly so project-scoped file history remains queryable even when consumers do not start from a job row.
 - `user_roles` enforces composite uniqueness on (`username`, `role`).
 - Guard tables enforce single-row behavior via check constraints (`id = 1`).
 - Audit payloads are stored as JSON (PostgreSQL JSONB variant).
