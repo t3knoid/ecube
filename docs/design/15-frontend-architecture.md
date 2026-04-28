@@ -292,7 +292,7 @@ Each module exports thin wrapper functions around Axios calls. Modules map 1:1 t
 | `setup.js` | `GET /setup/status`, `POST /setup/initialize`, `POST /setup/database/test-connection`, `POST /setup/database/provision`, `GET /setup/database/provision-status`, `GET /setup/database/system-info`, `GET /setup/database/status`, `PUT /setup/database/settings` | SetupWizardView |
 | `drives.js` | `GET /drives`, `POST /drives/{drive_id}/initialize`, `POST /drives/{drive_id}/format`, `POST /drives/{drive_id}/prepare-eject` | DrivesView, DriveDetailView, DashboardView, AuditView |
 | `mounts.js` | `GET /mounts`, `POST /mounts`, `PATCH /mounts/{mount_id}`, `DELETE /mounts/{mount_id}` | MountsView |
-| `jobs.js` | `POST /jobs`, `PUT /jobs/{job_id}`, `DELETE /jobs/{job_id}`, `POST /jobs/{job_id}/start`, `POST /jobs/{job_id}/pause`, `POST /jobs/{job_id}/complete`, `GET /jobs/{job_id}`, `POST /jobs/{job_id}/verify`, `POST /jobs/{job_id}/manifest` | JobsView, JobDetailView, DashboardView |
+| `jobs.js` | `GET /jobs`, `POST /jobs`, `PUT /jobs/{job_id}`, `DELETE /jobs/{job_id}`, `POST /jobs/{job_id}/start`, `POST /jobs/{job_id}/pause`, `POST /jobs/{job_id}/complete`, `POST /jobs/{job_id}/archive`, `GET /jobs/{job_id}`, `POST /jobs/{job_id}/verify`, `POST /jobs/{job_id}/manifest` | JobsView, JobDetailView, DashboardView |
 | `audit.js` | `GET /audit`, `GET /audit/chain-of-custody` | AuditView |
 | `files.js` | `GET /files/{file_id}/hashes`, `POST /files/compare` | JobDetailView (hash viewer, file compare) |
 | `users.js` | `GET /users`, `GET /users/{username}/roles`, `PUT /users/{username}/roles`, `DELETE /users/{username}/roles` | UsersView |
@@ -314,7 +314,7 @@ The `usePolling` composable provides a standard pattern:
 usePolling(fetchFn, intervalMs, options):
   - Calls fetchFn immediately, then every intervalMs
   - Stops automatically when component unmounts
-  - Stops when fetchFn returns a terminal state (COMPLETED, FAILED)
+  - Stops when fetchFn returns a terminal state (COMPLETED, FAILED, ARCHIVED)
   - Default interval: 3000ms (3 seconds)
   - Exposes: start(), stop(), isPolling, lastResponse
 ```
@@ -532,6 +532,7 @@ Vue I18n 9.x provides the localization infrastructure. All user-visible strings 
 | Edit non-active job | ✔ | ✔ | ✔ | ✗ |
 | Pause job | ✔ | ✔ | ✔ | ✗ |
 | Complete non-active job | ✔ | ✔ | ✔ | ✗ |
+| Archive terminal job | ✔ | ✔ | ✗ | ✗ |
 | Delete pending job | ✔ | ✔ | ✔ | ✗ |
 | Verify/manifest | ✔ | ✔ | ✔ | ✗ |
 | View file hashes | ✔ | ✗ | ✗ | ✔ |

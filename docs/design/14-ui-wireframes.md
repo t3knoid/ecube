@@ -748,8 +748,10 @@ Accessible from the Drive Management screen via a "Manage Hubs" button. Visible 
 
 **Status indicators:**
 - ○ PENDING (gray) · ● RUNNING (blue, animated) · ◉ VERIFYING (orange)
-- ✔ COMPLETED (green) · ✖ FAILED (red)
+- ✔ COMPLETED (green) · ✖ FAILED (red) · ◌ ARCHIVED (muted)
 - Active progress remains conservative and should not display 100% until byte and finished-file progress agree
+
+Archived jobs are hidden from the default Jobs list. The list view exposes a `Show Archived Jobs` toggle and an `Archived` status filter when operators need to review sunset job records.
 
 ### 6b — Job Detail & Monitoring View (UC-6.3, UC-6.4, UC-6.5, UC-6.6)
 
@@ -795,6 +797,7 @@ Accessible from the Drive Management screen via a "Manage Hubs" button. Visible 
 │                                                                              │
 │  ┌─ Actions ───────────────────────────────────────────────────────────┐     │
 │  │  [ Start ] (disabled—running)   [ Verify ]   [ Generate Manifest ] │     │
+│  │  [ Archive ] (shown only for admin/manager on eligible terminal jobs) │   │
 │  └─────────────────────────────────────────────────────────────────────┘     │
 │                                                                              │
 │                                                            [ ← Back ]       │
@@ -805,13 +808,16 @@ The Job Detail monitoring view includes a duration field for cumulative active r
 
 **Action button states by job status:**
 
-| Job Status | Start | Verify | Manifest |
-|------------|-------|--------|----------|
-| PENDING    | enabled | disabled | disabled |
-| RUNNING    | disabled | disabled | disabled |
-| COMPLETED  | disabled | enabled | enabled |
-| VERIFYING  | disabled | disabled | disabled |
-| FAILED     | disabled | enabled | enabled |
+| Job Status | Start | Verify | Manifest | Archive |
+|------------|-------|--------|----------|---------|
+| PENDING    | enabled | disabled | disabled | disabled |
+| RUNNING    | disabled | disabled | disabled | disabled |
+| COMPLETED  | disabled | enabled | enabled | enabled after `Prepare Eject` |
+| VERIFYING  | disabled | disabled | disabled | disabled |
+| FAILED     | disabled | enabled | enabled | enabled after `Prepare Eject` |
+| ARCHIVED   | disabled | disabled | disabled | hidden |
+
+`Archive` is limited to `admin` and `manager`, opens a confirmation dialog, and remains unavailable until any related drive has been prepared for eject and is no longer mounted.
 
 For restart-reconciled failures, Job Detail should surface a stable operator message such as `Job interrupted by service restart before completion` instead of a generic fallback. If no matching application log line is available, the related failure hint can be derived from sanitized audit evidence (including `JOB_RECONCILED`) so the failed state still presents actionable context.
 
