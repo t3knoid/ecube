@@ -35,6 +35,8 @@ def _default_provider() -> "MountProvider":
 
 logger = logging.getLogger(__name__)
 
+_SUPPORTED_NFS_CLIENT_VERSIONS = ("4.2", "4.1", "4.0", "3")
+
 _CREDENTIAL_FIELD_NAMES = ("username", "password", "credentials_file")
 _ENCRYPTED_CREDENTIAL_ATTRS = {
     "username": "encrypted_username",
@@ -144,9 +146,11 @@ class LinuxMountProvider:
         return discovered
 
     def os_mount(self, mount_type: MountType, remote_path: str, local_mount_point: str,
-                 *, credentials_file: Optional[str] = None, username: Optional[str] = None, password: Optional[str] = None) -> Tuple[bool, Optional[str]]:
+                 *, credentials_file: Optional[str] = None, username: Optional[str] = None, password: Optional[str] = None,
+                 nfs_client_version: Optional[str] = None) -> Tuple[bool, Optional[str]]:
         if mount_type == MountType.NFS:
-            cmd = [settings.mount_binary_path, "-t", "nfs", remote_path, local_mount_point]
+            resolved_nfs_client_version = _resolve_nfs_client_version(nfs_client_version)
+            cmd = [settings.mount_binary_path, "-t", "nfs", "-o", f"vers={resolved_nfs_client_version}", remote_path, local_mount_point]
         else:
             cmd = [settings.mount_binary_path, "-t", "cifs", remote_path, local_mount_point]
             if credentials_file:
@@ -350,6 +354,21 @@ def _resolve_mount_nfs_binary() -> Optional[str]:
         if resolved:
             return resolved
     return None
+
+
+def _resolve_nfs_client_version(requested_version: Optional[str]) -> str:
+    candidate = str(requested_version or settings.nfs_client_version or "4.1").strip()
+    if candidate not in _SUPPORTED_NFS_CLIENT_VERSIONS:
+        return "4.1"
+    return candidate
+
+
+def _stored_nfs_client_version(mount_type: MountType, requested_version: Optional[str]) -> Optional[str]:
+    if mount_type != MountType.NFS:
+        return None
+    if requested_version is None or not str(requested_version).strip():
+        return None
+    return _resolve_nfs_client_version(requested_version)
 
 
 def _resolve_showmount_binary() -> Optional[str]:
@@ -813,6 +832,8 @@ def _changed_mount_fields(
         changed_fields.append("remote_path")
     if normalize_project_id(mount.project_id) != normalized_project_id:
         changed_fields.append("project_id")
+    if _stored_nfs_client_version(mount_data.type, mount_data.nfs_client_version) != _stored_nfs_client_version(current_type, mount.nfs_client_version):
+        changed_fields.append("nfs_client_version")
     if _credential_fields_provided(mount_data):
         changed_fields.append("credentials")
 
@@ -949,6 +970,7 @@ def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Option
         type=mount_data.type,
         remote_path=mount_data.remote_path,
         project_id=normalized_project_id,
+        nfs_client_version=_stored_nfs_client_version(mount_data.type, mount_data.nfs_client_version),
         local_mount_point=local_mount_point,
         status=MountStatus.UNMOUNTED,
     )
@@ -972,6 +994,7 @@ def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Option
                     credentials_file=resolved_credentials["credentials_file"],
                     username=resolved_credentials["username"],
                     password=resolved_credentials["password"],
+                    nfs_client_version=mount.nfs_client_version,
                 )
                 candidate_status = MountStatus.MOUNTED if success else MountStatus.ERROR
     finally:
@@ -1037,6 +1060,7 @@ def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Option
         type=mount_data.type,
         remote_path=mount_data.remote_path,
         project_id=normalized_project_id,
+        nfs_client_version=mount.nfs_client_version,
         local_mount_point=local_mount_point,
         status=candidate_status,
         last_checked_at=checked_at,
@@ -1207,6 +1231,7 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
         type=mount_data.type,
         remote_path=mount_data.remote_path,
         project_id=normalized_project_id,
+        nfs_client_version=_stored_nfs_client_version(mount_data.type, mount_data.nfs_client_version),
         local_mount_point=local_mount_point,
         status=MountStatus.UNMOUNTED,
     )
@@ -1275,6 +1300,7 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
                     credentials_file=resolved_credentials["credentials_file"],
                     username=resolved_credentials["username"],
                     password=resolved_credentials["password"],
+                    nfs_client_version=mount.nfs_client_version,
                 )
         if success:
             mount.status = MountStatus.MOUNTED
@@ -1382,6 +1408,7 @@ def update_mount(mount_id: int, mount_data: MountUpdate, db: Session, actor: Opt
         mount_data,
         normalized_project_id=normalized_project_id,
     )
+    mount.nfs_client_version = _stored_nfs_client_version(mount_data.type, mount_data.nfs_client_version)
 
     try:
         mount_repo.acquire_create_lock()
@@ -1702,6 +1729,7 @@ def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None,
                         credentials_file=resolved_credentials["credentials_file"],
                         username=resolved_credentials["username"],
                         password=resolved_credentials["password"],
+                        nfs_client_version=mount.nfs_client_version,
                     )
                     candidate_status = MountStatus.MOUNTED if success else MountStatus.ERROR
         finally:
@@ -1781,6 +1809,7 @@ def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None,
             type=mount_data.type,
             remote_path=mount_data.remote_path,
             project_id=normalized_project_id,
+            nfs_client_version=mount.nfs_client_version,
             local_mount_point=mount.local_mount_point,
             status=candidate_status,
             last_checked_at=checked_at,
@@ -1824,6 +1853,7 @@ def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None,
                     credentials_file=stored_credentials["credentials_file"],
                     username=stored_credentials["username"],
                     password=stored_credentials["password"],
+                    nfs_client_version=mount.nfs_client_version,
                 )
                 mount.status = MountStatus.MOUNTED if success else MountStatus.ERROR
 
