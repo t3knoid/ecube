@@ -5,6 +5,7 @@ import JobDetailView from '@/views/JobDetailView.vue'
 
 const mocks = vi.hoisted(() => ({
   analyzeJob: vi.fn(),
+  archiveJob: vi.fn(),
   getJob: vi.fn(),
   getJobFiles: vi.fn(),
   startJob: vi.fn(),
@@ -56,6 +57,7 @@ vi.mock('@/stores/auth.js', () => ({
 
 vi.mock('@/api/jobs.js', () => ({
   analyzeJob: (...args) => mocks.analyzeJob(...args),
+  archiveJob: (...args) => mocks.archiveJob(...args),
   getJob: (...args) => mocks.getJob(...args),
   getJobFiles: (...args) => mocks.getJobFiles(...args),
   startJob: (...args) => mocks.startJob(...args),
@@ -129,10 +131,12 @@ function mountView() {
           template: '<div class="progressbar-stub">{{ value }}|{{ total }}|{{ label }}|{{ fullWidth }}|{{ active }}</div>',
         },
         ConfirmDialog: {
-          props: ['modelValue', 'confirmLabel', 'cancelLabel', 'busy'],
+          props: ['modelValue', 'title', 'message', 'confirmLabel', 'cancelLabel', 'busy'],
           emits: ['update:modelValue', 'confirm', 'cancel'],
           template: `
             <div v-if="modelValue" class="confirm-dialog-stub">
+              <h2 class="confirm-dialog-title">{{ title }}</h2>
+              <p class="confirm-dialog-message">{{ message }}</p>
               <slot />
               <button class="confirm-dialog-cancel" @click="$emit('update:modelValue', false); $emit('cancel')">{{ cancelLabel }}</button>
               <button class="confirm-dialog-confirm" :disabled="busy" @click="$emit('confirm')">{{ confirmLabel }}</button>
@@ -148,6 +152,7 @@ describe('JobDetailView start action', () => {
   beforeEach(() => {
     mocks.getJob.mockReset()
     mocks.analyzeJob.mockReset()
+    mocks.archiveJob.mockReset()
     mocks.getJobFiles.mockReset()
     mocks.startJob.mockReset()
     mocks.retryFailedJob.mockReset()
@@ -211,6 +216,7 @@ describe('JobDetailView start action', () => {
     mocks.pauseJob.mockResolvedValue({ id: 6, status: 'PAUSING', project_id: 'PROJ-001', evidence_number: 'EV-006', thread_count: 4, copied_bytes: 0, total_bytes: 0, source_path: '/nfs/project-001/evidence', target_mount_path: '/mnt/ecube/1' })
     mocks.retryFailedJob.mockResolvedValue({ id: 6, status: 'RUNNING', project_id: 'PROJ-001', evidence_number: 'EV-006', thread_count: 4, copied_bytes: 10, total_bytes: 20, files_failed: 0, files_timed_out: 0, source_path: '/nfs/project-001/evidence', target_mount_path: '/mnt/ecube/1' })
     mocks.completeJob.mockResolvedValue({ id: 6, status: 'COMPLETED', project_id: 'PROJ-001', evidence_number: 'EV-006', thread_count: 4, copied_bytes: 0, total_bytes: 0 })
+    mocks.archiveJob.mockResolvedValue({ id: 6, status: 'ARCHIVED', project_id: 'PROJ-001', evidence_number: 'EV-006', thread_count: 4, copied_bytes: 0, total_bytes: 0, source_path: '/nfs/project-001/evidence', target_mount_path: '/mnt/ecube/1' })
     mocks.deleteJob.mockResolvedValue({ status: 'deleted' })
     mocks.clearJobStartupAnalysisCache.mockResolvedValue({ id: 6, status: 'FAILED', project_id: 'PROJ-001', evidence_number: 'EV-006', thread_count: 4, copied_bytes: 0, total_bytes: 0, startup_analysis_cached: false })
   })
@@ -497,6 +503,75 @@ describe('JobDetailView start action', () => {
 
     expect(mocks.retryFailedJob).toHaveBeenCalledWith(6)
     expect(wrapper.text()).toContain('RUNNING')
+  })
+
+  it('archives a completed job only after confirmation', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 10,
+      total_bytes: 10,
+      file_count: 1,
+      files_succeeded: 1,
+      files_failed: 0,
+      files_timed_out: 0,
+      startup_analysis_status: 'READY',
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const archiveButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.archive'))
+    expect(archiveButton).toBeTruthy()
+
+    await archiveButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.archiveConfirmTitle'))
+
+    await wrapper.find('.confirm-dialog-confirm').trigger('click')
+    await flushPromises()
+
+    expect(mocks.archiveJob).toHaveBeenCalledWith(6, { confirm: true })
+  })
+
+  it('shows archived jobs with lifecycle actions disabled', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'ARCHIVED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 10,
+      total_bytes: 10,
+      file_count: 1,
+      files_succeeded: 1,
+      files_failed: 0,
+      files_timed_out: 0,
+      startup_analysis_status: 'READY',
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
+    const analyzeButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.analyze'))
+    const startButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.start'))
+
+    expect(editButton).toBeTruthy()
+    expect(analyzeButton).toBeTruthy()
+    expect(startButton).toBeTruthy()
+    expect(editButton.attributes('disabled')).toBeDefined()
+    expect(analyzeButton.attributes('disabled')).toBeDefined()
+    expect(startButton.attributes('disabled')).toBeDefined()
+    expect(wrapper.findAll('button').some((node) => node.text() === i18n.global.t('jobs.archive'))).toBe(false)
   })
 
   it('keeps the files panel collapsed by default and pages through file rows with a 5-page window', async () => {
@@ -1478,6 +1553,7 @@ describe('JobDetailView start action', () => {
       i18n.global.t('jobs.complete'),
       i18n.global.t('jobs.verify'),
       i18n.global.t('jobs.manifest'),
+      i18n.global.t('jobs.archive'),
       i18n.global.t('common.actions.delete'),
     ])
 

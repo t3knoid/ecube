@@ -28,6 +28,19 @@
 
 This guide covers manual QA execution driven by UI behavior and functional test cases. Automated test execution is documented separately and is out of scope here.
 
+## Manual Verification Additions for Archived Jobs
+
+Add the following manual checks when a release includes the archived-job workflow on the Jobs page and Job Detail page.
+
+| Scenario | Steps | Expected |
+|---|---|---|
+| Jobs list hides archived jobs by default | Create or seed one `COMPLETED` job and one `ARCHIVED` job, then open `Jobs` with default filters | The completed job appears in the list, and the archived job does not appear until the archived toggle is enabled |
+| Jobs list shows archived jobs on demand | On `Jobs`, enable `Show Archived Jobs` and optionally choose the `Archived` status filter | Archived jobs appear without requiring a page reload outside the normal list refresh, and the `Archived` status label is available in the filter control |
+| Archive confirmation flow is role-gated | Sign in as `manager` or `admin`, open a `COMPLETED` or `FAILED` job, click `Archive`, then confirm | The confirmation dialog explains that archiving sunsets the job and allows recreation of the same work definition, and the job transitions to `ARCHIVED` |
+| Archived Job Detail is read-only for lifecycle actions | Open an archived job in Job Detail | The job remains viewable, but lifecycle actions such as Edit, Analyze, and Start are disabled, and the Archive action itself is no longer offered |
+| Processor cannot archive jobs | Sign in as `processor`, open a completed job in Job Detail | No Archive action is shown in the UI, and direct API use should return `403` |
+
+
 ---
 
 ## 1. Machine Setup
