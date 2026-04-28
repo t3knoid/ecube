@@ -71,6 +71,11 @@ export function completeJob(jobId) {
   return toData(apiClient.post(`${API_BASE}/jobs/${id}/complete`))
 }
 
+export function archiveJob(jobId, payload = { confirm: true }) {
+  const id = normalizeJobId(jobId)
+  return toData(apiClient.post(`${API_BASE}/jobs/${id}/archive`, payload))
+}
+
 export function deleteJob(jobId) {
   const id = normalizeJobId(jobId)
   return toData(apiClient.delete(`${API_BASE}/jobs/${id}`))
