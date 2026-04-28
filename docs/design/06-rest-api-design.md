@@ -784,9 +784,9 @@ List the most recent export jobs, ordered by creation time descending.
 | `offset` | integer | `0` | `offset ≥ 0` | Number of jobs to skip before returning results |
 | `drive_id` | integer or null | `null` | `drive_id ≥ 1` | Filter jobs by currently assigned drive ID |
 | `statuses` | repeatable string | omitted | must be valid `JobStatus` values | Filter jobs by one or more explicit statuses |
-| `include_archived` | boolean | `false` | none | Include `ARCHIVED` jobs in the result set when no explicit `statuses` filter is supplied |
+| `include_archived` | boolean | `false` | none | Include `ARCHIVED` jobs in the result set |
 
-**Response:** `200 OK` — JSON array of `ExportJobSchema` objects. Each job includes `files_succeeded`, `files_failed`, `failure_reason`, `error_summary`, and the nested `drive` object, populated via bulk queries (no N+1). `error_summary` is a derived fallback and may be omitted when a persisted sanitized `failure_reason` is available. Archived jobs are excluded from the default list flow unless `include_archived=true` is supplied or the caller explicitly filters on `statuses=ARCHIVED`.
+**Response:** `200 OK` — JSON array of `ExportJobSchema` objects. Each job includes `files_succeeded`, `files_failed`, `failure_reason`, `error_summary`, and the nested `drive` object, populated via bulk queries (no N+1). `error_summary` is a derived fallback and may be omitted when a persisted sanitized `failure_reason` is available. Archived jobs are excluded unless `include_archived=true` is supplied.
 
 **Error responses:**
 
