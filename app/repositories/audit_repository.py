@@ -141,13 +141,14 @@ class AuditRepository:
         offset: int = 0,
     ) -> List[AuditLog]:
         """Return audit log entries matching the given filters."""
+        normalized_project_id = _normalize_project_id(project_id)
         q = self.db.query(AuditLog)
         if user is not None:
             q = q.filter(AuditLog.user == user)
         if action is not None:
             q = q.filter(AuditLog.action == action)
-        if project_id is not None:
-            q = q.filter(AuditLog.project_id == project_id)
+        if normalized_project_id is not None:
+            q = q.filter(AuditLog.project_id == normalized_project_id)
         if drive_id is not None:
             q = q.filter(AuditLog.drive_id == drive_id)
         if job_id is not None:
