@@ -253,6 +253,9 @@ def _resolve_usb_drive_owner(
 
     for row in assignment_rows:
         if row.released_at is None and row.job is not None:
+            job_target = row.job.target_mount_path
+            if candidate_mount_paths and os.path.normpath(str(job_target)) not in candidate_mount_paths:
+                continue
             candidate_jobs[int(row.job.id)] = row.job
 
     if candidate_mount_paths:
