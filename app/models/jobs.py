@@ -15,6 +15,7 @@ class JobStatus(str, enum.Enum):
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     VERIFYING = "VERIFYING"
+    ARCHIVED = "ARCHIVED"
 
 
 class FileStatus(str, enum.Enum):

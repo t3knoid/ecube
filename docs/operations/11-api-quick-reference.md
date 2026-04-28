@@ -132,6 +132,7 @@ Compatibility note: To support project-to-source-path policy, use project source
 
 | Method | Endpoint | Role | Description |
 | ------ | -------- | -------- | ----------- |
+| GET | `/jobs` | admin/manager/processor/auditor | List recent jobs. Optional `drive_id`, repeatable `statuses`, and `include_archived=true` filters |
 | POST | `/jobs` | processor+ | Create new export job (omit `drive_id` for auto-assignment) |
 | PUT | `/jobs/{job_id}` | processor+ | Update a pending, paused, or failed job from the Job Detail page |
 | DELETE | `/jobs/{job_id}` | processor+ | Delete a pending job and release its current drive assignment |
@@ -142,10 +143,17 @@ Compatibility note: To support project-to-source-path policy, use project source
 | POST | `/jobs/{job_id}/retry-failed` | processor+ | Re-queue only `ERROR` and `TIMEOUT` file rows on a partially successful `COMPLETED` job |
 | POST | `/jobs/{job_id}/pause` | processor+ | Request a safe pause for a running job; returns `PAUSING` until in-flight work drains |
 | POST | `/jobs/{job_id}/complete` | processor+ | Manually mark a pending, paused, or failed job as completed |
+| POST | `/jobs/{job_id}/archive` | admin/manager | Archive a completed or failed job after explicit `{ "confirm": true }` confirmation |
 | POST | `/jobs/{job_id}/startup-analysis/clear` | admin/manager | Clear the persisted startup-analysis cache after explicit `{ "confirm": true }` confirmation |
 | POST | `/jobs/{job_id}/verify` | processor+ | Verify copied data only after a clean completed job with no failed or timed-out files |
 | POST | `/jobs/{job_id}/manifest` | processor+ | Write or refresh `manifest.json` only after a clean completed job with no failed or timed-out files |
 | GET | `/jobs/{job_id}/manifest/download` | processor+ | Download the most recently generated manifest JSON as an attachment |
+
+**Archived Job Visibility:** `GET /jobs` excludes `ARCHIVED` jobs by default. Pass `include_archived=true` when operator or QA workflows need to review archived jobs alongside active and terminal jobs.
+
+**Archive Semantics:** `POST /jobs/{job_id}/archive` is limited to `admin` and `manager`, requires `{ "confirm": true }`, and returns **409 Conflict** unless the current job is `COMPLETED` or `FAILED`. Archived jobs remain available through `GET /jobs/{job_id}` but are removed from the default list flow.
+
+**Duplicate Blocking Semantics:** ECUBE continues blocking parent/child source-path overlap against active jobs on the same assigned drive. For terminal jobs, ECUBE still blocks recreation of the same exact source-path/destination combination until the earlier `COMPLETED` or `FAILED` job is explicitly archived.
 
 **Pause, Resume, and Retry Semantics:** `POST /jobs/{job_id}/pause` moves a running job into `PAUSING` immediately and into `PAUSED` once the active copy threads finish their current work. `POST /jobs/{job_id}/start` can then resume the job from `PAUSED`; attempts to start while a job is still `PAUSING` return **409 Conflict**. `POST /jobs/{job_id}/retry-failed` is the follow-up path for a partial-success `COMPLETED` job and returns **409 Conflict** if the job is not completed or no failed files remain.
 
