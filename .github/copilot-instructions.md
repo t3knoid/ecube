@@ -11,8 +11,19 @@
 - Business logic must live in `services/`, not routers.
 - All new behavior must include tests.
 - Code must follow Black, Ruff, ESLint, and Prettier formatting.
+- ECUBE uses a release-scoped Alembic workflow: during an unreleased app cycle, update the current release migration in `alembic/versions` instead of creating a second migration file.
 - When extending an existing UI surface, inspect the closest existing component that already solves the same visual or interaction problem and match its styling patterns before introducing a new variant.
 - For UI styling work, prefer reusing the same tokens, spacing, scrollbar, button, panel, and state treatments from the existing component unless the task explicitly requires a different design.
+
+## 1.1 Alembic Release Migration Workflow
+
+- Treat issue 280 as a binding repository workflow rule.
+- Do not run `alembic revision` directly for normal ECUBE feature work.
+- Resolve the current release migration filename from `[project].version` in `pyproject.toml`.
+- For the current unreleased version `0.2.0`, the only supported unreleased migration file is `alembic/versions/v0_2_0.py`.
+- If a schema change is required, update the current release migration in place.
+- Use the repo wrapper `ecube-release-migration ensure`, `ecube-release-migration create`, or `ecube-release-migration autogenerate` instead of creating a second Alembic revision file.
+- If a task appears to require a second unreleased migration file, stop and explain that the request conflicts with the ECUBE release-scoped migration workflow.
 
 ## 2. Architecture & Trust Boundaries
 
