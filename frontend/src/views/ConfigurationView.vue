@@ -27,6 +27,7 @@ const form = ref({
   log_file: '',
   log_file_max_bytes: 10485760,
   log_file_backup_count: 5,
+  nfs_client_version: '4.1',
   db_pool_size: 5,
   db_pool_max_overflow: 10,
   db_pool_recycle_seconds: -1,
@@ -41,6 +42,7 @@ const fieldOrder = [
   'log_file',
   'log_file_max_bytes',
   'log_file_backup_count',
+  'nfs_client_version',
   'db_pool_size',
   'db_pool_max_overflow',
   'db_pool_recycle_seconds',
@@ -50,6 +52,7 @@ const fieldOrder = [
 
 const levelOptions = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
 const formatOptions = ['text', 'json']
+const nfsClientVersionOptions = ['4.2', '4.1', '4.0', '3']
 
 const hasChanges = computed(() => Object.keys(buildPatchPayload()).length > 0)
 
@@ -252,6 +255,12 @@ onMounted(loadConfiguration)
 
         <label for="cfg-log-backup-count">{{ t('configuration.fields.log_file_backup_count.label') }}</label>
         <input id="cfg-log-backup-count" v-model.number="form.log_file_backup_count" type="number" min="0" />
+
+        <label for="cfg-nfs-client-version">{{ t('configuration.fields.nfs_client_version.label') }}</label>
+        <select id="cfg-nfs-client-version" v-model="form.nfs_client_version">
+          <option v-for="option in nfsClientVersionOptions" :key="option" :value="option">{{ option }}</option>
+        </select>
+        <p class="field-help">{{ t('configuration.fields.nfs_client_version.help') }}</p>
       </article>
 
       <article class="panel">

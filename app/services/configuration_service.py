@@ -45,6 +45,7 @@ _EDITABLE_FIELDS: Dict[str, _FieldSpec] = {
     "log_file": _FieldSpec("LOG_FILE", False, _serialize_log_file),
     "log_file_max_bytes": _FieldSpec("LOG_FILE_MAX_BYTES", False, _serialize_plain),
     "log_file_backup_count": _FieldSpec("LOG_FILE_BACKUP_COUNT", False, _serialize_plain),
+    "nfs_client_version": _FieldSpec("NFS_CLIENT_VERSION", False, _serialize_plain),
     "db_pool_size": _FieldSpec("DB_POOL_SIZE", False, _serialize_plain),
     "db_pool_max_overflow": _FieldSpec("DB_POOL_MAX_OVERFLOW", False, _serialize_plain),
     "db_pool_recycle_seconds": _FieldSpec("DB_POOL_RECYCLE_SECONDS", True, _serialize_plain),

@@ -279,6 +279,9 @@ class Settings(BaseSettings):
     #: Timeout in seconds for subprocess calls (mount, umount, sync, etc.).
     subprocess_timeout_seconds: int = 30
 
+    #: Default NFS client protocol version requested for network mounts.
+    nfs_client_version: Literal["4.2", "4.1", "4.0", "3"] = "4.1"
+
     #: Path to the ``mount`` binary.
     mount_binary_path: str = "/bin/mount"
 

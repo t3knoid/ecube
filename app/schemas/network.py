@@ -1,14 +1,20 @@
 from datetime import datetime
+from typing import Literal, Optional
+
 from pydantic import BaseModel, Field
-from typing import Optional
+
 from app.models.network import MountType, MountStatus
 from app.utils.sanitize import ProjectIdStr, SafeStr, StrictSafeStr
+
+
+NfsClientVersion = Literal["4.2", "4.1", "4.0", "3"]
 
 
 class MountCreate(BaseModel):
     type: MountType = Field(..., description="Mount protocol type (SMB, NFS, etc.)")
     remote_path: StrictSafeStr = Field(..., min_length=1, description="Remote path on the network share (e.g., //server/share for SMB or server:/export for NFS)")
     project_id: ProjectIdStr = Field(..., min_length=1, description="Project assigned to this mount")
+    nfs_client_version: Optional[NfsClientVersion] = Field(default=None, description="Requested NFS client protocol version when type is NFS")
     username: Optional[SafeStr] = Field(default=None, description="Username for authentication (if required)")
     password: Optional[SafeStr] = Field(default=None, description="Password for authentication (if required)")
     credentials_file: Optional[StrictSafeStr] = Field(default=None, description="Path to credentials file (alternative to username/password)")
@@ -44,6 +50,7 @@ class NetworkMountSchema(BaseModel):
     type: MountType = Field(..., description="Mount protocol type (SMB, NFS, etc.)")
     remote_path: str = Field(..., description="Remote path on the network share")
     project_id: str = Field(..., description="Project assigned to the mount")
+    nfs_client_version: Optional[NfsClientVersion] = Field(default=None, description="Configured NFS client protocol version when type is NFS")
     local_mount_point: str = Field(..., description="Local filesystem path where the mount is attached")
     status: MountStatus = Field(..., description="Current mount status (MOUNTED, UNMOUNTED, ERROR)")
     last_checked_at: Optional[datetime] = Field(default=None, description="Timestamp of last connectivity check")
@@ -56,6 +63,7 @@ class CandidateNetworkMountSchema(BaseModel):
     type: MountType = Field(..., description="Mount protocol type (SMB, NFS, etc.)")
     remote_path: str = Field(..., description="Remote path on the network share")
     project_id: str = Field(..., description="Project assigned to the mount")
+    nfs_client_version: Optional[NfsClientVersion] = Field(default=None, description="Configured NFS client protocol version when type is NFS")
     local_mount_point: str = Field(..., description="Local filesystem path that would be used for the mount")
     status: MountStatus = Field(..., description="Current mount status (MOUNTED, UNMOUNTED, ERROR)")
     last_checked_at: Optional[datetime] = Field(default=None, description="Timestamp of last connectivity check")
