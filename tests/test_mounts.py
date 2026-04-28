@@ -1,3 +1,4 @@
+import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -664,6 +665,40 @@ def test_add_mount_logs_failure(manager_client, db, caplog):
     assert not any("sudo -n" in m for m in messages)
 
 
+def test_add_mount_logs_useful_info_on_nfs_failure(manager_client, db, caplog):
+    with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
+         patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(
+            returncode=1,
+            stderr="mount.nfs: access denied by server while mounting 192.168.1.3:/exports/info",
+            stdout="",
+        )
+        with caplog.at_level("INFO"):
+            response = manager_client.post(
+                "/mounts",
+                json={
+                    "type": "NFS",
+                    "remote_path": "192.168.1.3:/exports/info",
+                    "project_id": "PROJ-AUDIT-INFO",
+                },
+            )
+
+    assert response.status_code == 200
+    info_messages = [record.getMessage() for record in caplog.records if record.levelname == "INFO"]
+    assert any("Mount attempt started" in message for message in info_messages)
+    assert any(
+        "Mount attempt failed" in message
+        and "type=NFS" in message
+        and "mount_label=info" in message
+        and "failure_category=mount_add" in message
+        and "reason=Permission or authentication failure" in message
+        and "/exports/info" not in message
+        and "/nfs/info" not in message
+        for message in info_messages
+    )
+
+
 def test_list_mounts(client, db):
     mount = NetworkMount(
         type=MountType.NFS,
@@ -993,6 +1028,38 @@ def test_validate_mount_candidate_returns_candidate_without_persisting(manager_c
         }
     ]
     assert provider.unmount_calls == ["/nfs/evidence"]
+
+
+def test_validate_mount_candidate_timeout_returns_conflict(manager_client, db, caplog):
+    with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
+         patch(
+             "subprocess.run",
+             side_effect=subprocess.TimeoutExpired(
+                 cmd=["sudo", "-n", "/usr/bin/nsenter", "-t", "1", "-m", "/bin/mount"],
+                 timeout=30,
+             ),
+         ):
+        with caplog.at_level("INFO"):
+            response = manager_client.post(
+                "/mounts/test",
+                json={
+                    "type": "NFS",
+                    "remote_path": "192.168.20.240:/volume1/demo-case-001",
+                    "project_id": "proj-timeout",
+                },
+            )
+
+    assert response.status_code == 409
+    assert response.json()["message"] == "Operation timed out"
+    warning_messages = [record.getMessage() for record in caplog.records if record.levelname == "WARNING"]
+    assert any(
+        "Mount command timed out" in message
+        and "type=NFS" in message
+        and "mount_label=demo-case-001" in message
+        and "reason=Operation timed out" in message
+        for message in warning_messages
+    )
 
 
 def test_discover_mount_shares_returns_sanitized_remote_paths_and_reuses_credentials(manager_client, db):

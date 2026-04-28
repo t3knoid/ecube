@@ -165,7 +165,23 @@ class LinuxMountProvider:
         cmd = _with_host_mount_namespace(cmd)
         mount_label = _redacted_mount_label(local_mount_point)
         logger.info("Executing mount command: type=%s mount_label=%s", mount_type.value, mount_label)
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=settings.subprocess_timeout_seconds)
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=settings.subprocess_timeout_seconds)
+        except subprocess.TimeoutExpired as exc:
+            logger.warning(
+                "Mount command timed out: type=%s mount_label=%s reason=%s",
+                mount_type.value,
+                mount_label,
+                sanitize_error_message(exc, "Mount command timed out"),
+            )
+            _log_mount_debug_failure(
+                "Mount command timeout details",
+                mount_type=mount_type,
+                remote_path=remote_path,
+                local_mount_point=local_mount_point,
+                raw_error=exc,
+            )
+            return False, str(exc)
         if result.returncode == 0:
             mounted = self.check_mounted(local_mount_point)
             if mounted is True:
@@ -204,12 +220,27 @@ class LinuxMountProvider:
                     direct_cmd = [nfs_bin, remote_path, local_mount_point]
                     direct_cmd = _with_host_mount_namespace(direct_cmd)
                     logger.info("Retrying direct NFS helper for mount_label=%s", mount_label)
-                    direct_result = subprocess.run(
-                        direct_cmd,
-                        capture_output=True,
-                        text=True,
-                        timeout=settings.subprocess_timeout_seconds,
-                    )
+                    try:
+                        direct_result = subprocess.run(
+                            direct_cmd,
+                            capture_output=True,
+                            text=True,
+                            timeout=settings.subprocess_timeout_seconds,
+                        )
+                    except subprocess.TimeoutExpired as exc:
+                        logger.warning(
+                            "Direct NFS helper mount timed out: mount_label=%s reason=%s",
+                            mount_label,
+                            sanitize_error_message(exc, "Direct NFS helper mount timed out"),
+                        )
+                        _log_mount_debug_failure(
+                            "Direct NFS helper timeout details",
+                            mount_type=mount_type,
+                            remote_path=remote_path,
+                            local_mount_point=local_mount_point,
+                            raw_error=exc,
+                        )
+                        return False, str(exc)
                     if direct_result.returncode == 0:
                         logger.info("Direct NFS helper mount succeeded for mount_label=%s", mount_label)
                         return True, None
@@ -1257,6 +1288,15 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
         else:
             mount.status = MountStatus.ERROR
             _mount_error = error
+            logger.info(
+                "Mount attempt failed: mount_id=%s type=%s mount_label=%s actor=%s failure_category=%s reason=%s",
+                mount.id,
+                mount_data.type.value,
+                _redacted_mount_label(str(mount.local_mount_point)),
+                actor or "system",
+                "mount_add",
+                sanitize_error_message(_mount_error, "Mount command failed"),
+            )
             logger.warning(
                 "Mount attempt failed: mount_id=%s type=%s mount_label=%s actor=%s reason=%s",
                 mount.id,
