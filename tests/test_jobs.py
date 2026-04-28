@@ -1689,6 +1689,30 @@ def test_archive_job_updates_status_and_writes_audit_log(manager_client, db):
     assert audit.details["previous_status"] == "COMPLETED"
 
 
+def test_archive_job_rolls_back_when_audit_log_write_fails(manager_client, db):
+    job = ExportJob(
+        project_id="PROJ-ARCHIVE-ATOMIC-001",
+        evidence_number="EV-ARCHIVE-ATOMIC-001",
+        source_path="/data/evidence",
+        status=JobStatus.COMPLETED,
+    )
+    db.add(job)
+    db.commit()
+
+    with patch("app.services.job_service.AuditRepository.add_uncommitted", side_effect=RuntimeError("boom")):
+        response = manager_client.post(
+            f"/jobs/{job.id}/archive",
+            json={"confirm": True},
+        )
+
+    assert response.status_code == 500
+    assert response.json()["message"] == "Database error while archiving job"
+    db.refresh(job)
+    assert job.status == JobStatus.COMPLETED
+    audit = db.query(AuditLog).filter(AuditLog.action == "JOB_ARCHIVED", AuditLog.job_id == job.id).first()
+    assert audit is None
+
+
 def test_archive_job_requires_admin_or_manager(client, db):
     job = ExportJob(
         project_id="PROJ-ARCHIVE-ROLE-001",
