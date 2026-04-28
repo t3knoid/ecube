@@ -156,6 +156,23 @@ class TestAuditFilters:
         assert len(data) == 2
         assert all(d["project_id"] == "PRJ-1" for d in data)
 
+    def test_filter_by_project_id_normalizes_case_and_whitespace(self, admin_client, db):
+        _seed_entries(
+            db,
+            [
+                {"action": "JOB_CREATED", "user": "griffin", "project_id": "PRJ-1", "details": {}},
+                {"action": "JOB_STARTED", "user": "griffin", "project_id": "PRJ-1", "details": {}},
+                {"action": "JOB_CREATED", "user": "alba", "project_id": "PRJ-2", "details": {}},
+            ],
+        )
+
+        response = admin_client.get("/audit", params={"project_id": " prj-1 "})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+        assert all(d["project_id"] == "PRJ-1" for d in data)
+
     def test_filter_by_project_id_sanitizes_invalid_chars(self, admin_client, db):
         _seed_entries(
             db,
