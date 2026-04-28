@@ -296,7 +296,7 @@ describe('MountsView removal flow', () => {
 
     const versionSelect = wrapper.find('#mount-nfs-client-version')
     expect(versionSelect.exists()).toBe(true)
-    expect(versionSelect.element.value).toBe('4.1')
+    expect(versionSelect.element.value).toBe('')
 
     await versionSelect.setValue('4.2')
     await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
@@ -319,6 +319,49 @@ describe('MountsView removal flow', () => {
       remote_path: '192.168.20.240:/volume1/demo-case-001',
       project_id: 'PROJ-NFS42',
       nfs_client_version: '4.2',
+      username: null,
+      password: null,
+      credentials_file: null,
+    })
+  })
+
+  it('omits the per-mount NFS version when the dialog is left on the default option', async () => {
+    mocks.getMounts.mockResolvedValue([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    expect(addButton).toBeTruthy()
+
+    await addButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#mount-type').setValue('NFS')
+    await wrapper.find('#mount-remote-path').setValue('192.168.20.240:/volume1/default-share')
+    await wrapper.find('#mount-project-id').setValue('proj-default')
+
+    const versionSelect = wrapper.find('#mount-nfs-client-version')
+    expect(versionSelect.element.value).toBe('')
+
+    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
+    await flushPromises()
+
+    await findDialogButton(wrapper, i18n.global.t('common.actions.create')).trigger('click')
+    await flushPromises()
+
+    expect(mocks.validateMountCandidate).toHaveBeenCalledWith({
+      type: 'NFS',
+      remote_path: '192.168.20.240:/volume1/default-share',
+      project_id: 'PROJ-DEFAULT',
+      username: null,
+      password: null,
+      credentials_file: null,
+    })
+    expect(mocks.createMount).toHaveBeenCalledWith({
+      type: 'NFS',
+      remote_path: '192.168.20.240:/volume1/default-share',
+      project_id: 'PROJ-DEFAULT',
       username: null,
       password: null,
       credentials_file: null,
