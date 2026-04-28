@@ -1368,6 +1368,29 @@ def test_linux_mount_provider_uses_sudo_for_mount_when_configured(monkeypatch):
     assert cmd[:2] == ["sudo", "-n"]
 
 
+def test_linux_mount_provider_uses_guest_option_for_credentialless_smb_mount(monkeypatch):
+    provider = LinuxMountProvider()
+
+    monkeypatch.setattr("app.services.mount_service.settings.use_sudo", True)
+    monkeypatch.setattr("app.services.mount_service.os.geteuid", lambda: 1000)
+
+    with patch("subprocess.run") as mock_run, patch.object(provider, "check_mounted", return_value=True):
+        mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
+
+        ok, err = provider.os_mount(
+            MountType.SMB,
+            "//192.168.2.250/demo-case-001",
+            "/smb/demo-case-001",
+        )
+
+    assert ok is True
+    assert err is None
+    cmd = mock_run.call_args_list[0].args[0]
+    assert cmd[:2] == ["sudo", "-n"]
+    assert "-o" in cmd
+    assert "guest" in cmd
+
+
 def test_linux_mount_provider_treats_returncode_zero_with_inactive_mountpoint_as_failure():
     provider = LinuxMountProvider()
 
