@@ -1,7 +1,8 @@
 from itertools import chain
 
-from sqlalchemy import Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime, Text, JSON, Float, event, select
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime, Text, JSON, Float, event
+from sqlalchemy.dialects.postgresql import JSONB, insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session, relationship, validates
 from sqlalchemy.sql import func
 from app.database import Base
@@ -146,13 +147,31 @@ def _ensure_projects_for_jobs(session, _flush_context, _instances):
         and isinstance((normalized := normalize_project_id(obj.normalized_project_id)), str)
         and normalized
     }
-    existing_project_ids = set(
-        session.execute(
-            select(Project.normalized_project_id).where(
-                Project.normalized_project_id.in_(project_ids)
-            )
-        ).scalars()
-    )
 
-    for project_id in sorted(project_ids - pending_project_ids - existing_project_ids):
+    for project_id in sorted(project_ids - pending_project_ids):
+        _insert_project_if_missing(session, project_id)
+
+
+def _insert_project_if_missing(session: Session, project_id: str) -> None:
+    bind = session.get_bind()
+    dialect_name = bind.dialect.name if bind is not None else ""
+
+    if dialect_name == "postgresql":
+        session.execute(
+            postgresql_insert(Project)
+            .values(normalized_project_id=project_id)
+            .on_conflict_do_nothing(index_elements=["normalized_project_id"])
+        )
+        return
+
+    if dialect_name == "sqlite":
+        session.execute(
+            sqlite_insert(Project)
+            .values(normalized_project_id=project_id)
+            .on_conflict_do_nothing(index_elements=["normalized_project_id"])
+        )
+        return
+
+    existing_project = session.get(Project, {"normalized_project_id": project_id})
+    if existing_project is None:
         session.add(Project(normalized_project_id=project_id))
