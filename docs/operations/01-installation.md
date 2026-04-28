@@ -97,7 +97,7 @@ The installer will:
 
 **ECUBE runtime packages for native/manual hosts:**
 
-The ECUBE service depends on several non-standard OS packages for USB formatting, USB discovery, and NFS/SMB evidence mounts. These packages are provisioned by the Ansible deployment path and mirrored by the container image runtime dependencies, but operators preparing a bare-metal or minimal VM host should ensure they are installed before running the native installer or starting the service manually.
+The ECUBE service depends on several non-standard OS packages for USB formatting, USB discovery, and NFS/SMB evidence mounts. On Debian/Ubuntu native installs, `install.sh` installs the full required native runtime package set below. Operators preparing a bare-metal or minimal VM host for a manual service install should ensure the same package set is present themselves.
 
 | Package | Purpose |
 |---|---|
@@ -145,15 +145,16 @@ sudo ./install.sh
 The installer will:
 
 1. Run pre-flight checks (OS, disk space, ports, Python 3.11).
-2. Create the `ecube` system user and add it to required host groups (`plugdev`, `dialout`, and `shadow` when present).
-3. Install `/etc/sudoers.d/ecube-user-mgmt` with narrowly scoped `NOPASSWD` rules for setup OS user/group management, mount/unmount operations, and selected drive filesystem commands.
-4. Install `/etc/pam.d/ecube` PAM configuration for local and domain user authentication (detects SSSD at install time and installs an SSSD-enabled or local-only variant accordingly).
-5. Set up a Python virtual environment in `<install-dir>/venv`.
-6. Generate a self-signed TLS certificate (skipped with `--no-tls`).
-7. Write `<install-dir>/.env` with a random `SECRET_KEY`, empty `SETUP_DEFAULT_ADMIN_USERNAME` (populated later by the superuser creation step), and runtime defaults. `DATABASE_URL` is left empty and configured later via the setup wizard.
-8. Write and start the `ecube.service` systemd unit.
-9. Deploy the pre-built frontend to `<install-dir>/www` so FastAPI serves the SPA directly (no separate web server required).
-10. Optionally configure `ufw` firewall rules.
+2. Install required host runtime packages for USB formatting, USB discovery, and NFS/SMB mount support (`exfatprogs`, `nfs-common`, `cifs-utils`, `smbclient`, `usbutils`, and `util-linux`) on supported Debian/Ubuntu systems.
+3. Create the `ecube` system user and add it to required host groups (`plugdev`, `dialout`, and `shadow` when present).
+4. Install `/etc/sudoers.d/ecube-user-mgmt` with narrowly scoped `NOPASSWD` rules for setup OS user/group management, mount/unmount operations, and selected drive filesystem commands.
+5. Install `/etc/pam.d/ecube` PAM configuration for local and domain user authentication (detects SSSD at install time and installs an SSSD-enabled or local-only variant accordingly).
+6. Set up a Python virtual environment in `<install-dir>/venv`.
+7. Generate a self-signed TLS certificate (skipped with `--no-tls`).
+8. Write `<install-dir>/.env` with a random `SECRET_KEY`, empty `SETUP_DEFAULT_ADMIN_USERNAME` (populated later by the superuser creation step), and runtime defaults. `DATABASE_URL` is left empty and configured later via the setup wizard.
+9. Write and start the `ecube.service` systemd unit.
+10. Deploy the pre-built frontend to `<install-dir>/www` so FastAPI serves the SPA directly (no separate web server required).
+11. Optionally configure `ufw` firewall rules.
 
 At the end it prints a summary with the UI URL, API URL, and service management commands.
 

@@ -1098,8 +1098,8 @@ run() {
   fi
 }
 
-_ensure_runtime_mount_packages() {
-  local packages=(smbclient)
+_ensure_runtime_host_packages() {
+  local packages=(exfatprogs nfs-common cifs-utils smbclient usbutils util-linux)
   local missing_packages=()
   local package
 
@@ -1115,14 +1115,14 @@ _ensure_runtime_mount_packages() {
   done
 
   if (( ${#missing_packages[@]} == 0 )); then
-    ok "Runtime mount packages already installed: ${packages[*]}"
+    ok "Runtime host packages already installed: ${packages[*]}"
     return 0
   fi
 
-  info "Installing runtime mount packages: ${missing_packages[*]}"
+  info "Installing runtime host packages: ${missing_packages[*]}"
   run apt-get update -qq
   run apt-get install -y "${missing_packages[@]}"
-  ok "Runtime mount packages installed: ${missing_packages[*]}"
+  ok "Runtime host packages installed: ${missing_packages[*]}"
 }
 
 # Run a command as the ecube user, dropping privileges from root.
@@ -1805,8 +1805,8 @@ _provision_pg_superuser() {
 install_backend() {
   header "\n── Backend installation ────────────────────────────────────────"
 
-  # 0. Install host packages needed for runtime mount discovery.
-  _ensure_runtime_mount_packages
+  # 0. Install host packages required for runtime mount, formatting, and USB support.
+  _ensure_runtime_host_packages
 
   # 1. System user and USB device access
   _ensure_ecube_user
