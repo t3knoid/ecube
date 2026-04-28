@@ -255,6 +255,10 @@ onMounted(loadConfiguration)
 
         <label for="cfg-log-backup-count">{{ t('configuration.fields.log_file_backup_count.label') }}</label>
         <input id="cfg-log-backup-count" v-model.number="form.log_file_backup_count" type="number" min="0" />
+      </article>
+
+      <article class="panel">
+        <h2>{{ t('configuration.sections.shares') }}</h2>
 
         <label for="cfg-nfs-client-version">{{ t('configuration.fields.nfs_client_version.label') }}</label>
         <select id="cfg-nfs-client-version" v-model="form.nfs_client_version">
@@ -277,9 +281,7 @@ onMounted(loadConfiguration)
         <p class="field-help">{{ t('configuration.fields.db_pool_recycle_seconds.help') }}</p>
         <p class="restart-chip">{{ t('configuration.restartRequiredField') }}</p>
       </article>
-    </div>
 
-    <div class="settings-grid" :class="{ 'settings-grid-single': !restartPending }">
       <article class="panel">
         <h2>{{ t('configuration.sections.copyJobs') }}</h2>
 
@@ -297,8 +299,10 @@ onMounted(loadConfiguration)
         />
         <p class="field-help">{{ t('configuration.fields.job_detail_files_page_size.help') }}</p>
       </article>
+    </div>
 
-      <article v-if="restartPending" class="panel warning-panel">
+    <div v-if="restartPending" class="settings-grid">
+      <article class="panel warning-panel">
         <h2>{{ t('configuration.pendingRestartTitle') }}</h2>
         <p>{{ t('configuration.pendingRestartBody') }}</p>
         <ul>
@@ -343,8 +347,10 @@ onMounted(loadConfiguration)
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.settings-grid-single {
-  grid-template-columns: minmax(0, 1fr);
+@media (max-width: 960px) {
+  .settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .header-row {
@@ -360,6 +366,7 @@ onMounted(loadConfiguration)
   padding: var(--space-md);
   display: grid;
   gap: var(--space-xs);
+  align-content: start;
 }
 
 .warning-panel {
@@ -390,7 +397,9 @@ select {
   background: var(--color-bg-input);
   color: var(--color-text-primary);
   border-radius: var(--border-radius);
-  padding: var(--space-xs) var(--space-sm);
+  font: inherit;
+  line-height: 1.4;
+  padding: 0.5em 0.75em;
 }
 
 .field-help,
