@@ -187,8 +187,8 @@ def test_upgrade_head_backfills_projects_from_legacy_export_jobs(sqlite_db_path)
         conn.executemany(
             "INSERT INTO export_jobs (id, project_id, evidence_number, source_path) VALUES (?, ?, ?, ?)",
             [
-                (1, "CASE-001", "EV-1", "/src/one"),
-                (2, "CASE-001", "EV-2", "/src/two"),
+                (1, "Case-001", "EV-1", "/src/one"),
+                (2, " case-001 ", "EV-2", "/src/two"),
                 (3, "CASE-002", "EV-3", "/src/three"),
             ],
         )
@@ -213,14 +213,18 @@ def test_upgrade_head_backfills_projects_from_legacy_export_jobs(sqlite_db_path)
     engine = create_engine(db_url)
     try:
         with engine.begin() as conn:
-            rows = conn.execute(
+            project_rows = conn.execute(
                 text("SELECT normalized_project_id FROM projects ORDER BY normalized_project_id")
+            ).fetchall()
+            job_rows = conn.execute(
+                text("SELECT id, project_id FROM export_jobs ORDER BY id")
             ).fetchall()
         inspector = inspect(engine)
     finally:
         engine.dispose()
 
-    assert [row[0] for row in rows] == ["CASE-001", "CASE-002"]
+    assert [row[0] for row in project_rows] == ["CASE-001", "CASE-002"]
+    assert job_rows == [(1, "CASE-001"), (2, "CASE-001"), (3, "CASE-002")]
     assert any(
         fk.get("referred_table") == "projects"
         and fk.get("constrained_columns") == ["project_id"]
