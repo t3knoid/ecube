@@ -151,6 +151,7 @@
     "saveChanges": "Save Changes",
     "archiveConfirmTitle": "Archive this job?",
     "archiveConfirmBody": "This sunsets the current job record and allows the same project, source, and drive work definition to be created again. Archived jobs remain viewable in Job Detail.",
+    "archiveRequiresEject": "Prepare Eject the related drive before archiving this job so the media can move into chain of custody.",
     "deleteConfirmTitle": "Delete pending job?",
     "deleteConfirmBody": "This removes the pending job and releases its current drive assignment. This action cannot be undone.",
     "clearStartupAnalysis": "Clear startup analysis cache",

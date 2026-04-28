@@ -229,6 +229,19 @@ def archive_job(
             detail="Only completed or failed jobs can be archived",
         )
 
+    assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
+    assignment_row = _row(assignment) if assignment is not None else None
+    assigned_drive = cast(Optional[UsbDrive], assignment_row.drive) if assignment_row is not None else None
+    if assigned_drive is not None:
+        drive_state = cast(DriveState, assigned_drive.current_state)
+        if drive_state != DriveState.AVAILABLE or assigned_drive.mount_path:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Prepare eject the related drive before archiving this job so the media can move into chain of custody"
+                ),
+            )
+
     job_row.status = JobStatus.ARCHIVED
 
     try:
@@ -240,8 +253,6 @@ def archive_job(
             detail="Database error while archiving job",
         )
 
-    assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
-    assignment_row = _row(assignment) if assignment is not None else None
     active_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
 
     try:
