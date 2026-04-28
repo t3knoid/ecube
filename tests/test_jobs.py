@@ -1759,6 +1759,35 @@ def test_archive_job_requires_related_drive_to_be_ejected(manager_client, db):
     assert job.status == JobStatus.COMPLETED
 
 
+def test_get_job_reports_drive_mount_state_for_archive_gating(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-ARCHIVE-EJECT-STATE-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-ARCHIVE-EJECT-STATE-001",
+        mount_path="/mnt/ecube/archive-eject-state-001",
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-ARCHIVE-EJECT-STATE-001",
+        evidence_number="EV-ARCHIVE-EJECT-STATE-001",
+        source_path="/data/evidence",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.COMPLETED,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    response = client.get(f"/jobs/{job.id}")
+
+    assert response.status_code == 200
+    assert response.json()["drive"]["current_state"] == "AVAILABLE"
+    assert response.json()["drive"]["is_mounted"] is True
+
+
 def test_update_pending_job_reassigns_drive_and_updates_fields(client, db):
     mount = NetworkMount(
         type=MountType.NFS,

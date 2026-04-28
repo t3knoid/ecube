@@ -170,6 +170,7 @@ class DriveInfoSchema(BaseModel):
     capacity_bytes: Optional[int] = Field(default=None, description="Total storage capacity in bytes")
     filesystem_type: Optional[str] = Field(default=None, description="Detected filesystem label (e.g. ext4, exfat)")
     current_state: DriveState = Field(..., description="Current drive state (DISCONNECTED, AVAILABLE, IN_USE)")
+    is_mounted: bool = Field(default=False, description="Whether the drive is still mounted on the host")
     current_project_id: Optional[str] = Field(default=None, description="Bound project ID if IN_USE")
 
     model_config = {"from_attributes": True}
