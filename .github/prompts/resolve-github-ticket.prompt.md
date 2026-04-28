@@ -24,15 +24,17 @@ Required ECUBE guardrails:
 - redact internal paths, credentials, hardware identifiers, and raw provider errors
 - avoid unsafe shell usage, directory traversal risks, and blocking endpoint behavior
 - follow Black, Ruff, ESLint, and Prettier conventions
+- follow the ECUBE release-scoped Alembic workflow: reuse the current release migration file and do not create a second unreleased revision under `alembic/versions`
 
 Investigation workflow:
 1. Summarize the ticket and note any assumptions.
 2. Inspect the relevant code, tests, and docs.
-3. Identify the root cause with evidence.
-4. Make the minimal fix.
-5. Add or update focused tests.
-6. Run the relevant verification steps.
-7. Report what changed and any remaining risks or follow-up work.
+3. If schema changes are required, resolve the current release migration from `project.version` and reuse it instead of creating a new Alembic revision file.
+4. Identify the root cause with evidence.
+5. Make the minimal fix.
+6. Add or update focused tests.
+7. Run the relevant verification steps.
+8. Report what changed and any remaining risks or follow-up work.
 
 If the ticket is ambiguous or lacks enough evidence, ask a small number of focused clarification questions instead of guessing.
 
