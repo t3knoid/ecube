@@ -38,13 +38,14 @@ from app.infrastructure.usb_discovery import DiscoveredTopology
 from app.infrastructure import FilesystemDetector
 from app.exceptions import ConflictError
 from app.models.hardware import DriveState, UsbDrive
-from app.models.jobs import ExportJob, JobStatus
+from app.models.jobs import DriveAssignment, ExportJob, JobStatus
 from app.models.network import MountStatus, NetworkMount
 from app.models.system import ReconciliationLock
 from app.repositories.user_role_repository import UserRoleRepository
 from app.repositories.audit_repository import AuditRepository
 from app.services.mount_check_utils import check_mounted_with_configured_timeout
 from app.constants import ECUBE_GROUP_ROLE_MAP
+from app.utils.sanitize import normalize_project_id
 
 logger = logging.getLogger(__name__)
 
@@ -208,6 +209,102 @@ def _cleanup_generated_network_mount_directory(path: str) -> None:
         _cleanup_managed_mount_directory(path, "/smb")
 
 
+def _normalized_usb_mount_candidates(*paths: object) -> set[str]:
+    normalized: set[str] = set()
+    for path in paths:
+        if not isinstance(path, str):
+            continue
+        stripped = path.strip()
+        if not stripped:
+            continue
+        normalized.add(os.path.normpath(stripped))
+    return normalized
+
+
+def _missing_project_binding(project_id: object) -> bool:
+    normalized = normalize_project_id(project_id)
+    return not isinstance(normalized, str) or normalized == ""
+
+
+def _resolve_usb_drive_owner(
+    db: Session,
+    *,
+    drive_id: int,
+    candidate_mount_paths: set[str],
+) -> tuple[Optional[str], str]:
+    assignment_rows = (
+        db.query(DriveAssignment)
+        .join(ExportJob, ExportJob.id == DriveAssignment.job_id)
+        .filter(DriveAssignment.drive_id == drive_id)
+        .all()
+    )
+
+    candidate_jobs: dict[int, ExportJob] = {}
+    active_assignment_job_ids = {
+        int(row.job_id)
+        for row in assignment_rows
+        if row.released_at is None and row.job is not None
+    }
+    released_assignment_job_ids = {
+        int(row.job_id)
+        for row in assignment_rows
+        if row.released_at is not None
+    }
+
+    for row in assignment_rows:
+        if row.released_at is None and row.job is not None:
+            job_target = row.job.target_mount_path
+            if candidate_mount_paths and os.path.normpath(str(job_target)) not in candidate_mount_paths:
+                continue
+            candidate_jobs[int(row.job.id)] = row.job
+
+    if candidate_mount_paths:
+        path_jobs = (
+            db.query(ExportJob)
+            .filter(ExportJob.target_mount_path.in_(sorted(candidate_mount_paths)))
+            .all()
+        )
+        for job in path_jobs:
+            job_id = int(job.id)
+            if job_id in released_assignment_job_ids and job_id not in active_assignment_job_ids:
+                continue
+            candidate_jobs[job_id] = job
+
+    candidate_projects = {
+        normalized_project
+        for normalized_project in (
+            normalize_project_id(job.project_id) for job in candidate_jobs.values()
+        )
+        if isinstance(normalized_project, str) and normalized_project != ""
+    }
+
+    if not candidate_projects:
+        return None, "no_relevant_owner"
+    if len(candidate_projects) == 1:
+        return next(iter(candidate_projects)), "binding_restored"
+    return None, "ambiguous_owner"
+
+
+def _release_usb_drive_without_owner(
+    drive: UsbDrive,
+    *,
+    actual_target: Optional[str],
+    drive_mount_provider: DriveMountProvider,
+    managed_root: str,
+) -> tuple[bool, str, Optional[str]]:
+    if actual_target:
+        unmount_ok, unmount_error = drive_mount_provider.unmount_drive(actual_target)
+        if not unmount_ok:
+            return False, "owner_release_failed", unmount_error
+        if _is_direct_child_of(actual_target, managed_root):
+            _cleanup_managed_mount_directory(actual_target, managed_root)
+
+    drive.current_state = DriveState.AVAILABLE
+    drive.current_project_id = None
+    drive.mount_path = None
+    return True, "owner_released", None
+
+
 def _reconcile_usb_mounts(
     db: Session,
     drive_mount_provider: DriveMountProvider,
@@ -237,11 +334,83 @@ def _reconcile_usb_mounts(
         corrected_this_drive = False
         expected_target = os.path.normpath(os.path.join(settings.usb_mount_base_path, str(drive.id)))
         actual_target = find_device_mount_point(str(drive.filesystem_path)) if drive.filesystem_path else None
+        missing_binding = drive.current_state == DriveState.IN_USE and _missing_project_binding(drive.current_project_id)
+
+        if missing_binding:
+            resolved_project_id, owner_reason = _resolve_usb_drive_owner(
+                db,
+                drive_id=int(drive.id),
+                candidate_mount_paths=_normalized_usb_mount_candidates(
+                    actual_target,
+                    expected_target,
+                    drive.mount_path,
+                ),
+            )
+            if resolved_project_id is not None:
+                drive.current_project_id = resolved_project_id
+                drive.current_state = DriveState.IN_USE
+                corrected += 1
+                corrected_this_drive = True
+                audit_entries.append({
+                    "action": "DRIVE_MOUNT_RECONCILED",
+                    "user": "system",
+                    "drive_id": drive.id,
+                    "project_id": resolved_project_id,
+                    "details": {
+                        "drive_id": drive.id,
+                        "project_id": resolved_project_id,
+                        "status": "IN_USE",
+                        "reason": owner_reason,
+                    },
+                })
+            else:
+                released, release_reason, raw_error = _release_usb_drive_without_owner(
+                    drive,
+                    actual_target=actual_target,
+                    drive_mount_provider=drive_mount_provider,
+                    managed_root=managed_root,
+                )
+                if not released:
+                    failures += 1
+                    logger.info(
+                        "Startup USB owner release failed",
+                        extra={"drive_id": drive.id, "reason": release_reason},
+                    )
+                    logger.debug(
+                        "Startup USB owner release raw error",
+                        extra={"drive_id": drive.id, "mount_point": actual_target, "raw_error": raw_error},
+                    )
+                    audit_entries.append({
+                        "action": "DRIVE_MOUNT_RECONCILED",
+                        "user": "system",
+                        "drive_id": drive.id,
+                        "details": {
+                            "drive_id": drive.id,
+                            "status": "ERROR",
+                            "reason": release_reason,
+                        },
+                    })
+                    continue
+
+                corrected += 1
+                corrected_this_drive = True
+                audit_entries.append({
+                    "action": "DRIVE_MOUNT_RECONCILED",
+                    "user": "system",
+                    "drive_id": drive.id,
+                    "details": {
+                        "drive_id": drive.id,
+                        "status": "AVAILABLE",
+                        "reason": owner_reason,
+                    },
+                })
+                continue
 
         if actual_target == expected_target:
             if drive.mount_path != expected_target:
                 drive.mount_path = expected_target
-                corrected += 1
+                if not corrected_this_drive:
+                    corrected += 1
                 audit_entries.append({
                     "action": "DRIVE_MOUNT_RECONCILED",
                     "user": "system",
