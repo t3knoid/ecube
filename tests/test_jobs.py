@@ -452,7 +452,7 @@ def test_create_job_allows_same_source_path_on_different_drive(client, db):
     assert response.status_code == 200
 
 
-def test_create_job_overlap_check_ignores_completed_and_failed_jobs(client, db):
+def test_create_job_rejects_exact_duplicate_for_completed_non_archived_job(client, db):
     drive = UsbDrive(
         device_identifier="USB-OVERLAP-TERMINAL-001",
         current_state=DriveState.AVAILABLE,
@@ -484,6 +484,47 @@ def test_create_job_overlap_check_ignores_completed_and_failed_jobs(client, db):
         json={
             "project_id": "PROJ-OVERLAP",
             "evidence_number": "EV-NEW-006",
+            "source_path": "//server/proj-A/Evidence1",
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "SOURCE_OVERLAP"
+
+
+def test_create_job_allows_exact_duplicate_after_archiving_prior_job(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-OVERLAP-ARCHIVED-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-OVERLAP",
+        mount_path="/mnt/ecube/overlap-archived-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    existing = _create_assigned_job(
+        db,
+        drive=drive,
+        project_id="PROJ-OVERLAP",
+        evidence_number="EV-EXISTING-ARCHIVED-001",
+        source_path="//server/proj-A/Evidence1",
+        status=JobStatus.COMPLETED,
+    )
+
+    archive_response = manager_client.post(
+        f"/jobs/{existing.id}/archive",
+        json={"confirm": True},
+    )
+
+    assert archive_response.status_code == 200
+    assert archive_response.json()["status"] == "ARCHIVED"
+
+    response = manager_client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-OVERLAP",
+            "evidence_number": "EV-NEW-ARCHIVED-001",
             "source_path": "//server/proj-A/Evidence1",
             "drive_id": drive.id,
         },
@@ -1615,6 +1656,68 @@ def test_complete_job_conflict_while_startup_analysis_running(client, db):
 
     assert response.status_code == 409
     assert "startup analysis is in progress" in response.json()["message"].lower()
+
+
+def test_archive_job_updates_status_and_writes_audit_log(manager_client, db):
+    job = ExportJob(
+        project_id="PROJ-ARCHIVE-001",
+        evidence_number="EV-ARCHIVE-001",
+        source_path="/data/evidence",
+        status=JobStatus.COMPLETED,
+    )
+    db.add(job)
+    db.commit()
+
+    response = manager_client.post(
+        f"/jobs/{job.id}/archive",
+        json={"confirm": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ARCHIVED"
+    db.refresh(job)
+    assert job.status == JobStatus.ARCHIVED
+
+    audit = db.query(AuditLog).filter(AuditLog.action == "JOB_ARCHIVED", AuditLog.job_id == job.id).first()
+    assert audit is not None
+    assert audit.details["previous_status"] == "COMPLETED"
+
+
+def test_archive_job_requires_admin_or_manager(client, db):
+    job = ExportJob(
+        project_id="PROJ-ARCHIVE-ROLE-001",
+        evidence_number="EV-ARCHIVE-ROLE-001",
+        source_path="/data/evidence",
+        status=JobStatus.COMPLETED,
+    )
+    db.add(job)
+    db.commit()
+
+    response = client.post(
+        f"/jobs/{job.id}/archive",
+        json={"confirm": True},
+    )
+
+    assert response.status_code == 403
+
+
+def test_archive_job_rejects_missing_confirmation(manager_client, db):
+    job = ExportJob(
+        project_id="PROJ-ARCHIVE-CONFIRM-001",
+        evidence_number="EV-ARCHIVE-CONFIRM-001",
+        source_path="/data/evidence",
+        status=JobStatus.FAILED,
+    )
+    db.add(job)
+    db.commit()
+
+    response = manager_client.post(
+        f"/jobs/{job.id}/archive",
+        json={"confirm": False},
+    )
+
+    assert response.status_code == 400
+    assert "confirmation" in response.json()["message"].lower()
 
 
 def test_update_pending_job_reassigns_drive_and_updates_fields(client, db):
@@ -2912,6 +3015,56 @@ def test_list_jobs_filters_by_drive_and_statuses(client, db):
     data = response.json()
     assert len(data) == 1
     assert data[0]["id"] == matching.id
+
+
+def test_list_jobs_excludes_archived_by_default(client, db):
+    db.add_all([
+        ExportJob(
+            project_id="PROJ-LIST-ARCHIVED",
+            evidence_number="EV-LIST-ACTIVE-001",
+            source_path="/data/active",
+            status=JobStatus.COMPLETED,
+        ),
+        ExportJob(
+            project_id="PROJ-LIST-ARCHIVED",
+            evidence_number="EV-LIST-ARCHIVED-001",
+            source_path="/data/archived",
+            status=JobStatus.ARCHIVED,
+        ),
+    ])
+    db.commit()
+
+    response = client.get("/jobs")
+
+    assert response.status_code == 200
+    evidence_numbers = {item["evidence_number"] for item in response.json()}
+    assert "EV-LIST-ACTIVE-001" in evidence_numbers
+    assert "EV-LIST-ARCHIVED-001" not in evidence_numbers
+
+
+def test_list_jobs_includes_archived_when_requested(client, db):
+    db.add_all([
+        ExportJob(
+            project_id="PROJ-LIST-ARCHIVED",
+            evidence_number="EV-LIST-ACTIVE-002",
+            source_path="/data/active-two",
+            status=JobStatus.COMPLETED,
+        ),
+        ExportJob(
+            project_id="PROJ-LIST-ARCHIVED",
+            evidence_number="EV-LIST-ARCHIVED-002",
+            source_path="/data/archived-two",
+            status=JobStatus.ARCHIVED,
+        ),
+    ])
+    db.commit()
+
+    response = client.get("/jobs", params={"include_archived": True})
+
+    assert response.status_code == 200
+    evidence_numbers = {item["evidence_number"] for item in response.json()}
+    assert "EV-LIST-ACTIVE-002" in evidence_numbers
+    assert "EV-LIST-ARCHIVED-002" in evidence_numbers
 
 
 def test_list_jobs_filters_support_offset(client, db):

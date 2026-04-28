@@ -41,6 +41,7 @@ const createDialogTriggerRef = ref(null)
 
 const search = ref('')
 const statusFilter = ref('ALL')
+const showArchivedJobs = ref(false)
 const page = ref(1)
 const pageSize = ref(10)
 const isMobileViewport = ref(false)
@@ -262,6 +263,9 @@ const filtered = computed(() => {
   const query = search.value.trim().toLowerCase()
   return jobs.value.filter((job) => {
     const status = String(job.status || '').toUpperCase()
+    if (!showArchivedJobs.value && status === 'ARCHIVED') {
+      return false
+    }
     const matchesStatus = statusFilter.value === 'ALL' || status === statusFilter.value
     const text = [job.project_id, job.evidence_number, formatJobDevice(job), String(job.id), job.source_path]
       .filter(Boolean)
@@ -395,7 +399,7 @@ async function loadJobs() {
   compatibilityNote.value = ''
   try {
     const previousJobs = jobs.value
-    const response = await listJobs({ limit: 200 })
+    const response = await listJobs({ limit: 200, include_archived: showArchivedJobs.value })
     const nextJobs = (response || []).map((item) => normalizeProjectRecord(item, ['project_id']))
     const analysisCompletionMessage = buildStartupAnalysisCompletionMessage(previousJobs, nextJobs)
     jobs.value = nextJobs
@@ -582,6 +586,14 @@ watch(
   },
 )
 
+watch(showArchivedJobs, async (nextValue) => {
+  page.value = 1
+  if (!nextValue && statusFilter.value === 'ARCHIVED') {
+    statusFilter.value = 'ALL'
+  }
+  await loadJobs()
+})
+
 watch(showCreateDialog, async (open) => {
   if (open) {
     document.addEventListener('keydown', handleCreateDialogKeydown)
@@ -659,7 +671,12 @@ onBeforeUnmount(() => {
         <option value="VERIFYING">{{ t('jobs.statuses.verifying') }}</option>
         <option value="COMPLETED">{{ t('jobs.statuses.completed') }}</option>
         <option value="FAILED">{{ t('jobs.statuses.failed') }}</option>
+        <option value="ARCHIVED">{{ t('jobs.statuses.archived') }}</option>
       </select>
+      <label class="jobs-show-archived-toggle" for="jobs-show-archived">
+        <input id="jobs-show-archived" v-model="showArchivedJobs" type="checkbox" />
+        {{ t('jobs.showArchivedJobs') }}
+      </label>
     </div>
 
     <DataTable :columns="columns" :rows="paged" :empty-text="t('jobs.empty')">

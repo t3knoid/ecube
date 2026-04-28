@@ -50,6 +50,16 @@ _ACTIVE_SOURCE_OVERLAP_STATUSES = (
     JobStatus.VERIFYING,
 )
 
+_NON_ARCHIVED_DUPLICATE_STATUSES = _ACTIVE_SOURCE_OVERLAP_STATUSES + (
+    JobStatus.COMPLETED,
+    JobStatus.FAILED,
+)
+
+_ARCHIVABLE_JOB_STATUSES = (
+    JobStatus.COMPLETED,
+    JobStatus.FAILED,
+)
+
 
 def _row(instance: object) -> Any:
     """Expose SQLAlchemy model instances using their runtime attribute types."""
@@ -63,10 +73,17 @@ def list_jobs(
     offset: int = 0,
     drive_id: Optional[int] = None,
     statuses: Optional[tuple[JobStatus, ...]] = None,
+    include_archived: bool = False,
 ) -> list[ExportJob]:
     """Return the most recent export jobs."""
     repo = JobRepository(db)
-    return repo.list_recent(limit=limit, offset=offset, drive_id=drive_id, statuses=statuses)
+    return repo.list_recent(
+        limit=limit,
+        offset=offset,
+        drive_id=drive_id,
+        statuses=statuses,
+        include_archived=include_archived,
+    )
 
 
 def _resolve_job_source_path(body: JobCreate, db: Session) -> str:
@@ -131,22 +148,24 @@ def _reject_source_path_overlap(
     new_source_path: str,
     exclude_job_id: Optional[int] = None,
 ) -> None:
-    assignment_repo = DriveAssignmentRepository(db)
-    active_jobs = assignment_repo.list_active_jobs_for_drive(
+    candidate_jobs = JobRepository(db).list_assigned_jobs_for_drive(
         drive_id,
-        statuses=_ACTIVE_SOURCE_OVERLAP_STATUSES,
+        statuses=_NON_ARCHIVED_DUPLICATE_STATUSES,
     )
 
-    for existing_job in active_jobs:
+    for existing_job in candidate_jobs:
         existing_job_row = _row(existing_job)
         existing_job_id = cast(int, existing_job_row.id)
         existing_source_path = cast(str, existing_job_row.source_path)
+        existing_status = cast(JobStatus, existing_job_row.status)
 
         if exclude_job_id is not None and existing_job_id == exclude_job_id:
             continue
 
         overlap_type = classify_source_path_overlap(existing_source_path, new_source_path)
         if overlap_type == "none":
+            continue
+        if overlap_type != "exact" and existing_status not in _ACTIVE_SOURCE_OVERLAP_STATUSES:
             continue
 
         db.rollback()
@@ -182,6 +201,67 @@ def _reject_source_path_overlap(
             _build_source_overlap_message(overlap_type, drive_id, existing_job_id),
             code="SOURCE_OVERLAP",
         )
+
+
+def archive_job(
+    job_id: int,
+    *,
+    confirm: bool,
+    db: Session,
+    actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
+) -> ExportJob:
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Confirmation is required to archive this job")
+
+    job_repo = JobRepository(db)
+    audit_repo = AuditRepository(db)
+
+    job = job_repo.get_for_update(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    job_row = _row(job)
+    current_status = cast(JobStatus, job_row.status)
+    if current_status not in _ARCHIVABLE_JOB_STATUSES:
+        raise HTTPException(
+            status_code=409,
+            detail="Only completed or failed jobs can be archived",
+        )
+
+    job_row.status = JobStatus.ARCHIVED
+
+    try:
+        job_repo.save(job)
+    except Exception:
+        logger.exception("DB commit failed while archiving job %s", job_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Database error while archiving job",
+        )
+
+    assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
+    assignment_row = _row(assignment) if assignment is not None else None
+    active_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
+
+    try:
+        audit_repo.add(
+            action="JOB_ARCHIVED",
+            user=actor,
+            project_id=cast(Optional[str], job_row.project_id),
+            drive_id=active_drive_id,
+            job_id=job_id,
+            details={
+                "project_id": cast(Optional[str], job_row.project_id),
+                "previous_status": current_status.value,
+            },
+            client_ip=client_ip,
+        )
+    except Exception:
+        logger.exception("Failed to write audit log for JOB_ARCHIVED")
+
+    db.refresh(job)
+    return job
 
 
 def create_job(

@@ -192,6 +192,51 @@ describe('JobsView grouped create dialog', () => {
     vi.useRealTimers()
   })
 
+  it('excludes archived jobs by default and reloads them when requested', async () => {
+    mocks.listJobs
+      .mockResolvedValueOnce([
+        {
+          id: 61,
+          project_id: 'PROJ-001',
+          evidence_number: 'EV-ACTIVE-001',
+          status: 'COMPLETED',
+          source_path: '/nfs/project-001/active',
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 61,
+          project_id: 'PROJ-001',
+          evidence_number: 'EV-ACTIVE-001',
+          status: 'COMPLETED',
+          source_path: '/nfs/project-001/active',
+        },
+        {
+          id: 62,
+          project_id: 'PROJ-001',
+          evidence_number: 'EV-ARCHIVED-001',
+          status: 'ARCHIVED',
+          source_path: '/nfs/project-001/archived',
+        },
+      ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(mocks.listJobs).toHaveBeenNthCalledWith(1, { limit: 200, include_archived: false })
+    expect(wrapper.text()).toContain('EV-ACTIVE-001')
+    expect(wrapper.text()).not.toContain('EV-ARCHIVED-001')
+
+    const checkbox = wrapper.find('#jobs-show-archived')
+    expect(checkbox.exists()).toBe(true)
+
+    await checkbox.setValue(true)
+    await flushPromises()
+
+    expect(mocks.listJobs).toHaveBeenNthCalledWith(2, { limit: 200, include_archived: true })
+    expect(wrapper.text()).toContain('EV-ARCHIVED-001')
+  })
+
   it('opens a grouped dialog with only the project field active initially', async () => {
     const wrapper = mountView()
     await flushPromises()
