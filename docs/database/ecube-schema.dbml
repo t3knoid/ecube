@@ -11,6 +11,7 @@ Enum job_status {
   COMPLETED
   FAILED
   VERIFYING
+  ARCHIVED
 }
 
 Enum startup_analysis_status {
