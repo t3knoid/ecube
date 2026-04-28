@@ -143,6 +143,33 @@ def test_job_repo_add_creates_linked_project(db):
     assert project.jobs[0].id == saved.id
 
 
+def test_job_repo_add_reuses_existing_project_record(db):
+    repo = JobRepository(db)
+
+    first = repo.add(
+        ExportJob(
+            project_id="case-repo",
+            evidence_number="EV-1",
+            source_path="/data/one",
+        )
+    )
+    second = repo.add(
+        ExportJob(
+            project_id=" CASE-REPO ",
+            evidence_number="EV-2",
+            source_path="/data/two",
+        )
+    )
+
+    projects = db.query(Project).filter(Project.normalized_project_id == "CASE-REPO").all()
+
+    assert len(projects) == 1
+    assert first.project is not None
+    assert second.project is not None
+    assert first.project.id == projects[0].id
+    assert second.project.id == projects[0].id
+
+
 def test_job_repo_get_missing(db):
     repo = JobRepository(db)
     assert repo.get(9999) is None
