@@ -326,6 +326,8 @@ The wizard will:
 
 > **Idempotent re-run behavior:** If setup is already initialized, `POST /setup/initialize` returns `200` with `status="already_initialized"` and does not perform setup side-effects.
 
+> **UI behavior on initialized systems:** When an operator opens `/setup` after initialization is complete, ECUBE redirects them to the login screen and shows an informational banner instead of presenting the state as a setup error.
+
 > **Note:** `DATABASE_URL` and `TRUST_PROXY_HEADERS` in `<install-dir>/.env` are configured by the setup wizard during first-run setup (not by `install.sh`). After initialization, change runtime settings through authenticated admin workflows (or by editing `.env` and restarting `ecube.service`).
 
 ---
