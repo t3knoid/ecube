@@ -3159,6 +3159,56 @@ def test_list_jobs_includes_archived_when_requested(client, db):
     assert "EV-LIST-ARCHIVED-002" in evidence_numbers
 
 
+def test_list_jobs_excludes_archived_status_filter_without_opt_in(client, db):
+    db.add_all([
+        ExportJob(
+            project_id="PROJ-LIST-ARCHIVED",
+            evidence_number="EV-LIST-COMPLETED-ARCHIVE-FILTER-001",
+            source_path="/data/completed-archive-filter",
+            status=JobStatus.COMPLETED,
+        ),
+        ExportJob(
+            project_id="PROJ-LIST-ARCHIVED",
+            evidence_number="EV-LIST-ARCHIVED-FILTER-001",
+            source_path="/data/archived-filter",
+            status=JobStatus.ARCHIVED,
+        ),
+    ])
+    db.commit()
+
+    response = client.get("/jobs", params=[("statuses", "ARCHIVED")])
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_jobs_includes_archived_status_filter_when_opted_in(client, db):
+    db.add_all([
+        ExportJob(
+            project_id="PROJ-LIST-ARCHIVED",
+            evidence_number="EV-LIST-COMPLETED-ARCHIVE-FILTER-002",
+            source_path="/data/completed-archive-filter-two",
+            status=JobStatus.COMPLETED,
+        ),
+        ExportJob(
+            project_id="PROJ-LIST-ARCHIVED",
+            evidence_number="EV-LIST-ARCHIVED-FILTER-002",
+            source_path="/data/archived-filter-two",
+            status=JobStatus.ARCHIVED,
+        ),
+    ])
+    db.commit()
+
+    response = client.get(
+        "/jobs",
+        params=[("statuses", "ARCHIVED"), ("include_archived", True)],
+    )
+
+    assert response.status_code == 200
+    evidence_numbers = {item["evidence_number"] for item in response.json()}
+    assert evidence_numbers == {"EV-LIST-ARCHIVED-FILTER-002"}
+
+
 def test_list_jobs_filters_support_offset(client, db):
     drive = UsbDrive(
         device_identifier="USB-LIST-OFFSET-001",
