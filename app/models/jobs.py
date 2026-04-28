@@ -1,6 +1,6 @@
 from itertools import chain
 
-from sqlalchemy import Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime, Text, JSON, Float, event
+from sqlalchemy import Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime, Text, JSON, Float, Index, event
 from sqlalchemy.dialects.postgresql import JSONB, insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session, relationship, validates
@@ -92,8 +92,13 @@ class ExportJob(Base):
 
 class ExportFile(Base):
     __tablename__ = "export_files"
+    __table_args__ = (
+        Index("ix_export_files_project_status", "project_id", "status"),
+    )
+
     id = Column(Integer, primary_key=True)
     job_id = Column(Integer, ForeignKey("export_jobs.id"), nullable=False)
+    project_id = Column(String, ForeignKey("projects.normalized_project_id"), nullable=False, index=True)
     relative_path = Column(String, nullable=False)
     size_bytes = Column(BigInteger)
     checksum = Column(String)
@@ -101,6 +106,7 @@ class ExportFile(Base):
     error_message = Column(Text)
     retry_attempts = Column(Integer, default=0)
     job = relationship("ExportJob", back_populates="files")
+    project = relationship(Project, back_populates="files")
 
 
 class Manifest(Base):
@@ -128,9 +134,12 @@ class DriveAssignment(Base):
 def _ensure_projects_for_jobs(session, _flush_context, _instances):
     project_ids: set[str] = set()
     for obj in chain(session.new, session.dirty):
-        if not isinstance(obj, ExportJob):
+        if isinstance(obj, ExportJob):
+            normalized = normalize_project_id(obj.project_id)
+        elif isinstance(obj, ExportFile):
+            normalized = _resolve_export_file_project_id(session, obj)
+        else:
             continue
-        normalized = normalize_project_id(obj.project_id)
         if not isinstance(normalized, str) or not normalized:
             continue
         if obj.project_id != normalized:
@@ -175,3 +184,15 @@ def _insert_project_if_missing(session: Session, project_id: str) -> None:
     existing_project = session.get(Project, {"normalized_project_id": project_id})
     if existing_project is None:
         session.add(Project(normalized_project_id=project_id))
+
+
+def _resolve_export_file_project_id(session: Session, export_file: ExportFile) -> object:
+    if export_file.job is not None:
+        return normalize_project_id(export_file.job.project_id)
+
+    if export_file.job_id is not None:
+        job = session.get(ExportJob, export_file.job_id)
+        if job is not None:
+            return normalize_project_id(job.project_id)
+
+    return normalize_project_id(export_file.project_id)

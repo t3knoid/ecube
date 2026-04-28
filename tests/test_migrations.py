@@ -171,6 +171,26 @@ def test_export_jobs_project_id_references_projects(migrated_engine):
     )
 
 
+def test_export_files_project_id_references_projects(migrated_engine):
+    """HEAD migration should expose first-class project ownership for copied files."""
+    inspector = inspect(migrated_engine)
+
+    export_file_columns = {c["name"] for c in inspector.get_columns("export_files")}
+    assert "project_id" in export_file_columns
+
+    export_file_fks = inspector.get_foreign_keys("export_files")
+    assert any(
+        fk.get("referred_table") == "projects"
+        and fk.get("constrained_columns") == ["project_id"]
+        and fk.get("referred_columns") == ["normalized_project_id"]
+        for fk in export_file_fks
+    )
+
+    index_names = {idx["name"] for idx in inspector.get_indexes("export_files")}
+    assert "ix_export_files_project_id" in index_names
+    assert "ix_export_files_project_status" in index_names
+
+
 def test_upgrade_head_backfills_projects_from_legacy_export_jobs(sqlite_db_path):
     """Legacy export_jobs rows should backfill into projects during upgrade."""
     with sqlite3.connect(sqlite_db_path) as conn:
@@ -184,12 +204,34 @@ def test_upgrade_head_backfills_projects_from_legacy_export_jobs(sqlite_db_path)
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE export_files (
+                id INTEGER PRIMARY KEY,
+                job_id INTEGER NOT NULL,
+                relative_path VARCHAR NOT NULL,
+                size_bytes BIGINT,
+                checksum VARCHAR,
+                status VARCHAR,
+                error_message TEXT,
+                retry_attempts INTEGER DEFAULT 0
+            )
+            """
+        )
         conn.executemany(
             "INSERT INTO export_jobs (id, project_id, evidence_number, source_path) VALUES (?, ?, ?, ?)",
             [
                 (1, "Case-001", "EV-1", "/src/one"),
                 (2, " case-001 ", "EV-2", "/src/two"),
                 (3, "CASE-002", "EV-3", "/src/three"),
+            ],
+        )
+        conn.executemany(
+            "INSERT INTO export_files (id, job_id, relative_path, status) VALUES (?, ?, ?, ?)",
+            [
+                (10, 1, "one.txt", "DONE"),
+                (11, 2, "two.txt", "ERROR"),
+                (12, 3, "three.txt", "DONE"),
             ],
         )
         conn.commit()
@@ -219,15 +261,25 @@ def test_upgrade_head_backfills_projects_from_legacy_export_jobs(sqlite_db_path)
             job_rows = conn.execute(
                 text("SELECT id, project_id FROM export_jobs ORDER BY id")
             ).fetchall()
+            file_rows = conn.execute(
+                text("SELECT id, project_id FROM export_files ORDER BY id")
+            ).fetchall()
         inspector = inspect(engine)
     finally:
         engine.dispose()
 
     assert [row[0] for row in project_rows] == ["CASE-001", "CASE-002"]
     assert job_rows == [(1, "CASE-001"), (2, "CASE-001"), (3, "CASE-002")]
+    assert file_rows == [(10, "CASE-001"), (11, "CASE-001"), (12, "CASE-002")]
     assert any(
         fk.get("referred_table") == "projects"
         and fk.get("constrained_columns") == ["project_id"]
         and fk.get("referred_columns") == ["normalized_project_id"]
         for fk in inspector.get_foreign_keys("export_jobs")
+    )
+    assert any(
+        fk.get("referred_table") == "projects"
+        and fk.get("constrained_columns") == ["project_id"]
+        and fk.get("referred_columns") == ["normalized_project_id"]
+        for fk in inspector.get_foreign_keys("export_files")
     )
