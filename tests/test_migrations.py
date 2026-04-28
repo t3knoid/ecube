@@ -9,6 +9,7 @@ We use a file-based SQLite DB (rather than in-memory) because Alembic's
 process and therefore cannot share a StaticPool in-memory connection.
 """
 import os
+import sqlite3
 import subprocess
 import sys
 import pytest
@@ -54,6 +55,7 @@ def test_upgrade_head_on_sqlite(migrated_engine):
         "usb_ports",
         "usb_drives",
         "network_mounts",
+        "projects",
         "export_jobs",
         "export_files",
         "manifests",
@@ -151,3 +153,77 @@ def test_audit_log_has_project_and_drive_columns_and_indexes(migrated_engine):
     index_names = {idx["name"] for idx in inspector.get_indexes("audit_logs")}
     assert "ix_audit_logs_project_timestamp" in index_names
     assert "ix_audit_logs_drive_timestamp" in index_names
+
+
+def test_export_jobs_project_id_references_projects(migrated_engine):
+    """HEAD migration should expose a first-class projects table for jobs."""
+    inspector = inspect(migrated_engine)
+
+    project_columns = {c["name"] for c in inspector.get_columns("projects")}
+    assert "normalized_project_id" in project_columns
+
+    export_job_fks = inspector.get_foreign_keys("export_jobs")
+    assert any(
+        fk.get("referred_table") == "projects"
+        and fk.get("constrained_columns") == ["project_id"]
+        and fk.get("referred_columns") == ["normalized_project_id"]
+        for fk in export_job_fks
+    )
+
+
+def test_upgrade_head_backfills_projects_from_legacy_export_jobs(sqlite_db_path):
+    """Legacy export_jobs rows should backfill into projects during upgrade."""
+    with sqlite3.connect(sqlite_db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE export_jobs (
+                id INTEGER PRIMARY KEY,
+                project_id VARCHAR NOT NULL,
+                evidence_number VARCHAR NOT NULL,
+                source_path VARCHAR NOT NULL
+            )
+            """
+        )
+        conn.executemany(
+            "INSERT INTO export_jobs (id, project_id, evidence_number, source_path) VALUES (?, ?, ?, ?)",
+            [
+                (1, "CASE-001", "EV-1", "/src/one"),
+                (2, "CASE-001", "EV-2", "/src/two"),
+                (3, "CASE-002", "EV-3", "/src/three"),
+            ],
+        )
+        conn.commit()
+
+    db_url = f"sqlite:///{sqlite_db_path}"
+    env = {**os.environ, "DATABASE_URL": db_url}
+    repo_root = os.path.dirname(os.path.dirname(__file__))
+    alembic_cmd = [sys.executable, "-m", "alembic"]
+
+    result = subprocess.run(
+        [*alembic_cmd, "upgrade", "head"],
+        capture_output=True,
+        text=True,
+        cwd=repo_root,
+        env=env,
+    )
+    assert result.returncode == 0, (
+        f"alembic upgrade head failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+    )
+
+    engine = create_engine(db_url)
+    try:
+        with engine.begin() as conn:
+            rows = conn.execute(
+                text("SELECT normalized_project_id FROM projects ORDER BY normalized_project_id")
+            ).fetchall()
+        inspector = inspect(engine)
+    finally:
+        engine.dispose()
+
+    assert [row[0] for row in rows] == ["CASE-001", "CASE-002"]
+    assert any(
+        fk.get("referred_table") == "projects"
+        and fk.get("constrained_columns") == ["project_id"]
+        and fk.get("referred_columns") == ["normalized_project_id"]
+        for fk in inspector.get_foreign_keys("export_jobs")
+    )
