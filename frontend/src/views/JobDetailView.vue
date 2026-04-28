@@ -83,7 +83,7 @@ const currentStatus = computed(() => String(job.value?.status || '').toUpperCase
 const currentStartupAnalysisStatus = computed(() => String(job.value?.startup_analysis_status || 'NOT_ANALYZED').toUpperCase())
 const archiveDriveReady = computed(() => {
   const driveState = String(job.value?.drive?.current_state || '').toUpperCase()
-  return !job.value?.drive || driveState === 'AVAILABLE'
+  return !job.value?.drive || (driveState === 'AVAILABLE' && !job.value?.drive?.is_mounted)
 })
 const archiveBlockedByDriveEject = computed(() => canArchiveJobs.value
   && ['COMPLETED', 'FAILED'].includes(currentStatus.value)
