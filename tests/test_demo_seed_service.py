@@ -72,7 +72,7 @@ class _FakeNetworkMountProvider:
     def __init__(self):
         self.mounted = []
 
-    def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None):
+    def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None, nfs_client_version=None):
         self.mounted.append(
             {
                 "type": getattr(mount_type, "value", str(mount_type)),
@@ -81,6 +81,7 @@ class _FakeNetworkMountProvider:
                 "credentials_file": credentials_file,
                 "username": username,
                 "password": password,
+                "nfs_client_version": nfs_client_version,
             }
         )
         return True, None
