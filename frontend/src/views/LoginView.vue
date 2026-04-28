@@ -29,6 +29,9 @@ const publicAuthConfig = ref({
 const sessionExpired = computed(
   () => route.query[EXPIRED_QUERY_KEY] === EXPIRED_QUERY_VALUE,
 );
+const setupAlreadyInitialized = computed(
+  () => route.query.reason === 'setup_already_initialized',
+);
 const showLogoImage = computed(
   () => Boolean(themeStore.currentLogo) && !logoLoadFailed.value,
 );
@@ -167,6 +170,13 @@ async function handleLogin() {
           <strong>{{ t("auth.sessionExpired") }}</strong>
         </p>
         <p>{{ t("auth.sessionExpiredMessage") }}</p>
+      </div>
+
+      <div v-if="setupAlreadyInitialized" class="info-banner">
+        <p>
+          <strong>{{ t("setup.alreadyInitializedTitle") }}</strong>
+        </p>
+        <p>{{ t("setup.alreadyInitialized") }}</p>
       </div>
 
       <section

@@ -115,4 +115,16 @@ describe("LoginView logo behavior", () => {
     expect(passwordInput.element.value).toBe("demo");
     expect(passwordInput.attributes("readonly")).toBeDefined();
   });
+
+  it("shows an informational banner when setup redirects an already initialized system to login", async () => {
+    mocks.route.query = { reason: "setup_already_initialized" };
+
+    const wrapper = mount(LoginView, { global: { plugins: [i18n] } });
+    await flushPromises();
+
+    const banner = wrapper.find(".info-banner");
+    expect(banner.exists()).toBe(true);
+    expect(banner.text()).toContain(i18n.global.t("setup.alreadyInitializedTitle"));
+    expect(banner.text()).toContain(i18n.global.t("setup.alreadyInitialized"));
+  });
 });
