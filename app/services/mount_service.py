@@ -157,6 +157,8 @@ class LinuxMountProvider:
                     options.append(f"username={username}")
                 if password:
                     options.append(f"password={password}")
+                if not options:
+                    options.append("guest")
                 if options:
                     cmd += ["-o", ",".join(options)]
 
