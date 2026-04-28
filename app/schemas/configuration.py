@@ -37,6 +37,7 @@ class ConfigurationUpdateRequest(StrictIntMixin, BaseModel):
     log_file: Optional[StrictSafeStr] = Field(default=None)
     log_file_max_bytes: Optional[StrictInt] = Field(default=None, ge=1)
     log_file_backup_count: Optional[StrictInt] = Field(default=None, ge=0)
+    nfs_client_version: Optional[Literal["4.2", "4.1", "4.0", "3"]] = Field(default=None)
 
     db_pool_size: Optional[StrictInt] = Field(default=None, ge=1, le=100)
     db_pool_max_overflow: Optional[StrictInt] = Field(default=None, ge=0, le=200)
