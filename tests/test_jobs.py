@@ -512,6 +512,9 @@ def test_create_job_allows_exact_duplicate_after_archiving_prior_job(manager_cli
         status=JobStatus.COMPLETED,
     )
 
+    drive.mount_path = None
+    db.commit()
+
     archive_response = manager_client.post(
         f"/jobs/{existing.id}/archive",
         json={"confirm": True},
@@ -519,6 +522,9 @@ def test_create_job_allows_exact_duplicate_after_archiving_prior_job(manager_cli
 
     assert archive_response.status_code == 200
     assert archive_response.json()["status"] == "ARCHIVED"
+
+    drive.mount_path = "/mnt/ecube/overlap-archived-001"
+    db.commit()
 
     response = manager_client.post(
         "/jobs",
@@ -1718,6 +1724,39 @@ def test_archive_job_rejects_missing_confirmation(manager_client, db):
 
     assert response.status_code == 400
     assert "confirmation" in response.json()["message"].lower()
+
+
+def test_archive_job_requires_related_drive_to_be_ejected(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-ARCHIVE-EJECT-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-ARCHIVE-EJECT-001",
+        mount_path="/mnt/ecube/archive-eject-001",
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-ARCHIVE-EJECT-001",
+        evidence_number="EV-ARCHIVE-EJECT-001",
+        source_path="/data/evidence",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.COMPLETED,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    response = manager_client.post(
+        f"/jobs/{job.id}/archive",
+        json={"confirm": True},
+    )
+
+    assert response.status_code == 409
+    assert "prepare eject" in response.json()["message"].lower()
+    db.refresh(job)
+    assert job.status == JobStatus.COMPLETED
 
 
 def test_update_pending_job_reassigns_drive_and_updates_fields(client, db):

@@ -612,6 +612,7 @@ Typical functions include:
 - Retry only the failed or timed-out files from a partial-success completed job
 - Pause a running job and resume it later
 - Manually complete a safe non-active job when required by the workflow
+- Prepare Eject before Archive so the related drive leaves active use and the media can move into chain of custody
 - Archive a completed or failed job after explicit confirmation so the same work definition can be created again later
 - Clear a persisted startup-analysis snapshot before the next restart when the cached scan should be discarded
 - Generate a manifest, review the reported location, and download the generated file
@@ -631,7 +632,7 @@ Use them when appropriate:
 - `Retry Failed Files` to re-queue only `ERROR` and `TIMEOUT` file rows on a `COMPLETED` job that finished with partial-success results
 - `Pause` to request a safe stop after the current copy work finishes
 - `Complete` to manually mark a pending, paused, or failed job as complete when the operational workflow requires it
-- `Archive` to sunset a completed or failed job after confirmation; this action is limited to `admin` and `manager`
+- `Archive` to sunset a completed or failed job after confirmation; this action is limited to `admin` and `manager` and requires `Prepare Eject` first when the job still has a related drive assignment
 - `Clear startup analysis cache` to remove a persisted startup scan after explicit confirmation; this is available only to `admin` and `manager` when cached startup-analysis data exists for the job
 - `Verify` to run verification checks once the job is fully complete with no failed or timed-out files
 - `Manifest` to generate the manifest output once the job is fully complete with no failed or timed-out files
@@ -644,7 +645,7 @@ Verify and Manifest stay disabled until the job reaches a truly complete 100% st
 
 For a partial-success `COMPLETED` job, Job Detail can show `Retry Failed Files` instead of exposing Verify or Manifest too early. This action is available only to `admin`, `manager`, and `processor`, moves the job back into `RUNNING`, re-queues only failed or timed-out files, and preserves already successful copies.
 
-`Archive` opens its own confirmation dialog and is available only for `COMPLETED` or `FAILED` jobs. After confirmation, the job transitions to `ARCHIVED`, remains viewable in Job Detail for audit and review purposes, drops out of the default Jobs list, and no longer blocks recreation of the same exact project/source/destination work definition.
+`Archive` opens its own confirmation dialog and is available only for `COMPLETED` or `FAILED` jobs after the related drive has been through `Prepare Eject`. In practice, treat this as `Prepare Eject before Archive`: first prepare the drive for eject so the media can move into chain of custody, then archive the job record. After confirmation, the job transitions to `ARCHIVED`, remains viewable in Job Detail for audit and review purposes, drops out of the default Jobs list, and no longer blocks recreation of the same exact project/source/destination work definition.
 
 The completion summary uses the normal success styling for clean completions. If the summary still shows any failed or timed-out file counts, the summary switches to a red warning background so operators can distinguish a partial-success completion from a clean completed run at a glance.
 
