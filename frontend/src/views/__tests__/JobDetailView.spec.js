@@ -556,7 +556,7 @@ describe('JobDetailView start action', () => {
       files_failed: 0,
       files_timed_out: 0,
       startup_analysis_status: 'READY',
-      drive: { id: 1, current_state: 'IN_USE' },
+      drive: { id: 1, current_state: 'AVAILABLE', is_mounted: true },
     })
 
     const wrapper = mountView()
@@ -566,6 +566,34 @@ describe('JobDetailView start action', () => {
     expect(archiveButton).toBeTruthy()
     expect(archiveButton.attributes('disabled')).toBeDefined()
     expect(wrapper.text()).toContain(i18n.global.t('jobs.archiveRequiresEject'))
+  })
+
+  it('enables archive after the related drive is available and unmounted', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 10,
+      total_bytes: 10,
+      file_count: 1,
+      files_succeeded: 1,
+      files_failed: 0,
+      files_timed_out: 0,
+      startup_analysis_status: 'READY',
+      drive: { id: 1, current_state: 'AVAILABLE', is_mounted: false },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const archiveButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.archive'))
+    expect(archiveButton).toBeTruthy()
+    expect(archiveButton.attributes('disabled')).toBeUndefined()
+    expect(wrapper.text()).not.toContain(i18n.global.t('jobs.archiveRequiresEject'))
   })
 
   it('shows archived jobs with lifecycle actions disabled', async () => {
