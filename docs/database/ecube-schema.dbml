@@ -61,6 +61,7 @@ Table network_mounts {
   type mount_type [not null]
   remote_path varchar [not null]
   project_id varchar [not null, default: 'UNASSIGNED']
+  nfs_client_version varchar
   local_mount_point varchar [not null, unique]
   encrypted_username varchar
   encrypted_password varchar
