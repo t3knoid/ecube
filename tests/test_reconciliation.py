@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive, UsbHub, UsbPort
-from app.models.jobs import ExportJob, JobStatus
+from app.models.jobs import DriveAssignment, ExportJob, JobStatus
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.models.system import ReconciliationLock
 from app.models.users import UserRole
@@ -64,11 +64,18 @@ def _make_mount(db: Session, status: MountStatus = MountStatus.MOUNTED,
     return mount
 
 
-def _make_job(db: Session, status: JobStatus = JobStatus.RUNNING) -> ExportJob:
+def _make_job(
+    db: Session,
+    status: JobStatus = JobStatus.RUNNING,
+    *,
+    project_id: str = "PROJ-001",
+    target_mount_path: str | None = None,
+) -> ExportJob:
     job = ExportJob(
-        project_id="PROJ-001",
+        project_id=project_id,
         evidence_number="EV-001",
         source_path="/data/source",
+        target_mount_path=target_mount_path,
         status=status,
     )
     db.add(job)
@@ -315,6 +322,7 @@ class TestReconcileMounts:
     def test_persisted_usb_mount_is_remounted_to_expected_slot(self, db: Session):
         drive = _make_drive(db, "USB-STARTUP", DriveState.IN_USE)
         drive.filesystem_type = "ext4"
+        drive.current_project_id = "PROJ-STARTUP"
         drive.mount_path = "/mnt/ecube/stale"
         db.commit()
         drive_provider = FakeDriveMountProvider()
@@ -332,6 +340,7 @@ class TestReconcileMounts:
     def test_in_use_usb_drive_with_cleared_mount_path_is_remounted(self, db: Session):
         drive = _make_drive(db, "USB-STARTUP-CLEARED", DriveState.IN_USE)
         drive.filesystem_type = "ext4"
+        drive.current_project_id = "PROJ-STARTUP"
         drive.mount_path = None
         db.commit()
         drive_provider = FakeDriveMountProvider()
@@ -348,6 +357,7 @@ class TestReconcileMounts:
     def test_persisted_usb_mount_outside_managed_root_is_unmounted_before_remount(self, db: Session):
         drive = _make_drive(db, "USB-STARTUP-EXTERNAL", DriveState.IN_USE)
         drive.filesystem_type = "ext4"
+        drive.current_project_id = "PROJ-STARTUP"
         drive.mount_path = "/mnt/ecube/stale"
         db.commit()
         drive_provider = FakeDriveMountProvider()
@@ -363,6 +373,7 @@ class TestReconcileMounts:
     def test_persisted_usb_mount_cleanup_and_remount_counts_once(self, db: Session):
         drive = _make_drive(db, "USB-STARTUP-MANAGED", DriveState.IN_USE)
         drive.filesystem_type = "ext4"
+        drive.current_project_id = "PROJ-STARTUP"
         drive.mount_path = "/mnt/ecube/stale"
         db.commit()
         drive_provider = FakeDriveMountProvider()
@@ -383,6 +394,187 @@ class TestReconcileMounts:
 
         assert result["usb_mounts_corrected"] == 1
         assert drive_provider.unmount_calls == ["/mnt/ecube/999"]
+
+    def test_usb_mount_restores_missing_project_binding_from_matching_job(self, db: Session):
+        drive = _make_drive(db, "USB-RECOVER", DriveState.IN_USE)
+        drive.filesystem_type = "ext4"
+        drive.current_project_id = None
+        drive.mount_path = f"{settings.usb_mount_base_path}/{drive.id}"
+        job = _make_job(
+            db,
+            project_id="PROJ-RECOVER",
+            target_mount_path=f"{settings.usb_mount_base_path}/{drive.id}",
+        )
+        db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+        db.commit()
+
+        drive_provider = FakeDriveMountProvider({f"{settings.usb_mount_base_path}/{drive.id}": drive.filesystem_path})
+
+        with patch(
+            "app.services.reconciliation_service.find_device_mount_point",
+            return_value=f"{settings.usb_mount_base_path}/{drive.id}",
+        ):
+            result = reconcile_mounts(db, FakeMountProvider(), drive_provider)
+
+        db.refresh(drive)
+        assert result["usb_mounts_checked"] == 1
+        assert result["usb_mounts_corrected"] == 1
+        assert drive.current_state == DriveState.IN_USE
+        assert drive.current_project_id == "PROJ-RECOVER"
+        assert drive_provider.unmount_calls == []
+        assert drive_provider.mount_calls == []
+
+    def test_usb_mount_restores_missing_project_binding_when_multiple_jobs_share_one_project(self, db: Session):
+        drive = _make_drive(db, "USB-SHARED-PROJECT", DriveState.IN_USE)
+        drive.filesystem_type = "ext4"
+        drive.current_project_id = None
+        drive.mount_path = f"{settings.usb_mount_base_path}/{drive.id}"
+        job_one = _make_job(
+            db,
+            project_id="PROJ-SAME",
+            target_mount_path=f"{settings.usb_mount_base_path}/{drive.id}",
+        )
+        job_two = _make_job(
+            db,
+            project_id="PROJ-SAME",
+            target_mount_path=f"{settings.usb_mount_base_path}/{drive.id}",
+        )
+        db.add_all([
+            DriveAssignment(drive_id=drive.id, job_id=job_one.id),
+            DriveAssignment(drive_id=drive.id, job_id=job_two.id),
+        ])
+        db.commit()
+
+        drive_provider = FakeDriveMountProvider({f"{settings.usb_mount_base_path}/{drive.id}": drive.filesystem_path})
+
+        with patch(
+            "app.services.reconciliation_service.find_device_mount_point",
+            return_value=f"{settings.usb_mount_base_path}/{drive.id}",
+        ):
+            reconcile_mounts(db, FakeMountProvider(), drive_provider)
+
+        db.refresh(drive)
+        assert drive.current_state == DriveState.IN_USE
+        assert drive.current_project_id == "PROJ-SAME"
+        assert drive_provider.unmount_calls == []
+
+    def test_usb_mount_with_no_relevant_owner_is_released(self, db: Session):
+        drive = _make_drive(db, "USB-ORPHANED", DriveState.IN_USE)
+        drive.filesystem_type = "ext4"
+        drive.current_project_id = None
+        drive.mount_path = f"{settings.usb_mount_base_path}/{drive.id}"
+        db.commit()
+
+        drive_provider = FakeDriveMountProvider({f"{settings.usb_mount_base_path}/{drive.id}": drive.filesystem_path})
+
+        with patch(
+            "app.services.reconciliation_service.find_device_mount_point",
+            return_value=f"{settings.usb_mount_base_path}/{drive.id}",
+        ):
+            result = reconcile_mounts(db, FakeMountProvider(), drive_provider)
+
+        db.refresh(drive)
+        assert result["usb_mounts_checked"] == 1
+        assert result["usb_mounts_corrected"] == 1
+        assert drive.current_state == DriveState.AVAILABLE
+        assert drive.current_project_id is None
+        assert drive.mount_path is None
+        assert drive_provider.unmount_calls == [f"{settings.usb_mount_base_path}/{drive.id}"]
+        assert drive_provider.mount_calls == []
+
+    def test_usb_mount_with_conflicting_project_owners_is_released(self, db: Session):
+        drive = _make_drive(db, "USB-CONFLICT", DriveState.IN_USE)
+        drive.filesystem_type = "ext4"
+        drive.current_project_id = None
+        drive.mount_path = f"{settings.usb_mount_base_path}/{drive.id}"
+        job_one = _make_job(
+            db,
+            project_id="PROJ-A",
+            target_mount_path=f"{settings.usb_mount_base_path}/{drive.id}",
+        )
+        job_two = _make_job(
+            db,
+            project_id="PROJ-B",
+            target_mount_path=f"{settings.usb_mount_base_path}/{drive.id}",
+        )
+        db.add_all([
+            DriveAssignment(drive_id=drive.id, job_id=job_one.id),
+            DriveAssignment(drive_id=drive.id, job_id=job_two.id),
+        ])
+        db.commit()
+
+        drive_provider = FakeDriveMountProvider({f"{settings.usb_mount_base_path}/{drive.id}": drive.filesystem_path})
+
+        with patch(
+            "app.services.reconciliation_service.find_device_mount_point",
+            return_value=f"{settings.usb_mount_base_path}/{drive.id}",
+        ):
+            reconcile_mounts(db, FakeMountProvider(), drive_provider)
+
+        db.refresh(drive)
+        assert drive.current_state == DriveState.AVAILABLE
+        assert drive.current_project_id is None
+        assert drive.mount_path is None
+        assert drive_provider.unmount_calls == [f"{settings.usb_mount_base_path}/{drive.id}"]
+
+    def test_released_assignments_do_not_restore_missing_project_binding(self, db: Session):
+        drive = _make_drive(db, "USB-RELEASED-ONLY", DriveState.IN_USE)
+        drive.filesystem_type = "ext4"
+        drive.current_project_id = None
+        drive.mount_path = f"{settings.usb_mount_base_path}/{drive.id}"
+        job = _make_job(
+            db,
+            project_id="PROJ-OLD",
+            target_mount_path=f"{settings.usb_mount_base_path}/{drive.id}",
+        )
+        db.add(
+            DriveAssignment(
+                drive_id=drive.id,
+                job_id=job.id,
+                released_at=datetime.now(timezone.utc),
+            )
+        )
+        db.commit()
+
+        drive_provider = FakeDriveMountProvider({f"{settings.usb_mount_base_path}/{drive.id}": drive.filesystem_path})
+
+        with patch(
+            "app.services.reconciliation_service.find_device_mount_point",
+            return_value=f"{settings.usb_mount_base_path}/{drive.id}",
+        ):
+            reconcile_mounts(db, FakeMountProvider(), drive_provider)
+
+        db.refresh(drive)
+        assert drive.current_state == DriveState.AVAILABLE
+        assert drive.current_project_id is None
+        assert drive_provider.unmount_calls == [f"{settings.usb_mount_base_path}/{drive.id}"]
+
+    def test_unreleased_assignment_with_different_target_does_not_restore_binding(self, db: Session):
+        drive = _make_drive(db, "USB-STALE-ACTIVE", DriveState.IN_USE)
+        drive.filesystem_type = "ext4"
+        drive.current_project_id = None
+        drive.mount_path = f"{settings.usb_mount_base_path}/{drive.id}"
+        job = _make_job(
+            db,
+            project_id="PROJ-STALE",
+            target_mount_path="/mnt/ecube/other-drive",
+        )
+        db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+        db.commit()
+
+        drive_provider = FakeDriveMountProvider({f"{settings.usb_mount_base_path}/{drive.id}": drive.filesystem_path})
+
+        with patch(
+            "app.services.reconciliation_service.find_device_mount_point",
+            return_value=f"{settings.usb_mount_base_path}/{drive.id}",
+        ):
+            reconcile_mounts(db, FakeMountProvider(), drive_provider)
+
+        db.refresh(drive)
+        assert drive.current_state == DriveState.AVAILABLE
+        assert drive.current_project_id is None
+        assert drive.mount_path is None
+        assert drive_provider.unmount_calls == [f"{settings.usb_mount_base_path}/{drive.id}"]
 
     def test_stale_mount_emits_audit_record(self, db: Session):
         mount = _make_mount(db, MountStatus.MOUNTED, "/mnt/audit-test")
@@ -877,6 +1069,40 @@ class TestRunManualManagedMountReconciliation:
 
         assert result["status"] == "partial"
         assert result["failure_count"] == 2
+
+    def test_manual_reconciliation_reuses_usb_ownership_recovery_logic(self, db: Session):
+        drive = _make_drive(db, "USB-MANUAL-RECOVER", DriveState.IN_USE)
+        drive.filesystem_type = "ext4"
+        drive.current_project_id = None
+        drive.mount_path = f"{settings.usb_mount_base_path}/{drive.id}"
+        job = _make_job(
+            db,
+            project_id="PROJ-MANUAL",
+            target_mount_path=f"{settings.usb_mount_base_path}/{drive.id}",
+        )
+        db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+        db.commit()
+
+        provider = FakeMountProvider(mounted_paths=set())
+        drive_provider = FakeDriveMountProvider({f"{settings.usb_mount_base_path}/{drive.id}": drive.filesystem_path})
+
+        with patch(
+            "app.services.reconciliation_service.find_device_mount_point",
+            return_value=f"{settings.usb_mount_base_path}/{drive.id}",
+        ):
+            result = run_manual_managed_mount_reconciliation(
+                db,
+                provider,
+                drive_mount_provider=drive_provider,
+                actor="manager-user",
+            )
+
+        db.refresh(drive)
+        assert result["status"] == "ok"
+        assert result["usb_mounts_checked"] == 1
+        assert result["usb_mounts_corrected"] == 1
+        assert drive.current_state == DriveState.IN_USE
+        assert drive.current_project_id == "PROJ-MANUAL"
 
     def test_rejects_when_lock_already_held(self, db: Session):
         assert _acquire_reconciliation_lock(db) is True
