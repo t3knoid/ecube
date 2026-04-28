@@ -4,7 +4,7 @@
 |---|---|
 | Title | ECUBE Configuration Reference |
 | Purpose | Documents all ECUBE application and deployment configuration settings, environment variables, and their defaults. |
-| Updated on | 04/08/26 |
+| Updated on | 04/28/26 |
 | Audience | Systems administrators, operators, IT staff. |
 
 ## Table of Contents
@@ -179,10 +179,13 @@ Required only when `SESSION_BACKEND=redis`. If Redis is unavailable, ECUBE autom
 | `AUDIT_LOG_RETENTION_DAYS` | `365`   | Days to retain audit log records. `0` = keep forever.                      |
 | `COPY_JOB_TIMEOUT`         | `3600`  | Maximum seconds for one file copy/checksum attempt before that file is marked `TIMEOUT`. `0` = no timeout. |
 | `JOB_DETAIL_FILES_PAGE_SIZE` | `40` | Default number of file rows shown per page on the Job Detail Files panel. Admins can change this from the Configuration page. Minimum `20`, maximum `100`. |
+| `NFS_CLIENT_VERSION` | `4.1` | Default NFS protocol version requested for network mounts when a share does not set an explicit override. Supported values: `4.2`, `4.1`, `4.0`, `3`. Admins can change this from the Configuration page under Shares. |
 | `USB_DISCOVERY_INTERVAL`   | `30`    | Seconds between automatic USB discovery sweeps. `0` = disabled.            |
 | `READINESS_MOUNT_CHECK_TIMEOUT_SECONDS` | `1.0` | Timeout in seconds for each mount check in `GET /health/ready`. Keep low to preserve fail-fast readiness behavior. |
 | `READINESS_MOUNT_CHECKS_TOTAL_TIMEOUT_SECONDS` | `1.0` | Total timeout budget in seconds for all mount checks in `GET /health/ready` to keep probe latency bounded as mount count grows. |
 | `READINESS_USB_DISCOVERY_CACHE_TTL_SECONDS` | `5.0` | Cache TTL (seconds) for successful USB discovery readiness checks in `GET /health/ready`. Reduces repeated sysfs discovery scans under frequent probes while still re-validating periodically. |
+
+For NFS shares, ECUBE persists a per-share `nfs_client_version` only when an operator selects an explicit override in the Mounts dialog. When a share is left on the default option, mount creation, validation, and startup reconciliation use the current global `NFS_CLIENT_VERSION` instead.
 
 ---
 
