@@ -52,7 +52,7 @@ Supports local OS authentication (PAM), LDAP/Active Directory, and OIDC single s
 
 ### Web-Based Operator Interface
 
-A modern browser-based UI provides real-time visibility into drive status, job progress, mount health, and audit history. The interface is intentionally simple and task-focused so each user sees the tools that matter for the job in front of them.
+A modern browser-based UI provides real-time visibility into drive status, job progress, mount health, and audit history across desktop, tablet, and mobile devices. The interface is intentionally simple and task-focused so each user sees the tools that matter for the job in front of them.
 
 That means:
 

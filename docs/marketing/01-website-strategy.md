@@ -42,7 +42,7 @@ ECUBE improves that model by:
 - logging every meaningful operator and system event;
 - automating copy, verify, manifest, and eject workflows;
 - exposing REST and webhook integrations for repeatable operations;
-- presenting the workflow in a browser UI rather than direct filesystem access;
+- presenting the workflow in a browser UI across desktop, tablet, and mobile devices rather than direct filesystem access;
 - delivering the option of a turnkey hardware appliance with dedicated USB 3.1 controllers for better throughput and less deployment guesswork.
 
 ## 5. Core Message Pillars
@@ -52,7 +52,7 @@ ECUBE improves that model by:
 | Controlled export | Evidence leaves approved shares through a governed workflow, not desktop drag-and-drop. |
 | Defensible auditing | Every action is logged for review, reporting, and chain-of-custody support. |
 | Operational safety | RBAC and hardware-aware controls reduce accidental misuse and cross-project contamination. |
-| Intuitive workflow UX | The interface keeps each role focused on the task at hand, from deployment to processing to audit review. |
+| Intuitive workflow UX | The interface keeps each role focused on the task at hand, from deployment to processing to audit review, across desktop, tablet, and mobile devices. |
 | Automation-ready | REST API and webhooks support enterprise workflows, orchestration, and reporting. |
 | Flexible presentation | Themes and browser-based UX support branded or customer-facing deployments. |
 | Turnkey delivery | The appliance bundles validated hardware and software into a ready-to-use export station with dedicated USB 3.1 controller hardware for optimal export speed. |
@@ -89,7 +89,7 @@ Use as a controlled sandbox demonstration environment with non-sensitive sample 
 
 Recommended objectives:
 
-- show the real UI and workflows;
+- show the real UI and workflows across desktop, tablet, and mobile browsers;
 - provide guided evaluation access;
 - reinforce confidence without exposing customer data or admin-only internals.
 
