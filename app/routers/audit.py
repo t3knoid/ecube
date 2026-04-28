@@ -20,7 +20,7 @@ from app.schemas.errors import R_401, R_403, R_404, R_409, R_410, R_422
 from app.schemas.types import OptionalDatetimeQuery, OptionalIntQuery
 from app.services import audit_service
 from app.utils.client_ip import get_client_ip
-from app.utils.sanitize import normalize_project_id, sanitize_string, strict_sanitize_string
+from app.utils.sanitize import normalize_project_id, strict_sanitize_string
 
 logger = logging.getLogger(__name__)
 
