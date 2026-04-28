@@ -98,6 +98,7 @@ During initial deployment, the readiness probe may fail for up to **5 minutes** 
 - Removes orphaned or mismatched ECUBE-managed mount points under the managed network and USB mount roots.
 - Discovers USB topology and reconciles drive state.
 - Validates network share accessibility and writes audit entries for any startup mount corrections.
+- Re-mounts NFS shares with their persisted per-share protocol override when one is configured, otherwise using the current global `NFS_CLIENT_VERSION` default.
 
 Orchestrators must be configured with a **startupPeriod** or **initialDelaySeconds** of at least **5 minutes** to avoid premature restarts during initialization.
 
