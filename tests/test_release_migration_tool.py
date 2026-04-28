@@ -54,7 +54,7 @@ def test_release_migration_module_name_normalizes_semver() -> None:
 
 
 def test_release_migration_module_name_rejects_non_semver() -> None:
-    with pytest.raises(ReleaseMigrationError, match="must use major\.minor\.patch"):
+    with pytest.raises(ReleaseMigrationError, match=r"must use major\.minor\.patch"):
         release_migration_module_name("0.2")
 
 
