@@ -588,7 +588,7 @@ The source path is interpreted inside the selected mounted share. Entering only 
 
 Open a job to view details and perform follow-up actions.
 
-The Jobs list hides archived jobs by default. To review archived work, enable `Show Archived Jobs`, then optionally use the `Archived` status filter to narrow the list further.
+The Jobs list hides archived jobs by default. To review archived work, enable `Show Archived Jobs` to bring those records back into the list.
 
 Archived jobs remain readable from Job Detail, but they are intentionally treated as sunset records instead of active work. Once a job is archived, the normal lifecycle actions stay visible only as disabled context or disappear where appropriate, and the archive action itself is no longer shown.
 
