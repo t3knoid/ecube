@@ -239,6 +239,53 @@ test('jobs list supports safe pause and resume flow', async ({ page }) => {
   await expectNoCriticalA11yViolations(page)
 })
 
+test('jobs mobile overflow menu stays visible without expanding the row', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await setupAuthenticatedPage(page, ['admin'])
+
+  const jobState = {
+    id: 89,
+    project_id: 'P-89',
+    evidence_number: 'EV-89',
+    status: 'RUNNING',
+    copied_bytes: 50,
+    total_bytes: 100,
+    thread_count: 2,
+    file_count: 2,
+    files_succeeded: 1,
+    active_duration_seconds: 90,
+    drive: { id: 9, port_system_path: '2-9', device_identifier: 'USB-009' },
+  }
+
+  await routeJson(page, '**/api/drives', [])
+  await routeJson(page, '**/api/mounts', [])
+  await routeJson(page, '**/api/jobs**', [jobState])
+
+  await page.goto('/jobs')
+  await expect(page.getByRole('heading', { name: 'Jobs' })).toBeVisible()
+
+  const row = page.locator('tbody tr').first()
+  const rowBoxBefore = await row.boundingBox()
+
+  const toggle = page.getByLabel('P-89 job actions')
+  await toggle.click()
+
+  const popover = page.locator('.row-actions-popover').first()
+  await expect(popover).toBeVisible()
+  const popoverBox = await popover.boundingBox()
+
+  const rowBoxAfter = await row.boundingBox()
+
+  expect(rowBoxBefore).not.toBeNull()
+  expect(popoverBox).not.toBeNull()
+  expect(rowBoxAfter).not.toBeNull()
+  expect(popoverBox.x).toBeGreaterThanOrEqual(0)
+  expect(popoverBox.y).toBeGreaterThanOrEqual(0)
+  expect(popoverBox.x + popoverBox.width).toBeLessThanOrEqual(390)
+  expect(popoverBox.y + popoverBox.height).toBeLessThanOrEqual(844)
+  expect(Math.abs(rowBoxAfter.height - rowBoxBefore.height)).toBeLessThanOrEqual(1)
+})
+
 test('jobs surfaces preparing labels during startup analysis', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
