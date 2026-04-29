@@ -506,7 +506,7 @@ The drive can be physically removed once the operation completes.
 </li></ul>
 <p>If ECUBE reports that the drive is still busy, the confirmation dialog closes cleanly and the page shows a specific retry message. Close any open shell, file browser, or process still using the mounted drive, then retry <code>Prepare Eject</code>.</p>
 <p>If ECUBE detects timed-out or failed files in active drive assignments, the first <code>Prepare Eject</code> attempt is blocked with an explicit confirmation-required warning. Review the warning details, then confirm a second prompt to continue with ejection.</p>
-<blockquote><p>To permanently retire a drive after removal, use the Chain of Custody handoff workflow on the <code>Audit</code> page. Confirming a handoff transitions the drive to <code>ARCHIVED</code>.</p></blockquote>
+<blockquote><p>To permanently retire a drive after removal, open the related job in <code>Job Detail</code>, then use the <code>Chain of Custody</code> action. Confirming a handoff transitions the drive to <code>ARCHIVED</code>.</p></blockquote>
 <p class="help-back-to-top"><a href="#help-toc-title">Back to top</a></p>
 <hr />
 <h1 id="5-mounts">5. Mounts</h1>
@@ -805,22 +805,20 @@ Review filters before export so the file contains the intended data set
 Treat exported audit data as sensitive operational evidence
 </li></ul>
 <h2 id="8-1-chain-of-custody-workflow">8.1 Chain of Custody Workflow</h2>
-<p>Use the Chain of Custody panel on the <code>Audit</code> page to generate formatted custody reports, print a compliance-ready hard copy, export the raw JSON response, export a CSV of custody events, prefill handoff fields, and record final transfer details when physical media leaves active operations.</p>
+<p>Use the <code>Chain of Custody</code> action on <code>Job Detail</code> to open the job-scoped CoC dialog. The dialog loads the last stored CoC snapshot for that job, shows the formatted report content directly, allows authorized users to refresh and store a new snapshot, and provides print/export and handoff controls appropriate to the current role.</p>
 <p>Typical workflow:</p>
 <ol><li>
-Open <code>Audit</code>.
+Open the relevant job in <code>Job Detail</code>.
 </li><li>
-In the <strong>Chain of Custody</strong> section, filter by drive ID, drive serial, and/or project ID.
+Click <code>Chain of Custody</code> in the action area.
 </li><li>
-Click <code>Load CoC</code> to load custody report data.
+Review the report for each drive section. Each report includes generated-at UTC metadata, the requesting username, drive identity, custody status, custody-event timeline, manifest summary rows, and an attestation block for print sign-off.
 </li><li>
-Review the report card for the selected drive. Each report includes generated-at UTC metadata, the requesting username, drive identity (including manufacturer and model when available), custody status, custody-event timeline, manifest summary rows, and an attestation block for print sign-off.
+If the report needs to be rebuilt from current trusted state, an <code>admin</code> or <code>manager</code> can click <code>Refresh</code> to store a new snapshot.
 </li><li>
-Use <code>Print CoC</code> when you need a print-only chain-of-custody document. The print layout hides the rest of the Audit page and separates drive reports cleanly.
+Use <code>Print CoC</code>, <code>Export CoC CSV</code>, or <code>Export JSON</code> when you need a printable or downloadable copy of the report currently loaded in the dialog.
 </li><li>
-Use <code>Export JSON</code> to save the raw machine-readable API response, or <code>Export CoC CSV</code> to save the custody events table for spreadsheet review.
-</li><li>
-Click <code>Prefill Handoff</code> to populate the handoff form from the selected report.
+If you are an <code>admin</code> or <code>manager</code>, click <code>Prefill Handoff</code> to populate the handoff form from a selected report.
 </li><li>
 Enter required handoff details (<code>Possessor</code> and <code>Delivery Time</code>) and any optional receipt fields. The delivery time picker uses your browser's local timezone; the application converts it to UTC automatically before storing.
 </li><li>
@@ -835,15 +833,23 @@ Choose one of the following:
 <code>Yes, archive drive</code>: records the handoff and archives the drive.
 </li></ul>
 </li></ol>
+<p>Auditor behavior:</p>
+<ul><li>
+Auditors can open the dialog, review the loaded report, and use <code>Print CoC</code>, <code>Export CoC CSV</code>, and <code>Export JSON</code>.
+</li><li>
+Auditors cannot refresh the snapshot or confirm custody handoff.
+</li></ul>
 <p>What happens when handoff is confirmed:</p>
 <ul><li>
 The custody handoff event is written to the immutable audit trail.
+</li><li>
+The refreshed CoC snapshot write is recorded in both the audit log and the application log.
 </li><li>
 The selected drive is automatically transitioned to the <code>ARCHIVED</code> state.
 </li><li>
 The drive is removed from active circulation workflows.
 </li><li>
-The drive no longer appears in Chain of Custody search results intended for active media.
+Archived jobs continue to expose the last stored CoC snapshot for review, print, and export.
 </li><li>
 Operational actions for that drive are blocked as part of archival enforcement.
 </li></ul>
@@ -1196,7 +1202,7 @@ Do not remove the drive while a copy or verification step is still active.
 </li><li>
 After ejection the drive returns to <code>AVAILABLE</code> with its project binding intact. It can be re-initialized for the same project without reformatting.
 </li><li>
-To permanently retire the drive, complete the Chain of Custody handoff on the <code>Audit</code> page after removal.
+To permanently retire the drive, open the related job in <code>Job Detail</code> and complete the Chain of Custody handoff from the <code>Chain of Custody</code> dialog.
 </li></ul>
 <h2 id="11-3-export-evidence-to-a-drive">11.3 Export Evidence to a Drive</h2>
 <p><strong>Allowed roles:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code></p>

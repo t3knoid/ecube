@@ -321,6 +321,7 @@ describe('JobsView grouped create dialog', () => {
       source_path: 'folder/subfolder',
       drive_id: 1,
       thread_count: 3,
+      notes: 'Operator note',
     })
     expect(mocks.startJob).toHaveBeenCalledWith(44)
     expect(mocks.push).toHaveBeenCalledWith({ name: 'job-detail', params: { id: 44 } })
@@ -351,6 +352,7 @@ describe('JobsView grouped create dialog', () => {
       source_path: '/folder/subfolder',
       drive_id: 1,
       thread_count: 4,
+      notes: undefined,
     })
   })
 
@@ -379,6 +381,7 @@ describe('JobsView grouped create dialog', () => {
       source_path: '/',
       drive_id: 1,
       thread_count: 4,
+      notes: undefined,
     })
   })
 

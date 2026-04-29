@@ -14,6 +14,7 @@ from app.database import get_db
 from app.models.audit import AuditLog
 from app.models.jobs import JobStatus
 from app.repositories.job_repository import DriveAssignmentRepository, FileRepository
+from app.schemas.audit import ChainOfCustodyHandoffRequest, ChainOfCustodyHandoffResponse, ChainOfCustodyReportSchema
 from app.schemas.jobs import (
     DriveInfoSchema,
     ExportJobSchema,
@@ -26,8 +27,8 @@ from app.schemas.jobs import (
     JobStartupAnalysisClearRequest,
     JobUpdate,
 )
-from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500
-from app.services import job_service
+from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_410, R_422, R_500
+from app.services import audit_service, job_service
 from app.utils.client_ip import get_client_ip
 from app.utils.sanitize import redact_pathlike_substrings
 
@@ -36,6 +37,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 _ALL_ROLES = require_roles("admin", "manager", "processor", "auditor")
+_COC_READ_ROLES = require_roles("admin", "manager", "auditor")
 _ADMIN_MANAGER = require_roles("admin", "manager")
 _ADMIN_MANAGER_PROCESSOR = require_roles("admin", "manager", "processor")
 
@@ -365,6 +367,73 @@ def get_job(
     """
     job = job_service.get_job(job_id, db)
     return _redact_ip(job, current_user, db)
+
+
+@router.get("/{job_id}/chain-of-custody", response_model=ChainOfCustodyReportSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_422})
+def get_job_chain_of_custody(
+    job_id: int,
+    request: Request,
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_COC_READ_ROLES),
+):
+    """Return the job-scoped chain-of-custody report or stored archived snapshot.
+
+    Archived jobs return only the last stored snapshot. Non-archived jobs
+    return the most recent stored snapshot and require an explicit refresh
+    action to generate and persist a new one.
+
+    **Roles:** ``admin``, ``manager``, ``auditor``
+    """
+    return audit_service.get_job_chain_of_custody_report(
+        db,
+        job_id=job_id,
+        actor=current_user.username,
+        client_ip=get_client_ip(request),
+        allow_persistence=any(role in {"admin", "manager"} for role in current_user.roles),
+    )
+
+
+@router.post("/{job_id}/chain-of-custody/refresh", response_model=ChainOfCustodyReportSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_422})
+def refresh_job_chain_of_custody(
+    job_id: int,
+    request: Request,
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER),
+):
+    """Rebuild and persist the job-scoped chain-of-custody snapshot.
+
+    **Roles:** ``admin``, ``manager``
+    """
+    return audit_service.refresh_job_chain_of_custody_report(
+        db,
+        job_id=job_id,
+        actor=current_user.username,
+        client_ip=get_client_ip(request),
+    )
+
+
+@router.post("/{job_id}/chain-of-custody/handoff", response_model=ChainOfCustodyHandoffResponse, responses={**R_401, **R_403, **R_404, **R_409, **R_410, **R_422})
+def confirm_job_chain_of_custody_handoff(
+    job_id: int,
+    body: ChainOfCustodyHandoffRequest,
+    request: Request,
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER),
+):
+    """Record job-scoped custody transfer and store the refreshed CoC snapshot.
+
+    **Roles:** ``admin``, ``manager``
+    """
+    return audit_service.confirm_job_chain_of_custody_handoff(
+        db,
+        job_id=job_id,
+        payload=body,
+        actor=current_user.username,
+        client_ip=get_client_ip(request),
+    )
 
 
 @router.get("/{job_id}/files", response_model=JobFilesResponse, responses={**R_401, **R_403, **R_404, **R_422})
