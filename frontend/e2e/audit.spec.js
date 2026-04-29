@@ -306,27 +306,35 @@ test.describe('chain of custody handoff', () => {
     await page.goto('/jobs/12')
     await page.getByRole('button', { name: 'Chain of Custody' }).click()
     await expect(page.getByText('Drive #1 (SN-001)')).toBeVisible()
+    await page.getByRole('button', { name: 'Custody Handoff' }).click()
+    await expect(page.getByRole('heading', { name: 'Custody Handoff' })).toBeVisible()
+    await expect(page.getByText('Standard closeout is an in-app custody handoff. Record it in ECUBE even if external paper paperwork is also used.')).toBeVisible()
 
-    await page.getByRole('button', { name: 'Prefill Handoff' }).click()
     await expect(page.getByLabel('Drive ID')).toHaveValue('1')
     await expect(page.getByLabel('Project Binding')).toHaveValue('PRJ-001')
     await expect(page.getByLabel('Evidence')).toHaveValue('EV-12')
+    const expectedDefaultDeliveryTime = await page.evaluate(() => {
+      const now = new Date()
+      const local = new Date(now.getTime() - (now.getTimezoneOffset() * 60 * 1000))
+      return local.toISOString().slice(0, 16)
+    })
+    await expect(page.getByLabel('Delivery Time (Local Time)')).toHaveValue(expectedDefaultDeliveryTime)
     await page.getByLabel('Possessor').fill('Officer Jane Doe')
     await page.getByLabel('Delivery Time (Local Time)').fill('2026-04-01T10:30')
 
     await page.getByRole('button', { name: 'Confirm Handoff' }).click()
-    await expect(page.getByRole('heading', { name: 'Permanent Archive Warning' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Record custody handoff in ECUBE?' })).toBeVisible()
 
     await page.getByRole('button', { name: 'Cancel' }).click()
-    await expect(page.getByRole('heading', { name: 'Permanent Archive Warning' })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Record custody handoff in ECUBE?' })).toHaveCount(0)
     expect(handoffCallCount).toBe(0)
 
     await page.getByRole('button', { name: 'Confirm Handoff' }).click()
-    await page.getByRole('button', { name: 'Yes, archive drive' }).click()
+    await page.getByRole('button', { name: 'Record handoff and archive drive' }).click()
 
     expect(handoffCallCount).toBe(1)
     expect(cocLoads).toBeGreaterThanOrEqual(1)
-    await expect(page.getByRole('heading', { name: 'Permanent Archive Warning' })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Record custody handoff in ECUBE?' })).toHaveCount(0)
     await expect(page.getByText('Request conflict, please retry.')).toHaveCount(0)
     expect(lastHandoffBody).toMatchObject({
       drive_id: 1,
