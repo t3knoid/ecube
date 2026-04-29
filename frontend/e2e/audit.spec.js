@@ -109,6 +109,7 @@ test('job detail chain of custody report renders printable sections and CoC expo
             drive_manufacturer: 'Kingston',
             drive_model: 'DataTraveler',
             project_id: 'PRJ-001',
+            evidence_number: 'EV-12',
             delivery_time: '2026-04-01T14:30:00.000Z',
             custody_complete: true,
             manifest_summary: [
@@ -166,9 +167,10 @@ test('job detail chain of custody report renders printable sections and CoC expo
   await expect(page.locator('.coc-print-card dd').filter({ hasText: 'DataTraveler' })).toBeVisible()
   await expect(page.getByText('Drive initialized')).toBeVisible()
   await expect(page.getByText('DRIVE_INITIALIZED')).toHaveCount(0)
-  await expect(page.getByText('/reports/manifests/12.json')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Processor Notes' })).toBeVisible()
+  await expect(page.getByRole('table', { name: 'Processor notes for drive #1 (SN-001)' })).toContainText('Sealed container intact')
   await expect(page.locator('.coc-print-card dd').filter({ hasText: 'Officer Jane Doe' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Prefill Handoff' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Custody Handoff' })).toHaveCount(0)
 
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: 5000 }).catch(() => null),
@@ -254,6 +256,7 @@ test.describe('chain of custody handoff', () => {
               drive_manufacturer: 'Kingston',
               drive_model: 'DataTraveler',
               project_id: 'PRJ-001',
+              evidence_number: 'EV-12',
               delivery_time: null,
               custody_complete: false,
               manifest_summary: [{
@@ -305,28 +308,36 @@ test.describe('chain of custody handoff', () => {
 
     await page.goto('/jobs/12')
     await page.getByRole('button', { name: 'Chain of Custody' }).click()
-    await expect(page.getByText('Drive #1 (SN-001)')).toBeVisible()
+    await expect(page.getByText('PRJ-001 - EV-12')).toBeVisible()
+    await page.getByRole('button', { name: 'Custody Handoff' }).click()
+    await expect(page.getByRole('heading', { name: 'Custody Handoff' })).toBeVisible()
+    await expect(page.getByText('Standard closeout is an in-app custody handoff. Record it in ECUBE even if external paper paperwork is also used.')).toBeVisible()
 
-    await page.getByRole('button', { name: 'Prefill Handoff' }).click()
     await expect(page.getByLabel('Drive ID')).toHaveValue('1')
     await expect(page.getByLabel('Project Binding')).toHaveValue('PRJ-001')
     await expect(page.getByLabel('Evidence')).toHaveValue('EV-12')
+    const expectedDefaultDeliveryTime = await page.evaluate(() => {
+      const now = new Date()
+      const local = new Date(now.getTime() - (now.getTimezoneOffset() * 60 * 1000))
+      return local.toISOString().slice(0, 16)
+    })
+    await expect(page.getByLabel('Delivery Time (Local Time)')).toHaveValue(expectedDefaultDeliveryTime)
     await page.getByLabel('Possessor').fill('Officer Jane Doe')
     await page.getByLabel('Delivery Time (Local Time)').fill('2026-04-01T10:30')
 
     await page.getByRole('button', { name: 'Confirm Handoff' }).click()
-    await expect(page.getByRole('heading', { name: 'Permanent Archive Warning' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Record custody handoff in ECUBE?' })).toBeVisible()
 
     await page.getByRole('button', { name: 'Cancel' }).click()
-    await expect(page.getByRole('heading', { name: 'Permanent Archive Warning' })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Record custody handoff in ECUBE?' })).toHaveCount(0)
     expect(handoffCallCount).toBe(0)
 
     await page.getByRole('button', { name: 'Confirm Handoff' }).click()
-    await page.getByRole('button', { name: 'Yes, archive drive' }).click()
+    await page.getByRole('button', { name: 'Record handoff and archive drive' }).click()
 
     expect(handoffCallCount).toBe(1)
     expect(cocLoads).toBeGreaterThanOrEqual(1)
-    await expect(page.getByRole('heading', { name: 'Permanent Archive Warning' })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Record custody handoff in ECUBE?' })).toHaveCount(0)
     await expect(page.getByText('Request conflict, please retry.')).toHaveCount(0)
     expect(lastHandoffBody).toMatchObject({
       drive_id: 1,

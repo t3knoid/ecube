@@ -104,6 +104,7 @@ async function mockCoreApis(page) {
       drive_manufacturer: 'SanDisk',
       drive_model: 'Extreme Pro',
       project_id: 'PRJ-777',
+      evidence_number: 'EV-777',
       custody_complete: true,
       delivery_time: '2026-04-28T14:15:16Z',
       chain_of_custody_events: [
