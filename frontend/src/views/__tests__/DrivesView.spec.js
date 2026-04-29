@@ -6,6 +6,7 @@ import DrivesView from '@/views/DrivesView.vue'
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   getDrives: vi.fn(),
+  listJobs: vi.fn(),
   refreshDrives: vi.fn(),
 }))
 
@@ -22,6 +23,10 @@ vi.mock('vue-router', () => ({
 vi.mock('@/api/drives.js', () => ({
   getDrives: (...args) => mocks.getDrives(...args),
   refreshDrives: (...args) => mocks.refreshDrives(...args),
+}))
+
+vi.mock('@/api/jobs.js', () => ({
+  listJobs: (...args) => mocks.listJobs(...args),
 }))
 
 function buildDrive(overrides = {}) {
@@ -56,8 +61,10 @@ function mountView() {
               <div v-for="row in rows" :key="row.id" class="row-stub">
                 <span class="row-device">{{ row.display_device_label || row.port_system_path || '-' }}</span>
                 <span class="row-serial">{{ row.serial_number || '-' }}</span>
+                <span class="row-evidence">{{ row.current_project_evidence_number || '-' }}</span>
                 <slot name="cell-current_state" :row="row" />
                 <slot name="cell-current_project_id" :row="row" />
+                <slot name="cell-current_project_evidence_number" :row="row" />
                 <slot name="cell-actions" :row="row" />
               </div>
               <div class="rows-count">{{ rows.length }}</div>
@@ -95,9 +102,11 @@ describe('DrivesView rescan and filter loading', () => {
     installMatchMediaMock()
     mocks.push.mockReset()
     mocks.getDrives.mockReset()
+    mocks.listJobs.mockReset()
     mocks.refreshDrives.mockReset()
 
     mocks.getDrives.mockResolvedValue([buildDrive()])
+    mocks.listJobs.mockResolvedValue([])
     mocks.refreshDrives.mockResolvedValue({ ok: true })
   })
 
@@ -163,6 +172,7 @@ describe('DrivesView rescan and filter loading', () => {
   })
 
   it('shows the readable device label and serial number in separate columns', async () => {
+    mocks.listJobs.mockResolvedValue([{ id: 9, project_id: 'PROJ-001', evidence_number: 'EV-009' }])
     mocks.getDrives.mockResolvedValue([
       buildDrive({
         device_identifier: 'SER-ONLY',
@@ -172,6 +182,7 @@ describe('DrivesView rescan and filter loading', () => {
         port_number: 4,
         port_system_path: '2-4',
         serial_number: 'SER-ONLY',
+        current_project_id: 'PROJ-001',
       }),
     ])
 
@@ -180,8 +191,10 @@ describe('DrivesView rescan and filter loading', () => {
 
     expect(wrapper.text()).toContain(i18n.global.t('drives.device'))
     expect(wrapper.text()).toContain(i18n.global.t('drives.serialNumber'))
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.evidence'))
     expect(wrapper.text()).toContain('Kingston DataTraveler - Port 4')
     expect(wrapper.text()).toContain('SER-ONLY')
+    expect(wrapper.text()).toContain('EV-009')
   })
 
   it('shows the Browse action for a mounted available drive', async () => {
@@ -231,6 +244,22 @@ describe('DrivesView rescan and filter loading', () => {
     expect(labels).not.toContain(i18n.global.t('common.labels.size'))
     expect(wrapper.find('.drive-status-icon').attributes('aria-label')).toBe(i18n.global.t('drives.states.available'))
     expect(wrapper.find('.row-actions-toggle-dots').exists()).toBe(true)
+  })
+
+  it('removes the filesystem column and shows project evidence in the list', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-123' })])
+    mocks.listJobs.mockResolvedValue([
+      { id: 12, project_id: 'PROJ-123', evidence_number: 'EV-123' },
+      { id: 11, project_id: 'PROJ-123', evidence_number: 'EV-OLDER' },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const labels = wrapper.find('.column-labels').text()
+    expect(labels).not.toContain(i18n.global.t('drives.filesystem'))
+    expect(labels).toContain(i18n.global.t('jobs.evidence'))
+    expect(wrapper.find('.row-evidence').text()).toBe('EV-123')
   })
 
   it('sorts by project in ascending and descending order and keeps that sort after refresh', async () => {
