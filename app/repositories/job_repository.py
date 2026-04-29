@@ -1,4 +1,5 @@
 from collections import defaultdict
+from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from sqlalchemy import and_, case, func, update
@@ -157,6 +158,19 @@ class JobRepository:
             .order_by(ExportJob.created_at.desc(), ExportJob.id.desc())
             .all()
         )
+
+    def get_latest_manifest_created_at(self, job_id: int) -> Optional[datetime]:
+        manifest = (
+            self.db.query(Manifest)
+            .filter(Manifest.job_id == job_id)
+            .order_by(Manifest.created_at.desc(), Manifest.id.desc())
+            .first()
+        )
+        if manifest is None or manifest.created_at is None:
+            return None
+        if manifest.created_at.tzinfo is None:
+            return manifest.created_at.replace(tzinfo=timezone.utc)
+        return manifest.created_at.astimezone(timezone.utc)
 
 
 class JobChainOfCustodySnapshotRepository:
