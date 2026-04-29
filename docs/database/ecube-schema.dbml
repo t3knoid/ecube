@@ -231,6 +231,8 @@ Table drive_assignments {
   id int [pk, not null]
   drive_id int [not null]
   job_id int [not null]
+  file_count int [not null, default: 0]
+  copied_bytes bigint [not null, default: 0]
   assigned_at timestamptz
   released_at timestamptz
 }
