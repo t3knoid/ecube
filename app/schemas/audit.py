@@ -6,6 +6,14 @@ from pydantic import BaseModel, Field, field_serializer, model_validator
 from app.utils.sanitize import ProjectIdStr, SafeStr
 
 
+def _serialize_utc_datetime(dt: Optional[datetime]) -> Optional[str]:
+    if dt is None:
+        return None
+    if dt.tzinfo is None or dt.utcoffset() is None:
+        return f"{dt.isoformat()}Z"
+    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 class AuditLogSchema(BaseModel):
     id: int = Field(..., description="Unique identifier for the audit log entry")
     timestamp: datetime = Field(..., description="ISO 8601 timestamp when the action occurred")
@@ -31,6 +39,8 @@ class ChainOfCustodyEventSchema(BaseModel):
 
 class ManifestSummarySchema(BaseModel):
     job_id: int = Field(..., description="Related export job ID")
+    evidence_number: Optional[str] = Field(default=None, description="Evidence identifier for the related job")
+    processor_notes: Optional[str] = Field(default=None, description="Processor notes recorded when the job was created")
     total_files: int = Field(..., description="Number of files copied during this drive assignment for the job")
     total_bytes: int = Field(..., description="Total bytes copied during this drive assignment for the job")
     manifest_count: int = Field(..., description="Number of generated manifests for the job")
@@ -52,15 +62,20 @@ class ChainOfCustodyDriveReportSchema(BaseModel):
 
     @field_serializer("delivery_time")
     def _serialize_delivery_time(self, dt: Optional[datetime]) -> Optional[str]:
-        if dt is None:
-            return None
-        return dt.isoformat().replace("+00:00", "Z")
+        return _serialize_utc_datetime(dt)
 
 
 class ChainOfCustodyReportSchema(BaseModel):
     selector_mode: str = Field(..., description="Resolved selector mode: DRIVE_ID, DRIVE_SN, or PROJECT")
     project_id: Optional[str] = Field(default=None, description="Project selector when provided")
+    snapshot_stored_at: Optional[datetime] = Field(default=None, description="When the stored snapshot was first written")
+    snapshot_updated_at: Optional[datetime] = Field(default=None, description="When the stored snapshot was last updated on disk")
+    snapshot_stored_by: Optional[str] = Field(default=None, description="User who last stored the snapshot")
     reports: List[ChainOfCustodyDriveReportSchema] = Field(default_factory=list, description="Drive-scoped chain-of-custody reports")
+
+    @field_serializer("snapshot_stored_at", "snapshot_updated_at")
+    def _serialize_snapshot_datetimes(self, dt: Optional[datetime]) -> Optional[str]:
+        return _serialize_utc_datetime(dt)
 
 
 class ChainOfCustodyHandoffRequest(BaseModel):
@@ -96,4 +111,4 @@ class ChainOfCustodyHandoffResponse(BaseModel):
 
     @field_serializer("delivery_time", "recorded_at")
     def _serialize_utc_datetime(self, dt: datetime) -> str:
-        return dt.isoformat().replace("+00:00", "Z")
+        return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
