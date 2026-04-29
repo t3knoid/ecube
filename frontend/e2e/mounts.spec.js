@@ -3,6 +3,7 @@ import { setupAuthenticatedPage } from './helpers/app.js'
 import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
 
 test('mounts add/edit/test/remove flow', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 620 })
   await setupAuthenticatedPage(page, ['admin'])
 
   const mounts = [{ id: 10, type: 'NFS', remote_path: '10.0.0.4:/exports', local_mount_point: '/nfs/exports', project_id: 'CASE-2026-000', status: 'MOUNTED' }]
@@ -151,7 +152,9 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
 
   await editDialog.getByRole('button', { name: 'Test', exact: true }).click()
   await expect(editDialog.getByText('Share test passed. You can now save these changes.')).toBeVisible()
+  await expect(editDialog.getByRole('button', { name: 'Cancel', exact: true })).toBeInViewport()
   await expect(editDialog.getByRole('button', { name: 'Save', exact: true })).toBeEnabled()
+  await expect(editDialog.getByRole('button', { name: 'Save', exact: true })).toBeInViewport()
 
   await page.getByLabel('Remote Path').fill('//server/case-2026-001-updated')
   await expect(editDialog.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
