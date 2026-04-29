@@ -13,7 +13,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.audit import AuditLog
 from app.models.jobs import JobStatus
-from app.repositories.job_repository import DriveAssignmentRepository, FileRepository
+from app.repositories.job_repository import DriveAssignmentRepository, FileRepository, JobRepository
 from app.schemas.audit import ChainOfCustodyHandoffRequest, ChainOfCustodyHandoffResponse, ChainOfCustodyReportSchema
 from app.schemas.jobs import (
     DriveInfoSchema,
@@ -186,6 +186,9 @@ def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
     schema = ExportJobSchema.model_validate(job)
     if not _IP_VISIBLE_ROLES.intersection(user.roles):
         schema.client_ip = None
+
+    job_repo = JobRepository(db)
+    schema.latest_manifest_created_at = job_repo.get_latest_manifest_created_at(job.id)
 
     # Derived file counts via a single aggregate query
     file_repo = FileRepository(db)

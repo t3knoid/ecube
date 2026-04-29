@@ -250,6 +250,7 @@ class ExportJobSchema(BaseModel):
     created_at: Optional[datetime] = Field(default=None, description="When the job was created")
     started_at: Optional[datetime] = Field(default=None, description="When the copy was started")
     completed_at: Optional[datetime] = Field(default=None, description="When the job reached a terminal state")
+    latest_manifest_created_at: Optional[datetime] = Field(default=None, description="When the most recent manifest for this job was generated")
     drive: Optional[DriveInfoSchema] = Field(default=None, description="Assigned drive metadata (null if no drive assigned)")
     failure_reason: Optional[str] = Field(default=None, description="Persisted sanitized job-level failure reason (null when not available)")
     error_summary: Optional[str] = Field(default=None, description="Brief summary of file failures (null on success)")
