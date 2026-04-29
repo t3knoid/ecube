@@ -1,7 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import i18n from '@/i18n/index.js'
 import AuditView from '@/views/AuditView.vue'
+
+const fixedNow = new Date('2026-04-02T10:15:00.000Z')
 
 const mocks = vi.hoisted(() => ({
   route: { query: {} },
@@ -61,6 +63,8 @@ function mountView() {
 
 describe('AuditView chain of custody report', () => {
   beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(fixedNow)
     mocks.route.query = {}
     mocks.getAudit.mockReset()
     mocks.getChainOfCustody.mockReset()
@@ -115,6 +119,10 @@ describe('AuditView chain of custody report', () => {
     })
   })
 
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('renders the structured CoC report after loading data', async () => {
     const wrapper = mountView()
     await flushPromises()
@@ -151,5 +159,28 @@ describe('AuditView chain of custody report', () => {
     clickSpy.mockRestore()
     createObjectURLSpy.mockRestore()
     revokeObjectURLSpy.mockRestore()
+  })
+
+  it('restores the previous generation timestamp when an archived drive returns 410', async () => {
+    const originalGeneratedAt = '2026-04-02 10:15:00 UTC'
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.find('select').setValue('1')
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.loadCoc')).trigger('click')
+    await flushPromises()
+
+    expect(wrapper.html()).toContain(originalGeneratedAt)
+
+    vi.setSystemTime(new Date('2026-04-03T12:00:00.000Z'))
+    mocks.getChainOfCustody.mockRejectedValueOnce({ response: { status: 410 } })
+
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.loadCoc')).trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Drive initialized')
+    expect(wrapper.html()).toContain(originalGeneratedAt)
+    expect(wrapper.html()).not.toContain('2026-04-03 12:00:00 UTC')
   })
 })
