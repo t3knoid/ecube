@@ -1564,15 +1564,19 @@ Chain-of-Custody (CoC) handoff ensures legal custody transfer of evidence is pro
 | 1 | CoC page accessible after job completion | Complete a job, prepare-eject drive, navigate to Audit view | CoC tab/section visible and accessible |
 | 2 | Drive selector is dropdown | In CoC filter panel, click drive selector | Dropdown shows list of existing (non-archived) drives sorted by ID |
 | 3 | Project selector is dropdown | In CoC filter panel, click project selector | Dropdown shows list of unique project IDs from current drive bindings |
-| 4 | Load CoC by drive | Select a drive from dropdown and click "Load CoC" | Report displays lifecycle events and manifest summary for that drive |
-| 5 | CoC prefill handoff form | Click "Prefill Handoff" on a CoC report | Handoff form populates with drive_id and project_id from the report |
-| 6 | Handoff confirmation warning modal appears | After filling handoff form and clicking "Confirm Handoff" | Modal appears with warning text: "This action will permanently archive the drive..." |
-| 7 | Handoff warning shows confirmation buttons | Inspect warning modal | Two buttons: "Yes, archive drive" (danger styling) and "Cancel" |
-| 8 | Cancel handoff from modal | Click "Cancel" in warning modal | Modal closes, form state preserved, no handoff submitted |
-| 9 | Confirm handoff from modal | Click "Yes, archive drive" in warning modal | Modal closes, handoff submitted; upon success, status message "Custody handoff recorded." appears and report reloads |
-| 10 | Archived drive removed from report lists | After handoff, reload page or navigate away/back | Archived drive no longer appears in CoC filter dropdowns or project reports |
-| 11 | Handoff form validation | Submit handoff form with missing possessor or delivery_time | Inline validation error shown (form not submitted) |
-| 12 | Manual archive result | After successful handoff, query drive state via API | Drive state is `ARCHIVED` |
+| 4 | Load CoC by drive | Select a drive from dropdown and click "Load CoC" | Report displays generated-at metadata, manufacturer/model identity when available, lifecycle events, manifest summary, and attestation block for that drive |
+| 5 | CoC export actions are distinct | Load a report and inspect the Audit/CoC toolbars | Audit section shows `Export Audit CSV`; CoC section shows `Print CoC`, `Export CoC CSV`, and `Export JSON` |
+| 6 | CoC CSV export contains custody-event rows | Load a report and click `Export CoC CSV` | Download filename matches `chain-of-custody-*.csv`; rows include drive serial, manufacturer, model, timestamp, actor, action, event type, and JSON details |
+| 7 | CoC print layout isolates the report | Load a report, trigger print preview, and inspect the rendered page | Print view hides the audit-log table and shows only the formatted CoC report cards |
+| 8 | CoC prefill handoff form | Click "Prefill Handoff" on a CoC report | Handoff form populates with drive_id and project_id from the report |
+| 9 | Handoff confirmation warning modal appears | After filling handoff form and clicking "Confirm Handoff" | Modal appears with warning text: "This action will permanently archive the drive..." |
+| 10 | Handoff warning shows confirmation buttons | Inspect warning modal | Two buttons: "Yes, archive drive" (danger styling) and "Cancel" |
+| 11 | Cancel handoff from modal | Click "Cancel" in warning modal | Modal closes, form state preserved, no handoff submitted |
+| 12 | Confirm handoff from modal | Click "Yes, archive drive" in warning modal | Modal closes, handoff submitted; upon success, status message "Custody handoff recorded." appears and report reloads |
+| 13 | Archived drive removed from report lists | After handoff, reload page or navigate away/back | Archived drive no longer appears in CoC filter dropdowns or project reports |
+| 14 | Handoff form validation | Submit handoff form with missing possessor or delivery_time | Inline validation error shown (form not submitted) |
+| 15 | Archived-drive reload preserves prior report | Load a report, archive the selected drive in another session, then click `Load CoC` again for the same selector | Prior report remains visible with its original generated-at timestamp instead of being replaced by stale or mismatched data |
+| 16 | Manual archive result | After successful handoff, query drive state via API | Drive state is `ARCHIVED` |
 
 #### 12.12.5 Manual Test Data Setup (SQL)
 
