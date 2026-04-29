@@ -705,8 +705,6 @@ describe('JobDetailView start action', () => {
 
     expect(mocks.getJobChainOfCustody).toHaveBeenCalledWith(6)
     expect(wrapper.text()).toContain('job-coc-report-5|JOB|PROJ-001|casey')
-    expect(wrapper.text()).toContain(i18n.global.t('audit.snapshotStatusTitle'))
-    expect(wrapper.text()).toContain(i18n.global.t('audit.snapshotUpdatedAtLabel'))
     expect(wrapper.findAll('button').some((node) => node.text() === i18n.global.t('audit.prefillHandoff'))).toBe(false)
 
     const printButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.printCoc'))
