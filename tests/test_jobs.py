@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from app.routers import jobs as jobs_router
@@ -731,6 +731,7 @@ def test_get_job_chain_of_custody_active_job_requires_stored_snapshot(manager_cl
 
     assert response.status_code == 404
     assert "refresh the report to create one" in response.json()["message"].lower()
+    assert "ask an admin or manager" not in response.json()["message"].lower()
 
     snapshot = db.query(JobChainOfCustodySnapshot).filter(JobChainOfCustodySnapshot.job_id == job.id).one_or_none()
     assert snapshot is None
@@ -849,7 +850,7 @@ def test_get_job_chain_of_custody_auditor_read_does_not_persist_snapshot(auditor
     response = auditor_client.get(f"/jobs/{job.id}/chain-of-custody")
 
     assert response.status_code == 404
-    assert "refresh the report to create one" in response.json()["message"].lower()
+    assert "ask an admin or manager to refresh the report to create one" in response.json()["message"].lower()
 
     snapshot = db.query(JobChainOfCustodySnapshot).filter(JobChainOfCustodySnapshot.job_id == job.id).one_or_none()
     assert snapshot is None
@@ -1084,6 +1085,67 @@ def test_get_job_chain_of_custody_active_job_prefers_stored_snapshot_over_live_s
     assert report["manifest_summary"][0]["processor_notes"] == "Stored intake note"
     assert report["manifest_summary"][0]["total_files"] == 1
     assert report["manifest_summary"][0]["total_bytes"] == 128
+
+
+def test_get_job_chain_of_custody_normalizes_snapshot_timestamps_to_utc(manager_client, db):
+    offset = timezone(-timedelta(hours=4))
+    stored_at = datetime(2026, 4, 29, 0, 0, 49, 680951, tzinfo=offset)
+    updated_at = datetime(2026, 4, 29, 6, 16, 5, 631750, tzinfo=offset)
+
+    job = ExportJob(
+        project_id="PROJ-COC-TIMEZONE",
+        evidence_number="EV-COC-TIMEZONE",
+        source_path="/data/coc-timezone",
+        status=JobStatus.COMPLETED,
+    )
+    db.add(job)
+    db.commit()
+
+    snapshot = type(
+        "SnapshotStub",
+        (),
+        {
+            "job_id": job.id,
+            "stored_by": "manager-user",
+            "stored_at": stored_at,
+            "updated_at": updated_at,
+            "payload": {
+                "selector_mode": "JOB",
+                "project_id": "PROJ-COC-TIMEZONE",
+                "reports": [
+                    {
+                        "drive_id": 15,
+                        "drive_sn": "USB-COC-TIMEZONE-001",
+                        "drive_manufacturer": "SanDisk",
+                        "drive_model": "Extreme",
+                        "project_id": "PROJ-COC-TIMEZONE",
+                        "custody_complete": False,
+                        "delivery_time": None,
+                        "chain_of_custody_events": [],
+                        "manifest_summary": [],
+                    }
+                ],
+            },
+        },
+    )()
+
+    with patch("app.services.audit_service.JobChainOfCustodySnapshotRepository.get_by_job_id", return_value=snapshot):
+        response = manager_client.get(f"/jobs/{job.id}/chain-of-custody")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["snapshot_stored_at"] == "2026-04-29T04:00:49.680951Z"
+    assert payload["snapshot_updated_at"] == "2026-04-29T10:16:05.631750Z"
+
+    recall_audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "COC_SNAPSHOT_RECALLED", AuditLog.job_id == job.id)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    assert recall_audit is not None
+    assert recall_audit.details["stored_at"] == "2026-04-29T04:00:49.680951Z"
+    assert recall_audit.details["updated_at"] == "2026-04-29T10:16:05.631750Z"
 
 
 def test_refresh_job_chain_of_custody_denies_auditor(auditor_client, db):
