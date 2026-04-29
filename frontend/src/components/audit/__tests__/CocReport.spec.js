@@ -12,6 +12,7 @@ function mountView(props = {}) {
         drive_manufacturer: 'SanDisk',
         drive_model: 'Extreme Pro',
         project_id: 'PRJ-777',
+        evidence_number: 'EV-777',
         custody_complete: true,
         delivery_time: '2026-04-28T14:15:16Z',
         chain_of_custody_events: [
@@ -108,6 +109,7 @@ describe('CocReport', () => {
         drive_manufacturer: null,
         drive_model: null,
         project_id: null,
+        evidence_number: 'EV-888',
         custody_complete: false,
         delivery_time: null,
         chain_of_custody_events: [],
@@ -115,6 +117,7 @@ describe('CocReport', () => {
       },
     })
 
+    expect(wrapper.text()).toContain('EV-888')
     expect(wrapper.text()).toContain('No events recorded')
     expect(wrapper.text()).toContain('No manifest summary available')
     expect(wrapper.text()).toContain('No processor notes recorded')
