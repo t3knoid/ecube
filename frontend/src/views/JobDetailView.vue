@@ -2011,6 +2011,7 @@ onUnmounted(() => {
       :message="''"
       :confirm-label="t('common.actions.close')"
       :cancel-label="t('common.actions.cancel')"
+      :show-cancel="false"
       @confirm="closeCocHandoffErrorDialog"
       @cancel="closeCocHandoffErrorDialog"
     >

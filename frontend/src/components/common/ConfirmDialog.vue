@@ -22,6 +22,10 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  showCancel: {
+    type: Boolean,
+    default: true,
+  },
   dangerous: {
     type: Boolean,
     default: false,
@@ -162,7 +166,7 @@ onUnmounted(() => {
           <slot />
         </div>
         <div class="dialog-actions">
-          <button class="btn" @click="close">{{ cancelLabel }}</button>
+          <button v-if="showCancel" class="btn" @click="close">{{ cancelLabel }}</button>
           <button
             class="btn"
             :class="dangerous ? 'btn-danger' : 'btn-primary'"
