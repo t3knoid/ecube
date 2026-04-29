@@ -721,6 +721,7 @@ function handleAfterPrint() {
 }
 
 function applyCocSnapshot(report) {
+  cocGeneratedAt.value = report?.snapshot_updated_at || report?.snapshot_stored_at || new Date().toISOString()
   cocReport.value = report
 }
 
@@ -730,7 +731,6 @@ async function loadJobChainOfCustody() {
   cocError.value = ''
   cocStatusMessage.value = ''
   try {
-    cocGeneratedAt.value = new Date().toISOString()
     applyCocSnapshot(await getJobChainOfCustody(job.value.id))
   } catch (err) {
     cocReport.value = null
@@ -746,7 +746,6 @@ async function refreshStoredJobChainOfCustody() {
   cocError.value = ''
   cocStatusMessage.value = ''
   try {
-    cocGeneratedAt.value = new Date().toISOString()
     applyCocSnapshot(await refreshJobChainOfCustody(job.value.id))
     cocStatusMessage.value = t('audit.snapshotRefreshed')
   } catch (err) {

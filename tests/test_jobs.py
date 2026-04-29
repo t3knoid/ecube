@@ -984,6 +984,108 @@ def test_get_job_chain_of_custody_active_job_uses_stored_snapshot(auditor_client
     assert payload["snapshot_stored_by"] == "manager-user"
 
 
+def test_get_job_chain_of_custody_active_job_prefers_stored_snapshot_over_live_state(auditor_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-COC-LIVE-STATE-001",
+        manufacturer="LiveVendor",
+        product_name="LiveModel",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-COC-LIVE-STATE",
+        mount_path="/mnt/ecube/coc-live-state-001",
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-COC-LIVE-STATE",
+        evidence_number="EV-COC-LIVE-STATE",
+        source_path="/data/coc-live-state",
+        status=JobStatus.COMPLETED,
+        file_count=9,
+        copied_bytes=9000,
+    )
+    db.add(job)
+    db.flush()
+
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id, file_count=9, copied_bytes=9000))
+    db.add(Manifest(job_id=job.id, manifest_path="/tmp/manifest-coc-live-state.json", format="JSON"))
+    db.add_all([
+        AuditLog(action="DRIVE_INITIALIZED", drive_id=drive.id, project_id="PROJ-COC-LIVE-STATE", details={"drive_id": drive.id}),
+        AuditLog(
+            action="JOB_CREATED",
+            drive_id=drive.id,
+            job_id=job.id,
+            project_id="PROJ-COC-LIVE-STATE",
+            details={
+                "project_id": "PROJ-COC-LIVE-STATE",
+                "evidence_number": "EV-COC-LIVE-STATE",
+                "processor_notes": "Live intake note",
+            },
+        ),
+        AuditLog(action="JOB_COMPLETED", job_id=job.id, project_id="PROJ-COC-LIVE-STATE", details={"status": "COMPLETED"}),
+    ])
+    db.add(
+        JobChainOfCustodySnapshot(
+            job_id=job.id,
+            stored_by="manager-user",
+            payload={
+                "selector_mode": "JOB",
+                "project_id": "PROJ-COC-LIVE-STATE",
+                "reports": [
+                    {
+                        "drive_id": 77,
+                        "drive_sn": "USB-COC-STORED-ONLY-001",
+                        "drive_manufacturer": "StoredVendor",
+                        "drive_model": "StoredModel",
+                        "project_id": "PROJ-COC-LIVE-STATE",
+                        "custody_complete": False,
+                        "delivery_time": None,
+                        "chain_of_custody_events": [
+                            {
+                                "event_id": 501,
+                                "event_type": "COC_SNAPSHOT_STORED",
+                                "timestamp": "2026-04-28T19:30:00Z",
+                                "actor": "manager-user",
+                                "action": "Stored snapshot event",
+                                "details": {"source": "stored-snapshot"},
+                            }
+                        ],
+                        "manifest_summary": [
+                            {
+                                "job_id": job.id,
+                                "evidence_number": "EV-COC-STORED-ONLY",
+                                "processor_notes": "Stored intake note",
+                                "total_files": 1,
+                                "total_bytes": 128,
+                                "manifest_count": 1,
+                                "latest_manifest_path": "/tmp/stored-manifest.json",
+                                "latest_manifest_format": "JSON",
+                                "latest_manifest_created_at": "2026-04-28T19:30:00Z",
+                            }
+                        ],
+                    }
+                ],
+            },
+        )
+    )
+    db.commit()
+
+    response = auditor_client.get(f"/jobs/{job.id}/chain-of-custody")
+
+    assert response.status_code == 200
+    payload = response.json()
+    report = payload["reports"][0]
+    assert report["drive_id"] == 77
+    assert report["drive_sn"] == "USB-COC-STORED-ONLY-001"
+    assert report["drive_manufacturer"] == "StoredVendor"
+    assert report["drive_model"] == "StoredModel"
+    assert report["chain_of_custody_events"][0]["action"] == "Stored snapshot event"
+    assert report["manifest_summary"][0]["evidence_number"] == "EV-COC-STORED-ONLY"
+    assert report["manifest_summary"][0]["processor_notes"] == "Stored intake note"
+    assert report["manifest_summary"][0]["total_files"] == 1
+    assert report["manifest_summary"][0]["total_bytes"] == 128
+
+
 def test_refresh_job_chain_of_custody_denies_auditor(auditor_client, db):
     job = ExportJob(
         project_id="PROJ-COC-REFRESH-DENY",
