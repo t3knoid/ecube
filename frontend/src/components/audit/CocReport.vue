@@ -172,6 +172,8 @@ function manifestPath(value) {
           <thead>
             <tr>
               <th>{{ t('jobs.jobId') }}</th>
+              <th>{{ t('jobs.evidence') }}</th>
+              <th>{{ t('audit.processorNotes') }}</th>
               <th>{{ t('audit.totalFiles') }}</th>
               <th>{{ t('audit.totalBytes') }}</th>
               <th>{{ t('audit.manifestCount') }}</th>
@@ -183,6 +185,8 @@ function manifestPath(value) {
           <tbody>
             <tr v-for="manifest in report.manifest_summary" :key="manifest.job_id">
               <td>{{ manifest.job_id }}</td>
+              <td>{{ manifest.evidence_number || '-' }}</td>
+              <td>{{ manifest.processor_notes || '-' }}</td>
               <td>{{ manifest.total_files }}</td>
               <td>{{ manifest.total_bytes }}</td>
               <td>{{ manifest.manifest_count }}</td>

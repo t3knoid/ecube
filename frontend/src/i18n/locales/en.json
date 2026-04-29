@@ -340,6 +340,7 @@
     "sequenceNumber": "#",
     "totalFiles": "Files",
     "totalBytes": "Bytes",
+    "processorNotes": "Processor Notes",
     "latestManifestPath": "Latest Manifest Path",
     "latestManifestFormat": "Latest Manifest Format",
     "latestManifestCreatedAt": "Latest Manifest Date",

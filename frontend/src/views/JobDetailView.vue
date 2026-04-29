@@ -3,12 +3,13 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
-import { analyzeJob, archiveJob, getJob, getJobFiles, startJob, retryFailedJob, pauseJob, verifyJob, generateManifest, downloadManifest, updateJob, completeJob, deleteJob, clearJobStartupAnalysisCache } from '@/api/jobs.js'
+import { analyzeJob, archiveJob, getJob, getJobChainOfCustody, getJobFiles, startJob, retryFailedJob, pauseJob, verifyJob, generateManifest, downloadManifest, updateJob, completeJob, deleteJob, clearJobStartupAnalysisCache, confirmJobChainOfCustodyHandoff } from '@/api/jobs.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import { getFileHashes, compareFiles } from '@/api/files.js'
 import { getDrives } from '@/api/drives.js'
 import { getMounts } from '@/api/mounts.js'
 import { usePolling } from '@/composables/usePolling.js'
+import CocReport from '@/components/audit/CocReport.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
@@ -55,12 +56,16 @@ const showDeleteDialog = ref(false)
 const showArchiveDialog = ref(false)
 const showStartupAnalysisCleanupDialog = ref(false)
 const showPausePendingDialog = ref(false)
+const showCocDialog = ref(false)
+const showCocHandoffWarning = ref(false)
 const showHashDialog = ref(false)
 const showFileErrorDialog = ref(false)
+const cocDialogRef = ref(null)
 const editDialogRef = ref(null)
 const pauseDialogRef = ref(null)
 const hashDialogRef = ref(null)
 const fileErrorDialogRef = ref(null)
+const cocDialogTriggerRef = ref(null)
 const dialogTriggerRef = ref(null)
 const hashDialogTriggerRef = ref(null)
 const fileErrorDialogTriggerRef = ref(null)
@@ -75,11 +80,30 @@ const editForm = ref({
   thread_count: 4,
 })
 
+const cocLoading = ref(false)
+const cocError = ref('')
+const cocStatusMessage = ref('')
+const cocGeneratedAt = ref('')
+const cocReport = ref(null)
+const handoffSaving = ref(false)
+const cocHandoffForm = ref({
+  drive_id: '',
+  project_id: '',
+  evidence_number: '',
+  possessor: '',
+  delivery_time: '',
+  received_by: '',
+  receipt_ref: '',
+  notes: '',
+})
+
 const canOperate = computed(() => authStore.hasAnyRole(['admin', 'manager', 'processor']))
 const canArchiveJobs = computed(() => authStore.hasAnyRole(['admin', 'manager']))
 const canManageStartupAnalysis = computed(() => authStore.hasAnyRole(['admin', 'manager']))
 const canInspectHashes = computed(() => authStore.hasAnyRole(['admin', 'auditor']))
+const canReadCoc = computed(() => authStore.hasAnyRole(['admin', 'manager', 'auditor']))
 const currentStatus = computed(() => String(job.value?.status || '').toUpperCase())
+const canConfirmCocHandoff = computed(() => authStore.hasAnyRole(['admin', 'manager']) && currentStatus.value !== 'ARCHIVED')
 const currentStartupAnalysisStatus = computed(() => String(job.value?.startup_analysis_status || 'NOT_ANALYZED').toUpperCase())
 const archiveDriveReady = computed(() => {
   const driveState = String(job.value?.drive?.current_state || '').toUpperCase()
@@ -368,6 +392,13 @@ const actionItems = computed(() => {
       visible: true,
     },
     {
+      key: 'coc',
+      label: t('audit.chainTitle'),
+      disabled: !canReadCoc.value,
+      run: () => openCocDialog(),
+      visible: canReadCoc.value,
+    },
+    {
       key: 'clear-startup-analysis',
       label: t('jobs.clearStartupAnalysis'),
       disabled: !canClearStartupAnalysisCache.value || acting.value,
@@ -534,6 +565,11 @@ function formatTimestamp(value) {
   return parsed.toLocaleString()
 }
 
+function localDateTimeAsUtcIso(value) {
+  if (!value) return undefined
+  return new Date(value).toISOString()
+}
+
 function normalizeStartupAnalysisFailureReason(value) {
   const raw = String(value || '').trim()
   if (!raw) return ''
@@ -624,6 +660,121 @@ async function downloadGeneratedManifest(jobId) {
   URL.revokeObjectURL(url)
 }
 
+function saveJobCocReport() {
+  if (!cocReport.value) return
+  const blob = new Blob([JSON.stringify(cocReport.value, null, 2)], { type: 'application/json;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = `chain-of-custody-job-${job.value?.id || 'unknown'}.json`
+  anchor.click()
+  setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+function saveJobCocCsvReport() {
+  if (!cocReport.value?.reports?.length) return
+
+  const header = ['event_id', 'drive_sn', 'drive_manufacturer', 'drive_model', 'timestamp', 'actor', 'action', 'event_type', 'details']
+  const rows = cocReport.value.reports.flatMap((report) =>
+    (report.chain_of_custody_events || []).map((event) => ({
+      event_id: event.event_id ?? '',
+      drive_sn: report.drive_sn || '',
+      drive_manufacturer: report.drive_manufacturer || '',
+      drive_model: report.drive_model || '',
+      timestamp: event.timestamp || '',
+      actor: event.actor || '',
+      action: event.action || '',
+      event_type: event.event_type || '',
+      details: JSON.stringify(event.details || {}),
+    })),
+  )
+
+  const lines = [
+    header.join(','),
+    ...rows.map((row) => header.map((key) => `"${String(row[key]).replace(/"/g, '""')}"`).join(',')),
+  ]
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = `chain-of-custody-job-${job.value?.id || 'unknown'}.csv`
+  anchor.click()
+  setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+function printJobCocReport() {
+  if (!cocReport.value) return
+  window.print()
+}
+
+async function loadJobChainOfCustody() {
+  if (!job.value || !canReadCoc.value) return
+  cocLoading.value = true
+  cocError.value = ''
+  cocStatusMessage.value = ''
+  try {
+    cocGeneratedAt.value = new Date().toISOString()
+    cocReport.value = await getJobChainOfCustody(job.value.id)
+  } catch (err) {
+    cocReport.value = null
+    cocError.value = buildJobError(err)
+  } finally {
+    cocLoading.value = false
+  }
+}
+
+function prepareCocHandoff(report) {
+  cocHandoffForm.value = {
+    drive_id: String(report.drive_id || ''),
+    project_id: normalizeProjectId(report.project_id || job.value?.project_id) || '',
+    evidence_number: String(job.value?.evidence_number || report?.manifest_summary?.[0]?.evidence_number || ''),
+    possessor: '',
+    delivery_time: '',
+    received_by: '',
+    receipt_ref: '',
+    notes: '',
+  }
+}
+
+function submitCocHandoff() {
+  const driveId = Number(cocHandoffForm.value.drive_id)
+  if (!Number.isInteger(driveId) || driveId <= 0 || !cocHandoffForm.value.possessor.trim() || !cocHandoffForm.value.delivery_time) {
+    cocError.value = t('audit.handoffInvalid')
+    return
+  }
+  showCocHandoffWarning.value = true
+}
+
+async function confirmCocHandoffSubmission() {
+  if (!job.value) return
+  showCocHandoffWarning.value = false
+  handoffSaving.value = true
+  cocError.value = ''
+  cocStatusMessage.value = ''
+  try {
+    await confirmJobChainOfCustodyHandoff(job.value.id, {
+      drive_id: Number(cocHandoffForm.value.drive_id),
+      project_id: normalizeProjectId(cocHandoffForm.value.project_id) || undefined,
+      possessor: cocHandoffForm.value.possessor.trim(),
+      delivery_time: localDateTimeAsUtcIso(cocHandoffForm.value.delivery_time),
+      received_by: cocHandoffForm.value.received_by.trim() || undefined,
+      receipt_ref: cocHandoffForm.value.receipt_ref.trim() || undefined,
+      notes: cocHandoffForm.value.notes.trim() || undefined,
+    })
+    await Promise.all([loadJobChainOfCustody(), refreshAll()])
+    cocStatusMessage.value = t('audit.handoffSaved')
+  } catch (err) {
+    cocError.value = buildJobError(err)
+  } finally {
+    handoffSaving.value = false
+  }
+}
+
+function cancelCocHandoffSubmission() {
+  showCocHandoffWarning.value = false
+}
+
 async function loadSupportingData() {
   const [driveResult, mountResult] = await Promise.allSettled([getDrives(), getMounts()])
   supportingDrives.value = driveResult.status === 'fulfilled'
@@ -684,6 +835,10 @@ function closeEditDialog() {
   showEditDialog.value = false
 }
 
+function closeCocDialog() {
+  showCocDialog.value = false
+}
+
 function closePausePendingDialog() {
   showPausePendingDialog.value = false
 }
@@ -700,6 +855,13 @@ function syncViewportState() {
 
 function closeHashDialog() {
   showHashDialog.value = false
+}
+
+function openCocDialog() {
+  if (!job.value || !canReadCoc.value) return
+  cocDialogTriggerRef.value = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  showCocDialog.value = true
+  void loadJobChainOfCustody()
 }
 
 function closeFileErrorDialog() {
@@ -738,6 +900,18 @@ function handleDialogKeydown(event) {
     }
     if (event.key === 'Tab') {
       trapFocusWithin(event, editDialogRef.value)
+    }
+    return
+  }
+
+  if (showCocDialog.value) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeCocDialog()
+      return
+    }
+    if (event.key === 'Tab') {
+      trapFocusWithin(event, cocDialogRef.value)
     }
     return
   }
@@ -1150,6 +1324,28 @@ watch(showEditDialog, async (open) => {
   }
 })
 
+watch(showCocDialog, async (open) => {
+  if (open) {
+    document.addEventListener('keydown', handleDialogKeydown)
+    await nextTick()
+    const target = cocDialogRef.value?.querySelector('button')
+    if (target instanceof HTMLElement) {
+      target.focus()
+    }
+    return
+  }
+
+  if (!showEditDialog.value && !showPausePendingDialog.value && !showHashDialog.value && !showFileErrorDialog.value) {
+    document.removeEventListener('keydown', handleDialogKeydown)
+  }
+  const trigger = cocDialogTriggerRef.value
+  cocDialogTriggerRef.value = null
+  await nextTick()
+  if (trigger instanceof HTMLElement) {
+    trigger.focus()
+  }
+})
+
 watch(showPausePendingDialog, async (open) => {
   if (open) {
     document.addEventListener('keydown', handleDialogKeydown)
@@ -1183,7 +1379,7 @@ watch(showHashDialog, async (open) => {
     return
   }
 
-  if (!showEditDialog.value && !showPausePendingDialog.value) {
+  if (!showEditDialog.value && !showCocDialog.value && !showPausePendingDialog.value) {
     document.removeEventListener('keydown', handleDialogKeydown)
   }
   const trigger = hashDialogTriggerRef.value
@@ -1205,7 +1401,7 @@ watch(showFileErrorDialog, async (open) => {
     return
   }
 
-  if (!showEditDialog.value && !showPausePendingDialog.value && !showHashDialog.value) {
+  if (!showEditDialog.value && !showCocDialog.value && !showPausePendingDialog.value && !showHashDialog.value) {
     document.removeEventListener('keydown', handleDialogKeydown)
   }
   const trigger = fileErrorDialogTriggerRef.value
@@ -1520,6 +1716,82 @@ onUnmounted(() => {
     </teleport>
 
     <teleport to="body">
+      <div v-if="showCocDialog" class="dialog-overlay" @click.self="closeCocDialog">
+        <div ref="cocDialogRef" class="dialog-panel coc-dialog" role="dialog" aria-modal="true" aria-labelledby="job-coc-title">
+          <div class="dialog-header">
+            <h2 id="job-coc-title">{{ t('audit.chainTitle') }}</h2>
+            <div class="actions coc-toolbar">
+              <button class="btn" @click="loadJobChainOfCustody">{{ t('common.actions.refresh') }}</button>
+              <button class="btn" :disabled="!cocReport" @click="printJobCocReport">{{ t('audit.printCoc') }}</button>
+              <button class="btn" :disabled="!cocReport" @click="saveJobCocCsvReport">{{ t('audit.exportCsv') }}</button>
+              <button class="btn btn-primary" :disabled="!cocReport" @click="saveJobCocReport">{{ t('audit.saveCoc') }}</button>
+            </div>
+          </div>
+
+          <div class="coc-status">
+            <p v-if="cocLoading" class="muted">{{ t('common.labels.loading') }}</p>
+            <p v-if="cocError" class="error-banner">{{ cocError }}</p>
+            <p v-if="cocStatusMessage" class="ok-banner">{{ cocStatusMessage }}</p>
+          </div>
+
+          <div v-if="cocReport" class="coc-results">
+            <div v-for="report in cocReport.reports" :key="report.drive_id" class="coc-report-shell">
+              <CocReport
+                :report="report"
+                :selector-mode="cocReport.selector_mode"
+                :project-id="normalizeProjectId(cocReport.project_id) || ''"
+                :generated-at="cocGeneratedAt"
+                :generated-by="authStore.username || ''"
+                :manifest-totals-footnote="t('audit.manifestTotalsFootnote')"
+              />
+            </div>
+          </div>
+
+          <div v-if="canConfirmCocHandoff" class="handoff-form">
+            <div class="header-row handoff-header">
+              <h3>{{ t('audit.handoffTitle') }}</h3>
+              <div v-if="cocReport?.reports?.length" class="coc-actions">
+                <button
+                  v-for="report in cocReport.reports"
+                  :key="`prefill-handoff-${report.drive_id}`"
+                  class="btn"
+                  @click="prepareCocHandoff(report)"
+                >
+                  {{ t('audit.prefillHandoff') }}
+                </button>
+              </div>
+            </div>
+            <div class="handoff-grid">
+              <input v-model="cocHandoffForm.drive_id" type="text" :placeholder="t('audit.driveIdLabel')" :aria-label="t('audit.driveIdLabel')" />
+              <input v-model="cocHandoffForm.project_id" type="text" :placeholder="t('audit.projectBinding')" :aria-label="t('audit.projectBinding')" />
+              <input v-model="cocHandoffForm.evidence_number" type="text" :placeholder="t('jobs.evidence')" :aria-label="t('jobs.evidence')" readonly />
+              <input v-model="cocHandoffForm.possessor" type="text" :placeholder="t('audit.possessor')" :aria-label="t('audit.possessor')" />
+              <div class="datetime-field">
+                <input
+                  v-model="cocHandoffForm.delivery_time"
+                  type="datetime-local"
+                  :placeholder="t('audit.deliveryTimeLocalInput')"
+                  :aria-label="t('audit.deliveryTimeLocalInput')"
+                />
+              </div>
+              <input v-model="cocHandoffForm.received_by" type="text" :placeholder="t('audit.receivedBy')" :aria-label="t('audit.receivedBy')" />
+              <input v-model="cocHandoffForm.receipt_ref" type="text" :placeholder="t('audit.receiptRef')" :aria-label="t('audit.receiptRef')" />
+            </div>
+            <textarea v-model="cocHandoffForm.notes" rows="3" :placeholder="t('audit.notes')" :aria-label="t('audit.notes')"></textarea>
+            <div class="dialog-actions">
+              <button class="btn" @click="closeCocDialog">{{ t('common.actions.close') }}</button>
+              <button class="btn btn-primary" :disabled="handoffSaving" @click="submitCocHandoff">{{ t('audit.confirmHandoff') }}</button>
+            </div>
+          </div>
+
+          <div v-else class="dialog-actions">
+            <button class="btn" @click="closeCocDialog">{{ t('common.actions.close') }}</button>
+          </div>
+        </div>
+      </div>
+    </teleport>
+
+    <teleport to="body">
       <div v-if="showHashDialog" class="dialog-overlay" @click.self="closeHashDialog">
         <div ref="hashDialogRef" class="dialog-panel hash-dialog" role="dialog" aria-modal="true" aria-labelledby="hash-viewer-title">
           <h2 id="hash-viewer-title">{{ t('jobs.hashViewer') }}</h2>
@@ -1641,6 +1913,18 @@ onUnmounted(() => {
       :busy="acting"
       dangerous
       @confirm="confirmDelete"
+    />
+
+    <ConfirmDialog
+      v-model="showCocHandoffWarning"
+      :title="t('audit.handoffWarning')"
+      :message="t('audit.handoffWarningMessage')"
+      :confirm-label="t('audit.handoffWarningConfirm')"
+      :cancel-label="t('audit.handoffWarningCancel')"
+      :dangerous="true"
+      :busy="handoffSaving"
+      @confirm="confirmCocHandoffSubmission"
+      @cancel="cancelCocHandoffSubmission"
     />
   </section>
 </template>
@@ -1952,6 +2236,45 @@ select {
 .files-panel-body {
   display: grid;
   gap: var(--space-sm);
+}
+
+.coc-section,
+.coc-results,
+.coc-report-shell,
+.handoff-form {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.coc-status {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.coc-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.handoff-header {
+  gap: var(--space-sm);
+}
+
+.handoff-grid {
+  display: grid;
+  gap: var(--space-sm);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.handoff-form textarea,
+.handoff-form input {
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-input);
+  color: var(--color-text-primary);
+  border-radius: var(--border-radius);
+  padding: var(--space-xs) var(--space-sm);
 }
 
 @media (max-width: 420px) {
