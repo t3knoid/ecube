@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   archiveJob: vi.fn(),
   getJob: vi.fn(),
   getJobChainOfCustody: vi.fn(),
+  refreshJobChainOfCustody: vi.fn(),
   getJobFiles: vi.fn(),
   startJob: vi.fn(),
   retryFailedJob: vi.fn(),
@@ -63,6 +64,7 @@ vi.mock('@/api/jobs.js', () => ({
   archiveJob: (...args) => mocks.archiveJob(...args),
   getJob: (...args) => mocks.getJob(...args),
   getJobChainOfCustody: (...args) => mocks.getJobChainOfCustody(...args),
+  refreshJobChainOfCustody: (...args) => mocks.refreshJobChainOfCustody(...args),
   getJobFiles: (...args) => mocks.getJobFiles(...args),
   startJob: (...args) => mocks.startJob(...args),
   retryFailedJob: (...args) => mocks.retryFailedJob(...args),
@@ -168,6 +170,7 @@ describe('JobDetailView start action', () => {
   beforeEach(() => {
     mocks.getJob.mockReset()
     mocks.getJobChainOfCustody.mockReset()
+    mocks.refreshJobChainOfCustody.mockReset()
     mocks.analyzeJob.mockReset()
     mocks.archiveJob.mockReset()
     mocks.getJobFiles.mockReset()
@@ -237,7 +240,8 @@ describe('JobDetailView start action', () => {
     mocks.archiveJob.mockResolvedValue({ id: 6, status: 'ARCHIVED', project_id: 'PROJ-001', evidence_number: 'EV-006', thread_count: 4, copied_bytes: 0, total_bytes: 0, source_path: '/nfs/project-001/evidence', target_mount_path: '/mnt/ecube/1' })
     mocks.deleteJob.mockResolvedValue({ status: 'deleted' })
     mocks.clearJobStartupAnalysisCache.mockResolvedValue({ id: 6, status: 'FAILED', project_id: 'PROJ-001', evidence_number: 'EV-006', thread_count: 4, copied_bytes: 0, total_bytes: 0, startup_analysis_cached: false })
-    mocks.getJobChainOfCustody.mockResolvedValue({ selector_mode: 'JOB', project_id: 'PROJ-001', reports: [] })
+    mocks.getJobChainOfCustody.mockResolvedValue({ selector_mode: 'JOB', project_id: 'PROJ-001', snapshot_updated_at: '2026-04-28T19:30:00Z', reports: [] })
+    mocks.refreshJobChainOfCustody.mockResolvedValue({ selector_mode: 'JOB', project_id: 'PROJ-001', snapshot_updated_at: '2026-04-29T09:15:00Z', reports: [] })
     mocks.confirmJobChainOfCustodyHandoff.mockResolvedValue({ event_id: 99 })
   })
 
@@ -670,6 +674,7 @@ describe('JobDetailView start action', () => {
     mocks.getJobChainOfCustody.mockResolvedValue({
       selector_mode: 'JOB',
       project_id: 'PROJ-001',
+      snapshot_updated_at: '2026-04-28T19:30:00Z',
       reports: [{
         drive_id: 5,
         drive_sn: 'SN-005',
@@ -700,6 +705,8 @@ describe('JobDetailView start action', () => {
 
     expect(mocks.getJobChainOfCustody).toHaveBeenCalledWith(6)
     expect(wrapper.text()).toContain('job-coc-report-5|JOB|PROJ-001|casey')
+    expect(wrapper.text()).toContain(i18n.global.t('audit.snapshotStatusTitle'))
+    expect(wrapper.text()).toContain(i18n.global.t('audit.snapshotUpdatedAtLabel'))
     expect(wrapper.findAll('button').some((node) => node.text() === i18n.global.t('audit.prefillHandoff'))).toBe(false)
 
     const printButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.printCoc'))
@@ -739,6 +746,7 @@ describe('JobDetailView start action', () => {
     mocks.getJobChainOfCustody.mockResolvedValue({
       selector_mode: 'JOB',
       project_id: 'PROJ-001',
+      snapshot_updated_at: '2026-04-28T19:30:00Z',
       reports: [{
         drive_id: 1,
         drive_sn: 'SN-001',
@@ -785,6 +793,52 @@ describe('JobDetailView start action', () => {
     }))
     expect(mocks.getJobChainOfCustody).toHaveBeenCalledTimes(2)
     expect(wrapper.text()).toContain(i18n.global.t('audit.handoffSaved'))
+  })
+
+  it('refreshes and stores the CoC snapshot from the dialog toolbar', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 10,
+      total_bytes: 10,
+      file_count: 1,
+      files_succeeded: 1,
+      files_failed: 0,
+      files_timed_out: 0,
+      startup_analysis_status: 'READY',
+      drive: { id: 1, current_state: 'AVAILABLE', is_mounted: false },
+    })
+    mocks.getJobChainOfCustody.mockResolvedValue({
+      selector_mode: 'JOB',
+      project_id: 'PROJ-001',
+      snapshot_updated_at: '2026-04-28T19:30:00Z',
+      reports: [],
+    })
+    mocks.refreshJobChainOfCustody.mockResolvedValue({
+      selector_mode: 'JOB',
+      project_id: 'PROJ-001',
+      snapshot_updated_at: '2026-04-29T09:15:00Z',
+      reports: [],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const openCocButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.chainTitle'))
+    await openCocButton.trigger('click')
+    await flushPromises()
+
+    const refreshButton = wrapper.find('.coc-toolbar').findAll('button').find((node) => node.text() === i18n.global.t('common.actions.refresh'))
+    await refreshButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.refreshJobChainOfCustody).toHaveBeenCalledWith(6)
+    expect(wrapper.text()).toContain(i18n.global.t('audit.snapshotRefreshed'))
   })
 
   it('keeps the files panel collapsed by default and pages through file rows with a 5-page window', async () => {
