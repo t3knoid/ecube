@@ -712,6 +712,9 @@ describe('JobDetailView start action', () => {
     const exportJsonButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.saveCoc'))
 
     await printButton.trigger('click')
+    expect(document.body.classList.contains('printing-coc-report')).toBe(true)
+    window.dispatchEvent(new Event('afterprint'))
+    expect(document.body.classList.contains('printing-coc-report')).toBe(false)
     await exportCsvButton.trigger('click')
     await exportJsonButton.trigger('click')
 
