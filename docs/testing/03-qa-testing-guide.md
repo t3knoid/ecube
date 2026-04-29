@@ -1563,7 +1563,7 @@ Chain-of-Custody (CoC) handoff ensures legal custody transfer of evidence is pro
 |---|------|-----|----------|
 | 1 | CoC dialog accessible after job completion | Complete a job, open Job Detail, click `Chain of Custody` | CoC dialog opens from Job Detail |
 | 2 | Missing snapshot state is clear | Open CoC for a non-archived job with no stored snapshot yet | Dialog shows no stored snapshot message and a refresh hint for admin/manager users |
-| 3 | Snapshot status is visible | Open CoC after a snapshot has been stored | Dialog shows `Last Updated On Disk` timestamp |
+| 3 | Snapshot status is visible | Open CoC after a snapshot has been stored | Dialog shows a `Generated At` timestamp sourced from the stored snapshot metadata |
 | 4 | Refresh stores a new snapshot | Click `Refresh` as admin or manager | Dialog reloads with the refreshed snapshot and a success message |
 | 5 | CoC export actions use stored snapshot | Open CoC and inspect the toolbar | `Print CoC`, `Export CoC CSV`, and `Export JSON` operate on the loaded stored snapshot |
 | 6 | CoC CSV export contains custody-event rows | Load a stored snapshot and click `Export CoC CSV` | Download filename matches `chain-of-custody-job-*.csv`; rows include drive serial, manufacturer, model, timestamp, actor, action, event type, and JSON details |
