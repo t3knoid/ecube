@@ -114,6 +114,55 @@ def test_create_job_ignores_client_supplied_created_by(client, db):
     assert response.json()["created_by"] != "spoofed-user"
 
 
+def test_update_job_rejects_notes_field(client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="server:/exports/project-update-001",
+        project_id="PROJ-UPDATE-001",
+        local_mount_point="/nfs/project-update-001",
+        status=MountStatus.MOUNTED,
+    )
+    drive = UsbDrive(
+        device_identifier="USB-UPDATE-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-UPDATE-001",
+        mount_path="/mnt/ecube/update-001",
+    )
+    db.add_all([mount, drive])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-UPDATE-001",
+        evidence_number="EV-UPDATE-001",
+        source_path="/nfs/project-update-001/source",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.PENDING,
+        thread_count=4,
+        max_file_retries=3,
+        retry_delay_seconds=1,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    response = client.put(
+        f"/jobs/{job.id}",
+        json={
+            "project_id": "PROJ-UPDATE-001",
+            "evidence_number": "EV-UPDATE-001",
+            "source_path": "/source",
+            "mount_id": mount.id,
+            "drive_id": drive.id,
+            "thread_count": 4,
+            "notes": "Ignored update notes should be rejected",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "notes" in response.json()["message"].lower()
+
+
 def test_create_job_ignores_client_supplied_target_mount_path(client, db):
     drive = UsbDrive(
         device_identifier="USB-TARGET-OVERRIDE-001",
