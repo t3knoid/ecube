@@ -23,6 +23,7 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const authStore = useAuthStore()
+const COC_PRINT_BODY_CLASS = 'printing-coc-report'
 
 const jobId = computed(() => {
   const parsed = Number(route.params.id)
@@ -706,7 +707,17 @@ function saveJobCocCsvReport() {
 
 function printJobCocReport() {
   if (!cocReport.value) return
+  document.body.classList.add(COC_PRINT_BODY_CLASS)
   window.print()
+}
+
+function handleBeforePrint() {
+  if (!showCocDialog.value || !cocReport.value) return
+  document.body.classList.add(COC_PRINT_BODY_CLASS)
+}
+
+function handleAfterPrint() {
+  document.body.classList.remove(COC_PRINT_BODY_CLASS)
 }
 
 function applyCocSnapshot(report) {
@@ -858,6 +869,7 @@ function closeEditDialog() {
 
 function closeCocDialog() {
   showCocDialog.value = false
+  handleAfterPrint()
 }
 
 function closePausePendingDialog() {
@@ -1446,6 +1458,8 @@ onMounted(async () => {
   currentTimeIntervalId = window.setInterval(() => {
     currentTimeMs.value = Date.now()
   }, 1000)
+  window.addEventListener('beforeprint', handleBeforePrint)
+  window.addEventListener('afterprint', handleAfterPrint)
   currentTimeMs.value = Date.now()
   await refreshAll()
   if (!isTerminalStatus(job.value?.status)) {
@@ -1457,6 +1471,9 @@ onUnmounted(() => {
   document.removeEventListener('keydown', handleDialogKeydown)
   jobPoller.stop()
   mobileViewportQuery?.removeEventListener('change', syncViewportState)
+  window.removeEventListener('beforeprint', handleBeforePrint)
+  window.removeEventListener('afterprint', handleAfterPrint)
+  handleAfterPrint()
   if (currentTimeIntervalId != null) {
     window.clearInterval(currentTimeIntervalId)
     currentTimeIntervalId = null
@@ -2412,5 +2429,33 @@ select {
   border: 1px solid var(--color-ok-banner-border, #86efac);
   border-radius: var(--border-radius);
   padding: var(--space-sm);
+}
+</style>
+
+<style>
+@media print {
+  body.printing-coc-report > *:not(.dialog-overlay) {
+    display: none !important;
+  }
+
+  body.printing-coc-report > .dialog-overlay {
+    position: static !important;
+    inset: auto !important;
+    display: block !important;
+    background: transparent !important;
+    place-items: stretch !important;
+  }
+
+  body.printing-coc-report > .dialog-overlay .dialog-panel,
+  body.printing-coc-report > .dialog-overlay .coc-dialog {
+    width: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    background: transparent !important;
+  }
 }
 </style>
