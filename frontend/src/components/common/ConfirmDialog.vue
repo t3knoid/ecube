@@ -1,5 +1,5 @@
 <script setup>
-import { computed, useSlots, watch, onUnmounted } from 'vue'
+import { computed, nextTick, onUnmounted, ref, useSlots, watch } from 'vue'
 
 const props = defineProps({
   modelValue: {
@@ -22,6 +22,10 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  showCancel: {
+    type: Boolean,
+    default: true,
+  },
   dangerous: {
     type: Boolean,
     default: false,
@@ -34,6 +38,8 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'confirm', 'cancel'])
 const slots = useSlots()
+const dialogPanelRef = ref(null)
+const previousFocusRef = ref(null)
 
 const dialogId = `confirm-dialog-${Math.random().toString(36).slice(2, 10)}`
 const titleId = `${dialogId}-title`
@@ -55,8 +61,65 @@ function confirm() {
   emit('confirm')
 }
 
+function getFocusableElements() {
+  if (!(dialogPanelRef.value instanceof HTMLElement)) {
+    return []
+  }
+
+  return Array.from(
+    dialogPanelRef.value.querySelectorAll(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  )
+}
+
+function focusFirstElement() {
+  void nextTick(() => {
+    const [firstElement] = getFocusableElements()
+    firstElement?.focus()
+  })
+}
+
+function restorePreviousFocus() {
+  if (previousFocusRef.value instanceof HTMLElement) {
+    previousFocusRef.value.focus()
+  }
+  previousFocusRef.value = null
+}
+
+function trapFocus(event) {
+  const focusableElements = getFocusableElements()
+  if (!focusableElements.length) {
+    return
+  }
+
+  const firstElement = focusableElements[0]
+  const lastElement = focusableElements[focusableElements.length - 1]
+  const activeElement = document.activeElement
+
+  if (event.shiftKey && activeElement === firstElement) {
+    event.preventDefault()
+    lastElement.focus()
+    return
+  }
+
+  if (!event.shiftKey && activeElement === lastElement) {
+    event.preventDefault()
+    firstElement.focus()
+  }
+}
+
 function onKeydown(event) {
-  if (event.key === 'Escape' && props.modelValue) {
+  if (!props.modelValue) {
+    return
+  }
+
+  if (event.key === 'Tab') {
+    trapFocus(event)
+    return
+  }
+
+  if (event.key === 'Escape') {
     event.preventDefault()
     close()
   }
@@ -64,11 +127,18 @@ function onKeydown(event) {
 
 watch(
   () => props.modelValue,
-  (open) => {
+  (open, wasOpen) => {
     if (open) {
+      previousFocusRef.value = document.activeElement instanceof HTMLElement ? document.activeElement : null
       document.addEventListener('keydown', onKeydown)
+      focusFirstElement()
     } else {
       document.removeEventListener('keydown', onKeydown)
+      if (wasOpen) {
+        void nextTick(() => {
+          restorePreviousFocus()
+        })
+      }
     }
   },
   { immediate: true },
@@ -83,6 +153,7 @@ onUnmounted(() => {
   <teleport to="body">
     <div v-if="modelValue" class="dialog-overlay" @click.self="close">
       <div
+        ref="dialogPanelRef"
         class="dialog-panel"
         role="dialog"
         aria-modal="true"
@@ -95,7 +166,7 @@ onUnmounted(() => {
           <slot />
         </div>
         <div class="dialog-actions">
-          <button class="btn" @click="close">{{ cancelLabel }}</button>
+          <button v-if="showCancel" class="btn" @click="close">{{ cancelLabel }}</button>
           <button
             class="btn"
             :class="dangerous ? 'btn-danger' : 'btn-primary'"

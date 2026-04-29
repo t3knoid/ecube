@@ -364,6 +364,7 @@
     "handoffWarningMessage": "This action will permanently archive the drive and remove it from active circulation. All operational actions (initialization, copy jobs, eject) will be blocked, and chain-of-custody selectors will exclude the drive. Read-only history (audit logs, drive list) remains visible. This action cannot be undone.",
     "handoffWarningConfirm": "Yes, archive drive",
     "handoffWarningCancel": "Cancel",
+    "handoffErrorTitle": "Handoff Failed",
     "handoffSaved": "Custody handoff recorded.",
     "driveArchived": "This drive has been archived after handoff. The chain-of-custody report endpoint does not return reports for archived drives, but the drive remains visible in the drive list and audit log.",
     "handoffInvalid": "Drive ID, possessor, and delivery time are required.",
