@@ -746,7 +746,7 @@ Typical workflow:
 
 1. Open the relevant job in `Job Detail`.
 2. Click `Chain of Custody` in the action area.
-3. Review the report for each drive section. Each report is titled with the project binding and evidence number and includes generated-at UTC metadata, the requesting username, drive identity, processor notes, custody status, custody-event timeline, manifest summary rows, and an attestation block for print sign-off.
+3. Review the report card shown in the dialog for the drive tied to that copy job. The report is titled with the project binding and evidence number and includes generated-at UTC metadata, the requesting username, drive identity, processor notes, custody status, custody-event timeline, manifest summary rows, and an attestation block for print sign-off.
 4. If the report needs to be rebuilt from current trusted state, an `admin` or `manager` can click `Refresh` to store a new snapshot.
 5. Use `Print CoC`, `Export CoC CSV`, or `Export JSON` when you need a printable or downloadable copy of the report currently loaded in the dialog.
 6. If you are an `admin` or `manager` and the loaded report still shows incomplete custody, click `Custody Handoff` in the dialog toolbar.
@@ -777,9 +777,8 @@ What happens when handoff is confirmed:
 Operational guidance:
 
 - Treat `Record handoff and archive drive` as a finalization action.
-- If the same job is reassigned to another drive during its lifecycle, that job can appear in more than one drive section of the Chain of Custody report.
-- In those multi-drive cases, each drive section shows the file and byte totals recorded for that specific drive assignment rather than the full job aggregate.
-- When reviewing a multi-drive Chain of Custody report, use the drive identity, processor notes, custody events, and manifest summary rows to determine which drive section you are signing or exporting.
+- Treat each Chain of Custody report as tied to the drive lifecycle for that copy job.
+- If a drive is later formatted and reused, that later work must be handled as a new copy job with its own Chain of Custody record rather than as a continuation of the earlier job.
 - Verify drive ID, project, possessor, and delivery timestamp before confirming.
 - Use `Cancel` if any custody detail needs correction before archival.
 
