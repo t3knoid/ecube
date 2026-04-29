@@ -1022,9 +1022,7 @@ def _process_file(
                     return
                 flushed_bytes = pending_progress_bytes
                 try:
-                    file_repo.increment_job_bytes(ef.job_id, flushed_bytes)
-                    if active_assignment_id is not None:
-                        file_repo.increment_assignment_bytes(active_assignment_id, flushed_bytes)
+                    file_repo.increment_copy_progress(ef.job_id, active_assignment_id, flushed_bytes)
                     attempt_bytes_reported += flushed_bytes
                     bytes_reported += flushed_bytes
                     pending_progress_bytes = 0
@@ -1126,9 +1124,7 @@ def _process_file(
 
             if attempt_bytes_reported:
                 try:
-                    file_repo.decrement_job_bytes(ef.job_id, attempt_bytes_reported)
-                    if active_assignment_id is not None:
-                        file_repo.decrement_assignment_bytes(active_assignment_id, attempt_bytes_reported)
+                    file_repo.decrement_copy_progress(ef.job_id, active_assignment_id, attempt_bytes_reported)
                     bytes_reported = max(0, bytes_reported - attempt_bytes_reported)
                 except Exception:
                     logger.exception("DB commit failed rolling back copied_bytes for file %s", export_file_id)
@@ -1175,16 +1171,12 @@ def _process_file(
         if success:
             ef.status = FileStatus.DONE
             try:
-                file_repo.save(ef)
-                if active_assignment_id is not None:
-                    file_repo.increment_assignment_file_count(active_assignment_id)
+                file_repo.save_completed_copy(ef, active_assignment_id)
             except Exception:
                 logger.exception("DB commit failed saving DONE status for file %s", export_file_id)
                 if bytes_reported:
                     try:
-                        file_repo.decrement_job_bytes(ef.job_id, bytes_reported)
-                        if active_assignment_id is not None:
-                            file_repo.decrement_assignment_bytes(active_assignment_id, bytes_reported)
+                        file_repo.decrement_copy_progress(ef.job_id, active_assignment_id, bytes_reported)
                     except Exception:
                         logger.exception("DB commit failed restoring copied_bytes for file %s", export_file_id)
             try:
@@ -1206,7 +1198,7 @@ def _process_file(
                 logger.exception("DB commit failed saving TIMEOUT status for file", {"file_id": export_file_id})
                 if bytes_reported:
                     try:
-                        file_repo.decrement_job_bytes(ef.job_id, bytes_reported)
+                        file_repo.decrement_copy_progress(ef.job_id, active_assignment_id, bytes_reported)
                     except Exception:
                         logger.exception("DB commit failed restoring copied_bytes for file", {"file_id": export_file_id})
         else:
