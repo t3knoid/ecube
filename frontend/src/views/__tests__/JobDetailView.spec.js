@@ -139,7 +139,7 @@ function mountView() {
         },
         CocReport: {
           props: ['report', 'selectorMode', 'projectId', 'generatedAt', 'generatedBy', 'manifestTotalsFootnote'],
-          template: '<div class="coc-report-stub">job-coc-report-{{ report.drive_id }}|{{ selectorMode }}|{{ projectId }}|{{ generatedBy }}</div>',
+          template: '<div class="coc-report-stub">job-coc-report-{{ report.drive_id }}|{{ selectorMode }}|{{ projectId }}|{{ generatedBy }}|{{ generatedAt }}</div>',
         },
         ConfirmDialog: {
           props: ['modelValue', 'title', 'message', 'confirmLabel', 'cancelLabel', 'busy'],
@@ -704,7 +704,7 @@ describe('JobDetailView start action', () => {
     await flushPromises()
 
     expect(mocks.getJobChainOfCustody).toHaveBeenCalledWith(6)
-    expect(wrapper.text()).toContain('job-coc-report-5|JOB|PROJ-001|casey')
+    expect(wrapper.text()).toContain('job-coc-report-5|JOB|PROJ-001|casey|2026-04-28T19:30:00Z')
     expect(wrapper.findAll('button').some((node) => node.text() === i18n.global.t('audit.prefillHandoff'))).toBe(false)
 
     const printButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.printCoc'))
@@ -722,6 +722,96 @@ describe('JobDetailView start action', () => {
     expect(URL.createObjectURL).toHaveBeenCalledTimes(2)
 
     printSpy.mockRestore()
+    URL.createObjectURL = originalCreateObjectURL
+    URL.revokeObjectURL = originalRevokeObjectURL
+  })
+
+  it('exports CSV and JSON from the loaded stored CoC snapshot', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'ARCHIVED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 10,
+      total_bytes: 10,
+      file_count: 1,
+      files_succeeded: 1,
+      files_failed: 0,
+      files_timed_out: 0,
+      startup_analysis_status: 'READY',
+    })
+    mocks.getJobChainOfCustody.mockResolvedValue({
+      selector_mode: 'JOB',
+      project_id: 'PROJ-001',
+      snapshot_updated_at: '2026-04-28T19:30:00Z',
+      reports: [{
+        drive_id: 5,
+        drive_sn: 'SN-STORED-005',
+        drive_manufacturer: 'StoredVendor',
+        drive_model: 'StoredModel',
+        project_id: 'PROJ-001',
+        custody_complete: true,
+        delivery_time: '2026-04-28T18:00:00Z',
+        chain_of_custody_events: [{
+          event_id: 91,
+          timestamp: '2026-04-28T18:10:00Z',
+          actor: 'manager-user',
+          action: 'Stored snapshot event',
+          event_type: 'COC_SNAPSHOT_STORED',
+          details: { source: 'stored-snapshot', marker: 'csv-marker' },
+        }],
+        manifest_summary: [{
+          job_id: 6,
+          evidence_number: 'EV-STORED-006',
+          processor_notes: 'Stored export note',
+          total_files: 1,
+          total_bytes: 10,
+          manifest_count: 1,
+          latest_manifest_path: '/tmp/stored-manifest.json',
+          latest_manifest_format: 'JSON',
+          latest_manifest_created_at: '2026-04-28T18:05:00Z',
+        }],
+      }],
+    })
+
+    const createObjectUrl = vi.fn(() => 'blob:job-coc')
+    const originalCreateObjectURL = URL.createObjectURL
+    const originalRevokeObjectURL = URL.revokeObjectURL
+    URL.createObjectURL = createObjectUrl
+    URL.revokeObjectURL = vi.fn()
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const openCocButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.chainTitle'))
+    await openCocButton.trigger('click')
+    await flushPromises()
+
+    const exportCsvButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.exportCsv'))
+    const exportJsonButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.saveCoc'))
+
+    await exportCsvButton.trigger('click')
+    await exportJsonButton.trigger('click')
+
+    expect(mocks.getJobChainOfCustody).toHaveBeenCalledTimes(1)
+    expect(mocks.refreshJobChainOfCustody).not.toHaveBeenCalled()
+    expect(createObjectUrl).toHaveBeenCalledTimes(2)
+
+    const csvBlob = createObjectUrl.mock.calls[0][0]
+    const jsonBlob = createObjectUrl.mock.calls[1][0]
+    const csvText = await csvBlob.text()
+    const jsonText = await jsonBlob.text()
+
+    expect(csvText).toContain('SN-STORED-005')
+    expect(csvText).toContain('Stored snapshot event')
+    expect(csvText).toContain('csv-marker')
+    expect(jsonText).toContain('SN-STORED-005')
+    expect(jsonText).toContain('Stored export note')
+    expect(jsonText).toContain('stored-snapshot')
+
     URL.createObjectURL = originalCreateObjectURL
     URL.revokeObjectURL = originalRevokeObjectURL
   })
@@ -818,13 +908,33 @@ describe('JobDetailView start action', () => {
       selector_mode: 'JOB',
       project_id: 'PROJ-001',
       snapshot_updated_at: '2026-04-28T19:30:00Z',
-      reports: [],
+      reports: [{
+        drive_id: 1,
+        drive_sn: 'SN-001',
+        drive_manufacturer: 'PNY',
+        drive_model: 'USB 3.2.1 FD',
+        project_id: 'PROJ-001',
+        custody_complete: false,
+        delivery_time: null,
+        chain_of_custody_events: [],
+        manifest_summary: [],
+      }],
     })
     mocks.refreshJobChainOfCustody.mockResolvedValue({
       selector_mode: 'JOB',
       project_id: 'PROJ-001',
       snapshot_updated_at: '2026-04-29T09:15:00Z',
-      reports: [],
+      reports: [{
+        drive_id: 1,
+        drive_sn: 'SN-001',
+        drive_manufacturer: 'PNY',
+        drive_model: 'USB 3.2.1 FD',
+        project_id: 'PROJ-001',
+        custody_complete: false,
+        delivery_time: null,
+        chain_of_custody_events: [],
+        manifest_summary: [],
+      }],
     })
 
     const wrapper = mountView()
@@ -840,6 +950,7 @@ describe('JobDetailView start action', () => {
 
     expect(mocks.refreshJobChainOfCustody).toHaveBeenCalledWith(6)
     expect(wrapper.text()).toContain(i18n.global.t('audit.snapshotRefreshed'))
+    expect(wrapper.text()).toContain('2026-04-29T09:15:00Z')
   })
 
   it('keeps the files panel collapsed by default and pages through file rows with a 5-page window', async () => {
