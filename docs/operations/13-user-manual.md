@@ -735,27 +735,26 @@ When exporting CSV:
 
 ### 11.1 Chain of Custody Workflow
 
-Use the `Chain of Custody` action on `Job Detail` to open the job-scoped CoC dialog. The dialog loads the last stored CoC snapshot for that job, shows when the snapshot was last updated on disk, allows authorized users to refresh and store a new snapshot, and provides print/export and handoff controls appropriate to the current role.
+Use the `Chain of Custody` action on `Job Detail` to open the job-scoped CoC dialog. The dialog loads the last stored CoC snapshot for that job, shows the formatted report content directly, allows authorized users to refresh and store a new snapshot, and provides print/export and handoff controls appropriate to the current role.
 
 Typical workflow:
 
 1. Open the relevant job in `Job Detail`.
 2. Click `Chain of Custody` in the action area.
-3. Review the stored snapshot status card. `Last Updated On Disk` shows when the currently loaded snapshot was last persisted.
-4. If no stored snapshot exists yet, an `admin` or `manager` can click `Refresh` to rebuild the report from current trusted state and store it on disk.
-5. Review the report card for each drive section. Each report includes generated-at UTC metadata, the requesting username, drive identity, custody status, custody-event timeline, manifest summary rows, and an attestation block for print sign-off.
-6. Use `Print CoC`, `Export CoC CSV`, or `Export JSON` when you need a printable or downloadable copy of the stored snapshot currently loaded in the dialog.
-7. If you are an `admin` or `manager`, click `Prefill Handoff` to populate the handoff form from a selected report.
-8. Enter required handoff details (`Possessor` and `Delivery Time`) and any optional receipt fields. The delivery time picker uses your browser's local timezone; the application converts it to UTC automatically before storing.
-9. Click `Confirm Handoff`.
-10. Review the **Permanent Archive Warning** modal.
-11. Choose one of the following:
+3. Review the report for each drive section. Each report includes generated-at UTC metadata, the requesting username, drive identity, custody status, custody-event timeline, manifest summary rows, and an attestation block for print sign-off.
+4. If the report needs to be rebuilt from current trusted state, an `admin` or `manager` can click `Refresh` to store a new snapshot.
+5. Use `Print CoC`, `Export CoC CSV`, or `Export JSON` when you need a printable or downloadable copy of the report currently loaded in the dialog.
+6. If you are an `admin` or `manager`, click `Prefill Handoff` to populate the handoff form from a selected report.
+7. Enter required handoff details (`Possessor` and `Delivery Time`) and any optional receipt fields. The delivery time picker uses your browser's local timezone; the application converts it to UTC automatically before storing.
+8. Click `Confirm Handoff`.
+9. Review the **Permanent Archive Warning** modal.
+10. Choose one of the following:
    - `Cancel`: closes the warning modal and does not record a handoff.
    - `Yes, archive drive`: records the handoff and archives the drive.
 
 Auditor behavior:
 
-- Auditors can open the dialog, review the stored snapshot, and use `Print CoC`, `Export CoC CSV`, and `Export JSON`.
+- Auditors can open the dialog, review the loaded report, and use `Print CoC`, `Export CoC CSV`, and `Export JSON`.
 - Auditors cannot refresh the snapshot or confirm custody handoff.
 
 ![Drives page (related media lifecycle context, E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/drives-default-chromium-linux.png)
@@ -1064,7 +1063,7 @@ Notes:
 - Use this workflow before final packaging or shipment.
 - Do not remove the drive while a copy or verification step is still active.
 - After ejection the drive returns to `AVAILABLE` with its project binding intact. It can be re-initialized for the same project without reformatting.
-- To permanently retire the drive, complete the Chain of Custody handoff on the `Audit` page after removal.
+- To permanently retire the drive, open the related job in `Job Detail` and complete the Chain of Custody handoff from the `Chain of Custody` dialog.
 
 ### 14.3 Export Evidence to a Drive
 
