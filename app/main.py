@@ -963,9 +963,54 @@ def _try_log_auth_failure(request: Request, reason: str, trace_id: str) -> None:
         pass
 
 
+def _log_exception_info(
+    request: Request,
+    *,
+    status_code: int,
+    code: str,
+    summary: str,
+    trace_id: str,
+    extra: dict[str, Any] | None = None,
+) -> None:
+    safe_context: dict[str, Any] = {
+        "status_code": status_code,
+        "error_code": code,
+        "trace_id": trace_id,
+        "request_path": request.url.path,
+        "request_method": request.method,
+        "failure_summary": summary,
+    }
+    if extra:
+        safe_context.update(extra)
+    logger.info(
+        f"Handled exception status={status_code} code={code} trace_id={trace_id} path={request.url.path}",
+        extra=safe_context,
+    )
+
+
+def _safe_http_exception_summary(status_code: int, code: str, detail: str) -> str:
+    default_summaries = {
+        401: "Unauthorized request",
+        403: "Forbidden request",
+        404: "Requested resource was not found",
+        409: "Request conflicts with the current resource state",
+        410: "Requested resource is no longer available",
+        413: "Request payload is too large",
+    }
+    return sanitize_error_message(detail, default_summaries.get(status_code, f"{code} request failed"))
+
+
 @app.exception_handler(AuthenticationError)
 async def authentication_error_handler(request: Request, exc: AuthenticationError) -> JSONResponse:
     trace_id = str(uuid.uuid4())
+    _log_exception_info(
+        request,
+        status_code=401,
+        code=exc.code,
+        summary=exc.message,
+        trace_id=trace_id,
+        extra={"error_category": "authentication_failure"},
+    )
     logger.warning("401 %s trace_id=%s path=%s", exc.code, trace_id, request.url.path)
     _try_log_auth_failure(request, reason=exc.message, trace_id=trace_id)
     return _error_response(401, exc.code, exc.message, trace_id)
@@ -974,6 +1019,14 @@ async def authentication_error_handler(request: Request, exc: AuthenticationErro
 @app.exception_handler(AuthorizationError)
 async def authorization_error_handler(request: Request, exc: AuthorizationError) -> JSONResponse:
     trace_id = str(uuid.uuid4())
+    _log_exception_info(
+        request,
+        status_code=403,
+        code=exc.code,
+        summary=exc.message,
+        trace_id=trace_id,
+        extra={"error_category": "authorization_failure"},
+    )
     logger.warning("403 %s trace_id=%s path=%s", exc.code, trace_id, request.url.path)
     return _error_response(403, exc.code, exc.message, trace_id)
 
@@ -981,6 +1034,14 @@ async def authorization_error_handler(request: Request, exc: AuthorizationError)
 @app.exception_handler(ConflictError)
 async def conflict_error_handler(request: Request, exc: ConflictError) -> JSONResponse:
     trace_id = str(uuid.uuid4())
+    _log_exception_info(
+        request,
+        status_code=409,
+        code=exc.code,
+        summary=exc.message,
+        trace_id=trace_id,
+        extra={"error_category": "conflict"},
+    )
     logger.warning("409 %s trace_id=%s path=%s", exc.code, trace_id, request.url.path)
     return _error_response(409, exc.code, exc.message, trace_id)
 
@@ -988,6 +1049,14 @@ async def conflict_error_handler(request: Request, exc: ConflictError) -> JSONRe
 @app.exception_handler(ECUBEException)
 async def ecube_exception_handler(request: Request, exc: ECUBEException) -> JSONResponse:
     trace_id = str(uuid.uuid4())
+    _log_exception_info(
+        request,
+        status_code=exc.status_code,
+        code=exc.code,
+        summary=exc.message,
+        trace_id=trace_id,
+        extra={"error_category": "application_exception"},
+    )
     logger.error("%d %s trace_id=%s path=%s", exc.status_code, exc.code, trace_id, request.url.path)
     return _error_response(exc.status_code, exc.code, exc.message, trace_id)
 
@@ -1000,6 +1069,14 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         loc = " -> ".join(str(part) for part in error["loc"])
         messages.append(f"{loc}: {error['msg']}")
     detail = "; ".join(messages)
+    _log_exception_info(
+        request,
+        status_code=422,
+        code="VALIDATION_ERROR",
+        summary="Request validation failed",
+        trace_id=trace_id,
+        extra={"error_category": "validation_failure"},
+    )
     logger.info("422 VALIDATION_ERROR trace_id=%s path=%s", trace_id, request.url.path)
     return _error_response(422, "VALIDATION_ERROR", detail, trace_id)
 
@@ -1017,6 +1094,15 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
     code = code_map.get(exc.status_code, f"HTTP_{exc.status_code}")
     detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
     trace_id = str(uuid.uuid4())
+    safe_summary = _safe_http_exception_summary(exc.status_code, code, detail)
+    _log_exception_info(
+        request,
+        status_code=exc.status_code,
+        code=code,
+        summary=safe_summary,
+        trace_id=trace_id,
+        extra={"error_category": "http_exception"},
+    )
     log_level = logging.WARNING if exc.status_code == 413 else logging.INFO
     logger.log(log_level, "%d %s trace_id=%s path=%s", exc.status_code, code, trace_id, request.url.path)
     if exc.status_code == 401:
@@ -1037,6 +1123,14 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     trace_id = str(uuid.uuid4())
     if is_encoding_error(exc):
+        _log_exception_info(
+            request,
+            status_code=422,
+            code="ENCODING_ERROR",
+            summary="Request contains invalid characters.",
+            trace_id=trace_id,
+            extra={"error_category": "encoding_error"},
+        )
         logger.warning("422 ENCODING_ERROR trace_id=%s path=%s", trace_id, request.url.path, exc_info=exc)
         return _error_response(422, "ENCODING_ERROR", "Request contains invalid characters.", trace_id)
     classification = _classify_unhandled_exception(exc)
@@ -1067,10 +1161,9 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
             "detail": classification["detail"],
         },
     )
-    logger.error(
+    logger.exception(
         f"Unhandled exception trace_id={trace_id} path={request.url.path}",
         extra=safe_context,
-        exc_info=exc,
     )
     return _error_response(500, "INTERNAL_ERROR", "An unexpected error occurred.", trace_id)
 

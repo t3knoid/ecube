@@ -257,6 +257,7 @@ def _require_admin_or_initial_setup(
         if not any(r == "admin" for r in current_user.roles):
             _try_log_authorization_denied(
                 db=db,
+                actor_id=current_user.id,
                 actor=current_user.username,
                 path=str(request.url.path),
                 method=request.method,
@@ -280,6 +281,7 @@ def _require_admin_or_initial_setup(
             # Authenticated but not admin — definitive denial (403, not 503)
             _try_log_authorization_denied(
                 db=db,
+                actor_id=current_user.id,
                 actor=current_user.username,
                 path=str(request.url.path),
                 method=request.method,

@@ -1,5 +1,6 @@
+import logging
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional
+from typing import Callable, List, NoReturn, Optional
 
 import jwt
 from fastapi import Depends, HTTPException, Request, status
@@ -11,6 +12,7 @@ from app.database import get_db
 from app.exceptions import AuthorizationError
 
 _bearer_scheme = HTTPBearer(auto_error=False)
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -19,6 +21,32 @@ class CurrentUser:
     username: str
     groups: List[str] = field(default_factory=list)
     roles: List[str] = field(default_factory=list)
+
+
+def _raise_authentication_http_exception(
+    request: Request,
+    *,
+    detail: str,
+    reason: str,
+    extra: Optional[dict[str, object]] = None,
+) -> NoReturn:
+    log_extra = {
+        "event_code": "AUTHENTICATION_DENIED",
+        "status_code": status.HTTP_401_UNAUTHORIZED,
+        "request_path": str(request.url.path),
+        "request_method": request.method,
+        "auth_reason": reason,
+        "role_resolver": settings.role_resolver,
+    }
+    if extra:
+        log_extra.update(extra)
+
+    logger.warning("Authentication denied", extra=log_extra)
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=detail,
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 def get_current_user(
@@ -53,17 +81,18 @@ def get_current_user(
     request.state.db = db
 
     if credentials is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+        _raise_authentication_http_exception(
+            request,
             detail="Missing authentication token",
-            headers={"WWW-Authenticate": "Bearer"},
+            reason="missing_token",
         )
 
     if credentials.scheme.lower() != "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+        _raise_authentication_http_exception(
+            request,
             detail="Invalid authentication token",
-            headers={"WWW-Authenticate": "Bearer"},
+            reason="invalid_auth_scheme",
+            extra={"auth_scheme": credentials.scheme},
         )
 
     token = credentials.credentials
@@ -84,25 +113,25 @@ def get_current_user(
             algorithms=[settings.algorithm],
         )
     except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+        _raise_authentication_http_exception(
+            request,
             detail="Token has expired",
-            headers={"WWW-Authenticate": "Bearer"},
+            reason="token_expired",
         )
     except jwt.InvalidTokenError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+        _raise_authentication_http_exception(
+            request,
             detail="Invalid authentication token",
-            headers={"WWW-Authenticate": "Bearer"},
+            reason="token_validation_failed",
         )
 
     user_id = payload.get("sub")
     username = payload.get("username")
     if user_id is None or username is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+        _raise_authentication_http_exception(
+            request,
             detail="Invalid token payload",
-            headers={"WWW-Authenticate": "Bearer"},
+            reason="invalid_token_payload",
         )
 
     groups = payload.get("groups", [])
@@ -113,17 +142,17 @@ def get_current_user(
         roles = []
 
     if not isinstance(groups, list) or not all(isinstance(group, str) for group in groups):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+        _raise_authentication_http_exception(
+            request,
             detail="Invalid token payload",
-            headers={"WWW-Authenticate": "Bearer"},
+            reason="invalid_token_groups",
         )
 
     if not isinstance(roles, list) or not all(isinstance(role, str) for role in roles):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+        _raise_authentication_http_exception(
+            request,
             detail="Invalid token payload",
-            headers={"WWW-Authenticate": "Bearer"},
+            reason="invalid_token_roles",
         )
 
     # When the token carries no explicit roles, resolve them from group
@@ -160,18 +189,19 @@ def _get_current_user_oidc(token: str, request: Request) -> CurrentUser:
     try:
         payload = validate_token(token)
     except OidcTokenError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+        _raise_authentication_http_exception(
+            request,
             detail=str(exc),
-            headers={"WWW-Authenticate": "Bearer"},
+            reason="oidc_validation_failed",
+            extra={"error_type": type(exc).__name__},
         )
 
     user_id = payload.get("sub")
     if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+        _raise_authentication_http_exception(
+            request,
             detail="Invalid token payload",
-            headers={"WWW-Authenticate": "Bearer"},
+            reason="invalid_token_payload",
         )
 
     # Prefer a human-readable username; fall back to the subject identifier.
@@ -183,10 +213,10 @@ def _get_current_user_oidc(token: str, request: Request) -> CurrentUser:
 
     raw_groups = payload.get(settings.oidc_group_claim_name, [])
     if not isinstance(raw_groups, list) or not all(isinstance(g, str) for g in raw_groups):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+        _raise_authentication_http_exception(
+            request,
             detail="Invalid token payload",
-            headers={"WWW-Authenticate": "Bearer"},
+            reason="invalid_token_groups",
         )
 
     groups = raw_groups
@@ -208,7 +238,8 @@ def require_roles(*allowed_roles: str) -> Callable[..., CurrentUser]:
     Returns a dependency callable that validates the current user holds at least
     one of *allowed_roles*.  Raises HTTP 403 (via :class:`AuthorizationError`)
     when the user is authenticated but lacks the required role.  Every denial is
-    recorded in the audit log with the actor identity and context.
+    recorded in application logs and, when available, the audit log with the actor
+    identity and request context.
 
     Usage::
 
@@ -229,6 +260,7 @@ def require_roles(*allowed_roles: str) -> Callable[..., CurrentUser]:
         if not any(r in current_user.roles for r in allowed_roles):
             _try_log_authorization_denied(
                 db=db,
+                actor_id=current_user.id,
                 actor=current_user.username,
                 path=str(request.url.path),
                 method=request.method,
@@ -245,6 +277,7 @@ def require_roles(*allowed_roles: str) -> Callable[..., CurrentUser]:
 
 def _try_log_authorization_denied(
     db: Optional[Session],
+    actor_id: Optional[str],
     actor: str,
     path: str,
     method: str,
@@ -252,6 +285,19 @@ def _try_log_authorization_denied(
     user_roles: List[str],
 ) -> None:
     """Best-effort audit log for role-denial events.  Never raises."""
+    logger.warning(
+        "Authorization denied",
+        extra={
+            "event_code": "AUTHORIZATION_DENIED",
+            "status_code": status.HTTP_403_FORBIDDEN,
+            "actor_id": actor_id,
+            "actor_username": actor,
+            "request_path": path,
+            "request_method": method,
+            "required_roles": sorted(required_roles),
+            "user_roles": sorted(user_roles),
+        },
+    )
     if db is None:
         return
     try:
