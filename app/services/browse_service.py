@@ -102,22 +102,24 @@ def _log_browse_failure(
 ) -> None:
     surface = _browse_surface_label(root_source, network_mount_type)
     safe_reason = sanitize_error_message(exc, default_message)
+    log_context = {
+        "surface": surface,
+        "page": page,
+        "page_size": page_size,
+        "reason": safe_reason,
+    }
 
-    logger.info(
-        "Browse directory failed surface=%s page=%s page_size=%s reason=%s",
-        surface,
-        page,
-        page_size,
-        safe_reason,
-    )
+    logger.info("Browse directory failed", extra=log_context)
     logger.debug(
-        "Browse directory raw failure surface=%s path=%s subdir=%s real_root=%s resolved_path=%s raw_error=%s",
-        surface,
-        path,
-        subdir,
-        real_root,
-        real_target,
-        str(exc),
+        "Browse directory raw failure",
+        extra={
+            **log_context,
+            "path": path,
+            "subdir": subdir,
+            "real_root": real_root,
+            "resolved_path": real_target,
+            "raw_error": str(exc),
+        },
     )
 
 
