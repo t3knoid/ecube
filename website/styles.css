@@ -677,6 +677,11 @@ a {
   gap: 0.75rem;
 }
 
+.contact-card .contact-meta {
+  margin: 0;
+  line-height: 1.35;
+}
+
 .site-footer {
   padding: 1.5rem 0 2rem;
   background: var(--surface-alt);
