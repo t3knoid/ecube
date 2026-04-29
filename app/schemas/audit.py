@@ -62,7 +62,18 @@ class ChainOfCustodyDriveReportSchema(BaseModel):
 class ChainOfCustodyReportSchema(BaseModel):
     selector_mode: str = Field(..., description="Resolved selector mode: DRIVE_ID, DRIVE_SN, or PROJECT")
     project_id: Optional[str] = Field(default=None, description="Project selector when provided")
+    snapshot_stored_at: Optional[datetime] = Field(default=None, description="When the stored snapshot was first written")
+    snapshot_updated_at: Optional[datetime] = Field(default=None, description="When the stored snapshot was last updated on disk")
+    snapshot_stored_by: Optional[str] = Field(default=None, description="User who last stored the snapshot")
     reports: List[ChainOfCustodyDriveReportSchema] = Field(default_factory=list, description="Drive-scoped chain-of-custody reports")
+
+    @field_serializer("snapshot_stored_at", "snapshot_updated_at")
+    def _serialize_snapshot_datetimes(self, dt: Optional[datetime]) -> Optional[str]:
+        if dt is None:
+            return None
+        if dt.tzinfo is None or dt.utcoffset() is None:
+            return f"{dt.isoformat()}Z"
+        return dt.isoformat().replace("+00:00", "Z")
 
 
 class ChainOfCustodyHandoffRequest(BaseModel):

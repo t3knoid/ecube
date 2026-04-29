@@ -298,6 +298,7 @@ def get_job_chain_of_custody_report(
     job_id: int,
     actor: Optional[str],
     client_ip: Optional[str],
+    allow_persistence: bool = True,
 ) -> ChainOfCustodyReportSchema:
     job = JobRepository(db).get(job_id)
     if job is None:
@@ -305,12 +306,18 @@ def get_job_chain_of_custody_report(
 
     snapshot_repo = JobChainOfCustodySnapshotRepository(db)
     snapshot = snapshot_repo.get_by_job_id(job.id)
-    if job.status == JobStatus.ARCHIVED:
-        if snapshot is None:
+    if snapshot is None:
+        if job.status == JobStatus.ARCHIVED:
             raise HTTPException(
                 status_code=404,
                 detail="No stored chain-of-custody snapshot is available for this archived job",
             )
+        raise HTTPException(
+            status_code=404,
+            detail="No stored chain-of-custody snapshot is available for this job; refresh the report to create one",
+        )
+
+    if allow_persistence:
         AuditRepository(db).add(
             action="COC_SNAPSHOT_RECALLED",
             user=actor,
@@ -323,20 +330,41 @@ def get_job_chain_of_custody_report(
                     snapshot.stored_at.isoformat().replace("+00:00", "Z")
                     if snapshot.stored_at is not None else None
                 ),
+                "updated_at": (
+                    snapshot.updated_at.isoformat().replace("+00:00", "Z")
+                    if snapshot.updated_at is not None else None
+                ),
             },
             client_ip=client_ip,
         )
-        return ChainOfCustodyReportSchema.model_validate(snapshot.payload)
+    return _report_with_snapshot_metadata(
+        ChainOfCustodyReportSchema.model_validate(snapshot.payload),
+        snapshot,
+    )
+
+
+def refresh_job_chain_of_custody_report(
+    db: Session,
+    *,
+    job_id: int,
+    actor: Optional[str],
+    client_ip: Optional[str],
+) -> ChainOfCustodyReportSchema:
+    job = JobRepository(db).get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status == JobStatus.ARCHIVED:
+        raise HTTPException(status_code=409, detail="Archived jobs can only return the last stored chain-of-custody snapshot")
 
     report = _build_job_chain_of_custody_report(db, job)
-    _store_job_chain_of_custody_snapshot(
+    snapshot = _store_job_chain_of_custody_snapshot(
         db,
         job=job,
         report=report,
         actor=actor,
         client_ip=client_ip,
     )
-    return report
+    return _report_with_snapshot_metadata(report, snapshot)
 
 
 def confirm_job_chain_of_custody_handoff(
@@ -758,9 +786,9 @@ def _store_job_chain_of_custody_snapshot(
     report: ChainOfCustodyReportSchema,
     actor: Optional[str],
     client_ip: Optional[str],
-) -> None:
+) -> JobChainOfCustodySnapshotRepository:
     payload = report.model_dump(mode="json")
-    JobChainOfCustodySnapshotRepository(db).upsert_for_job(
+    snapshot = JobChainOfCustodySnapshotRepository(db).upsert_for_job(
         job_id=job.id,
         payload=payload,
         stored_by=actor,
@@ -776,6 +804,48 @@ def _store_job_chain_of_custody_snapshot(
             "report_count": len(report.reports),
         },
         client_ip=client_ip,
+    )
+    logger.info(
+        "Stored chain-of-custody snapshot",
+        {
+            "job_id": job.id,
+            "project_id": job.project_id,
+            "report_count": len(report.reports),
+            "stored_by": actor,
+            "snapshot_updated_at": (
+                snapshot.updated_at.isoformat().replace("+00:00", "Z")
+                if snapshot.updated_at is not None else None
+            ),
+        },
+    )
+    logger.debug(
+        "Stored chain-of-custody snapshot details",
+        {
+            "job_id": job.id,
+            "snapshot_id": snapshot.id,
+            "snapshot_stored_at": (
+                snapshot.stored_at.isoformat().replace("+00:00", "Z")
+                if snapshot.stored_at is not None else None
+            ),
+            "snapshot_updated_at": (
+                snapshot.updated_at.isoformat().replace("+00:00", "Z")
+                if snapshot.updated_at is not None else None
+            ),
+        },
+    )
+    return snapshot
+
+
+def _report_with_snapshot_metadata(
+    report: ChainOfCustodyReportSchema,
+    snapshot,
+) -> ChainOfCustodyReportSchema:
+    return report.model_copy(
+        update={
+            "snapshot_stored_at": snapshot.stored_at,
+            "snapshot_updated_at": snapshot.updated_at,
+            "snapshot_stored_by": snapshot.stored_by,
+        }
     )
 
 
