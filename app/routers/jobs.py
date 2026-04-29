@@ -380,8 +380,8 @@ def get_job_chain_of_custody(
     """Return the job-scoped chain-of-custody report or stored archived snapshot.
 
     Archived jobs return only the last stored snapshot. Non-archived jobs
-    generate the report from current trusted state and persist the latest
-    snapshot for later recall.
+    return the most recent stored snapshot and require an explicit refresh
+    action to generate and persist a new one.
 
     **Roles:** ``admin``, ``manager``, ``auditor``
     """
