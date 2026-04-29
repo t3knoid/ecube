@@ -217,6 +217,7 @@ class TestChainOfCustodyGet:
 
         response = auditor_client.get("/audit/chain-of-custody", params={"drive_id": drive_id})
         assert response.status_code == 200
+        assert response.headers["Cache-Control"] == "no-store"
         report = response.json()["reports"][0]
 
         assert report["drive_manufacturer"] == "SanDisk"
@@ -532,6 +533,7 @@ class TestChainOfCustodyHandoff:
             params={"drive_id": drive_id}
         )
         assert response.status_code == 410
+        assert response.headers["Cache-Control"] == "no-store"
 
     def test_archived_drives_excluded_from_coc_by_project_id(self, manager_client, db):
         # Create two drives in same project: one active, one archived
