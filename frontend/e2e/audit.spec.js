@@ -109,6 +109,7 @@ test('job detail chain of custody report renders printable sections and CoC expo
             drive_manufacturer: 'Kingston',
             drive_model: 'DataTraveler',
             project_id: 'PRJ-001',
+            evidence_number: 'EV-12',
             delivery_time: '2026-04-01T14:30:00.000Z',
             custody_complete: true,
             manifest_summary: [
@@ -255,6 +256,7 @@ test.describe('chain of custody handoff', () => {
               drive_manufacturer: 'Kingston',
               drive_model: 'DataTraveler',
               project_id: 'PRJ-001',
+              evidence_number: 'EV-12',
               delivery_time: null,
               custody_complete: false,
               manifest_summary: [{
