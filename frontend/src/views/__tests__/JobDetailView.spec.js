@@ -481,6 +481,85 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain('1 file failed: Permission denied (/evidence/report.pdf)')
   })
 
+  it('shows an explicit no-manifest state when no manifest has been generated', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 100,
+      total_bytes: 100,
+      file_count: 1,
+      files_succeeded: 1,
+      files_failed: 0,
+      files_timed_out: 0,
+      completed_at: '2026-04-29T12:00:00Z',
+      latest_manifest_created_at: null,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.lastManifestCreated'))
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.manifestStatus'))
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.manifestNeverGenerated'))
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.manifestStatusMissing'))
+  })
+
+  it('marks the manifest as current when it is newer than the completed timestamp', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 100,
+      total_bytes: 100,
+      file_count: 1,
+      files_succeeded: 1,
+      files_failed: 0,
+      files_timed_out: 0,
+      completed_at: '2026-04-29T12:00:00Z',
+      latest_manifest_created_at: '2026-04-29T12:15:00Z',
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.manifestStatusCurrent'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('jobs.manifestStatusStale'))
+  })
+
+  it('marks the manifest as stale when it predates the completed timestamp', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 100,
+      total_bytes: 100,
+      file_count: 1,
+      files_succeeded: 1,
+      files_failed: 0,
+      files_timed_out: 0,
+      completed_at: '2026-04-29T12:00:00Z',
+      latest_manifest_created_at: '2026-04-29T11:45:00Z',
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.manifestStatusStale'))
+  })
+
   it('shows retry failed files for partial-success jobs and calls the retry endpoint', async () => {
     mocks.getJob
       .mockResolvedValueOnce({
