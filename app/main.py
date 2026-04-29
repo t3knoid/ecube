@@ -988,6 +988,18 @@ def _log_exception_info(
     )
 
 
+def _safe_http_exception_summary(status_code: int, code: str, detail: str) -> str:
+    default_summaries = {
+        401: "Unauthorized request",
+        403: "Forbidden request",
+        404: "Requested resource was not found",
+        409: "Request conflicts with the current resource state",
+        410: "Requested resource is no longer available",
+        413: "Request payload is too large",
+    }
+    return sanitize_error_message(detail, default_summaries.get(status_code, f"{code} request failed"))
+
+
 @app.exception_handler(AuthenticationError)
 async def authentication_error_handler(request: Request, exc: AuthenticationError) -> JSONResponse:
     trace_id = str(uuid.uuid4())
@@ -1082,11 +1094,12 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
     code = code_map.get(exc.status_code, f"HTTP_{exc.status_code}")
     detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
     trace_id = str(uuid.uuid4())
+    safe_summary = _safe_http_exception_summary(exc.status_code, code, detail)
     _log_exception_info(
         request,
         status_code=exc.status_code,
         code=code,
-        summary=detail,
+        summary=safe_summary,
         trace_id=trace_id,
         extra={"error_category": "http_exception"},
     )
