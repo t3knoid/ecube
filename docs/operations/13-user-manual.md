@@ -335,7 +335,7 @@ Every drive moves through a defined set of states. Actions available in the UI d
 | State | Meaning | Actions available |
 |-----------|-------------------------------------------------------------------------|-----------------------------------|
 | `DISCONNECTED` | Drive is known to the system but not currently accessible — either not physically present, or present on a disabled port. | Enable port when the drive is still physically detected on a known port |
-| `AVAILABLE` | Drive is present on an enabled port and ready to be formatted or assigned to a project. | Format, Initialize |
+| `AVAILABLE` | Drive is present on an enabled port and ready to be formatted or assigned to a project. If it is still mounted from a prior ECUBE-managed session, it can also be safely unmounted. | Format, Initialize, Prepare Eject when mounted |
 | `IN_USE` | Drive is assigned to a project. Jobs can target this drive. | Prepare Eject |
 | `ARCHIVED` | Drive has been permanently handed off via the Chain of Custody workflow. | None — drive is read-only. |
 
@@ -413,6 +413,8 @@ Before initializing a drive:
 ### 7.6 Prepare Eject
 
 Use `Prepare Eject` before physically removing a drive. This flushes pending writes, unmounts the filesystem, and transitions the drive to `AVAILABLE`.
+
+`Prepare Eject` is available for drives in the normal `IN_USE` workflow and for mounted `AVAILABLE` drives that have not yet been initialized into an active job assignment. This lets operators safely unmount a newly mounted drive before removing it.
 
 After a successful prepare-eject:
 

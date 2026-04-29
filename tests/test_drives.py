@@ -1211,7 +1211,7 @@ def test_prepare_eject_requires_in_use_state(manager_client, db):
 
 
 def test_prepare_eject_available_state_conflict(manager_client, db):
-    """Prepare-eject on AVAILABLE drive returns 409 Conflict.
+    """Prepare-eject on unmounted AVAILABLE drive returns 409 Conflict.
     
     Verifies that prepare_eject is NOT called (fast-fail optimization).
     """
@@ -1230,6 +1230,62 @@ def test_prepare_eject_available_state_conflict(manager_client, db):
     assert response.status_code == 409
     assert "not in IN_USE state" in response.json()["message"]
     # Verify prepare_eject was NOT called (fast-fail before OS operations)
+    provider.prepare_eject.assert_not_called()
+
+
+def test_prepare_eject_allows_mounted_available_drive_without_active_assignment(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB012-MOUNTED",
+        current_state=DriveState.AVAILABLE,
+        current_project_id=None,
+        filesystem_path="/dev/sdz",
+        mount_path="/media/usb012-mounted",
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = _fake_eject()
+    with patch("app.routers.drives.get_drive_eject", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["current_state"] == "AVAILABLE"
+    assert data["mount_path"] is None
+    provider.prepare_eject.assert_called_once_with("/dev/sdz")
+
+
+def test_prepare_eject_available_drive_with_active_assignment_conflict(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB012-ACTIVE",
+        current_state=DriveState.AVAILABLE,
+        current_project_id=None,
+        filesystem_path="/dev/sdy",
+        mount_path="/media/usb012-active",
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-001",
+        evidence_number="EV-USB012-ACTIVE",
+        source_path="/data/evidence",
+        status=JobStatus.RUNNING,
+    )
+    db.add(job)
+    db.flush()
+
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    provider = _fake_eject()
+    with patch("app.routers.drives.get_drive_eject", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+
+    assert response.status_code == 409
+    assert response.json()["message"] == (
+        "Drive has an active job assignment and cannot be prepared for eject while still available"
+    )
     provider.prepare_eject.assert_not_called()
 
 
