@@ -106,4 +106,70 @@ describe('ConfirmDialog', () => {
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([false])
     wrapper.unmount()
   })
+
+  it('traps focus inside the dialog when tabbing', async () => {
+    const wrapper = mount(ConfirmDialog, {
+      attachTo: document.body,
+      props: {
+        modelValue: true,
+        title: 'Confirm',
+        confirmLabel: 'Yes',
+        cancelLabel: 'No',
+      },
+      global: {
+        stubs: {
+          teleport: true,
+        },
+      },
+    })
+
+    await nextTick()
+
+    const buttons = wrapper.findAll('button')
+    expect(document.activeElement).toBe(buttons[0].element)
+
+    buttons[1].element.focus()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
+    await nextTick()
+    expect(document.activeElement).toBe(buttons[0].element)
+
+    buttons[0].element.focus()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }))
+    await nextTick()
+    expect(document.activeElement).toBe(buttons[1].element)
+
+    wrapper.unmount()
+  })
+
+  it('restores focus to the triggering element when closed', async () => {
+    const trigger = document.createElement('button')
+    trigger.textContent = 'Open dialog'
+    document.body.appendChild(trigger)
+    trigger.focus()
+
+    const wrapper = mount(ConfirmDialog, {
+      attachTo: document.body,
+      props: {
+        modelValue: true,
+        title: 'Confirm',
+        confirmLabel: 'Yes',
+        cancelLabel: 'No',
+      },
+      global: {
+        stubs: {
+          teleport: true,
+        },
+      },
+    })
+
+    await nextTick()
+    await wrapper.findAll('button')[0].trigger('click')
+    await wrapper.setProps({ modelValue: false })
+    await nextTick()
+
+    expect(document.activeElement).toBe(trigger)
+
+    wrapper.unmount()
+    trigger.remove()
+  })
 })
