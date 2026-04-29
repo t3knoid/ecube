@@ -83,10 +83,12 @@ const editForm = ref({
 
 const cocLoading = ref(false)
 const cocError = ref('')
+const cocHandoffError = ref('')
 const cocStatusMessage = ref('')
 const cocGeneratedAt = ref('')
 const cocReport = ref(null)
 const handoffSaving = ref(false)
+const showCocHandoffErrorDialog = ref(false)
 const cocHandoffForm = ref({
   drive_id: '',
   project_id: '',
@@ -793,10 +795,20 @@ function prepareCocHandoff(report) {
   }
 }
 
+function showCocHandoffError(message) {
+  cocHandoffError.value = message
+  showCocHandoffErrorDialog.value = true
+}
+
+function closeCocHandoffErrorDialog() {
+  showCocHandoffErrorDialog.value = false
+  cocHandoffError.value = ''
+}
+
 function submitCocHandoff() {
   const driveId = Number(cocHandoffForm.value.drive_id)
   if (!Number.isInteger(driveId) || driveId <= 0 || !cocHandoffForm.value.possessor.trim() || !cocHandoffForm.value.delivery_time) {
-    cocError.value = t('audit.handoffInvalid')
+    showCocHandoffError(t('audit.handoffInvalid'))
     return
   }
   showCocHandoffWarning.value = true
@@ -807,6 +819,8 @@ async function confirmCocHandoffSubmission() {
   showCocHandoffWarning.value = false
   handoffSaving.value = true
   cocError.value = ''
+  cocHandoffError.value = ''
+  showCocHandoffErrorDialog.value = false
   cocStatusMessage.value = ''
   try {
     await confirmJobChainOfCustodyHandoff(job.value.id, {
@@ -821,7 +835,7 @@ async function confirmCocHandoffSubmission() {
     await Promise.all([loadJobChainOfCustody(), refreshAll()])
     cocStatusMessage.value = t('audit.handoffSaved')
   } catch (err) {
-    cocError.value = buildJobError(err)
+    showCocHandoffError(buildJobError(err))
   } finally {
     handoffSaving.value = false
   }
@@ -1990,6 +2004,18 @@ onUnmounted(() => {
       @confirm="confirmCocHandoffSubmission"
       @cancel="cancelCocHandoffSubmission"
     />
+
+    <ConfirmDialog
+      v-model="showCocHandoffErrorDialog"
+      :title="t('audit.handoffErrorTitle')"
+      :message="''"
+      :confirm-label="t('common.actions.close')"
+      :cancel-label="t('common.actions.cancel')"
+      @confirm="closeCocHandoffErrorDialog"
+      @cancel="closeCocHandoffErrorDialog"
+    >
+      <p class="error-banner" role="alert" aria-live="assertive">{{ cocHandoffError }}</p>
+    </ConfirmDialog>
   </section>
 </template>
 
