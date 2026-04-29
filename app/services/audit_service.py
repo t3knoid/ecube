@@ -668,6 +668,14 @@ def _build_all_drive_reports(
                 drive_manufacturer=drive.manufacturer,
                 drive_model=drive.product_name,
                 project_id=effective_project_ids[drive_id_key],
+                evidence_number=next(
+                    (
+                        jobs_by_id[job_id].evidence_number
+                        for job_id in sorted(job_ids_per_drive[drive_id_key])
+                        if jobs_by_id.get(job_id) is not None and jobs_by_id[job_id].evidence_number
+                    ),
+                    None,
+                ),
                 custody_complete=latest_handoff is not None,
                 delivery_time=delivery_time,
                 chain_of_custody_events=coc_events,
@@ -768,6 +776,7 @@ def _build_job_chain_of_custody_report(
                 drive_manufacturer=drive.manufacturer,
                 drive_model=drive.product_name,
                 project_id=job.project_id,
+                evidence_number=job.evidence_number,
                 custody_complete=latest_handoff is not None,
                 delivery_time=delivery_time,
                 chain_of_custody_events=coc_events,
