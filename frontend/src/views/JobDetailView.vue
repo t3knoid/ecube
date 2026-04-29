@@ -84,7 +84,6 @@ const cocLoading = ref(false)
 const cocError = ref('')
 const cocStatusMessage = ref('')
 const cocGeneratedAt = ref('')
-const cocSnapshotUpdatedAt = ref('')
 const cocReport = ref(null)
 const handoffSaving = ref(false)
 const cocHandoffForm = ref({
@@ -712,7 +711,6 @@ function printJobCocReport() {
 
 function applyCocSnapshot(report) {
   cocReport.value = report
-  cocSnapshotUpdatedAt.value = report?.snapshot_updated_at || ''
 }
 
 async function loadJobChainOfCustody() {
@@ -725,7 +723,6 @@ async function loadJobChainOfCustody() {
     applyCocSnapshot(await getJobChainOfCustody(job.value.id))
   } catch (err) {
     cocReport.value = null
-    cocSnapshotUpdatedAt.value = ''
     cocError.value = buildJobError(err)
   } finally {
     cocLoading.value = false
@@ -1758,13 +1755,6 @@ onUnmounted(() => {
             <p v-if="cocStatusMessage" class="ok-banner">{{ cocStatusMessage }}</p>
           </div>
 
-          <div class="coc-snapshot-card">
-            <span class="coc-snapshot-label">{{ t('audit.snapshotStatusTitle') }}</span>
-            <span v-if="cocSnapshotUpdatedAt" class="coc-snapshot-value">{{ t('audit.snapshotUpdatedAtLabel') }}: {{ formatTimestamp(cocSnapshotUpdatedAt) }}</span>
-            <span v-else class="muted">{{ t('audit.snapshotUnavailable') }}</span>
-            <p v-if="!cocSnapshotUpdatedAt && canRefreshCoc" class="muted coc-snapshot-hint">{{ t('audit.snapshotRefreshHint') }}</p>
-          </div>
-
           <div v-if="cocReport" class="coc-results">
             <div v-for="report in cocReport.reports" :key="report.drive_id" class="coc-report-shell">
               <CocReport
@@ -2280,27 +2270,6 @@ select {
 .coc-status {
   display: grid;
   gap: var(--space-xs);
-}
-
-.coc-snapshot-card {
-  display: grid;
-  gap: 2px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius);
-  background: var(--color-bg-secondary);
-  padding: var(--space-sm);
-}
-
-.coc-snapshot-label {
-  font-weight: 600;
-}
-
-.coc-snapshot-value {
-  color: var(--color-text-primary);
-}
-
-.coc-snapshot-hint {
-  margin: 0;
 }
 
 .coc-actions {
