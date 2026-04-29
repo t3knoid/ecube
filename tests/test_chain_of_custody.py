@@ -6,9 +6,19 @@ from app.models.hardware import DriveState, UsbDrive
 from app.models.jobs import DriveAssignment, ExportJob, JobStatus, Manifest
 
 
-def _seed_drive(db, *, device_identifier: str, project_id: str | None = None, state: DriveState = DriveState.IN_USE) -> UsbDrive:
+def _seed_drive(
+    db,
+    *,
+    device_identifier: str,
+    project_id: str | None = None,
+    state: DriveState = DriveState.IN_USE,
+    manufacturer: str | None = None,
+    product_name: str | None = None,
+) -> UsbDrive:
     drive = UsbDrive(
         device_identifier=device_identifier,
+        manufacturer=manufacturer,
+        product_name=product_name,
         current_state=state,
         current_project_id=project_id,
         filesystem_type="ext4",
@@ -186,7 +196,14 @@ class TestChainOfCustodyGet:
         assert response.status_code == 409
 
     def test_drive_report_contains_lifecycle_and_manifest_summary(self, auditor_client, db):
-        drive = _seed_drive(db, device_identifier="COC-LIFECYCLE", project_id="CASE-L", state=DriveState.AVAILABLE)
+        drive = _seed_drive(
+            db,
+            device_identifier="COC-LIFECYCLE",
+            project_id="CASE-L",
+            state=DriveState.AVAILABLE,
+            manufacturer="SanDisk",
+            product_name="Extreme Pro",
+        )
         drive_id = _as_int(drive.id)
         job = _seed_job_and_assignment(db, drive_id=drive_id, project_id="CASE-L")
         job_id = _as_int(job.id)
@@ -201,6 +218,9 @@ class TestChainOfCustodyGet:
         response = auditor_client.get("/audit/chain-of-custody", params={"drive_id": drive_id})
         assert response.status_code == 200
         report = response.json()["reports"][0]
+
+        assert report["drive_manufacturer"] == "SanDisk"
+        assert report["drive_model"] == "Extreme Pro"
 
         event_types = [event["event_type"] for event in report["chain_of_custody_events"]]
         assert "DRIVE_INITIALIZED" in event_types

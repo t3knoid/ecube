@@ -7,16 +7,20 @@ import { getDrives } from '@/api/drives.js'
 import { useRoleGuard } from '@/composables/useRoleGuard.js'
 import { COC_HANDOFF_ROLES } from '@/constants/roles.js'
 import { useSettingsStore } from '@/stores/settings.js'
+import { useAuthStore } from '@/stores/auth.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import CocReport from '@/components/audit/CocReport.vue'
 import { formatDriveIdentity } from '@/utils/driveIdentity.js'
+import { asUtcDate } from '@/utils/dateTime.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const { t } = useI18n()
 const route = useRoute()
 const settingsStore = useSettingsStore()
+const authStore = useAuthStore()
 const { canAccess: canConfirmHandoff } = useRoleGuard(COC_HANDOFF_ROLES)
 
 const logs = ref([])
@@ -41,6 +45,7 @@ const cocError = ref('')
 const cocReport = ref(null)
 const expandedCocEvents = ref(new Set())
 const cocStatusMessage = ref('')
+const cocGeneratedAt = ref('')
 const handoffSaving = ref(false)
 const showHandoffWarning = ref(false)
 const handoffForm = ref({
@@ -126,32 +131,11 @@ function toggleDetails(id) {
   expanded.value = new Set(expanded.value)
 }
 
-function toggleCocEvents(driveId) {
-  if (expandedCocEvents.value.has(driveId)) {
-    expandedCocEvents.value.delete(driveId)
-  } else {
-    expandedCocEvents.value.add(driveId)
-  }
-  expandedCocEvents.value = new Set(expandedCocEvents.value)
-}
-
 function asLocalDate(value) {
   if (!value) return '-'
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return '-'
   return parsed.toLocaleString()
-}
-
-function asUtcDate(value) {
-  if (!value) return '-'
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return '-'
-  return new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'UTC',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit',
-    hour12: false,
-  }).format(parsed) + ' UTC'
 }
 
 function toIsoDate(value) {
@@ -229,10 +213,11 @@ async function loadChainOfCustody() {
   cocError.value = ''
   cocStatusMessage.value = ''
   const previousReport = cocReport.value
+  const previousGeneratedAt = cocGeneratedAt.value
   const requestedParams = buildCocParams()
   cocReport.value = null
-  expandedCocEvents.value = new Set()
   try {
+    cocGeneratedAt.value = new Date().toISOString()
     cocReport.value = await getChainOfCustody(requestedParams)
   } catch (err) {
     if (err?.response?.status === 410) {
@@ -255,6 +240,7 @@ async function loadChainOfCustody() {
         })()
       if (prevMatchesRequest) {
         cocReport.value = previousReport
+        cocGeneratedAt.value = previousGeneratedAt
       } else {
         cocStatusMessage.value = t('audit.driveArchived')
       }
@@ -391,6 +377,39 @@ function saveCocReport() {
   setTimeout(() => URL.revokeObjectURL(url), settingsStore.downloadRevokeDelayMs)
 }
 
+function saveCocCsvReport() {
+  if (!cocReport.value?.reports?.length) return
+
+  const header = ['event_id', 'drive_sn', 'drive_manufacturer', 'drive_model', 'timestamp', 'actor', 'action', 'event_type', 'details']
+  const rows = cocReport.value.reports.flatMap((report) =>
+    (report.chain_of_custody_events || []).map((event) => ({
+      event_id: event.event_id ?? '',
+      drive_sn: report.drive_sn || '',
+      drive_manufacturer: report.drive_manufacturer || '',
+      drive_model: report.drive_model || '',
+      timestamp: event.timestamp || '',
+      actor: event.actor || '',
+      action: event.action || '',
+      event_type: event.event_type || '',
+      details: JSON.stringify(event.details || {}),
+    })),
+  )
+
+  const lines = [
+    header.join(','),
+    ...rows.map((row) => header.map((key) => `"${String(row[key]).replace(/"/g, '""')}"`).join(',')),
+  ]
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+  anchor.download = `chain-of-custody-${timestamp}.csv`
+  anchor.click()
+  setTimeout(() => URL.revokeObjectURL(url), settingsStore.downloadRevokeDelayMs)
+}
+
 function printCocReport() {
   window.print()
 }
@@ -443,9 +462,9 @@ onMounted(() => {
   <section class="view-root">
     <header class="header-row">
       <h1>{{ t('audit.title') }}</h1>
-      <div class="actions">
+      <div class="actions audit-toolbar">
         <button class="btn" @click="loadAudit">{{ t('common.actions.refresh') }}</button>
-        <button class="btn btn-primary" @click="exportCsv">{{ t('audit.exportCsv') }}</button>
+        <button class="btn btn-primary" @click="exportCsv">{{ t('audit.exportAuditCsv') }}</button>
       </div>
     </header>
 
@@ -468,8 +487,9 @@ onMounted(() => {
     <section class="coc-section">
       <header class="header-row">
         <h2>{{ t('audit.chainTitle') }}</h2>
-        <div class="actions">
+        <div class="actions coc-toolbar">
           <button class="btn" :disabled="!cocReport" @click="printCocReport">{{ t('audit.printCoc') }}</button>
+          <button class="btn" :disabled="!cocReport" @click="saveCocCsvReport">{{ t('audit.exportCsv') }}</button>
           <button class="btn btn-primary" :disabled="!cocReport" @click="saveCocReport">{{ t('audit.saveCoc') }}</button>
         </div>
       </header>
@@ -487,60 +507,26 @@ onMounted(() => {
         <button class="btn" :disabled="!hasCocSelector" @click="loadChainOfCustody">{{ t('audit.loadCoc') }}</button>
       </div>
 
-      <p v-if="cocLoading" class="muted">{{ t('common.labels.loading') }}</p>
-      <p v-if="cocError" class="error-banner">{{ cocError }}</p>
-      <p v-if="cocStatusMessage" class="ok-banner">{{ cocStatusMessage }}</p>
+      <div class="coc-status">
+        <p v-if="cocLoading" class="muted">{{ t('common.labels.loading') }}</p>
+        <p v-if="cocError" class="error-banner">{{ cocError }}</p>
+        <p v-if="cocStatusMessage" class="ok-banner">{{ cocStatusMessage }}</p>
+      </div>
 
       <div v-if="cocReport" class="coc-results">
-        <p class="muted">{{ t('audit.selectorMode') }}: {{ cocReport.selector_mode }}</p>
-
-        <article v-for="report in cocReport.reports" :key="report.drive_id" class="coc-card">
-          <header class="header-row">
-            <h3>{{ t('audit.cocDriveHeader', { driveId: report.drive_id, driveSn: report.drive_sn }) }}</h3>
-            <StatusBadge :status="report.custody_complete ? 'COMPLETED' : 'PENDING'" :label="report.custody_complete ? t('audit.custodyComplete') : t('audit.custodyIncomplete')" />
-          </header>
-          <p class="muted">
-            {{ t('dashboard.project') }}: {{ normalizeProjectId(report.project_id) || '-' }}
-            | {{ t('audit.deliveryTime') }}: {{ asUtcDate(report.delivery_time) }}
-          </p>
-
+        <div v-for="report in cocReport.reports" :key="report.drive_id" class="coc-report-shell">
           <div class="coc-actions">
             <button v-if="canConfirmHandoff" class="btn" @click="prepareHandoff(report)">{{ t('audit.prefillHandoff') }}</button>
           </div>
-
-          <div class="manifest-grid" v-if="report.manifest_summary.length">
-            <div v-for="manifest in report.manifest_summary" :key="manifest.job_id" class="manifest-item">
-              <strong>{{ t('jobs.jobId') }} {{ manifest.job_id }}</strong>
-              <span>{{ t('common.labels.count') }}: {{ manifest.total_files }}</span>
-              <span>{{ t('common.labels.size') }}: {{ manifest.total_bytes }}</span>
-              <span>{{ t('audit.manifestCount') }}: {{ manifest.manifest_count }}</span>
-            </div>
-          </div>
-
-          <div class="coc-events">
-            <p v-if="!report.chain_of_custody_events.length" class="muted">{{ t('audit.cocEventsEmpty') }}</p>
-            <table v-else class="coc-events-table" :aria-label="t('audit.cocDriveHeader', { driveId: report.drive_id, driveSn: report.drive_sn })">
-              <thead>
-                <tr>
-                  <th>{{ t('audit.action') }}</th>
-                  <th>{{ t('common.labels.date') }}</th>
-                  <th>{{ t('auth.username') }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="event in report.chain_of_custody_events" :key="event.event_id">
-                  <td>{{ event.action }}</td>
-                  <td>{{ asUtcDate(event.timestamp) }}</td>
-                  <td>{{ event.actor || '-' }}</td>
-                </tr>
-              </tbody>
-            </table>
-            <button class="btn" @click="toggleCocEvents(report.drive_id)">
-              {{ expandedCocEvents.has(report.drive_id) ? t('audit.hideDetails') : t('audit.showDetails') }}
-            </button>
-            <pre v-if="expandedCocEvents.has(report.drive_id)">{{ JSON.stringify(report.chain_of_custody_events, null, 2) }}</pre>
-          </div>
-        </article>
+          <CocReport
+            :report="report"
+            :selector-mode="cocReport.selector_mode"
+            :project-id="normalizeProjectId(cocReport.project_id) || ''"
+            :generated-at="cocGeneratedAt"
+            :generated-by="authStore.username || ''"
+            :manifest-totals-footnote="t('audit.manifestTotalsFootnote')"
+          />
+        </div>
       </div>
 
       <div v-if="canConfirmHandoff" class="handoff-form">
@@ -571,23 +557,25 @@ onMounted(() => {
       </div>
     </section>
 
-    <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
-    <p v-if="error" class="error-banner">{{ error }}</p>
+    <section class="audit-log-section">
+      <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
+      <p v-if="error" class="error-banner">{{ error }}</p>
 
-    <DataTable :columns="columns" :rows="paged" :empty-text="t('audit.empty')">
-      <template #cell-timestamp="{ row }">{{ asLocalDate(row.timestamp) }}</template>
-      <template #cell-action="{ row }"><StatusBadge :status="row.action" /></template>
-      <template #cell-details="{ row }">
-        <div class="details-cell">
-          <button class="btn" @click="toggleDetails(row.id)">
-            {{ expanded.has(row.id) ? t('audit.hideDetails') : t('audit.showDetails') }}
-          </button>
-          <pre v-if="expanded.has(row.id)">{{ JSON.stringify(row.details || {}, null, 2) }}</pre>
-        </div>
-      </template>
-    </DataTable>
+      <DataTable :columns="columns" :rows="paged" :empty-text="t('audit.empty')">
+        <template #cell-timestamp="{ row }">{{ asLocalDate(row.timestamp) }}</template>
+        <template #cell-action="{ row }"><StatusBadge :status="row.action" /></template>
+        <template #cell-details="{ row }">
+          <div class="details-cell">
+            <button class="btn" @click="toggleDetails(row.id)">
+              {{ expanded.has(row.id) ? t('audit.hideDetails') : t('audit.showDetails') }}
+            </button>
+            <pre v-if="expanded.has(row.id)">{{ JSON.stringify(row.details || {}, null, 2) }}</pre>
+          </div>
+        </template>
+      </DataTable>
 
-    <Pagination v-model:page="page" :page-size="pageSize" :total="logs.length" />
+      <Pagination v-model:page="page" :page-size="pageSize" :total="logs.length" />
+    </section>
 
     <!-- Handoff Warning Modal -->
     <ConfirmDialog
@@ -672,13 +660,11 @@ pre {
 }
 
 .coc-section,
-.coc-card,
 .handoff-form {
   display: grid;
   gap: var(--space-sm);
 }
 
-.coc-card,
 .handoff-form {
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-lg);
@@ -687,30 +673,12 @@ pre {
 }
 
 .coc-results,
+.coc-report-shell,
 .handoff-grid,
-.manifest-grid,
 .coc-actions,
-.coc-events {
+.coc-status {
   display: grid;
   gap: var(--space-sm);
-}
-
-.coc-events-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--font-size-xs);
-}
-
-.coc-events-table th,
-.coc-events-table td {
-  text-align: left;
-  padding: var(--space-xs) var(--space-sm);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.coc-events-table th {
-  color: var(--color-text-secondary);
-  font-weight: 600;
 }
 
 .handoff-grid {
@@ -722,15 +690,15 @@ pre {
   gap: 2px;
 }
 
-.manifest-item {
-  display: grid;
-  gap: 2px;
+textarea {
   border: 1px solid var(--color-border);
+  background: var(--color-bg-input);
+  color: var(--color-text-primary);
   border-radius: var(--border-radius);
-  padding: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
 }
 
-textarea {
+select {
   border: 1px solid var(--color-border);
   background: var(--color-bg-input);
   color: var(--color-text-primary);
