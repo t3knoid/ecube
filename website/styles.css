@@ -413,6 +413,11 @@ a {
 }
 
 .tour-frame-1 {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.tour-frame-1 {
   animation-delay: 0s;
 }
 
@@ -453,6 +458,11 @@ a {
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
   opacity: 0;
   animation: tourLabel 28s infinite;
+}
+
+.tour-callout-1 {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .tour-callout-1 { top: 18%; left: 8%; animation-delay: 0s; }
