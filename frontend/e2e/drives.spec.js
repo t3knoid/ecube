@@ -309,3 +309,51 @@ test('drives list and drive detail admin flows', async ({ page }) => {
 
   await expectNoCriticalA11yViolations(page)
 })
+
+test('drives mobile overflow menu stays visible without expanding the row', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await setupAuthenticatedPage(page, ['admin'])
+
+  const drive = {
+    id: 1,
+    device_identifier: '/dev/sdb',
+    display_device_label: 'SanDisk Ultra - Port 1',
+    manufacturer: 'SanDisk',
+    product_name: 'Ultra',
+    port_number: 1,
+    port_system_path: '2-1',
+    serial_number: 'SER-001',
+    filesystem_path: '/mnt/usb1',
+    filesystem_type: 'ext4',
+    capacity_bytes: 1073741824,
+    current_state: 'AVAILABLE',
+    current_project_id: null,
+    mount_path: '/mnt/ecube/1',
+  }
+
+  await routeJson(page, '**/api/drives', () => [drive])
+
+  await page.goto('/drives')
+  await expect(page.getByRole('heading', { name: 'Drives' })).toBeVisible()
+
+  const row = page.locator('tbody tr').first()
+  const rowBoxBefore = await row.boundingBox()
+
+  const toggle = page.getByLabel('SanDisk Ultra - Port 1 drive actions')
+  await toggle.click()
+
+  const popover = page.locator('.row-actions-popover').first()
+  await expect(popover).toBeVisible()
+  const popoverBox = await popover.boundingBox()
+
+  const rowBoxAfter = await row.boundingBox()
+
+  expect(rowBoxBefore).not.toBeNull()
+  expect(popoverBox).not.toBeNull()
+  expect(rowBoxAfter).not.toBeNull()
+  expect(popoverBox.x).toBeGreaterThanOrEqual(0)
+  expect(popoverBox.y).toBeGreaterThanOrEqual(0)
+  expect(popoverBox.x + popoverBox.width).toBeLessThanOrEqual(390)
+  expect(popoverBox.y + popoverBox.height).toBeLessThanOrEqual(844)
+  expect(Math.abs(rowBoxAfter.height - rowBoxBefore.height)).toBeLessThanOrEqual(1)
+})

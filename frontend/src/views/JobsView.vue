@@ -1076,6 +1076,10 @@ textarea {
 }
 
 @media (max-width: 768px) {
+  :deep(.table-scroll-wrapper) {
+    overflow: visible;
+  }
+
   .row-actions {
     display: none;
   }
