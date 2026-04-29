@@ -55,6 +55,7 @@ class ChainOfCustodyDriveReportSchema(BaseModel):
     drive_manufacturer: Optional[str] = Field(default=None, description="Drive manufacturer when available")
     drive_model: Optional[str] = Field(default=None, description="Drive model/product name when available")
     project_id: Optional[str] = Field(default=None, description="Bound project ID for the drive")
+    evidence_number: Optional[str] = Field(default=None, description="Evidence identifier for the related copy job")
     custody_complete: bool = Field(..., description="Whether handoff confirmation exists")
     delivery_time: Optional[datetime] = Field(default=None, description="Physical handoff timestamp if confirmed")
     chain_of_custody_events: List[ChainOfCustodyEventSchema] = Field(default_factory=list, description="Chronological custody-related audit events")
