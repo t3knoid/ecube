@@ -48,7 +48,7 @@ def _seed_job_and_assignment(db, *, drive_id: int, project_id: str) -> ExportJob
     db.refresh(job)
 
     job_id = _as_int(job.id)
-    assignment = DriveAssignment(drive_id=drive_id, job_id=job_id)
+    assignment = DriveAssignment(drive_id=drive_id, job_id=job_id, file_count=4, copied_bytes=4096)
     db.add(assignment)
 
     manifest = Manifest(job_id=job_id, manifest_path=f"/tmp/manifest_{job_id}.json", format="JSON")
@@ -234,6 +234,53 @@ class TestChainOfCustodyGet:
         manifest = report["manifest_summary"][0]
         assert manifest["job_id"] == job_id
         assert manifest["manifest_count"] == 1
+        assert manifest["total_files"] == 4
+        assert manifest["total_bytes"] == 4096
+
+    def test_project_report_uses_drive_assignment_totals_for_multi_drive_jobs(self, auditor_client, db):
+        drive_one = _seed_drive(db, device_identifier="COC-MULTI-ONE", project_id="CASE-MULTI", state=DriveState.AVAILABLE)
+        drive_two = _seed_drive(db, device_identifier="COC-MULTI-TWO", project_id="CASE-MULTI", state=DriveState.AVAILABLE)
+        drive_one_id = _as_int(drive_one.id)
+        drive_two_id = _as_int(drive_two.id)
+
+        job = ExportJob(
+            project_id="CASE-MULTI",
+            evidence_number="EV-002",
+            source_path="/evidence/src",
+            status=JobStatus.COMPLETED,
+            file_count=10,
+            copied_bytes=10_000,
+            created_by="processor-user",
+        )
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+        job_id = _as_int(job.id)
+
+        db.add_all(
+            [
+                DriveAssignment(drive_id=drive_one_id, job_id=job_id, file_count=4, copied_bytes=4_000),
+                DriveAssignment(drive_id=drive_two_id, job_id=job_id, file_count=6, copied_bytes=6_000),
+                Manifest(job_id=job_id, manifest_path=f"/tmp/manifest_{job_id}.json", format="JSON"),
+            ]
+        )
+        db.commit()
+
+        _seed_audit(db, action="DRIVE_INITIALIZED", drive_id=drive_one_id, project_id="CASE-MULTI", details={"drive_id": drive_one_id})
+        _seed_audit(db, action="DRIVE_INITIALIZED", drive_id=drive_two_id, project_id="CASE-MULTI", details={"drive_id": drive_two_id})
+        _seed_audit(db, action="JOB_CREATED", drive_id=drive_one_id, job_id=job_id, project_id="CASE-MULTI", details={"project_id": "CASE-MULTI"})
+        _seed_audit(db, action="JOB_CREATED", drive_id=drive_two_id, job_id=job_id, project_id="CASE-MULTI", details={"project_id": "CASE-MULTI"})
+        _seed_audit(db, action="JOB_COMPLETED", job_id=job_id, project_id="CASE-MULTI", details={"status": "COMPLETED"})
+
+        response = auditor_client.get("/audit/chain-of-custody", params={"project_id": "CASE-MULTI"})
+        assert response.status_code == 200
+
+        payload = response.json()
+        reports = {report["drive_id"]: report for report in payload["reports"]}
+        assert reports[drive_one_id]["manifest_summary"][0]["total_files"] == 4
+        assert reports[drive_one_id]["manifest_summary"][0]["total_bytes"] == 4_000
+        assert reports[drive_two_id]["manifest_summary"][0]["total_files"] == 6
+        assert reports[drive_two_id]["manifest_summary"][0]["total_bytes"] == 6_000
 
     def test_prepare_eject_without_handoff_does_not_set_delivery_time(self, auditor_client, db):
         drive = _seed_drive(db, device_identifier="COC-NO-HANDOFF", project_id="CASE-H", state=DriveState.AVAILABLE)

@@ -497,7 +497,8 @@ class TestCopyEngineDBFailures:
 
     def test_process_file_skips_increment_when_done_save_fails(self, db):
         """If saving DONE status fails, copied_bytes must NOT be incremented."""
-        from app.models.jobs import ExportFile, FileStatus
+        from app.models.hardware import DriveState, UsbDrive
+        from app.models.jobs import DriveAssignment, ExportFile, FileStatus
         from app.services.copy_engine import _process_file
 
         job = ExportJob(
@@ -509,6 +510,17 @@ class TestCopyEngineDBFailures:
         )
         db.add(job)
         db.commit()
+
+        drive = UsbDrive(device_identifier="USB-DONE-SAVE-FAIL", current_state=DriveState.IN_USE)
+        db.add(drive)
+        db.commit()
+        db.refresh(drive)
+
+        assignment = DriveAssignment(drive_id=drive.id, job_id=job.id)
+        db.add(assignment)
+        db.commit()
+        db.refresh(assignment)
+        assignment_id = assignment.id
 
         ef = ExportFile(
             job_id=job.id,
@@ -556,9 +568,13 @@ class TestCopyEngineDBFailures:
             # failed — the increment must have been skipped.
             db.expire_all()
             refreshed_job = db.get(ExportJob, job_id)
+            refreshed_assignment = db.get(DriveAssignment, assignment_id)
             assert refreshed_job.copied_bytes == 0, (
                 f"Expected copied_bytes=0 but got {refreshed_job.copied_bytes}; "
                 "increment_job_bytes should be skipped when DONE save fails"
             )
+            assert refreshed_assignment is not None
+            assert refreshed_assignment.copied_bytes == 0
+            assert refreshed_assignment.file_count == 1
         finally:
             os.unlink(src_path)
