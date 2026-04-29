@@ -74,6 +74,8 @@ onUnmounted(() => {
   flex-direction: column;
   min-height: 100vh;
   background: var(--color-bg-primary);
+  border-radius: var(--border-radius-lg);
+  overflow: hidden;
 }
 
 .shell-body {
@@ -94,6 +96,10 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
+  .app-shell {
+    border-radius: 0;
+  }
+
   .shell-content {
     padding: var(--space-md);
   }
