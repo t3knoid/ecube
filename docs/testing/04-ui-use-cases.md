@@ -178,13 +178,13 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 | UC-7.14 | Acknowledge permanent archive warning before handoff | Admin, Manager | admin, manager |
 | UC-7.15 | Print or export the formatted chain-of-custody report for compliance records | Admin, Manager, Auditor | admin, manager, auditor |
 
-**UI Implication:** The Audit section includes two sub-areas:
+**UI Implication:** Audit and chain-of-custody now live on separate surfaces:
 
 1. **Audit Logs** (UC-7.1–7.7): Traditional log viewer with multi-filter sidebar (user, action type dropdown, job ID, date range picker). Paginated table with expandable detail rows showing the JSON `details` payload. Dedicated `Export Audit CSV` button for compliance reporting.
 
 	Startup reconciliation may add `MOUNT_RECONCILED` and `DRIVE_MOUNT_RECONCILED` entries when ECUBE restores expected managed mounts or removes orphan managed mount points during service startup.
 
-2. **Chain of Custody** (UC-7.8–7.15): Compliance-focused CoC report viewer with selector panel (drive ID dropdown, drive serial input, project ID dropdown), a formatted report header with generated-at UTC metadata and generated-by identity, drive manufacturer/model fields, lifecycle timeline showing custody events, manifest inventory per job, attestation block, handoff confirmation form with pre-filled defaults, and permanent-archive warning confirmation modal. `Print CoC`, `Export CoC CSV`, and `Export JSON` actions generate compliance-ready output. After handoff, drives transition to `ARCHIVED` and are excluded from all CoC searches; if a directly selected drive is archived before a reload completes, the UI may preserve the previously loaded matching report instead of replacing it with unrelated data.
+2. **Chain of Custody** (UC-7.8–7.15): Job Detail exposes a dedicated `Chain of Custody` action that opens a compliance-focused CoC dialog for the current job. The dialog loads the last stored snapshot, shows when that snapshot was last updated on disk, lets `admin` and `manager` users explicitly refresh and persist a new snapshot, and exposes `Print CoC`, `Export CoC CSV`, and `Export JSON` against the stored snapshot currently loaded in the dialog. The same dialog contains the handoff confirmation form, prefill controls, and permanent-archive warning modal for `admin` and `manager` users only. After handoff, drives transition to `ARCHIVED`, while archived jobs continue to expose their last stored CoC snapshot for read-only review.
 
 ---
 

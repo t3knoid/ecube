@@ -1037,41 +1037,64 @@ Return audit logs with filters.
 - `401 Unauthorized` — Missing/invalid token
 - `403 Forbidden` — Insufficient role
 
-### `GET /audit/chain-of-custody`
+### `GET /jobs/{job_id}/chain-of-custody`
 
-Return chain-of-custody report data for legal review.
+Return the last stored job-scoped chain-of-custody snapshot for legal review, print, or export.
 
-**Roles:** `admin`, `manager`, `auditor` (same role set as audit-log read access)
-
-**Query parameters:**
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `drive_id` | integer | No* | Drive identifier. Default query mode when no explicit mode is provided. |
-| `drive_sn` | string | No* | Drive serial/device identifier for serial-scoped CoC retrieval. |
-| `project_id` | string | No* | Project identifier for project-scoped CoC retrieval. |
-
-\* At least one of `drive_id`, `drive_sn`, or `project_id` must be provided. Query precedence is `drive_id`, then `drive_sn`, then `project_id`.
+**Roles:** `admin`, `manager`, `auditor`
 
 **Behavior:**
 
-1. Validates caller authorization with the same role policy as `GET /audit`.
-2. Resolves query mode (`drive_id` first, then `drive_sn`, then `project_id`).
-3. Aggregates custody events from audit/job records.
-4. Returns structured CoC report content including generated lifecycle timelines, manifest summaries, and drive identity fields such as manufacturer and model when available.
+1. Validates caller authorization with the job-scoped CoC read policy.
+2. Loads the previously stored snapshot for the requested job.
+3. Returns the stored CoC report together with snapshot metadata such as `snapshot_stored_at`, `snapshot_updated_at`, and `snapshot_stored_by`.
+4. Does not regenerate the snapshot as part of the read path.
 
 **Response notes:**
 
 - Each drive report includes `drive_id`, `drive_sn`, `drive_manufacturer`, `drive_model`, `project_id`, `custody_complete`, `delivery_time`, `manifest_summary`, and `chain_of_custody_events`.
-- Archived-drive queries may return `410 Gone` when the selected archived drive is requested directly by `drive_id` or `drive_sn`.
+- Active and archived jobs can both return a stored snapshot when one exists.
 
 **Error responses:**
 
 - `401 Unauthorized` — Missing/invalid token
 - `403 Forbidden` — Insufficient role
-- `410 Gone` — Requested drive has been archived and is no longer eligible for active CoC lookup
-- `404 Not Found` — Unknown drive/project for requested query mode
-- `422 Validation Error` — Missing required query parameters or invalid values
+- `404 Not Found` — Unknown job or no stored snapshot is available for the job
+- `409 Conflict` — Job state prevents the requested operation
+
+### `POST /jobs/{job_id}/chain-of-custody/refresh`
+
+Rebuild and persist the latest job-scoped chain-of-custody snapshot from current trusted state.
+
+**Roles:** `admin`, `manager`
+
+**Behavior:**
+
+1. Validates caller authorization with the CoC refresh policy.
+2. Rebuilds the CoC report from current job, drive-assignment, manifest, and audit state.
+3. Stores the refreshed snapshot on disk, records the write in the audit trail, and writes an application-log entry for operator correlation.
+4. Returns the refreshed snapshot with updated snapshot metadata.
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+- `404 Not Found` — Unknown job
+- `409 Conflict` — Archived jobs can only return the last stored snapshot
+
+### `POST /jobs/{job_id}/chain-of-custody/handoff`
+
+Record custody transfer for a drive assigned to the job and store the refreshed snapshot after handoff.
+
+**Roles:** `admin`, `manager`
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+- `404 Not Found` — Unknown job
+- `409 Conflict` — Provided project or drive assignment does not match the job
+- `410 Gone` — Drive is already archived or no longer eligible for handoff
 
 ---
 
