@@ -524,6 +524,8 @@ def _build_all_drive_reports(
             ChainOfCustodyDriveReportSchema(
                 drive_id=drive.id,
                 drive_sn=drive.device_identifier,
+                drive_manufacturer=drive.manufacturer,
+                drive_model=drive.product_name,
                 project_id=effective_project_ids[drive_id_key],
                 custody_complete=latest_handoff is not None,
                 delivery_time=delivery_time,

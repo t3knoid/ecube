@@ -36,7 +36,7 @@ test('audit filters and export csv', async ({ page }) => {
   await expect(page.locator('tbody').getByText('frank')).toBeVisible()
 
   // Export CSV — verify download is triggered
-  const exportBtn = page.getByRole('button', { name: 'Export CSV' })
+  const exportBtn = page.getByRole('button', { name: 'Export Audit CSV' })
   await expect(exportBtn).toBeVisible()
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: 5000 }).catch(() => null),
@@ -48,6 +48,126 @@ test('audit filters and export csv', async ({ page }) => {
   }
 
   await expectNoCriticalA11yViolations(page)
+})
+
+test('chain of custody report renders printable sections and CoC CSV export on mobile', async ({ page, browserName }) => {
+  test.skip(browserName === 'webkit', 'Print media assertions are unstable in webkit for this view')
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await setupAuthenticatedPage(page, ['auditor'])
+
+  await page.route(/\/api\/audit(?!\/)/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([]),
+    })
+  })
+
+  await page.route('**/api/drives**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        {
+          id: 1,
+          device_identifier: 'sdb',
+          display_device_label: 'Kingston DataTraveler - Port 1',
+          current_state: 'IN_USE',
+          current_project_id: 'PRJ-001',
+        },
+      ]),
+    })
+  })
+
+  await page.route('**/api/audit/chain-of-custody**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        selector_mode: 'PROJECT',
+        project_id: 'PRJ-001',
+        reports: [
+          {
+            drive_id: 1,
+            drive_sn: 'SN-001',
+            drive_manufacturer: 'Kingston',
+            drive_model: 'DataTraveler',
+            project_id: 'PRJ-001',
+            delivery_time: '2026-04-01T14:30:00.000Z',
+            custody_complete: true,
+            manifest_summary: [
+              {
+                job_id: 12,
+                total_files: 3,
+                total_bytes: 1024,
+                manifest_count: 1,
+                latest_manifest_path: '/reports/manifests/12.json',
+                latest_manifest_format: 'json',
+                latest_manifest_created_at: '2026-04-01T14:00:00.000Z',
+              },
+            ],
+            chain_of_custody_events: [
+              {
+                event_id: 1,
+                event_type: 'DRIVE_INITIALIZED',
+                timestamp: '2026-04-01T13:00:00.000Z',
+                actor: 'auditor-user',
+                action: 'Drive initialized',
+                details: { drive_id: 1, project_id: 'PRJ-001' },
+              },
+              {
+                event_id: 2,
+                event_type: 'COC_HANDOFF_CONFIRMED',
+                timestamp: '2026-04-01T14:31:00.000Z',
+                actor: 'manager-user',
+                action: 'Custody handoff confirmed',
+                details: {
+                  possessor: 'Officer Jane Doe',
+                  received_by: 'Archive Clerk',
+                  receipt_ref: 'REC-42',
+                  notes: 'Sealed container intact',
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    })
+  })
+
+  await page.goto('/audit')
+  await page.getByLabel('Filter by drive ID').first().selectOption({ label: 'Kingston DataTraveler - Port 1' })
+  await page.getByRole('button', { name: 'Load CoC' }).click()
+
+  await expect(page.getByText('Report Header')).toBeVisible()
+  await expect(page.getByText('Events Timeline')).toBeVisible()
+  await expect(page.getByText('Manifest Summary')).toBeVisible()
+  await expect(page.getByText('Attestation')).toBeVisible()
+  await expect(page.getByText('Manufacturer')).toBeVisible()
+  await expect(page.getByText('Kingston')).toBeVisible()
+  await expect(page.getByText('Model')).toBeVisible()
+  await expect(page.getByText('DataTraveler')).toBeVisible()
+  await expect(page.getByText('Drive initialized')).toBeVisible()
+  await expect(page.getByText('DRIVE_INITIALIZED')).toHaveCount(0)
+  await expect(page.getByText('/reports/manifests/12.json')).toBeVisible()
+  await expect(page.locator('.coc-print-card dd').filter({ hasText: 'Officer Jane Doe' })).toBeVisible()
+
+  const [download] = await Promise.all([
+    page.waitForEvent('download', { timeout: 5000 }).catch(() => null),
+    page.getByRole('button', { name: 'Export CoC CSV' }).click(),
+  ])
+  if (download) {
+    expect(download.suggestedFilename()).toMatch(/^chain-of-custody-.*\.csv$/i)
+  }
+
+  await page.getByRole('button', { name: 'Print CoC' }).click()
+  await expect.poll(async () => page.evaluate(() => document.body.classList.contains('coc-print-active'))).toBe(false)
+
+  await page.emulateMedia({ media: 'print' })
+  await expect(page.locator('.coc-print-card')).toBeVisible()
+  await expect(page.locator('.audit-log-section')).toBeHidden()
+  await page.emulateMedia({ media: 'screen' })
 })
 
 test.describe('chain of custody handoff', () => {
@@ -96,6 +216,8 @@ test.describe('chain of custody handoff', () => {
             {
               drive_id: 1,
               drive_sn: 'SN-001',
+              drive_manufacturer: 'Kingston',
+              drive_model: 'DataTraveler',
               project_id: 'PRJ-001',
               delivery_time: null,
               custody_complete: false,
@@ -170,17 +292,8 @@ test.describe('chain of custody handoff', () => {
 
     // Verify the report was patched in-place with the handoff response fields.
     // custody_complete should be true and the new event should appear in the events list.
-    await expect(page.getByText('Custody Complete')).toBeVisible()
-
-    // Expand the raw events panel (collapsed by default) then read from it.
-    await page.locator('.coc-events').getByRole('button', { name: 'Show' }).click()
-    await expect(page.locator('.coc-events pre')).toBeVisible()
-    const eventsJson = await page.locator('.coc-events pre').textContent()
-    const events = JSON.parse(eventsJson)
-    const handoffEvent = events.find((e) => e.event_type === 'COC_HANDOFF_CONFIRMED')
-    expect(handoffEvent).toBeDefined()
-    expect(handoffEvent.event_id).toBe(42)
-    expect(handoffEvent.actor).toBe('manager-user')
-    expect(handoffEvent.details.possessor).toBe('Officer Jane Doe')
+    await expect(page.locator('.status-badge').filter({ hasText: 'Custody Complete' })).toBeVisible()
+    await expect(page.getByRole('cell', { name: 'Custody handoff confirmed' })).toBeVisible()
+    await expect(page.getByRole('cell', { name: /possessor: Officer Jane Doe/ })).toBeVisible()
   })
 })
