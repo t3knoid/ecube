@@ -431,6 +431,50 @@ class FileRepository:
             self.db.rollback()
             raise
 
+    def increment_assignment_bytes(self, assignment_id: int, size_bytes: int) -> None:
+        """Atomically increment copied bytes for the active drive assignment."""
+        self.db.execute(
+            update(DriveAssignment)
+            .where(DriveAssignment.id == assignment_id)
+            .values(copied_bytes=DriveAssignment.copied_bytes + size_bytes)
+        )
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+
+    def decrement_assignment_bytes(self, assignment_id: int, size_bytes: int) -> None:
+        """Atomically subtract copied bytes from the assignment, clamping at zero."""
+        self.db.execute(
+            update(DriveAssignment)
+            .where(DriveAssignment.id == assignment_id)
+            .values(
+                copied_bytes=case(
+                    (DriveAssignment.copied_bytes > size_bytes, DriveAssignment.copied_bytes - size_bytes),
+                    else_=0,
+                )
+            )
+        )
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+
+    def increment_assignment_file_count(self, assignment_id: int) -> None:
+        """Atomically increment completed-file count for the active assignment."""
+        self.db.execute(
+            update(DriveAssignment)
+            .where(DriveAssignment.id == assignment_id)
+            .values(file_count=DriveAssignment.file_count + 1)
+        )
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+
 
 class DriveAssignmentRepository:
     """Data-access layer for :class:`~app.models.jobs.DriveAssignment`."""

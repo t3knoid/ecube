@@ -334,7 +334,7 @@
     "eventsTimelineTitle": "Events Timeline",
     "manifestSummaryTitle": "Manifest Summary",
     "manifestSummaryEmpty": "No manifest summary available",
-    "manifestTotalsFootnote": "Manifest totals reflect per-job aggregate summaries. See issue #199 for the current file-level totals limitation.",
+    "manifestTotalsFootnote": "Manifest totals reflect files and bytes recorded for this drive assignment.",
     "cocEventsTableLabel": "Chain of custody events for drive #{driveId} ({driveSn})",
     "manifestSummaryTableLabel": "Manifest summary for drive #{driveId} ({driveSn})",
     "sequenceNumber": "#",
