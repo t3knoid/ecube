@@ -805,7 +805,7 @@ Review filters before export so the file contains the intended data set
 Treat exported audit data as sensitive operational evidence
 </li></ul>
 <h2 id="8-1-chain-of-custody-workflow">8.1 Chain of Custody Workflow</h2>
-<p>Use the Chain of Custody panel on the <code>Audit</code> page to generate custody reports, prefill handoff fields, and record final transfer details when physical media leaves active operations.</p>
+<p>Use the Chain of Custody panel on the <code>Audit</code> page to generate a formatted custody report, print a compliance-focused hard copy, export the raw JSON response, export a CSV of custody events, prefill handoff fields, and record final transfer details when physical media leaves active operations.</p>
 <p>Typical workflow:</p>
 <ol><li>
 Open <code>Audit</code>.
@@ -814,7 +814,11 @@ In the <strong>Chain of Custody</strong> section, filter by drive ID, drive seri
 </li><li>
 Click <code>Load CoC</code> to load custody report data.
 </li><li>
-Review the report card for the selected drive (drive ID, serial, project, manifest summary, and custody events).
+Review the report card for the selected drive. Each report includes a header with UTC generation details, drive identity, custody status, a custody-events timeline, manifest summary rows, and an attestation block for printed sign-off.
+</li><li>
+Use <code>Print CoC</code> when you need a print-only chain-of-custody document. The print layout hides the rest of the Audit page and separates drive reports cleanly.
+</li><li>
+Use <code>Export JSON</code> to save the raw machine-readable API response, or <code>Export CoC CSV</code> to save the custody events table for spreadsheet review.
 </li><li>
 Click <code>Prefill Handoff</code> to populate the handoff form from the selected report.
 </li><li>
