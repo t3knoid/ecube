@@ -34,7 +34,27 @@ const props = defineProps({
 const { t } = useI18n()
 
 const displayedProjectId = computed(() => props.projectId || props.report.project_id || '-')
+const reportTitle = computed(() => {
+  const evidenceNumber = (props.report.manifest_summary || []).find((manifest) => String(manifest?.evidence_number || '').trim())?.evidence_number || '-'
+
+  if (displayedProjectId.value !== '-' && evidenceNumber !== '-') {
+    return t('audit.cocReportTitle', {
+      projectId: displayedProjectId.value,
+      evidenceNumber,
+    })
+  }
+  if (displayedProjectId.value !== '-') return displayedProjectId.value
+  if (evidenceNumber !== '-') return evidenceNumber
+  return t('audit.chainTitle')
+})
 const deliveryDetails = computed(() => props.report.chain_of_custody_events.find((event) => event.event_type === 'COC_HANDOFF_CONFIRMED')?.details || {})
+const processorNotesEntries = computed(() => (props.report.manifest_summary || [])
+  .filter((manifest) => String(manifest?.processor_notes || '').trim())
+  .map((manifest) => ({
+    jobId: manifest.job_id,
+    evidenceNumber: manifest.evidence_number || '-',
+    notes: manifest.processor_notes,
+  })))
 
 function formatEventDetails(details) {
   if (!details || typeof details !== 'object' || Array.isArray(details)) return '-'
@@ -46,19 +66,15 @@ function formatEventDetails(details) {
   return lines.length ? lines.join('; ') : '-'
 }
 
-function manifestPath(value) {
-  return typeof value === 'string' && value.trim() ? value : '-'
-}
 </script>
 
 <template>
   <article class="coc-card coc-print-card">
     <header class="report-header">
       <div>
-        <h3>{{ t('audit.cocDriveHeader', { driveId: report.drive_id, driveSn: report.drive_sn }) }}</h3>
-        <p class="muted">{{ t('audit.cocReportIntro') }}</p>
+        <h3>{{ reportTitle }}</h3>
       </div>
-      <StatusBadge :status="report.custody_complete ? 'COMPLETED' : 'PENDING'" :label="report.custody_complete ? t('audit.custodyComplete') : t('audit.custodyIncomplete')" />
+      <StatusBadge :status="report.custody_complete ? 'COMPLETED' : 'FAILED'" :label="report.custody_complete ? t('audit.custodyComplete') : t('audit.custodyIncomplete')" />
     </header>
 
     <section class="report-section">
@@ -71,10 +87,6 @@ function manifestPath(value) {
         <div>
           <dt>{{ t('audit.generatedBy') }}</dt>
           <dd>{{ generatedBy || '-' }}</dd>
-        </div>
-        <div>
-          <dt>{{ t('audit.selectorMode') }}</dt>
-          <dd>{{ selectorMode }}</dd>
         </div>
         <div>
           <dt>{{ t('audit.projectBinding') }}</dt>
@@ -107,6 +119,27 @@ function manifestPath(value) {
           <dd>{{ report.project_id || '-' }}</dd>
         </div>
       </dl>
+    </section>
+
+    <section class="report-section">
+      <h4>{{ t('audit.processorNotes') }}</h4>
+      <p v-if="!processorNotesEntries.length" class="muted">{{ t('audit.processorNotesEmpty') }}</p>
+      <table v-else class="coc-report-table" :aria-label="t('audit.processorNotesTableLabel', { driveId: report.drive_id, driveSn: report.drive_sn })">
+        <thead>
+          <tr>
+            <th>{{ t('jobs.jobId') }}</th>
+            <th>{{ t('jobs.evidence') }}</th>
+            <th>{{ t('audit.processorNotes') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="entry in processorNotesEntries" :key="`${entry.jobId}-${entry.evidenceNumber}`">
+            <td>{{ entry.jobId }}</td>
+            <td>{{ entry.evidenceNumber }}</td>
+            <td>{{ entry.notes }}</td>
+          </tr>
+        </tbody>
+      </table>
     </section>
 
     <section class="report-section">
@@ -168,16 +201,23 @@ function manifestPath(value) {
       <h4>{{ t('audit.manifestSummaryTitle') }}</h4>
       <p v-if="!report.manifest_summary.length" class="muted">{{ t('audit.manifestSummaryEmpty') }}</p>
       <template v-else>
+        <dl class="report-grid report-grid--summary">
+          <div>
+            <dt>{{ t('audit.projectBinding') }}</dt>
+            <dd>{{ displayedProjectId }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('audit.generatedBy') }}</dt>
+            <dd>{{ generatedBy || '-' }}</dd>
+          </div>
+        </dl>
         <table class="coc-report-table" :aria-label="t('audit.manifestSummaryTableLabel', { driveId: report.drive_id, driveSn: report.drive_sn })">
           <thead>
             <tr>
               <th>{{ t('jobs.jobId') }}</th>
               <th>{{ t('jobs.evidence') }}</th>
-              <th>{{ t('audit.processorNotes') }}</th>
               <th>{{ t('audit.totalFiles') }}</th>
               <th>{{ t('audit.totalBytes') }}</th>
-              <th>{{ t('audit.manifestCount') }}</th>
-              <th>{{ t('audit.latestManifestPath') }}</th>
               <th>{{ t('audit.latestManifestFormat') }}</th>
               <th>{{ t('audit.latestManifestCreatedAt') }}</th>
             </tr>
@@ -186,11 +226,8 @@ function manifestPath(value) {
             <tr v-for="manifest in report.manifest_summary" :key="manifest.job_id">
               <td>{{ manifest.job_id }}</td>
               <td>{{ manifest.evidence_number || '-' }}</td>
-              <td>{{ manifest.processor_notes || '-' }}</td>
               <td>{{ manifest.total_files }}</td>
               <td>{{ manifest.total_bytes }}</td>
-              <td>{{ manifest.manifest_count }}</td>
-              <td class="path-cell">{{ manifestPath(manifest.latest_manifest_path) }}</td>
               <td>{{ manifest.latest_manifest_format || '-' }}</td>
               <td>{{ asUtcDate(manifest.latest_manifest_created_at) }}</td>
             </tr>
