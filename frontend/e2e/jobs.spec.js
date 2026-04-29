@@ -200,6 +200,20 @@ test('jobs list supports safe pause and resume flow', async ({ page }) => {
       return
     }
 
+    const requestUrl = new URL(route.request().url())
+    const requestStatuses = requestUrl.searchParams.getAll('statuses').map((value) => value.toUpperCase())
+    const archivedProbe = requestUrl.searchParams.get('include_archived') === 'true'
+      && requestStatuses.includes('ARCHIVED')
+
+    if (archivedProbe) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([]),
+      })
+      return
+    }
+
     listCalls += 1
     if (jobState.status === 'PAUSING' && listCalls >= 3) {
       jobState = { ...jobState, status: 'PAUSED' }
@@ -235,6 +249,78 @@ test('jobs list supports safe pause and resume flow', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Start' }).click()
   await expect(page.locator('.status-badge').filter({ hasText: 'Running' }).first()).toBeVisible()
+
+  await expectNoCriticalA11yViolations(page)
+})
+
+test('jobs archived toggle appears when archived jobs become available and reveals archived rows', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['admin'])
+
+  let archivedProbeCalls = 0
+  const activeJob = {
+    id: 93,
+    project_id: 'P-93',
+    evidence_number: 'EV-ACTIVE-093',
+    status: 'RUNNING',
+    copied_bytes: 10,
+    total_bytes: 100,
+    thread_count: 2,
+    file_count: 1,
+    files_succeeded: 0,
+    active_duration_seconds: 10,
+    drive: { id: 3, port_system_path: '2-3', device_identifier: 'USB-003' },
+  }
+  const archivedJob = {
+    id: 94,
+    project_id: 'P-94',
+    evidence_number: 'EV-ARCHIVED-094',
+    status: 'ARCHIVED',
+    copied_bytes: 100,
+    total_bytes: 100,
+    thread_count: 2,
+    file_count: 1,
+    files_succeeded: 1,
+    drive: { id: 4, port_system_path: '2-4', device_identifier: 'USB-004' },
+  }
+
+  await routeJson(page, '**/api/drives', [])
+  await routeJson(page, '**/api/mounts', [])
+
+  await page.route('**/api/jobs**', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback()
+      return
+    }
+
+    const requestUrl = new URL(route.request().url())
+    const requestStatuses = requestUrl.searchParams.getAll('statuses').map((value) => value.toUpperCase())
+    const includeArchived = requestUrl.searchParams.get('include_archived') === 'true'
+    const archivedProbe = includeArchived && requestStatuses.includes('ARCHIVED')
+
+    if (archivedProbe) {
+      archivedProbeCalls += 1
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(archivedProbeCalls >= 2 ? [archivedJob] : []),
+      })
+      return
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(includeArchived ? [activeJob, archivedJob] : [activeJob]),
+    })
+  })
+
+  await page.goto('/jobs')
+  await expect(page.getByText('EV-ACTIVE-093')).toBeVisible()
+  await expect(page.locator('#jobs-show-archived')).toHaveCount(0)
+
+  await expect(page.locator('#jobs-show-archived')).toBeVisible({ timeout: 10000 })
+  await page.locator('#jobs-show-archived').check()
+  await expect(page.getByText('EV-ARCHIVED-094')).toBeVisible()
 
   await expectNoCriticalA11yViolations(page)
 })
