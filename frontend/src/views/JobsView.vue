@@ -519,6 +519,7 @@ async function submitCreateJob() {
       source_path: resolveSourcePath(),
       drive_id: Number(form.value.drive_id),
       thread_count: Number(form.value.thread_count),
+      notes: form.value.notes.trim() || undefined,
     }
 
     const created = normalizeProjectRecord(await createJob(payload), ['project_id'])

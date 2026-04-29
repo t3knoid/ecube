@@ -134,6 +134,29 @@ def _drive_assignments_has_manifest_counters(inspector: sa.Inspector) -> bool:
     return {"file_count", "copied_bytes"}.issubset(columns)
 
 
+def _job_coc_snapshots_table_exists(inspector: sa.Inspector) -> bool:
+    return "job_chain_of_custody_snapshots" in inspector.get_table_names()
+
+
+def _create_job_coc_snapshots_table() -> None:
+    op.create_table(
+        "job_chain_of_custody_snapshots",
+        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column("job_id", sa.Integer(), sa.ForeignKey("export_jobs.id"), nullable=False),
+        sa.Column("payload", sa.JSON().with_variant(JSONB(), "postgresql"), nullable=False),
+        sa.Column("stored_by", sa.String(), nullable=True),
+        sa.Column("stored_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.UniqueConstraint("job_id", name="uq_job_chain_of_custody_snapshots_job_id"),
+    )
+    op.create_index(
+        "ix_job_chain_of_custody_snapshots_job_id",
+        "job_chain_of_custody_snapshots",
+        ["job_id"],
+        unique=True,
+    )
+
+
 def _backfill_drive_assignment_manifest_counters() -> None:
     bind = op.get_bind()
     rows = bind.execute(
@@ -264,6 +287,8 @@ def upgrade() -> None:
                 batch_op.add_column(sa.Column("nfs_client_version", sa.String(), nullable=True))
         if "drive_assignments" in existing_tables:
             _upgrade_drive_assignment_manifest_counters(inspector)
+        if not _job_coc_snapshots_table_exists(inspector):
+            _create_job_coc_snapshots_table()
         _upgrade_legacy_project_schema(inspector, existing_tables)
         if "export_files" in existing_tables:
             _upgrade_legacy_export_file_project_schema(inspector)
@@ -415,6 +440,8 @@ def upgrade() -> None:
     )
 
     op.create_index("ix_export_jobs_project_id", "export_jobs", ["project_id"])
+
+    _create_job_coc_snapshots_table()
 
     op.create_table(
         "export_files",

@@ -1,27 +1,14 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { confirmChainOfCustodyHandoff, getAudit, getChainOfCustody } from '@/api/audit.js'
-import { getDrives } from '@/api/drives.js'
-import { useRoleGuard } from '@/composables/useRoleGuard.js'
-import { COC_HANDOFF_ROLES } from '@/constants/roles.js'
+import { getAudit } from '@/api/audit.js'
 import { useSettingsStore } from '@/stores/settings.js'
-import { useAuthStore } from '@/stores/auth.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import CocReport from '@/components/audit/CocReport.vue'
-import { formatDriveIdentity } from '@/utils/driveIdentity.js'
-import { asUtcDate } from '@/utils/dateTime.js'
-import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const { t } = useI18n()
-const route = useRoute()
 const settingsStore = useSettingsStore()
-const authStore = useAuthStore()
-const { canAccess: canConfirmHandoff } = useRoleGuard(COC_HANDOFF_ROLES)
 
 const logs = ref([])
 const loading = ref(false)
@@ -34,76 +21,6 @@ const filters = ref({
   since: '',
   until: '',
 })
-
-const cocFilters = ref({
-  drive_id: '',
-  drive_sn: '',
-  project_id: '',
-})
-const cocLoading = ref(false)
-const cocError = ref('')
-const cocReport = ref(null)
-const expandedCocEvents = ref(new Set())
-const cocStatusMessage = ref('')
-const cocGeneratedAt = ref('')
-const handoffSaving = ref(false)
-const showHandoffWarning = ref(false)
-const handoffForm = ref({
-  drive_id: '',
-  project_id: '',
-  possessor: '',
-  delivery_time: '',
-  received_by: '',
-  receipt_ref: '',
-  notes: '',
-})
-const allActiveDrives = ref([])
-
-// Drives in IN_USE (active job) or AVAILABLE (after prepare-eject) with a project
-// binding — the two states that need CoC and handoff selectors.  DISCONNECTED drives that
-// retain a stale project_id after removal/port-disable are intentionally excluded.
-const initializedDrives = computed(() =>
-  allActiveDrives.value.filter(
-    (drive) =>
-      (drive.current_state === 'IN_USE' || drive.current_state === 'AVAILABLE') &&
-      typeof drive.current_project_id === 'string' &&
-      drive.current_project_id.trim() !== ''
-  )
-)
-
-function _toDriveOption(drive) {
-  return { id: String(drive.id), label: formatDriveIdentity(drive) }
-}
-
-function _toProjectList(drives) {
-  return [...new Set(
-    drives
-      .map((drive) => normalizeProjectId(drive.current_project_id))
-      .filter((value) => typeof value === 'string' && value.trim())
-  )].sort((a, b) => a.localeCompare(b))
-}
-
-// CoC filter selectors — initialized drives, cross-filtered by selected project
-const driveOptions = computed(() => {
-  const project = cocFilters.value.project_id.trim()
-  const source = project
-    ? initializedDrives.value.filter((d) => d.current_project_id === project)
-    : initializedDrives.value
-  return source.map(_toDriveOption).sort((a, b) => Number(a.id) - Number(b.id))
-})
-
-const projectOptions = computed(() => _toProjectList(initializedDrives.value))
-
-// Handoff form selectors — initialized drives, cross-filtered by selected project
-const handoffDriveOptions = computed(() => {
-  const project = handoffForm.value.project_id.trim()
-  const source = project
-    ? initializedDrives.value.filter((d) => d.current_project_id === project)
-    : initializedDrives.value
-  return source.map(_toDriveOption).sort((a, b) => Number(a.id) - Number(b.id))
-})
-
-const handoffProjectOptions = computed(() => _toProjectList(initializedDrives.value))
 
 const page = ref(1)
 const pageSize = ref(20)
@@ -142,21 +59,6 @@ function toIsoDate(value) {
   return value ? new Date(value).toISOString() : undefined
 }
 
-/**
- * Convert a datetime-local string (browser local time) to a UTC ISO-8601 timestamp.
- *
- * <input type="datetime-local"> yields a bare "YYYY-MM-DDTHH:mm" string with no
- * timezone.  new Date() interprets that as local (browser) time, and toISOString()
- * converts it to UTC before the value is sent to the API.  The backend stores and
- * returns all delivery timestamps in UTC.
- */
-function localDateTimeAsUtcIso(value) {
-  if (!value) return undefined
-  // <input type="datetime-local"> yields "YYYY-MM-DDTHH:mm" with no timezone designator.
-  // new Date() interprets that string as local (browser) time; toISOString() converts to UTC.
-  return new Date(value).toISOString()
-}
-
 async function loadAudit() {
   loading.value = true
   error.value = ''
@@ -174,254 +76,6 @@ async function loadAudit() {
     error.value = t('common.errors.networkError')
   } finally {
     loading.value = false
-  }
-}
-
-async function loadDriveOptions() {
-  try {
-    const drives = await getDrives({ state: ['IN_USE', 'AVAILABLE'] })
-    allActiveDrives.value = (drives || []).map((item) => normalizeProjectRecord(item, ['current_project_id']))
-  } catch {
-    allActiveDrives.value = []
-    cocError.value = t('common.errors.networkError')
-  }
-}
-
-function buildCocParams() {
-  const params = {}
-  const driveId = Number(cocFilters.value.drive_id)
-  if (Number.isInteger(driveId) && driveId > 0) {
-    params.drive_id = driveId
-  }
-  if (cocFilters.value.drive_sn.trim()) {
-    params.drive_sn = cocFilters.value.drive_sn.trim()
-  }
-  if (cocFilters.value.project_id.trim()) {
-    params.project_id = normalizeProjectId(cocFilters.value.project_id)
-  }
-  return params
-}
-
-const hasCocSelector = computed(() => Object.keys(buildCocParams()).length > 0)
-
-async function loadChainOfCustody() {
-  if (!hasCocSelector.value) {
-    cocError.value = t('audit.cocSelectRequired')
-    return
-  }
-  cocLoading.value = true
-  cocError.value = ''
-  cocStatusMessage.value = ''
-  const previousReport = cocReport.value
-  const previousGeneratedAt = cocGeneratedAt.value
-  const requestedParams = buildCocParams()
-  cocReport.value = null
-  try {
-    cocGeneratedAt.value = new Date().toISOString()
-    cocReport.value = await getChainOfCustody(requestedParams)
-  } catch (err) {
-    if (err?.response?.status === 410) {
-      // Drive has been archived after handoff. Only restore the previous report
-      // if it actually corresponds to the selectors that just produced the 410
-      // — a stale report from a different drive or project must not be shown.
-      const prevMatchesRequest =
-        previousReport &&
-        (() => {
-          if (requestedParams.drive_id != null) {
-            return previousReport.reports?.some((r) => r.drive_id === requestedParams.drive_id)
-          }
-          if (requestedParams.drive_sn != null) {
-            return previousReport.reports?.some((r) => r.drive_sn === requestedParams.drive_sn)
-          }
-          if (requestedParams.project_id != null) {
-            return previousReport.project_id === requestedParams.project_id
-          }
-          return false
-        })()
-      if (prevMatchesRequest) {
-        cocReport.value = previousReport
-        cocGeneratedAt.value = previousGeneratedAt
-      } else {
-        cocStatusMessage.value = t('audit.driveArchived')
-      }
-    } else {
-      const status = err?.response?.status
-      if (status === 404) {
-        cocError.value = t('common.errors.notFound')
-      } else if (status === 409) {
-        cocError.value = t('common.errors.requestConflict')
-      } else if (status === 422) {
-        cocError.value = t('common.errors.invalidRequest')
-      } else if (status >= 500) {
-        cocError.value = t('common.errors.serverError', { status })
-      } else if (!status) {
-        cocError.value = t('common.errors.networkError')
-      } else {
-        cocError.value = t('common.errors.serverErrorGeneric')
-      }
-    }
-  } finally {
-    cocLoading.value = false
-  }
-}
-
-function prepareHandoff(report) {
-  handoffForm.value = {
-    drive_id: String(report.drive_id),
-    project_id: normalizeProjectId(report.project_id),
-    possessor: '',
-    delivery_time: '',
-    received_by: '',
-    receipt_ref: '',
-    notes: '',
-  }
-}
-
-function submitHandoff() {
-  const driveId = Number(handoffForm.value.drive_id)
-  if (!Number.isInteger(driveId) || driveId <= 0 || !handoffForm.value.possessor.trim() || !handoffForm.value.delivery_time) {
-    cocError.value = t('audit.handoffInvalid')
-    return
-  }
-
-  // Show the warning modal instead of submitting directly
-  showHandoffWarning.value = true
-}
-
-async function confirmHandoffSubmission() {
-  showHandoffWarning.value = false
-
-  const driveId = Number(handoffForm.value.drive_id)
-  handoffSaving.value = true
-  cocError.value = ''
-  cocStatusMessage.value = ''
-  try {
-    const handoffResult = await confirmChainOfCustodyHandoff({
-      drive_id: driveId,
-      project_id: normalizeProjectId(handoffForm.value.project_id) || undefined,
-      possessor: handoffForm.value.possessor.trim(),
-      delivery_time: localDateTimeAsUtcIso(handoffForm.value.delivery_time),
-      received_by: handoffForm.value.received_by.trim() || undefined,
-      receipt_ref: handoffForm.value.receipt_ref.trim() || undefined,
-      notes: handoffForm.value.notes.trim() || undefined,
-    })
-    cocStatusMessage.value = t('audit.handoffSaved')
-    // Patch the loaded report directly — the drive is now ARCHIVED so
-    // reloading via the CoC endpoint returns 410 and would leave the report
-    // showing custody_complete: false with no delivery_time.
-    if (cocReport.value) {
-      const match = cocReport.value.reports.find((r) => r.drive_id === driveId)
-      if (match) {
-        match.custody_complete = true
-        match.delivery_time = handoffResult.delivery_time
-        // Append the new COC_HANDOFF_CONFIRMED event so the compliance record
-        // is fully visible without reloading (archived drives return 410).
-        match.chain_of_custody_events = [
-          ...match.chain_of_custody_events,
-          {
-            event_id: handoffResult.event_id,
-            event_type: handoffResult.event_type,
-            timestamp: handoffResult.recorded_at,
-            actor: handoffResult.creator,
-            action: 'Custody handoff confirmed',
-            details: {
-              drive_id: handoffResult.drive_id,
-              drive_sn: match.drive_sn,
-              project_id: handoffResult.project_id,
-              creator: handoffResult.creator,
-              possessor: handoffResult.possessor,
-              delivery_time: handoffResult.delivery_time,
-              received_by: handoffResult.received_by,
-              receipt_ref: handoffResult.receipt_ref,
-              notes: handoffResult.notes,
-            },
-          },
-        ]
-        // Trigger Vue reactivity by replacing the reports array reference.
-        cocReport.value = { ...cocReport.value, reports: [...cocReport.value.reports] }
-      }
-    }
-  } catch (err) {
-    const status = err?.response?.status
-    if (status === 409) {
-      cocError.value = t('common.errors.requestConflict')
-    } else if (status === 410) {
-      cocError.value = t('audit.driveArchived')
-    } else if (status === 422) {
-      cocError.value = t('common.errors.invalidRequest')
-    } else if (status >= 500) {
-      cocError.value = t('common.errors.serverError', { status })
-    } else if (!status) {
-      cocError.value = t('common.errors.networkError')
-    } else {
-      cocError.value = t('common.errors.serverErrorGeneric')
-    }
-  } finally {
-    handoffSaving.value = false
-  }
-}
-
-function cancelHandoffSubmission() {
-  showHandoffWarning.value = false
-}
-
-function saveCocReport() {
-  if (!cocReport.value) return
-  const blob = new Blob([JSON.stringify(cocReport.value, null, 2)], { type: 'application/json;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
-  anchor.download = `chain-of-custody-${timestamp}.json`
-  anchor.click()
-  setTimeout(() => URL.revokeObjectURL(url), settingsStore.downloadRevokeDelayMs)
-}
-
-function saveCocCsvReport() {
-  if (!cocReport.value?.reports?.length) return
-
-  const header = ['event_id', 'drive_sn', 'drive_manufacturer', 'drive_model', 'timestamp', 'actor', 'action', 'event_type', 'details']
-  const rows = cocReport.value.reports.flatMap((report) =>
-    (report.chain_of_custody_events || []).map((event) => ({
-      event_id: event.event_id ?? '',
-      drive_sn: report.drive_sn || '',
-      drive_manufacturer: report.drive_manufacturer || '',
-      drive_model: report.drive_model || '',
-      timestamp: event.timestamp || '',
-      actor: event.actor || '',
-      action: event.action || '',
-      event_type: event.event_type || '',
-      details: JSON.stringify(event.details || {}),
-    })),
-  )
-
-  const lines = [
-    header.join(','),
-    ...rows.map((row) => header.map((key) => `"${String(row[key]).replace(/"/g, '""')}"`).join(',')),
-  ]
-
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
-  anchor.download = `chain-of-custody-${timestamp}.csv`
-  anchor.click()
-  setTimeout(() => URL.revokeObjectURL(url), settingsStore.downloadRevokeDelayMs)
-}
-
-function printCocReport() {
-  window.print()
-}
-
-function initCocFromRoute() {
-  cocFilters.value.drive_id = typeof route.query.drive_id === 'string' ? route.query.drive_id : ''
-  cocFilters.value.drive_sn = typeof route.query.drive_sn === 'string' ? route.query.drive_sn : ''
-  cocFilters.value.project_id = typeof route.query.project_id === 'string'
-    ? normalizeProjectId(route.query.project_id)
-    : ''
-  if (route.query.coc === '1' && (cocFilters.value.drive_id || cocFilters.value.drive_sn || cocFilters.value.project_id)) {
-    loadChainOfCustody()
   }
 }
 
@@ -453,8 +107,6 @@ function exportCsv() {
 
 onMounted(() => {
   loadAudit()
-  loadDriveOptions()
-  initCocFromRoute()
 })
 </script>
 
@@ -484,79 +136,6 @@ onMounted(() => {
       <button class="btn" @click="loadAudit">{{ t('audit.applyFilters') }}</button>
     </div>
 
-    <section class="coc-section">
-      <header class="header-row">
-        <h2>{{ t('audit.chainTitle') }}</h2>
-        <div class="actions coc-toolbar">
-          <button class="btn" :disabled="!cocReport" @click="printCocReport">{{ t('audit.printCoc') }}</button>
-          <button class="btn" :disabled="!cocReport" @click="saveCocCsvReport">{{ t('audit.exportCsv') }}</button>
-          <button class="btn btn-primary" :disabled="!cocReport" @click="saveCocReport">{{ t('audit.saveCoc') }}</button>
-        </div>
-      </header>
-
-      <div class="filters">
-        <select v-model="cocFilters.drive_id" :aria-label="t('audit.driveIdFilter')">
-          <option value="">{{ t('audit.anyDrive') }}</option>
-          <option v-for="drive in driveOptions" :key="drive.id" :value="drive.id">{{ drive.label }}</option>
-        </select>
-        <input v-model="cocFilters.drive_sn" type="text" :placeholder="t('audit.driveSnFilter')" :aria-label="t('audit.driveSnFilter')" />
-        <select v-model="cocFilters.project_id" :aria-label="t('audit.projectFilter')">
-          <option value="">{{ t('audit.anyProject') }}</option>
-          <option v-for="projectId in projectOptions" :key="projectId" :value="projectId">{{ projectId }}</option>
-        </select>
-        <button class="btn" :disabled="!hasCocSelector" @click="loadChainOfCustody">{{ t('audit.loadCoc') }}</button>
-      </div>
-
-      <div class="coc-status">
-        <p v-if="cocLoading" class="muted">{{ t('common.labels.loading') }}</p>
-        <p v-if="cocError" class="error-banner">{{ cocError }}</p>
-        <p v-if="cocStatusMessage" class="ok-banner">{{ cocStatusMessage }}</p>
-      </div>
-
-      <div v-if="cocReport" class="coc-results">
-        <div v-for="report in cocReport.reports" :key="report.drive_id" class="coc-report-shell">
-          <div class="coc-actions">
-            <button v-if="canConfirmHandoff" class="btn" @click="prepareHandoff(report)">{{ t('audit.prefillHandoff') }}</button>
-          </div>
-          <CocReport
-            :report="report"
-            :selector-mode="cocReport.selector_mode"
-            :project-id="normalizeProjectId(cocReport.project_id) || ''"
-            :generated-at="cocGeneratedAt"
-            :generated-by="authStore.username || ''"
-            :manifest-totals-footnote="t('audit.manifestTotalsFootnote')"
-          />
-        </div>
-      </div>
-
-      <div v-if="canConfirmHandoff" class="handoff-form">
-        <h3>{{ t('audit.handoffTitle') }}</h3>
-        <div class="handoff-grid">
-          <select v-model="handoffForm.drive_id" :aria-label="t('audit.driveIdFilter')">
-            <option value="">{{ t('audit.selectDrive') }}</option>
-            <option v-for="drive in handoffDriveOptions" :key="`handoff-${drive.id}`" :value="drive.id">{{ drive.label }}</option>
-          </select>
-          <select v-model="handoffForm.project_id" :aria-label="t('audit.projectFilter')">
-            <option value="">{{ t('audit.selectProject') }}</option>
-            <option v-for="projectId in handoffProjectOptions" :key="`handoff-project-${projectId}`" :value="projectId">{{ projectId }}</option>
-          </select>
-          <input v-model="handoffForm.possessor" type="text" :placeholder="t('audit.possessor')" :aria-label="t('audit.possessor')" />
-          <div class="datetime-field">
-            <input
-              v-model="handoffForm.delivery_time"
-              type="datetime-local"
-              :placeholder="t('audit.deliveryTimeLocalInput')"
-              :aria-label="t('audit.deliveryTimeLocalInput')"
-            />
-          </div>
-          <input v-model="handoffForm.received_by" type="text" :placeholder="t('audit.receivedBy')" :aria-label="t('audit.receivedBy')" />
-          <input v-model="handoffForm.receipt_ref" type="text" :placeholder="t('audit.receiptRef')" :aria-label="t('audit.receiptRef')" />
-        </div>
-        <textarea v-model="handoffForm.notes" rows="3" :placeholder="t('audit.notes')" :aria-label="t('audit.notes')"></textarea>
-        <button class="btn btn-primary" :disabled="handoffSaving" @click="submitHandoff">{{ t('audit.confirmHandoff') }}</button>
-      </div>
-    </section>
-
     <section class="audit-log-section">
       <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
       <p v-if="error" class="error-banner">{{ error }}</p>
@@ -576,19 +155,6 @@ onMounted(() => {
 
       <Pagination v-model:page="page" :page-size="pageSize" :total="logs.length" />
     </section>
-
-    <!-- Handoff Warning Modal -->
-    <ConfirmDialog
-      v-model="showHandoffWarning"
-      :title="t('audit.handoffWarning')"
-      :message="t('audit.handoffWarningMessage')"
-      :confirm-label="t('audit.handoffWarningConfirm')"
-      :cancel-label="t('audit.handoffWarningCancel')"
-      :dangerous="true"
-      :busy="handoffSaving"
-      @confirm="confirmHandoffSubmission"
-      @cancel="cancelHandoffSubmission"
-    />
   </section>
 </template>
 
@@ -649,60 +215,5 @@ pre {
 
 .muted {
   color: var(--color-text-secondary);
-}
-
-.ok-banner {
-  color: var(--color-ok-banner-text, #14532d);
-  background: color-mix(in srgb, var(--color-success) 14%, var(--color-bg-secondary));
-  border: 1px solid color-mix(in srgb, var(--color-success) 45%, var(--color-border));
-  border-radius: var(--border-radius);
-  padding: var(--space-sm);
-}
-
-.coc-section,
-.handoff-form {
-  display: grid;
-  gap: var(--space-sm);
-}
-
-.handoff-form {
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  background: var(--color-bg-secondary);
-  padding: var(--space-md);
-}
-
-.coc-results,
-.coc-report-shell,
-.handoff-grid,
-.coc-actions,
-.coc-status {
-  display: grid;
-  gap: var(--space-sm);
-}
-
-.handoff-grid {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
-
-.datetime-field {
-  display: grid;
-  gap: 2px;
-}
-
-textarea {
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-input);
-  color: var(--color-text-primary);
-  border-radius: var(--border-radius);
-  padding: var(--space-xs) var(--space-sm);
-}
-
-select {
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-input);
-  color: var(--color-text-primary);
-  border-radius: var(--border-radius);
-  padding: var(--space-xs) var(--space-sm);
 }
 </style>
