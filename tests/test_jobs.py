@@ -623,6 +623,72 @@ def test_create_job_allows_exact_duplicate_after_archiving_prior_job(manager_cli
     assert response.status_code == 200
 
 
+def test_start_recreated_archived_duplicate_job_fails_when_source_is_now_empty(manager_client, db, tmp_path):
+    drive = UsbDrive(
+        device_identifier="USB-OVERLAP-ARCHIVED-START-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-OVERLAP-START",
+        mount_path="/mnt/ecube/overlap-archived-start-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    source_file = source_dir / "evidence.txt"
+    source_file.write_text("original evidence", encoding="utf-8")
+
+    existing = _create_assigned_job(
+        db,
+        drive=drive,
+        project_id="PROJ-OVERLAP-START",
+        evidence_number="EV-EXISTING-ARCHIVED-START-001",
+        source_path=str(source_dir),
+        status=JobStatus.COMPLETED,
+    )
+
+    drive.mount_path = None
+    db.commit()
+
+    archive_response = manager_client.post(
+        f"/jobs/{existing.id}/archive",
+        json={"confirm": True},
+    )
+
+    assert archive_response.status_code == 200
+
+    drive.mount_path = "/mnt/ecube/overlap-archived-start-001"
+    db.commit()
+
+    source_file.unlink()
+
+    create_response = manager_client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-OVERLAP-START",
+            "evidence_number": "EV-NEW-ARCHIVED-START-001",
+            "source_path": str(source_dir),
+            "drive_id": drive.id,
+        },
+    )
+
+    assert create_response.status_code == 200
+    recreated_job_id = create_response.json()["id"]
+
+    start_response = manager_client.post(
+        f"/jobs/{recreated_job_id}/start",
+        json={"thread_count": 1},
+    )
+
+    assert start_response.status_code == 200
+
+    recreated_job = db.get(ExportJob, recreated_job_id)
+    assert recreated_job is not None
+    assert recreated_job.status == JobStatus.FAILED
+    assert recreated_job.file_count == 0
+    assert recreated_job.failure_reason == "Source path contains no transferable files"
+
+
 def test_create_job_overlap_check_respects_component_boundaries(client, db):
     drive = UsbDrive(
         device_identifier="USB-OVERLAP-BOUNDARY-001",
