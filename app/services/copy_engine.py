@@ -791,6 +791,9 @@ def prepare_job_startup_analysis(
         elif not reused_cached_analysis:
             _clear_startup_analysis_benchmark(job)
 
+        if cached_file_count <= 0:
+            raise ValueError("Source path contains no transferable files")
+
         existing_files = file_repo.list_by_job(job_id)
         existing_by_rel = {ef.relative_path: ef for ef in existing_files}
 
