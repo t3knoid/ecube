@@ -948,7 +948,7 @@ cannot be initialized, formatted, or ejected. The audit trail is preserved.
 
 ```bash
 # Requires admin or manager role
-curl -k -X POST https://localhost:8443/audit/chain-of-custody/handoff \
+curl -k -X POST https://localhost:8443/jobs/42/chain-of-custody/handoff \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -970,20 +970,19 @@ The call is **idempotent**: submitting the same `(drive_id, possessor, delivery_
 
 Response: returns the recorded handoff event including `event_id`, `event_type`, `recorded_at`, and all submitted fields.
 
-To retrieve the chain-of-custody report for a drive before or after handoff:
+To refresh and retrieve the job-scoped chain-of-custody snapshot:
 
 ```bash
-# By drive ID
-curl -k -H "Authorization: Bearer $JWT_TOKEN" \
-  "https://localhost:8443/audit/chain-of-custody?drive_id=1"
+# Refresh and store the latest snapshot (admin/manager only)
+curl -k -X POST -H "Authorization: Bearer $JWT_TOKEN" \
+  "https://localhost:8443/jobs/42/chain-of-custody/refresh"
 
-# By project ID (returns all non-archived drives for the project)
+# Retrieve the stored snapshot (admin/manager/auditor)
 curl -k -H "Authorization: Bearer $JWT_TOKEN" \
-  "https://localhost:8443/audit/chain-of-custody?project_id=PROJECT-42"
+  "https://localhost:8443/jobs/42/chain-of-custody"
 ```
 
-> **Note:** After archival, querying a drive by `drive_id` or `drive_sn` returns
-> `410 Gone`. Project-level queries automatically exclude archived drives.
+> **Note:** Archived jobs continue returning their last stored snapshot through `GET /jobs/{job_id}/chain-of-custody`, but `POST /jobs/{job_id}/chain-of-custody/refresh` returns `409 Conflict` once the job is archived.
 > Full audit history for the drive remains visible via `GET /audit`.
 
 ---
