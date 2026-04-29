@@ -275,37 +275,36 @@ ECUBE must provide an automated export of chain-of-custody records:
 - The UI must provide an authorized user control to print or save a chain-of-custody report.
 - Printed/saved output must include custody actors and timestamps needed for legal review.
 
-**Endpoint:** `GET /audit/chain-of-custody`
+**Endpoints:**
 
-Supported selectors:
+- `GET /jobs/{job_id}/chain-of-custody` — return the last stored job-scoped CoC snapshot for review, print, or export.
+- `POST /jobs/{job_id}/chain-of-custody/refresh` — rebuild and persist the latest job-scoped CoC snapshot from current trusted state.
+- `POST /jobs/{job_id}/chain-of-custody/handoff` — record custody transfer and store the refreshed snapshot.
 
-- `drive_id` (authoritative when provided)
-- `drive_sn` (drive device identifier/serial)
-- `project_id` (project-scoped output with per-drive sections)
+Rules:
 
-Selector rules:
+- CoC access remains limited to `admin`, `manager`, and `auditor`.
+- Only `admin` and `manager` may refresh or confirm handoff.
+- `GET /jobs/{job_id}/chain-of-custody` returns `404` when a non-archived job has no stored snapshot yet.
+- Archived jobs can still return the last stored snapshot for legal review, but they cannot be refreshed.
+- The stored snapshot response includes metadata describing when the snapshot was written or last updated on disk.
 
-- At least one selector is required.
-- If both project and drive selectors are provided, the selected drive must match the project binding or the API returns `409`.
-- `drive_sn` with no matching drive returns `404`.
-- `drive_sn` with ambiguous resolution returns `409`.
-
-Drive-based example:
+Stored-snapshot retrieval example:
 
 ```http
-GET /audit/chain-of-custody?drive_id=42
+GET /jobs/42/chain-of-custody
 ```
 
-Project-based example:
+Snapshot refresh example:
 
 ```http
-GET /audit/chain-of-custody?project_id=CASE-2026-0007
+POST /jobs/42/chain-of-custody/refresh
 ```
 
 Handoff confirmation example:
 
 ```http
-POST /audit/chain-of-custody/handoff
+POST /jobs/42/chain-of-custody/handoff
 Content-Type: application/json
 
 {
@@ -318,6 +317,8 @@ Content-Type: application/json
   "notes": "Sealed evidence bag #A771"
 }
 ```
+
+Operational note: refreshing and storing a CoC snapshot must leave evidence in both the audit log and the application log so operators can correlate when the on-disk record was updated.
 
 **Response:**
 
