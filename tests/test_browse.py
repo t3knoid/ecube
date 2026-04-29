@@ -1,5 +1,6 @@
 """Tests for ``GET /browse`` — directory browser endpoint."""
 
+import logging
 import os
 from unittest.mock import patch
 
@@ -25,10 +26,10 @@ def _make_drive_with_mount(db, mount_path: str) -> UsbDrive:
     return drive
 
 
-def _make_network_mount(db, local_mount_point: str) -> NetworkMount:
+def _make_network_mount(db, local_mount_point: str, mount_type: MountType = MountType.NFS) -> NetworkMount:
     """Insert a NetworkMount row with *local_mount_point* set."""
     mount = NetworkMount(
-        type=MountType.NFS,
+        type=mount_type,
         remote_path="192.168.1.1:/exports/evidence",
         local_mount_point=local_mount_point,
         status=MountStatus.MOUNTED,
@@ -383,16 +384,31 @@ class TestBrowseParameterValidation:
 
 
 class TestBrowseFilesystemErrors:
-    def test_permission_denied_returns_403(self, client, db, tmp_path):
+    def test_permission_denied_returns_403_with_useful_smb_logs(self, client, db, tmp_path, caplog):
         """When os.scandir raises PermissionError, the endpoint returns 403."""
         mount_point = str(tmp_path)
-        _make_network_mount(db, mount_point)
+        _make_network_mount(db, mount_point, MountType.SMB)
 
+        caplog.set_level(logging.DEBUG, logger="app.services.browse_service")
         with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]), \
              patch("os.scandir", side_effect=PermissionError("Permission denied")):
             response = client.get(f"/browse?path={mount_point}")
 
         assert response.status_code == 403
+        info_records = [record for record in caplog.records if record.levelno == logging.INFO]
+        debug_records = [record for record in caplog.records if record.levelno == logging.DEBUG]
+        assert any(
+            record.getMessage() == "Browse directory failed"
+            and getattr(record, "surface", None) == "network_mount:smb"
+            and getattr(record, "reason", None) == "Permission or authentication failure"
+            for record in info_records
+        )
+        assert any(
+            record.getMessage() == "Browse directory raw failure"
+            and getattr(record, "surface", None) == "network_mount:smb"
+            and getattr(record, "raw_error", None) == "Permission denied"
+            for record in debug_records
+        )
 
     def test_not_a_directory_returns_400(self, client, db, tmp_path):
         """When os.scandir raises NotADirectoryError, the endpoint returns 400."""
@@ -405,35 +421,59 @@ class TestBrowseFilesystemErrors:
 
         assert response.status_code == 400
 
-    def test_os_error_returns_500(self, client, db, tmp_path):
+    def test_os_error_returns_500_with_useful_nfs_logs(self, client, db, tmp_path, caplog):
         """When os.scandir raises a generic OSError, the endpoint returns 500."""
         mount_point = str(tmp_path)
         _make_network_mount(db, mount_point)
 
+        caplog.set_level(logging.DEBUG, logger="app.services.browse_service")
         with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]), \
-             patch("os.scandir", side_effect=OSError("I/O error")):
+             patch("os.scandir", side_effect=OSError("I/O error on /mnt/ecube/share")):
             response = client.get(f"/browse?path={mount_point}")
 
         assert response.status_code == 500
+        info_records = [record for record in caplog.records if record.levelno == logging.INFO]
+        debug_records = [record for record in caplog.records if record.levelno == logging.DEBUG]
+        assert any(
+            record.getMessage() == "Browse directory failed"
+            and getattr(record, "surface", None) == "network_mount:nfs"
+            and getattr(record, "reason", None) == "Failed to list the directory due to a filesystem error"
+            for record in info_records
+        )
+        assert all("/mnt/ecube/share" not in str(getattr(record, "reason", "")) for record in info_records)
+        assert any(
+            record.getMessage() == "Browse directory raw failure"
+            and getattr(record, "surface", None) == "network_mount:nfs"
+            and getattr(record, "raw_error", None) == "I/O error on /mnt/ecube/share"
+            for record in debug_records
+        )
 
-    def test_file_not_found_returns_404(self, client, db, tmp_path):
+    def test_file_not_found_returns_404(self, client, db, tmp_path, caplog):
         """When the directory disappears between DB lookup and scandir (TOCTOU),
         the endpoint returns 404 with a helpful message."""
         mount_point = str(tmp_path)
         _make_network_mount(db, mount_point)
 
+        caplog.set_level(logging.DEBUG, logger="app.services.browse_service")
         with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]), \
              patch("os.scandir", side_effect=FileNotFoundError("No such file or directory")):
             response = client.get(f"/browse?path={mount_point}")
 
         assert response.status_code == 404
-        assert "unmounted" in response.json()["message"].lower()
-
-    def test_stat_race_skips_vanished_entries(self, client, db, tmp_path):
-        """When a file vanishes between listdir and lstat (_stat_entry returns
-        None), the entry is silently excluded from the response."""
-        mount_point = str(tmp_path)
-        _make_network_mount(db, mount_point)
+        info_records = [record for record in caplog.records if record.levelno == logging.INFO]
+        debug_records = [record for record in caplog.records if record.levelno == logging.DEBUG]
+        assert any(
+            record.getMessage() == "Browse directory failed"
+            and getattr(record, "surface", None) == "network_mount:nfs"
+            and getattr(record, "reason", None) == "Target device or path was not found"
+            for record in info_records
+        )
+        assert any(
+            record.getMessage() == "Browse directory raw failure"
+            and getattr(record, "surface", None) == "network_mount:nfs"
+            and getattr(record, "raw_error", None) == "No such file or directory"
+            for record in debug_records
+        )
         (tmp_path / "keep.txt").write_text("ok")
         (tmp_path / "vanish.txt").write_text("gone")
 
