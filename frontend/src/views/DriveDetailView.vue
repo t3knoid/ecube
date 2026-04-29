@@ -14,6 +14,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
+import { buildProjectEvidenceMap, getProjectEvidence } from '@/utils/projectEvidence.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -26,6 +27,7 @@ const saving = ref(false)
 const error = ref('')
 const infoMessage = ref('')
 const warnMessage = ref('')
+const currentProjectEvidenceNumber = ref('')
 
 function clearBanners() {
   error.value = ''
@@ -143,9 +145,24 @@ async function loadDrive() {
   loading.value = true
   clearBanners()
   try {
-    const drives = await getDrives({ include_disconnected: true })
+    const [driveResult, jobResult] = await Promise.allSettled([
+      getDrives({ include_disconnected: true }),
+      listJobs({ limit: 1000, include_archived: true }),
+    ])
+
+    if (driveResult.status !== 'fulfilled') {
+      throw driveResult.reason
+    }
+
+    const drives = driveResult.value || []
     const next = drives.find((item) => item.id === driveId.value) || null
     drive.value = next ? normalizeProjectRecord(next, ['current_project_id']) : null
+    currentProjectEvidenceNumber.value = jobResult.status === 'fulfilled' && drive.value
+      ? getProjectEvidence(
+        drive.value.current_project_id,
+        buildProjectEvidenceMap(jobResult.value || []),
+      )
+      : ''
     if (!drive.value) {
       error.value = t('drives.notFound')
     }
@@ -511,6 +528,7 @@ onBeforeUnmount(() => {
         <div><strong>{{ t('drives.filesystem') }}</strong><span>{{ drive.filesystem_type || '-' }}</span></div>
         <div><strong>{{ t('common.labels.size') }}</strong><span>{{ formatBytes(drive.capacity_bytes) }}</span></div>
         <div><strong>{{ t('dashboard.project') }}</strong><span>{{ drive.current_project_id || '-' }}</span></div>
+        <div><strong>{{ t('jobs.evidence') }}</strong><span>{{ currentProjectEvidenceNumber || '-' }}</span></div>
         <div><strong>{{ t('common.labels.status') }}</strong><StatusBadge :status="drive.current_state" :label="driveStateLabel(drive.current_state)" /></div>
       </div>
 

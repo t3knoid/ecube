@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getDrives, refreshDrives } from '@/api/drives.js'
+import { listJobs } from '@/api/jobs.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
@@ -10,6 +11,7 @@ import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
 import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
+import { buildProjectEvidenceMap, getProjectEvidence } from '@/utils/projectEvidence.js'
 
 const { t } = useI18n()
 const { driveStateLabel } = useStatusLabels()
@@ -26,6 +28,7 @@ const sortDir = ref('asc')
 const page = ref(1)
 const pageSize = ref(10)
 const isMobileViewport = ref(false)
+const projectEvidenceById = ref(new Map())
 let mobileViewportQuery = null
 
 /** Drive ID currently being browsed (null = none open). */
@@ -43,10 +46,10 @@ const columns = computed(() => {
     { key: 'id', label: t('common.labels.id'), align: 'right' },
     { key: 'display_device_label', label: t('drives.device') },
     { key: 'serial_number', label: t('drives.serialNumber') },
-    { key: 'filesystem_type', label: t('drives.filesystem') },
     { key: 'capacity_bytes', label: t('common.labels.size'), align: 'right' },
     { key: 'current_state', label: t('common.labels.status') },
     { key: 'current_project_id', label: t('dashboard.project') },
+    { key: 'current_project_evidence_number', label: t('jobs.evidence') },
     { key: 'actions', label: '', align: 'center' },
   ]
 
@@ -54,7 +57,6 @@ const columns = computed(() => {
     return nextColumns.filter(
       (column) =>
         column.key !== 'serial_number' &&
-        column.key !== 'filesystem_type' &&
         column.key !== 'capacity_bytes',
     )
   }
@@ -129,8 +131,26 @@ async function loadDrives() {
     if (stateFilter.value === 'ALL' || stateFilter.value === 'DISCONNECTED') {
       params.include_disconnected = true
     }
-    const response = await getDrives(params)
-    drives.value = (response || []).map((item) => normalizeProjectRecord(item, ['current_project_id']))
+    const [driveResult, jobResult] = await Promise.allSettled([
+      getDrives(params),
+      listJobs({ limit: 1000, include_archived: true }),
+    ])
+
+    if (driveResult.status !== 'fulfilled') {
+      throw driveResult.reason
+    }
+
+    projectEvidenceById.value = jobResult.status === 'fulfilled'
+      ? buildProjectEvidenceMap(jobResult.value || [])
+      : new Map()
+
+    drives.value = (driveResult.value || []).map((item) => {
+      const drive = normalizeProjectRecord(item, ['current_project_id'])
+      return {
+        ...drive,
+        current_project_evidence_number: getProjectEvidence(drive.current_project_id, projectEvidenceById.value),
+      }
+    })
   } catch {
     error.value = t('common.errors.networkError')
   } finally {
@@ -149,8 +169,8 @@ const filtered = computed(() => {
       drive.product_name,
       drive.port_system_path,
       drive.serial_number,
-      drive.filesystem_type,
       drive.current_project_id,
+      drive.current_project_evidence_number,
       drive.filesystem_path,
       String(drive.id),
     ]
@@ -316,9 +336,9 @@ onBeforeUnmount(() => {
         <option value="id">{{ t('common.labels.id') }}</option>
         <option value="display_device_label">{{ t('drives.device') }}</option>
         <option value="serial_number">{{ t('drives.serialNumber') }}</option>
-        <option value="filesystem_type">{{ t('drives.filesystem') }}</option>
         <option value="current_state">{{ t('common.labels.status') }}</option>
         <option value="current_project_id">{{ t('dashboard.project') }}</option>
+        <option value="current_project_evidence_number">{{ t('jobs.evidence') }}</option>
       </select>
       <button class="btn" @click="setSort(sortKey)">
         {{ sortDir === 'asc' ? t('drives.sortAsc') : t('drives.sortDesc') }}
@@ -334,6 +354,9 @@ onBeforeUnmount(() => {
       </template>
       <template #cell-current_project_id="{ row }">
         {{ formatProjectId(row.current_project_id) }}
+      </template>
+      <template #cell-current_project_evidence_number="{ row }">
+        {{ row.current_project_evidence_number || '-' }}
       </template>
       <template #cell-current_state="{ row }">
         <span
