@@ -965,6 +965,127 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain(i18n.global.t('audit.handoffSaved'))
   })
 
+  it('shows failed CoC handoff submission in a visible dialog context', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 10,
+      total_bytes: 10,
+      file_count: 1,
+      files_succeeded: 1,
+      files_failed: 0,
+      files_timed_out: 0,
+      startup_analysis_status: 'READY',
+      drive: { id: 1, current_state: 'AVAILABLE', is_mounted: false },
+    })
+    mocks.getJobChainOfCustody.mockResolvedValue({
+      selector_mode: 'JOB',
+      project_id: 'PROJ-001',
+      snapshot_updated_at: '2026-04-28T19:30:00Z',
+      reports: [{
+        drive_id: 1,
+        drive_sn: 'SN-001',
+        drive_manufacturer: 'PNY',
+        drive_model: 'USB 3.2.1 FD',
+        project_id: 'PROJ-001',
+        custody_complete: false,
+        delivery_time: null,
+        chain_of_custody_events: [],
+        manifest_summary: [],
+      }],
+    })
+    mocks.confirmJobChainOfCustodyHandoff.mockRejectedValue({
+      response: {
+        status: 409,
+        data: { detail: 'Drive handoff could not be recorded.' },
+      },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const openCocButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.chainTitle'))
+    await openCocButton.trigger('click')
+    await flushPromises()
+
+    const prefillButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.prefillHandoff'))
+    await prefillButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find(`input[aria-label="${i18n.global.t('audit.possessor')}"]`).setValue('Evidence Locker')
+    await wrapper.find(`input[aria-label="${i18n.global.t('audit.deliveryTimeLocalInput')}"]`).setValue('2026-04-28T14:00')
+
+    const confirmHandoffButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.confirmHandoff'))
+    await confirmHandoffButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.confirm-dialog-stub').exists()).toBe(true)
+    await wrapper.find('.confirm-dialog-confirm').trigger('click')
+    await flushPromises()
+
+    const dialogTitles = wrapper.findAll('.confirm-dialog-title').map((node) => node.text())
+    expect(dialogTitles).toContain(i18n.global.t('audit.handoffErrorTitle'))
+    expect(wrapper.text()).toContain('Drive handoff could not be recorded.')
+    expect(wrapper.findAll('.confirm-dialog-stub')).toHaveLength(1)
+  })
+
+  it('shows invalid CoC handoff input in a visible dialog context', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 10,
+      total_bytes: 10,
+      file_count: 1,
+      files_succeeded: 1,
+      files_failed: 0,
+      files_timed_out: 0,
+      startup_analysis_status: 'READY',
+      drive: { id: 1, current_state: 'AVAILABLE', is_mounted: false },
+    })
+    mocks.getJobChainOfCustody.mockResolvedValue({
+      selector_mode: 'JOB',
+      project_id: 'PROJ-001',
+      snapshot_updated_at: '2026-04-28T19:30:00Z',
+      reports: [{
+        drive_id: 1,
+        drive_sn: 'SN-001',
+        drive_manufacturer: 'PNY',
+        drive_model: 'USB 3.2.1 FD',
+        project_id: 'PROJ-001',
+        custody_complete: false,
+        delivery_time: null,
+        chain_of_custody_events: [],
+        manifest_summary: [],
+      }],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const openCocButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.chainTitle'))
+    await openCocButton.trigger('click')
+    await flushPromises()
+
+    const confirmHandoffButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.confirmHandoff'))
+    await confirmHandoffButton.trigger('click')
+    await flushPromises()
+
+    const dialogTitles = wrapper.findAll('.confirm-dialog-title').map((node) => node.text())
+    expect(dialogTitles).toContain(i18n.global.t('audit.handoffErrorTitle'))
+    expect(wrapper.text()).toContain(i18n.global.t('audit.handoffInvalid'))
+    expect(mocks.confirmJobChainOfCustodyHandoff).not.toHaveBeenCalled()
+  })
+
   it('refreshes and stores the CoC snapshot from the dialog toolbar', async () => {
     mocks.getJob.mockResolvedValue({
       id: 6,
