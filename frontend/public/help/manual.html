@@ -410,8 +410,8 @@ Current state
 </tr>
 <tr>
 <td><code>AVAILABLE</code></td>
-<td>Drive is present on an enabled port and ready to be formatted or assigned to a project.</td>
-<td>Format, Initialize</td>
+<td>Drive is present on an enabled port and ready to be formatted or assigned to a project. If it is still mounted from a prior ECUBE-managed session, it can also be safely unmounted.</td>
+<td>Format, Initialize, Prepare Eject when mounted</td>
 </tr>
 <tr>
 <td><code>IN_USE</code></td>
@@ -494,6 +494,7 @@ If you need to assign the drive to a <em>different</em> project, format it first
 </li></ul>
 <h2 id="4-6-prepare-eject">4.6 Prepare Eject</h2>
 <p>Use <code>Prepare Eject</code> before physically removing a drive. This flushes pending writes, unmounts the filesystem, and transitions the drive to <code>AVAILABLE</code>.</p>
+<p><code>Prepare Eject</code> is available for drives in the normal <code>IN_USE</code> workflow and for mounted <code>AVAILABLE</code> drives that have not yet been initialized into an active job assignment. This lets operators safely unmount a newly mounted drive before removing it.</p>
 <p>After a successful prepare-eject:</p>
 <ul><li>
 The drive state returns to <code>AVAILABLE</code>.

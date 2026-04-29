@@ -654,10 +654,11 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
     # Capture the precondition state for later validation.
     initial_state = drive.current_state
     initial_device_path = drive.filesystem_path
+    allow_available_mounted_eject = initial_state == DriveState.AVAILABLE and bool(drive.mount_path)
 
-    # Fail fast if the drive is not in the required IN_USE state.
+    # Fail fast if the drive is not in a state that supports safe ECUBE-managed unmount.
     # Don't waste time on expensive OS operations for invalid preconditions.
-    if initial_state != DriveState.IN_USE:
+    if initial_state != DriveState.IN_USE and not allow_available_mounted_eject:
         if drive.mount_path:
             raise HTTPException(
                 status_code=409,
@@ -668,13 +669,19 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
             detail=f"Drive is not in IN_USE state; cannot prepare eject (current state: {initial_state.value})",
         )
 
-    # Check if the drive has any jobs with incomplete files (timeouts or errors).
-    # Warn the operator before allowing eject.
+    # Check active assignments before any OS work.
+    # Mounted AVAILABLE drives can be safely unmounted only when no job still actively claims them.
     try:
         incomplete_assignments = db.query(DriveAssignment).filter(
             DriveAssignment.drive_id == drive_id,
             DriveAssignment.released_at.is_(None)  # Only active assignments
         ).all()
+
+        if allow_available_mounted_eject and incomplete_assignments:
+            raise HTTPException(
+                status_code=409,
+                detail="Drive has an active job assignment and cannot be prepared for eject while still available",
+            )
         
         incomplete_file_count = 0
         for assignment in incomplete_assignments:
