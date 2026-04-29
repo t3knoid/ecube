@@ -29,6 +29,16 @@ def exception_routes(client):  # noqa: F811 – shadow outer client intentionall
     def raise_401_http():
         raise HTTPException(status_code=401, detail="Missing bearer token")
 
+    @router.get("/401-http-unsafe")
+    def raise_401_http_unsafe():
+        raise HTTPException(
+            status_code=401,
+            detail=(
+                "Failed to fetch OIDC discovery document from "
+                "'https://issuer.example/.well-known/openid-configuration': network error"
+            ),
+        )
+
     @router.get("/403-custom")
     def raise_403_custom():
         raise AuthorizationError("Insufficient role", code="INSUFFICIENT_ROLE")
@@ -97,12 +107,55 @@ def test_401_custom_exception_schema(client, exception_routes):
     assert "Token has expired" in data["message"]
 
 
+def test_401_custom_exception_emits_sanitized_info_log(exception_routes, caplog):
+    caplog.set_level(logging.INFO, logger="app.main")
+
+    with TestClient(app, raise_server_exceptions=False) as safe_client:
+        response = safe_client.get("/test-exceptions/401-custom")
+
+    data = response.json()
+    info_record = next(
+        record
+        for record in caplog.records
+        if record.levelname == "INFO"
+        and getattr(record, "error_code", None) == "TOKEN_EXPIRED"
+    )
+
+    assert response.status_code == 401
+    assert info_record.trace_id == data["trace_id"]
+    assert info_record.request_path == "/test-exceptions/401-custom"
+    assert info_record.request_method == "GET"
+    assert info_record.failure_summary == "Token has expired"
+
+
 def test_401_http_exception_schema(client, exception_routes):
     response = client.get("/test-exceptions/401-http")
     assert response.status_code == 401
     data = response.json()
     _assert_error_schema(data, expected_code="UNAUTHORIZED")
     assert "Missing bearer token" in data["message"]
+
+
+def test_401_http_exception_info_log_sanitizes_unsafe_detail(exception_routes, caplog):
+    caplog.set_level(logging.INFO, logger="app.main")
+
+    with TestClient(app, raise_server_exceptions=False) as safe_client:
+        response = safe_client.get("/test-exceptions/401-http-unsafe")
+
+    data = response.json()
+    info_record = next(
+        record
+        for record in caplog.records
+        if record.levelname == "INFO"
+        and getattr(record, "error_code", None) == "UNAUTHORIZED"
+        and getattr(record, "request_path", None) == "/test-exceptions/401-http-unsafe"
+    )
+
+    assert response.status_code == 401
+    assert info_record.trace_id == data["trace_id"]
+    assert info_record.failure_summary == "Unauthorized request"
+    assert "issuer.example" not in info_record.getMessage()
+    assert "issuer.example" not in str(getattr(info_record, "failure_summary", ""))
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +189,26 @@ def test_409_custom_exception_schema(client, exception_routes):
     assert "Drive already assigned" in data["message"]
 
 
+def test_409_custom_exception_emits_sanitized_info_log(exception_routes, caplog):
+    caplog.set_level(logging.INFO, logger="app.main")
+
+    with TestClient(app, raise_server_exceptions=False) as safe_client:
+        response = safe_client.get("/test-exceptions/409-custom")
+
+    data = response.json()
+    info_record = next(
+        record
+        for record in caplog.records
+        if record.levelname == "INFO"
+        and getattr(record, "error_code", None) == "DRIVE_CONFLICT"
+    )
+
+    assert response.status_code == 409
+    assert info_record.trace_id == data["trace_id"]
+    assert info_record.failure_summary == "Drive already assigned"
+    assert info_record.error_category == "conflict"
+
+
 def test_409_http_exception_schema(client, exception_routes):
     response = client.get("/test-exceptions/409-http")
     assert response.status_code == 409
@@ -166,6 +239,26 @@ def test_500_ecube_exception_schema(client, exception_routes):
     _assert_error_schema(data, expected_code="INTERNAL_ERROR")
 
 
+def test_500_ecube_exception_emits_sanitized_info_log(exception_routes, caplog):
+    caplog.set_level(logging.INFO, logger="app.main")
+
+    with TestClient(app, raise_server_exceptions=False) as safe_client:
+        response = safe_client.get("/test-exceptions/500-ecube")
+
+    data = response.json()
+    info_record = next(
+        record
+        for record in caplog.records
+        if record.levelname == "INFO"
+        and getattr(record, "error_category", None) == "application_exception"
+    )
+
+    assert response.status_code == 500
+    assert info_record.trace_id == data["trace_id"]
+    assert info_record.error_code == "INTERNAL_ERROR"
+    assert info_record.failure_summary == "Something went wrong internally"
+
+
 def test_500_unhandled_exception_sanitized(exception_routes):
     """Unhandled exceptions must not leak internals and must return 500.
 
@@ -186,7 +279,7 @@ def test_500_unhandled_exception_sanitized(exception_routes):
 
 def test_500_unhandled_exception_preserves_traceback_logging(exception_routes, caplog):
     """Unhandled exceptions should still emit an error log with traceback context."""
-    caplog.set_level(logging.ERROR, logger="app.main")
+    caplog.set_level(logging.INFO, logger="app.main")
 
     with TestClient(app, raise_server_exceptions=False) as safe_client:
         response = safe_client.get("/test-exceptions/500-unhandled")
@@ -206,6 +299,17 @@ def test_500_unhandled_exception_preserves_traceback_logging(exception_routes, c
     assert error_record.exc_info is not None
     assert error_record.exc_info[0] is RuntimeError
     assert str(error_record.exc_info[1]) == "Completely unexpected failure"
+
+    info_record = next(
+        record
+        for record in caplog.records
+        if record.levelname == "INFO"
+        and getattr(record, "error_category", None) == "unexpected_backend_error"
+    )
+
+    assert info_record.trace_id == data["trace_id"]
+    assert info_record.request_path == "/test-exceptions/500-unhandled"
+    assert "Completely unexpected failure" not in info_record.getMessage()
 
 
 def test_500_unhandled_schema_drift_emits_safe_classified_logs(exception_routes, caplog):
@@ -311,6 +415,24 @@ def test_existing_404_schema(client):
     assert response.status_code == 404
     data = response.json()
     _assert_error_schema(data, expected_code="NOT_FOUND")
+
+
+def test_existing_404_emits_sanitized_info_log(client, caplog):
+    caplog.set_level(logging.INFO, logger="app.main")
+
+    response = client.get("/jobs/999999")
+
+    data = response.json()
+    info_record = next(
+        record
+        for record in caplog.records
+        if record.levelname == "INFO"
+        and getattr(record, "error_code", None) == "NOT_FOUND"
+    )
+
+    assert response.status_code == 404
+    assert info_record.trace_id == data["trace_id"]
+    assert info_record.request_path == "/jobs/999999"
 
 
 def test_existing_isolation_violation_schema(manager_client, db):

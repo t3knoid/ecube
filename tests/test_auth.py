@@ -1,5 +1,6 @@
 """Tests for bearer token authentication dependency (app/auth.py)."""
 
+import logging
 import time
 
 import jwt
@@ -76,6 +77,24 @@ def test_missing_token_returns_401(auth_client):
     response = auth_client.get("/protected")
     assert response.status_code == 401
     assert "missing" in response.json()["detail"].lower()
+
+
+def test_missing_token_emits_warning_log(auth_client, caplog):
+    caplog.set_level(logging.WARNING, logger="app.auth")
+
+    response = auth_client.get("/protected")
+
+    assert response.status_code == 401
+    warning_record = next(
+        record
+        for record in caplog.records
+        if record.name == "app.auth" and record.levelname == "WARNING"
+    )
+    assert warning_record.getMessage() == "Authentication denied"
+    assert warning_record.event_code == "AUTHENTICATION_DENIED"
+    assert warning_record.auth_reason == "missing_token"
+    assert warning_record.request_path == "/protected"
+    assert warning_record.request_method == "GET"
 
 
 def test_invalid_token_returns_401(auth_client):
