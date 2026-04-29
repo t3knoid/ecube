@@ -8,6 +8,7 @@ Verifies that:
 - Unauthenticated requests still receive HTTP 401.
 """
 
+import logging
 import time
 from unittest.mock import MagicMock, patch
 
@@ -106,6 +107,27 @@ def _assert_forbidden(response) -> None:
     assert body.get("code") == "FORBIDDEN"
     assert "message" in body
     assert "trace_id" in body
+
+
+def test_role_denial_emits_warning_log(db, caplog):
+    caplog.set_level(logging.WARNING, logger="app.auth")
+
+    c = _client_for_role(db, [])
+    response = c.get("/drives")
+
+    _assert_forbidden(response)
+    warning_record = next(
+        record
+        for record in caplog.records
+        if record.name == "app.auth"
+        and record.levelname == "WARNING"
+        and getattr(record, "event_code", None) == "AUTHORIZATION_DENIED"
+    )
+    assert warning_record.getMessage() == "Authorization denied"
+    assert warning_record.request_path == "/drives"
+    assert warning_record.request_method == "GET"
+    assert warning_record.required_roles == ["admin", "auditor", "manager", "processor"]
+    assert warning_record.user_roles == []
 
 
 # ---------------------------------------------------------------------------
