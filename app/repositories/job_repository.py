@@ -12,6 +12,7 @@ from app.models.jobs import (
     ExportFile,
     ExportJob,
     FileStatus,
+    JobChainOfCustodySnapshot,
     JobStatus,
     Manifest,
 )
@@ -156,6 +157,41 @@ class JobRepository:
             .order_by(ExportJob.created_at.desc(), ExportJob.id.desc())
             .all()
         )
+
+
+class JobChainOfCustodySnapshotRepository:
+    """Persistence helpers for the latest stored CoC snapshot per job."""
+
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def get_by_job_id(self, job_id: int) -> Optional[JobChainOfCustodySnapshot]:
+        return (
+            self.db.query(JobChainOfCustodySnapshot)
+            .filter(JobChainOfCustodySnapshot.job_id == job_id)
+            .one_or_none()
+        )
+
+    def upsert_for_job(
+        self,
+        *,
+        job_id: int,
+        payload: dict,
+        stored_by: Optional[str],
+    ) -> JobChainOfCustodySnapshot:
+        snapshot = self.get_by_job_id(job_id)
+        if snapshot is None:
+            snapshot = JobChainOfCustodySnapshot(
+                job_id=job_id,
+                payload=payload,
+                stored_by=stored_by,
+            )
+            self.db.add(snapshot)
+        else:
+            snapshot.payload = payload
+            snapshot.stored_by = stored_by
+        self.db.flush()
+        return snapshot
 
 
 class FileRepository:

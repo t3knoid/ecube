@@ -493,11 +493,17 @@ def create_job(
         logger.exception("Failed to write audit log for auto-assignment")
 
     try:
+        audit_details = {
+            "project_id": body.project_id,
+            "evidence_number": body.evidence_number,
+        }
+        if body.notes:
+            audit_details["processor_notes"] = body.notes
         audit_repo.add(
             action="JOB_CREATED",
             user=actor,
             job_id=created_job_id,
-            details={"project_id": body.project_id},
+            details=audit_details,
             client_ip=client_ip,
         )
     except Exception:
