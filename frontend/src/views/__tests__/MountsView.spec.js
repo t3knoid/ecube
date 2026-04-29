@@ -765,6 +765,32 @@ describe('MountsView removal flow', () => {
     expect(saveButton().attributes('disabled')).toBeDefined()
   })
 
+  it('keeps the edit dialog footer reachable by using an internal scroll region after test success', async () => {
+    mocks.getMounts.mockResolvedValue([buildMount({ id: 42, remote_path: '//server/original-share', project_id: 'PROJ-OLD' })])
+    mocks.validateMount.mockResolvedValue(buildMount({ id: 42, status: 'MOUNTED' }))
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
+    expect(editButton).toBeTruthy()
+
+    await editButton.trigger('click')
+    await flushPromises()
+
+    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
+    await flushPromises()
+
+    const dialog = wrapper.find('.mount-dialog-panel')
+    const scrollRegion = wrapper.find('.mount-dialog-scroll-region')
+    const footer = wrapper.find('.dialog-footer')
+
+    expect(dialog.exists()).toBe(true)
+    expect(scrollRegion.exists()).toBe(true)
+    expect(footer.exists()).toBe(true)
+    expect(findDialogSuccessBanner(wrapper).text()).toContain(i18n.global.t('mounts.testSuccess'))
+  })
+
   it('clears the test success banner when the edit dialog is cancelled', async () => {
     mocks.getMounts.mockResolvedValue([buildMount({ id: 42, remote_path: '//server/original-share', project_id: 'PROJ-OLD' })])
     mocks.validateMount.mockResolvedValue(buildMount({ id: 42, status: 'MOUNTED' }))
