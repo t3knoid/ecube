@@ -139,7 +139,7 @@ function mountView() {
         },
         CocReport: {
           props: ['report', 'selectorMode', 'projectId', 'generatedAt', 'generatedBy', 'manifestTotalsFootnote'],
-          template: '<div class="coc-report-stub">job-coc-report-{{ report.drive_id }}|{{ selectorMode }}|{{ projectId }}|{{ generatedBy }}|{{ generatedAt }}</div>',
+          template: '<div class="coc-report-stub"><h3>{{ projectId && report.evidence_number ? `${projectId} - ${report.evidence_number}` : (projectId || report.evidence_number || "") }}</h3><div>job-coc-report-{{ report.drive_id }}|{{ selectorMode }}|{{ projectId }}|{{ report.evidence_number }}|{{ generatedBy }}|{{ generatedAt }}</div></div>',
         },
         ConfirmDialog: {
           props: ['modelValue', 'title', 'message', 'confirmLabel', 'cancelLabel', 'busy'],
@@ -771,6 +771,7 @@ describe('JobDetailView start action', () => {
         drive_manufacturer: 'SanDisk',
         drive_model: 'Cruzer Switch',
         project_id: 'PROJ-001',
+        evidence_number: 'EV-006',
         custody_complete: true,
         delivery_time: '2026-04-28T18:00:00Z',
         chain_of_custody_events: [],
@@ -787,14 +788,14 @@ describe('JobDetailView start action', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.text()).not.toContain('job-coc-report-5|JOB|PROJ-001|casey')
+    expect(wrapper.text()).not.toContain('job-coc-report-5|JOB|PROJ-001|EV-006|casey')
 
     const openCocButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.closeOutWithHandoff'))
     await openCocButton.trigger('click')
     await flushPromises()
 
     expect(mocks.getJobChainOfCustody).toHaveBeenCalledWith(6)
-    expect(wrapper.text()).toContain('job-coc-report-5|JOB|PROJ-001|casey|2026-04-28T19:30:00Z')
+    expect(wrapper.text()).toContain('job-coc-report-5|JOB|PROJ-001|EV-006|casey|2026-04-28T19:30:00Z')
     expect(wrapper.findAll('button').some((node) => node.text() === i18n.global.t('audit.handoffTitle'))).toBe(false)
 
     const printButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.printCoc'))
@@ -979,6 +980,7 @@ describe('JobDetailView start action', () => {
         drive_manufacturer: 'PNY',
         drive_model: 'USB 3.2.1 FD',
         project_id: 'PROJ-001',
+        evidence_number: 'EV-006',
         custody_complete: false,
         delivery_time: null,
         chain_of_custody_events: [],
@@ -993,6 +995,7 @@ describe('JobDetailView start action', () => {
     await openCocButton.trigger('click')
     await flushPromises()
 
+    expect(wrapper.text()).toContain('PROJ-001 - EV-006')
     const openHandoffButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.handoffTitle'))
     await openHandoffButton.trigger('click')
     await flushPromises()

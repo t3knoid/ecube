@@ -35,7 +35,7 @@ const { t } = useI18n()
 
 const displayedProjectId = computed(() => props.projectId || props.report.project_id || '-')
 const reportTitle = computed(() => {
-  const evidenceNumber = (props.report.manifest_summary || []).find((manifest) => String(manifest?.evidence_number || '').trim())?.evidence_number || '-'
+  const evidenceNumber = String(props.report.evidence_number || '').trim() || '-'
 
   if (displayedProjectId.value !== '-' && evidenceNumber !== '-') {
     return t('audit.cocReportTitle', {
