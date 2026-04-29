@@ -576,6 +576,8 @@ async def fallback_status_logging(request: Request, call_next):
     Add fallback log lines for observability.
     """
     response = await call_next(request)
+    if request.method == "GET" and request.url.path.endswith("/audit/chain-of-custody"):
+        response.headers["Cache-Control"] = "no-store"
     if "X-Trace-Id" not in response.headers:
         if response.status_code == 405:
             logger.info("405 HTTP_405 path=%s method=%s", request.url.path, request.method)
