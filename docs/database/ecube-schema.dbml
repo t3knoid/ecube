@@ -184,6 +184,19 @@ Table export_files {
   }
 }
 
+Table job_chain_of_custody_snapshots {
+  id int [pk, not null]
+  job_id int [not null, unique]
+  payload json [not null]
+  stored_by varchar
+  stored_at timestamptz [not null]
+  updated_at timestamptz [not null]
+
+  indexes {
+    job_id [unique, name: 'ix_job_chain_of_custody_snapshots_job_id']
+  }
+}
+
 Table manifests {
   id int [pk, not null]
   job_id int [not null]
@@ -244,6 +257,7 @@ Ref: drive_assignments.job_id > export_jobs.id
 Ref: export_files.job_id > export_jobs.id
 Ref: export_files.project_id > projects.normalized_project_id
 Ref: export_jobs.project_id > projects.normalized_project_id
+Ref: job_chain_of_custody_snapshots.job_id > export_jobs.id
 Ref: manifests.job_id > export_jobs.id
 Ref: usb_drives.port_id > usb_ports.id
 Ref: usb_ports.hub_id > usb_hubs.id
