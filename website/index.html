@@ -20,7 +20,7 @@
           <img class="brand-logo" src="./assets/ecube-logo.png" alt="ECUBE logo" />
           <div>
             <strong>ECUBE</strong>
-            <span>Secure evidence export</span>
+            <span>Evidence Copying &amp; USB Based Export</span>
           </div>
         </a>
 
@@ -48,7 +48,7 @@
             <p class="eyebrow">Software platform and turnkey appliance</p>
             <h1>Secure evidence export without giving operators direct filesystem control.</h1>
             <p class="hero-copy">
-              ECUBE moves approved case data from network shares to encrypted USB drives through a governed,
+              ECUBE, short for Evidence Copying &amp; USB Based Export, moves approved case data from network shares to encrypted USB drives through a governed,
               audited, browser-based workflow built for legal, forensic, and compliance teams.
             </p>
             <div class="cta-row">
@@ -117,7 +117,8 @@
             <h2>A browser-based export platform built for repeatable operations</h2>
             <p>
               ECUBE gives operations teams a controlled way to export evidence with visibility, auditability,
-              automation support, and a simple interface that stays focused on each user’s role and task.
+              automation support, and a simple interface that stays focused on each user’s role and task, even when
+              the export hardware itself is physically secured away from day-to-day operator access.
             </p>
           </div>
 
@@ -135,12 +136,20 @@
               <p>Browser-based screens stay focused on the task in front of the operator and adapt across desktop, tablet, and mobile devices.</p>
             </article>
             <article class="feature-card">
+              <h3>Remote browser operation</h3>
+              <p>Teams can physically secure the ECUBE station while authorized users continue to prepare, launch, and monitor work remotely from outside the secure location through the web interface.</p>
+            </article>
+            <article class="feature-card">
               <h3>Automation-ready</h3>
               <p>Integrate with enterprise systems using REST APIs, webhooks, and documented workflows.</p>
             </article>
             <article class="feature-card">
               <h3>Compliance support</h3>
               <p>Verification, manifest generation, and chain-of-custody visibility help support defensibility.</p>
+            </article>
+            <article class="feature-card">
+              <h3>Drive staging</h3>
+              <p>Prepare and assign copy drives ahead of delivery windows so media is ready before operators begin the governed export workflow.</p>
             </article>
             <article class="feature-card">
               <h3>Themes and branding</h3>
@@ -155,32 +164,102 @@
           <div class="section-heading">
             <p class="eyebrow">Product screenshots</p>
             <h2>Real ECUBE workflow views</h2>
+            <p>Click any screenshot to open a full-size view without the cropped card framing.</p>
           </div>
 
           <div class="screenshot-grid">
             <figure class="shot-card">
-              <img src="./assets/shared-folder.png" alt="ECUBE mounts screen showing a shared folder being added and managed" />
-              <figcaption>1. Shared folders are added and managed through the controlled mounts workflow.</figcaption>
+              <button
+                class="shot-trigger"
+                type="button"
+                data-full-src="./assets/workflow-dashboard.png"
+                data-full-alt="ECUBE dashboard showing system health, drive summary, and active job status"
+                data-full-caption="1. Dashboard view gives operators immediate status visibility before export work begins."
+                aria-label="Open full-size dashboard screenshot"
+              >
+                <img src="./assets/workflow-dashboard.png" alt="ECUBE dashboard showing system health, drive summary, and active job status" />
+              </button>
+              <figcaption>1. Dashboard view gives operators immediate status visibility before export work begins.</figcaption>
             </figure>
             <figure class="shot-card">
-              <img src="./assets/drives.png" alt="ECUBE drive management view with status tracking" />
-              <figcaption>4. Hardware-aware drive management supports preparation, tracking, and safe handling.</figcaption>
+              <button
+                class="shot-trigger"
+                type="button"
+                data-full-src="./assets/workflow-mounts.png"
+                data-full-alt="ECUBE mounts screen showing an approved shared source mounted to a project"
+                data-full-caption="2. Approved source mounts are added and managed through the controlled mounts workflow."
+                aria-label="Open full-size mounts screenshot"
+              >
+                <img src="./assets/workflow-mounts.png" alt="ECUBE mounts screen showing an approved shared source mounted to a project" />
+              </button>
+              <figcaption>2. Approved source mounts are added and managed through the controlled mounts workflow.</figcaption>
             </figure>
             <figure class="shot-card">
-              <img src="./assets/jobs.png" alt="ECUBE jobs workflow showing controlled export creation" />
-              <figcaption>3. Job workflow creates and tracks governed evidence export steps.</figcaption>
+              <button
+                class="shot-trigger"
+                type="button"
+                data-full-src="./assets/workflow-drives.png"
+                data-full-alt="ECUBE drive management view showing staged destination media ready for use"
+                data-full-caption="3. Drive management supports staging, assignment, and safe handling before delivery windows open."
+                aria-label="Open full-size drives screenshot"
+              >
+                <img src="./assets/workflow-drives.png" alt="ECUBE drive management view showing staged destination media ready for use" />
+              </button>
+              <figcaption>3. Drive management supports staging, assignment, and safe handling before delivery windows open.</figcaption>
             </figure>
             <figure class="shot-card">
-              <img src="./assets/dashboard.png" alt="ECUBE dashboard showing system health and active jobs" />
-              <figcaption>2. Dashboard view gives operators immediate status visibility across the environment.</figcaption>
+              <button
+                class="shot-trigger"
+                type="button"
+                data-full-src="./assets/workflow-job-create.png"
+                data-full-alt="ECUBE job creation workflow selecting a project, source mount, and staged destination device"
+                data-full-caption="4. Job creation pairs the approved source and staged destination inside a governed export workflow."
+                aria-label="Open full-size job creation screenshot"
+              >
+                <img src="./assets/workflow-job-create.png" alt="ECUBE job creation workflow selecting a project, source mount, and staged destination device" />
+              </button>
+              <figcaption>4. Job creation pairs the approved source and staged destination inside a governed export workflow.</figcaption>
             </figure>
             <figure class="shot-card">
-              <img src="./assets/audit.png" alt="ECUBE audit view highlighting logged events and review data" />
-              <figcaption>5. Audit review supports reporting, defensibility, and chain-of-custody checks.</figcaption>
+              <button
+                class="shot-trigger"
+                type="button"
+                data-full-src="./assets/workflow-job-detail.png"
+                data-full-alt="ECUBE job detail view showing live progress for an active export"
+                data-full-caption="5. Job detail tracks progress, live copy state, and destination status during export execution."
+                aria-label="Open full-size job detail screenshot"
+              >
+                <img src="./assets/workflow-job-detail.png" alt="ECUBE job detail view showing live progress for an active export" />
+              </button>
+              <figcaption>5. Job detail tracks progress, live copy state, and destination status during export execution.</figcaption>
+            </figure>
+            <figure class="shot-card">
+              <button
+                class="shot-trigger"
+                type="button"
+                data-full-src="./assets/workflow-audit.png"
+                data-full-alt="ECUBE audit view highlighting structured logged events and review controls"
+                data-full-caption="6. Audit review supports reporting, defensibility, and chain-of-custody checks after the workflow completes."
+                aria-label="Open full-size audit screenshot"
+              >
+                <img src="./assets/workflow-audit.png" alt="ECUBE audit view highlighting structured logged events and review controls" />
+              </button>
+              <figcaption>6. Audit review supports reporting, defensibility, and chain-of-custody checks after the workflow completes.</figcaption>
             </figure>
           </div>
         </div>
       </section>
+
+      <div class="shot-lightbox" id="shot-lightbox" hidden>
+        <div class="shot-lightbox-backdrop" data-lightbox-close></div>
+        <div class="shot-lightbox-dialog" role="dialog" aria-modal="true" aria-labelledby="shot-lightbox-caption">
+          <button class="shot-lightbox-close" type="button" aria-label="Close full-size screenshot" data-lightbox-close>
+            Close
+          </button>
+          <img id="shot-lightbox-image" src="" alt="" />
+          <p id="shot-lightbox-caption"></p>
+        </div>
+      </div>
 
       <section id="appliances" class="section alt-section">
         <div class="container">
@@ -190,7 +269,7 @@
             <p>
               ECUBE appliances combine secure workflow software with purpose-built hardware so teams can deploy a
               ready-to-use export station without workstation guesswork, while still supporting responsive browser use
-              from desktop, tablet, and mobile devices.
+              from desktop, tablet, and mobile devices for remote operational control.
             </p>
           </div>
 
@@ -198,7 +277,9 @@
             <div>
               <h3>Why the appliance matters</h3>
               <ul>
+                <li>Physically secure the export machine while staff continue working through the browser interface</li>
                 <li>Validated controller layouts for predictable concurrent write performance</li>
+                <li>Stage prepared copy drives ahead of pickup, delivery, or scheduled export windows</li>
                 <li>Reduced rollout risk compared with ad hoc operator PCs</li>
                 <li>Cleaner operational story for air-gapped and enterprise-separated environments</li>
               </ul>
@@ -336,6 +417,40 @@
     <script>
       const navToggle = document.querySelector(".nav-toggle");
       const siteNav = document.querySelector("#site-nav");
+      const shotLightbox = document.querySelector("#shot-lightbox");
+      const shotLightboxImage = document.querySelector("#shot-lightbox-image");
+      const shotLightboxCaption = document.querySelector("#shot-lightbox-caption");
+      const shotTriggers = document.querySelectorAll(".shot-trigger");
+
+      if (shotLightbox && shotLightboxImage && shotLightboxCaption && shotTriggers.length) {
+        const closeLightbox = () => {
+          shotLightbox.hidden = true;
+          shotLightboxImage.src = "";
+          shotLightboxImage.alt = "";
+          shotLightboxCaption.textContent = "";
+          document.body.style.overflow = "";
+        };
+
+        shotTriggers.forEach((trigger) => {
+          trigger.addEventListener("click", () => {
+            shotLightboxImage.src = trigger.dataset.fullSrc || "";
+            shotLightboxImage.alt = trigger.dataset.fullAlt || "";
+            shotLightboxCaption.textContent = trigger.dataset.fullCaption || "";
+            shotLightbox.hidden = false;
+            document.body.style.overflow = "hidden";
+          });
+        });
+
+        shotLightbox.querySelectorAll("[data-lightbox-close]").forEach((element) => {
+          element.addEventListener("click", closeLightbox);
+        });
+
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape" && !shotLightbox.hidden) {
+            closeLightbox();
+          }
+        });
+      }
 
       if (navToggle && siteNav) {
         const closeMenu = () => {
