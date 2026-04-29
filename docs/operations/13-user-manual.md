@@ -747,8 +747,9 @@ Typical workflow:
 6. If you are an `admin` or `manager`, click `Prefill Handoff` to populate the handoff form from a selected report.
 7. Enter required handoff details (`Possessor` and `Delivery Time`) and any optional receipt fields. The delivery time picker uses your browser's local timezone; the application converts it to UTC automatically before storing.
 8. Click `Confirm Handoff`.
-9. Review the **Permanent Archive Warning** modal.
-10. Choose one of the following:
+9. If the handoff form is incomplete or the submission fails, ECUBE keeps the error inside a visible handoff-failure dialog in the active CoC workflow so you can correct the issue without scrolling back through the report.
+10. If validation succeeds, review the **Permanent Archive Warning** modal.
+11. Choose one of the following:
    - `Cancel`: closes the warning modal and does not record a handoff.
    - `Yes, archive drive`: records the handoff and archives the drive.
 
