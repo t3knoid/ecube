@@ -448,12 +448,13 @@ class TestBrowseFilesystemErrors:
             for record in debug_records
         )
 
-    def test_file_not_found_returns_404(self, client, db, tmp_path):
+    def test_file_not_found_returns_404(self, client, db, tmp_path, caplog):
         """When the directory disappears between DB lookup and scandir (TOCTOU),
         the endpoint returns 404 with a helpful message."""
         mount_point = str(tmp_path)
         _make_network_mount(db, mount_point)
 
+        caplog.set_level(logging.DEBUG, logger="app.services.browse_service")
         with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]), \
              patch("os.scandir", side_effect=FileNotFoundError("No such file or directory")):
             response = client.get(f"/browse?path={mount_point}")
@@ -464,16 +465,15 @@ class TestBrowseFilesystemErrors:
         assert any(
             record.getMessage() == "Browse directory failed"
             and getattr(record, "surface", None) == "network_mount:nfs"
-            and getattr(record, "reason", None) == "Unable to enumerate directory"
+            and getattr(record, "reason", None) == "Target device or path was not found"
             for record in info_records
         )
         assert any(
             record.getMessage() == "Browse directory raw failure"
             and getattr(record, "surface", None) == "network_mount:nfs"
-            and getattr(record, "raw_error", None) == "stale file handle"
+            and getattr(record, "raw_error", None) == "No such file or directory"
             for record in debug_records
         )
-        _make_network_mount(db, mount_point)
         (tmp_path / "keep.txt").write_text("ok")
         (tmp_path / "vanish.txt").write_text("gone")
 
