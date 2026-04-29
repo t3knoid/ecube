@@ -735,19 +735,21 @@ When exporting CSV:
 
 ### 11.1 Chain of Custody Workflow
 
-Use the Chain of Custody panel on the `Audit` page to generate custody reports, prefill handoff fields, and record final transfer details when physical media leaves active operations.
+Use the Chain of Custody panel on the `Audit` page to generate formatted custody reports, print a compliance-ready hard copy, export the raw JSON response, export a CSV of custody events, prefill handoff fields, and record final transfer details when physical media leaves active operations.
 
 Typical workflow:
 
 1. Open `Audit`.
 2. In the **Chain of Custody** section, filter by drive ID, drive serial, and/or project ID.
 3. Click `Load CoC` to load custody report data.
-4. Review the report card for the selected drive (drive ID, serial, project, manifest summary, and custody events).
-5. Click `Prefill Handoff` to populate the handoff form from the selected report.
-6. Enter required handoff details (`Possessor` and `Delivery Time`) and any optional receipt fields. The delivery time picker uses your browser's local timezone; the application converts it to UTC automatically before storing.
-7. Click `Confirm Handoff`.
-8. Review the **Permanent Archive Warning** modal.
-9. Choose one of the following:
+4. Review the report card for the selected drive. Each report includes generated-at UTC metadata, the requesting username, drive identity (including manufacturer and model when available), custody status, custody-event timeline, manifest summary rows, and an attestation block for print sign-off.
+5. Use `Print CoC` when you need a print-only chain-of-custody document. The print layout hides the rest of the Audit page and separates drive reports cleanly.
+6. Use `Export JSON` to save the raw machine-readable API response, or `Export CoC CSV` to save the custody events table for spreadsheet review.
+7. Click `Prefill Handoff` to populate the handoff form from the selected report.
+8. Enter required handoff details (`Possessor` and `Delivery Time`) and any optional receipt fields. The delivery time picker uses your browser's local timezone; the application converts it to UTC automatically before storing.
+9. Click `Confirm Handoff`.
+10. Review the **Permanent Archive Warning** modal.
+11. Choose one of the following:
    - `Cancel`: closes the warning modal and does not record a handoff.
    - `Yes, archive drive`: records the handoff and archives the drive.
 
