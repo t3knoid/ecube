@@ -172,4 +172,26 @@ describe('ConfirmDialog', () => {
     wrapper.unmount()
     trigger.remove()
   })
+
+  it('can render a single acknowledgement action', () => {
+    const wrapper = mount(ConfirmDialog, {
+      props: {
+        modelValue: true,
+        title: 'Notice',
+        confirmLabel: 'OK',
+        cancelLabel: 'Cancel',
+        showCancel: false,
+      },
+      global: {
+        stubs: {
+          teleport: true,
+        },
+      },
+    })
+
+    const buttons = wrapper.findAll('button')
+    expect(buttons).toHaveLength(1)
+    expect(buttons[0].text()).toBe('OK')
+    wrapper.unmount()
+  })
 })
