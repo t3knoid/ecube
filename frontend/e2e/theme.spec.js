@@ -94,6 +94,54 @@ async function mockCoreApis(page) {
   })
   await routeJson(page, '**/api/jobs/55', { id: 55, project_id: 'PRJ', evidence_number: 'EV', status: 'RUNNING', copied_bytes: 20, total_bytes: 100, drive: { id: 1, port_system_path: '2-1', device_identifier: '/dev/sdb' } })
   await routeJson(page, '**/api/jobs/55/files', { files: [] })
+  await routeJson(page, '**/api/jobs/55/chain-of-custody', {
+    selector_mode: 'PROJECT',
+    project_id: 'PRJ-777',
+    snapshot_updated_at: '2026-04-28T15:00:00Z',
+    reports: [{
+      drive_id: 7,
+      drive_sn: 'SN-777',
+      drive_manufacturer: 'SanDisk',
+      drive_model: 'Extreme Pro',
+      project_id: 'PRJ-777',
+      custody_complete: true,
+      delivery_time: '2026-04-28T14:15:16Z',
+      chain_of_custody_events: [
+        {
+          event_id: 11,
+          event_type: 'DRIVE_INITIALIZED',
+          timestamp: '2026-04-28T13:00:00Z',
+          actor: 'auditor-user',
+          action: 'Drive initialized',
+          details: { drive_id: 7, project_id: 'PRJ-777' },
+        },
+        {
+          event_id: 12,
+          event_type: 'COC_HANDOFF_CONFIRMED',
+          timestamp: '2026-04-28T14:15:16Z',
+          actor: 'manager-user',
+          action: 'Custody handoff confirmed',
+          details: {
+            possessor: 'Officer Jane Doe',
+            received_by: 'Archive Clerk',
+            receipt_ref: 'REC-42',
+            notes: 'Sealed container intact',
+          },
+        },
+      ],
+      manifest_summary: [{
+        job_id: 99,
+        evidence_number: 'EV-777',
+        processor_notes: 'Collected from workstation cart A',
+        total_files: 12,
+        total_bytes: 4096,
+        manifest_count: 2,
+        latest_manifest_path: '/reports/manifests/99.json',
+        latest_manifest_format: 'json',
+        latest_manifest_created_at: '2026-04-28T14:00:00Z',
+      }],
+    }],
+  })
 }
 
 async function openCreateJobDialog(page) {
@@ -104,6 +152,13 @@ async function openCreateJobDialog(page) {
   await createJobButton.click()
   await expect(page.locator('.dialog-panel')).toBeVisible()
   await page.locator('#job-project').selectOption('PRJ')
+}
+
+async function openCocDialog(page) {
+  await page.goto('/jobs/55')
+  await expect(page.getByRole('heading', { name: 'Job Detail #55' })).toBeVisible()
+  await page.getByRole('button', { name: 'Chain of Custody' }).click()
+  await expect(page.locator('.coc-report-shell')).toBeVisible()
 }
 
 test('theme switch changes css variables', async ({ page }) => {
@@ -172,12 +227,15 @@ test('visual regression snapshots for key screens in default and dark themes', a
     { path: '/configuration', name: 'configuration' },
     { path: '/jobs', name: 'jobs-list' },
     { path: '/jobs/55', name: 'job-detail' },
+    { path: '/jobs/55', name: 'coc-report' },
     { path: '/audit', name: 'audit' },
   ]
 
   for (const shot of shots) {
     if (shot.name === 'jobs-list') {
       await openCreateJobDialog(page)
+    } else if (shot.name === 'coc-report') {
+      await openCocDialog(page)
     } else {
       await page.goto(shot.path)
     }
@@ -204,6 +262,8 @@ test('visual regression snapshots for key screens in default and dark themes', a
   for (const shot of shots) {
     if (shot.name === 'jobs-list') {
       await openCreateJobDialog(page)
+    } else if (shot.name === 'coc-report') {
+      await openCocDialog(page)
     } else {
       await page.goto(shot.path)
     }
