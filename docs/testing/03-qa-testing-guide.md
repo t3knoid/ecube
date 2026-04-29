@@ -1513,33 +1513,33 @@ Chain-of-Custody (CoC) handoff ensures legal custody transfer of evidence is pro
 
 | # | Test | How | Expected |
 |---|------|-----|----------|
-| 1 | Retrieve CoC — by drive_id | `GET /audit/chain-of-custody?drive_id=42` with auditor/manager/admin token | 200, `selector_mode: "DRIVE_ID"`, report contains events for that drive |
-| 2 | Retrieve CoC — by drive_sn | `GET /audit/chain-of-custody?drive_sn=ABC123DEF` with manager token | 200, `selector_mode: "DRIVE_SN"`, report contains events for that drive |
-| 3 | Retrieve CoC — by project_id | `GET /audit/chain-of-custody?project_id=CASE-2026-007` with auditor token | 200, `selector_mode: "PROJECT"`, reports array contains all non-archived drives for project |
-| 4 | CoC — processor denied | `GET /audit/chain-of-custody?drive_id=42` with processor token | 403, `FORBIDDEN` |
-| 5 | CoC — unauthenticated denied | `GET /audit/chain-of-custody?drive_id=42` without token | 401, `UNAUTHORIZED` |
-| 6 | CoC — no selector | `GET /audit/chain-of-custody` with no query parameters | 422, at least one selector required |
-| 7 | CoC — drive_id takes precedence | `GET /audit/chain-of-custody?drive_id=42&drive_sn=ABC&project_id=CASE-X` | 200, `selector_mode: "DRIVE_ID"` (ignores other selectors) |
-| 8 | CoC — project_id mismatch | `GET /audit/chain-of-custody?drive_id=42&project_id=WRONG-PROJECT` where drive is bound to different project | 409, `CONFLICT`, mismatch detail |
-| 9 | CoC report fields | Inspect any `GET /audit/chain-of-custody` response | `reports[].drive_id`, `reports[].drive_sn`, `reports[].project_id`, `reports[].custody_complete`, `reports[].chain_of_custody_events` present |
-| 10 | CoC events include lifecycle | Inspect `chain_of_custody_events` in a report with completed job | Events include `DRIVE_INITIALIZED`, `JOB_CREATED`, `JOB_STARTED`, `JOB_COMPLETED`, `DRIVE_EJECT_PREPARED`, `COC_HANDOFF_CONFIRMED` (if handed off) |
-| 11 | CoC manifest summary | Inspect `manifest_summary` in CoC report | Array of objects with `job_id`, `total_files`, `total_bytes`, `manifest_count` |
-| 12 | CoC — delivery_time absence (no handoff) | Complete a job and eject without handoff, query `GET /audit/chain-of-custody?drive_id=...` | `chain_of_custody_events` do not contain `COC_HANDOFF_CONFIRMED`; `custody_complete` is `false` |
+| 1 | Retrieve stored CoC snapshot — archived job | `GET /jobs/{job_id}/chain-of-custody` for an archived job that already has a stored snapshot | 200, response contains the stored snapshot and snapshot metadata |
+| 2 | Retrieve stored CoC snapshot — active job | `GET /jobs/{job_id}/chain-of-custody` for a non-archived job that already has a stored snapshot | 200, response contains the stored snapshot and does not regenerate it |
+| 3 | CoC read — missing stored snapshot | `GET /jobs/{job_id}/chain-of-custody` for a non-archived job with no stored snapshot yet | 404, message explains that the report must be refreshed first |
+| 4 | CoC read — processor denied | `GET /jobs/{job_id}/chain-of-custody` with processor token | 403, `FORBIDDEN` |
+| 5 | CoC read — unauthenticated denied | `GET /jobs/{job_id}/chain-of-custody` without token | 401, `UNAUTHORIZED` |
+| 6 | CoC snapshot fields | Inspect any stored-snapshot response | `snapshot_stored_at`, `snapshot_updated_at`, `snapshot_stored_by`, `reports[]`, and manifest/custody fields are present |
+| 7 | CoC events include lifecycle | Inspect `chain_of_custody_events` in a stored report for a completed job | Events include `DRIVE_INITIALIZED`, `JOB_CREATED`, `JOB_STARTED`, `JOB_COMPLETED`, `DRIVE_EJECT_PREPARED`, and `COC_HANDOFF_CONFIRMED` when applicable |
+| 8 | CoC manifest summary | Inspect `manifest_summary` in the stored report | Array of objects with `job_id`, `evidence_number`, `processor_notes`, `total_files`, `total_bytes`, and `manifest_count` |
+| 9 | CoC — delivery_time absence (no handoff) | Complete a job and store a snapshot before handoff | `chain_of_custody_events` do not contain `COC_HANDOFF_CONFIRMED`; `custody_complete` is `false` |
+| 10 | CoC refresh — valid | `POST /jobs/{job_id}/chain-of-custody/refresh` with admin or manager token for a non-archived job with assignments | 200, response contains the refreshed stored snapshot and updated snapshot metadata |
+| 11 | CoC refresh — auditor denied | `POST /jobs/{job_id}/chain-of-custody/refresh` with auditor token | 403, `FORBIDDEN` |
+| 12 | CoC refresh — archived job denied | `POST /jobs/{job_id}/chain-of-custody/refresh` for an archived job | 409, archived jobs can only return the last stored snapshot |
 
 #### 12.12.2 CoC Handoff Confirmation
 
 | # | Test | How | Expected |
 |---|------|-----|----------|
-| 1 | Confirm handoff — valid | `POST /audit/chain-of-custody/handoff` with drive_id, possessor, delivery_time (UTC ISO), received_by, receipt_ref | 200, response includes all submitted fields + server-generated `event_id` |
-| 2 | Confirm handoff — possessor required | `POST /audit/chain-of-custody/handoff` with missing `possessor` | 422, validation error |
-| 3 | Confirm handoff — delivery_time required | `POST /audit/chain-of-custody/handoff` with missing `delivery_time` | 422, validation error |
-| 4 | Confirm handoff — UTC only | `POST /audit/chain-of-custody/handoff` with `delivery_time: "2026-04-12T14:00:00+05:00"` (non-UTC) | 422, must be UTC timezone |
-| 5 | Confirm handoff — drive_id required | `POST /audit/chain-of-custody/handoff` with missing `drive_id` | 422, validation error |
+| 1 | Confirm handoff — valid | `POST /jobs/{job_id}/chain-of-custody/handoff` with drive_id, possessor, delivery_time (UTC ISO), received_by, receipt_ref | 200, response includes all submitted fields + server-generated `event_id`, and the snapshot is refreshed afterward |
+| 2 | Confirm handoff — possessor required | `POST /jobs/{job_id}/chain-of-custody/handoff` with missing `possessor` | 422, validation error |
+| 3 | Confirm handoff — delivery_time required | `POST /jobs/{job_id}/chain-of-custody/handoff` with missing `delivery_time` | 422, validation error |
+| 4 | Confirm handoff — UTC only | `POST /jobs/{job_id}/chain-of-custody/handoff` with `delivery_time: "2026-04-12T14:00:00+05:00"` (non-UTC) | 422, must be UTC timezone |
+| 5 | Confirm handoff — drive_id required | `POST /jobs/{job_id}/chain-of-custody/handoff` with missing `drive_id` | 422, validation error |
 | 6 | Confirm handoff — idempotent | Submit same handoff twice with identical (drive_id, possessor, delivery_time, receipt_ref, project_id) | Both return 200 with same `event_id`; only one `COC_HANDOFF_CONFIRMED` audit entry. Idempotency is scoped to the resolved `project_id` — a prior-project handoff on the same drive does not match. |
-| 7 | Confirm handoff — project_id mismatch | `POST /audit/chain-of-custody/handoff` with `project_id` that differs from drive binding | 409, `CONFLICT` |
-| 8 | Confirm handoff — drive not found | `POST /audit/chain-of-custody/handoff` with non-existent drive_id | 404, `NOT_FOUND` |
-| 9 | Confirm handoff — processor denied | `POST /audit/chain-of-custody/handoff` with processor token | 403, `FORBIDDEN` |
-| 10 | Confirm handoff — auditor denied | `POST /audit/chain-of-custody/handoff` with auditor token | 403, `FORBIDDEN` |
+| 7 | Confirm handoff — project_id mismatch | `POST /jobs/{job_id}/chain-of-custody/handoff` with `project_id` that differs from the job project | 409, `CONFLICT` |
+| 8 | Confirm handoff — drive not assigned | `POST /jobs/{job_id}/chain-of-custody/handoff` for a drive that is not assigned to the job | 409, `CONFLICT` |
+| 9 | Confirm handoff — processor denied | `POST /jobs/{job_id}/chain-of-custody/handoff` with processor token | 403, `FORBIDDEN` |
+| 10 | Confirm handoff — auditor denied | `POST /jobs/{job_id}/chain-of-custody/handoff` with auditor token | 403, `FORBIDDEN` |
 | 11 | Audit trail — COC_HANDOFF_CONFIRMED | Query `GET /audit?action=COC_HANDOFF_CONFIRMED` after handoff | Entry includes drive_id, project_id, possessor, delivery_time (ISO), received_by, receipt_ref, actor |
 | 12 | UI — delivery time local-to-UTC conversion | In the Confirm Custody Handoff panel, enter a delivery time (browser local timezone); submit the handoff | Submitted `delivery_time` in the API request body is in UTC ISO 8601; stored audit event reflects the UTC equivalent of the local time entered |
 
@@ -1548,34 +1548,34 @@ Chain-of-Custody (CoC) handoff ensures legal custody transfer of evidence is pro
 | # | Test | How | Expected |
 |---|------|-----|----------|
 | 1 | Drive state post-handoff | Initialize drive (state → IN_USE), run prepare-eject (state → AVAILABLE), confirm handoff | Drive transitions to `current_state: ARCHIVED` |
-| 2 | Archived drive excluded from CoC by drive_id | Archive a drive, then `GET /audit/chain-of-custody?drive_id=<archived_id>` | 410, `Gone`, message includes "archived" |
-| 3 | Archived drive excluded from CoC by project_id | Archive one of two drives in a project, then `GET /audit/chain-of-custody?project_id=PROJ` | 200, report contains only the non-archived drive |
-| 4 | Archived drive excluded from CoC by drive_sn | Archive a drive, then `GET /audit/chain-of-custody?drive_sn=<sn>` | 410, `Gone` |
+| 2 | Archived job retains stored CoC snapshot | Archive a job after storing a snapshot, then call `GET /jobs/{job_id}/chain-of-custody` | 200, last stored snapshot remains available for review |
+| 3 | Archived job cannot refresh CoC snapshot | Call `POST /jobs/{job_id}/chain-of-custody/refresh` after job archival | 409, archived jobs can only return the last stored snapshot |
+| 4 | Archived snapshot remains exportable | Open the archived job CoC dialog and use print or export | Stored snapshot remains printable and downloadable |
 | 5 | Archived drives cannot initialize (prevents reuse) | Archive a drive, attempt `POST /drives/<archived_id>/initialize` | 409, `CONFLICT`, message includes "archived" |
 | 6 | Archived drives cannot format | Archive a drive, attempt `POST /drives/<archived_id>/format` | 409, `CONFLICT` |
 | 7 | Archived drives cannot prepare-eject | Archive a drive, attempt `POST /drives/<archived_id>/prepare-eject` | 409, `CONFLICT` |
 | 8 | Archived audit trail preserved | Review full audit log (without CoC filter) after archival | All audit entries for the archived drive remain visible (CoC filtering is read-side only) |
 | 9 | Archive idempotency | Call handoff endpoint twice with same contract (drive_id, possessor, delivery_time, receipt_ref) | Both succeed; drive transitions to ARCHIVED once (no duplicate operations) |
 
-#### 12.12.4 UI: CoC Wizard Workflow
+#### 12.12.4 UI: Job Detail CoC Workflow
 
 | # | Test | How | Expected |
 |---|------|-----|----------|
-| 1 | CoC page accessible after job completion | Complete a job, prepare-eject drive, navigate to Audit view | CoC tab/section visible and accessible |
-| 2 | Drive selector is dropdown | In CoC filter panel, click drive selector | Dropdown shows list of existing (non-archived) drives sorted by ID |
-| 3 | Project selector is dropdown | In CoC filter panel, click project selector | Dropdown shows list of unique project IDs from current drive bindings |
-| 4 | Load CoC by drive | Select a drive from dropdown and click "Load CoC" | Report displays generated-at metadata, manufacturer/model identity when available, lifecycle events, manifest summary, and attestation block for that drive |
-| 5 | CoC export actions are distinct | Load a report and inspect the Audit/CoC toolbars | Audit section shows `Export Audit CSV`; CoC section shows `Print CoC`, `Export CoC CSV`, and `Export JSON` |
-| 6 | CoC CSV export contains custody-event rows | Load a report and click `Export CoC CSV` | Download filename matches `chain-of-custody-*.csv`; rows include drive serial, manufacturer, model, timestamp, actor, action, event type, and JSON details |
-| 7 | CoC print layout isolates the report | Load a report, trigger print preview, and inspect the rendered page | Print view hides the audit-log table and shows only the formatted CoC report cards |
-| 8 | CoC prefill handoff form | Click "Prefill Handoff" on a CoC report | Handoff form populates with drive_id and project_id from the report |
-| 9 | Handoff confirmation warning modal appears | After filling handoff form and clicking "Confirm Handoff" | Modal appears with warning text: "This action will permanently archive the drive..." |
-| 10 | Handoff warning shows confirmation buttons | Inspect warning modal | Two buttons: "Yes, archive drive" (danger styling) and "Cancel" |
-| 11 | Cancel handoff from modal | Click "Cancel" in warning modal | Modal closes, form state preserved, no handoff submitted |
-| 12 | Confirm handoff from modal | Click "Yes, archive drive" in warning modal | Modal closes, handoff submitted; upon success, status message "Custody handoff recorded." appears and report reloads |
-| 13 | Archived drive removed from report lists | After handoff, reload page or navigate away/back | Archived drive no longer appears in CoC filter dropdowns or project reports |
+| 1 | CoC dialog accessible after job completion | Complete a job, open Job Detail, click `Chain of Custody` | CoC dialog opens from Job Detail |
+| 2 | Missing snapshot state is clear | Open CoC for a non-archived job with no stored snapshot yet | Dialog shows no stored snapshot message and a refresh hint for admin/manager users |
+| 3 | Snapshot status is visible | Open CoC after a snapshot has been stored | Dialog shows `Last Updated On Disk` timestamp |
+| 4 | Refresh stores a new snapshot | Click `Refresh` as admin or manager | Dialog reloads with the refreshed snapshot and a success message |
+| 5 | CoC export actions use stored snapshot | Open CoC and inspect the toolbar | `Print CoC`, `Export CoC CSV`, and `Export JSON` operate on the loaded stored snapshot |
+| 6 | CoC CSV export contains custody-event rows | Load a stored snapshot and click `Export CoC CSV` | Download filename matches `chain-of-custody-job-*.csv`; rows include drive serial, manufacturer, model, timestamp, actor, action, event type, and JSON details |
+| 7 | CoC print layout isolates the report | Load a stored snapshot, trigger print preview, and inspect the rendered page | Print view shows only the formatted CoC report cards from the dialog |
+| 8 | CoC prefill handoff form | Click `Prefill Handoff` on a CoC report as admin or manager | Handoff form populates with drive_id, project_id, and evidence value from the report/job |
+| 9 | Handoff confirmation warning modal appears | After filling handoff form and clicking `Confirm Handoff` | Modal appears with warning text: "This action will permanently archive the drive..." |
+| 10 | Handoff warning shows confirmation buttons | Inspect warning modal | Two buttons: `Yes, archive drive` (danger styling) and `Cancel` |
+| 11 | Cancel handoff from modal | Click `Cancel` in warning modal | Modal closes, form state preserved, no handoff submitted |
+| 12 | Confirm handoff from modal | Click `Yes, archive drive` in warning modal | Modal closes, handoff submits, status message appears, and the stored snapshot reloads |
+| 13 | Auditor sees read-only CoC actions | Open CoC as auditor | Print/export actions are visible; refresh and handoff controls are hidden |
 | 14 | Handoff form validation | Submit handoff form with missing possessor or delivery_time | Inline validation error shown (form not submitted) |
-| 15 | Archived-drive reload preserves prior report | Load a report, archive the selected drive in another session, then click `Load CoC` again for the same selector | Prior report remains visible with its original generated-at timestamp instead of being replaced by stale or mismatched data |
+| 15 | Archived job CoC stays readable | Open an archived job in Job Detail and click `Chain of Custody` | Stored snapshot opens in read-only mode and remains exportable |
 | 16 | Manual archive result | After successful handoff, query drive state via API | Drive state is `ARCHIVED` |
 
 #### 12.12.5 Manual Test Data Setup (SQL)
@@ -1907,9 +1907,9 @@ COMMIT;
    ```
 
 2. **Verify population via API:**
-  - `GET /audit/chain-of-custody?project_id=CASE-2026-001` — should return 200 with only non-archived drives (for this dataset: 1 IN_USE drive)
-   - `GET /audit/chain-of-custody?drive_id=<archived_drive_id>` — should return 410 Gone
-   - Inspect lifecycle events in the response
+  - `POST /jobs/{job_id}/chain-of-custody/refresh` — should return 200 and create the stored snapshot for an active job
+  - `GET /jobs/{archived_job_id}/chain-of-custody` — should return 200 for an archived job that already has a stored snapshot
+  - Inspect lifecycle events and snapshot metadata in the response
 
 3. **Test CoC UI:**
    - Navigate to Audit view

@@ -292,8 +292,8 @@ Each module exports thin wrapper functions around Axios calls. Modules map 1:1 t
 | `setup.js` | `GET /setup/status`, `POST /setup/initialize`, `POST /setup/database/test-connection`, `POST /setup/database/provision`, `GET /setup/database/provision-status`, `GET /setup/database/system-info`, `GET /setup/database/status`, `PUT /setup/database/settings` | SetupWizardView |
 | `drives.js` | `GET /drives`, `POST /drives/{drive_id}/initialize`, `POST /drives/{drive_id}/format`, `POST /drives/{drive_id}/prepare-eject` | DrivesView, DriveDetailView, DashboardView, AuditView |
 | `mounts.js` | `GET /mounts`, `POST /mounts`, `PATCH /mounts/{mount_id}`, `DELETE /mounts/{mount_id}` | MountsView |
-| `jobs.js` | `GET /jobs`, `POST /jobs`, `PUT /jobs/{job_id}`, `DELETE /jobs/{job_id}`, `POST /jobs/{job_id}/start`, `POST /jobs/{job_id}/pause`, `POST /jobs/{job_id}/complete`, `POST /jobs/{job_id}/archive`, `GET /jobs/{job_id}`, `POST /jobs/{job_id}/verify`, `POST /jobs/{job_id}/manifest` | JobsView, JobDetailView, DashboardView |
-| `audit.js` | `GET /audit`, `GET /audit/chain-of-custody` | AuditView |
+| `jobs.js` | `GET /jobs`, `POST /jobs`, `PUT /jobs/{job_id}`, `DELETE /jobs/{job_id}`, `POST /jobs/{job_id}/start`, `POST /jobs/{job_id}/pause`, `POST /jobs/{job_id}/complete`, `POST /jobs/{job_id}/archive`, `GET /jobs/{job_id}`, `GET /jobs/{job_id}/chain-of-custody`, `POST /jobs/{job_id}/chain-of-custody/refresh`, `POST /jobs/{job_id}/chain-of-custody/handoff`, `POST /jobs/{job_id}/verify`, `POST /jobs/{job_id}/manifest` | JobsView, JobDetailView, DashboardView |
+| `audit.js` | `GET /audit` | AuditView |
 | `files.js` | `GET /files/{file_id}/hashes`, `POST /files/compare` | JobDetailView (hash viewer, file compare) |
 | `users.js` | `GET /users`, `GET /users/{username}/roles`, `PUT /users/{username}/roles`, `DELETE /users/{username}/roles` | UsersView |
 | `admin.js` | `POST /admin/os-users`, `GET /admin/os-users`, `DELETE /admin/os-users/{username}`, `PUT /admin/os-users/{username}/password`, `PUT /admin/os-users/{username}/groups`, `POST /admin/os-users/{username}/groups`, `GET /admin/os-groups` | UsersView (single users/roles editor) |
@@ -446,8 +446,8 @@ Vue I18n 9.x provides the localization infrastructure. All user-visible strings 
 | `DriveDetailView.vue` | Screen 4b | UC-4.4 – UC-4.7 | Drive properties; format, initialize, eject action panels; role-gated actions |
 | `MountsView.vue` | Screen 5 | UC-5.1 – UC-5.6 | Mount list with test, edit, browse, and remove actions; add/edit dialog with credential-preservation and clear-credentials flows |
 | `JobsView.vue` | Screen 6a | UC-6.1, UC-6.3 | Job list with status/progress; create-job button |
-| `JobDetailView.vue` | Screen 6b–d | UC-6.2 – UC-6.8 | Progress bar with polling; edit/pause/complete/delete lifecycle actions; gated verify/manifest controls; hash viewer; source/destination compare; manifest success feedback |
-| `AuditView.vue` | Screen 7 | UC-7.1 – UC-7.7 | Filterable audit log table; date range, user, action filters; dedicated `Export Audit CSV` action; CoC report retrieval by drive, drive serial, or project with a formatted printable report, generated-at metadata, manufacturer/model identity fields, `Export CoC CSV`, JSON export, and handoff controls. Drive selector populated server-side via `GET /drives?state=IN_USE&state=AVAILABLE` to exclude DISCONNECTED and ARCHIVED drives. |
+| `JobDetailView.vue` | Screen 6b–d | UC-6.2 – UC-7.15 | Progress bar with polling; edit/pause/complete/delete lifecycle actions; gated verify/manifest controls; hash viewer; source/destination compare; manifest success feedback; job-scoped CoC dialog that loads stored snapshots, shows last on-disk update time, supports explicit refresh for admin/manager, and exposes print/export/handoff controls according to role |
+| `AuditView.vue` | Screen 7 | UC-7.1 – UC-7.7 | Filterable audit log table; date range, user, action filters; dedicated `Export Audit CSV` action |
 | `UsersView.vue` | Screen 8 | UC-3.1 – UC-3.9 | Single editable users table: role selection, per-user save, password reset, and create-user flow; admin-only |
 | `SystemView.vue` | Screen 9 | UC-8.1 – UC-8.5, UC-8.7 – UC-8.9 | Tabbed: Health, USB Topology, Block Devices, Mounts, Logs; Health splits host metrics from ECUBE process diagnostics and shows an Active Copy Threads table with an empty state |
 
