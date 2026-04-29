@@ -768,6 +768,9 @@ What happens when handoff is confirmed:
 Operational guidance:
 
 - Treat `Yes, archive drive` as a finalization action.
+- If the same job is reassigned to another drive during its lifecycle, that job can appear in more than one drive section of the Chain of Custody report.
+- In those multi-drive cases, the manifest summary currently shows the job-level file and byte totals in each affected drive section rather than only the subset copied to that specific drive.
+- When reviewing a multi-drive Chain of Custody report, use the drive identity, custody events, and manifest path columns to determine which drive section you are signing or exporting.
 - Verify drive ID, project, possessor, and delivery timestamp before confirming.
 - Use `Cancel` if any custody detail needs correction before archival.
 
