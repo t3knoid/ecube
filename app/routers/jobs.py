@@ -1,8 +1,9 @@
 import logging
 import os
 import re
+from datetime import datetime
 from io import BytesIO
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, cast
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, Query, Request
 from fastapi.responses import StreamingResponse
@@ -12,7 +13,7 @@ from app.auth import CurrentUser, require_roles
 from app.config import settings
 from app.database import get_db
 from app.models.audit import AuditLog
-from app.models.jobs import JobStatus
+from app.models.jobs import JobStatus, Manifest
 from app.repositories.job_repository import DriveAssignmentRepository, FileRepository
 from app.schemas.audit import ChainOfCustodyHandoffRequest, ChainOfCustodyHandoffResponse, ChainOfCustodyReportSchema
 from app.schemas.jobs import (
@@ -186,6 +187,14 @@ def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
     schema = ExportJobSchema.model_validate(job)
     if not _IP_VISIBLE_ROLES.intersection(user.roles):
         schema.client_ip = None
+
+    latest_manifest = (
+        db.query(Manifest)
+        .filter(Manifest.job_id == job.id)
+        .order_by(Manifest.created_at.desc(), Manifest.id.desc())
+        .first()
+    )
+    schema.latest_manifest_created_at = cast(datetime | None, latest_manifest.created_at) if latest_manifest is not None else None
 
     # Derived file counts via a single aggregate query
     file_repo = FileRepository(db)

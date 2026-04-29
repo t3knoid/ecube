@@ -746,6 +746,39 @@ def test_get_job(client, db):
     assert response.json()["id"] == job_id
 
 
+def test_get_job_includes_latest_manifest_created_at(client, db):
+    job = ExportJob(
+        project_id="PROJ-MANIFEST-GET-001",
+        evidence_number="EV-MANIFEST-GET-001",
+        source_path="/data/evidence",
+        target_mount_path="/mnt/ecube/manifest-get-001",
+        status=JobStatus.COMPLETED,
+        completed_at=datetime(2026, 4, 29, 12, 0, tzinfo=timezone.utc),
+    )
+    db.add(job)
+    db.flush()
+    db.add_all([
+        Manifest(
+            job_id=job.id,
+            manifest_path="/tmp/older-manifest.json",
+            format="JSON",
+            created_at=datetime(2026, 4, 29, 11, 30, tzinfo=timezone.utc),
+        ),
+        Manifest(
+            job_id=job.id,
+            manifest_path="/tmp/latest-manifest.json",
+            format="JSON",
+            created_at=datetime(2026, 4, 29, 12, 30, tzinfo=timezone.utc),
+        ),
+    ])
+    db.commit()
+
+    response = client.get(f"/jobs/{job.id}")
+
+    assert response.status_code == 200
+    assert response.json()["latest_manifest_created_at"].startswith("2026-04-29T12:30:00")
+
+
 def test_get_job_not_found(client, db):
     response = client.get("/jobs/999")
     assert response.status_code == 404
