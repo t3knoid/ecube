@@ -413,6 +413,25 @@ class FileRepository:
             self.db.rollback()
             raise
 
+    def increment_copy_progress(self, job_id: int, assignment_id: Optional[int], size_bytes: int) -> None:
+        """Atomically increment copied bytes for the job and its active assignment."""
+        self.db.execute(
+            update(ExportJob)
+            .where(ExportJob.id == job_id)
+            .values(copied_bytes=ExportJob.copied_bytes + size_bytes)
+        )
+        if assignment_id is not None:
+            self.db.execute(
+                update(DriveAssignment)
+                .where(DriveAssignment.id == assignment_id)
+                .values(copied_bytes=DriveAssignment.copied_bytes + size_bytes)
+            )
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+
     def decrement_job_bytes(self, job_id: int, size_bytes: int) -> None:
         """Atomically subtract bytes from the parent job, clamping at zero."""
         self.db.execute(
@@ -425,6 +444,49 @@ class FileRepository:
                 )
             )
         )
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+
+    def decrement_copy_progress(self, job_id: int, assignment_id: Optional[int], size_bytes: int) -> None:
+        """Atomically roll back copied bytes for the job and its active assignment."""
+        self.db.execute(
+            update(ExportJob)
+            .where(ExportJob.id == job_id)
+            .values(
+                copied_bytes=case(
+                    (ExportJob.copied_bytes > size_bytes, ExportJob.copied_bytes - size_bytes),
+                    else_=0,
+                )
+            )
+        )
+        if assignment_id is not None:
+            self.db.execute(
+                update(DriveAssignment)
+                .where(DriveAssignment.id == assignment_id)
+                .values(
+                    copied_bytes=case(
+                        (DriveAssignment.copied_bytes > size_bytes, DriveAssignment.copied_bytes - size_bytes),
+                        else_=0,
+                    )
+                )
+            )
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+
+    def save_completed_copy(self, export_file: ExportFile, assignment_id: Optional[int]) -> None:
+        """Persist DONE status and assignment file-count updates in one transaction."""
+        if assignment_id is not None:
+            self.db.execute(
+                update(DriveAssignment)
+                .where(DriveAssignment.id == assignment_id)
+                .values(file_count=DriveAssignment.file_count + 1)
+            )
         try:
             self.db.commit()
         except Exception:
