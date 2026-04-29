@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
-import { listJobs, createJob, startJob, pauseJob } from '@/api/jobs.js'
+import { hasArchivedJobs, listJobs, createJob, startJob, pauseJob } from '@/api/jobs.js'
 import { getDrives } from '@/api/drives.js'
 import { getMounts } from '@/api/mounts.js'
 import { normalizeErrorMessage } from '@/api/client.js'
@@ -42,6 +42,7 @@ const createDialogTriggerRef = ref(null)
 const search = ref('')
 const statusFilter = ref('ALL')
 const showArchivedJobs = ref(false)
+const archivedJobsAvailable = ref(false)
 const page = ref(1)
 const pageSize = ref(10)
 const isMobileViewport = ref(false)
@@ -389,7 +390,7 @@ function syncJobsRefreshTimer() {
   ))
   if (!hasActiveJobs) return
   jobsRefreshTimer.value = window.setInterval(() => {
-    void loadJobs()
+    void refreshJobsPage()
   }, 3000)
 }
 
@@ -412,6 +413,22 @@ async function loadJobs() {
   } finally {
     loading.value = false
   }
+}
+
+async function loadArchivedAvailability() {
+  try {
+    archivedJobsAvailable.value = await hasArchivedJobs()
+    if (!archivedJobsAvailable.value && showArchivedJobs.value) {
+      showArchivedJobs.value = false
+    }
+  } catch {
+    // Fail open so archived jobs remain reachable if the probe request flakes.
+    archivedJobsAvailable.value = true
+  }
+}
+
+async function refreshJobsPage() {
+  await Promise.all([loadJobs(), loadArchivedAvailability()])
 }
 
 function syncEligibleSelections() {
@@ -631,7 +648,7 @@ onMounted(async () => {
     mobileViewportQuery.addEventListener('change', syncViewportState)
   }
 
-  await Promise.all([loadJobs(), loadSupportingData()])
+  await Promise.all([loadJobs(), loadSupportingData(), loadArchivedAvailability()])
   syncJobsRefreshTimer()
 })
 
@@ -647,7 +664,7 @@ onBeforeUnmount(() => {
     <header class="header-row">
       <h1>{{ t('jobs.title') }}</h1>
       <div class="actions">
-        <button class="btn" @click="loadJobs">{{ t('common.actions.refresh') }}</button>
+        <button class="btn" @click="refreshJobsPage">{{ t('common.actions.refresh') }}</button>
         <button class="btn btn-primary" :disabled="!canOperate" @click="openCreateDialog">
           {{ t('jobs.create') }}
         </button>
@@ -670,7 +687,7 @@ onBeforeUnmount(() => {
         <option value="COMPLETED">{{ t('jobs.statuses.completed') }}</option>
         <option value="FAILED">{{ t('jobs.statuses.failed') }}</option>
       </select>
-      <label class="jobs-show-archived-toggle" for="jobs-show-archived">
+      <label v-if="archivedJobsAvailable" class="jobs-show-archived-toggle" for="jobs-show-archived">
         <input id="jobs-show-archived" v-model="showArchivedJobs" type="checkbox" />
         {{ t('jobs.showArchivedJobs') }}
       </label>

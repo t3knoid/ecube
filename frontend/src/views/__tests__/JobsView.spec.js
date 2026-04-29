@@ -7,6 +7,7 @@ import JobsView from '@/views/JobsView.vue'
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   listJobs: vi.fn(),
+  hasArchivedJobs: vi.fn(),
   createJob: vi.fn(),
   startJob: vi.fn(),
   pauseJob: vi.fn(),
@@ -33,6 +34,7 @@ vi.mock('@/stores/auth.js', () => ({
 
 vi.mock('@/api/jobs.js', () => ({
   listJobs: (...args) => mocks.listJobs(...args),
+  hasArchivedJobs: (...args) => mocks.hasArchivedJobs(...args),
   createJob: (...args) => mocks.createJob(...args),
   startJob: (...args) => mocks.startJob(...args),
   pauseJob: (...args) => mocks.pauseJob(...args),
@@ -129,6 +131,7 @@ describe('JobsView grouped create dialog', () => {
     installMatchMediaMock()
     mocks.push.mockReset()
     mocks.listJobs.mockReset()
+    mocks.hasArchivedJobs.mockReset()
     mocks.createJob.mockReset()
     mocks.startJob.mockReset()
     mocks.pauseJob.mockReset()
@@ -138,6 +141,7 @@ describe('JobsView grouped create dialog', () => {
 
     mocks.hasAnyRole.mockReturnValue(true)
     mocks.listJobs.mockResolvedValue([])
+    mocks.hasArchivedJobs.mockResolvedValue(false)
     mocks.createJob.mockResolvedValue({ id: 44, project_id: 'PROJ-001', status: 'PENDING' })
     mocks.startJob.mockResolvedValue({ id: 44, project_id: 'PROJ-001', status: 'RUNNING' })
     mocks.pauseJob.mockResolvedValue({ id: 45, project_id: 'PROJ-001', status: 'PAUSING' })
@@ -157,6 +161,7 @@ describe('JobsView grouped create dialog', () => {
 
   it('shows a page message when startup analysis finishes while the list is open', async () => {
     vi.useFakeTimers()
+    mocks.hasArchivedJobs.mockResolvedValueOnce(false).mockResolvedValueOnce(true)
     mocks.listJobs
       .mockResolvedValueOnce([
         {
@@ -186,13 +191,16 @@ describe('JobsView grouped create dialog', () => {
     await flushPromises()
 
     expect(mocks.listJobs).toHaveBeenCalledTimes(2)
+    expect(mocks.hasArchivedJobs).toHaveBeenCalledTimes(2)
     expect(wrapper.text()).toContain('Startup analysis finished for job #61 with status Ready.')
+    expect(wrapper.find('#jobs-show-archived').exists()).toBe(true)
 
     wrapper.unmount()
     vi.useRealTimers()
   })
 
   it('excludes archived jobs by default and reloads them when requested', async () => {
+    mocks.hasArchivedJobs.mockResolvedValue(true)
     mocks.listJobs
       .mockResolvedValueOnce([
         {
@@ -224,6 +232,7 @@ describe('JobsView grouped create dialog', () => {
     await flushPromises()
 
     expect(mocks.listJobs).toHaveBeenNthCalledWith(1, { limit: 200, include_archived: false })
+    expect(mocks.hasArchivedJobs).toHaveBeenCalledTimes(1)
     expect(wrapper.text()).toContain('EV-ACTIVE-001')
     expect(wrapper.text()).not.toContain('EV-ARCHIVED-001')
     expect(wrapper.find('select').text()).not.toContain(i18n.global.t('jobs.statuses.archived'))
@@ -236,6 +245,47 @@ describe('JobsView grouped create dialog', () => {
 
     expect(mocks.listJobs).toHaveBeenNthCalledWith(2, { limit: 200, include_archived: true })
     expect(wrapper.text()).toContain('EV-ARCHIVED-001')
+  })
+
+  it('hides the archived toggle when no archived jobs exist', async () => {
+    mocks.hasArchivedJobs.mockResolvedValue(false)
+    mocks.listJobs.mockResolvedValueOnce([
+      {
+        id: 71,
+        project_id: 'PROJ-001',
+        evidence_number: 'EV-ACTIVE-ONLY-001',
+        status: 'COMPLETED',
+        source_path: '/nfs/project-001/active-only',
+      },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(mocks.listJobs).toHaveBeenNthCalledWith(1, { limit: 200, include_archived: false })
+    expect(mocks.hasArchivedJobs).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('#jobs-show-archived').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain(i18n.global.t('jobs.showArchivedJobs'))
+  })
+
+  it('keeps the archived toggle available when the archived probe fails', async () => {
+    mocks.hasArchivedJobs.mockRejectedValueOnce(new Error('probe failed'))
+    mocks.listJobs.mockResolvedValueOnce([
+      {
+        id: 72,
+        project_id: 'PROJ-001',
+        evidence_number: 'EV-ACTIVE-PROBE-FAIL-001',
+        status: 'COMPLETED',
+        source_path: '/nfs/project-001/active-probe-fail',
+      },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(mocks.listJobs).toHaveBeenNthCalledWith(1, { limit: 200, include_archived: false })
+    expect(mocks.hasArchivedJobs).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('#jobs-show-archived').exists()).toBe(true)
   })
 
   it('opens a grouped dialog with only the project field active initially', async () => {
