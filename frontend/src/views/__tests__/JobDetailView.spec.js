@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import i18n from '@/i18n/index.js'
 import JobDetailView from '@/views/JobDetailView.vue'
@@ -168,6 +168,8 @@ function findJobActionButtons(wrapper) {
 
 describe('JobDetailView start action', () => {
   beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-29T16:45:00Z'))
     mocks.getJob.mockReset()
     mocks.getJobChainOfCustody.mockReset()
     mocks.refreshJobChainOfCustody.mockReset()
@@ -243,6 +245,10 @@ describe('JobDetailView start action', () => {
     mocks.getJobChainOfCustody.mockResolvedValue({ selector_mode: 'JOB', project_id: 'PROJ-001', snapshot_updated_at: '2026-04-28T19:30:00Z', reports: [] })
     mocks.refreshJobChainOfCustody.mockResolvedValue({ selector_mode: 'JOB', project_id: 'PROJ-001', snapshot_updated_at: '2026-04-29T09:15:00Z', reports: [] })
     mocks.confirmJobChainOfCustodyHandoff.mockResolvedValue({ event_id: 99 })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('shows the validation detail instead of a generic conflict message', async () => {
@@ -629,13 +635,18 @@ describe('JobDetailView start action', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const archiveButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.archive'))
+    const archiveButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.archiveWithoutHandoff'))
     expect(archiveButton).toBeTruthy()
 
     await archiveButton.trigger('click')
     await flushPromises()
 
     expect(wrapper.text()).toContain(i18n.global.t('jobs.archiveConfirmTitle'))
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.archiveConfirmBodyLead'))
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.archiveConfirmBodyRestore'))
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.archiveConfirmBodyNoHandoff'))
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.archiveConfirmBodyUseHandoff'))
+    expect(wrapper.find('.confirm-dialog-confirm').text()).toBe(i18n.global.t('jobs.archiveWithoutHandoff'))
 
     await wrapper.find('.confirm-dialog-confirm').trigger('click')
     await flushPromises()
@@ -665,7 +676,7 @@ describe('JobDetailView start action', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const archiveButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.archive'))
+    const archiveButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.archiveWithoutHandoff'))
     expect(archiveButton).toBeTruthy()
     expect(archiveButton.attributes('disabled')).toBeDefined()
     expect(wrapper.text()).toContain(i18n.global.t('jobs.archiveRequiresEject'))
@@ -693,7 +704,7 @@ describe('JobDetailView start action', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const archiveButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.archive'))
+    const archiveButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.archiveWithoutHandoff'))
     expect(archiveButton).toBeTruthy()
     expect(archiveButton.attributes('disabled')).toBeUndefined()
     expect(wrapper.text()).not.toContain(i18n.global.t('jobs.archiveRequiresEject'))
@@ -730,7 +741,7 @@ describe('JobDetailView start action', () => {
     expect(editButton.attributes('disabled')).toBeDefined()
     expect(analyzeButton.attributes('disabled')).toBeDefined()
     expect(startButton.attributes('disabled')).toBeDefined()
-    expect(wrapper.findAll('button').some((node) => node.text() === i18n.global.t('jobs.archive'))).toBe(false)
+    expect(wrapper.findAll('button').some((node) => node.text() === i18n.global.t('jobs.archiveWithoutHandoff'))).toBe(false)
   })
 
   it('loads archived job-scoped CoC snapshots and exposes print/export affordances', async () => {
@@ -778,13 +789,13 @@ describe('JobDetailView start action', () => {
 
     expect(wrapper.text()).not.toContain('job-coc-report-5|JOB|PROJ-001|casey')
 
-    const openCocButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.chainTitle'))
+    const openCocButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.closeOutWithHandoff'))
     await openCocButton.trigger('click')
     await flushPromises()
 
     expect(mocks.getJobChainOfCustody).toHaveBeenCalledWith(6)
     expect(wrapper.text()).toContain('job-coc-report-5|JOB|PROJ-001|casey|2026-04-28T19:30:00Z')
-    expect(wrapper.findAll('button').some((node) => node.text() === i18n.global.t('audit.prefillHandoff'))).toBe(false)
+    expect(wrapper.findAll('button').some((node) => node.text() === i18n.global.t('audit.handoffTitle'))).toBe(false)
 
     const printButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.printCoc'))
     const exportCsvButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.exportCsv'))
@@ -803,6 +814,51 @@ describe('JobDetailView start action', () => {
     printSpy.mockRestore()
     URL.createObjectURL = originalCreateObjectURL
     URL.revokeObjectURL = originalRevokeObjectURL
+  })
+
+  it('hides custody handoff when the loaded CoC report is already complete', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 10,
+      total_bytes: 10,
+      file_count: 1,
+      files_succeeded: 1,
+      files_failed: 0,
+      files_timed_out: 0,
+      startup_analysis_status: 'READY',
+      drive: { id: 5, current_state: 'AVAILABLE', is_mounted: false },
+    })
+    mocks.getJobChainOfCustody.mockResolvedValue({
+      selector_mode: 'JOB',
+      project_id: 'PROJ-001',
+      snapshot_updated_at: '2026-04-28T19:30:00Z',
+      reports: [{
+        drive_id: 5,
+        drive_sn: 'SN-005',
+        drive_manufacturer: 'SanDisk',
+        drive_model: 'Cruzer Switch',
+        project_id: 'PROJ-001',
+        custody_complete: true,
+        delivery_time: '2026-04-28T18:00:00Z',
+        chain_of_custody_events: [],
+        manifest_summary: [],
+      }],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const openCocButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.closeOutWithHandoff'))
+    await openCocButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findAll('button').some((node) => node.text() === i18n.global.t('audit.handoffTitle'))).toBe(false)
   })
 
   it('exports CSV and JSON from the loaded stored CoC snapshot', async () => {
@@ -865,7 +921,7 @@ describe('JobDetailView start action', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const openCocButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.chainTitle'))
+    const openCocButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.closeOutWithHandoff'))
     await openCocButton.trigger('click')
     await flushPromises()
 
@@ -933,15 +989,20 @@ describe('JobDetailView start action', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const openCocButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.chainTitle'))
+    const openCocButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.closeOutWithHandoff'))
     await openCocButton.trigger('click')
     await flushPromises()
 
-    const prefillButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.prefillHandoff'))
-    await prefillButton.trigger('click')
+    const openHandoffButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.handoffTitle'))
+    await openHandoffButton.trigger('click')
     await flushPromises()
 
+    expect(wrapper.text()).toContain(i18n.global.t('audit.handoffGuidance'))
+    const expectedDefaultDeliveryTime = new Date(Date.now() - (new Date().getTimezoneOffset() * 60 * 1000)).toISOString().slice(0, 16)
+    expect(wrapper.find(`input[aria-label="${i18n.global.t('audit.driveIdLabel')}"]`).element.value).toBe('1')
+    expect(wrapper.find(`input[aria-label="${i18n.global.t('audit.projectBinding')}"]`).element.value).toBe('PROJ-001')
     expect(wrapper.find(`input[aria-label="${i18n.global.t('jobs.evidence')}"]`).element.value).toBe('EV-006')
+    expect(wrapper.find(`input[aria-label="${i18n.global.t('audit.deliveryTimeLocalInput')}"]`).element.value).toBe(expectedDefaultDeliveryTime)
 
     await wrapper.find(`input[aria-label="${i18n.global.t('audit.possessor')}"]`).setValue('Evidence Locker')
     await wrapper.find(`input[aria-label="${i18n.global.t('audit.deliveryTimeLocalInput')}"]`).setValue('2026-04-28T14:00')
@@ -1009,12 +1070,12 @@ describe('JobDetailView start action', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const openCocButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.chainTitle'))
+    const openCocButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.closeOutWithHandoff'))
     await openCocButton.trigger('click')
     await flushPromises()
 
-    const prefillButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.prefillHandoff'))
-    await prefillButton.trigger('click')
+    const openHandoffButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.handoffTitle'))
+    await openHandoffButton.trigger('click')
     await flushPromises()
 
     await wrapper.find(`input[aria-label="${i18n.global.t('audit.possessor')}"]`).setValue('Evidence Locker')
@@ -1072,8 +1133,12 @@ describe('JobDetailView start action', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const openCocButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.chainTitle'))
+    const openCocButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.closeOutWithHandoff'))
     await openCocButton.trigger('click')
+    await flushPromises()
+
+    const openHandoffButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.handoffTitle'))
+    await openHandoffButton.trigger('click')
     await flushPromises()
 
     const confirmHandoffButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.confirmHandoff'))
@@ -1140,7 +1205,7 @@ describe('JobDetailView start action', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const openCocButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.chainTitle'))
+    const openCocButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.closeOutWithHandoff'))
     await openCocButton.trigger('click')
     await flushPromises()
 
@@ -2133,8 +2198,8 @@ describe('JobDetailView start action', () => {
       i18n.global.t('jobs.complete'),
       i18n.global.t('jobs.verify'),
       i18n.global.t('jobs.manifest'),
-      i18n.global.t('audit.chainTitle'),
-      i18n.global.t('jobs.archive'),
+      i18n.global.t('jobs.closeOutWithHandoff'),
+      i18n.global.t('jobs.archiveWithoutHandoff'),
       i18n.global.t('common.actions.delete'),
     ])
 
