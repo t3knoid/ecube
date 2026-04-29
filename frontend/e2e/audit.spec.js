@@ -166,9 +166,10 @@ test('job detail chain of custody report renders printable sections and CoC expo
   await expect(page.locator('.coc-print-card dd').filter({ hasText: 'DataTraveler' })).toBeVisible()
   await expect(page.getByText('Drive initialized')).toBeVisible()
   await expect(page.getByText('DRIVE_INITIALIZED')).toHaveCount(0)
-  await expect(page.getByText('/reports/manifests/12.json')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Processor Notes' })).toBeVisible()
+  await expect(page.getByRole('table', { name: 'Processor notes for drive #1 (SN-001)' })).toContainText('Sealed container intact')
   await expect(page.locator('.coc-print-card dd').filter({ hasText: 'Officer Jane Doe' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Prefill Handoff' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Custody Handoff' })).toHaveCount(0)
 
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: 5000 }).catch(() => null),
@@ -305,7 +306,7 @@ test.describe('chain of custody handoff', () => {
 
     await page.goto('/jobs/12')
     await page.getByRole('button', { name: 'Chain of Custody' }).click()
-    await expect(page.getByText('Drive #1 (SN-001)')).toBeVisible()
+    await expect(page.getByText('PRJ-001 - EV-12')).toBeVisible()
     await page.getByRole('button', { name: 'Custody Handoff' }).click()
     await expect(page.getByRole('heading', { name: 'Custody Handoff' })).toBeVisible()
     await expect(page.getByText('Standard closeout is an in-app custody handoff. Record it in ECUBE even if external paper paperwork is also used.')).toBeVisible()

@@ -2397,7 +2397,7 @@ select {
 .coc-section,
 .coc-results,
 .coc-report-shell,
-.handoff-form {
+.handoff-dialog {
   display: grid;
   gap: var(--space-sm);
 }
@@ -2433,8 +2433,8 @@ select {
   margin: 0;
 }
 
-.handoff-form textarea,
-.handoff-form input {
+.handoff-dialog textarea,
+.handoff-dialog input {
   border: 1px solid var(--color-border);
   background: var(--color-bg-input);
   color: var(--color-text-primary);
