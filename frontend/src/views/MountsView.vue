@@ -763,56 +763,61 @@ onBeforeUnmount(() => {
 
     <teleport to="body">
       <div v-if="showAddDialog" class="dialog-overlay">
-        <div ref="addDialogRef" class="dialog-panel" role="dialog" aria-modal="true" :aria-labelledby="addMountDialogTitleId">
-          <h2 :id="addMountDialogTitleId">{{ dialogTitle }}</h2>
-          <p v-if="dialogError" class="error-banner" role="alert" aria-live="assertive">{{ dialogError }}</p>
-          <p v-if="dialogSuccessMessage" class="success-banner" role="status" aria-live="polite">{{ dialogSuccessMessage }}</p>
-          <label for="mount-type" class="field-label">
-            {{ t('common.labels.type') }}
-            <span class="required-indicator" aria-hidden="true">*</span>
-            <span class="sr-only">required</span>
-          </label>
-          <select id="mount-type" v-model="form.type" required aria-required="true">
-            <option value="SMB">SMB</option>
-            <option value="NFS">NFS</option>
-          </select>
-          <label for="mount-remote-path" class="field-label">
-            {{ t('mounts.remotePath') }}
-            <span class="required-indicator" aria-hidden="true">*</span>
-            <span class="sr-only">required</span>
-          </label>
-          <input id="mount-remote-path" v-model="form.remote_path" type="text" required aria-required="true" />
-          <label for="mount-project-id" class="field-label">
-            {{ t('dashboard.project') }}
-            <span class="required-indicator" aria-hidden="true">*</span>
-            <span class="sr-only">required</span>
-          </label>
-          <input id="mount-project-id" v-model="form.project_id" type="text" required aria-required="true" />
-          <template v-if="form.type === 'NFS'">
-            <label for="mount-nfs-client-version">{{ t('mounts.nfsClientVersion') }}</label>
-            <select id="mount-nfs-client-version" v-model="form.nfs_client_version">
-              <option v-for="option in nfsClientVersionSelectOptions" :key="option.value || 'default'" :value="option.value">{{ option.label }}</option>
-            </select>
-            <p class="field-help">{{ t('mounts.nfsClientVersionHelp') }}</p>
-          </template>
-          <template v-if="isEditMode && dialogLocalMountPoint">
-            <label for="mount-local-path">{{ t('mounts.localMountPointInfo') }}</label>
-            <input id="mount-local-path" :value="dialogLocalMountPoint" type="text" readonly />
-          </template>
-          <div v-if="isEditMode" class="credential-header-row">
-            <span class="field-label">{{ t('mounts.storedCredentials') }}</span>
-            <button class="btn btn-secondary btn-inline" type="button" @click="clearStoredCredentials">
-              {{ t('mounts.clearStoredCredentials') }}
-            </button>
+        <div ref="addDialogRef" class="dialog-panel mount-dialog-panel" role="dialog" aria-modal="true" :aria-labelledby="addMountDialogTitleId">
+          <div class="dialog-header mount-dialog-header">
+            <h2 :id="addMountDialogTitleId">{{ dialogTitle }}</h2>
+            <p v-if="dialogError" class="error-banner" role="alert" aria-live="assertive">{{ dialogError }}</p>
+            <p v-if="dialogSuccessMessage" class="success-banner" role="status" aria-live="polite">{{ dialogSuccessMessage }}</p>
           </div>
-          <label for="mount-username">{{ t('auth.username') }}</label>
-          <input id="mount-username" v-model="form.username" type="text" autocomplete="off" @input="markCredentialFieldChanged('username')" />
-          <label for="mount-password">{{ t('auth.password') }}</label>
-          <input id="mount-password" v-model="form.password" type="password" autocomplete="new-password" @input="markCredentialFieldChanged('password')" />
-          <label for="mount-creds-file">{{ t('mounts.credentialsFile') }}</label>
-          <input id="mount-creds-file" v-model="form.credentials_file" type="text" @input="markCredentialFieldChanged('credentials_file')" />
 
-          <div class="dialog-actions">
+          <div class="dialog-body mount-dialog-scroll-region">
+            <label for="mount-type" class="field-label">
+              {{ t('common.labels.type') }}
+              <span class="required-indicator" aria-hidden="true">*</span>
+              <span class="sr-only">required</span>
+            </label>
+            <select id="mount-type" v-model="form.type" required aria-required="true">
+              <option value="SMB">SMB</option>
+              <option value="NFS">NFS</option>
+            </select>
+            <label for="mount-remote-path" class="field-label">
+              {{ t('mounts.remotePath') }}
+              <span class="required-indicator" aria-hidden="true">*</span>
+              <span class="sr-only">required</span>
+            </label>
+            <input id="mount-remote-path" v-model="form.remote_path" type="text" required aria-required="true" />
+            <label for="mount-project-id" class="field-label">
+              {{ t('dashboard.project') }}
+              <span class="required-indicator" aria-hidden="true">*</span>
+              <span class="sr-only">required</span>
+            </label>
+            <input id="mount-project-id" v-model="form.project_id" type="text" required aria-required="true" />
+            <template v-if="form.type === 'NFS'">
+              <label for="mount-nfs-client-version">{{ t('mounts.nfsClientVersion') }}</label>
+              <select id="mount-nfs-client-version" v-model="form.nfs_client_version">
+                <option v-for="option in nfsClientVersionSelectOptions" :key="option.value || 'default'" :value="option.value">{{ option.label }}</option>
+              </select>
+              <p class="field-help">{{ t('mounts.nfsClientVersionHelp') }}</p>
+            </template>
+            <template v-if="isEditMode && dialogLocalMountPoint">
+              <label for="mount-local-path">{{ t('mounts.localMountPointInfo') }}</label>
+              <input id="mount-local-path" :value="dialogLocalMountPoint" type="text" readonly />
+            </template>
+            <div v-if="isEditMode" class="credential-header-row">
+              <span class="field-label">{{ t('mounts.storedCredentials') }}</span>
+              <button class="btn btn-secondary btn-inline" type="button" @click="clearStoredCredentials">
+                {{ t('mounts.clearStoredCredentials') }}
+              </button>
+            </div>
+            <label for="mount-username">{{ t('auth.username') }}</label>
+            <input id="mount-username" v-model="form.username" type="text" autocomplete="off" @input="markCredentialFieldChanged('username')" />
+            <label for="mount-password">{{ t('auth.password') }}</label>
+            <input id="mount-password" v-model="form.password" type="password" autocomplete="new-password" @input="markCredentialFieldChanged('password')" />
+            <label for="mount-creds-file">{{ t('mounts.credentialsFile') }}</label>
+            <input id="mount-creds-file" v-model="form.credentials_file" type="text" @input="markCredentialFieldChanged('credentials_file')" />
+          </div>
+
+          <div class="dialog-actions dialog-footer">
             <button class="btn" @click="closeAddDialog">{{ t('common.actions.cancel') }}</button>
             <button
               v-if="shareDiscoveryAvailable"
@@ -1078,6 +1083,25 @@ select {
   padding: var(--space-lg);
   display: grid;
   gap: var(--space-xs);
+}
+
+.mount-dialog-panel {
+  max-height: min(85vh, 44rem);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.mount-dialog-header,
+.dialog-footer {
+  gap: var(--space-xs);
+}
+
+.mount-dialog-scroll-region {
+  display: grid;
+  gap: var(--space-xs);
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: var(--space-2xs);
 }
 
 .share-browser-panel {
