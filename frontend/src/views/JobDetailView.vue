@@ -58,15 +58,18 @@ const showArchiveDialog = ref(false)
 const showStartupAnalysisCleanupDialog = ref(false)
 const showPausePendingDialog = ref(false)
 const showCocDialog = ref(false)
+const showCocHandoffDialog = ref(false)
 const showCocHandoffWarning = ref(false)
 const showHashDialog = ref(false)
 const showFileErrorDialog = ref(false)
 const cocDialogRef = ref(null)
+const cocHandoffDialogRef = ref(null)
 const editDialogRef = ref(null)
 const pauseDialogRef = ref(null)
 const hashDialogRef = ref(null)
 const fileErrorDialogRef = ref(null)
 const cocDialogTriggerRef = ref(null)
+const cocHandoffDialogTriggerRef = ref(null)
 const dialogTriggerRef = ref(null)
 const hashDialogTriggerRef = ref(null)
 const fileErrorDialogTriggerRef = ref(null)
@@ -107,7 +110,10 @@ const canInspectHashes = computed(() => authStore.hasAnyRole(['admin', 'auditor'
 const canReadCoc = computed(() => authStore.hasAnyRole(['admin', 'manager', 'auditor']))
 const currentStatus = computed(() => String(job.value?.status || '').toUpperCase())
 const canRefreshCoc = computed(() => authStore.hasAnyRole(['admin', 'manager']) && currentStatus.value !== 'ARCHIVED')
-const canConfirmCocHandoff = computed(() => authStore.hasAnyRole(['admin', 'manager']) && currentStatus.value !== 'ARCHIVED')
+const hasPendingCocHandoff = computed(() => (cocReport.value?.reports || []).some((report) => !report?.custody_complete))
+const canConfirmCocHandoff = computed(() => authStore.hasAnyRole(['admin', 'manager'])
+  && currentStatus.value !== 'ARCHIVED'
+  && hasPendingCocHandoff.value)
 const currentStartupAnalysisStatus = computed(() => String(job.value?.startup_analysis_status || 'NOT_ANALYZED').toUpperCase())
 const archiveDriveReady = computed(() => {
   const driveState = String(job.value?.drive?.current_state || '').toUpperCase()
@@ -327,7 +333,7 @@ const primaryActionKeys = computed(() => {
     return ['pause']
   }
   if (status === 'COMPLETED') {
-    return canRetryFailed.value ? ['retry-failed'] : ['verify', 'manifest']
+    return canRetryFailed.value ? ['retry-failed', 'coc'] : ['verify', 'manifest', 'coc']
   }
 
   if (status === 'ARCHIVED') {
@@ -397,7 +403,7 @@ const actionItems = computed(() => {
     },
     {
       key: 'coc',
-      label: t('audit.chainTitle'),
+      label: t('jobs.closeOutWithHandoff'),
       disabled: !canReadCoc.value,
       run: () => openCocDialog(),
       visible: canReadCoc.value,
@@ -413,12 +419,13 @@ const actionItems = computed(() => {
     },
     {
       key: 'archive',
-      label: t('jobs.archive'),
+      label: t('jobs.archiveWithoutHandoff'),
       disabled: !canArchive.value || acting.value,
       run: () => {
         showArchiveDialog.value = true
       },
       visible: canArchiveJobs.value && currentStatus.value !== 'ARCHIVED',
+      tone: 'danger',
     },
     {
       key: 'delete',
@@ -597,6 +604,14 @@ function formatTimestamp(value) {
 function localDateTimeAsUtcIso(value) {
   if (!value) return undefined
   return new Date(value).toISOString()
+}
+
+function isoToLocalDateTimeValue(value) {
+  const parsed = value ? new Date(value) : new Date()
+  if (Number.isNaN(parsed.getTime())) return ''
+  const offsetMinutes = parsed.getTimezoneOffset()
+  const local = new Date(parsed.getTime() - (offsetMinutes * 60 * 1000))
+  return local.toISOString().slice(0, 16)
 }
 
 function normalizeStartupAnalysisFailureReason(value) {
@@ -783,12 +798,13 @@ async function refreshStoredJobChainOfCustody() {
 }
 
 function prepareCocHandoff(report) {
+  const defaultDeliveryTime = isoToLocalDateTimeValue()
   cocHandoffForm.value = {
     drive_id: String(report.drive_id || ''),
     project_id: normalizeProjectId(report.project_id || job.value?.project_id) || '',
     evidence_number: String(job.value?.evidence_number || report?.manifest_summary?.[0]?.evidence_number || ''),
     possessor: '',
-    delivery_time: '',
+    delivery_time: defaultDeliveryTime,
     received_by: '',
     receipt_ref: '',
     notes: '',
@@ -814,6 +830,17 @@ function submitCocHandoff() {
   showCocHandoffWarning.value = true
 }
 
+function openCocHandoffDialog() {
+  if (!canConfirmCocHandoff.value) return
+  prepareCocHandoff(cocReport.value?.reports?.[0] || {})
+  cocHandoffDialogTriggerRef.value = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  showCocHandoffDialog.value = true
+}
+
+function closeCocHandoffDialog() {
+  showCocHandoffDialog.value = false
+}
+
 async function confirmCocHandoffSubmission() {
   if (!job.value) return
   showCocHandoffWarning.value = false
@@ -833,6 +860,7 @@ async function confirmCocHandoffSubmission() {
       notes: cocHandoffForm.value.notes.trim() || undefined,
     })
     await Promise.all([loadJobChainOfCustody(), refreshAll()])
+    showCocHandoffDialog.value = false
     cocStatusMessage.value = t('audit.handoffSaved')
   } catch (err) {
     showCocHandoffError(buildJobError(err))
@@ -907,6 +935,8 @@ function closeEditDialog() {
 
 function closeCocDialog() {
   showCocDialog.value = false
+  showCocHandoffDialog.value = false
+  showCocHandoffWarning.value = false
   handleAfterPrint()
 }
 
@@ -971,6 +1001,18 @@ function handleDialogKeydown(event) {
     }
     if (event.key === 'Tab') {
       trapFocusWithin(event, editDialogRef.value)
+    }
+    return
+  }
+
+  if (showCocHandoffDialog.value) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeCocHandoffDialog()
+      return
+    }
+    if (event.key === 'Tab') {
+      trapFocusWithin(event, cocHandoffDialogRef.value)
     }
     return
   }
@@ -1417,6 +1459,28 @@ watch(showCocDialog, async (open) => {
   }
 })
 
+watch(showCocHandoffDialog, async (open) => {
+  if (open) {
+    document.addEventListener('keydown', handleDialogKeydown)
+    await nextTick()
+    const target = cocHandoffDialogRef.value?.querySelector('button, input, textarea')
+    if (target instanceof HTMLElement) {
+      target.focus()
+    }
+    return
+  }
+
+  if (!showEditDialog.value && !showCocDialog.value && !showPausePendingDialog.value && !showHashDialog.value && !showFileErrorDialog.value) {
+    document.removeEventListener('keydown', handleDialogKeydown)
+  }
+  const trigger = cocHandoffDialogTriggerRef.value
+  cocHandoffDialogTriggerRef.value = null
+  await nextTick()
+  if (trigger instanceof HTMLElement) {
+    trigger.focus()
+  }
+})
+
 watch(showPausePendingDialog, async (open) => {
   if (open) {
     document.addEventListener('keydown', handleDialogKeydown)
@@ -1803,6 +1867,7 @@ onUnmounted(() => {
               <button class="btn" :disabled="!cocReport" @click="printJobCocReport">{{ t('audit.printCoc') }}</button>
               <button class="btn" :disabled="!cocReport" @click="saveJobCocCsvReport">{{ t('audit.exportCsv') }}</button>
               <button class="btn btn-primary" :disabled="!cocReport" @click="saveJobCocReport">{{ t('audit.saveCoc') }}</button>
+              <button v-if="canConfirmCocHandoff" class="btn" @click="openCocHandoffDialog">{{ t('audit.handoffTitle') }}</button>
             </div>
           </div>
 
@@ -1825,45 +1890,38 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div v-if="canConfirmCocHandoff" class="handoff-form">
-            <div class="header-row handoff-header">
-              <h3>{{ t('audit.handoffTitle') }}</h3>
-              <div v-if="cocReport?.reports?.length" class="coc-actions">
-                <button
-                  v-for="report in cocReport.reports"
-                  :key="`prefill-handoff-${report.drive_id}`"
-                  class="btn"
-                  @click="prepareCocHandoff(report)"
-                >
-                  {{ t('audit.prefillHandoff') }}
-                </button>
-              </div>
-            </div>
-            <div class="handoff-grid">
-              <input v-model="cocHandoffForm.drive_id" type="text" :placeholder="t('audit.driveIdLabel')" :aria-label="t('audit.driveIdLabel')" />
-              <input v-model="cocHandoffForm.project_id" type="text" :placeholder="t('audit.projectBinding')" :aria-label="t('audit.projectBinding')" />
-              <input v-model="cocHandoffForm.evidence_number" type="text" :placeholder="t('jobs.evidence')" :aria-label="t('jobs.evidence')" readonly />
-              <input v-model="cocHandoffForm.possessor" type="text" :placeholder="t('audit.possessor')" :aria-label="t('audit.possessor')" />
-              <div class="datetime-field">
-                <input
-                  v-model="cocHandoffForm.delivery_time"
-                  type="datetime-local"
-                  :placeholder="t('audit.deliveryTimeLocalInput')"
-                  :aria-label="t('audit.deliveryTimeLocalInput')"
-                />
-              </div>
-              <input v-model="cocHandoffForm.received_by" type="text" :placeholder="t('audit.receivedBy')" :aria-label="t('audit.receivedBy')" />
-              <input v-model="cocHandoffForm.receipt_ref" type="text" :placeholder="t('audit.receiptRef')" :aria-label="t('audit.receiptRef')" />
-            </div>
-            <textarea v-model="cocHandoffForm.notes" rows="3" :placeholder="t('audit.notes')" :aria-label="t('audit.notes')"></textarea>
-            <div class="dialog-actions">
-              <button class="btn" @click="closeCocDialog">{{ t('common.actions.close') }}</button>
-              <button class="btn btn-primary" :disabled="handoffSaving" @click="submitCocHandoff">{{ t('audit.confirmHandoff') }}</button>
-            </div>
-          </div>
-
-          <div v-else class="dialog-actions">
+          <div class="dialog-actions">
             <button class="btn" @click="closeCocDialog">{{ t('common.actions.close') }}</button>
+          </div>
+        </div>
+      </div>
+    </teleport>
+
+    <teleport to="body">
+      <div v-if="showCocHandoffDialog" class="dialog-overlay" @click.self="closeCocHandoffDialog">
+        <div ref="cocHandoffDialogRef" class="dialog-panel handoff-dialog" role="dialog" aria-modal="true" aria-labelledby="job-coc-handoff-title">
+          <h2 id="job-coc-handoff-title">{{ t('audit.handoffTitle') }}</h2>
+          <p class="muted">{{ t('audit.handoffGuidance') }}</p>
+          <div class="handoff-grid">
+            <input v-model="cocHandoffForm.drive_id" type="text" :placeholder="t('audit.driveIdLabel')" :aria-label="t('audit.driveIdLabel')" />
+            <input v-model="cocHandoffForm.project_id" type="text" :placeholder="t('audit.projectBinding')" :aria-label="t('audit.projectBinding')" />
+            <input v-model="cocHandoffForm.evidence_number" type="text" :placeholder="t('jobs.evidence')" :aria-label="t('jobs.evidence')" readonly />
+            <input v-model="cocHandoffForm.possessor" type="text" :placeholder="t('audit.possessor')" :aria-label="t('audit.possessor')" />
+            <div class="datetime-field">
+              <input
+                v-model="cocHandoffForm.delivery_time"
+                type="datetime-local"
+                :placeholder="t('audit.deliveryTimeLocalInput')"
+                :aria-label="t('audit.deliveryTimeLocalInput')"
+              />
+            </div>
+            <input v-model="cocHandoffForm.received_by" type="text" :placeholder="t('audit.receivedBy')" :aria-label="t('audit.receivedBy')" />
+            <input v-model="cocHandoffForm.receipt_ref" type="text" :placeholder="t('audit.receiptRef')" :aria-label="t('audit.receiptRef')" />
+          </div>
+          <textarea v-model="cocHandoffForm.notes" rows="3" :placeholder="t('audit.notes')" :aria-label="t('audit.notes')"></textarea>
+          <div class="dialog-actions">
+            <button class="btn" @click="closeCocHandoffDialog">{{ t('common.actions.close') }}</button>
+            <button class="btn btn-primary" :disabled="handoffSaving" @click="submitCocHandoff">{{ t('audit.confirmHandoff') }}</button>
           </div>
         </div>
       </div>
@@ -1975,12 +2033,19 @@ onUnmounted(() => {
       v-model="showArchiveDialog"
       :title="t('jobs.archiveConfirmTitle')"
       :message="t('jobs.archiveConfirmBody')"
-      :confirm-label="t('jobs.archive')"
+      :confirm-label="t('jobs.archiveWithoutHandoff')"
       :cancel-label="t('common.actions.cancel')"
       :busy="acting"
       dangerous
       @confirm="confirmArchive"
-    />
+    >
+      <div class="archive-confirm-copy">
+        <p>{{ t('jobs.archiveConfirmBodyLead') }}</p>
+        <p>{{ t('jobs.archiveConfirmBodyRestore') }}</p>
+        <p>{{ t('jobs.archiveConfirmBodyNoHandoff') }}</p>
+        <p>{{ t('jobs.archiveConfirmBodyUseHandoff') }}</p>
+      </div>
+    </ConfirmDialog>
 
     <ConfirmDialog
       v-model="showDeleteDialog"
@@ -2332,7 +2397,7 @@ select {
 .coc-section,
 .coc-results,
 .coc-report-shell,
-.handoff-form {
+.handoff-dialog {
   display: grid;
   gap: var(--space-sm);
 }
@@ -2359,8 +2424,17 @@ select {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
-.handoff-form textarea,
-.handoff-form input {
+.archive-confirm-copy {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.archive-confirm-copy p {
+  margin: 0;
+}
+
+.handoff-dialog textarea,
+.handoff-dialog input {
   border: 1px solid var(--color-border);
   background: var(--color-bg-input);
   color: var(--color-text-primary);
