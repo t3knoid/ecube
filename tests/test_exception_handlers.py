@@ -29,6 +29,16 @@ def exception_routes(client):  # noqa: F811 – shadow outer client intentionall
     def raise_401_http():
         raise HTTPException(status_code=401, detail="Missing bearer token")
 
+    @router.get("/401-http-unsafe")
+    def raise_401_http_unsafe():
+        raise HTTPException(
+            status_code=401,
+            detail=(
+                "Failed to fetch OIDC discovery document from "
+                "'https://issuer.example/.well-known/openid-configuration': network error"
+            ),
+        )
+
     @router.get("/403-custom")
     def raise_403_custom():
         raise AuthorizationError("Insufficient role", code="INSUFFICIENT_ROLE")
@@ -124,6 +134,28 @@ def test_401_http_exception_schema(client, exception_routes):
     data = response.json()
     _assert_error_schema(data, expected_code="UNAUTHORIZED")
     assert "Missing bearer token" in data["message"]
+
+
+def test_401_http_exception_info_log_sanitizes_unsafe_detail(exception_routes, caplog):
+    caplog.set_level(logging.INFO, logger="app.main")
+
+    with TestClient(app, raise_server_exceptions=False) as safe_client:
+        response = safe_client.get("/test-exceptions/401-http-unsafe")
+
+    data = response.json()
+    info_record = next(
+        record
+        for record in caplog.records
+        if record.levelname == "INFO"
+        and getattr(record, "error_code", None) == "UNAUTHORIZED"
+        and getattr(record, "request_path", None) == "/test-exceptions/401-http-unsafe"
+    )
+
+    assert response.status_code == 401
+    assert info_record.trace_id == data["trace_id"]
+    assert info_record.failure_summary == "Unauthorized request"
+    assert "issuer.example" not in info_record.getMessage()
+    assert "issuer.example" not in str(getattr(info_record, "failure_summary", ""))
 
 
 # ---------------------------------------------------------------------------
