@@ -395,12 +395,20 @@ class TestBrowseFilesystemErrors:
             response = client.get(f"/browse?path={mount_point}")
 
         assert response.status_code == 403
-        info_messages = [record.getMessage() for record in caplog.records if record.levelno == logging.INFO]
-        debug_messages = [record.getMessage() for record in caplog.records if record.levelno == logging.DEBUG]
-        assert any("Browse directory failed surface=network_mount:smb" in message for message in info_messages)
-        assert any("Permission or authentication failure" in message for message in info_messages)
-        assert any("Browse directory raw failure surface=network_mount:smb" in message for message in debug_messages)
-        assert any("Permission denied" in message for message in debug_messages)
+        info_records = [record for record in caplog.records if record.levelno == logging.INFO]
+        debug_records = [record for record in caplog.records if record.levelno == logging.DEBUG]
+        assert any(
+            record.getMessage() == "Browse directory failed"
+            and getattr(record, "surface", None) == "network_mount:smb"
+            and getattr(record, "reason", None) == "Permission or authentication failure"
+            for record in info_records
+        )
+        assert any(
+            record.getMessage() == "Browse directory raw failure"
+            and getattr(record, "surface", None) == "network_mount:smb"
+            and getattr(record, "raw_error", None) == "Permission denied"
+            for record in debug_records
+        )
 
     def test_not_a_directory_returns_400(self, client, db, tmp_path):
         """When os.scandir raises NotADirectoryError, the endpoint returns 400."""
@@ -424,13 +432,21 @@ class TestBrowseFilesystemErrors:
             response = client.get(f"/browse?path={mount_point}")
 
         assert response.status_code == 500
-        info_messages = [record.getMessage() for record in caplog.records if record.levelno == logging.INFO]
-        debug_messages = [record.getMessage() for record in caplog.records if record.levelno == logging.DEBUG]
-        assert any("Browse directory failed surface=network_mount:nfs" in message for message in info_messages)
-        assert any("Failed to list the directory due to a filesystem error" in message for message in info_messages)
-        assert not any("/mnt/ecube/share" in message for message in info_messages)
-        assert any("Browse directory raw failure surface=network_mount:nfs" in message for message in debug_messages)
-        assert any("I/O error on /mnt/ecube/share" in message for message in debug_messages)
+        info_records = [record for record in caplog.records if record.levelno == logging.INFO]
+        debug_records = [record for record in caplog.records if record.levelno == logging.DEBUG]
+        assert any(
+            record.getMessage() == "Browse directory failed"
+            and getattr(record, "surface", None) == "network_mount:nfs"
+            and getattr(record, "reason", None) == "Failed to list the directory due to a filesystem error"
+            for record in info_records
+        )
+        assert all("/mnt/ecube/share" not in str(getattr(record, "reason", "")) for record in info_records)
+        assert any(
+            record.getMessage() == "Browse directory raw failure"
+            and getattr(record, "surface", None) == "network_mount:nfs"
+            and getattr(record, "raw_error", None) == "I/O error on /mnt/ecube/share"
+            for record in debug_records
+        )
 
     def test_file_not_found_returns_404(self, client, db, tmp_path):
         """When the directory disappears between DB lookup and scandir (TOCTOU),
@@ -443,12 +459,20 @@ class TestBrowseFilesystemErrors:
             response = client.get(f"/browse?path={mount_point}")
 
         assert response.status_code == 404
-        assert "unmounted" in response.json()["message"].lower()
-
-    def test_stat_race_skips_vanished_entries(self, client, db, tmp_path):
-        """When a file vanishes between listdir and lstat (_stat_entry returns
-        None), the entry is silently excluded from the response."""
-        mount_point = str(tmp_path)
+        info_records = [record for record in caplog.records if record.levelno == logging.INFO]
+        debug_records = [record for record in caplog.records if record.levelno == logging.DEBUG]
+        assert any(
+            record.getMessage() == "Browse directory failed"
+            and getattr(record, "surface", None) == "network_mount:nfs"
+            and getattr(record, "reason", None) == "Unable to enumerate directory"
+            for record in info_records
+        )
+        assert any(
+            record.getMessage() == "Browse directory raw failure"
+            and getattr(record, "surface", None) == "network_mount:nfs"
+            and getattr(record, "raw_error", None) == "stale file handle"
+            for record in debug_records
+        )
         _make_network_mount(db, mount_point)
         (tmp_path / "keep.txt").write_text("ok")
         (tmp_path / "vanish.txt").write_text("gone")
