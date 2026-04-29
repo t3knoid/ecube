@@ -15,16 +15,6 @@ from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
 
 
-_STARTUP_RECONCILIATION_ACTIONS = {
-    "USB_DISCOVERY_SYNC",
-    "DRIVE_DISCOVERED",
-    "STARTUP_RECONCILIATION_STARTED",
-    "STARTUP_RECONCILIATION_FAILED",
-    "STARTUP_RECONCILIATION_COMPLETED",
-    "STARTUP_RECONCILIATION_SKIPPED",
-}
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -41,6 +31,11 @@ def _seed_entries(db, entries):
     return result
 
 
+def _user_created_entries(entries):
+    """Exclude startup reconciliation rows emitted by the system actor."""
+    return [entry for entry in entries if entry.get("user") != "system"]
+
+
 # ---------------------------------------------------------------------------
 # Basic listing
 # ---------------------------------------------------------------------------
@@ -51,11 +46,7 @@ class TestAuditListBasic:
         response = admin_client.get("/audit")
         assert response.status_code == 200
         data = response.json()
-        # Startup reconciliation may emit discovery-side audit entries;
-        # filter them out to verify no user-created entries exist.
-        user_entries = [
-            e for e in data if e["action"] not in _STARTUP_RECONCILIATION_ACTIONS
-        ]
+        user_entries = _user_created_entries(data)
         assert user_entries == []
 
     def test_returns_seeded_entries(self, admin_client, db):
@@ -69,8 +60,7 @@ class TestAuditListBasic:
         response = admin_client.get("/audit")
         assert response.status_code == 200
         data = response.json()
-        # Filter out startup reconciliation entries.
-        data = [e for e in data if e["action"] not in _STARTUP_RECONCILIATION_ACTIONS]
+        data = _user_created_entries(data)
         assert len(data) == 2
         actions = {d["action"] for d in data}
         assert actions == {"JOB_CREATED", "DRIVE_INITIALIZED"}
