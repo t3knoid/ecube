@@ -148,6 +148,13 @@ def test_network_mounts_include_nfs_client_version_column(migrated_engine):
     assert "nfs_client_version" in columns
 
 
+def test_drive_assignments_include_manifest_counters(migrated_engine):
+    inspector = inspect(migrated_engine)
+    columns = {c["name"] for c in inspector.get_columns("drive_assignments")}
+    assert "file_count" in columns
+    assert "copied_bytes" in columns
+
+
 def test_audit_log_has_project_and_drive_columns_and_indexes(migrated_engine):
     """HEAD migration should expose first-class project/drive audit columns and indexes."""
     inspector = inspect(migrated_engine)

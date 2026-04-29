@@ -31,8 +31,8 @@ class ChainOfCustodyEventSchema(BaseModel):
 
 class ManifestSummarySchema(BaseModel):
     job_id: int = Field(..., description="Related export job ID")
-    total_files: int = Field(..., description="Number of files tracked for the job")
-    total_bytes: int = Field(..., description="Total bytes copied for the job")
+    total_files: int = Field(..., description="Number of files copied during this drive assignment for the job")
+    total_bytes: int = Field(..., description="Total bytes copied during this drive assignment for the job")
     manifest_count: int = Field(..., description="Number of generated manifests for the job")
     latest_manifest_path: Optional[str] = Field(default=None, description="Path of most recent manifest")
     latest_manifest_format: Optional[str] = Field(default=None, description="Format of most recent manifest")

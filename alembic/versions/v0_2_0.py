@@ -129,6 +129,62 @@ def _network_mounts_has_nfs_client_version(inspector: sa.Inspector) -> bool:
     return any(column.get("name") == "nfs_client_version" for column in inspector.get_columns("network_mounts"))
 
 
+def _drive_assignments_has_manifest_counters(inspector: sa.Inspector) -> bool:
+    columns = {column.get("name") for column in inspector.get_columns("drive_assignments")}
+    return {"file_count", "copied_bytes"}.issubset(columns)
+
+
+def _backfill_drive_assignment_manifest_counters() -> None:
+    bind = op.get_bind()
+    rows = bind.execute(
+        sa.text(
+            "SELECT drive_assignments.id, export_jobs.file_count, export_jobs.copied_bytes "
+            "FROM drive_assignments "
+            "JOIN export_jobs ON export_jobs.id = drive_assignments.job_id "
+            "JOIN ("
+            "    SELECT job_id "
+            "    FROM drive_assignments "
+            "    GROUP BY job_id "
+            "    HAVING COUNT(*) = 1"
+            ") single_assignment_jobs ON single_assignment_jobs.job_id = drive_assignments.job_id"
+        )
+    ).fetchall()
+
+    if rows:
+        bind.execute(
+            sa.text(
+                "UPDATE drive_assignments "
+                "SET file_count = :file_count, copied_bytes = :copied_bytes "
+                "WHERE id = :assignment_id"
+            ),
+            [
+                {
+                    "assignment_id": assignment_id,
+                    "file_count": int(file_count or 0),
+                    "copied_bytes": int(copied_bytes or 0),
+                }
+                for assignment_id, file_count, copied_bytes in rows
+            ],
+        )
+
+
+def _upgrade_drive_assignment_manifest_counters(inspector: sa.Inspector) -> None:
+    if "drive_assignments" not in inspector.get_table_names():
+        return
+    if _drive_assignments_has_manifest_counters(inspector):
+        return
+
+    with op.batch_alter_table("drive_assignments") as batch_op:
+        batch_op.add_column(sa.Column("file_count", sa.Integer(), nullable=False, server_default="0"))
+        batch_op.add_column(sa.Column("copied_bytes", sa.BigInteger(), nullable=False, server_default="0"))
+
+    _backfill_drive_assignment_manifest_counters()
+
+    with op.batch_alter_table("drive_assignments") as batch_op:
+        batch_op.alter_column("file_count", existing_type=sa.Integer(), server_default=None)
+        batch_op.alter_column("copied_bytes", existing_type=sa.BigInteger(), server_default=None)
+
+
 def _backfill_export_file_projects() -> None:
     bind = op.get_bind()
     rows = bind.execute(
@@ -206,6 +262,8 @@ def upgrade() -> None:
         if "network_mounts" in existing_tables and not _network_mounts_has_nfs_client_version(inspector):
             with op.batch_alter_table("network_mounts") as batch_op:
                 batch_op.add_column(sa.Column("nfs_client_version", sa.String(), nullable=True))
+        if "drive_assignments" in existing_tables:
+            _upgrade_drive_assignment_manifest_counters(inspector)
         _upgrade_legacy_project_schema(inspector, existing_tables)
         if "export_files" in existing_tables:
             _upgrade_legacy_export_file_project_schema(inspector)
@@ -395,6 +453,8 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer, primary_key=True),
         sa.Column("drive_id", sa.Integer, sa.ForeignKey("usb_drives.id"), nullable=False),
         sa.Column("job_id", sa.Integer, sa.ForeignKey("export_jobs.id"), nullable=False),
+        sa.Column("file_count", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("copied_bytes", sa.BigInteger, nullable=False, server_default="0"),
         sa.Column(
             "assigned_at",
             sa.DateTime(timezone=True),

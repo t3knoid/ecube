@@ -14,7 +14,7 @@ from app.config import settings
 from app.database import SessionLocal
 from app.models.jobs import ExportFile, FileStatus, JobStatus, StartupAnalysisStatus
 from app.repositories.audit_repository import AuditRepository
-from app.repositories.job_repository import FileRepository, JobRepository
+from app.repositories.job_repository import DriveAssignmentRepository, FileRepository, JobRepository
 from app.services.callback_service import deliver_callback
 from app.services.copy_worker_runtime import (
     register_active_copy_worker,
@@ -973,6 +973,9 @@ def _process_file(
         job = job_repo.get(ef.job_id)
         if job is None:
             return
+        assignment_repo = DriveAssignmentRepository(db)
+        active_assignment = assignment_repo.get_active_for_job(ef.job_id)
+        active_assignment_id = int(active_assignment.id) if active_assignment is not None else None
         if job.status in (JobStatus.PAUSING, JobStatus.PAUSED):
             ef.status = FileStatus.PENDING
             try:
@@ -1020,6 +1023,8 @@ def _process_file(
                 flushed_bytes = pending_progress_bytes
                 try:
                     file_repo.increment_job_bytes(ef.job_id, flushed_bytes)
+                    if active_assignment_id is not None:
+                        file_repo.increment_assignment_bytes(active_assignment_id, flushed_bytes)
                     attempt_bytes_reported += flushed_bytes
                     bytes_reported += flushed_bytes
                     pending_progress_bytes = 0
@@ -1122,6 +1127,8 @@ def _process_file(
             if attempt_bytes_reported:
                 try:
                     file_repo.decrement_job_bytes(ef.job_id, attempt_bytes_reported)
+                    if active_assignment_id is not None:
+                        file_repo.decrement_assignment_bytes(active_assignment_id, attempt_bytes_reported)
                     bytes_reported = max(0, bytes_reported - attempt_bytes_reported)
                 except Exception:
                     logger.exception("DB commit failed rolling back copied_bytes for file %s", export_file_id)
@@ -1169,11 +1176,15 @@ def _process_file(
             ef.status = FileStatus.DONE
             try:
                 file_repo.save(ef)
+                if active_assignment_id is not None:
+                    file_repo.increment_assignment_file_count(active_assignment_id)
             except Exception:
                 logger.exception("DB commit failed saving DONE status for file %s", export_file_id)
                 if bytes_reported:
                     try:
                         file_repo.decrement_job_bytes(ef.job_id, bytes_reported)
+                        if active_assignment_id is not None:
+                            file_repo.decrement_assignment_bytes(active_assignment_id, bytes_reported)
                     except Exception:
                         logger.exception("DB commit failed restoring copied_bytes for file %s", export_file_id)
             try:

@@ -124,6 +124,8 @@ class DriveAssignment(Base):
     id = Column(Integer, primary_key=True)
     drive_id = Column(Integer, ForeignKey("usb_drives.id"), nullable=False)
     job_id = Column(Integer, ForeignKey("export_jobs.id"), nullable=False)
+    file_count = Column(Integer, default=0, nullable=False)
+    copied_bytes = Column(BigInteger, default=0, nullable=False)
     assigned_at = Column(DateTime(timezone=True), server_default=func.now())
     released_at = Column(DateTime(timezone=True))
     drive = relationship("UsbDrive", back_populates="assignments")
