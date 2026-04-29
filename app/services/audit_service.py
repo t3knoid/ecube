@@ -9,9 +9,10 @@ from sqlalchemy.orm import Session
 
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
-from app.models.jobs import DriveAssignment, ExportJob, Manifest
+from app.models.jobs import DriveAssignment, ExportJob, JobStatus, Manifest
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
+from app.repositories.job_repository import JobChainOfCustodySnapshotRepository, JobRepository
 from app.schemas.audit import (
     ChainOfCustodyDriveReportSchema,
     ChainOfCustodyEventSchema,
@@ -36,6 +37,7 @@ _COC_JOB_ACTIONS = {
     "JOB_STARTED",
     "JOB_COMPLETED",
     "JOB_FAILED",
+    "JOB_ARCHIVED",
     "JOB_VERIFY_STARTED",
     "MANIFEST_CREATED",
     "MANIFEST_DOWNLOADED",
@@ -51,6 +53,7 @@ _ACTION_LABELS = {
     "JOB_STARTED": "Copy operation started",
     "JOB_COMPLETED": "Copy operation completed",
     "JOB_FAILED": "Copy operation failed",
+    "JOB_ARCHIVED": "Job archived",
     "JOB_VERIFY_STARTED": "Job verification started",
     "MANIFEST_CREATED": "Manifest generated",
     "MANIFEST_DOWNLOADED": "Manifest downloaded",
@@ -58,6 +61,8 @@ _ACTION_LABELS = {
     "DRIVE_EJECT_PREPARED": "Drive prepared for eject",
     "DRIVE_EJECT_FAILED": "Drive eject preparation failed",
     "COC_HANDOFF_CONFIRMED": "Custody handoff confirmed",
+    "COC_SNAPSHOT_STORED": "Chain of custody snapshot stored",
+    "COC_SNAPSHOT_RECALLED": "Stored chain of custody snapshot recalled",
 }
 
 
@@ -287,6 +292,97 @@ def confirm_chain_of_custody_handoff(
     return _handoff_response_from_audit(created)
 
 
+def get_job_chain_of_custody_report(
+    db: Session,
+    *,
+    job_id: int,
+    actor: Optional[str],
+    client_ip: Optional[str],
+) -> ChainOfCustodyReportSchema:
+    job = JobRepository(db).get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    snapshot_repo = JobChainOfCustodySnapshotRepository(db)
+    snapshot = snapshot_repo.get_by_job_id(job.id)
+    if job.status == JobStatus.ARCHIVED:
+        if snapshot is None:
+            raise HTTPException(
+                status_code=404,
+                detail="No stored chain-of-custody snapshot is available for this archived job",
+            )
+        AuditRepository(db).add(
+            action="COC_SNAPSHOT_RECALLED",
+            user=actor,
+            project_id=job.project_id,
+            job_id=job.id,
+            details={
+                "job_id": job.id,
+                "project_id": job.project_id,
+                "stored_at": (
+                    snapshot.stored_at.isoformat().replace("+00:00", "Z")
+                    if snapshot.stored_at is not None else None
+                ),
+            },
+            client_ip=client_ip,
+        )
+        return ChainOfCustodyReportSchema.model_validate(snapshot.payload)
+
+    report = _build_job_chain_of_custody_report(db, job)
+    _store_job_chain_of_custody_snapshot(
+        db,
+        job=job,
+        report=report,
+        actor=actor,
+        client_ip=client_ip,
+    )
+    return report
+
+
+def confirm_job_chain_of_custody_handoff(
+    db: Session,
+    *,
+    job_id: int,
+    payload: ChainOfCustodyHandoffRequest,
+    actor: Optional[str],
+    client_ip: Optional[str],
+) -> ChainOfCustodyHandoffResponse:
+    job = JobRepository(db).get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if payload.project_id is not None and payload.project_id != job.project_id:
+        raise HTTPException(status_code=409, detail="Provided project_id does not match the job project")
+
+    assignment = (
+        db.query(DriveAssignment)
+        .filter(DriveAssignment.job_id == job.id, DriveAssignment.drive_id == payload.drive_id)
+        .one_or_none()
+    )
+    if assignment is None:
+        raise HTTPException(status_code=409, detail="Drive is not assigned to this job")
+
+    response = confirm_chain_of_custody_handoff(
+        db,
+        payload=payload,
+        actor=actor,
+        client_ip=client_ip,
+    )
+
+    refreshed_job = JobRepository(db).get(job.id)
+    if refreshed_job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    report = _build_job_chain_of_custody_report(db, refreshed_job)
+    _store_job_chain_of_custody_snapshot(
+        db,
+        job=refreshed_job,
+        report=report,
+        actor=actor,
+        client_ip=client_ip,
+    )
+    return response
+
+
 def _resolve_coc_targets(
     db: Session,
     *,
@@ -487,6 +583,8 @@ def _build_all_drive_reports(
             if owner is not None:
                 events_per_drive[owner].append(event)
 
+    job_creation_details_by_job = _extract_job_creation_details(all_events)
+
     # 3–4. Batch-fetch jobs and manifests for manifest summary assembly.
     jobs_by_id: Dict[int, ExportJob] = {}
     manifests_by_job: Dict[int, List[Manifest]] = {}
@@ -541,11 +639,144 @@ def _build_all_drive_reports(
                     jobs_by_id,
                     manifests_by_job,
                     assignment_by_drive_and_job,
+                    job_creation_details_by_job,
                 ),
             )
         )
 
     return reports
+
+
+def _build_job_chain_of_custody_report(
+    db: Session,
+    job: ExportJob,
+) -> ChainOfCustodyReportSchema:
+    assignments = (
+        db.query(DriveAssignment)
+        .join(UsbDrive, UsbDrive.id == DriveAssignment.drive_id)
+        .filter(DriveAssignment.job_id == job.id)
+        .order_by(DriveAssignment.assigned_at.asc(), DriveAssignment.id.asc())
+        .all()
+    )
+    if not assignments:
+        raise HTTPException(status_code=409, detail="Job has no drive assignments for chain-of-custody reporting")
+
+    drives_by_id: Dict[int, UsbDrive] = {}
+    assignment_by_drive_and_job: Dict[tuple[int, int], DriveAssignment] = {}
+    for assignment in assignments:
+        if assignment.drive is None:
+            continue
+        drives_by_id[assignment.drive_id] = assignment.drive
+        assignment_by_drive_and_job[(assignment.drive_id, job.id)] = assignment
+
+    drives = [drives_by_id[drive_id] for drive_id in sorted(drives_by_id)]
+    if not drives:
+        raise HTTPException(status_code=409, detail="Job has no drive assignments for chain-of-custody reporting")
+
+    drive_ids = [drive.id for drive in drives]
+    drive_events = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.drive_id.in_(drive_ids),
+            AuditLog.action.in_(_COC_DRIVE_ACTIONS),
+            AuditLog.project_id == job.project_id,
+        )
+        .order_by(AuditLog.timestamp.asc(), AuditLog.id.asc())
+        .all()
+    )
+    job_events = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.job_id == job.id,
+            AuditLog.action.in_(_COC_JOB_ACTIONS),
+        )
+        .order_by(AuditLog.timestamp.asc(), AuditLog.id.asc())
+        .all()
+    )
+    manifests = db.query(Manifest).filter(Manifest.job_id == job.id).all()
+
+    manifests_by_job = {job.id: manifests}
+    jobs_by_id = {job.id: job}
+    job_creation_details_by_job = _extract_job_creation_details(job_events)
+    reports: List[ChainOfCustodyDriveReportSchema] = []
+    for drive in drives:
+        events = [event for event in drive_events if event.drive_id == drive.id]
+        events.extend(job_events)
+        events.sort(key=lambda row: (row.timestamp, row.id))
+
+        coc_events = [
+            ChainOfCustodyEventSchema(
+                event_id=event.id,
+                event_type=event.action,
+                timestamp=event.timestamp,
+                actor=event.user,
+                action=_ACTION_LABELS.get(event.action, event.action.replace("_", " ").title()),
+                details=event.details or {},
+            )
+            for event in events
+        ]
+
+        handoff_events = [event for event in events if event.action == "COC_HANDOFF_CONFIRMED"]
+        latest_handoff = handoff_events[-1] if handoff_events else None
+        delivery_time = (
+            _parse_iso_datetime((latest_handoff.details or {}).get("delivery_time"))
+            if latest_handoff is not None else None
+        )
+
+        reports.append(
+            ChainOfCustodyDriveReportSchema(
+                drive_id=drive.id,
+                drive_sn=drive.device_identifier,
+                drive_manufacturer=drive.manufacturer,
+                drive_model=drive.product_name,
+                project_id=job.project_id,
+                custody_complete=latest_handoff is not None,
+                delivery_time=delivery_time,
+                chain_of_custody_events=coc_events,
+                manifest_summary=_assemble_manifest_summary(
+                    drive.id,
+                    [job.id],
+                    jobs_by_id,
+                    manifests_by_job,
+                    assignment_by_drive_and_job,
+                    job_creation_details_by_job,
+                ),
+            )
+        )
+
+    return ChainOfCustodyReportSchema(
+        selector_mode="JOB",
+        project_id=job.project_id,
+        reports=reports,
+    )
+
+
+def _store_job_chain_of_custody_snapshot(
+    db: Session,
+    *,
+    job: ExportJob,
+    report: ChainOfCustodyReportSchema,
+    actor: Optional[str],
+    client_ip: Optional[str],
+) -> None:
+    payload = report.model_dump(mode="json")
+    JobChainOfCustodySnapshotRepository(db).upsert_for_job(
+        job_id=job.id,
+        payload=payload,
+        stored_by=actor,
+    )
+    AuditRepository(db).add(
+        action="COC_SNAPSHOT_STORED",
+        user=actor,
+        project_id=job.project_id,
+        job_id=job.id,
+        details={
+            "job_id": job.id,
+            "project_id": job.project_id,
+            "report_count": len(report.reports),
+        },
+        client_ip=client_ip,
+    )
 
 
 def _assemble_manifest_summary(
@@ -554,6 +785,7 @@ def _assemble_manifest_summary(
     jobs_by_id: Dict[int, ExportJob],
     manifests_by_job: Dict[int, List[Manifest]],
     assignment_by_drive_and_job: Dict[tuple[int, int], DriveAssignment],
+    job_creation_details_by_job: Dict[int, Dict[str, Any]],
 ) -> List[ManifestSummarySchema]:
     summaries: List[ManifestSummarySchema] = []
     for jid in job_ids:
@@ -569,6 +801,9 @@ def _assemble_manifest_summary(
         summaries.append(
             ManifestSummarySchema(
                 job_id=job.id,
+                evidence_number=job.evidence_number,
+                processor_notes=(job_creation_details_by_job.get(jid, {}).get("processor_notes")
+                    or job_creation_details_by_job.get(jid, {}).get("notes")),
                 total_files=(assignment.file_count if assignment is not None else 0) or 0,
                 total_bytes=(assignment.copied_bytes if assignment is not None else 0) or 0,
                 manifest_count=len(rows),
@@ -640,3 +875,12 @@ def _parse_iso_datetime(value: Any) -> Optional[datetime]:
         return datetime.fromisoformat(normalized)
     except ValueError:
         return None
+
+
+def _extract_job_creation_details(events: List[AuditLog]) -> Dict[int, Dict[str, Any]]:
+    details_by_job: Dict[int, Dict[str, Any]] = {}
+    for event in events:
+        if event.action != "JOB_CREATED" or event.job_id is None:
+            continue
+        details_by_job[event.job_id] = event.details or {}
+    return details_by_job

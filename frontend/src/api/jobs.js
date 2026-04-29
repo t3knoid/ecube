@@ -91,6 +91,16 @@ export function getJob(jobId) {
   return toData(apiClient.get(`${API_BASE}/jobs/${id}`))
 }
 
+export function getJobChainOfCustody(jobId) {
+  const id = normalizeJobId(jobId)
+  return toData(apiClient.get(`${API_BASE}/jobs/${id}/chain-of-custody`))
+}
+
+export function confirmJobChainOfCustodyHandoff(jobId, payload) {
+  const id = normalizeJobId(jobId)
+  return toData(apiClient.post(`${API_BASE}/jobs/${id}/chain-of-custody/handoff`, payload))
+}
+
 export function getJobFiles(jobId, params = {}) {
   const id = normalizeJobId(jobId)
   return toData(apiClient.get(`${API_BASE}/jobs/${id}/files`, { params }))

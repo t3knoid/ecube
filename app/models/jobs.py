@@ -75,6 +75,7 @@ class ExportJob(Base):
     files = relationship("ExportFile", back_populates="job")
     manifests = relationship("Manifest", back_populates="job")
     assignments = relationship("DriveAssignment", back_populates="job")
+    coc_snapshot = relationship("JobChainOfCustodySnapshot", back_populates="job", uselist=False)
 
     @validates("project_id")
     def _normalize_project_id(self, _key, value):
@@ -130,6 +131,19 @@ class DriveAssignment(Base):
     released_at = Column(DateTime(timezone=True))
     drive = relationship("UsbDrive", back_populates="assignments")
     job = relationship("ExportJob", back_populates="assignments")
+
+
+class JobChainOfCustodySnapshot(Base):
+    __tablename__ = "job_chain_of_custody_snapshots"
+
+    id = Column(Integer, primary_key=True)
+    job_id = Column(Integer, ForeignKey("export_jobs.id"), nullable=False, unique=True, index=True)
+    payload = Column(JSON().with_variant(JSONB(), "postgresql"), nullable=False)
+    stored_by = Column(String, nullable=True)
+    stored_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    job = relationship("ExportJob", back_populates="coc_snapshot")
 
 
 @event.listens_for(Session, "before_flush")
