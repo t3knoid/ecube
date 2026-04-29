@@ -228,17 +228,28 @@ async def _try_redis_backend() -> "object | None":
     try:
         import redis.asyncio as aioredis  # optional dependency
     except ImportError:
-        logger.exception(
-            "SESSION_BACKEND=redis but the 'redis' package is not installed; "
-            "falling back to cookie-based sessions"
+        logger.warning(
+            "Redis session backend package missing; falling back to cookie-based sessions",
+            extra={
+                "event_code": "SESSION_BACKEND_FALLBACK",
+                "backend": "redis",
+                "fallback_backend": "cookie",
+                "reason": "redis_package_missing",
+            },
         )
         return None
 
     url = settings.redis_url
     if not url:
-        logger.error(
-            "SESSION_BACKEND=redis but REDIS_URL is not set; "
-            "falling back to cookie-based sessions"
+        logger.warning(
+            "Redis session backend configuration missing (REDIS_URL); falling back to cookie-based sessions",
+            extra={
+                "event_code": "SESSION_BACKEND_FALLBACK",
+                "backend": "redis",
+                "fallback_backend": "cookie",
+                "reason": "redis_url_missing",
+                "missing_setting": "REDIS_URL",
+            },
         )
         return None
 
@@ -252,19 +263,44 @@ async def _try_redis_backend() -> "object | None":
             socket_keepalive=settings.redis_socket_keepalive,
         )
         await client.ping()
-        logger.info("Redis session backend connected: %s", safe_url)
+        logger.info(
+            "Redis session backend connected",
+            extra={
+                "event_code": "SESSION_BACKEND_CONNECTED",
+                "backend": "redis",
+                "redis_url": safe_url,
+            },
+        )
         return client
-    except Exception:
+    except Exception as exc:
         # Close the client if it was created, to avoid leaking connections.
         if client is not None:
             try:
                 await client.aclose()
             except Exception:
                 pass
-        logger.exception(
-            "Redis session backend unavailable (url=%s); "
-            "falling back to cookie-based sessions",
-            safe_url,
+        logger.warning(
+            "Redis session backend unavailable; falling back to cookie-based sessions",
+            extra={
+                "event_code": "SESSION_BACKEND_FALLBACK",
+                "backend": "redis",
+                "fallback_backend": "cookie",
+                "reason": "redis_unavailable",
+                "redis_url": safe_url,
+                "error_type": type(exc).__name__,
+            },
+        )
+        logger.debug(
+            "Redis session backend failure detail",
+            extra={
+                "event_code": "SESSION_BACKEND_FALLBACK",
+                "backend": "redis",
+                "fallback_backend": "cookie",
+                "reason": "redis_unavailable",
+                "redis_url": safe_url,
+                "error_type": type(exc).__name__,
+            },
+            exc_info=exc,
         )
         return None
 
