@@ -199,3 +199,38 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
 
   await expectNoCriticalA11yViolations(page)
 })
+
+test('mounts mobile overflow menu stays visible without expanding the row', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await setupAuthenticatedPage(page, ['admin'])
+
+  const mounts = [{ id: 10, type: 'SMB', remote_path: '//server/project', local_mount_point: '/smb/project', project_id: 'CASE-2026-001', status: 'MOUNTED' }]
+
+  await page.route('**/api/mounts', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mounts) })
+  })
+
+  await page.goto('/mounts')
+  await expect(page.getByRole('heading', { name: 'Mounts' })).toBeVisible()
+
+  const row = page.locator('tbody tr').first()
+  const rowBoxBefore = await row.boundingBox()
+
+  const toggle = page.getByLabel('CASE-2026-001 mount actions')
+  await toggle.click()
+
+  const popover = page.locator('.row-actions-popover').first()
+  await expect(popover).toBeVisible()
+  const popoverBox = await popover.boundingBox()
+
+  const rowBoxAfter = await row.boundingBox()
+
+  expect(rowBoxBefore).not.toBeNull()
+  expect(popoverBox).not.toBeNull()
+  expect(rowBoxAfter).not.toBeNull()
+  expect(popoverBox.x).toBeGreaterThanOrEqual(0)
+  expect(popoverBox.y).toBeGreaterThanOrEqual(0)
+  expect(popoverBox.x + popoverBox.width).toBeLessThanOrEqual(390)
+  expect(popoverBox.y + popoverBox.height).toBeLessThanOrEqual(844)
+  expect(Math.abs(rowBoxAfter.height - rowBoxBefore.height)).toBeLessThanOrEqual(1)
+})
