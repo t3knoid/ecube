@@ -1,9 +1,8 @@
 import logging
 import os
 import re
-from datetime import datetime, timezone
 from io import BytesIO
-from typing import Dict, List, Tuple, cast
+from typing import Dict, List, Tuple
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, Query, Request
 from fastapi.responses import StreamingResponse
@@ -13,8 +12,8 @@ from app.auth import CurrentUser, require_roles
 from app.config import settings
 from app.database import get_db
 from app.models.audit import AuditLog
-from app.models.jobs import JobStatus, Manifest
-from app.repositories.job_repository import DriveAssignmentRepository, FileRepository
+from app.models.jobs import JobStatus
+from app.repositories.job_repository import DriveAssignmentRepository, FileRepository, JobRepository
 from app.schemas.audit import ChainOfCustodyHandoffRequest, ChainOfCustodyHandoffResponse, ChainOfCustodyReportSchema
 from app.schemas.jobs import (
     DriveInfoSchema,
@@ -43,14 +42,6 @@ _ADMIN_MANAGER = require_roles("admin", "manager")
 _ADMIN_MANAGER_PROCESSOR = require_roles("admin", "manager", "processor")
 
 _IP_VISIBLE_ROLES = {"admin", "auditor"}
-
-
-def _as_utc_timestamp(value: datetime | None) -> datetime | None:
-    if value is None:
-        return None
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
 
 
 def _build_error_summary(files_failed: int, error_rows: List[Tuple[str, str]]) -> str:
@@ -196,15 +187,8 @@ def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
     if not _IP_VISIBLE_ROLES.intersection(user.roles):
         schema.client_ip = None
 
-    latest_manifest = (
-        db.query(Manifest)
-        .filter(Manifest.job_id == job.id)
-        .order_by(Manifest.created_at.desc(), Manifest.id.desc())
-        .first()
-    )
-    schema.latest_manifest_created_at = _as_utc_timestamp(
-        cast(datetime | None, latest_manifest.created_at) if latest_manifest is not None else None
-    )
+    job_repo = JobRepository(db)
+    schema.latest_manifest_created_at = job_repo.get_latest_manifest_created_at(job.id)
 
     # Derived file counts via a single aggregate query
     file_repo = FileRepository(db)
