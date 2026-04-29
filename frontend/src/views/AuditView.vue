@@ -213,6 +213,7 @@ async function loadChainOfCustody() {
   cocError.value = ''
   cocStatusMessage.value = ''
   const previousReport = cocReport.value
+  const previousGeneratedAt = cocGeneratedAt.value
   const requestedParams = buildCocParams()
   cocReport.value = null
   try {
@@ -239,6 +240,7 @@ async function loadChainOfCustody() {
         })()
       if (prevMatchesRequest) {
         cocReport.value = previousReport
+        cocGeneratedAt.value = previousGeneratedAt
       } else {
         cocStatusMessage.value = t('audit.driveArchived')
       }
