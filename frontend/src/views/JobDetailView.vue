@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
-import { analyzeJob, archiveJob, getJob, getJobChainOfCustody, getJobFiles, startJob, retryFailedJob, pauseJob, verifyJob, generateManifest, downloadManifest, updateJob, completeJob, deleteJob, clearJobStartupAnalysisCache, confirmJobChainOfCustodyHandoff } from '@/api/jobs.js'
+import { analyzeJob, archiveJob, getJob, getJobChainOfCustody, refreshJobChainOfCustody, getJobFiles, startJob, retryFailedJob, pauseJob, verifyJob, generateManifest, downloadManifest, updateJob, completeJob, deleteJob, clearJobStartupAnalysisCache, confirmJobChainOfCustodyHandoff } from '@/api/jobs.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import { getFileHashes, compareFiles } from '@/api/files.js'
 import { getDrives } from '@/api/drives.js'
@@ -84,6 +84,7 @@ const cocLoading = ref(false)
 const cocError = ref('')
 const cocStatusMessage = ref('')
 const cocGeneratedAt = ref('')
+const cocSnapshotUpdatedAt = ref('')
 const cocReport = ref(null)
 const handoffSaving = ref(false)
 const cocHandoffForm = ref({
@@ -103,6 +104,7 @@ const canManageStartupAnalysis = computed(() => authStore.hasAnyRole(['admin', '
 const canInspectHashes = computed(() => authStore.hasAnyRole(['admin', 'auditor']))
 const canReadCoc = computed(() => authStore.hasAnyRole(['admin', 'manager', 'auditor']))
 const currentStatus = computed(() => String(job.value?.status || '').toUpperCase())
+const canRefreshCoc = computed(() => authStore.hasAnyRole(['admin', 'manager']) && currentStatus.value !== 'ARCHIVED')
 const canConfirmCocHandoff = computed(() => authStore.hasAnyRole(['admin', 'manager']) && currentStatus.value !== 'ARCHIVED')
 const currentStartupAnalysisStatus = computed(() => String(job.value?.startup_analysis_status || 'NOT_ANALYZED').toUpperCase())
 const archiveDriveReady = computed(() => {
@@ -708,6 +710,11 @@ function printJobCocReport() {
   window.print()
 }
 
+function applyCocSnapshot(report) {
+  cocReport.value = report
+  cocSnapshotUpdatedAt.value = report?.snapshot_updated_at || ''
+}
+
 async function loadJobChainOfCustody() {
   if (!job.value || !canReadCoc.value) return
   cocLoading.value = true
@@ -715,9 +722,26 @@ async function loadJobChainOfCustody() {
   cocStatusMessage.value = ''
   try {
     cocGeneratedAt.value = new Date().toISOString()
-    cocReport.value = await getJobChainOfCustody(job.value.id)
+    applyCocSnapshot(await getJobChainOfCustody(job.value.id))
   } catch (err) {
     cocReport.value = null
+    cocSnapshotUpdatedAt.value = ''
+    cocError.value = buildJobError(err)
+  } finally {
+    cocLoading.value = false
+  }
+}
+
+async function refreshStoredJobChainOfCustody() {
+  if (!job.value || !canRefreshCoc.value) return
+  cocLoading.value = true
+  cocError.value = ''
+  cocStatusMessage.value = ''
+  try {
+    cocGeneratedAt.value = new Date().toISOString()
+    applyCocSnapshot(await refreshJobChainOfCustody(job.value.id))
+    cocStatusMessage.value = t('audit.snapshotRefreshed')
+  } catch (err) {
     cocError.value = buildJobError(err)
   } finally {
     cocLoading.value = false
@@ -1721,7 +1745,7 @@ onUnmounted(() => {
           <div class="dialog-header">
             <h2 id="job-coc-title">{{ t('audit.chainTitle') }}</h2>
             <div class="actions coc-toolbar">
-              <button class="btn" @click="loadJobChainOfCustody">{{ t('common.actions.refresh') }}</button>
+              <button v-if="canRefreshCoc" class="btn" @click="refreshStoredJobChainOfCustody">{{ t('common.actions.refresh') }}</button>
               <button class="btn" :disabled="!cocReport" @click="printJobCocReport">{{ t('audit.printCoc') }}</button>
               <button class="btn" :disabled="!cocReport" @click="saveJobCocCsvReport">{{ t('audit.exportCsv') }}</button>
               <button class="btn btn-primary" :disabled="!cocReport" @click="saveJobCocReport">{{ t('audit.saveCoc') }}</button>
@@ -1732,6 +1756,13 @@ onUnmounted(() => {
             <p v-if="cocLoading" class="muted">{{ t('common.labels.loading') }}</p>
             <p v-if="cocError" class="error-banner">{{ cocError }}</p>
             <p v-if="cocStatusMessage" class="ok-banner">{{ cocStatusMessage }}</p>
+          </div>
+
+          <div class="coc-snapshot-card">
+            <span class="coc-snapshot-label">{{ t('audit.snapshotStatusTitle') }}</span>
+            <span v-if="cocSnapshotUpdatedAt" class="coc-snapshot-value">{{ t('audit.snapshotUpdatedAtLabel') }}: {{ formatTimestamp(cocSnapshotUpdatedAt) }}</span>
+            <span v-else class="muted">{{ t('audit.snapshotUnavailable') }}</span>
+            <p v-if="!cocSnapshotUpdatedAt && canRefreshCoc" class="muted coc-snapshot-hint">{{ t('audit.snapshotRefreshHint') }}</p>
           </div>
 
           <div v-if="cocReport" class="coc-results">
@@ -2249,6 +2280,27 @@ select {
 .coc-status {
   display: grid;
   gap: var(--space-xs);
+}
+
+.coc-snapshot-card {
+  display: grid;
+  gap: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg-secondary);
+  padding: var(--space-sm);
+}
+
+.coc-snapshot-label {
+  font-weight: 600;
+}
+
+.coc-snapshot-value {
+  color: var(--color-text-primary);
+}
+
+.coc-snapshot-hint {
+  margin: 0;
 }
 
 .coc-actions {

@@ -390,6 +390,27 @@ def get_job_chain_of_custody(
         job_id=job_id,
         actor=current_user.username,
         client_ip=get_client_ip(request),
+        allow_persistence=any(role in {"admin", "manager"} for role in current_user.roles),
+    )
+
+
+@router.post("/{job_id}/chain-of-custody/refresh", response_model=ChainOfCustodyReportSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_422})
+def refresh_job_chain_of_custody(
+    job_id: int,
+    request: Request,
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER),
+):
+    """Rebuild and persist the job-scoped chain-of-custody snapshot.
+
+    **Roles:** ``admin``, ``manager``
+    """
+    return audit_service.refresh_job_chain_of_custody_report(
+        db,
+        job_id=job_id,
+        actor=current_user.username,
+        client_ip=get_client_ip(request),
     )
 
 
