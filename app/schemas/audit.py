@@ -31,6 +31,8 @@ class ChainOfCustodyEventSchema(BaseModel):
 
 class ManifestSummarySchema(BaseModel):
     job_id: int = Field(..., description="Related export job ID")
+    evidence_number: Optional[str] = Field(default=None, description="Evidence identifier for the related job")
+    processor_notes: Optional[str] = Field(default=None, description="Processor notes recorded when the job was created")
     total_files: int = Field(..., description="Number of files copied during this drive assignment for the job")
     total_bytes: int = Field(..., description="Total bytes copied during this drive assignment for the job")
     manifest_count: int = Field(..., description="Number of generated manifests for the job")
