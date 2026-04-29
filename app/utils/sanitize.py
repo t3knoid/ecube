@@ -246,6 +246,8 @@ def sanitize_error_message(err: object, default_message: str = "Operation failed
         return "Operation timed out"
     if "not mounted" in lowered or "no mount point" in lowered:
         return "Target was already unmounted"
+    if "no transferable files" in lowered:
+        return "Source path contains no transferable files"
     if "busy" in lowered:
         return "Target is busy"
     if "invalid device path" in lowered or "not a block device" in lowered:
