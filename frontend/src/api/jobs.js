@@ -37,6 +37,11 @@ export function listJobs(params = {}, { timeout } = {}) {
   return toData(apiClient.get(`${API_BASE}/jobs`, config))
 }
 
+export async function hasArchivedJobs({ timeout } = {}) {
+  const jobs = await listJobs({ limit: 1, include_archived: true, statuses: ['ARCHIVED'] }, { timeout })
+  return Array.isArray(jobs) && jobs.length > 0
+}
+
 export function createJob(payload) {
   return toData(apiClient.post(`${API_BASE}/jobs`, payload))
 }
