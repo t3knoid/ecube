@@ -202,10 +202,16 @@ class TestGracefulRedisFailover:
 
         import asyncio
         with patch("builtins.__import__", side_effect=_block_redis):
-            with caplog.at_level(logging.WARNING):
+            with caplog.at_level(logging.WARNING, logger="app.session"):
                 result = asyncio.run(_try_redis_backend())
         assert result is None
-        assert "not installed" in caplog.text
+        warning_record = next(
+            record
+            for record in caplog.records
+            if record.name == "app.session" and record.levelno == logging.WARNING
+        )
+        assert "package missing" in warning_record.getMessage()
+        assert warning_record.reason == "redis_package_missing"
 
     def test_fallback_when_redis_url_not_set(self, caplog):
         pytest.importorskip("redis", reason="redis package required for this test")
@@ -215,10 +221,16 @@ class TestGracefulRedisFailover:
         with patch("app.session.settings") as mock_settings:
             mock_settings.session_backend = "redis"
             mock_settings.redis_url = None
-            with caplog.at_level(logging.WARNING):
+            with caplog.at_level(logging.WARNING, logger="app.session"):
                 result = asyncio.run(_try_redis_backend())
         assert result is None
-        assert "REDIS_URL" in caplog.text
+        warning_record = next(
+            record
+            for record in caplog.records
+            if record.name == "app.session" and record.levelno == logging.WARNING
+        )
+        assert warning_record.missing_setting == "REDIS_URL"
+        assert warning_record.reason == "redis_url_missing"
 
     def test_fallback_when_redis_connection_fails(self, caplog):
         pytest.importorskip("redis", reason="redis package required for this test")
@@ -235,11 +247,24 @@ class TestGracefulRedisFailover:
                 mock_settings.redis_url = "redis://localhost:6379/0"
                 mock_settings.redis_connection_timeout = 5
                 mock_settings.redis_socket_keepalive = True
-                with caplog.at_level(logging.WARNING):
+                with caplog.at_level(logging.DEBUG, logger="app.session"):
                     result = asyncio.run(_try_redis_backend())
 
         assert result is None
-        assert "unavailable" in caplog.text
+        warning_record = next(
+            record
+            for record in caplog.records
+            if record.name == "app.session" and record.levelno == logging.WARNING
+        )
+        debug_record = next(
+            record
+            for record in caplog.records
+            if record.name == "app.session" and record.levelno == logging.DEBUG
+        )
+        assert "unavailable" in warning_record.getMessage()
+        assert warning_record.reason == "redis_unavailable"
+        assert debug_record.getMessage() == "Redis session backend failure detail"
+        assert debug_record.exc_info is not None
         mock_client.aclose.assert_awaited_once()
 
     def test_init_session_backend_redis_fallback(self, caplog):
