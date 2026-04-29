@@ -4,7 +4,7 @@
 |---|---|
 | Title | ECUBE User Manual |
 | Purpose | Guides end users, processors, managers, and auditors through day-to-day ECUBE workflows and operational tasks. |
-| Updated on | 04/25/26 |
+| Updated on | 04/29/26 |
 | Audience | Processors, managers, auditors, administrators, end users. |
 
 ## Table of Contents
@@ -600,7 +600,7 @@ Archived jobs remain readable from Job Detail, but they are intentionally treate
 
 > **Access Summary**
 > **Page visibility:** `admin`, `manager`, `processor`, `auditor`
-> **Restricted actions:** `Analyze`, `Edit`, `Start`, `Retry Failed Files`, `Pause`, `Complete`, `Verify`, and `Manifest` are enabled for `admin`, `manager`, and `processor` when the current job state allows them. `Archive` and `Clear startup analysis cache` are shown only to `admin` and `manager` when the current job state allows them. `Delete` is shown only for eligible pending jobs. Hash inspection and source/destination comparison remain available to `admin` and `auditor`.
+> **Restricted actions:** `Analyze`, `Edit`, `Start`, `Retry Failed Files`, `Pause`, `Complete`, `Verify`, and `Manifest` are enabled for `admin`, `manager`, and `processor` when the current job state allows them. `Chain of Custody` is available to roles that can open the job-scoped chain-of-custody workflow. Within that report, `Custody Handoff` appears only for `admin` and `manager` when the loaded report still shows incomplete custody. `Archive` and `Clear startup analysis cache` remain limited to `admin` and `manager` when the current job state allows them. `Delete` is shown only for eligible pending jobs. Hash inspection and source/destination comparison remain available to `admin` and `auditor`.
 
 The job detail page provides deeper inspection and follow-up controls.
 
@@ -612,8 +612,8 @@ Typical functions include:
 - Retry only the failed or timed-out files from a partial-success completed job
 - Pause a running job and resume it later
 - Manually complete a safe non-active job when required by the workflow
-- Prepare Eject before Archive so the related drive leaves active use and the media can move into chain of custody
-- Archive a completed or failed job after explicit confirmation so the same work definition can be created again later
+- Use `Chain of Custody` as the standard sunset path when custody is being transferred
+- Use `Archive` only as an exceptional administrative or non-handoff closure path after `Prepare Eject` when the related drive is still attached
 - Clear a persisted startup-analysis snapshot before the next restart when the cached scan should be discarded
 - Generate a manifest, review the reported location, and download the generated file
 - Review copied files
@@ -632,7 +632,8 @@ Use them when appropriate:
 - `Retry Failed Files` to re-queue only `ERROR` and `TIMEOUT` file rows on a `COMPLETED` job that finished with partial-success results
 - `Pause` to request a safe stop after the current copy work finishes
 - `Complete` to manually mark a pending, paused, or failed job as complete when the operational workflow requires it
-- `Archive` to sunset a completed or failed job after confirmation; this action is limited to `admin` and `manager` and requires `Prepare Eject` first when the job still has a related drive assignment
+- `Chain of Custody` to open the job-scoped chain-of-custody report as the normal closeout step when custody is being transferred
+- `Archive` to sunset a completed or failed job after confirmation when an exceptional administrative or non-handoff closure is required; this action is limited to `admin` and `manager` and requires `Prepare Eject` first when the job still has a related drive assignment
 - `Clear startup analysis cache` to remove a persisted startup scan after explicit confirmation; this is available only to `admin` and `manager` when cached startup-analysis data exists for the job
 - `Verify` to run verification checks once the job is fully complete with no failed or timed-out files
 - `Manifest` to generate the manifest output once the job is fully complete with no failed or timed-out files
@@ -645,7 +646,11 @@ Verify and Manifest stay disabled until the job reaches a truly complete 100% st
 
 For a partial-success `COMPLETED` job, Job Detail can show `Retry Failed Files` instead of exposing Verify or Manifest too early. This action is available only to `admin`, `manager`, and `processor`, moves the job back into `RUNNING`, re-queues only failed or timed-out files, and preserves already successful copies.
 
-`Archive` opens its own confirmation dialog and is available only for `COMPLETED` or `FAILED` jobs after the related drive has been through `Prepare Eject`. In practice, treat this as `Prepare Eject before Archive`: first prepare the drive for eject so the media can move into chain of custody, then archive the job record. After confirmation, the job transitions to `ARCHIVED`, remains viewable in Job Detail for audit and review purposes, drops out of the default Jobs list, and no longer blocks recreation of the same exact project/source/destination work definition.
+For evidence-bearing work, treat `Chain of Custody` as the standard sunset path. Use it to review the stored report and, when needed, launch the separate `Custody Handoff` dialog to record custody transfer in ECUBE even when external paper paperwork is also being used.
+
+`Archive` opens its own confirmation dialog and is available only for `COMPLETED` or `FAILED` jobs after the related drive has been through `Prepare Eject`. This is an exception-only path for administrative or non-handoff closure. The confirmation explicitly warns that the job cannot be restored from the UI and that archive does not itself record custody handoff. After confirmation, the job transitions to `ARCHIVED`, remains viewable in Job Detail for audit and review purposes, drops out of the default Jobs list, and no longer blocks recreation of the same exact project/source/destination work definition.
+
+`Delete` remains limited to eligible pending jobs that have not yet become part of the operational record. It is not a substitute for closing out historical work.
 
 The completion summary uses the normal success styling for clean completions. If the summary still shows any failed or timed-out file counts, the summary switches to a red warning background so operators can distinguish a partial-success completion from a clean completed run at a glance.
 
@@ -735,28 +740,28 @@ When exporting CSV:
 
 ### 11.1 Chain of Custody Workflow
 
-Use the `Chain of Custody` action on `Job Detail` to open the job-scoped CoC dialog. The dialog loads the last stored CoC snapshot for that job, shows the formatted report content directly, allows authorized users to refresh and store a new snapshot, and provides print/export and handoff controls appropriate to the current role.
+Use the `Chain of Custody` action on `Job Detail` to open the job-scoped CoC dialog. This is the standard closeout path when media is being transferred. The dialog loads the last stored CoC snapshot for that job, shows the formatted report content directly, allows authorized users to refresh and store a new snapshot, and provides print/export controls plus a separate `Custody Handoff` action when the current role and custody state allow it.
 
 Typical workflow:
 
 1. Open the relevant job in `Job Detail`.
 2. Click `Chain of Custody` in the action area.
-3. Review the report for each drive section. Each report includes generated-at UTC metadata, the requesting username, drive identity, custody status, custody-event timeline, manifest summary rows, and an attestation block for print sign-off.
+3. Review the report for each drive section. Each report is titled with the project binding and evidence number and includes generated-at UTC metadata, the requesting username, drive identity, processor notes, custody status, custody-event timeline, manifest summary rows, and an attestation block for print sign-off.
 4. If the report needs to be rebuilt from current trusted state, an `admin` or `manager` can click `Refresh` to store a new snapshot.
 5. Use `Print CoC`, `Export CoC CSV`, or `Export JSON` when you need a printable or downloadable copy of the report currently loaded in the dialog.
-6. If you are an `admin` or `manager`, click `Prefill Handoff` to populate the handoff form from a selected report.
-7. Enter required handoff details (`Possessor` and `Delivery Time`) and any optional receipt fields. The delivery time picker uses your browser's local timezone; the application converts it to UTC automatically before storing.
+6. If you are an `admin` or `manager` and the loaded report still shows incomplete custody, click `Custody Handoff` in the dialog toolbar.
+7. ECUBE auto-populates `Drive ID`, `Project Binding`, and `Evidence`, and defaults `Delivery Time` to the current local date and time. Enter the required handoff details (`Possessor` and `Delivery Time`) and any optional receipt fields.
 8. Click `Confirm Handoff`.
 9. If the handoff form is incomplete or the submission fails, ECUBE keeps the error inside a visible handoff-failure dialog in the active CoC workflow so you can correct the issue without scrolling back through the report.
-10. If validation succeeds, review the **Permanent Archive Warning** modal.
+10. If validation succeeds, review the `Record custody handoff in ECUBE?` modal.
 11. Choose one of the following:
    - `Cancel`: closes the warning modal and does not record a handoff.
-   - `Yes, archive drive`: records the handoff and archives the drive.
+   - `Record handoff and archive drive`: records the handoff and archives the drive.
 
 Auditor behavior:
 
 - Auditors can open the dialog, review the loaded report, and use `Print CoC`, `Export CoC CSV`, and `Export JSON`.
-- Auditors cannot refresh the snapshot or confirm custody handoff.
+- Auditors cannot refresh the snapshot and do not see `Custody Handoff`.
 
 ![Drives page (related media lifecycle context, E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/drives-default-chromium-linux.png)
 
@@ -771,10 +776,10 @@ What happens when handoff is confirmed:
 
 Operational guidance:
 
-- Treat `Yes, archive drive` as a finalization action.
+- Treat `Record handoff and archive drive` as a finalization action.
 - If the same job is reassigned to another drive during its lifecycle, that job can appear in more than one drive section of the Chain of Custody report.
 - In those multi-drive cases, each drive section shows the file and byte totals recorded for that specific drive assignment rather than the full job aggregate.
-- When reviewing a multi-drive Chain of Custody report, use the drive identity, custody events, and manifest path columns to determine which drive section you are signing or exporting.
+- When reviewing a multi-drive Chain of Custody report, use the drive identity, processor notes, custody events, and manifest summary rows to determine which drive section you are signing or exporting.
 - Verify drive ID, project, possessor, and delivery timestamp before confirming.
 - Use `Cancel` if any custody detail needs correction before archival.
 
