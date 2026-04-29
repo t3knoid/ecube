@@ -1,6 +1,17 @@
 import { test, expect } from '@playwright/test'
-import { setupAuthenticatedPage, stubDrivesApi } from './helpers/app.js'
+import { setupAuthenticatedPage, routeJson, stubDrivesApi } from './helpers/app.js'
 import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
+
+async function openJobDetailChainOfCustody(page) {
+  const chainButton = page.getByRole('button', { name: 'Chain of Custody' })
+  if (await chainButton.count()) {
+    await chainButton.click()
+    return
+  }
+
+  await page.getByLabel('Job Detail actions').click()
+  await page.getByRole('button', { name: 'Chain of Custody' }).click()
+}
 
 test('audit filters and export csv', async ({ page }) => {
   await setupAuthenticatedPage(page, ['auditor'])
@@ -50,11 +61,30 @@ test('audit filters and export csv', async ({ page }) => {
   await expectNoCriticalA11yViolations(page)
 })
 
-test('chain of custody report renders printable sections and CoC CSV export on mobile', async ({ page, browserName }) => {
+test('job detail chain of custody report renders printable sections and CoC exports on mobile', async ({ page, browserName }) => {
   test.skip(browserName === 'webkit', 'Print media assertions are unstable in webkit for this view')
 
   await page.setViewportSize({ width: 390, height: 844 })
   await setupAuthenticatedPage(page, ['auditor'])
+  await routeJson(page, '**/api/drives**', [])
+  await routeJson(page, '**/api/mounts', [])
+  await routeJson(page, '**/api/jobs/12/files', { total_files: 0, returned_files: 0, files: [] })
+  await routeJson(page, '**/api/jobs/12', {
+    id: 12,
+    project_id: 'PRJ-001',
+    evidence_number: 'EV-12',
+    status: 'ARCHIVED',
+    copied_bytes: 1024,
+    total_bytes: 1024,
+    file_count: 3,
+    files_succeeded: 3,
+    files_failed: 0,
+    files_timed_out: 0,
+    thread_count: 4,
+    source_path: '/mnt/share/evidence',
+    target_mount_path: '/mnt/ecube/1',
+    drive: { id: 1, current_state: 'ARCHIVED', is_mounted: false, device_identifier: 'SN-001' },
+  })
 
   await page.route(/\/api\/audit(?!\/)/, async (route) => {
     await route.fulfill({
@@ -64,29 +94,14 @@ test('chain of custody report renders printable sections and CoC CSV export on m
     })
   })
 
-  await page.route('**/api/drives**', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify([
-        {
-          id: 1,
-          device_identifier: 'sdb',
-          display_device_label: 'Kingston DataTraveler - Port 1',
-          current_state: 'IN_USE',
-          current_project_id: 'PRJ-001',
-        },
-      ]),
-    })
-  })
-
-  await page.route('**/api/audit/chain-of-custody**', async (route) => {
+  await page.route('**/api/jobs/12/chain-of-custody', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        selector_mode: 'PROJECT',
+        selector_mode: 'JOB',
         project_id: 'PRJ-001',
+        snapshot_updated_at: '2026-04-01T14:31:00.000Z',
         reports: [
           {
             drive_id: 1,
@@ -99,6 +114,8 @@ test('chain of custody report renders printable sections and CoC CSV export on m
             manifest_summary: [
               {
                 job_id: 12,
+                evidence_number: 'EV-12',
+                processor_notes: 'Sealed container intact',
                 total_files: 3,
                 total_bytes: 1024,
                 manifest_count: 1,
@@ -136,9 +153,8 @@ test('chain of custody report renders printable sections and CoC CSV export on m
     })
   })
 
-  await page.goto('/audit')
-  await page.getByLabel('Filter by drive ID').first().selectOption({ label: 'Kingston DataTraveler - Port 1' })
-  await page.getByRole('button', { name: 'Load CoC' }).click()
+  await page.goto('/jobs/12')
+  await openJobDetailChainOfCustody(page)
 
   await expect(page.getByText('Report Header')).toBeVisible()
   await expect(page.getByText('Events Timeline')).toBeVisible()
@@ -152,29 +168,42 @@ test('chain of custody report renders printable sections and CoC CSV export on m
   await expect(page.getByText('DRIVE_INITIALIZED')).toHaveCount(0)
   await expect(page.getByText('/reports/manifests/12.json')).toBeVisible()
   await expect(page.locator('.coc-print-card dd').filter({ hasText: 'Officer Jane Doe' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Prefill Handoff' })).toHaveCount(0)
 
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: 5000 }).catch(() => null),
     page.getByRole('button', { name: 'Export CoC CSV' }).click(),
   ])
   if (download) {
-    expect(download.suggestedFilename()).toMatch(/^chain-of-custody-.*\.csv$/i)
+    expect(download.suggestedFilename()).toMatch(/^chain-of-custody-job-.*\.csv$/i)
+  }
+
+  const [jsonDownload] = await Promise.all([
+    page.waitForEvent('download', { timeout: 5000 }).catch(() => null),
+    page.getByRole('button', { name: 'Export JSON' }).click(),
+  ])
+  if (jsonDownload) {
+    expect(jsonDownload.suggestedFilename()).toMatch(/^chain-of-custody-job-.*\.json$/i)
   }
 
   await page.getByRole('button', { name: 'Print CoC' }).click()
-  await expect.poll(async () => page.evaluate(() => document.body.classList.contains('coc-print-active'))).toBe(false)
+  await page.evaluate(() => document.body.classList.add('printing-coc-report'))
 
   await page.emulateMedia({ media: 'print' })
   await expect(page.locator('.coc-print-card')).toBeVisible()
-  await expect(page.locator('.audit-log-section')).toBeHidden()
+  await expect(page.locator('article.panel').first()).toBeHidden()
   await page.emulateMedia({ media: 'screen' })
+  await page.evaluate(() => document.body.classList.remove('printing-coc-report'))
 })
 
 test.describe('chain of custody handoff', () => {
   test.use({ timezoneId: 'America/New_York' })
 
-  test('requires warning confirmation and submits archive handoff', async ({ page }) => {
+  test('requires warning confirmation and submits archive handoff from job detail', async ({ page }) => {
     await setupAuthenticatedPage(page, ['manager'])
+    await routeJson(page, '**/api/drives**', [])
+    await routeJson(page, '**/api/mounts', [])
+    await routeJson(page, '**/api/jobs/12/files', { total_files: 0, returned_files: 0, files: [] })
 
     await page.route(/\/api\/audit(?!\/)/, async (route) => {
       await route.fulfill({
@@ -184,24 +213,28 @@ test.describe('chain of custody handoff', () => {
       })
     })
 
-    await page.route('**/api/drives**', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify([
-          {
-            id: 1,
-            device_identifier: 'sdb',
-            display_device_label: 'Kingston DataTraveler - Port 1',
-            current_state: 'IN_USE',
-            current_project_id: 'PRJ-001',
-          },
-        ]),
-      })
+    let jobState = {
+      id: 12,
+      project_id: 'PRJ-001',
+      evidence_number: 'EV-12',
+      status: 'COMPLETED',
+      copied_bytes: 1024,
+      total_bytes: 1024,
+      file_count: 3,
+      files_succeeded: 3,
+      files_failed: 0,
+      files_timed_out: 0,
+      thread_count: 4,
+      source_path: '/mnt/share/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      drive: { id: 1, current_state: 'AVAILABLE', is_mounted: false, device_identifier: 'SN-001' },
+    }
+    await page.route('**/api/jobs/12', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobState) })
     })
 
     let cocLoads = 0
-    await page.route('**/api/audit/chain-of-custody**', async (route) => {
+    await page.route('**/api/jobs/12/chain-of-custody', async (route) => {
       if (route.request().method() !== 'GET') {
         await route.fallback()
         return
@@ -211,7 +244,9 @@ test.describe('chain of custody handoff', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          selector_mode: 'DRIVE_ID',
+          selector_mode: 'JOB',
+          project_id: 'PRJ-001',
+          snapshot_updated_at: '2026-04-01T14:31:00.000Z',
           reports: [
             {
               drive_id: 1,
@@ -221,7 +256,17 @@ test.describe('chain of custody handoff', () => {
               project_id: 'PRJ-001',
               delivery_time: null,
               custody_complete: false,
-              manifest_summary: [],
+              manifest_summary: [{
+                job_id: 12,
+                evidence_number: 'EV-12',
+                processor_notes: 'Initial intake note',
+                total_files: 3,
+                total_bytes: 1024,
+                manifest_count: 1,
+                latest_manifest_path: '/reports/manifests/12.json',
+                latest_manifest_format: 'json',
+                latest_manifest_created_at: '2026-04-01T14:00:00.000Z',
+              }],
               chain_of_custody_events: [],
             },
           ],
@@ -231,9 +276,14 @@ test.describe('chain of custody handoff', () => {
 
     let handoffCallCount = 0
     let lastHandoffBody = null
-    await page.route('**/api/audit/chain-of-custody/handoff', async (route) => {
+    await page.route('**/api/jobs/12/chain-of-custody/handoff', async (route) => {
       handoffCallCount += 1
       lastHandoffBody = route.request().postDataJSON()
+      jobState = {
+        ...jobState,
+        status: 'ARCHIVED',
+        drive: { ...jobState.drive, current_state: 'ARCHIVED' },
+      }
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -253,19 +303,14 @@ test.describe('chain of custody handoff', () => {
       })
     })
 
-    await page.goto('/audit')
-
-  const cocDriveSelect = page.getByLabel('Filter by drive ID').first()
-  await expect(cocDriveSelect.locator('option')).toContainText(['Any drive', 'Kingston DataTraveler - Port 1'])
-
-  const handoffDriveSelect = page.locator('.handoff-form').getByLabel('Filter by drive ID')
-  await expect(handoffDriveSelect.locator('option')).toContainText(['Select drive', 'Kingston DataTraveler - Port 1'])
-
-  await page.getByLabel('Filter by drive ID').first().selectOption({ label: 'Kingston DataTraveler - Port 1' })
-    await page.getByRole('button', { name: 'Load CoC' }).click()
+    await page.goto('/jobs/12')
+    await page.getByRole('button', { name: 'Chain of Custody' }).click()
     await expect(page.getByText('Drive #1 (SN-001)')).toBeVisible()
 
     await page.getByRole('button', { name: 'Prefill Handoff' }).click()
+    await expect(page.getByLabel('Drive ID')).toHaveValue('1')
+    await expect(page.getByLabel('Project Binding')).toHaveValue('PRJ-001')
+    await expect(page.getByLabel('Evidence')).toHaveValue('EV-12')
     await page.getByLabel('Possessor').fill('Officer Jane Doe')
     await page.getByLabel('Delivery Time (Local Time)').fill('2026-04-01T10:30')
 
@@ -290,10 +335,7 @@ test.describe('chain of custody handoff', () => {
       delivery_time: '2026-04-01T14:30:00.000Z',
     })
 
-    // Verify the report was patched in-place with the handoff response fields.
-    // custody_complete should be true and the new event should appear in the events list.
-    await expect(page.locator('.status-badge').filter({ hasText: 'Custody Complete' })).toBeVisible()
-    await expect(page.getByRole('cell', { name: 'Custody handoff confirmed' })).toBeVisible()
-    await expect(page.getByRole('cell', { name: /possessor: Officer Jane Doe/ })).toBeVisible()
+    await expect(page.getByText('Custody handoff recorded.')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Prefill Handoff' })).toHaveCount(0)
   })
 })

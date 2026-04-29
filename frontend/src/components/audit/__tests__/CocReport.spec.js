@@ -40,6 +40,8 @@ function mountView(props = {}) {
         manifest_summary: [
           {
             job_id: 99,
+            evidence_number: 'EV-777',
+            processor_notes: 'Collected from workstation cart A',
             total_files: 12,
             total_bytes: 4096,
             manifest_count: 2,
@@ -83,6 +85,8 @@ describe('CocReport', () => {
     expect(wrapper.text()).toContain('Events Timeline')
     expect(wrapper.text()).toContain('Drive initialized')
     expect(wrapper.text()).not.toContain('DRIVE_INITIALIZED')
+    expect(wrapper.text()).toContain('EV-777')
+    expect(wrapper.text()).toContain('Collected from workstation cart A')
     expect(wrapper.text()).toContain('/reports/manifests/99.json')
     expect(wrapper.text()).toContain('json')
     expect(wrapper.text()).toContain('2026-04-28 14:00:00 UTC')
