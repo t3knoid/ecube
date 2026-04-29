@@ -10,7 +10,8 @@ from unittest.mock import patch
 import pytest
 
 from app.models.audit import AuditLog
-from app.models.jobs import ExportFile, ExportJob, FileStatus, JobStatus, StartupAnalysisStatus
+from app.models.hardware import DriveState, UsbDrive
+from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, StartupAnalysisStatus
 from app.services import copy_engine
 
 
@@ -39,6 +40,19 @@ def _make_job(
     db.commit()
     db.refresh(job)
     return job
+
+
+def _assign_drive(db, job: ExportJob) -> DriveAssignment:
+    drive = UsbDrive(device_identifier=f"USB-COPY-{job.id}", current_state=DriveState.IN_USE)
+    db.add(drive)
+    db.commit()
+    db.refresh(drive)
+
+    assignment = DriveAssignment(drive_id=drive.id, job_id=job.id)
+    db.add(assignment)
+    db.commit()
+    db.refresh(assignment)
+    return assignment
 
 
 def _session_factory(db):
@@ -333,6 +347,7 @@ def test_process_file_updates_copied_bytes_for_completed_copy(db, tmp_path):
     target_dir.mkdir()
 
     job = _make_job(db, str(source_dir), max_file_retries=0, retry_delay_seconds=0, target_mount_path=str(target_dir))
+    assignment = _assign_drive(db, job)
 
     ef = ExportFile(
         job_id=job.id,
@@ -350,7 +365,11 @@ def test_process_file_updates_copied_bytes_for_completed_copy(db, tmp_path):
 
     db.expire_all()
     refreshed_job = db.get(ExportJob, job.id)
+    refreshed_assignment = db.get(DriveAssignment, assignment.id)
     assert refreshed_job.copied_bytes == len(payload)
+    assert refreshed_assignment is not None
+    assert refreshed_assignment.copied_bytes == len(payload)
+    assert refreshed_assignment.file_count == 1
 
 
 def test_process_file_batches_copied_bytes_updates(db, tmp_path):
