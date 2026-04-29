@@ -776,7 +776,7 @@ def test_get_job_includes_latest_manifest_created_at(client, db):
     response = client.get(f"/jobs/{job.id}")
 
     assert response.status_code == 200
-    assert response.json()["latest_manifest_created_at"].startswith("2026-04-29T12:30:00")
+    assert response.json()["latest_manifest_created_at"] == "2026-04-29T12:30:00Z"
 
 
 def test_get_job_not_found(client, db):
