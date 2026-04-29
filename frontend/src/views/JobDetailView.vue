@@ -547,6 +547,31 @@ const completionSummaryHasFailures = computed(() => {
   return completionSummary.value.filesFailed > 0 || completionSummary.value.filesTimedOut > 0
 })
 
+const manifestSummary = computed(() => {
+  if (!completionSummary.value || !job.value) return null
+
+  const latestManifestCreatedAt = job.value.latest_manifest_created_at
+  if (!latestManifestCreatedAt) {
+    return {
+      createdAtLabel: t('jobs.manifestNeverGenerated'),
+      statusLabel: t('jobs.manifestStatusMissing'),
+      tone: 'muted',
+    }
+  }
+
+  const manifestCreatedAt = new Date(latestManifestCreatedAt)
+  const completedAt = job.value.completed_at ? new Date(job.value.completed_at) : null
+  const hasValidManifestTime = !Number.isNaN(manifestCreatedAt.getTime())
+  const hasValidCompletedTime = completedAt && !Number.isNaN(completedAt.getTime())
+  const isStale = Boolean(hasValidManifestTime && hasValidCompletedTime && manifestCreatedAt.getTime() < completedAt.getTime())
+
+  return {
+    createdAtLabel: formatTimestamp(latestManifestCreatedAt),
+    statusLabel: isStale ? t('jobs.manifestStatusStale') : t('jobs.manifestStatusCurrent'),
+    tone: isStale ? 'danger' : 'success',
+  }
+})
+
 function formatBytes(value) {
   if (typeof value !== 'number' || value < 0) return '-'
   if (value === 0) return '0 B'
@@ -1550,6 +1575,8 @@ onUnmounted(() => {
           <span>{{ t('jobs.duration') }}</span><strong>{{ completionSummary.duration }}</strong>
           <span>{{ t('jobs.copyRate') }}</span><strong>{{ completionSummary.copyRate }}</strong>
           <span>{{ t('jobs.completedAt') }}</span><strong>{{ completionSummary.completedAt }}</strong>
+          <span>{{ t('jobs.lastManifestCreated') }}</span><strong>{{ manifestSummary?.createdAtLabel || '-' }}</strong>
+          <span>{{ t('jobs.manifestStatus') }}</span><strong :class="['manifest-status-text', `manifest-status-text--${manifestSummary?.tone || 'muted'}`]">{{ manifestSummary?.statusLabel || '-' }}</strong>
         </div>
       </div>
 
@@ -2371,6 +2398,37 @@ select {
 .completion-summary--danger {
   background: var(--color-alert-danger-bg, #fef2f2);
   border-color: var(--color-alert-danger-border, #fca5a5);
+}
+
+.manifest-status-text {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 7rem;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary, #1f2937);
+  font-weight: 600;
+}
+
+.manifest-status-text--success {
+  background: color-mix(in srgb, var(--color-success, #16a34a) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-success, #16a34a) 45%, var(--color-border));
+  color: var(--color-status-ok-text, #14532d);
+}
+
+.manifest-status-text--danger {
+  background: color-mix(in srgb, var(--color-danger, #dc2626) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-danger, #dc2626) 45%, var(--color-border));
+  color: var(--color-status-danger-text, #991b1b);
+}
+
+.manifest-status-text--muted {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border);
+  color: var(--color-status-muted-text, #475569);
 }
 
 .failure-summary {
