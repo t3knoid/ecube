@@ -497,7 +497,8 @@ class TestCopyEngineDBFailures:
 
     def test_process_file_skips_increment_when_done_save_fails(self, db):
         """If saving DONE status fails, copied_bytes must NOT be incremented."""
-        from app.models.jobs import ExportFile, FileStatus
+        from app.models.hardware import DriveState, UsbDrive
+        from app.models.jobs import DriveAssignment, ExportFile, FileStatus
         from app.services.copy_engine import _process_file
 
         job = ExportJob(
@@ -509,6 +510,17 @@ class TestCopyEngineDBFailures:
         )
         db.add(job)
         db.commit()
+
+        drive = UsbDrive(device_identifier="USB-DONE-SAVE-FAIL", current_state=DriveState.IN_USE)
+        db.add(drive)
+        db.commit()
+        db.refresh(drive)
+
+        assignment = DriveAssignment(drive_id=drive.id, job_id=job.id)
+        db.add(assignment)
+        db.commit()
+        db.refresh(assignment)
+        assignment_id = assignment.id
 
         ef = ExportFile(
             job_id=job.id,
@@ -531,13 +543,10 @@ class TestCopyEngineDBFailures:
             call_count = 0
 
             def commit_fails_on_done_save(*a, **kw):
-                """Fail the commit that persists DONE status (second commit),
-                but allow others (COPYING status, audit, etc.)."""
+                """Fail the commit that persists DONE status and assignment file count."""
                 nonlocal call_count
                 call_count += 1
-                # The DONE-status save is the 2nd real commit in _process_file
-                # (1st = COPYING status). Fail it to simulate DB error.
-                if call_count == 2:
+                if call_count == 3:
                     raise Exception("simulated DONE-save failure")
                 return original_save()
 
@@ -556,9 +565,85 @@ class TestCopyEngineDBFailures:
             # failed — the increment must have been skipped.
             db.expire_all()
             refreshed_job = db.get(ExportJob, job_id)
+            refreshed_assignment = db.get(DriveAssignment, assignment_id)
             assert refreshed_job.copied_bytes == 0, (
                 f"Expected copied_bytes=0 but got {refreshed_job.copied_bytes}; "
-                "increment_job_bytes should be skipped when DONE save fails"
+                "copy progress should be rolled back when DONE save fails"
             )
+            assert refreshed_assignment is not None
+            assert refreshed_assignment.copied_bytes == 0
+            assert refreshed_assignment.file_count == 0
+        finally:
+            os.unlink(src_path)
+
+    def test_process_file_progress_commit_failure_does_not_split_job_and_assignment_totals(self, db):
+        """A failed progress commit must leave both job and assignment counters unchanged."""
+        from app.models.hardware import DriveState, UsbDrive
+        from app.models.jobs import DriveAssignment, ExportFile, FileStatus
+        from app.services.copy_engine import _process_file
+
+        job = ExportJob(
+            project_id="PROJ-001",
+            evidence_number="EV-001",
+            source_path="/tmp",
+            status=JobStatus.RUNNING,
+            copied_bytes=0,
+        )
+        db.add(job)
+        db.commit()
+
+        drive = UsbDrive(device_identifier="USB-PROGRESS-FAIL", current_state=DriveState.IN_USE)
+        db.add(drive)
+        db.commit()
+        db.refresh(drive)
+
+        assignment = DriveAssignment(drive_id=drive.id, job_id=job.id)
+        db.add(assignment)
+        db.commit()
+        db.refresh(assignment)
+        job_id = job.id
+        assignment_id = assignment.id
+
+        ef = ExportFile(
+            job_id=job.id,
+            relative_path="progress.txt",
+            size_bytes=100,
+            status=FileStatus.PENDING,
+        )
+        db.add(ef)
+        db.commit()
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+            f.write("x" * 100)
+            src_path = f.name
+
+        try:
+            original_save = db.commit
+            call_count = 0
+
+            def commit_fails_on_progress_update(*a, **kw):
+                nonlocal call_count
+                call_count += 1
+                if call_count == 2:
+                    raise Exception("simulated progress commit failure")
+                return original_save()
+
+            with patch(
+                "app.repositories.audit_repository.AuditRepository.add",
+                return_value=None,
+            ), patch(
+                "app.services.copy_engine.SessionLocal",
+                return_value=db,
+            ):
+                with patch.object(db, "commit", side_effect=commit_fails_on_progress_update):
+                    _process_file(ef.id, Path(src_path), None)
+
+            db.expire_all()
+            refreshed_job = db.get(ExportJob, job_id)
+            refreshed_assignment = db.get(DriveAssignment, assignment_id)
+            assert refreshed_job is not None
+            assert refreshed_assignment is not None
+            assert refreshed_job.copied_bytes == 0
+            assert refreshed_assignment.copied_bytes == 0
         finally:
             os.unlink(src_path)
