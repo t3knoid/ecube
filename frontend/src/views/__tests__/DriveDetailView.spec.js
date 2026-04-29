@@ -212,6 +212,20 @@ describe('DriveDetailView mount workflow', () => {
     expect(wrapper.text()).toContain(i18n.global.t('browse.browseContents'))
   })
 
+  it('shows the latest evidence number for the bound project', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-007', mount_path: '/mnt/ecube/7' })])
+    mocks.listJobs.mockResolvedValue([
+      { id: 21, project_id: 'PROJ-007', evidence_number: 'EV-007' },
+      { id: 20, project_id: 'PROJ-007', evidence_number: 'EV-OLD-007' },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.evidence'))
+    expect(wrapper.text()).toContain('EV-007')
+  })
+
   it('hides Enable Drive when the drive is disconnected and not physically detected', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'DISCONNECTED', filesystem_path: null })])
 
@@ -362,7 +376,7 @@ describe('DriveDetailView mount workflow', () => {
 
     await ejectButton.trigger('click')
     await flushPromises()
-    expect(mocks.listJobs).toHaveBeenCalledWith({
+    expect(mocks.listJobs).toHaveBeenLastCalledWith({
       drive_id: 7,
       statuses: ['RUNNING', 'VERIFYING'],
       limit: 1,
