@@ -397,18 +397,18 @@ def test_process_file_batches_copied_bytes_updates(db, tmp_path):
     db.refresh(ef)
 
     progress_updates: list[int] = []
-    original_increment = copy_engine.FileRepository.increment_job_bytes
+    original_increment = copy_engine.FileRepository.increment_copy_progress
 
-    def _record_increment(self, job_id, size_bytes):
+    def _record_increment(self, job_id, assignment_id, size_bytes):
         progress_updates.append(size_bytes)
-        return original_increment(self, job_id, size_bytes)
+        return original_increment(self, job_id, assignment_id, size_bytes)
 
     with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
         with patch.object(copy_engine.settings, "copy_chunk_size_bytes", 4), patch.object(
             copy_engine.settings,
             "copy_progress_flush_bytes",
             8,
-        ), patch.object(copy_engine.FileRepository, "increment_job_bytes", autospec=True, side_effect=_record_increment):
+        ), patch.object(copy_engine.FileRepository, "increment_copy_progress", autospec=True, side_effect=_record_increment):
             copy_engine._process_file(ef.id, test_file, target_dir, max_retries=0, retry_delay=0)
 
     db.expire_all()
