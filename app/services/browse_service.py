@@ -31,12 +31,13 @@ from app.models.hardware import DriveState, UsbDrive
 from app.models.network import MountStatus, NetworkMount
 from app.schemas.browse import BrowseEntry, BrowseResponse, EntryType
 from app.services.audit_service import log_and_audit
+from app.utils.sanitize import sanitize_error_message
 
 logger = logging.getLogger(__name__)
 
 
-def _lookup_mount_root(path: str, db: Session) -> Optional[str]:
-    """Return the DB-stored mount root that matches *path*, or ``None``.
+def _lookup_mount_root(path: str, db: Session) -> Tuple[Optional[str], str, Optional[str]]:
+    """Return trusted mount metadata for *path*.
 
     Matching is done by normalising both sides (strip trailing slash).  Returns
     the **DB-stored** value so that subsequent filesystem operations are derived
@@ -61,10 +62,10 @@ def _lookup_mount_root(path: str, db: Session) -> Optional[str]:
         .first()
     )
     if usb_path and usb_path[0]:
-        return usb_path[0].rstrip("/")
+        return usb_path[0].rstrip("/"), "usb_drive", None
 
     net_path = (
-        db.query(NetworkMount.local_mount_point)
+        db.query(NetworkMount.local_mount_point, NetworkMount.type)
         .filter(
             NetworkMount.status == MountStatus.MOUNTED,
             NetworkMount.local_mount_point.isnot(None),
@@ -74,9 +75,50 @@ def _lookup_mount_root(path: str, db: Session) -> Optional[str]:
         .first()
     )
     if net_path and net_path[0]:
-        return net_path[0].rstrip("/")
+        mount_type = net_path[1].value.lower() if net_path[1] is not None else None
+        return net_path[0].rstrip("/"), "network_mount", mount_type
 
-    return None
+    return None, "unknown", None
+
+
+def _browse_surface_label(root_source: str, network_mount_type: Optional[str]) -> str:
+    if root_source != "network_mount" or not network_mount_type:
+        return root_source
+    return f"{root_source}:{network_mount_type}"
+
+
+def _log_browse_failure(
+    *,
+    root_source: str,
+    network_mount_type: Optional[str],
+    page: int,
+    page_size: int,
+    path: str,
+    subdir: str,
+    real_root: Optional[str],
+    real_target: Optional[str],
+    exc: BaseException,
+    default_message: str,
+) -> None:
+    surface = _browse_surface_label(root_source, network_mount_type)
+    safe_reason = sanitize_error_message(exc, default_message)
+
+    logger.info(
+        "Browse directory failed surface=%s page=%s page_size=%s reason=%s",
+        surface,
+        page,
+        page_size,
+        safe_reason,
+    )
+    logger.debug(
+        "Browse directory raw failure surface=%s path=%s subdir=%s real_root=%s resolved_path=%s raw_error=%s",
+        surface,
+        path,
+        subdir,
+        real_root,
+        real_target,
+        str(exc),
+    )
 
 
 def _resolve_and_validate(
@@ -242,7 +284,7 @@ def list_directory(
     # 1. Validate mount root against DB — returns the DB-stored (trusted) value
     #    or None.  Using the DB-stored value means all subsequent filesystem
     #    operations are derived from a trusted source, not from user input.
-    db_mount_root = _lookup_mount_root(path, db)
+    db_mount_root, root_source, network_mount_type = _lookup_mount_root(path, db)
     real_root: Optional[str] = None
     real_target: Optional[str] = None
     try:
@@ -276,23 +318,70 @@ def list_directory(
                             ),
                         )
             all_names = sorted(names)
-        except FileNotFoundError:
+        except FileNotFoundError as exc:
+            _log_browse_failure(
+                root_source=root_source,
+                network_mount_type=network_mount_type,
+                page=page,
+                page_size=page_size,
+                path=path,
+                subdir=subdir,
+                real_root=real_root,
+                real_target=real_target,
+                exc=exc,
+                default_message="Target device or path was not found",
+            )
             raise HTTPException(
                 status_code=404,
                 detail="The directory no longer exists — the drive or share may have been unmounted.",
             )
-        except PermissionError:
+        except PermissionError as exc:
+            _log_browse_failure(
+                root_source=root_source,
+                network_mount_type=network_mount_type,
+                page=page,
+                page_size=page_size,
+                path=path,
+                subdir=subdir,
+                real_root=real_root,
+                real_target=real_target,
+                exc=exc,
+                default_message="Permission denied listing the requested directory",
+            )
             raise HTTPException(
                 status_code=403,
                 detail="Permission denied listing the requested directory.",
             )
-        except NotADirectoryError:
+        except NotADirectoryError as exc:
+            _log_browse_failure(
+                root_source=root_source,
+                network_mount_type=network_mount_type,
+                page=page,
+                page_size=page_size,
+                path=path,
+                subdir=subdir,
+                real_root=real_root,
+                real_target=real_target,
+                exc=exc,
+                default_message="The resolved path is not a directory",
+            )
             raise HTTPException(
                 status_code=400,
                 detail="The resolved path is not a directory.",
             )
         except OSError as exc:
-            logger.error("Failed to list directory %s: %s", real_target, exc)
+            _log_browse_failure(
+                root_source=root_source,
+                network_mount_type=network_mount_type,
+                page=page,
+                page_size=page_size,
+                path=path,
+                subdir=subdir,
+                real_root=real_root,
+                real_target=real_target,
+                exc=exc,
+                default_message="Failed to list the directory due to a filesystem error",
+            )
             raise HTTPException(
                 status_code=500,
                 detail="Failed to list the directory due to a filesystem error.",
