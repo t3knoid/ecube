@@ -121,8 +121,48 @@ class JobAnalyzeRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
 
-class JobUpdate(JobCreate):
+class JobUpdate(StrictIntMixin, BaseModel):
     """Full job update payload for editable non-active jobs."""
+
+    model_config = {"extra": "forbid"}
+
+    project_id: ProjectIdStr = Field(..., min_length=1, description="Project ID for isolation enforcement")
+    evidence_number: SafeStr = Field(..., min_length=1, description="Evidence case number or identifier")
+    source_path: StrictSafeStr = Field(..., min_length=1, description="Path to source data on the selected mounted share or local filesystem")
+    mount_id: Optional[StrictInt] = Field(default=None, ge=1, description="Mounted share selected as the trusted source root")
+    drive_id: Optional[StrictInt] = Field(default=None, ge=1, description="Pre-assigned USB drive ID")
+    thread_count: StrictInt = Field(default=4, ge=1, le=8, description="Number of parallel copy threads (1-8)")
+    max_file_retries: StrictInt = Field(default=3, ge=0, le=100, description="Maximum number of retries for failed files (0-100)")
+    retry_delay_seconds: StrictInt = Field(default=1, ge=0, le=3600, description="Delay between retries in seconds (0-3600)")
+    callback_url: Optional[SafeStr] = Field(default=None, json_schema_extra={"pattern": "^https://[a-zA-Z0-9]"}, description="HTTPS URL to receive a POST callback when the job reaches a terminal state (COMPLETED or FAILED)")
+
+    @field_validator("source_path")
+    @classmethod
+    def _source_path_must_not_be_blank(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Source path is required")
+        return v
+
+    @field_validator("callback_url")
+    @classmethod
+    def _callback_url_must_be_valid_https(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            raise ValueError("callback_url must not be empty")
+        try:
+            parsed = urlparse(v)
+        except Exception:
+            raise ValueError("callback_url is not a valid URL")
+        if parsed.scheme.lower() != "https":
+            raise ValueError("callback_url must use HTTPS")
+        if not parsed.hostname:
+            raise ValueError("callback_url must include a hostname")
+        if parsed.username or parsed.password:
+            raise ValueError("callback_url must not contain embedded credentials")
+        return v
 
 
 class JobDeleteResponse(BaseModel):
