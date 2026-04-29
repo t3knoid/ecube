@@ -53,7 +53,7 @@ function mountView(props = {}) {
       projectId: 'PRJ-777',
       generatedAt: '2026-04-28T15:00:00Z',
       generatedBy: 'auditor-user',
-      manifestTotalsFootnote: 'Manifest totals reflect per-job aggregate summaries. When one job spans multiple drives, these file and byte totals can include data copied to other drives assigned to the same job.',
+      manifestTotalsFootnote: 'Manifest totals reflect files and bytes recorded for this drive assignment. When one job spans multiple drives, each drive section shows only the subset copied to that drive.',
       ...props,
     },
     global: {

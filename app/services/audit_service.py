@@ -451,6 +451,11 @@ def _build_all_drive_reports(
         for did, jids in job_ids_per_drive.items()
         for jid in jids
     }
+    assignment_by_drive_and_job: Dict[tuple[int, int], DriveAssignment] = {}
+    for assignment, job_project_id in raw_assignments:
+        eff_pid = effective_project_ids.get(assignment.drive_id)
+        if eff_pid is None or job_project_id == eff_pid:
+            assignment_by_drive_and_job[(assignment.drive_id, assignment.job_id)] = assignment
 
     # 2. Batch-fetch all relevant audit events in one query, then partition by
     #    drive in Python.  Drive-level events are project-scoped after fetch;
@@ -531,7 +536,11 @@ def _build_all_drive_reports(
                 delivery_time=delivery_time,
                 chain_of_custody_events=coc_events,
                 manifest_summary=_assemble_manifest_summary(
-                    sorted(job_ids_per_drive[drive_id_key]), jobs_by_id, manifests_by_job
+                    drive_id_key,
+                    sorted(job_ids_per_drive[drive_id_key]),
+                    jobs_by_id,
+                    manifests_by_job,
+                    assignment_by_drive_and_job,
                 ),
             )
         )
@@ -540,13 +549,16 @@ def _build_all_drive_reports(
 
 
 def _assemble_manifest_summary(
+    drive_id: int,
     job_ids: List[int],
     jobs_by_id: Dict[int, ExportJob],
     manifests_by_job: Dict[int, List[Manifest]],
+    assignment_by_drive_and_job: Dict[tuple[int, int], DriveAssignment],
 ) -> List[ManifestSummarySchema]:
     summaries: List[ManifestSummarySchema] = []
     for jid in job_ids:
         job = jobs_by_id.get(jid)
+        assignment = assignment_by_drive_and_job.get((drive_id, jid))
         if job is None:
             continue
         rows = sorted(
@@ -557,8 +569,8 @@ def _assemble_manifest_summary(
         summaries.append(
             ManifestSummarySchema(
                 job_id=job.id,
-                total_files=job.file_count or 0,
-                total_bytes=job.copied_bytes or 0,
+                total_files=(assignment.file_count if assignment is not None else 0) or 0,
+                total_bytes=(assignment.copied_bytes if assignment is not None else 0) or 0,
                 manifest_count=len(rows),
                 latest_manifest_path=latest.manifest_path if latest else None,
                 latest_manifest_format=latest.format if latest else None,
