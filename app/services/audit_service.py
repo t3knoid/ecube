@@ -66,6 +66,14 @@ _ACTION_LABELS = {
 }
 
 
+def _format_utc_iso(dt: Optional[datetime]) -> Optional[str]:
+    if dt is None:
+        return None
+    if dt.tzinfo is None or dt.utcoffset() is None:
+        return f"{dt.isoformat()}Z"
+    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 def create_audit_log(
     db: Session,
     action: str,
@@ -312,6 +320,14 @@ def get_job_chain_of_custody_report(
                 status_code=404,
                 detail="No stored chain-of-custody snapshot is available for this archived job",
             )
+        if not allow_persistence:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    "No stored chain-of-custody snapshot is available for this job; "
+                    "ask an admin or manager to refresh the report to create one"
+                ),
+            )
         raise HTTPException(
             status_code=404,
             detail="No stored chain-of-custody snapshot is available for this job; refresh the report to create one",
@@ -326,14 +342,8 @@ def get_job_chain_of_custody_report(
             details={
                 "job_id": job.id,
                 "project_id": job.project_id,
-                "stored_at": (
-                    snapshot.stored_at.isoformat().replace("+00:00", "Z")
-                    if snapshot.stored_at is not None else None
-                ),
-                "updated_at": (
-                    snapshot.updated_at.isoformat().replace("+00:00", "Z")
-                    if snapshot.updated_at is not None else None
-                ),
+                "stored_at": _format_utc_iso(snapshot.stored_at),
+                "updated_at": _format_utc_iso(snapshot.updated_at),
             },
             client_ip=client_ip,
         )
@@ -812,10 +822,7 @@ def _store_job_chain_of_custody_snapshot(
             "project_id": job.project_id,
             "report_count": len(report.reports),
             "stored_by": actor,
-            "snapshot_updated_at": (
-                snapshot.updated_at.isoformat().replace("+00:00", "Z")
-                if snapshot.updated_at is not None else None
-            ),
+            "snapshot_updated_at": _format_utc_iso(snapshot.updated_at),
         },
     )
     logger.debug(
@@ -823,14 +830,8 @@ def _store_job_chain_of_custody_snapshot(
         {
             "job_id": job.id,
             "snapshot_id": snapshot.id,
-            "snapshot_stored_at": (
-                snapshot.stored_at.isoformat().replace("+00:00", "Z")
-                if snapshot.stored_at is not None else None
-            ),
-            "snapshot_updated_at": (
-                snapshot.updated_at.isoformat().replace("+00:00", "Z")
-                if snapshot.updated_at is not None else None
-            ),
+            "snapshot_stored_at": _format_utc_iso(snapshot.stored_at),
+            "snapshot_updated_at": _format_utc_iso(snapshot.updated_at),
         },
     )
     return snapshot
