@@ -1048,21 +1048,28 @@ Return chain-of-custody report data for legal review.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `drive_id` | integer | No* | Drive identifier. Default query mode when no explicit mode is provided. |
+| `drive_sn` | string | No* | Drive serial/device identifier for serial-scoped CoC retrieval. |
 | `project_id` | string | No* | Project identifier for project-scoped CoC retrieval. |
 
-\* At least one of `drive_id` or `project_id` must be provided. When both are provided, drive-based query takes precedence.
+\* At least one of `drive_id`, `drive_sn`, or `project_id` must be provided. Query precedence is `drive_id`, then `drive_sn`, then `project_id`.
 
 **Behavior:**
 
 1. Validates caller authorization with the same role policy as `GET /audit`.
-2. Resolves query mode (`drive_id` first by default/precedence, otherwise `project_id`).
+2. Resolves query mode (`drive_id` first, then `drive_sn`, then `project_id`).
 3. Aggregates custody events from audit/job records.
-4. Returns structured CoC report content including custody actors and timestamps.
+4. Returns structured CoC report content including generated lifecycle timelines, manifest summaries, and drive identity fields such as manufacturer and model when available.
+
+**Response notes:**
+
+- Each drive report includes `drive_id`, `drive_sn`, `drive_manufacturer`, `drive_model`, `project_id`, `custody_complete`, `delivery_time`, `manifest_summary`, and `chain_of_custody_events`.
+- Archived-drive queries may return `410 Gone` when the selected archived drive is requested directly by `drive_id` or `drive_sn`.
 
 **Error responses:**
 
 - `401 Unauthorized` — Missing/invalid token
 - `403 Forbidden` — Insufficient role
+- `410 Gone` — Requested drive has been archived and is no longer eligible for active CoC lookup
 - `404 Not Found` — Unknown drive/project for requested query mode
 - `422 Validation Error` — Missing required query parameters or invalid values
 
