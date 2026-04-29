@@ -816,7 +816,7 @@ Open the relevant job in <code>Job Detail</code>.
 </li><li>
 Click <code>Chain of Custody</code> in the action area.
 </li><li>
-Review the report for each drive section. Each report is titled with the project binding and evidence number and includes generated-at UTC metadata, the requesting username, drive identity, processor notes, custody status, custody-event timeline, manifest summary rows, and an attestation block for print sign-off.
+Review the report card shown in the dialog for the drive tied to that copy job. The report is titled with the project binding and evidence number and includes generated-at UTC metadata, the requesting username, drive identity, processor notes, custody status, custody-event timeline, manifest summary rows, and an attestation block for print sign-off.
 </li><li>
 If the report needs to be rebuilt from current trusted state, an <code>admin</code> or <code>manager</code> can click <code>Refresh</code> to store a new snapshot.
 </li><li>
@@ -863,11 +863,9 @@ Operational actions for that drive are blocked as part of archival enforcement.
 <ul><li>
 Treat <code>Record handoff and archive drive</code> as a finalization action.
 </li><li>
-If the same job is reassigned to another drive during its lifecycle, that job can appear in more than one drive section of the Chain of Custody report.
+Treat each Chain of Custody report as tied to the drive lifecycle for that copy job.
 </li><li>
-In those multi-drive cases, each drive section shows the file and byte totals recorded for that specific drive assignment rather than the full job aggregate.
-</li><li>
-When reviewing a multi-drive Chain of Custody report, use the drive identity, processor notes, custody events, and manifest summary rows to determine which drive section you are signing or exporting.
+If a drive is later formatted and reused, that later work must be handled as a new copy job with its own Chain of Custody record rather than as a continuation of the earlier job.
 </li><li>
 Verify drive ID, project, possessor, and delivery timestamp before confirming.
 </li><li>
