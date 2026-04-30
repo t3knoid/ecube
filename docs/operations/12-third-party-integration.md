@@ -795,6 +795,8 @@ that URL whenever the job completes or fails.
 
 ### 7.1 Enabling Webhooks
 
+Operators can configure the callback URL from the Jobs create dialog and the Job Detail edit dialog. API clients can also continue to supply `callback_url` directly when creating or updating a job. Administrators can also set a system-wide `CALLBACK_DEFAULT_URL` from the Configuration page; that default is used only when the job itself does not define `callback_url`.
+
 Add the `callback_url` field to your `POST /jobs` request:
 
 ```json

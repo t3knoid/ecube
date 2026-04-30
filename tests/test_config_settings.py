@@ -50,6 +50,10 @@ class TestSettingsDefaults:
         s = Settings(database_url="sqlite://")
         assert s.usb_discovery_interval == 30
 
+    def test_callback_default_url_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.callback_default_url is None
+
     def test_ldap_server_default(self):
         s = Settings(database_url="sqlite://")
         assert s.ldap_server is None

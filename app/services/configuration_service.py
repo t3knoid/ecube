@@ -39,6 +39,12 @@ def _serialize_log_file(value: Any) -> str:
     return str(value).strip()
 
 
+def _serialize_callback_default_url(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
 _EDITABLE_FIELDS: Dict[str, _FieldSpec] = {
     "log_level": _FieldSpec("LOG_LEVEL", False, _serialize_plain),
     "log_format": _FieldSpec("LOG_FORMAT", False, _serialize_plain),
@@ -51,11 +57,17 @@ _EDITABLE_FIELDS: Dict[str, _FieldSpec] = {
     "db_pool_recycle_seconds": _FieldSpec("DB_POOL_RECYCLE_SECONDS", True, _serialize_plain),
     "copy_job_timeout": _FieldSpec("COPY_JOB_TIMEOUT", False, _serialize_plain),
     "job_detail_files_page_size": _FieldSpec("JOB_DETAIL_FILES_PAGE_SIZE", False, _serialize_plain),
+    "callback_default_url": _FieldSpec("CALLBACK_DEFAULT_URL", False, _serialize_callback_default_url),
 }
 
 
 def _normalized_value(field_name: str, value: Any) -> Any:
     if field_name == "log_file":
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+    if field_name == "callback_default_url":
         if value is None:
             return None
         text = str(value).strip()

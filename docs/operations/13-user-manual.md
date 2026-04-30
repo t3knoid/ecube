@@ -24,15 +24,17 @@
    - [Prepare Eject](#76-prepare-eject)
 10. [Mounts](#8-mounts)
 11. [Jobs](#9-jobs)
+   - [Webhook Callbacks](#93-webhook-callbacks)
 12. [Job Detail, Verification, and File Review](#10-job-detail-verification-and-file-review)
 13. [Audit Logs](#11-audit-logs)
    - [Chain of Custody Workflow](#111-chain-of-custody-workflow)
 14. [Users](#12-users)
-15. [System](#13-system)
-   - [Application Logs Tab](#131-application-logs-tab)
-   - [Manual Mount Reconciliation](#132-manual-mount-reconciliation)
-16. [Common Tasks](#14-common-tasks)
-17. [Troubleshooting](#15-troubleshooting)
+15. [Configuration](#13-configuration)
+16. [System](#14-system)
+   - [Application Logs Tab](#141-application-logs-tab)
+   - [Manual Mount Reconciliation](#142-manual-mount-reconciliation)
+17. [Common Tasks](#15-common-tasks)
+18. [Troubleshooting](#16-troubleshooting)
 
 ---
 
@@ -578,13 +580,37 @@ Before creating a job, confirm:
 - The correct project is selected first
 - The source mount and destination drive both match that project
 - The evidence number and source path are correct
+- If you need a job-specific webhook, enter the `Webhook callback URL` in the `Job details` section
 - If you enable `Run job immediately`, the job will start as soon as creation succeeds
 
 For `thread count`, start with the default value unless your administrator has given you a different recommendation. If you need to change it, a good rule is to choose a value no higher than the number of CPUs visible to the operating system and reduce it again if the host becomes sluggish or copy speed does not improve.
 
 The source path is interpreted inside the selected mounted share. Entering only / uses the root of that share, and attempts to navigate outside the selected share are rejected before the job is created.
 
-### 9.3 Opening a Job
+### 9.3 Webhook Callbacks
+
+ECUBE can notify an external system when a job reaches a terminal state.
+
+You can configure webhook behavior in two places:
+
+- `Configuration` page: administrators can set a system-wide `Default Callback URL`
+- Jobs UI: operators can set or clear a per-job `Webhook callback URL`
+
+How precedence works:
+
+- If a job has its own `Webhook callback URL`, ECUBE uses that job-specific value
+- If the job field is blank, ECUBE falls back to the system-wide `Default Callback URL` when one is configured
+- If neither value is set, ECUBE does not send a webhook callback
+
+Important rules:
+
+- Callback URLs must use `https://`
+- Callback URLs with embedded credentials are rejected
+- The callback is sent only when the job reaches a terminal state such as `COMPLETED` or `FAILED`
+
+Use a job-specific callback URL when one export must notify a different downstream system than the rest of the deployment.
+
+### 9.4 Opening a Job
 
 Open a job to view details and perform follow-up actions.
 
@@ -627,7 +653,7 @@ Action buttons are shown near the top of the job detail screen.
 Use them when appropriate:
 
 - `Analyze` to run startup analysis for an eligible job without starting copy
-- `Edit` to adjust evidence number, source path, drive, or thread count for a `PENDING`, `PAUSED`, or `FAILED` job
+- `Edit` to adjust evidence number, source path, drive, thread count, or the job-specific webhook callback URL for a `PENDING`, `PAUSED`, or `FAILED` job
 - `Start` to begin a new job or resume a paused one
 - `Retry Failed Files` to re-queue only `ERROR` and `TIMEOUT` file rows on a `COMPLETED` job that finished with partial-success results
 - `Pause` to request a safe stop after the current copy work finishes
@@ -822,7 +848,7 @@ If your role does not include access to this page, the navigation item will not 
 
 ![Users page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/users-default-chromium-linux.png)
 
-### 12.2 Configuration Page (Administrator)
+## 13. Configuration
 
 **Allowed roles:** `admin`
 
@@ -834,6 +860,7 @@ What this page is for:
 
 - Adjusting logging behavior (level, format, and file logging options)
 - Adjusting selected database pool settings exposed by the UI
+- Setting or clearing the system-wide `Default Callback URL` used for job webhooks when a job does not supply its own callback URL
 - Applying safe configuration changes through role-restricted workflows
 
 Basic workflow:
@@ -856,6 +883,7 @@ Important operational notes:
 
 - Restart actions are never automatic from this page and always require explicit confirmation.
 - Restarting the application service can interrupt active operations. Prefer using a maintenance window or an idle period.
+- The `Default Callback URL` must be a valid `https://` URL and is overridden by any job-specific `Webhook callback URL` entered on the Jobs page or Job Detail edit dialog.
 - If restart submission fails, use the displayed error and contact platform support or perform restart through approved host-level procedures.
 - For field-by-field meaning and defaults, see [04-configuration-reference.md](04-configuration-reference.md).
 
@@ -865,7 +893,7 @@ If your role does not include access to this page, the navigation item will not 
 
 ---
 
-## 13. System
+## 14. System
 
 > **Access Summary**
 > **Page visibility:** `admin`, `manager`, `processor`, `auditor`
@@ -892,7 +920,7 @@ For users with `admin` or `manager` roles, the System tab bar includes a `Reconc
 
 ![System page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/system-default-chromium-linux.png)
 
-### 13.1 Application Logs Tab
+### 14.1 Application Logs Tab
 
 **Access:** `admin` role only
 
@@ -953,7 +981,7 @@ If the Logs tab shows an error or is unavailable:
 
 Governance note: denied log access attempts by non-admin users are recorded in the audit trail for accountability and compliance visibility.
 
-### 13.2 Manual Mount Reconciliation
+### 14.2 Manual Mount Reconciliation
 
 **Access:** `admin`, `manager` roles
 
@@ -995,7 +1023,7 @@ Use the `Back` button on the results page to return to the System page.
 
 ---
 
-## 14. Common Tasks
+## 15. Common Tasks
 
 ### 14.1 Insert a New Drive and Associate It with a Project
 
@@ -1085,6 +1113,8 @@ Notes:
 9. Monitor progress until completion.
 10. Run verification and generate a manifest if required by your workflow.
 
+If the job should notify an external case-management or orchestration system when it completes, enter the destination `Webhook callback URL` during job creation. Leave the field blank if the job should use the administrator-configured system default instead.
+
 ### 14.4 Review Copy Results
 
 **Allowed roles:** `admin`, `manager`, `processor`, `auditor`
@@ -1166,9 +1196,9 @@ Notes:
 
 ---
 
-## 15. Troubleshooting
+## 16. Troubleshooting
 
-### 15.1 I Cannot Log In
+### 16.1 I Cannot Log In
 
 Possible causes:
 
@@ -1177,7 +1207,7 @@ Possible causes:
 - Browser cannot reach the site
 - Your account has not been created or assigned the right role
 
-### 15.2 A Page or Menu Item Is Missing
+### 16.2 A Page or Menu Item Is Missing
 
 Possible causes:
 
@@ -1185,7 +1215,7 @@ Possible causes:
 - The system is not fully initialized
 - The deployment is using an older or partially upgraded frontend/backend combination
 
-### 15.3 A Button Is Visible but Disabled
+### 16.3 A Button Is Visible but Disabled
 
 Possible causes:
 
@@ -1193,7 +1223,7 @@ Possible causes:
 - The selected object is not in a state that permits the action
 - Required data has not been entered yet
 
-### 15.4 The UI Shows a Network Error
+### 16.4 The UI Shows a Network Error
 
 Possible causes:
 
@@ -1211,7 +1241,7 @@ If the problem persists, collect:
 
 Then provide that information to your ECUBE administrator.
 
-### 15.5 USB Drive Is Not Recognized
+### 16.5 USB Drive Is Not Recognized
 
 **Who can do what:**
 
