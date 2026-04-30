@@ -188,7 +188,7 @@ async function shouldShowCocPromptForJob(jobId) {
     await getJobChainOfCustody(normalizedJobId)
     return false
   } catch (err) {
-    return err?.response?.status === 404
+    return true
   }
 }
 
