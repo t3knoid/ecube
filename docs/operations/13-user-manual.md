@@ -606,6 +606,7 @@ Important rules:
 
 - Callback URLs must use `https://`
 - Callback URLs with embedded credentials are rejected
+- If an administrator configures a signing secret, ECUBE adds an `X-ECUBE-Signature` header to outbound callbacks
 - The callback is sent only when the job reaches a terminal state such as `COMPLETED` or `FAILED`
 
 Use a job-specific callback URL when one export must notify a different downstream system than the rest of the deployment.
@@ -861,6 +862,8 @@ What this page is for:
 - Adjusting logging behavior (level, format, and file logging options)
 - Adjusting selected database pool settings exposed by the UI
 - Setting or clearing the system-wide `Default Callback URL` used for job webhooks when a job does not supply its own callback URL
+- Setting or clearing the write-only webhook signing secret used for the `X-ECUBE-Signature` header
+- Setting or clearing the outbound webhook proxy URL used for callback delivery
 - Applying safe configuration changes through role-restricted workflows
 
 Basic workflow:
@@ -884,6 +887,8 @@ Important operational notes:
 - Restart actions are never automatic from this page and always require explicit confirmation.
 - Restarting the application service can interrupt active operations. Prefer using a maintenance window or an idle period.
 - The `Default Callback URL` must be a valid `https://` URL and is overridden by any job-specific `Webhook callback URL` entered on the Jobs page or Job Detail edit dialog.
+- The `Outbound Callback Proxy URL` must be a valid `http://` or `https://` URL and must not contain embedded credentials.
+- The `Webhook Signing Secret` field is write-only. Leave it blank to keep the current secret, enter a new value to rotate it, or use the clear checkbox to remove it.
 - If restart submission fails, use the displayed error and contact platform support or perform restart through approved host-level procedures.
 - For field-by-field meaning and defaults, see [04-configuration-reference.md](04-configuration-reference.md).
 

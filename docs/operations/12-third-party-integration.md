@@ -858,6 +858,12 @@ For partial-success runs that still end in `JOB_COMPLETED`, rely on `completion_
 
 The request includes the header `Content-Type: application/json`.
 
+If administrators configure a webhook signing secret, ECUBE also includes:
+
+- `X-ECUBE-Signature: sha256=<hex digest>`
+
+The digest is an HMAC-SHA256 computed over the exact JSON request body bytes that ECUBE sends on the wire. Receivers should validate the header against the raw request body before parsing or trusting the payload.
+
 ### 7.3 Retry Behaviour
 
 | Attempt | Delay | Notes |
@@ -883,6 +889,9 @@ The request includes the header `Content-Type: application/json`.
 | `CALLBACK_ALLOW_PRIVATE_IPS` | `false` | Allow callbacks to RFC 1918 / loopback addresses. |
 | `CALLBACK_MAX_WORKERS` | `4` | Maximum concurrent callback delivery threads. |
 | `CALLBACK_MAX_PENDING` | `100` | Maximum outstanding deliveries (queued + in-flight). Excess deliveries are dropped. |
+| `CALLBACK_DEFAULT_URL` | unset | Optional HTTPS callback URL used when a job does not define `callback_url`. |
+| `CALLBACK_PROXY_URL` | unset | Optional `http://` or `https://` forward-proxy URL used for outbound callback delivery. |
+| `CALLBACK_HMAC_SECRET` | unset | Optional shared secret used to generate the `X-ECUBE-Signature` header. |
 
 ### 7.5 Example Webhook Receiver
 
@@ -906,7 +915,8 @@ async def ecube_callback(request: Request):
 ### 7.6 Security Recommendations
 
 - **HTTPS only:** Always use an HTTPS endpoint so payloads are encrypted in transit.
-- **Authenticate inbound requests:** Consider placing your webhook behind a reverse proxy that validates a shared secret or HMAC signature.
+- **Validate `X-ECUBE-Signature`:** When `CALLBACK_HMAC_SECRET` is configured, verify the `X-ECUBE-Signature` HMAC against the raw request body before accepting the callback.
+- **Keep secrets out of URLs:** ECUBE rejects callback and proxy URLs with embedded credentials. Use a managed proxy or receiver-side secret store instead.
 - **Idempotency:** Your receiver may be called more than once for the same job (e.g., if the first `200 OK` was lost in transit). Design your handler to be idempotent.
 - **Firewall rules:** Only allow inbound connections from the ECUBE host IP to your webhook port.
 

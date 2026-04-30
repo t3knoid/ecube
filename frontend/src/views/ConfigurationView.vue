@@ -34,6 +34,10 @@ const form = ref({
   copy_job_timeout: 3600,
   job_detail_files_page_size: 40,
   callback_default_url: '',
+  callback_proxy_url: '',
+  callback_hmac_secret: '',
+  callback_hmac_secret_configured: false,
+  clear_callback_hmac_secret: false,
 })
 const originalForm = ref({ ...form.value })
 
@@ -50,6 +54,7 @@ const fieldOrder = [
   'copy_job_timeout',
   'job_detail_files_page_size',
   'callback_default_url',
+  'callback_proxy_url',
 ]
 
 const levelOptions = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
@@ -106,8 +111,9 @@ function normalizeForm(data) {
   const list = Array.isArray(data?.settings) ? data.settings : []
   let backendLogFileValue = ''
   for (const entry of list) {
-    if (!entry?.key || !fieldOrder.includes(entry.key)) continue
+    if (!entry?.key) continue
     const key = entry.key
+    if (!fieldOrder.includes(key) && key !== 'callback_hmac_secret_configured') continue
     let value = entry.value
     if (key === 'log_file') {
       value = value || ''
@@ -123,6 +129,9 @@ function normalizeForm(data) {
   logFileEnabled.value = hasBackendLogFile
   originalLogFileEnabled.value = hasBackendLogFile
   next.log_file = hasBackendLogFile ? backendLogFileValue : DEFAULT_LOG_FILE_PATH
+  next.callback_hmac_secret = ''
+  next.clear_callback_hmac_secret = false
+  next.callback_hmac_secret_configured = Boolean(next.callback_hmac_secret_configured)
 
   form.value = next
   originalForm.value = { ...next }
@@ -149,11 +158,23 @@ function buildPatchPayload() {
       payload[key] = form.value[key]
     }
   }
+
+  const nextSecret = String(form.value.callback_hmac_secret || '').trim()
+  if (nextSecret) {
+    payload.callback_hmac_secret = nextSecret
+  } else if (form.value.clear_callback_hmac_secret && originalForm.value.callback_hmac_secret_configured) {
+    payload.clear_callback_hmac_secret = true
+  }
+
   return payload
 }
 
 function resetForm() {
-  form.value = { ...originalForm.value }
+  form.value = {
+    ...originalForm.value,
+    callback_hmac_secret: '',
+    clear_callback_hmac_secret: false,
+  }
   logFileEnabled.value = originalLogFileEnabled.value
 }
 
@@ -179,6 +200,14 @@ async function saveConfiguration() {
   try {
     const result = await updateConfiguration(payload)
     form.value.log_file = effectiveLogFileValue(logFileEnabled.value, form.value.log_file) || DEFAULT_LOG_FILE_PATH
+    if (payload.callback_hmac_secret) {
+      form.value.callback_hmac_secret_configured = true
+    }
+    if (payload.clear_callback_hmac_secret) {
+      form.value.callback_hmac_secret_configured = false
+    }
+    form.value.callback_hmac_secret = ''
+    form.value.clear_callback_hmac_secret = false
     originalForm.value = { ...form.value }
     originalLogFileEnabled.value = logFileEnabled.value
 
@@ -313,6 +342,39 @@ onMounted(loadConfiguration)
           :placeholder="t('configuration.fields.callback_default_url.placeholder')"
         />
         <p class="field-help">{{ t('configuration.fields.callback_default_url.help') }}</p>
+
+        <label for="cfg-callback-proxy-url">{{ t('configuration.fields.callback_proxy_url.label') }}</label>
+        <input
+          id="cfg-callback-proxy-url"
+          v-model="form.callback_proxy_url"
+          type="url"
+          :placeholder="t('configuration.fields.callback_proxy_url.placeholder')"
+        />
+        <p class="field-help">{{ t('configuration.fields.callback_proxy_url.help') }}</p>
+
+        <label for="cfg-callback-hmac-secret">{{ t('configuration.fields.callback_hmac_secret.label') }}</label>
+        <input
+          id="cfg-callback-hmac-secret"
+          v-model="form.callback_hmac_secret"
+          type="password"
+          autocomplete="new-password"
+          :placeholder="t('configuration.fields.callback_hmac_secret.placeholder')"
+        />
+        <p class="field-help">{{ t('configuration.fields.callback_hmac_secret.help') }}</p>
+        <p class="field-help">
+          {{ form.callback_hmac_secret_configured
+            ? t('configuration.fields.callback_hmac_secret.statusConfigured')
+            : t('configuration.fields.callback_hmac_secret.statusNotConfigured') }}
+        </p>
+        <label class="checkbox-row" for="cfg-clear-callback-hmac-secret">
+          <input
+            id="cfg-clear-callback-hmac-secret"
+            v-model="form.clear_callback_hmac_secret"
+            type="checkbox"
+            :disabled="!!String(form.callback_hmac_secret || '').trim() || !form.callback_hmac_secret_configured"
+          />
+          <span>{{ t('configuration.fields.callback_hmac_secret.clearLabel') }}</span>
+        </label>
       </article>
     </div>
 
