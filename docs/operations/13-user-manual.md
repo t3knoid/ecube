@@ -1009,7 +1009,7 @@ If your role does not include access to this page, the navigation item will not 
 
 ## 14. Webhook Callbacks
 
-ECUBE can notify an external system when a job reaches a terminal state.
+ECUBE can notify an external system when a persisted job lifecycle event occurs.
 
 You can configure webhook behavior in two places:
 
@@ -1027,7 +1027,7 @@ Important rules:
 - Callback URLs must use `https://`
 - Callback URLs with embedded credentials are rejected
 - If an administrator configures a signing secret, ECUBE adds an `X-ECUBE-Signature` header to outbound callbacks
-- The callback is sent only when the job reaches a terminal state such as `COMPLETED` or `FAILED`
+- The callback is sent for supported persisted lifecycle events such as `JOB_CREATED`, `JOB_STARTED`, `JOB_RETRY_FAILED_FILES_STARTED`, `JOB_PAUSE_REQUESTED`, `JOB_COMPLETED`, `JOB_FAILED`, `JOB_COMPLETED_MANUALLY`, `MANIFEST_CREATED`, `COC_SNAPSHOT_STORED`, `COC_HANDOFF_CONFIRMED`, `JOB_ARCHIVED`, and `JOB_RECONCILED`
 
 Use a job-specific callback URL when one export must notify a different downstream system than the rest of the deployment.
 
@@ -1078,11 +1078,13 @@ Example `Callback Payload Source Fields` value:
    "job_id",
    "project_id",
    "evidence_number",
+   "created_by",
    "started_by",
    "completion_result",
    "active_duration_seconds",
    "drive_id",
    "drive_serial_number",
+   "event_at",
    "started_at",
    "completed_at"
 ]
@@ -1095,11 +1097,13 @@ Example `Callback Payload Field Mapping` value:
    "type": "event",
    "job": "job_id",
    "project": "project_id",
+   "creator": "created_by",
    "operator": "started_by",
    "duration_seconds": "active_duration_seconds",
    "drive": "drive_id",
    "serial": "drive_serial_number",
    "summary": "project=${project_id};result=${completion_result}",
+   "recorded_at": "event_at",
    "started": "started_at",
    "ended": "completed_at"
 }
@@ -1120,12 +1124,13 @@ The following source fields can be used in `Callback Payload Source Fields` and 
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `event` | `string` | `JOB_COMPLETED` or `JOB_FAILED`. |
+| `event` | `string` | Any supported lifecycle event code. |
 | `job_id` | `integer` | ECUBE job ID. |
 | `project_id` | `string` | Bound project identifier. |
 | `evidence_number` | `string` | Evidence/case number stored on the job. |
+| `created_by` | `string` or null | Username of the user who created the job when recorded. |
 | `started_by` | `string` or null | Username of the user who started the job when recorded. |
-| `status` | `string` | Terminal job status. |
+| `status` | `string` | Persisted job status at callback time. |
 | `source_path` | `string` | Source path recorded for the job. |
 | `total_bytes` | `integer` | Total bytes ECUBE planned to copy. |
 | `copied_bytes` | `integer` | Bytes actually copied. |
@@ -1139,8 +1144,12 @@ The following source fields can be used in `Callback Payload Source Fields` and 
 | `drive_manufacturer` | `string` or null or absent | Destination drive manufacturer when present. |
 | `drive_model` | `string` or null or absent | Destination drive model/product name when present. |
 | `drive_serial_number` | `string` or null or absent | Destination drive serial number when present. |
+| `created_at` | `string` or absent | ISO 8601 timestamp when the job was created. |
 | `started_at` | `string` or absent | ISO 8601 timestamp when the job run started. |
 | `completed_at` | `string` or absent | ISO 8601 timestamp when present on the job. |
+| `event_actor` | `string` or absent | Username or system identity that triggered the lifecycle event. |
+| `event_at` | `string` | ISO 8601 timestamp for the persisted lifecycle event. |
+| `event_details` | `object` or absent | Optional event-specific metadata such as retry counts, manifest details, handoff details, or reconciliation reason. |
 
 ---
 
