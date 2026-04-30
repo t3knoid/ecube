@@ -430,6 +430,54 @@ class TestChainOfCustodyHandoff:
         rows = db.query(AuditLog).filter(AuditLog.action == "COC_HANDOFF_CONFIRMED", AuditLog.drive_id == drive_id).all()
         assert len(rows) == 1
 
+    def test_drive_level_handoff_allows_new_submission_after_reinitialize_same_project(self, manager_client, db):
+        drive = _seed_drive(db, device_identifier="COC-HANDOFF-REINIT", project_id="CASE-HANDOFF-REINIT", state=DriveState.AVAILABLE)
+        drive_id = _as_int(drive.id)
+
+        _seed_audit(
+            db,
+            action="DRIVE_INITIALIZED",
+            drive_id=drive_id,
+            project_id="CASE-HANDOFF-REINIT",
+            details={"drive_id": drive_id, "project_id": "CASE-HANDOFF-REINIT"},
+        )
+
+        first = manager_client.post(
+            "/audit/chain-of-custody/handoff",
+            json={
+                "drive_id": drive_id,
+                "project_id": "CASE-HANDOFF-REINIT",
+                "possessor": "Initial Recipient",
+                "delivery_time": datetime(2026, 4, 10, 14, 22, 31, tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
+                "receipt_ref": "COC-2026-0410-10",
+            },
+        )
+        assert first.status_code == 200
+
+        _seed_audit(
+            db,
+            action="DRIVE_INITIALIZED",
+            drive_id=drive_id,
+            project_id="CASE-HANDOFF-REINIT",
+            details={"drive_id": drive_id, "project_id": "CASE-HANDOFF-REINIT", "context": "reinitialized"},
+        )
+
+        second = manager_client.post(
+            "/audit/chain-of-custody/handoff",
+            json={
+                "drive_id": drive_id,
+                "project_id": "CASE-HANDOFF-REINIT",
+                "possessor": "Second Recipient",
+                "delivery_time": datetime(2026, 4, 10, 15, 0, 0, tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
+                "receipt_ref": "COC-2026-0410-11",
+            },
+        )
+        assert second.status_code == 200
+        assert second.json()["event_id"] != first.json()["event_id"]
+
+        rows = db.query(AuditLog).filter(AuditLog.action == "COC_HANDOFF_CONFIRMED", AuditLog.drive_id == drive_id).all()
+        assert len(rows) == 2
+
     def test_idempotency_does_not_match_across_projects(self, manager_client, db):
         """A prior-project handoff record must not satisfy the idempotency check
         for a new handoff submission scoped to a different project on the same drive."""
