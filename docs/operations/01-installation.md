@@ -147,7 +147,7 @@ The installer will:
 1. Run pre-flight checks (OS, disk space, ports, Python 3.11).
 2. Install required host runtime packages for USB formatting, USB discovery, and NFS/SMB mount support (`exfatprogs`, `nfs-common`, `cifs-utils`, `smbclient`, `usbutils`, and `util-linux`) on supported Debian/Ubuntu systems, and on Ubuntu also install the current-kernel `linux-modules-extra-*` package when apt provides it.
 3. Create the `ecube` system user and add it to required host groups (`plugdev`, `dialout`, and `shadow` when present).
-4. Prepare the managed mount roots used by ECUBE (`/nfs`, `/smb`, and the configured USB mount base path, default `/mnt/ecube`) with service-account ownership and runtime-safe permissions.
+4. Prepare the managed mount roots used by ECUBE (`/nfs`, `/smb`, and the configured USB mount base path, default `/mnt/ecube`) with service-account ownership and runtime-safe permissions. On first install, set `USB_MOUNT_BASE_PATH` in the installer environment if you need a non-default USB mount root so the generated `.env` and prepared directories stay aligned.
 5. Install `/etc/sudoers.d/ecube-user-mgmt` with narrowly scoped `NOPASSWD` rules for setup OS user/group management, mount/unmount operations, and selected drive filesystem commands.
 6. Install `/etc/pam.d/ecube` PAM configuration for local and domain user authentication (detects SSSD at install time and installs an SSSD-enabled or local-only variant accordingly).
 7. Set up a Python virtual environment in `<install-dir>/venv`.
