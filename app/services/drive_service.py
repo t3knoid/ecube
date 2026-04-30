@@ -118,7 +118,7 @@ def get_all_drives(
         return repo.list_by_states(parsed)
     if include_disconnected:
         return repo.list_all()
-    return repo.list_by_states([DriveState.AVAILABLE, DriveState.IN_USE, DriveState.ARCHIVED])  # DISCONNECTED excluded by default
+    return repo.list_by_states([DriveState.AVAILABLE, DriveState.IN_USE])  # DISCONNECTED excluded by default
 
 
 def initialize_drive(
@@ -138,30 +138,6 @@ def initialize_drive(
     drive = drive_repo.get_for_update(drive_id)
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
-
-    # Archived drives are permanently retired and must never re-enter operational use.
-    if drive.current_state == DriveState.ARCHIVED:
-        try:
-            audit_repo.add(
-                action="INIT_REJECTED_ARCHIVED",
-                user=actor,
-                project_id=project_id,
-                drive_id=drive_id,
-                details={
-                    "actor": actor,
-                    "drive_id": drive_id,
-                    "current_state": drive.current_state.value,
-                    "existing_project_id": drive.current_project_id,
-                    "requested_project_id": project_id,
-                },
-                client_ip=client_ip,
-            )
-        except Exception:
-            logger.error("Failed to write audit log for INIT_REJECTED_ARCHIVED")
-        raise HTTPException(
-            status_code=409,
-            detail="Drive is archived and cannot be re-initialized.",
-        )
 
     # DISCONNECTED drives are not physically accessible (not present or on a disabled port).
     # Initialization requires the drive to be AVAILABLE so that a filesystem is

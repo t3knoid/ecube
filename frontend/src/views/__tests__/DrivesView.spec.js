@@ -111,10 +111,11 @@ describe('DrivesView rescan and filter loading', () => {
   })
 
   it('loads all drives by default including disconnected drives', async () => {
-    mountView()
+    const wrapper = mountView()
     await flushPromises()
 
     expect(mocks.getDrives).toHaveBeenCalledWith({ include_disconnected: true })
+    expect(wrapper.findAll('select')[0].text()).not.toContain('Archived')
   })
 
   it('requests disconnected drives when switching the filter to All', async () => {
