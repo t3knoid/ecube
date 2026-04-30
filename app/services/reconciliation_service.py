@@ -875,7 +875,7 @@ def reconcile_jobs(db: Session) -> Dict[str, int]:
         except Exception:
             logger.exception(
                 "Failed to dispatch lifecycle callback",
-                {"job_id": job.id, "event": "JOB_RECONCILED"},
+                extra={"job_id": job.id, "event": "JOB_RECONCILED"},
             )
 
     return {"jobs_checked": checked, "jobs_corrected": corrected}
