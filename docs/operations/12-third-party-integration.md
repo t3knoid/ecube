@@ -789,9 +789,7 @@ Write-Host "  Drive:    $driveId"
 
 ## 7. Webhook Callbacks
 
-Instead of polling `GET /jobs/{job_id}` until a job reaches a terminal state, you can
-supply a `callback_url` when creating a job. ECUBE will `POST` a JSON payload to
-that URL whenever the job completes or fails.
+Instead of polling `GET /jobs/{job_id}` for every lifecycle change, you can supply a `callback_url` when creating or updating a job. ECUBE will `POST` a JSON payload to that URL whenever one of the supported persisted job lifecycle events occurs: `JOB_CREATED`, `JOB_STARTED`, `JOB_RETRY_FAILED_FILES_STARTED`, `JOB_PAUSE_REQUESTED`, `JOB_COMPLETED`, `JOB_FAILED`, `JOB_COMPLETED_MANUALLY`, `MANIFEST_CREATED`, `COC_SNAPSHOT_STORED`, `COC_HANDOFF_CONFIRMED`, `JOB_ARCHIVED`, or `JOB_RECONCILED`.
 
 ### 7.1 Enabling Webhooks
 
@@ -814,16 +812,17 @@ Add the `callback_url` field to your `POST /jobs` request:
 
 ### 7.2 Callback Payload
 
-When the job reaches a terminal state, ECUBE delivers a `POST` request with a JSON body:
+When a supported job lifecycle event is persisted, ECUBE delivers a `POST` request with a JSON body:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `event` | `string` | `JOB_COMPLETED` or `JOB_FAILED`. |
+| `event` | `string` | Lifecycle event code such as `JOB_CREATED`, `JOB_STARTED`, `JOB_COMPLETED`, `JOB_FAILED`, `MANIFEST_CREATED`, `COC_SNAPSHOT_STORED`, `COC_HANDOFF_CONFIRMED`, `JOB_ARCHIVED`, or `JOB_RECONCILED`. |
 | `job_id` | `integer` | The export job ID. |
 | `project_id` | `string` | Bound project ID. |
 | `evidence_number` | `string` | Evidence case number. |
+| `created_by` | `string` or null | Username of the user who created the job when recorded. |
 | `started_by` | `string` or null | Username of the user who started the job when recorded. |
-| `status` | `string` | Terminal status: `COMPLETED` or `FAILED`. |
+| `status` | `string` | Persisted job status at the time of the callback. |
 | `source_path` | `string` | Source data path. |
 | `total_bytes` | `integer` | Total bytes to copy. |
 | `copied_bytes` | `integer` | Bytes actually copied. |
@@ -831,14 +830,18 @@ When the job reaches a terminal state, ECUBE delivers a `POST` request with a JS
 | `files_succeeded` | `integer` | Number of files that completed successfully. |
 | `files_failed` | `integer` | Number of files that ended in error. |
 | `files_timed_out` | `integer` | Number of files that timed out. |
-| `completion_result` | `string` | `success`, `partial_success`, or `failed` so receivers can distinguish clean completion from partial-success `JOB_COMPLETED` callbacks. |
+| `completion_result` | `string` | `success`, `partial_success`, or `failed` when the callback reflects a terminal `COMPLETED` or `FAILED` job state. |
 | `active_duration_seconds` | `integer` | Persisted cumulative active runtime for the job in seconds. |
 | `drive_id` | `integer` or absent | Active destination drive ID when the terminal job still has an unreleased drive assignment. |
 | `drive_manufacturer` | `string` or null or absent | Destination drive manufacturer when available from hardware discovery. |
 | `drive_model` | `string` or null or absent | Destination drive model/product name when available from hardware discovery. |
 | `drive_serial_number` | `string` or null or absent | Destination drive serial number when available from hardware discovery. |
+| `created_at` | `string` or absent | ISO 8601 timestamp when the job was created. |
 | `started_at` | `string` or absent | ISO 8601 timestamp when the job run started. |
 | `completed_at` | `string` or absent | ISO 8601 timestamp. Present only when the job recorded a completion time. |
+| `event_actor` | `string` or absent | Username or system identity that triggered the lifecycle event when recorded. |
+| `event_at` | `string` | ISO 8601 timestamp for the persisted lifecycle event. |
+| `event_details` | `object` or absent | Optional event-specific metadata such as retry counts, manifest details, chain-of-custody details, or reconciliation reason. |
 
 **Example payload:**
 
@@ -848,6 +851,7 @@ When the job reaches a terminal state, ECUBE delivers a `POST` request with a JS
   "job_id": 42,
   "project_id": "ProjectAlpha",
   "evidence_number": "EV-2026-0042",
+  "created_by": "processor1",
   "started_by": "processor1",
   "status": "COMPLETED",
   "source_path": "/exports/ProjectAlpha/production_set_01",
@@ -859,7 +863,10 @@ When the job reaches a terminal state, ECUBE delivers a `POST` request with a JS
   "files_timed_out": 0,
   "completion_result": "success",
   "active_duration_seconds": 1845,
+  "created_at": "2026-03-18T16:10:00+00:00",
   "started_at": "2026-03-18T16:14:15+00:00",
+  "event_actor": "processor1",
+  "event_at": "2026-03-18T16:45:00+00:00",
   "completed_at": "2026-03-18T16:45:00+00:00"
 }
 ```
@@ -885,12 +892,13 @@ Supported source fields for `CALLBACK_PAYLOAD_FIELDS` and `CALLBACK_PAYLOAD_FIEL
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `event` | `string` | `JOB_COMPLETED` or `JOB_FAILED`. |
+| `event` | `string` | Any supported lifecycle event code. |
 | `job_id` | `integer` | ECUBE job ID. |
 | `project_id` | `string` | Bound project identifier. |
 | `evidence_number` | `string` | Evidence/case number stored on the job. |
+| `created_by` | `string` or null | Username of the user who created the job when recorded. |
 | `started_by` | `string` or null | Username of the user who started the job when recorded. |
-| `status` | `string` | Terminal job status. |
+| `status` | `string` | Persisted job status at callback time. |
 | `source_path` | `string` | Source path recorded for the job. |
 | `total_bytes` | `integer` | Total bytes ECUBE planned to copy. |
 | `copied_bytes` | `integer` | Bytes actually copied. |
@@ -904,8 +912,12 @@ Supported source fields for `CALLBACK_PAYLOAD_FIELDS` and `CALLBACK_PAYLOAD_FIEL
 | `drive_manufacturer` | `string` or null or absent | Destination drive manufacturer when present. |
 | `drive_model` | `string` or null or absent | Destination drive model/product name when present. |
 | `drive_serial_number` | `string` or null or absent | Destination drive serial number when present. |
+| `created_at` | `string` or absent | ISO 8601 timestamp when the job was created. |
 | `started_at` | `string` or absent | ISO 8601 timestamp when the job run started. |
 | `completed_at` | `string` or absent | ISO 8601 timestamp when present on the job. |
+| `event_actor` | `string` or absent | Username or system identity that triggered the lifecycle event. |
+| `event_at` | `string` | ISO 8601 timestamp for the persisted lifecycle event. |
+| `event_details` | `object` or absent | Optional event-specific metadata. |
 
 Template strings may reference only the same allowlisted source fields, for example `project=${project_id};result=${completion_result}`.
 
@@ -913,11 +925,12 @@ Template strings may reference only the same allowlisted source fields, for exam
 
 ```json
 {
-  "callback_payload_fields": ["event", "project_id", "completion_result"],
+  "callback_payload_fields": ["event", "project_id", "completion_result", "event_at"],
   "callback_payload_field_map": {
     "type": "event",
     "project": "project_id",
-    "summary": "project=${project_id};result=${completion_result}"
+    "summary": "project=${project_id};result=${completion_result}",
+    "recorded_at": "event_at"
   }
 }
 ```
@@ -928,7 +941,8 @@ With that configuration, ECUBE sends:
 {
   "type": "JOB_COMPLETED",
   "project": "PROJECTALPHA",
-  "summary": "project=PROJECTALPHA;result=success"
+  "summary": "project=PROJECTALPHA;result=success",
+  "recorded_at": "2026-03-18T16:45:00+00:00"
 }
 ```
 
@@ -947,7 +961,7 @@ With that configuration, ECUBE sends:
 - Exhausting all retries is logged as audit event `CALLBACK_DELIVERY_FAILED`.
 - If the delivery queue is full (more than `CALLBACK_MAX_PENDING` outstanding deliveries), new deliveries are dropped and logged as audit event `CALLBACK_DELIVERY_DROPPED`.
 - **Callback failures never change the job status.** A `COMPLETED` job remains `COMPLETED` even if the callback cannot be delivered.
-- **Startup reconciliation note:** Jobs that transition from `RUNNING`/`VERIFYING` to `FAILED` during startup reconciliation (after a service restart) do **not** trigger webhook callbacks. Only the `JOB_RECONCILED` audit event is emitted. Integrations that rely on callbacks should also implement polling or audit log queries to detect reconciliation-driven failures.
+- **Startup reconciliation note:** Jobs that transition from `RUNNING`/`VERIFYING` to `FAILED` during startup reconciliation (after a service restart) emit a `JOB_RECONCILED` callback when callback delivery is configured. Integrations should still tolerate retries, delivery failures, or periods without callbacks by retaining polling or audit-log fallbacks.
 
 ### 7.4 Configuration
 
