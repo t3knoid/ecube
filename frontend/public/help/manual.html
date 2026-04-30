@@ -423,8 +423,8 @@ Current state
 </table>
 <p>State transitions follow this order:</p>
 <pre><code>DISCONNECTED → AVAILABLE → IN_USE → AVAILABLE
-                       ↑____________|
-                     (re-insert same project)</code></pre>
+                                  ↑____________|
+                               (re-insert same project)</code></pre>
 <p>A drive assigned to one project cannot be re-assigned to a different project without first being formatted. Formatting wipes the drive and clears the project binding.</p>
 <p>After a service restart, ECUBE may automatically restore a previously mounted managed USB drive to its expected ECUBE mount slot. If a drive or mount appears to have changed state during startup, review the <code>Audit Logs</code> page for reconciliation events recorded by the system.</p>
 <h2 id="4-2-viewing-drives">4.2 Viewing Drives</h2>
@@ -807,7 +807,7 @@ Review filters before export so the file contains the intended data set
 Treat exported audit data as sensitive operational evidence
 </li></ul>
 <h2 id="7-1-chain-of-custody-workflow">7.1 Chain of Custody Workflow</h2>
-<p>Use the <code>Chain of Custody</code> action on <code>Job Detail</code> to open the job-scoped CoC dialog. This is the standard closeout path when media is being transferred. The dialog loads the last stored CoC snapshot for that job, shows the formatted report content directly, allows authorized users to refresh and store a new snapshot, and provides print/export controls plus a separate <code>Custody Handoff</code> action when the current role and custody state allow it.</p>
+<p>Use the <code>Chain of Custody</code> action on <code>Job Detail</code> to open the job-scoped CoC dialog. This is the standard closeout path when media is being transferred. The dialog loads the last stored CoC snapshot for that job, shows the formatted report content directly, allows authorized users to refresh and store a new snapshot while custody is still incomplete or when no stored snapshot exists yet, and provides print/export controls plus a separate <code>Custody Handoff</code> action when the current role and custody state allow it.</p>
 <p>Typical workflow:</p>
 <ol><li>
 Open the relevant job in <code>Job Detail</code>.
@@ -816,7 +816,7 @@ Click <code>Chain of Custody</code> in the action area.
 </li><li>
 Review the report card shown in the dialog for the drive tied to that copy job. The report is titled with the project binding and evidence number and includes generated-at UTC metadata, the requesting username, drive identity, processor notes, custody status, custody-event timeline, manifest summary rows, and an attestation block for print sign-off.
 </li><li>
-If the report needs to be rebuilt from current trusted state, an <code>admin</code> or <code>manager</code> can click <code>Refresh</code> to store a new snapshot.
+If no stored snapshot exists yet, or if the loaded report still shows incomplete custody and needs to be rebuilt from current trusted state, an <code>admin</code> or <code>manager</code> can click <code>Refresh</code> to store a new snapshot.
 </li><li>
 Use <code>Print CoC</code>, <code>Export CoC CSV</code>, or <code>Export JSON</code> when you need a printable or downloadable copy of the report currently loaded in the dialog.
 </li><li>
@@ -1124,7 +1124,7 @@ For field-by-field meaning and defaults, see Configuration reference.
 <p class="help-back-to-top"><a href="#help-toc-title">Back to top</a></p>
 <hr />
 <h1 id="11-webhook-callbacks">11. Webhook Callbacks</h1>
-<p>ECUBE can notify an external system when a job reaches a terminal state.</p>
+<p>ECUBE can notify an external system when a persisted job lifecycle event occurs.</p>
 <p>You can configure webhook behavior in two places:</p>
 <ul><li>
 <code>Configuration</code> page: administrators can set a system-wide <code>Default Callback URL</code>
@@ -1147,7 +1147,7 @@ Callback URLs with embedded credentials are rejected
 </li><li>
 If an administrator configures a signing secret, ECUBE adds an <code>X-ECUBE-Signature</code> header to outbound callbacks
 </li><li>
-The callback is sent only when the job reaches a terminal state such as <code>COMPLETED</code> or <code>FAILED</code>
+The callback is sent for supported persisted lifecycle events such as <code>JOB_CREATED</code>, <code>JOB_STARTED</code>, <code>JOB_RETRY_FAILED_FILES_STARTED</code>, <code>JOB_PAUSE_REQUESTED</code>, <code>JOB_VERIFY_STARTED</code>, <code>JOB_COMPLETED</code>, <code>JOB_FAILED</code>, <code>JOB_COMPLETED_MANUALLY</code>, <code>MANIFEST_CREATED</code>, <code>COC_SNAPSHOT_STORED</code>, <code>COC_HANDOFF_CONFIRMED</code>, <code>JOB_ARCHIVED</code>, and <code>JOB_RECONCILED</code>
 </li></ul>
 <p>Use a job-specific callback URL when one export must notify a different downstream system than the rest of the deployment.</p>
 <h2 id="11-1-configure-callback-delivery">11.1 Configure Callback Delivery</h2>
@@ -1208,11 +1208,13 @@ Save again and validate the result against your receiver.
    &quot;job_id&quot;,
    &quot;project_id&quot;,
    &quot;evidence_number&quot;,
+   &quot;created_by&quot;,
    &quot;started_by&quot;,
    &quot;completion_result&quot;,
    &quot;active_duration_seconds&quot;,
    &quot;drive_id&quot;,
    &quot;drive_serial_number&quot;,
+   &quot;event_at&quot;,
    &quot;started_at&quot;,
    &quot;completed_at&quot;
 ]</code></pre>
@@ -1221,11 +1223,13 @@ Save again and validate the result against your receiver.
    &quot;type&quot;: &quot;event&quot;,
    &quot;job&quot;: &quot;job_id&quot;,
    &quot;project&quot;: &quot;project_id&quot;,
+   &quot;creator&quot;: &quot;created_by&quot;,
    &quot;operator&quot;: &quot;started_by&quot;,
    &quot;duration_seconds&quot;: &quot;active_duration_seconds&quot;,
    &quot;drive&quot;: &quot;drive_id&quot;,
    &quot;serial&quot;: &quot;drive_serial_number&quot;,
    &quot;summary&quot;: &quot;project=${project_id};result=${completion_result}&quot;,
+   &quot;recorded_at&quot;: &quot;event_at&quot;,
    &quot;started&quot;: &quot;started_at&quot;,
    &quot;ended&quot;: &quot;completed_at&quot;
 }</code></pre>
@@ -1254,7 +1258,7 @@ Mapping is applied before ECUBE signs the payload, so the final mapped JSON body
 <tr>
 <td><code>event</code></td>
 <td><code>string</code></td>
-<td><code>JOB_COMPLETED</code> or <code>JOB_FAILED</code>.</td>
+<td>Any supported lifecycle event code.</td>
 </tr>
 <tr>
 <td><code>job_id</code></td>
@@ -1272,6 +1276,11 @@ Mapping is applied before ECUBE signs the payload, so the final mapped JSON body
 <td>Evidence/case number stored on the job.</td>
 </tr>
 <tr>
+<td><code>created_by</code></td>
+<td><code>string</code> or null</td>
+<td>Username of the user who created the job when recorded.</td>
+</tr>
+<tr>
 <td><code>started_by</code></td>
 <td><code>string</code> or null</td>
 <td>Username of the user who started the job when recorded.</td>
@@ -1279,7 +1288,7 @@ Mapping is applied before ECUBE signs the payload, so the final mapped JSON body
 <tr>
 <td><code>status</code></td>
 <td><code>string</code></td>
-<td>Terminal job status.</td>
+<td>Persisted job status at callback time.</td>
 </tr>
 <tr>
 <td><code>source_path</code></td>
@@ -1347,6 +1356,11 @@ Mapping is applied before ECUBE signs the payload, so the final mapped JSON body
 <td>Destination drive serial number when present.</td>
 </tr>
 <tr>
+<td><code>created_at</code></td>
+<td><code>string</code> or absent</td>
+<td>ISO 8601 timestamp when the job was created.</td>
+</tr>
+<tr>
 <td><code>started_at</code></td>
 <td><code>string</code> or absent</td>
 <td>ISO 8601 timestamp when the job run started.</td>
@@ -1355,6 +1369,21 @@ Mapping is applied before ECUBE signs the payload, so the final mapped JSON body
 <td><code>completed_at</code></td>
 <td><code>string</code> or absent</td>
 <td>ISO 8601 timestamp when present on the job.</td>
+</tr>
+<tr>
+<td><code>event_actor</code></td>
+<td><code>string</code> or absent</td>
+<td>Username or system identity that triggered the lifecycle event.</td>
+</tr>
+<tr>
+<td><code>event_at</code></td>
+<td><code>string</code></td>
+<td>ISO 8601 timestamp for the persisted lifecycle event.</td>
+</tr>
+<tr>
+<td><code>event_details</code></td>
+<td><code>object</code> or absent</td>
+<td>Optional event-specific metadata such as retry counts, manifest details, handoff details, or reconciliation reason.</td>
 </tr>
 </tbody>
 </table>
