@@ -12,6 +12,7 @@ Covers:
 import hashlib
 import hmac
 import json
+import logging
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -252,6 +253,65 @@ class TestSanitizeUrlForLog:
 
 
 class TestBuildPayload:
+
+    def test_explicit_lifecycle_event_supports_non_terminal_jobs(self):
+        job = SimpleNamespace(
+            id=42,
+            project_id="PROJ-LIFECYCLE",
+            evidence_number="EV-LIFECYCLE",
+            created_by="creator",
+            started_by="operator",
+            status=JobStatus.RUNNING,
+            source_path="/data/lifecycle",
+            total_bytes=2048,
+            copied_bytes=512,
+            file_count=4,
+            active_duration_seconds=11,
+            created_at=datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc),
+            started_at=datetime(2026, 5, 1, 12, 5, tzinfo=timezone.utc),
+            completed_at=None,
+            files=[],
+            assignments=[],
+        )
+
+        payload = build_payload(
+            job,
+            event="JOB_STARTED",
+            event_actor="processor",
+            event_at=datetime(2026, 5, 1, 12, 5, 30, tzinfo=timezone.utc),
+            event_details={"thread_count": 4},
+        )
+
+        assert payload["event"] == "JOB_STARTED"
+        assert payload["status"] == "RUNNING"
+        assert payload["created_by"] == "creator"
+        assert payload["event_actor"] == "processor"
+        assert payload["event_at"] == "2026-05-01T12:05:30+00:00"
+        assert payload["event_details"] == {"thread_count": 4}
+        assert "completion_result" not in payload
+
+    def test_explicit_lifecycle_event_requires_event_at_when_not_derived(self):
+        job = SimpleNamespace(
+            id=42,
+            project_id="PROJ-LIFECYCLE",
+            evidence_number="EV-LIFECYCLE",
+            created_by="creator",
+            started_by="operator",
+            status=JobStatus.ARCHIVED,
+            source_path="/data/lifecycle",
+            total_bytes=2048,
+            copied_bytes=2048,
+            file_count=4,
+            active_duration_seconds=11,
+            created_at=datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc),
+            started_at=datetime(2026, 5, 1, 12, 5, tzinfo=timezone.utc),
+            completed_at=datetime(2026, 5, 1, 12, 25, tzinfo=timezone.utc),
+            files=[],
+            assignments=[],
+        )
+
+        with pytest.raises(ValueError, match="explicit event_at"):
+            build_payload(job, event="JOB_ARCHIVED")
 
     def test_count_file_outcomes_uses_aggregate_query_for_mapped_jobs(self, db):
         job = ExportJob(
@@ -674,6 +734,28 @@ class TestDeliverCallback:
         assert headers["Content-Type"] == "application/json"
         assert "X-ECUBE-Signature" not in headers
 
+    @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
+    @patch("app.services.callback_service.httpx.Client")
+    def test_callback_logs_info_for_dispatch_and_success(self, mock_client_cls, _mock_resolve, db, caplog):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
+        mock_client_instance.__exit__ = MagicMock(return_value=False)
+        mock_client_instance.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client_instance
+
+        job = self._make_db_job(db)
+
+        with patch("app.services.callback_service.settings.callback_allow_private_ips", False), \
+             patch("app.services.callback_service.settings.callback_timeout_seconds", 5), \
+             caplog.at_level(logging.INFO, logger="app.services.callback_service"):
+            deliver_callback(job, db)
+
+        messages = [record.getMessage() for record in caplog.records]
+        assert "Dispatching callback" in messages
+        assert "Callback delivered" in messages
+
     @pytest.mark.parametrize("status", [
         JobStatus.PENDING,
         JobStatus.RUNNING,
@@ -685,6 +767,42 @@ class TestDeliverCallback:
         deliver_callback(job, db)
         logs = db.query(AuditLog).all()
         assert len(logs) == 0
+
+    @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
+    @patch("app.services.callback_service.httpx.Client")
+    def test_non_terminal_lifecycle_event_is_delivered_when_explicit_event_provided(
+        self,
+        mock_client_cls,
+        _mock_resolve,
+        db,
+    ):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
+        mock_client_instance.__exit__ = MagicMock(return_value=False)
+        mock_client_instance.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client_instance
+
+        job = self._make_db_job(db, status=JobStatus.RUNNING)
+        job.created_by = "creator"
+        job.completed_at = None
+
+        with patch("app.services.callback_service.settings.callback_allow_private_ips", False), \
+             patch("app.services.callback_service.settings.callback_timeout_seconds", 5):
+            deliver_callback(
+                job,
+                db,
+                event="JOB_STARTED",
+                event_actor="processor",
+                event_details={"thread_count": 4},
+            )
+
+        sent_payload = json.loads(mock_client_instance.post.call_args.kwargs["content"].decode("utf-8"))
+        assert sent_payload["event"] == "JOB_STARTED"
+        assert sent_payload["status"] == "RUNNING"
+        assert sent_payload["event_actor"] == "processor"
+        assert sent_payload["event_details"] == {"thread_count": 4}
 
     def test_malformed_url_audit_record(self, db):
         """A malformed callback_url that cannot be parsed must produce a
