@@ -20,6 +20,15 @@ const logFileEnabled = ref(false)
 const originalLogFileEnabled = ref(false)
 
 const DEFAULT_LOG_FILE_PATH = '/var/log/ecube/app.log'
+const CALLBACK_PAYLOAD_FIELDS_PLACEHOLDER = `[
+  "event",
+  "project_id",
+  "completion_result"
+]`
+const CALLBACK_PAYLOAD_FIELD_MAP_PLACEHOLDER = `{
+  "type": "event",
+  "summary": "project=${'${project_id}'};result=${'${completion_result}'}"
+}`
 
 const form = ref({
   log_level: 'INFO',
@@ -33,6 +42,13 @@ const form = ref({
   db_pool_recycle_seconds: -1,
   copy_job_timeout: 3600,
   job_detail_files_page_size: 40,
+  callback_default_url: '',
+  callback_proxy_url: '',
+  callback_payload_fields: '',
+  callback_payload_field_map: '',
+  callback_hmac_secret: '',
+  callback_hmac_secret_configured: false,
+  clear_callback_hmac_secret: false,
 })
 const originalForm = ref({ ...form.value })
 
@@ -48,13 +64,37 @@ const fieldOrder = [
   'db_pool_recycle_seconds',
   'copy_job_timeout',
   'job_detail_files_page_size',
+  'callback_default_url',
+  'callback_proxy_url',
+  'callback_payload_fields',
+  'callback_payload_field_map',
 ]
 
 const levelOptions = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
 const formatOptions = ['text', 'json']
 const nfsClientVersionOptions = ['4.2', '4.1', '4.0', '3']
 
-const hasChanges = computed(() => Object.keys(buildPatchPayload()).length > 0)
+const hasChanges = computed(() => {
+  for (const key of fieldOrder) {
+    if (key === 'log_file') {
+      const currentLogFile = effectiveLogFileValue(logFileEnabled.value, form.value.log_file)
+      const originalLogFile = effectiveLogFileValue(originalLogFileEnabled.value, originalForm.value.log_file)
+      if (currentLogFile !== originalLogFile) {
+        return true
+      }
+      continue
+    }
+    if (form.value[key] !== originalForm.value[key]) {
+      return true
+    }
+  }
+
+  const nextSecret = String(form.value.callback_hmac_secret || '').trim()
+  if (nextSecret) {
+    return true
+  }
+  return !!(form.value.clear_callback_hmac_secret && originalForm.value.callback_hmac_secret_configured)
+})
 
 const changedFieldLabels = computed(() => {
   return fieldOrder
@@ -104,12 +144,16 @@ function normalizeForm(data) {
   const list = Array.isArray(data?.settings) ? data.settings : []
   let backendLogFileValue = ''
   for (const entry of list) {
-    if (!entry?.key || !fieldOrder.includes(entry.key)) continue
+    if (!entry?.key) continue
     const key = entry.key
+    if (!fieldOrder.includes(key) && key !== 'callback_hmac_secret_configured') continue
     let value = entry.value
     if (key === 'log_file') {
       value = value || ''
       backendLogFileValue = String(value)
+    }
+    if (key === 'callback_payload_fields' || key === 'callback_payload_field_map') {
+      value = value == null ? '' : JSON.stringify(value, null, 2)
     }
     if (typeof form.value[key] === 'number' && value != null) {
       value = Number(value)
@@ -121,6 +165,9 @@ function normalizeForm(data) {
   logFileEnabled.value = hasBackendLogFile
   originalLogFileEnabled.value = hasBackendLogFile
   next.log_file = hasBackendLogFile ? backendLogFileValue : DEFAULT_LOG_FILE_PATH
+  next.callback_hmac_secret = ''
+  next.clear_callback_hmac_secret = false
+  next.callback_hmac_secret_configured = Boolean(next.callback_hmac_secret_configured)
 
   form.value = next
   originalForm.value = { ...next }
@@ -144,14 +191,52 @@ function buildPatchPayload() {
       continue
     }
     if (form.value[key] !== originalForm.value[key]) {
-      payload[key] = form.value[key]
+      if (key === 'callback_payload_fields') {
+        payload[key] = parseJsonConfigurationField(form.value[key], key, 'array')
+      } else if (key === 'callback_payload_field_map') {
+        payload[key] = parseJsonConfigurationField(form.value[key], key, 'object')
+      } else {
+        payload[key] = form.value[key]
+      }
     }
   }
+
+  const nextSecret = String(form.value.callback_hmac_secret || '').trim()
+  if (nextSecret) {
+    payload.callback_hmac_secret = nextSecret
+  } else if (form.value.clear_callback_hmac_secret && originalForm.value.callback_hmac_secret_configured) {
+    payload.clear_callback_hmac_secret = true
+  }
+
   return payload
 }
 
+function parseJsonConfigurationField(value, key, kind) {
+  const trimmed = String(value || '').trim()
+  if (!trimmed) return null
+
+  let parsed
+  try {
+    parsed = JSON.parse(trimmed)
+  } catch {
+    throw new Error(t(`configuration.fields.${key}.invalidJson`))
+  }
+
+  if (kind === 'array' && !Array.isArray(parsed)) {
+    throw new Error(t(`configuration.fields.${key}.invalidType`))
+  }
+  if (kind === 'object' && (parsed == null || Array.isArray(parsed) || typeof parsed !== 'object')) {
+    throw new Error(t(`configuration.fields.${key}.invalidType`))
+  }
+  return parsed
+}
+
 function resetForm() {
-  form.value = { ...originalForm.value }
+  form.value = {
+    ...originalForm.value,
+    callback_hmac_secret: '',
+    clear_callback_hmac_secret: false,
+  }
   logFileEnabled.value = originalLogFileEnabled.value
 }
 
@@ -169,7 +254,13 @@ async function loadConfiguration() {
 }
 
 async function saveConfiguration() {
-  const payload = buildPatchPayload()
+  let payload
+  try {
+    payload = buildPatchPayload()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : t('common.errors.validationFailed')
+    return
+  }
   if (Object.keys(payload).length === 0) return
 
   saving.value = true
@@ -177,6 +268,14 @@ async function saveConfiguration() {
   try {
     const result = await updateConfiguration(payload)
     form.value.log_file = effectiveLogFileValue(logFileEnabled.value, form.value.log_file) || DEFAULT_LOG_FILE_PATH
+    if (payload.callback_hmac_secret) {
+      form.value.callback_hmac_secret_configured = true
+    }
+    if (payload.clear_callback_hmac_secret) {
+      form.value.callback_hmac_secret_configured = false
+    }
+    form.value.callback_hmac_secret = ''
+    form.value.clear_callback_hmac_secret = false
     originalForm.value = { ...form.value }
     originalLogFileEnabled.value = logFileEnabled.value
 
@@ -298,6 +397,70 @@ onMounted(loadConfiguration)
           max="100"
         />
         <p class="field-help">{{ t('configuration.fields.job_detail_files_page_size.help') }}</p>
+      </article>
+
+      <article class="panel">
+        <h2>{{ t('configuration.sections.webhooks') }}</h2>
+
+        <label for="cfg-callback-default-url">{{ t('configuration.fields.callback_default_url.label') }}</label>
+        <input
+          id="cfg-callback-default-url"
+          v-model="form.callback_default_url"
+          type="url"
+          :placeholder="t('configuration.fields.callback_default_url.placeholder')"
+        />
+        <p class="field-help">{{ t('configuration.fields.callback_default_url.help') }}</p>
+
+        <label for="cfg-callback-proxy-url">{{ t('configuration.fields.callback_proxy_url.label') }}</label>
+        <input
+          id="cfg-callback-proxy-url"
+          v-model="form.callback_proxy_url"
+          type="url"
+          :placeholder="t('configuration.fields.callback_proxy_url.placeholder')"
+        />
+        <p class="field-help">{{ t('configuration.fields.callback_proxy_url.help') }}</p>
+
+        <label for="cfg-callback-hmac-secret">{{ t('configuration.fields.callback_hmac_secret.label') }}</label>
+        <input
+          id="cfg-callback-hmac-secret"
+          v-model="form.callback_hmac_secret"
+          type="password"
+          autocomplete="new-password"
+          :placeholder="t('configuration.fields.callback_hmac_secret.placeholder')"
+        />
+        <p class="field-help">{{ t('configuration.fields.callback_hmac_secret.help') }}</p>
+        <p class="field-help">
+          {{ form.callback_hmac_secret_configured
+            ? t('configuration.fields.callback_hmac_secret.statusConfigured')
+            : t('configuration.fields.callback_hmac_secret.statusNotConfigured') }}
+        </p>
+        <label class="checkbox-row" for="cfg-clear-callback-hmac-secret">
+          <input
+            id="cfg-clear-callback-hmac-secret"
+            v-model="form.clear_callback_hmac_secret"
+            type="checkbox"
+            :disabled="!!String(form.callback_hmac_secret || '').trim() || !form.callback_hmac_secret_configured"
+          />
+          <span>{{ t('configuration.fields.callback_hmac_secret.clearLabel') }}</span>
+        </label>
+
+        <label for="cfg-callback-payload-fields">{{ t('configuration.fields.callback_payload_fields.label') }}</label>
+        <textarea
+          id="cfg-callback-payload-fields"
+          v-model="form.callback_payload_fields"
+          rows="6"
+          :placeholder="CALLBACK_PAYLOAD_FIELDS_PLACEHOLDER"
+        />
+        <p class="field-help">{{ t('configuration.fields.callback_payload_fields.help') }}</p>
+
+        <label for="cfg-callback-payload-field-map">{{ t('configuration.fields.callback_payload_field_map.label') }}</label>
+        <textarea
+          id="cfg-callback-payload-field-map"
+          v-model="form.callback_payload_field_map"
+          rows="8"
+          :placeholder="CALLBACK_PAYLOAD_FIELD_MAP_PLACEHOLDER"
+        />
+        <p class="field-help">{{ t('configuration.fields.callback_payload_field_map.help') }}</p>
       </article>
     </div>
 

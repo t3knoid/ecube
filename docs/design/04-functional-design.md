@@ -277,6 +277,27 @@ The callback body is a JSON object containing:
 - `CALLBACK_DELIVERY_FAILED` — All retries exhausted, SSRF blocked, redirect received, or permanent failure; includes `callback_url`, `reason`, `attempts`.
 - `CALLBACK_DELIVERY_DROPPED` — Delivery dropped due to backpressure (queue full); includes `callback_url`, `reason`.
 
+### Signing and Proxy Configuration
+
+- Administrators may configure a system-wide callback signing secret.
+- When a signing secret is present, ECUBE signs the exact JSON request body bytes with HMAC-SHA256 and sends `X-ECUBE-Signature: sha256=<hex digest>`.
+- The signing secret is write-only in UI and API configuration surfaces. Read APIs expose only a boolean configured/not-configured status.
+- Administrators may configure a system-wide outbound callback forward proxy using an `http://` or `https://` proxy URL.
+- Proxy URLs must not contain embedded credentials.
+- Existing SSRF protections remain in force even when a proxy is configured: ECUBE still resolves and validates the destination host before delivery and connects using the pinned IP.
+
+### Payload Mapping Contract
+
+- Administrators may optionally customize callback payloads with `CALLBACK_PAYLOAD_FIELDS` and `CALLBACK_PAYLOAD_FIELD_MAP`.
+- The default payload described above remains the baseline payload shape when neither setting is configured.
+- Payload configuration uses an explicit allowlist of ECUBE-owned source fields; arbitrary expressions, code, and unrestricted templating are forbidden.
+- Supported source fields are `event`, `job_id`, `project_id`, `evidence_number`, `started_by`, `status`, `source_path`, `total_bytes`, `copied_bytes`, `file_count`, `files_succeeded`, `files_failed`, `files_timed_out`, `completion_result`, `active_duration_seconds`, `drive_id`, `drive_manufacturer`, `drive_model`, `drive_serial_number`, `started_at`, and `completed_at`.
+- Mapping format is a JSON object whose keys are outbound field names and whose values are either an allowlisted ECUBE field name or a constrained template token such as `${project_id}`.
+- Mapping evaluation is deterministic, side-effect free, and string-substitution only. Nested expressions, function calls, arithmetic, path traversal, and host-environment access are out of scope.
+- Invalid, blank, duplicate, or unknown source fields cause configuration rejection rather than silent omission.
+- Mapping is applied before signature generation so `X-ECUBE-Signature` always covers the final outbound request body.
+- Delivery and audit handling preserve auditability by recording the applied payload profile shape without logging secret values or unsafe raw expansions.
+
 ---
 
 ## 4.9 Audit Logging Design
