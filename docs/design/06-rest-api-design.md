@@ -804,7 +804,7 @@ Create a new job.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `callback_url` | string or null | `null` | HTTPS URL to receive a POST callback on job completion or failure. HTTP URLs are rejected (422). See [§ 4.8 Webhook Callback Delivery](04-functional-design.md#48-webhook-callback-delivery) for payload format, retry policy, and SSRF protection. |
+| `callback_url` | string or null | `null` | HTTPS URL to receive POST callbacks for persisted job lifecycle events including creation, start, pause, completion, archive, and reconciliation. HTTP URLs are rejected (422). See [§ 4.8 Webhook Callback Delivery](04-functional-design.md#48-webhook-callback-delivery) for payload format, retry policy, and SSRF protection. |
 
 **Error responses:**
 
@@ -1888,7 +1888,7 @@ Partially update database connection settings.  All fields are optional — only
 ECUBE performs **startup state reconciliation** during application startup (inside the FastAPI lifespan context manager), before the server begins accepting HTTP requests. A cross-process `reconciliation_lock` guard table ensures only one worker runs reconciliation in multi-worker deployments. This reconciliation:
 
 - Verifies all `MOUNTED` network mounts against the OS and corrects stale entries (audit action: `MOUNT_RECONCILED`).
-- Fails any `RUNNING` or `VERIFYING` export jobs that lost their worker process (audit action: `JOB_RECONCILED`). Webhook callbacks are **not** issued for these reconciliation-driven failures.
+- Fails any `RUNNING` or `VERIFYING` export jobs that lost their worker process (audit action: `JOB_RECONCILED`) and emits a `JOB_RECONCILED` webhook callback when callback delivery is configured.
 - Re-runs USB discovery to sync physical device presence with the database.
 
 API clients should be aware that after a service restart, previously `RUNNING` jobs may appear as `FAILED` and previously `MOUNTED` mounts may appear as `UNMOUNTED` or `ERROR`. The audit log contains the corresponding `MOUNT_RECONCILED` and `JOB_RECONCILED` records explaining the transitions.
