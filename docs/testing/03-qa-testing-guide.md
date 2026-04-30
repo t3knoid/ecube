@@ -1482,6 +1482,8 @@ Runtime configuration endpoints are admin-only.
 | 7 | Configuration update audit trail | Update configuration, then query `GET /audit?action=CONFIGURATION_UPDATED` | Audit entry lists changed settings without leaking sensitive paths or secrets |
 | 8 | Restart requires confirmation | `POST /admin/configuration/restart` with `{"confirm": false}` | 400 |
 | 9 | Restart request accepted when confirmed | `POST /admin/configuration/restart` with `{"confirm": true}` | 200, `status: "restart_requested"`, `service: "ecube"` |
+| 10 | Accept callback payload allowlist and mapping | `PUT /admin/configuration` with `{"callback_payload_fields": ["event", "project_id"], "callback_payload_field_map": {"type": "event", "project": "project_id"}}` | 200, changed settings include both callback payload fields |
+| 11 | Reject invalid callback payload mapping | `PUT /admin/configuration` with `{"callback_payload_field_map": {"summary": "${unknown_field}"}}` | 422, validation error identifies the invalid mapping source field |
 
 ### 12.10.2 Help System
 

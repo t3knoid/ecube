@@ -62,6 +62,14 @@ class TestSettingsDefaults:
         s = Settings(database_url="sqlite://")
         assert s.callback_proxy_url is None
 
+    def test_callback_payload_fields_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.callback_payload_fields is None
+
+    def test_callback_payload_field_map_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.callback_payload_field_map is None
+
     def test_ldap_server_default(self):
         s = Settings(database_url="sqlite://")
         assert s.ldap_server is None

@@ -208,6 +208,8 @@ For NFS shares, ECUBE persists a per-share `nfs_client_version` only when an ope
 | `CALLBACK_DEFAULT_URL`       | unset   | Optional HTTPS callback URL used when a job does not define its own `callback_url`. A job-specific callback URL always overrides the system-wide default. |
 | `CALLBACK_PROXY_URL`         | unset   | Optional `http://` or `https://` forward-proxy URL used for outbound callback delivery. Leave unset for direct delivery. Embedded credentials are not allowed. |
 | `CALLBACK_HMAC_SECRET`       | unset   | Optional shared secret used to sign callback payloads with the `X-ECUBE-Signature` header. This value is write-only in the Configuration UI and must be rotated or cleared explicitly. |
+| `CALLBACK_PAYLOAD_FIELDS`    | unset   | Optional JSON array of allowlisted source field names to include in callback payloads. Leave unset to send the default payload shape. |
+| `CALLBACK_PAYLOAD_FIELD_MAP` | unset   | Optional JSON object that maps outbound field names to an allowlisted source field name or a constrained `${field}` template. Applied before signature generation. |
 
 ---
 
