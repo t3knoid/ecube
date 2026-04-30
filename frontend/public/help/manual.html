@@ -240,12 +240,13 @@
 <li class="toc-level-1"><a href="#4-drives">4. Drives</a></li>
 <li class="toc-level-1"><a href="#5-mounts">5. Mounts</a></li>
 <li class="toc-level-1"><a href="#6-jobs">6. Jobs</a></li>
-<li class="toc-level-1"><a href="#7-job-detail-verification-and-file-review">7. Job Detail, Verification, and File Review</a></li>
-<li class="toc-level-1"><a href="#8-audit-logs">8. Audit Logs</a></li>
+<li class="toc-level-1"><a href="#7-audit-logs">7. Audit Logs</a></li>
+<li class="toc-level-1"><a href="#8-system">8. System</a></li>
 <li class="toc-level-1"><a href="#9-users">9. Users</a></li>
-<li class="toc-level-1"><a href="#10-system">10. System</a></li>
-<li class="toc-level-1"><a href="#11-common-tasks">11. Common Tasks</a></li>
-<li class="toc-level-1"><a href="#12-troubleshooting">12. Troubleshooting</a></li>
+<li class="toc-level-1"><a href="#10-configuration">10. Configuration</a></li>
+<li class="toc-level-1"><a href="#11-webhook-callbacks">11. Webhook Callbacks</a></li>
+<li class="toc-level-1"><a href="#12-common-tasks">12. Common Tasks</a></li>
+<li class="toc-level-1"><a href="#13-troubleshooting">13. Troubleshooting</a></li>
         </ol>
       </nav>
       <h1 id="1-roles-and-access">1. Roles and Access</h1>
@@ -661,6 +662,8 @@ The source mount and destination drive both match that project
 </li><li>
 The evidence number and source path are correct
 </li><li>
+If you need a job-specific webhook, enter the <code>Webhook callback URL</code> in the <code>Job details</code> section
+</li><li>
 If you enable <code>Run job immediately</code>, the job will start as soon as creation succeeds
 </li></ul>
 <p>For <code>thread count</code>, start with the default value unless your administrator has given you a different recommendation. If you need to change it, a good rule is to choose a value no higher than the number of CPUs visible to the operating system and reduce it again if the host becomes sluggish or copy speed does not improve.</p>
@@ -671,7 +674,7 @@ If you enable <code>Run job immediately</code>, the job will start as soon as cr
 <p>Archived jobs remain readable from Job Detail, but they are intentionally treated as sunset records instead of active work. Once a job is archived, the normal lifecycle actions stay visible only as disabled context or disappear where appropriate, and the archive action itself is no longer shown.</p>
 <p class="help-back-to-top"><a href="#help-toc-title">Back to top</a></p>
 <hr />
-<h1 id="7-job-detail-verification-and-file-review">7. Job Detail, Verification, and File Review</h1>
+<h2 id="6-4-job-detail-verification-and-file-review">6.4 Job Detail, Verification, and File Review</h2>
 <blockquote><p><strong>Access Summary</strong></p></blockquote>
 <blockquote><p><strong>Page visibility:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code></p></blockquote>
 <blockquote><p><strong>Restricted actions:</strong> <code>Analyze</code>, <code>Edit</code>, <code>Start</code>, <code>Retry Failed Files</code>, <code>Pause</code>, <code>Complete</code>, <code>Verify</code>, and <code>Manifest</code> are enabled for <code>admin</code>, <code>manager</code>, and <code>processor</code> when the current job state allows them. <code>Chain of Custody</code> is available to roles that can open the job-scoped chain-of-custody workflow. Within that report, <code>Custody Handoff</code> appears only for <code>admin</code> and <code>manager</code> when the loaded report still shows incomplete custody. <code>Archive</code> and <code>Clear startup analysis cache</code> remain limited to <code>admin</code> and <code>manager</code> when the current job state allows them. <code>Delete</code> is shown only for eligible pending jobs. Hash inspection and source/destination comparison remain available to <code>admin</code> and <code>auditor</code>.</p></blockquote>
@@ -704,13 +707,13 @@ Inspect hashes for individual files
 </li><li>
 Compare a file's source version against its copied destination version
 </li></ul>
-<h2 id="7-1-editing-starting-retrying-failed-files-pausing-completing-verifying-and-generating-a-manifest">7.1 Editing, Starting, Retrying Failed Files, Pausing, Completing, Verifying, and Generating a Manifest</h2>
+<h3 id="6-4-1-editing-starting-retrying-failed-files-pausing-completing-verifying-and-generating-a-manifest">6.4.1 Editing, Starting, Retrying Failed Files, Pausing, Completing, Verifying, and Generating a Manifest</h3>
 <p>Action buttons are shown near the top of the job detail screen.</p>
 <p>Use them when appropriate:</p>
 <ul><li>
 <code>Analyze</code> to run startup analysis for an eligible job without starting copy
 </li><li>
-<code>Edit</code> to adjust evidence number, source path, drive, or thread count for a <code>PENDING</code>, <code>PAUSED</code>, or <code>FAILED</code> job
+<code>Edit</code> to adjust evidence number, source path, drive, thread count, or the job-specific webhook callback URL for a <code>PENDING</code>, <code>PAUSED</code>, or <code>FAILED</code> job
 </li><li>
 <code>Start</code> to begin a new job or resume a paused one
 </li><li>
@@ -745,7 +748,7 @@ Compare a file's source version against its copied destination version
 <p>If a job is restarted after a failed, paused, or partially successful run and its persisted startup-analysis snapshot is still current, ECUBE can reuse that cached scan instead of repeating the full startup analysis. ECUBE clears the reusable snapshot automatically only after a clean completion with no failed or timed-out files. When operators need to discard that snapshot, the <code>Clear startup analysis cache</code> action opens a confirmation dialog and removes only the cached startup-analysis data. It does not remove per-file history, copied-file state, or other audit-relevant job records.</p>
 <p>When a job is paused, completed, or fails, the detail view shows a summary with the job start time, copy thread count, files copied, files failed, files timed out, total copied, elapsed time, copy rate, completion time, and manifest freshness state, plus any failure reason or related log hint. The manifest summary includes <code>Last manifest created</code> and a text status such as <code>Current</code>, <code>Stale</code>, or <code>No manifest available</code> so operators can tell whether the latest manifest post-dates the latest completed job state. A <code>COMPLETED</code> job means all files reached a terminal state, not necessarily that every file copied successfully, so the summary can still report failed or timed-out files after a partial-success completion. The elapsed time remains cumulative across earlier run segments, so a paused and later resumed job keeps the same additive runtime history that was shown while it was active. Failed jobs prefer a persisted sanitized job-level failure reason when one is available, so operators can see stable messages such as <code>Unexpected copy failure</code> or <code>Job interrupted by service restart before completion</code> before any derived per-file fallback. Completed jobs with file-level failures instead show the safe per-file failure summaries and counters without exposing raw provider errors or host paths. When <code>COPY_JOB_TIMEOUT</code> is exceeded for an individual file attempt, that timeout is recorded as a per-file error (for example <code>File copy timed out after 3600s</code>) rather than a whole-job timeout reason.</p>
 <p>When ECUBE can safely correlate a failed copy to the selected source or destination for that job, the failure summary may add relative hints such as <code>source: reports/a.txt</code> or <code>destination: reports/a.txt</code>. Raw host or mount paths are not shown in the Job Detail summary.</p>
-<h2 id="7-2-file-list">7.2 File List</h2>
+<h3 id="6-4-2-file-list">6.4.2 File List</h3>
 <p>The Files panel is collapsed by default on Job Detail. Use <code>Show files</code> to expand it and <code>Hide files</code> to collapse it again without losing the current page.</p>
 <p>When expanded, the file table usually shows:</p>
 <ul><li>
@@ -758,7 +761,7 @@ Status
 <p>Rows that include a safe file-level error summary are visually emphasized in the Files panel. Select the <code>ERROR</code> or <code>FAILED</code> status badge on desktop, or the matching compact status icon on smaller screens, to open the <code>File Error Details</code> dialog for that row. The dialog shows the file ID, relative path, status, and the sanitized per-file error text returned by the trusted backend.</p>
 <p>Users allowed to inspect hashes open the hash viewer by selecting the file path itself. On smaller screens, ECUBE may replace full status badges with compact status icons and shorten the visible pagination window so the file list stays within the viewport.</p>
 <p>If the job contains more rows than fit on one page, the panel shows a numbered pagination control with left/right navigation. Desktop layouts expose a wider page-number window, while smaller screens show a shorter page-number window to reduce horizontal crowding. The number of rows shown per page is controlled by the admin-only <code>Job Detail Files Per Page</code> runtime setting and is bounded between 20 and 100.</p>
-<h2 id="7-3-hash-viewer">7.3 Hash Viewer</h2>
+<h3 id="6-4-3-hash-viewer">6.4.3 Hash Viewer</h3>
 <p>Users with sufficient permissions can inspect file hashes in a popup dialog opened from the file path in the Files panel. The dialog includes values such as:</p>
 <ul><li>
 MD5
@@ -766,7 +769,7 @@ MD5
 SHA-256
 </li></ul>
 <p>The same popup also includes the compare workflow, so operators can inspect hashes and then compare the selected exported file against its source version without leaving Job Detail.</p>
-<h2 id="7-4-compare-source-and-destination">7.4 Compare Source and Destination</h2>
+<h3 id="6-4-4-compare-source-and-destination">6.4.4 Compare Source and Destination</h3>
 <p>The compare workflow now uses clear <code>Source</code> and <code>Destination</code> terminology inside the hash viewer popup. After you open hashes for an exported file, choose the source file in the compare selector to evaluate the original source version against the copied destination version.</p>
 <p>Comparison output includes:</p>
 <ul><li>
@@ -782,7 +785,7 @@ Path match
 <p>Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed <code>manifest.json</code> file on the destination drive and immediately starts a browser download of the same generated manifest JSON without an extra confirmation step.</p>
 <p class="help-back-to-top"><a href="#help-toc-title">Back to top</a></p>
 <hr />
-<h1 id="8-audit-logs">8. Audit Logs</h1>
+<h1 id="7-audit-logs">7. Audit Logs</h1>
 <blockquote><p><strong>Access Summary</strong></p></blockquote>
 <blockquote><p><strong>Page visibility:</strong> <code>admin</code>, <code>manager</code>, <code>auditor</code></p></blockquote>
 <blockquote><p><strong>Restricted actions:</strong> CSV export is available from the page for authorized users.</p></blockquote>
@@ -808,7 +811,7 @@ Review filters before export so the file contains the intended data set
 </li><li>
 Treat exported audit data as sensitive operational evidence
 </li></ul>
-<h2 id="8-1-chain-of-custody-workflow">8.1 Chain of Custody Workflow</h2>
+<h2 id="7-1-chain-of-custody-workflow">7.1 Chain of Custody Workflow</h2>
 <p>Use the <code>Chain of Custody</code> action on <code>Job Detail</code> to open the job-scoped CoC dialog. This is the standard closeout path when media is being transferred. The dialog loads the last stored CoC snapshot for that job, shows the formatted report content directly, allows authorized users to refresh and store a new snapshot, and provides print/export controls plus a separate <code>Custody Handoff</code> action when the current role and custody state allow it.</p>
 <p>Typical workflow:</p>
 <ol><li>
@@ -873,99 +876,7 @@ Use <code>Cancel</code> if any custody detail needs correction before archival.
 </li></ul>
 <p class="help-back-to-top"><a href="#help-toc-title">Back to top</a></p>
 <hr />
-<h1 id="9-users">9. Users</h1>
-<blockquote><p><strong>Access Summary</strong></p></blockquote>
-<blockquote><p><strong>Page visibility:</strong> <code>admin</code></p></blockquote>
-<blockquote><p><strong>Restricted actions:</strong> All user-management actions on this page are administrator-only.</p></blockquote>
-<p>The <code>Users</code> page is role-restricted and is generally intended for administrators.</p>
-<p>Functions available from this page can include:</p>
-<ul><li>
-Refreshing the current user list
-</li><li>
-Creating an operating-system user for ECUBE access
-</li><li>
-Assigning or removing ECUBE roles
-</li><li>
-Resetting a user's password
-</li></ul>
-<h2 id="9-1-reset-a-user-password">9.1 Reset a User Password</h2>
-<p><strong>Allowed roles:</strong> <code>admin</code></p>
-<ol><li>
-Open <code>Users</code>.
-</li><li>
-Locate the target account in the users table.
-</li><li>
-Open the password reset action for that user.
-</li><li>
-Enter a temporary or policy-compliant new password.
-</li><li>
-Confirm the reset action.
-</li><li>
-Verify the UI shows a success confirmation.
-</li><li>
-Communicate the temporary password through your approved secure channel.
-</li><li>
-Require the user to change it at first sign-in if required by your policy.
-</li></ol>
-<p>Notes:</p>
-<ul><li>
-Reset only ECUBE-managed accounts from this workflow.
-</li><li>
-Use strong passwords that meet your organization security requirements.
-</li><li>
-Record administrative password-reset actions according to your SOP.
-</li></ul>
-<p>If your role does not include access to this page, the navigation item will not appear.</p>
-<h2 id="9-2-configuration-page-administrator">9.2 Configuration Page (Administrator)</h2>
-<p><strong>Allowed roles:</strong> <code>admin</code></p>
-<p>Use the <code>Configuration</code> page to update selected runtime settings from the UI without logging into the host terminal.</p>
-<p>In a standard deployment, the Logging section loads with file logging already enabled and the log path prefilled as <code>/var/log/ecube/app.log</code>. Unchecking the file logging toggle clears <code>LOG_FILE</code> and returns ECUBE to console-only logging.</p>
-<p>What this page is for:</p>
-<ul><li>
-Adjusting logging behavior (level, format, and file logging options)
-</li><li>
-Adjusting selected database pool settings exposed by the UI
-</li><li>
-Applying safe configuration changes through role-restricted workflows
-</li></ul>
-<p>Basic workflow:</p>
-<ol><li>
-Open <code>Configuration</code> from the admin navigation area.
-</li><li>
-Review current values in each section.
-</li><li>
-Edit one or more fields.
-</li><li>
-Click <code>Save</code>.
-</li><li>
-Review post-save status: some changes apply immediately, and some changes are marked as pending restart.
-</li></ol>
-<p>Restart-required workflow:</p>
-<ol><li>
-If the page indicates that restart is required, review the listed changed settings.
-</li><li>
-Click <code>Restart Service</code> only when you are ready.
-</li><li>
-Read the confirmation dialog.
-</li><li>
-Confirm restart to submit the service restart request.
-</li><li>
-If you select cancel, no restart is triggered and the service keeps running.
-</li></ol>
-<p>Important operational notes:</p>
-<ul><li>
-Restart actions are never automatic from this page and always require explicit confirmation.
-</li><li>
-Restarting the application service can interrupt active operations. Prefer using a maintenance window or an idle period.
-</li><li>
-If restart submission fails, use the displayed error and contact platform support or perform restart through approved host-level procedures.
-</li><li>
-For field-by-field meaning and defaults, see Configuration reference.
-</li></ul>
-<p>If your role does not include access to this page, the navigation item will not appear.</p>
-<p class="help-back-to-top"><a href="#help-toc-title">Back to top</a></p>
-<hr />
-<h1 id="10-system">10. System</h1>
+<h1 id="8-system">8. System</h1>
 <blockquote><p><strong>Access Summary</strong></p></blockquote>
 <blockquote><p><strong>Page visibility:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code></p></blockquote>
 <blockquote><p><strong>Restricted actions:</strong> Most diagnostics on this page are relevant to administrators and support personnel. Log viewing is admin-only.</p></blockquote>
@@ -985,7 +896,7 @@ Investigating system errors or performance issues via application logs (admin-on
 <p>In the <code>USB Topology</code> tab, ECUBE shows a sorted device table and hides rows with no meaningful USB metadata so the list stays focused on useful hardware entries. On smaller screens, the table tightens to primary columns such as <code>Device</code> and <code>Product</code>, and the remaining hardware details move into a per-row overflow menu.</p>
 <p>In the <code>Mounts</code> tab, ECUBE continues to show device, mount point, filesystem type, and mount options on wider screens. On smaller screens, it keeps <code>Device</code> and <code>Mount Point</code> visible and moves the remaining fields into a per-row overflow menu.</p>
 <p>For users with <code>admin</code> or <code>manager</code> roles, the System tab bar includes a <code>Reconcile managed mounts</code> action button positioned between <code>Mounts</code> and <code>Logs</code>. This action triggers a manual managed-mount reconciliation pass and opens a dedicated results page.</p>
-<h2 id="10-1-application-logs-tab">10.1 Application Logs Tab</h2>
+<h2 id="8-1-application-logs-tab">8.1 Application Logs Tab</h2>
 <p><strong>Access:</strong> <code>admin</code> role only</p>
 <p>The <strong>Logs</strong> tab allows administrators to inspect the active application log and eligible rotated log files in real time without requiring SSH or command-line access to the ECUBE host. This is useful for diagnosing system issues, checking for errors, and monitoring application behavior.</p>
 <h3 id="viewing-logs">Viewing Logs</h3>
@@ -1060,10 +971,10 @@ Verify the ECUBE service account has read permissions on the selected log file.
 </li><li>
 If you selected a rotated file, confirm the file has not been removed or replaced during log rotation.
 </li><li>
-Consult <a href="#12-troubleshooting">12. Troubleshooting</a> for service-level issues.
+Consult <a href="#13-troubleshooting">13. Troubleshooting</a> for service-level issues.
 </li></ul>
 <p>Governance note: denied log access attempts by non-admin users are recorded in the audit trail for accountability and compliance visibility.</p>
-<h2 id="10-2-manual-mount-reconciliation">10.2 Manual Mount Reconciliation</h2>
+<h2 id="8-2-manual-mount-reconciliation">8.2 Manual Mount Reconciliation</h2>
 <p><strong>Access:</strong> <code>admin</code>, <code>manager</code> roles</p>
 <p>Use this action when mounted-share state appears stale or inconsistent and you need to reconcile managed network and USB mount state without restarting the service.</p>
 <h3 id="run-reconciliation-from-the-system-page">Run Reconciliation from the System Page</h3>
@@ -1109,8 +1020,355 @@ If reconciliation returns no mount or drive rows, ECUBE shows <code>No reconcili
 <p>Use the <code>Back</code> button on the results page to return to the System page.</p>
 <p class="help-back-to-top"><a href="#help-toc-title">Back to top</a></p>
 <hr />
-<h1 id="11-common-tasks">11. Common Tasks</h1>
-<h2 id="11-1-insert-a-new-drive-and-associate-it-with-a-project">11.1 Insert a New Drive and Associate It with a Project</h2>
+<h1 id="9-users">9. Users</h1>
+<blockquote><p><strong>Access Summary</strong></p></blockquote>
+<blockquote><p><strong>Page visibility:</strong> <code>admin</code></p></blockquote>
+<blockquote><p><strong>Restricted actions:</strong> All user-management actions on this page are administrator-only.</p></blockquote>
+<p>The <code>Users</code> page is role-restricted and is generally intended for administrators.</p>
+<p>Functions available from this page can include:</p>
+<ul><li>
+Refreshing the current user list
+</li><li>
+Creating an operating-system user for ECUBE access
+</li><li>
+Assigning or removing ECUBE roles
+</li><li>
+Resetting a user's password
+</li></ul>
+<h2 id="9-1-reset-a-user-password">9.1 Reset a User Password</h2>
+<p><strong>Allowed roles:</strong> <code>admin</code></p>
+<ol><li>
+Open <code>Users</code>.
+</li><li>
+Locate the target account in the users table.
+</li><li>
+Open the password reset action for that user.
+</li><li>
+Enter a temporary or policy-compliant new password.
+</li><li>
+Confirm the reset action.
+</li><li>
+Verify the UI shows a success confirmation.
+</li><li>
+Communicate the temporary password through your approved secure channel.
+</li><li>
+Require the user to change it at first sign-in if required by your policy.
+</li></ol>
+<p>Notes:</p>
+<ul><li>
+Reset only ECUBE-managed accounts from this workflow.
+</li><li>
+Use strong passwords that meet your organization security requirements.
+</li><li>
+Record administrative password-reset actions according to your SOP.
+</li></ul>
+<p>If your role does not include access to this page, the navigation item will not appear.</p>
+<h1 id="10-configuration">10. Configuration</h1>
+<p><strong>Allowed roles:</strong> <code>admin</code></p>
+<p>Use the <code>Configuration</code> page to update selected runtime settings from the UI without logging into the host terminal.</p>
+<p>In a standard deployment, the Logging section loads with file logging already enabled and the log path prefilled as <code>/var/log/ecube/app.log</code>. Unchecking the file logging toggle clears <code>LOG_FILE</code> and returns ECUBE to console-only logging.</p>
+<p>What this page is for:</p>
+<ul><li>
+Adjusting logging behavior (level, format, and file logging options)
+</li><li>
+Adjusting selected database pool settings exposed by the UI
+</li><li>
+Setting or clearing the system-wide <code>Default Callback URL</code> used for job webhooks when a job does not supply its own callback URL
+</li><li>
+Setting or clearing the write-only webhook signing secret used for the <code>X-ECUBE-Signature</code> header
+</li><li>
+Setting or clearing the outbound webhook proxy URL used for callback delivery
+</li><li>
+Setting or clearing JSON-based callback payload field selection and outbound field mapping rules
+</li><li>
+Applying safe configuration changes through role-restricted workflows
+</li></ul>
+<p>Basic workflow:</p>
+<ol><li>
+Open <code>Configuration</code> from the admin navigation area.
+</li><li>
+Review current values in each section.
+</li><li>
+Edit one or more fields.
+</li><li>
+Click <code>Save</code>.
+</li><li>
+Review post-save status: some changes apply immediately, and some changes are marked as pending restart.
+</li></ol>
+<p>Restart-required workflow:</p>
+<ol><li>
+If the page indicates that restart is required, review the listed changed settings.
+</li><li>
+Click <code>Restart Service</code> only when you are ready.
+</li><li>
+Read the confirmation dialog.
+</li><li>
+Confirm restart to submit the service restart request.
+</li><li>
+If you select cancel, no restart is triggered and the service keeps running.
+</li></ol>
+<p>Important operational notes:</p>
+<ul><li>
+Restart actions are never automatic from this page and always require explicit confirmation.
+</li><li>
+Restarting the application service can interrupt active operations. Prefer using a maintenance window or an idle period.
+</li><li>
+The <code>Default Callback URL</code> must be a valid <code>https://</code> URL and is overridden by any job-specific <code>Webhook callback URL</code> entered on the Jobs page or Job Detail edit dialog.
+</li><li>
+The <code>Outbound Callback Proxy URL</code> must be a valid <code>http://</code> or <code>https://</code> URL and must not contain embedded credentials.
+</li><li>
+The <code>Webhook Signing Secret</code> field is write-only. Leave it blank to keep the current secret, enter a new value to rotate it, or use the clear checkbox to remove it.
+</li><li>
+<code>Callback Payload Source Fields</code> expects a JSON array of allowlisted source fields. Leave it blank to keep the default ECUBE payload.
+</li><li>
+<code>Callback Payload Field Mapping</code> expects a JSON object whose values are exact source field names or <code>${field}</code> template strings. Invalid JSON or unsupported field names are rejected on save.
+</li><li>
+If restart submission fails, use the displayed error and contact platform support or perform restart through approved host-level procedures.
+</li><li>
+For field-by-field meaning and defaults, see Configuration reference.
+</li></ul>
+<p>If your role does not include access to this page, the navigation item will not appear.</p>
+<p class="help-back-to-top"><a href="#help-toc-title">Back to top</a></p>
+<hr />
+<h1 id="11-webhook-callbacks">11. Webhook Callbacks</h1>
+<p>ECUBE can notify an external system when a job reaches a terminal state.</p>
+<p>You can configure webhook behavior in two places:</p>
+<ul><li>
+<code>Configuration</code> page: administrators can set a system-wide <code>Default Callback URL</code>
+</li><li>
+Jobs UI: operators can set or clear a per-job <code>Webhook callback URL</code>
+</li></ul>
+<p>How precedence works:</p>
+<ul><li>
+If a job has its own <code>Webhook callback URL</code>, ECUBE uses that job-specific value
+</li><li>
+If the job field is blank, ECUBE falls back to the system-wide <code>Default Callback URL</code> when one is configured
+</li><li>
+If neither value is set, ECUBE does not send a webhook callback
+</li></ul>
+<p>Important rules:</p>
+<ul><li>
+Callback URLs must use <code>https://</code>
+</li><li>
+Callback URLs with embedded credentials are rejected
+</li><li>
+If an administrator configures a signing secret, ECUBE adds an <code>X-ECUBE-Signature</code> header to outbound callbacks
+</li><li>
+The callback is sent only when the job reaches a terminal state such as <code>COMPLETED</code> or <code>FAILED</code>
+</li></ul>
+<p>Use a job-specific callback URL when one export must notify a different downstream system than the rest of the deployment.</p>
+<h2 id="11-1-configure-callback-delivery">11.1 Configure Callback Delivery</h2>
+<p>To configure a system-wide callback as an administrator:</p>
+<ol><li>
+Open <code>Configuration</code>.
+</li><li>
+Scroll to the <code>Webhooks</code> panel.
+</li><li>
+Enter the <code>Default Callback URL</code> if jobs without a per-job callback should still notify a downstream system.
+</li><li>
+Optionally enter an <code>Outbound Callback Proxy URL</code> if your environment requires webhook delivery through an HTTP or HTTPS forward proxy.
+</li><li>
+Optionally enter a <code>Webhook Signing Secret</code> if the receiver should validate <code>X-ECUBE-Signature</code> against the raw request body.
+</li><li>
+Click <code>Save</code>.
+</li></ol>
+<p>To configure a per-job callback:</p>
+<ol><li>
+Open <code>Jobs</code> and create a new job, or open <code>Job Detail</code> and use <code>Edit</code> on an eligible job.
+</li><li>
+Enter the job-specific <code>Webhook callback URL</code>.
+</li><li>
+Save the job.
+</li></ol>
+<p>Operational notes:</p>
+<ul><li>
+The callback URL must use <code>https://</code>.
+</li><li>
+Embedded credentials in callback or proxy URLs are rejected.
+</li><li>
+Leaving the job-level callback blank causes ECUBE to fall back to the configured system default, if one exists.
+</li><li>
+Leaving both values blank disables callback delivery for that job.
+</li><li>
+The signing secret is write-only in the UI. Leave it blank to keep the current secret, enter a new secret to rotate it, or clear it from the <code>Configuration</code> page.
+</li></ul>
+<h2 id="11-2-configure-the-callback-payload">11.2 Configure the Callback Payload</h2>
+<p>Administrators can optionally customize the outbound payload in the <code>Configuration</code> page <code>Webhooks</code> panel with these two fields:</p>
+<ul><li>
+<code>Callback Payload Source Fields</code>: JSON array of allowlisted source fields to include.
+</li><li>
+<code>Callback Payload Field Mapping</code>: JSON object that remaps outbound field names to either an exact source field name or a deterministic <code>${field}</code> template string.
+</li></ul>
+<p>Recommended workflow:</p>
+<ol><li>
+Start by entering the source fields you want ECUBE to expose.
+</li><li>
+Save that field list first if you want the backend to validate the allowlist before you add mapping.
+</li><li>
+Add <code>Callback Payload Field Mapping</code> only after the required source fields are present in the allowlist.
+</li><li>
+Save again and validate the result against your receiver.
+</li></ol>
+<p>Example <code>Callback Payload Source Fields</code> value:</p>
+<pre><code>[
+   &quot;event&quot;,
+   &quot;job_id&quot;,
+   &quot;project_id&quot;,
+   &quot;evidence_number&quot;,
+   &quot;started_by&quot;,
+   &quot;completion_result&quot;,
+   &quot;active_duration_seconds&quot;,
+   &quot;drive_id&quot;,
+   &quot;drive_serial_number&quot;,
+   &quot;started_at&quot;,
+   &quot;completed_at&quot;
+]</code></pre>
+<p>Example <code>Callback Payload Field Mapping</code> value:</p>
+<pre><code>{
+   &quot;type&quot;: &quot;event&quot;,
+   &quot;job&quot;: &quot;job_id&quot;,
+   &quot;project&quot;: &quot;project_id&quot;,
+   &quot;operator&quot;: &quot;started_by&quot;,
+   &quot;duration_seconds&quot;: &quot;active_duration_seconds&quot;,
+   &quot;drive&quot;: &quot;drive_id&quot;,
+   &quot;serial&quot;: &quot;drive_serial_number&quot;,
+   &quot;summary&quot;: &quot;project=${project_id};result=${completion_result}&quot;,
+   &quot;started&quot;: &quot;started_at&quot;,
+   &quot;ended&quot;: &quot;completed_at&quot;
+}</code></pre>
+<p>Important payload rules:</p>
+<ul><li>
+<code>Callback Payload Source Fields</code> must be valid JSON and must be a non-empty array when provided.
+</li><li>
+<code>Callback Payload Field Mapping</code> must be valid JSON and must be an object when provided.
+</li><li>
+Mapping values can reference only fields already present in <code>Callback Payload Source Fields</code>.
+</li><li>
+Template values are limited to exact <code>${field}</code> substitutions. Expressions, code, arithmetic, and nested templating are not supported.
+</li><li>
+ECUBE validates the payload contract before saving; invalid, blank, duplicate, or unknown fields are rejected.
+</li><li>
+Mapping is applied before ECUBE signs the payload, so the final mapped JSON body is what the receiver validates.
+</li></ul>
+<h2 id="11-3-available-callback-payload-fields">11.3 Available Callback Payload Fields</h2>
+<p>The following source fields can be used in <code>Callback Payload Source Fields</code> and <code>Callback Payload Field Mapping</code>:</p>
+<table><thead><tr>
+<th>Field</th>
+<th>Type</th>
+<th>Notes</th>
+</tr></thead>
+<tbody>
+<tr>
+<td><code>event</code></td>
+<td><code>string</code></td>
+<td><code>JOB_COMPLETED</code> or <code>JOB_FAILED</code>.</td>
+</tr>
+<tr>
+<td><code>job_id</code></td>
+<td><code>integer</code></td>
+<td>ECUBE job ID.</td>
+</tr>
+<tr>
+<td><code>project_id</code></td>
+<td><code>string</code></td>
+<td>Bound project identifier.</td>
+</tr>
+<tr>
+<td><code>evidence_number</code></td>
+<td><code>string</code></td>
+<td>Evidence/case number stored on the job.</td>
+</tr>
+<tr>
+<td><code>started_by</code></td>
+<td><code>string</code> or null</td>
+<td>Username of the user who started the job when recorded.</td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td><code>string</code></td>
+<td>Terminal job status.</td>
+</tr>
+<tr>
+<td><code>source_path</code></td>
+<td><code>string</code></td>
+<td>Source path recorded for the job.</td>
+</tr>
+<tr>
+<td><code>total_bytes</code></td>
+<td><code>integer</code></td>
+<td>Total bytes ECUBE planned to copy.</td>
+</tr>
+<tr>
+<td><code>copied_bytes</code></td>
+<td><code>integer</code></td>
+<td>Bytes actually copied.</td>
+</tr>
+<tr>
+<td><code>file_count</code></td>
+<td><code>integer</code></td>
+<td>Total file count.</td>
+</tr>
+<tr>
+<td><code>files_succeeded</code></td>
+<td><code>integer</code></td>
+<td>Files copied successfully.</td>
+</tr>
+<tr>
+<td><code>files_failed</code></td>
+<td><code>integer</code></td>
+<td>Files that ended in error.</td>
+</tr>
+<tr>
+<td><code>files_timed_out</code></td>
+<td><code>integer</code></td>
+<td>Files that timed out.</td>
+</tr>
+<tr>
+<td><code>completion_result</code></td>
+<td><code>string</code></td>
+<td><code>success</code>, <code>partial_success</code>, or <code>failed</code>.</td>
+</tr>
+<tr>
+<td><code>active_duration_seconds</code></td>
+<td><code>integer</code></td>
+<td>Persisted cumulative active runtime for the job in seconds.</td>
+</tr>
+<tr>
+<td><code>drive_id</code></td>
+<td><code>integer</code> or absent</td>
+<td>Active destination drive ID for the job when present.</td>
+</tr>
+<tr>
+<td><code>drive_manufacturer</code></td>
+<td><code>string</code> or null or absent</td>
+<td>Destination drive manufacturer when present.</td>
+</tr>
+<tr>
+<td><code>drive_model</code></td>
+<td><code>string</code> or null or absent</td>
+<td>Destination drive model/product name when present.</td>
+</tr>
+<tr>
+<td><code>drive_serial_number</code></td>
+<td><code>string</code> or null or absent</td>
+<td>Destination drive serial number when present.</td>
+</tr>
+<tr>
+<td><code>started_at</code></td>
+<td><code>string</code> or absent</td>
+<td>ISO 8601 timestamp when the job run started.</td>
+</tr>
+<tr>
+<td><code>completed_at</code></td>
+<td><code>string</code> or absent</td>
+<td>ISO 8601 timestamp when present on the job.</td>
+</tr>
+</tbody>
+</table>
+<p class="help-back-to-top"><a href="#help-toc-title">Back to top</a></p>
+<hr />
+<h1 id="12-common-tasks">12. Common Tasks</h1>
+<h2 id="12-1-insert-a-new-drive-and-associate-it-with-a-project">12.1 Insert a New Drive and Associate It with a Project</h2>
 <p><strong>Allowed roles:</strong> <code>admin</code>, <code>manager</code></p>
 <ol><li>
 Insert the new USB drive into the ECUBE host.
@@ -1141,7 +1399,7 @@ The destination drive itself must also already be mounted; otherwise ECUBE retur
 </li><li>
 Confirm the project carefully before initialization because project isolation is enforced after association.
 </li></ul>
-<h2 id="11-1a-re-insert-a-drive-to-add-more-data-to-the-same-project">11.1a Re-insert a Drive to Add More Data to the Same Project</h2>
+<h2 id="12-1a-re-insert-a-drive-to-add-more-data-to-the-same-project">12.1a Re-insert a Drive to Add More Data to the Same Project</h2>
 <p><strong>Allowed roles:</strong> <code>admin</code>, <code>manager</code></p>
 <p>If a drive was previously ejected and needs to receive more data for the same project:</p>
 <ol><li>
@@ -1162,7 +1420,7 @@ Confirm and submit.
 The drive transitions back to <code>IN_USE</code> for the same project.
 </li></ol>
 <p>No format is required when re-using the same project, but both the mounted-share and mounted-drive prerequisites still apply.</p>
-<h2 id="11-1b-re-assign-a-drive-to-a-different-project">11.1b Re-assign a Drive to a Different Project</h2>
+<h2 id="12-1b-re-assign-a-drive-to-a-different-project">12.1b Re-assign a Drive to a Different Project</h2>
 <p><strong>Allowed roles:</strong> <code>admin</code>, <code>manager</code></p>
 <p>If a drive must be reassigned to a different project, a format is required to wipe existing data and clear the project binding:</p>
 <ol><li>
@@ -1183,7 +1441,7 @@ Choose the new project from the dropdown and confirm.
 The drive transitions to <code>IN_USE</code> for the new project.
 </li></ol>
 <blockquote><p><strong>Warning:</strong> Formatting permanently deletes all data on the drive. Verify that copies and chain-of-custody records for prior project data are complete before proceeding.</p></blockquote>
-<h2 id="11-2-prepare-a-drive-for-removal-and-shipment">11.2 Prepare a Drive for Removal and Shipment</h2>
+<h2 id="12-2-prepare-a-drive-for-removal-and-shipment">12.2 Prepare a Drive for Removal and Shipment</h2>
 <p><strong>Allowed roles:</strong> <code>admin</code>, <code>manager</code></p>
 <ol><li>
 Confirm the export job is complete and any required verification or manifest generation has finished.
@@ -1208,7 +1466,7 @@ After ejection the drive returns to <code>AVAILABLE</code> with its project bind
 </li><li>
 To permanently retire the drive, open the related job in <code>Job Detail</code> and complete the Chain of Custody handoff from the <code>Chain of Custody</code> dialog.
 </li></ul>
-<h2 id="11-3-export-evidence-to-a-drive">11.3 Export Evidence to a Drive</h2>
+<h2 id="12-3-export-evidence-to-a-drive">12.3 Export Evidence to a Drive</h2>
 <p><strong>Allowed roles:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code></p>
 <ol><li>
 Confirm the correct drive is present and in the expected state.
@@ -1231,7 +1489,8 @@ Monitor progress until completion.
 </li><li>
 Run verification and generate a manifest if required by your workflow.
 </li></ol>
-<h2 id="11-4-review-copy-results">11.4 Review Copy Results</h2>
+<p>If the job should notify an external case-management or orchestration system when it completes, enter the destination <code>Webhook callback URL</code> during job creation. Leave the field blank if the job should use the administrator-configured system default instead.</p>
+<h2 id="12-4-review-copy-results">12.4 Review Copy Results</h2>
 <p><strong>Allowed roles:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code></p>
 <ol><li>
 Open the job detail page.
@@ -1250,7 +1509,7 @@ Hash inspection is currently available to <code>admin</code> and <code>auditor</
 </li><li>
 Operational actions such as <code>Start</code>, <code>Verify</code>, and <code>Manifest</code> are available to <code>admin</code>, <code>manager</code>, and <code>processor</code>.
 </li></ul>
-<h2 id="11-5-review-audit-activity">11.5 Review Audit Activity</h2>
+<h2 id="12-5-review-audit-activity">12.5 Review Audit Activity</h2>
 <p><strong>Allowed roles:</strong> <code>admin</code>, <code>manager</code>, <code>auditor</code></p>
 <ol><li>
 Open <code>Audit</code>.
@@ -1261,7 +1520,7 @@ Expand details for relevant records.
 </li><li>
 Export CSV if you need to retain or share the filtered results.
 </li></ol>
-<h2 id="11-6-add-a-new-user">11.6 Add a New User</h2>
+<h2 id="12-6-add-a-new-user">12.6 Add a New User</h2>
 <p><strong>Allowed roles:</strong> <code>admin</code></p>
 <ol><li>
 Open <code>Users</code>.
@@ -1290,7 +1549,7 @@ Existing users that are linked into ECUBE are not prompted for a new password in
 </li><li>
 For directory-backed users that cannot be fully enumerated by host account listing, ECUBE may show placeholder host fields while still exposing role management controls.
 </li></ul>
-<h2 id="11-7-remove-a-user-s-ecube-access">11.7 Remove a User's ECUBE Access</h2>
+<h2 id="12-7-remove-a-user-s-ecube-access">12.7 Remove a User's ECUBE Access</h2>
 <p><strong>Allowed roles:</strong> <code>admin</code></p>
 <ol><li>
 Open <code>Users</code>.
@@ -1309,7 +1568,7 @@ In the current web UI, removing all roles is the visible workflow for removing E
 </li><li>
 Full operating-system user deletion is not currently exposed in the web UI and should be handled through administrative procedures outside this manual.
 </li></ul>
-<h2 id="11-8-view-application-logs-for-troubleshooting">11.8 View Application Logs for Troubleshooting</h2>
+<h2 id="12-8-view-application-logs-for-troubleshooting">12.8 View Application Logs for Troubleshooting</h2>
 <p><strong>Allowed roles:</strong> <code>admin</code></p>
 <ol><li>
 Open the <code>System</code> page.
@@ -1340,8 +1599,8 @@ This feature is admin-only to prevent information leakage from diagnostic data.
 </li></ul>
 <p class="help-back-to-top"><a href="#help-toc-title">Back to top</a></p>
 <hr />
-<h1 id="12-troubleshooting">12. Troubleshooting</h1>
-<h2 id="12-1-i-cannot-log-in">12.1 I Cannot Log In</h2>
+<h1 id="13-troubleshooting">13. Troubleshooting</h1>
+<h2 id="13-1-i-cannot-log-in">13.1 I Cannot Log In</h2>
 <p>Possible causes:</p>
 <ul><li>
 Incorrect username or password
@@ -1352,7 +1611,7 @@ Browser cannot reach the site
 </li><li>
 Your account has not been created or assigned the right role
 </li></ul>
-<h2 id="12-2-a-page-or-menu-item-is-missing">12.2 A Page or Menu Item Is Missing</h2>
+<h2 id="13-2-a-page-or-menu-item-is-missing">13.2 A Page or Menu Item Is Missing</h2>
 <p>Possible causes:</p>
 <ul><li>
 Your role does not include access to that feature
@@ -1361,7 +1620,7 @@ The system is not fully initialized
 </li><li>
 The deployment is using an older or partially upgraded frontend/backend combination
 </li></ul>
-<h2 id="12-3-a-button-is-visible-but-disabled">12.3 A Button Is Visible but Disabled</h2>
+<h2 id="13-3-a-button-is-visible-but-disabled">13.3 A Button Is Visible but Disabled</h2>
 <p>Possible causes:</p>
 <ul><li>
 Your role is read-only for that operation
@@ -1370,7 +1629,7 @@ The selected object is not in a state that permits the action
 </li><li>
 Required data has not been entered yet
 </li></ul>
-<h2 id="12-4-the-ui-shows-a-network-error">12.4 The UI Shows a Network Error</h2>
+<h2 id="13-4-the-ui-shows-a-network-error">13.4 The UI Shows a Network Error</h2>
 <p>Possible causes:</p>
 <ul><li>
 Backend service unavailable
@@ -1392,7 +1651,7 @@ The visible error text
 The approximate date and time
 </li></ul>
 <p>Then provide that information to your ECUBE administrator.</p>
-<h2 id="12-5-usb-drive-is-not-recognized">12.5 USB Drive Is Not Recognized</h2>
+<h2 id="13-5-usb-drive-is-not-recognized">13.5 USB Drive Is Not Recognized</h2>
 <p><strong>Who can do what:</strong></p>
 <ul><li>
 End users (<code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code>) can perform UI-level checks.
