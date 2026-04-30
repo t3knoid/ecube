@@ -464,6 +464,16 @@ class Settings(BaseSettings):
     #: takes precedence over this system-wide default.
     callback_default_url: str | None = None
 
+    #: Optional shared secret used to generate the
+    #: ``X-ECUBE-Signature: sha256=...`` HMAC header for callback payloads.
+    #: This value is write-only in admin configuration surfaces.
+    callback_hmac_secret: str | None = None
+
+    #: Optional outbound forward-proxy URL used for callback delivery.
+    #: Supports ``http://`` and ``https://`` proxies. Leave unset to
+    #: connect directly.
+    callback_proxy_url: str | None = None
+
     # ---------------------------------------------------------------------------
     # Database pool settings
     # ---------------------------------------------------------------------------

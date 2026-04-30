@@ -277,6 +277,26 @@ The callback body is a JSON object containing:
 - `CALLBACK_DELIVERY_FAILED` — All retries exhausted, SSRF blocked, redirect received, or permanent failure; includes `callback_url`, `reason`, `attempts`.
 - `CALLBACK_DELIVERY_DROPPED` — Delivery dropped due to backpressure (queue full); includes `callback_url`, `reason`.
 
+### Signing and Proxy Configuration
+
+- Administrators may configure a system-wide callback signing secret.
+- When a signing secret is present, ECUBE signs the exact JSON request body bytes with HMAC-SHA256 and sends `X-ECUBE-Signature: sha256=<hex digest>`.
+- The signing secret is write-only in UI and API configuration surfaces. Read APIs expose only a boolean configured/not-configured status.
+- Administrators may configure a system-wide outbound callback forward proxy using an `http://` or `https://` proxy URL.
+- Proxy URLs must not contain embedded credentials.
+- Existing SSRF protections remain in force even when a proxy is configured: ECUBE still resolves and validates the destination host before delivery and connects using the pinned IP.
+
+### Future Payload Mapping Contract
+
+- Payload customization remains design-only in this slice and is not yet implemented.
+- The default payload described above remains the only runtime payload shape until a later release enables allowlists and mapping.
+- A future payload configuration must use an explicit allowlist of ECUBE-owned source fields; arbitrary expressions, code, and unrestricted templating are forbidden.
+- Proposed source-field allowlist: `event`, `job_id`, `project_id`, `evidence_number`, `status`, `source_path`, `total_bytes`, `copied_bytes`, `file_count`, `files_succeeded`, `files_failed`, `files_timed_out`, `completion_result`, `completed_at`.
+- Proposed mapping format: a JSON object whose keys are outbound field names and whose values are either an allowlisted ECUBE field name or a constrained template token such as `${project_id}`.
+- Mapping evaluation must be deterministic, side-effect free, and string-substitution only. Nested expressions, function calls, arithmetic, path traversal, and host-environment access are out of scope.
+- Invalid or unknown source fields must cause configuration rejection rather than silent omission.
+- A future implementation should preserve auditability by recording which mapping profile was applied without logging secret values or raw host-path expansions.
+
 ---
 
 ## 4.9 Audit Logging Design
