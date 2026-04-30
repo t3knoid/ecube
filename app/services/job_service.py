@@ -292,10 +292,12 @@ def archive_job(
         )
 
     db.refresh(job)
+    archived_at = datetime.now(timezone.utc)
     _emit_job_lifecycle_callback(
         job,
         event="JOB_ARCHIVED",
         actor=actor,
+        event_at=archived_at,
         event_details={"previous_status": current_status.value},
     )
     return job
@@ -1439,10 +1441,12 @@ def pause_job(
         logger.exception("Failed to write audit log for JOB_PAUSE_REQUESTED")
 
     db.refresh(job)
+    pause_requested_at = datetime.now(timezone.utc)
     _emit_job_lifecycle_callback(
         job,
         event="JOB_PAUSE_REQUESTED",
         actor=actor,
+        event_at=pause_requested_at,
         event_details={"status": job_status.value},
     )
     return job
@@ -1505,10 +1509,12 @@ def verify_job(
         )
     except Exception:
         logger.exception("Failed to write audit log for JOB_VERIFY_STARTED")
+    verify_started_at = datetime.now(timezone.utc)
     _emit_job_lifecycle_callback(
         job,
         event="JOB_VERIFY_STARTED",
         actor=actor,
+        event_at=verify_started_at,
     )
     background_tasks.add_task(copy_engine.run_verify_job, job_id)
     db.refresh(job)
