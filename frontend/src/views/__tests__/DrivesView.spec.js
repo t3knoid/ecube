@@ -326,6 +326,20 @@ describe('DrivesView rescan and filter loading', () => {
     expect(linkedCells.map((node) => node.text())).toEqual(['PROJ-123', 'EV-004'])
   })
 
+  it('does not show stale project evidence or job links for a formatted drive', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ id: 7, current_project_id: null })])
+    mocks.listAllJobs.mockResolvedValue([
+      { id: 44, project_id: 'PROJ-OLD', evidence_number: 'EV-OLD', drive: { id: 7 } },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('.row-evidence').text()).toBe('-')
+    expect(wrapper.text()).not.toContain('EV-OLD')
+    expect(wrapper.find('.cell-link').exists()).toBe(false)
+  })
+
   it('sorts by project in ascending and descending order and keeps that sort after refresh', async () => {
     mocks.getDrives
       .mockResolvedValueOnce([
