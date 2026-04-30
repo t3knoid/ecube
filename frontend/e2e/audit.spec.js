@@ -83,7 +83,7 @@ test('job detail chain of custody report renders printable sections and CoC expo
     thread_count: 4,
     source_path: '/mnt/share/evidence',
     target_mount_path: '/mnt/ecube/1',
-    drive: { id: 1, current_state: 'ARCHIVED', is_mounted: false, device_identifier: 'SN-001' },
+    drive: { id: 1, current_state: 'AVAILABLE', is_mounted: false, device_identifier: 'SN-001' },
   })
 
   await page.route(/\/api\/audit(?!\/)/, async (route) => {
@@ -201,7 +201,7 @@ test('job detail chain of custody report renders printable sections and CoC expo
 test.describe('chain of custody handoff', () => {
   test.use({ timezoneId: 'America/New_York' })
 
-  test('requires warning confirmation and submits archive handoff from job detail', async ({ page }) => {
+  test('requires warning confirmation and submits custody handoff from job detail', async ({ page }) => {
     await setupAuthenticatedPage(page, ['manager'])
     await routeJson(page, '**/api/drives**', [])
     await routeJson(page, '**/api/mounts', [])
@@ -284,8 +284,7 @@ test.describe('chain of custody handoff', () => {
       lastHandoffBody = route.request().postDataJSON()
       jobState = {
         ...jobState,
-        status: 'ARCHIVED',
-        drive: { ...jobState.drive, current_state: 'ARCHIVED' },
+        drive: { ...jobState.drive, current_state: 'AVAILABLE' },
       }
       await route.fulfill({
         status: 200,
@@ -333,7 +332,7 @@ test.describe('chain of custody handoff', () => {
     expect(handoffCallCount).toBe(0)
 
     await page.getByRole('button', { name: 'Confirm Handoff' }).click()
-    await page.getByRole('button', { name: 'Record handoff and archive drive' }).click()
+  await page.getByRole('button', { name: 'Record custody handoff' }).click()
 
     expect(handoffCallCount).toBe(1)
     expect(cocLoads).toBeGreaterThanOrEqual(1)
