@@ -4,6 +4,7 @@ These tests exercise the path-safety checks (absolute, direct-child of
 usb_mount_base_path) without actually calling mount(8).
 """
 
+import logging
 import subprocess
 
 from unittest.mock import patch
@@ -176,7 +177,7 @@ def test_mount_drive_fails_when_mount_point_remains_unwritable():
 
 
 def test_mount_drive_logs_raw_debug_error(caplog):
-    """Debug logs should retain the unsanitized mount helper error text."""
+    """Warning logs should stay sanitized while debug logs retain the raw helper error text."""
     dm = LinuxDriveMount()
     with patch("app.infrastructure.drive_mount.settings") as mock_settings:
         mock_settings.usb_mount_base_path = _BASE
@@ -194,20 +195,83 @@ def test_mount_drive_logs_raw_debug_error(caplog):
                             side_effect=subprocess.CalledProcessError(
                                 returncode=32,
                                 cmd=["/bin/mount"],
-                                stderr=b"mount: /dev/sdb: permission denied while mounting /mnt/ecube/7",
+                                stderr=b"mount: unknown filesystem type 'exfat' while mounting /mnt/ecube/7",
                             ),
                         ):
                             with caplog.at_level("DEBUG"):
                                 ok, err = dm.mount_drive(_VALID_DEVICE, f"{_BASE}/7")
 
     assert ok is False
-    assert "permission denied" in (err or "")
-    messages = [record.getMessage() for record in caplog.records]
-    assert any("Drive mount command failed" in message for message in messages)
+    assert "unknown filesystem type" in (err or "")
+    warning_records = [record for record in caplog.records if record.levelno == logging.WARNING]
+    debug_messages = [record.getMessage() for record in caplog.records if record.levelno == logging.DEBUG]
+
+    assert any(record.getMessage() == "Drive mount command failed" for record in warning_records)
+    assert any(getattr(record, "failure_category", None) == "missing_filesystem_runtime" for record in warning_records)
+    assert any(getattr(record, "failure_summary", None) == "Filesystem type is not supported by the host" for record in warning_records)
+    assert all("/dev/sdb" not in record.getMessage() for record in warning_records)
+    assert all("/mnt/ecube/7" not in record.getMessage() for record in warning_records)
     assert any(
         "Drive mount raw error" in message
         and "/dev/sdb" in message
         and "/mnt/ecube/7" in message
-        and "permission denied while mounting /mnt/ecube/7" in message
-        for message in messages
+        and "unknown filesystem type 'exfat' while mounting /mnt/ecube/7" in message
+        for message in debug_messages
     )
+
+
+def test_mount_drive_logs_managed_mount_root_failure_with_safe_warning(caplog):
+    """Mount-root preparation failures should log a safe normal-level classification and raw debug detail."""
+    dm = LinuxDriveMount()
+    with patch("app.infrastructure.drive_mount.settings") as mock_settings:
+        mock_settings.usb_mount_base_path = _BASE
+        mock_settings.sysfs_block_path = "/sys/block"
+        mock_settings.mount_binary_path = "/bin/mount"
+        mock_settings.use_sudo = False
+        mock_settings.subprocess_timeout_seconds = 10
+        mock_settings.procfs_mounts_path = "/proc/mounts"
+        with patch("os.path.realpath", side_effect=lambda p: p):
+            with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
+                with patch("os.makedirs", side_effect=PermissionError("[Errno 13] Permission denied: '/mnt/ecube/7'")):
+                    with caplog.at_level("DEBUG"):
+                        ok, err = dm.mount_drive(_VALID_DEVICE, f"{_BASE}/7")
+
+    assert ok is False
+    assert "failed to create mount point" in (err or "")
+    warning_records = [record for record in caplog.records if record.levelno == logging.WARNING]
+    debug_messages = [record.getMessage() for record in caplog.records if record.levelno == logging.DEBUG]
+
+    assert any(record.getMessage() == "Drive mount root preparation failed" for record in warning_records)
+    assert any(getattr(record, "failure_category", None) == "managed_mount_root_inaccessible" for record in warning_records)
+    assert any(getattr(record, "failure_summary", None) == "Permission or authentication failure" for record in warning_records)
+    assert any("Drive mount root preparation details" in message and "/mnt/ecube/7" in message for message in debug_messages)
+
+
+def test_mount_drive_logs_access_repair_failure_with_safe_warning(caplog):
+    """Post-mount access repair failures should be classifiable without leaking raw details at warning level."""
+    dm = LinuxDriveMount()
+    with patch("app.infrastructure.drive_mount.settings") as mock_settings:
+        mock_settings.usb_mount_base_path = _BASE
+        mock_settings.sysfs_block_path = "/sys/block"
+        mock_settings.mount_binary_path = "/bin/mount"
+        mock_settings.use_sudo = True
+        mock_settings.subprocess_timeout_seconds = 10
+        mock_settings.procfs_mounts_path = "/proc/mounts"
+        with patch("os.path.realpath", side_effect=lambda p: p):
+            with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
+                with patch("os.makedirs"):
+                    with patch("os.geteuid", return_value=1234):
+                        with patch("os.getegid", return_value=5678):
+                            with patch("os.access", return_value=False):
+                                with patch("subprocess.run"):
+                                    with caplog.at_level("DEBUG"):
+                                        ok, err = dm.mount_drive(_VALID_DEVICE, f"{_BASE}/7")
+
+    assert ok is False
+    assert "not writable" in (err or "")
+    warning_records = [record for record in caplog.records if record.levelno == logging.WARNING]
+    debug_messages = [record.getMessage() for record in caplog.records if record.levelno == logging.DEBUG]
+
+    assert any(record.getMessage() == "Drive mount access repair failed" for record in warning_records)
+    assert any(getattr(record, "failure_category", None) == "post_mount_access_repair_failure" for record in warning_records)
+    assert any("Drive mount access repair details" in message and "/mnt/ecube/7" in message for message in debug_messages)
