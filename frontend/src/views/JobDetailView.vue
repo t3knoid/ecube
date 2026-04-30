@@ -966,10 +966,6 @@ function openCocDialog() {
   void loadJobChainOfCustody()
 }
 
-function shouldOpenCocFromRoute() {
-  return route.query?.coc === '1'
-}
-
 function closeFileErrorDialog() {
   showFileErrorDialog.value = false
 }
@@ -1570,9 +1566,6 @@ onMounted(async () => {
   window.addEventListener('afterprint', handleAfterPrint)
   currentTimeMs.value = Date.now()
   await refreshAll()
-  if (shouldOpenCocFromRoute()) {
-    openCocDialog()
-  }
   if (!isTerminalStatus(job.value?.status)) {
     jobPoller.start()
   }

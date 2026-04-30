@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { getDrives, formatDrive, initializeDrive, mountDrive, prepareEjectDrive, refreshDrives } from '@/api/drives.js'
-import { getJobChainOfCustody, listAllJobs, listJobs } from '@/api/jobs.js'
+import { listAllJobs, listJobs } from '@/api/jobs.js'
 import { getMounts } from '@/api/mounts.js'
 import { enablePort } from '@/api/admin.js'
 import { normalizeErrorMessage } from '@/api/client.js'
@@ -14,7 +14,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
-import { buildDriveJobMap, buildProjectEvidenceMap, getDriveJob, getProjectEvidence, getProjectEvidenceJobId } from '@/utils/projectEvidence.js'
+import { buildDriveJobMap, buildProjectEvidenceMap, getDriveJob, getProjectEvidence } from '@/utils/projectEvidence.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -28,7 +28,6 @@ const error = ref('')
 const infoMessage = ref('')
 const warnMessage = ref('')
 const currentProjectEvidenceNumber = ref('')
-const relatedJobId = ref(null)
 
 function clearBanners() {
   error.value = ''
@@ -157,17 +156,12 @@ async function loadDrive() {
 
     const drives = driveResult.value || []
     const jobs = jobResult.status === 'fulfilled' ? (jobResult.value || []) : []
-    const jobsByDrive = buildDriveJobMap(jobs)
-    const evidenceByProject = buildProjectEvidenceMap(jobs)
     const next = drives.find((item) => item.id === driveId.value) || null
     drive.value = next ? normalizeProjectRecord(next, ['current_project_id']) : null
-    const assignedJob = drive.value ? getDriveJob(drive.value.id, jobsByDrive) : null
+    const assignedJob = drive.value ? getDriveJob(drive.value.id, buildDriveJobMap(jobs)) : null
     currentProjectEvidenceNumber.value = drive.value
-      ? assignedJob?.evidenceNumber || getProjectEvidence(drive.value.current_project_id, evidenceByProject)
+      ? assignedJob?.evidenceNumber || getProjectEvidence(drive.value.current_project_id, buildProjectEvidenceMap(jobs))
       : ''
-    relatedJobId.value = drive.value
-      ? assignedJob?.jobId || getProjectEvidenceJobId(drive.value.current_project_id, evidenceByProject)
-      : null
     if (!drive.value) {
       error.value = t('drives.notFound')
     }
@@ -175,20 +169,6 @@ async function loadDrive() {
     error.value = t('common.errors.networkError')
   } finally {
     loading.value = false
-  }
-}
-
-async function shouldShowCocPromptForJob(jobId) {
-  const normalizedJobId = Number(jobId)
-  if (!Number.isInteger(normalizedJobId) || normalizedJobId <= 0) {
-    return false
-  }
-
-  try {
-    await getJobChainOfCustody(normalizedJobId)
-    return false
-  } catch (err) {
-    return err?.response?.status === 404
   }
 }
 
@@ -434,7 +414,6 @@ async function openPrepareEjectDialog() {
 
 async function runPrepareEject(confirmIncomplete = false) {
   if (!drive.value) return
-  const targetJobId = relatedJobId.value
   saving.value = true
   clearBanners()
   showEjectDialog.value = false
@@ -449,7 +428,7 @@ async function runPrepareEject(confirmIncomplete = false) {
       ['current_project_id'],
     )
     infoMessage.value = t('drives.ejectSuccess')
-    showCocPrompt.value = await shouldShowCocPromptForJob(targetJobId)
+    showCocPrompt.value = true
   } catch (err) {
     const status = err?.response?.status
     const detail = normalizeErrorMessage(err?.response?.data, null)
@@ -480,13 +459,13 @@ async function runPrepareEject(confirmIncomplete = false) {
 }
 
 function openChainOfCustody() {
-  const targetJobId = Number(relatedJobId.value)
-  if (!Number.isInteger(targetJobId) || targetJobId <= 0) return
-  router.push({
-    name: 'job-detail',
-    params: { id: targetJobId },
-    query: { coc: '1' },
-  })
+  if (!drive.value) return
+  const query = {
+    coc: '1',
+    drive_id: String(drive.value.id),
+  }
+  if (drive.value.current_project_id) query.project_id = drive.value.current_project_id
+  router.push({ name: 'audit', query })
 }
 
 onMounted(loadDrive)
