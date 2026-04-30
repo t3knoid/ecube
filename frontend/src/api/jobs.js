@@ -37,6 +37,32 @@ export function listJobs(params = {}, { timeout } = {}) {
   return toData(apiClient.get(`${API_BASE}/jobs`, config))
 }
 
+export async function listAllJobs(params = {}, { timeout, pageSize = 1000 } = {}) {
+  const effectivePageSize = Number.isInteger(pageSize) && pageSize > 0
+    ? Math.min(pageSize, 1000)
+    : 1000
+
+  const jobs = []
+  let offset = 0
+
+  while (true) {
+    const page = await listJobs({
+      ...params,
+      limit: effectivePageSize,
+      offset,
+    }, { timeout })
+
+    const nextPage = Array.isArray(page) ? page : []
+    jobs.push(...nextPage)
+
+    if (nextPage.length < effectivePageSize) {
+      return jobs
+    }
+
+    offset += nextPage.length
+  }
+}
+
 export async function hasArchivedJobs({ timeout } = {}) {
   const jobs = await listJobs({ limit: 1, include_archived: true, statuses: ['ARCHIVED'] }, { timeout })
   return Array.isArray(jobs) && jobs.length > 0
