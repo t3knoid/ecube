@@ -33,6 +33,18 @@ class TestConfigurationSchemaValidation:
         req = ConfigurationUpdateRequest(job_detail_files_page_size=60)
         assert req.job_detail_files_page_size == 60
 
+    def test_update_accepts_callback_default_url(self):
+        req = ConfigurationUpdateRequest(callback_default_url="https://example.com/default-webhook")
+        assert req.callback_default_url == "https://example.com/default-webhook"
+
+    def test_update_allows_clearing_callback_default_url_with_blank(self):
+        req = ConfigurationUpdateRequest(callback_default_url="   ")
+        assert req.callback_default_url is None
+
+    def test_update_rejects_non_https_callback_default_url(self):
+        with pytest.raises(ValidationError):
+            ConfigurationUpdateRequest(callback_default_url="http://example.com/webhook")
+
     def test_update_rejects_job_detail_files_page_size_below_minimum(self):
         with pytest.raises(ValidationError):
             ConfigurationUpdateRequest(job_detail_files_page_size=10)
@@ -49,6 +61,7 @@ class TestConfigurationEndpoints:
         assert "db_pool_recycle_seconds" in keys
         assert "copy_job_timeout" in keys
         assert "job_detail_files_page_size" in keys
+        assert "callback_default_url" in keys
 
     def test_get_configuration_returns_default_enabled_log_file(self, admin_client):
         resp = admin_client.get("/admin/configuration")
@@ -56,6 +69,13 @@ class TestConfigurationEndpoints:
 
         settings_map = {item["key"]: item["value"] for item in resp.json()["settings"]}
         assert settings_map["log_file"] == "/var/log/ecube/app.log"
+
+    def test_get_configuration_returns_callback_default_url_none_by_default(self, admin_client):
+        resp = admin_client.get("/admin/configuration")
+        assert resp.status_code == 200
+
+        settings_map = {item["key"]: item["value"] for item in resp.json()["settings"]}
+        assert settings_map["callback_default_url"] is None
 
     def test_get_configuration_non_admin_forbidden(self, client):
         resp = client.get("/admin/configuration")
@@ -85,6 +105,29 @@ class TestConfigurationEndpoints:
 
         mock_write_env.assert_called_once()
         mock_configure_logging.assert_called_once()
+
+    @patch("app.services.configuration_service.database_service._write_env_settings")
+    def test_update_configuration_persists_callback_default_url(
+        self,
+        mock_write_env,
+        admin_client,
+    ):
+        original_value = settings.callback_default_url
+        try:
+            resp = admin_client.put(
+                "/admin/configuration",
+                json={"callback_default_url": "https://example.com/default-webhook"},
+            )
+            assert resp.status_code == 200, resp.json()
+
+            payload = resp.json()
+            assert "callback_default_url" in payload["changed_settings"]
+            assert payload["restart_required"] is False
+
+            written = mock_write_env.call_args.args[0]
+            assert written.get("CALLBACK_DEFAULT_URL") == "https://example.com/default-webhook"
+        finally:
+            settings.callback_default_url = original_value
 
     @patch("app.services.configuration_service.database_service._write_env_settings")
     @patch("app.services.configuration_service.configure_logging")

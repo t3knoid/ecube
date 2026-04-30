@@ -33,6 +33,7 @@ const form = ref({
   db_pool_recycle_seconds: -1,
   copy_job_timeout: 3600,
   job_detail_files_page_size: 40,
+  callback_default_url: '',
 })
 const originalForm = ref({ ...form.value })
 
@@ -48,6 +49,7 @@ const fieldOrder = [
   'db_pool_recycle_seconds',
   'copy_job_timeout',
   'job_detail_files_page_size',
+  'callback_default_url',
 ]
 
 const levelOptions = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
@@ -298,6 +300,19 @@ onMounted(loadConfiguration)
           max="100"
         />
         <p class="field-help">{{ t('configuration.fields.job_detail_files_page_size.help') }}</p>
+      </article>
+
+      <article class="panel">
+        <h2>{{ t('configuration.sections.webhooks') }}</h2>
+
+        <label for="cfg-callback-default-url">{{ t('configuration.fields.callback_default_url.label') }}</label>
+        <input
+          id="cfg-callback-default-url"
+          v-model="form.callback_default_url"
+          type="url"
+          :placeholder="t('configuration.fields.callback_default_url.placeholder')"
+        />
+        <p class="field-help">{{ t('configuration.fields.callback_default_url.help') }}</p>
       </article>
     </div>
 

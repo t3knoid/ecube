@@ -116,6 +116,9 @@
     "chooseProject": "Choose a project",
     "additionalNotes": "Additional notes",
     "notesHint": "Optional operator notes for this job",
+    "callbackUrl": "Webhook callback URL",
+    "callbackUrlHint": "https://example.com/ecube/webhook",
+    "callbackUrlHelp": "Optional HTTPS endpoint for terminal-state job notifications. Leave blank to disable callbacks.",
     "runImmediately": "Run job immediately after creation",
     "noProjectsAvailable": "No mounted projects are available. Add and mount a project share first.",
     "noEligibleDrives": "No eligible mounted USB drives are available for the selected project.",
@@ -543,7 +546,8 @@
       "logging": "Logging",
       "shares": "Shares",
       "databasePool": "Database Connection Pool",
-      "copyJobs": "Copy Jobs"
+      "copyJobs": "Copy Jobs",
+      "webhooks": "Webhooks"
     },
     "fields": {
       "log_level": {
@@ -586,6 +590,11 @@
       "job_detail_files_page_size": {
         "label": "Job Detail Files Per Page",
         "help": "Default number of file rows shown per Job Detail page. Minimum 20, maximum 100."
+      },
+      "callback_default_url": {
+        "label": "Default Callback URL",
+        "placeholder": "https://example.com/default-webhook",
+        "help": "Optional HTTPS webhook URL used when a job does not define its own callback URL. A job-specific callback URL always overrides this system-wide default."
       }
     },
     "restartRequiredField": "Requires service restart",

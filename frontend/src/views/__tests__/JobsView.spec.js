@@ -359,6 +359,7 @@ describe('JobsView grouped create dialog', () => {
     await wrapper.find('#job-drive').setValue('1')
     await wrapper.find('#job-thread-count').setValue('3')
     await wrapper.find('#job-notes').setValue('Operator note')
+    await wrapper.find('#job-callback-url').setValue('https://example.com/ecube/webhook')
     await wrapper.find('#job-run-immediately').setValue(true)
 
     await wrapper.find('#job-submit').trigger('click')
@@ -372,9 +373,40 @@ describe('JobsView grouped create dialog', () => {
       drive_id: 1,
       thread_count: 3,
       notes: 'Operator note',
+      callback_url: 'https://example.com/ecube/webhook',
     })
     expect(mocks.startJob).toHaveBeenCalledWith(44)
     expect(mocks.push).toHaveBeenCalledWith({ name: 'job-detail', params: { id: 44 } })
+  })
+
+  it('omits callback_url when no webhook endpoint is entered', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const createButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.create'))
+    await createButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#job-project').setValue('PROJ-001')
+    await flushPromises()
+    await wrapper.find('#job-evidence').setValue('EVID-80')
+    await wrapper.find('#job-mount').setValue('11')
+    await wrapper.find('#job-source-path').setValue('folder')
+    await wrapper.find('#job-drive').setValue('1')
+
+    await wrapper.find('#job-submit').trigger('click')
+    await flushPromises()
+
+    expect(mocks.createJob).toHaveBeenCalledWith({
+      project_id: 'PROJ-001',
+      evidence_number: 'EVID-80',
+      mount_id: 11,
+      source_path: 'folder',
+      drive_id: 1,
+      thread_count: 4,
+      notes: undefined,
+      callback_url: undefined,
+    })
   })
 
   it('keeps slash-prefixed source paths within the selected mount', async () => {
