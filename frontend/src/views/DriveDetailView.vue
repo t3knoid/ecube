@@ -14,7 +14,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
-import { buildProjectEvidenceMap, getProjectEvidence } from '@/utils/projectEvidence.js'
+import { buildDriveJobMap, buildProjectEvidenceMap, getDriveJob, getProjectEvidence } from '@/utils/projectEvidence.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -155,13 +155,12 @@ async function loadDrive() {
     }
 
     const drives = driveResult.value || []
+    const jobs = jobResult.status === 'fulfilled' ? (jobResult.value || []) : []
     const next = drives.find((item) => item.id === driveId.value) || null
     drive.value = next ? normalizeProjectRecord(next, ['current_project_id']) : null
-    currentProjectEvidenceNumber.value = jobResult.status === 'fulfilled' && drive.value
-      ? getProjectEvidence(
-        drive.value.current_project_id,
-        buildProjectEvidenceMap(jobResult.value || []),
-      )
+    const assignedJob = drive.value ? getDriveJob(drive.value.id, buildDriveJobMap(jobs)) : null
+    currentProjectEvidenceNumber.value = drive.value
+      ? assignedJob?.evidenceNumber || getProjectEvidence(drive.value.current_project_id, buildProjectEvidenceMap(jobs))
       : ''
     if (!drive.value) {
       error.value = t('drives.notFound')
