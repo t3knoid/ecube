@@ -212,11 +212,11 @@ describe('DriveDetailView mount workflow', () => {
     expect(wrapper.text()).toContain(i18n.global.t('browse.browseContents'))
   })
 
-  it('shows the latest evidence number for the bound project', async () => {
+  it('shows the evidence number for the drive assigned job when multiple drives share a project', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-007', mount_path: '/mnt/ecube/7' })])
     mocks.listJobs.mockResolvedValue([
-      { id: 21, project_id: 'PROJ-007', evidence_number: 'EV-007' },
-      { id: 20, project_id: 'PROJ-007', evidence_number: 'EV-OLD-007' },
+      { id: 21, project_id: 'PROJ-007', evidence_number: 'EV-OTHER-DRIVE', drive: { id: 8 } },
+      { id: 20, project_id: 'PROJ-007', evidence_number: 'EV-007', drive: { id: 7 } },
     ])
 
     const wrapper = mountView()
@@ -224,6 +224,7 @@ describe('DriveDetailView mount workflow', () => {
 
     expect(wrapper.text()).toContain(i18n.global.t('jobs.evidence'))
     expect(wrapper.text()).toContain('EV-007')
+    expect(wrapper.text()).not.toContain('EV-OTHER-DRIVE')
   })
 
   it('hides Enable Drive when the drive is disconnected and not physically detected', async () => {
